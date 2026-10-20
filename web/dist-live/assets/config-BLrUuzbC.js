@@ -1,0 +1,1 @@
+import{n as e,t}from"./config-DTHBoaaf.js";export{t as duelApiUrl,e as duelRegion};

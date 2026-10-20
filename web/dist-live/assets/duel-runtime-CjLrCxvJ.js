@@ -1,0 +1,1 @@
+var e=null,t=()=>e!==null,n=()=>e,r=t=>{e=t};export{t as n,r,n as t};

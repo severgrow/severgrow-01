@@ -689,10 +689,13 @@ function layoutMenu(canContinue: boolean) {
   $('menu-login').textContent = MENU.login;
   $('menu-login').setAttribute('aria-label', MENU.login);
   // Owner decision (2026-10-20): the product menu is PLAY, TERRITORY, LOG IN, Settings, in that
-  // order. LOG IN is no longer hidden by the layout pass: the accounts module shows it to a guest
-  // and hides it again the moment the player is signed in (one entry, one flow, one place). It is
-  // left hidden here (the markup default) until that module knows Google is on.
-  $('menu-world').textContent = MENU.world;
+  // order. LOG IN is not hidden by the layout pass: the accounts module shows it to a guest and
+  // hides it again the moment the player is signed in (one entry, one flow, one place). It is left
+  // hidden here (the markup default) until that module knows Google is on.
+  // The label is its own node (owner brief, 2026-10-20): the Territory entry also carries the
+  // player's Seeds and tile counts, painted by web/src/online/lobby-ui.ts from ONE menu-show read.
+  // Writing the button's textContent here would wipe both read-outs, so this pass writes the label.
+  $('menu-world-label').textContent = MENU.world;
   $('menu-world').setAttribute('aria-label', MENU.world);
   // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
   // only when the build has an online endpoint to read the map from.

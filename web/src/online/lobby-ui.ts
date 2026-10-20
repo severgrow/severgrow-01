@@ -1,7 +1,7 @@
 // Phase 4 — online menu / lobby screens. Duel play opens in Phase 5.
 
 import { DuelClient, DuelError, browserStorage } from '../../../server/src/client.js';
-import type { MatchListEntry, MatchSummary, MatchViewPayload } from '../../../server/src/protocol.js';
+import type { MatchListEntry, MatchSummary, MatchViewPayload, WorldMapPayload } from '../../../server/src/protocol.js';
 import { ONLINE } from '../../../src/strings.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
@@ -9,9 +9,11 @@ import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parked
 import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
 import { WorldView } from './world-view.js';
+import { installTerritoryCountUI, territoryCounts } from './menu-territory.js';
+import type { TerritoryCounts } from './menu-territory.js';
 import { seedIcon } from './seed-icon.js';
 import { flushSeedProofs } from './seed-rewards.js';
-import type { RewardResult } from '../../../server/src/seeds/types.js';
+import type { RewardResult, SeedWallet } from '../../../server/src/seeds/types.js';
 import {
   FIRST_ONLINE_CARD_KEY,
   friendlyJoinError,
@@ -775,52 +777,102 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   // The first affordable claim is invited only on the quiet menu, never during a match,
   // animation, online turn or rematch flow. The server remembers acknowledgement per identity.
   let invitationOpen = false;
-  let invitationChecking = false;
   let invitationDismissedThisSession = false;
-  const checkWorldInvitation = async () => {
-    if (invitationOpen || invitationChecking || invitationDismissedThisSession || menuEl?.hidden !== false || !worldEl.hidden) return;
-    invitationChecking = true;
-    try {
-      await syncSeedRewards();
-      if (menuEl?.hidden !== false) return;
-      const id = await ensureIdentity();
-      if (!id) return;
-      let wallet;
-      try { wallet = await client.seedWallet(id.token); } catch { return; }
-      if (wallet.balance < 100 || wallet.worldInvitationSeen || menuEl?.hidden !== false) return;
-      invitationOpen = true;
-      const sheet = document.createElement('div');
-      sheet.className = 'world-invitation';
-      sheet.setAttribute('role', 'dialog');
-      sheet.setAttribute('aria-modal', 'true');
-      sheet.setAttribute('aria-label', '100 Seeds');
-      const card = document.createElement('div');
-      card.className = 'world-invitation-card';
-      const title = document.createElement('strong');
-      title.textContent = '100 SEEDS';
-      const line = document.createElement('p');
-      line.textContent = 'Your place in the world is waiting.';
-      const actions = document.createElement('div');
-      const open = document.createElement('button');
-      open.textContent = ONLINE.worldInviteOpen;
-      const later = document.createElement('button');
-      later.textContent = 'LATER';
-      const finish = (go: boolean) => {
-        sheet.remove(); invitationOpen = false; invitationDismissedThisSession = true;
-        void client.acknowledgeWorldInvitation(id.token).catch(() => { /* Retry on a later session. */ });
-        if (go) openWorld('menu');
-      };
-      open.addEventListener('click', () => finish(true));
-      later.addEventListener('click', () => finish(false));
-      actions.append(open, later);
-      card.append(seedIcon(28), title, line, actions);
-      sheet.append(card);
-      document.body.append(sheet);
-      open.focus();
-    } finally { invitationChecking = false; }
+  /**
+   * The Territory entry's two read-outs. They are painted from the SAME menu-show pass that offers
+   * the invitation, so the menu never pays a second wallet request for them (owner brief,
+   * 2026-10-20). This is not a poll: one read when the menu appears, and only while it is on show.
+   */
+  const territoryUI = installTerritoryCountUI();
+  /** The last pair read for a named player, so returning to the menu does not blink. */
+  let menuRead: (TerritoryCounts & { playerId: string }) | null = null;
+  let menuPass: Promise<void> | null = null;
+  /** A cached pair only counts for the identity it was read for; anyone else starts blank. */
+  const countsFor = (playerId: string | null): TerritoryCounts | null =>
+    playerId && menuRead?.playerId === playerId ? menuRead : null;
+
+  const offerWorldInvitation = (id: { token: string }, wallet: SeedWallet | null) => {
+    if (invitationOpen || invitationDismissedThisSession || menuEl?.hidden !== false || !worldEl.hidden) return;
+    if (!wallet || wallet.balance < 100 || wallet.worldInvitationSeen) return;
+    invitationOpen = true;
+    const sheet = document.createElement('div');
+    sheet.className = 'world-invitation';
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-modal', 'true');
+    sheet.setAttribute('aria-label', '100 Seeds');
+    const card = document.createElement('div');
+    card.className = 'world-invitation-card';
+    const title = document.createElement('strong');
+    title.textContent = '100 SEEDS';
+    const line = document.createElement('p');
+    line.textContent = 'Your place in the world is waiting.';
+    const actions = document.createElement('div');
+    const open = document.createElement('button');
+    open.textContent = ONLINE.worldInviteOpen;
+    const later = document.createElement('button');
+    later.textContent = 'LATER';
+    const finish = (go: boolean) => {
+      sheet.remove(); invitationOpen = false; invitationDismissedThisSession = true;
+      void client.acknowledgeWorldInvitation(id.token).catch(() => { /* Retry on a later session. */ });
+      if (go) openWorld('menu');
+    };
+    open.addEventListener('click', () => finish(true));
+    later.addEventListener('click', () => finish(false));
+    actions.append(open, later);
+    card.append(seedIcon(28), title, line, actions);
+    sheet.append(card);
+    document.body.append(sheet);
+    open.focus();
   };
-  window.addEventListener('futasaku:menu', () => { void checkWorldInvitation(); });
-  if (menuEl?.hidden === false) void checkWorldInvitation();
+
+  /**
+   * ONE pass per menu show: settle queued proofs, read the wallet ONCE and the world ONCE, paint
+   * the two read-outs, then use that same wallet for the invitation card. Single-flight, so a
+   * burst of `futasaku:menu` events can never stack requests. Any failure hides both numbers (a
+   * stale or invented value is worse than no value); the label and the entry stay untouched.
+   */
+  const refreshMenu = (): Promise<void> => {
+    if (menuEl?.hidden !== false) return Promise.resolve();
+    // A return from another screen never blinks: paint what is known for THIS identity, and clear
+    // at once when the identity changed (a sign-out reload, or a fresh guest).
+    territoryUI.paint(countsFor(identity.peek()?.playerId ?? null));
+    if (menuPass) return menuPass;
+    menuPass = (async () => {
+      try {
+        // Settle queued Seed proofs first, so the wallet read below already includes them.
+        await syncSeedRewards();
+        if (menuEl?.hidden !== false) return;
+        const id = await ensureIdentity();
+        if (!id) {
+          menuRead = null;
+          territoryUI.paint(null);
+          return;
+        }
+        let wallet: SeedWallet | null = null;
+        let world: WorldMapPayload['world'] | null = null;
+        try {
+          const [readWallet, map] = await Promise.all([client.seedWallet(id.token), client.worldMap()]);
+          wallet = readWallet;
+          world = map.world;
+        } catch {
+          // Offline, signed out, or a failed request: both read-outs stay hidden, together.
+          wallet = null;
+          world = null;
+        }
+        if (menuEl?.hidden !== false) return;
+        const counts = territoryCounts(wallet, world, id.playerId);
+        menuRead = counts ? { ...counts, playerId: id.playerId } : null;
+        territoryUI.paint(counts);
+        // The invitation reads the SAME wallet response; it never costs a second request.
+        offerWorldInvitation(id, wallet);
+      } finally {
+        menuPass = null;
+      }
+    })();
+    return menuPass;
+  };
+  window.addEventListener('futasaku:menu', () => { void refreshMenu(); });
+  if (menuEl?.hidden === false) void refreshMenu();
   $('online-create').addEventListener('click', () => void createMatch());
   document.getElementById('online-find')?.addEventListener('click', () => void findOpponent());
   $('online-join-open').addEventListener('click', () => {

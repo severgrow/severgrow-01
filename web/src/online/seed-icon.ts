@@ -1,3 +1,7 @@
+/** The ONE way a Seeds balance is written for the player ("128 SEEDS"), shared by the Territory
+ *  wallet and the menu's read-out so the two can never drift apart. */
+export const seedBalanceLabel = (balance: number): string => `${balance} SEEDS`;
+
 /** One authored icon at every Seeds size; currentColor keeps the ivory material intact. */
 export const seedIcon = (size = 20): SVGSVGElement => {
   const ns = 'http://www.w3.org/2000/svg';

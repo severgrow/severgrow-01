@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en" data-theme="ink">
+  <head>
+    <meta charset="utf-8" />
+    <script>
+      // A page cached from an earlier deploy can name script and style files the newest deploy
+      // removed (Pages caches the page for up to 10 minutes): the game then shows as bare text.
+      // If one of them fails to load, reload once from a fresh address (never in a loop).
+      (function () {
+        // Use native operations captured before channel.ts patches Storage.prototype.
+        var prefix = /\/futa0.5\//.test(location.pathname) ? 'futa05:' : /\.chatgpt\.site$/.test(location.hostname) || /\/futa0.4\//.test(location.pathname) ? 'futa04:' : /\/test2\//.test(location.pathname) ? 'main2:' : /\/test\//.test(location.pathname) ? 'test:' : '';
+        var key = prefix + 'fresh-reload';
+        if (typeof Storage === 'undefined') return;
+        var get = Storage.prototype.getItem, set = Storage.prototype.setItem, remove = Storage.prototype.removeItem;
+        var u = new URL(location.href);
+        if (u.searchParams.has('_fresh')) {
+          u.searchParams.delete('_fresh');
+          history.replaceState(null, '', u.pathname + u.search + u.hash);
+        }
+        function recover() {
+          try {
+            if (get.call(sessionStorage, key)) return;
+            set.call(sessionStorage, key, '1');
+          } catch (_) { return; }
+          var r = new URL(location.href);
+          r.searchParams.set('_fresh', String(Date.now()));
+          location.replace(r.href);
+        }
+        window.addEventListener('error', function (e) {
+          var t = e.target;
+          var src = t && (t.tagName === 'SCRIPT' ? t.src : t.tagName === 'LINK' && t.rel === 'stylesheet' ? t.href : '');
+          if (!src) return;
+          var asset = new URL(src, location.href), base = new URL('./assets/', location.href);
+          if (asset.origin === base.origin && asset.pathname.indexOf(base.pathname) === 0) recover();
+        }, true);
+        window.addEventListener('vite:preloadError', function () {
+          // Let Vite reject startup: suppressing the error would mark a partial app ready.
+          recover();
+        });
+        // A failed load also fires window.load: only a working app resets recovery.
+        window.addEventListener('severor-ready', function () {
+          try { remove.call(sessionStorage, key); } catch (_) {}
+        });
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#18191a" />
+    <meta name="description" content="Futasaku: grow your network, keep it joined to your home, cut your opponent's links." />
+    <title>Futasaku</title>
+    <link rel="icon" type="image/png" href="./icon-192.png" />
+    <!-- The share card. og:image MUST be ABSOLUTE: the Open Graph spec requires it, and real
+         scrapers (WhatsApp, iMessage, Slack) drop a relative path rather than resolving it — which
+         is how a link preview ends up with no picture, or with a stale one. The `?v=` is a
+         cache-buster: the file keeps the path /og.jpg across deploys, so the query is what tells a
+         cache that the artwork changed. Regenerate the picture with
+         `npx tsx web/e2e/og-image.ts` (and bump `?v=` in the same commit). -->
+    <meta property="og:title" content="Futasaku" />
+    <meta property="og:description" content="Grow your network. Keep it joined to your home. Cut your opponent's links." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Futasaku" />
+    <meta property="og:url" content="https://www.futasaku.com/" />
+    <meta property="og:image" content="https://www.futasaku.com/og.jpg?v=2" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A Futasaku duel board: green growth around your home, the opponent's red pushing in, with the Futasaku wordmark." />
+    <!-- X/Twitter does not read the og:* tags for a large-image card; it needs its own. -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Futasaku" />
+    <meta name="twitter:description" content="Grow your network. Keep it joined to your home. Cut your opponent's links." />
+    <meta name="twitter:image" content="https://www.futasaku.com/og.jpg?v=2" />
+    <meta name="twitter:image:alt" content="A Futasaku duel board: green growth around your home, the opponent's red pushing in, with the Futasaku wordmark." />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    
+    
+    <link rel="preload" href="./hardware/display-frame-supplied.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./hardware/button-frame-supplied.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./hardware/counter-frame-supplied.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./assets/moss-BJcejJcl.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./assets/ash-4xFXcabe.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./assets/dew-9V4ZRsr_.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./assets/ember-CIJk42jo.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./assets/bomb-B2TVwAKF.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./assets/back-BpX9Hqar.webp" as="image" type="image/webp" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Futasaku" />
+    <script type="module" crossorigin src="./assets/index-N4TJa4mD.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/engine-C956B9bE.js">
+    <link rel="modulepreload" crossorigin href="./assets/strings-CivwnTG3.js">
+    <link rel="modulepreload" crossorigin href="./assets/geom-CuiL23Ev.js">
+    <link rel="modulepreload" crossorigin href="./assets/board-iljT7YCY.js">
+    <link rel="modulepreload" crossorigin href="./assets/duel-runtime-CjLrCxvJ.js">
+    <link rel="modulepreload" crossorigin href="./assets/client-BTFmQnnF.js">
+    <link rel="modulepreload" crossorigin href="./assets/seed-rewards-CUDf7VYw.js">
+    <link rel="modulepreload" crossorigin href="./assets/log-CyWlHZzd.js">
+    <link rel="modulepreload" crossorigin href="./assets/sound-Cg8whaDc.js">
+    <link rel="modulepreload" crossorigin href="./assets/effects-C39bITaM.js">
+    <link rel="modulepreload" crossorigin href="./assets/config-DTHBoaaf.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-7V5YK3Cr.css">
+  </head>
+  <body>
+    <div id="splash" class="splash" hidden aria-hidden="true"></div>
+    <pre id="debug-corner" class="debug-corner" hidden></pre>
+    <div id="texture" aria-hidden="true"></div>
+    <div id="spores" aria-hidden="true"></div>
+
+    <!-- ===== Main menu ===== -->
+    <section id="menu" class="screen menu" aria-label="Main menu">
+      <div class="menu-inner">
+        <div id="terrarium" class="terrarium" aria-hidden="true"></div>
+        <div id="logo" class="logo" aria-hidden="true"></div>
+        <h1 class="title">FUTASAKU</h1>
+        <!-- The main-menu tagline was removed from the menu on 2026-10-14. It is deliberately NOT in
+             this markup — no hidden placeholder, no leftover gap. Restore it with ONE line,
+             SHOW_MENU_TAGLINE = true in src/strings.ts, and main.ts re-inserts the element in this
+             slot (the words live in ONLINE.tagline). See docs/DECISIONS.md. -->
+        <div class="menu-buttons">
+          <!-- LOG IN (product channels only): its own button at the TOP, above PLAY, and hidden the
+               moment the player is signed in. The accounts module reveals it (and hides it again)
+               from the one Google flow it already owns — no second sign-in path lives here. It is
+               quiet (ghost): PLAY is the menu's single leading action. -->
+          <button id="menu-login" class="btn ghost big" type="button" aria-label="Log in" hidden>LOG IN</button>
+          <!-- PLAY (product channels only) opens the submenu below, and carries the ONE cream fill
+               on this screen. Revealed by main.ts, so no other channel ever shows it. Its three
+               entries (Play online / LEVEL n / Practice match) are MOVED into #play-actions at boot. -->
+          <button id="menu-play" class="btn primary big" type="button" aria-label="Play" hidden>Play</button>
+          <!-- Continue (the saved game resume) sits right under the leader, as a quiet ghost. -->
+          <button id="menu-continue" class="btn ghost big" type="button" aria-label="Continue" hidden>Continue</button>
+          <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
+          <!-- Campaign (the primary offline mode) — revealed by main.ts on the product channels only,
+               so no other channel ever shows it. Its words come from src/strings.ts, and on the
+               product menu it reads LEVEL <n> (the level the player is on). -->
+          <button id="menu-campaign" class="btn primary big" type="button" aria-label="Level" hidden>Campaign</button>
+          <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
+          <!-- DELETED (owner, 2026-10-16): the quiet "Levels" entry that opened the whole
+               chapter/level list. The owner's rule is that the player does not need access to every
+               level - the LEVEL <n> entry above starts the next level they have NOT completed, and
+               that is the only way in. The list still exists and still renders; it is now reached
+               only from the finish card's "Back to levels", which is where the campaign hands the
+               player off once there is no next level left. -->
+          <!-- The world map: a top-level destination of its own, in the main menu with Tutorial and
+               Settings (owner direction 2026-10-15, option 'split' — deliberately NOT in the PLAY
+               submenu). Revealed by main.ts when the build has an online endpoint and the screen it
+               opens is live, so it can never be a dead entry. -->
+          <button id="menu-world" class="btn ghost big" type="button" hidden></button>
+          <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
+          <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== PLAY submenu (product channels) ===== -->
+    <!-- The single doorway to the offline modes and the duel lobby, and a screen of its own: the
+         main menu is fully hidden while it is open. It is composed from the SAME components as the
+         menu and the campaign screen — `.levels-inner` (the shared centred column), `.levels-head`
+         (the back button + display heading) and `.menu-buttons` (the same buttons the menu uses) —
+         so it echoes the main menu exactly while reading as a submenu, not a second menu.
+         Its three entries — Play online / LEVEL <n> / Practice match — are MOVED into #play-actions at
+         boot by main.ts, so each keeps its one id, its one handler and its one set of words: no
+         second copy of the online or campaign wiring exists. Only ONE of them leads (Play online,
+         or LEVEL <n> when this build has no online endpoint); the rest recede. -->
+    <section id="play-menu" class="screen play-menu" aria-label="Play" hidden>
+      <div class="levels-inner">
+        <header class="levels-head">
+          <button id="play-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
+          <h2 id="play-title">Play</h2>
+        </header>
+        <div id="play-actions" class="menu-buttons"></div>
+      </div>
+    </section>
+
+    <!-- ===== Online hub (Phase 4) ===== -->
+    <section id="online-hub" class="screen online-hub" aria-label="Play online" hidden>
+      <div class="online-inner">
+        <header class="online-head">
+          <button id="online-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-hub-title">Play online</h2>
+        </header>
+        <div id="online-first-card" class="online-card" hidden>
+          <h3 id="online-first-title"></h3>
+          <ul id="online-first-list"></ul>
+          <button id="online-first-ok" class="btn primary" type="button">Got it</button>
+        </div>
+        <div class="online-actions menu-buttons">
+          <button id="online-create" class="btn primary big" type="button">Create a duel</button>
+          <button id="online-find" class="btn ghost big" type="button" hidden>Find opponent</button>
+          <button id="online-join-open" class="btn ghost big" type="button">Join with a code</button>
+          <button id="online-world" class="btn ghost big" type="button"></button>
+        </div>
+        <h3 class="online-section" id="online-matches-title">Your online matches</h3>
+        <p id="online-matches-empty" class="muted" hidden>No online matches yet.</p>
+        <ul id="online-matches" class="online-matches" aria-live="polite"></ul>
+        <p id="online-hub-notice" class="online-notice" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="online-world-screen" class="screen online-world" hidden>
+      <div class="online-inner">
+        <header class="online-head">
+          <button id="online-world-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-world-title"></h2>
+        </header>
+        <!-- NO SUMMARY LINE (owner, 2026-10-16: "remove completely '5 / 183 grown · one shared
+             world'"). The map shows the world; a caption counting the tiles was noise on every
+             screen, and the line is deleted from the markup rather than hidden so nothing can
+             repaint it. The wallet above it carries the one number that matters. -->
+        <div id="online-world-wallet" class="world-wallet" aria-live="polite"></div>
+        <div id="online-world-grid" class="world-grid"></div>
+        <div id="online-world-selection" class="world-selection" aria-live="polite"></div>
+        <p id="online-world-notice" class="online-notice" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="online-waiting" class="screen online-waiting" aria-label="Waiting for a friend" hidden>
+      <div class="online-inner">
+        <header class="online-head">
+          <button id="online-waiting-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-waiting-title">Waiting for a friend</h2>
+        </header>
+        <p id="online-waiting-body" class="muted"></p>
+        <!-- The LINK is the primary action; the code is a smaller, tappable fallback (in-app
+             browsers, mangled links, reading a code aloud). No new visual language. -->
+        <div class="online-actions menu-buttons">
+          <button id="online-share" class="btn primary big" type="button">Share invite</button>
+          <button id="online-copy" class="btn ghost" type="button">Copy link</button>
+          <button id="online-cancel-match" class="btn ghost" type="button">Cancel match</button>
+        </div>
+        <p id="online-invite-code" class="online-code" role="button" tabindex="0" aria-label="Invite code"></p>
+        <p id="online-code-hint" class="online-code-hint muted small"></p>
+        <p id="online-waiting-expiry" class="muted small"></p>
+        <!-- Parked-search offer (shown after a while waiting). Three separate, honest choices. -->
+        <div id="online-search-options" class="online-actions menu-buttons" hidden>
+          <button id="online-search-computer" class="btn primary big" type="button">Play the computer</button>
+          <button id="online-search-invite" class="btn ghost big" type="button">Invite a friend</button>
+          <button id="online-search-keep" class="btn ghost big" type="button">Keep searching</button>
+        </div>
+        <p id="online-waiting-notice" class="online-notice" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="online-join" class="screen online-join" aria-label="Join a duel" hidden>
+      <div class="online-inner">
+        <header class="online-head">
+          <button id="online-join-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-join-title">Join a duel</h2>
+        </header>
+        <label class="online-field" for="online-join-code"><span id="online-join-prompt">Enter the invite code</span>
+          <input id="online-join-code" type="text" inputmode="text" autocomplete="off" maxlength="16" spellcheck="false" />
+        </label>
+        <p id="online-join-confirm" class="online-confirm" hidden></p>
+        <div class="online-actions menu-buttons">
+          <button id="online-join-submit" class="btn primary big" type="button">Join</button>
+          <button id="online-join-cancel" class="btn ghost big" type="button" hidden>Cancel</button>
+        </div>
+        <p id="online-join-notice" class="online-notice" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <!-- Opponent found while playing the computer: gentle, dismissible, and it never loses the
+         offline game (Continue keeps it). Reuses the online-card component, no new visual language. -->
+    <div id="online-matched" class="online-matched" role="dialog" aria-modal="false" aria-labelledby="online-matched-title" hidden>
+      <div class="online-card">
+        <h3 id="online-matched-title">Opponent found</h3>
+        <p id="online-matched-body" class="muted"></p>
+        <div class="online-actions menu-buttons">
+          <button id="online-matched-now" class="btn primary big" type="button">Play now</button>
+          <button id="online-matched-later" class="btn ghost big" type="button">Later</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Campaign (the primary offline mode) ===== -->
+    <!-- The chapter list and level tiles are drawn from the level data by main.ts, so a level is
+         never duplicated here. Everything a player reads comes from src/strings.ts and the level. -->
+    <section id="campaign" class="screen campaign" aria-label="Levels" hidden>
+      <div class="campaign-inner levels-inner">
+        <header class="levels-head">
+          <button id="campaign-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
+          <h2 id="campaign-heading">Levels</h2>
+        </header>
+        <button id="campaign-continue" class="btn primary big" type="button" aria-label="Continue">Continue</button>
+        <p id="campaign-resume-hint" class="campaign-hint muted small" hidden></p>
+        <p id="campaign-progress" class="campaign-progress muted small"></p>
+        <div id="campaign-chapters" class="campaign-chapters"></div>
+      </div>
+    </section>
+
+    <!-- ===== Pick a level (Classic vs AI, unchanged) ===== -->
+    <section id="levels" class="screen levels" aria-label="Pick a level" hidden>
+      <div class="levels-inner">
+        <header class="levels-head">
+          <button id="levels-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
+          <h2 id="levels-heading">Choose difficulty</h2>
+        </header>
+        <div id="level-grid" class="level-grid"></div>
+      </div>
+    </section>
+
+    <!-- ===== Game ===== -->
+    <section id="game" class="screen game" aria-label="Game" hidden>
+      <header class="hud">
+        <button id="hud-menu" class="icon-only" type="button" aria-label="Menu"><span class="i" data-icon="menu"></span></button>
+        <div class="score you">
+          <span class="who" id="score-you-label">You</span>
+          <span class="mark you" aria-hidden="true"></span>
+          <b id="score-you" class="num" aria-label="Your score">0</b>
+        </div>
+        <div id="turn" class="turn" aria-live="polite"></div>
+        <div class="score bot" title="Opponent">
+          <b id="score-bot" class="num" aria-label="Opponent score">0</b>
+          <span class="mark bot" aria-hidden="true"></span>
+          <span class="who" data-short="opp" id="score-bot-label">Opponent</span>
+        </div>
+        <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
+      </header>
+      <div id="duel-hud" class="duel-hud" hidden>
+        <!-- Hidden state hooks only (never painted): the trimmed strip shows ONE short message, but
+             the opponent name and the current notice stay readable to the page's own tests. -->
+        <span class="duel-opp" data-duel-opponent hidden></span>
+        <span class="duel-notice" data-duel-notice hidden></span>
+        <span class="duel-lane" data-duel-lane>
+          <span class="duel-msg" data-duel-turn aria-live="polite"><span class="duel-track" data-duel-track></span></span>
+          <span class="duel-urgency" data-duel-urgency role="status" hidden></span>
+          <span class="duel-presence" data-duel-presence data-presence="unknown"></span>
+        </span>
+      </div>
+      <div id="race" class="race" role="img" aria-label="Level at 0"><i class="race-fill"></i></div>
+      <div id="score-pop" class="score-pop" role="status" hidden></div>
+
+      <div class="play">
+        <div class="board-wrap" id="board-wrap">
+          <svg id="board" class="board" role="group" aria-label="Board. Use the arrow keys to move, Enter to choose." tabindex="0"></svg>
+          <div id="captions" class="captions" aria-live="polite"></div>
+          <div id="draw-info" class="draw-info" hidden></div>
+          <div id="draw-live" class="sr-only" aria-live="polite"></div>
+          <div id="banner" class="banner" aria-hidden="true"></div>
+          <div id="smoother" class="smoother" role="status" hidden><span>Smoother mode: effects are lighter so the game runs smoothly.</span><button id="smoother-keep" class="btn small primary" type="button">Keep</button><button id="smoother-undo" class="btn small ghost" type="button">Undo</button></div>
+          <div id="root-warn" class="root-warn" role="status" hidden><i aria-hidden="true"></i>Home in danger</div>
+          <div id="edge-wash" class="edge-wash" aria-hidden="true"></div>
+          <div id="turn-pill" class="turn-pill" aria-hidden="true" hidden></div>
+          <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+          <!-- Step 3: icon-only tools in the corners of the board zone (never over a tile) -->
+          <div class="corner-tools" role="toolbar" aria-label="Board tools">
+            <button id="tool-weak" class="ctool tl" type="button" aria-pressed="false" aria-label="My weak spots" data-tip="My weak spots: where your network is easy to cut"><span class="i" data-icon="shield"></span></button>
+            <button id="tool-targets" class="ctool tr" type="button" aria-pressed="false" aria-label="Their weak links" data-tip="Their weak links: where your opponent is easy to cut"><span class="i" data-icon="target"></span></button>
+            <button id="tool-replay" class="ctool bl" type="button" aria-label="Replay your opponent's last turn" data-tip="Replay your opponent's last turn"><span class="i" data-icon="replay"></span></button>
+            <button id="tool-skip" class="ctool bl" type="button" hidden aria-label="Skip the animation" data-tip="Skip the animation"><span class="i" data-icon="skip"></span></button>
+            <div id="ctool-tip" class="ctool-tip" role="tooltip" hidden></div>
+          </div>
+        </div>
+
+        <aside class="side dock" id="dock">
+          <!-- Positioning pass: one row, symmetric about the centre line: the hint, the deck and
+               throw pile as a centred pair, the moves; the forecast bar covers it while a move
+               waits for Confirm -->
+          <div class="table-row">
+            <p id="hint" class="hint-line" role="status" aria-live="polite"></p>
+            <div class="piles">
+              <!-- The pile labels below mirror PILES.draw / PILES.discard in src/strings.ts;
+                   main.ts keeps them in sync on every render. -->
+              <button id="deck" class="pile deck" type="button" aria-label="Draw pile">
+                <span class="pile-card">
+                  <span class="pile-stack" aria-hidden="true"></span>
+                </span>
+                <span class="pile-meta" aria-hidden="true"><span class="pile-label">Draw pile</span><span class="pile-count num" id="deck-count">0</span></span>
+                <span class="pile-hint" id="deck-hint" aria-hidden="true"></span>
+              </button>
+              <button id="discard" class="pile discard" type="button" aria-label="Throw pile">
+                <span class="pile-card">
+                  <span class="pile-top" id="discard-top" aria-hidden="true"></span>
+                </span>
+                <span class="pile-meta" aria-hidden="true"><span class="pile-label">Throw pile</span><span class="pile-count num" id="discard-count">0</span></span>
+                <span class="pile-hint" id="discard-hint" aria-hidden="true"></span>
+              </button>
+            </div>
+            <div id="moves" class="moves" role="group" aria-label="Moves"></div>
+            <div class="forecast-slot">
+            <div id="confirm" class="confirm forecast" hidden>
+            <div class="confirm-text">
+              <span id="confirm-chip" class="result-chip"></span>
+              <span id="confirm-warn" class="warn" hidden></span>
+              <ul id="confirm-risks" class="risks" hidden></ul>
+            </div>
+            <div class="confirm-buttons">
+              <button id="confirm-info" class="btn ghost small icon-info" type="button" aria-label="Open the tile card" title="Tile card" hidden>i</button>
+              <button id="confirm-cancel" class="btn ghost" type="button">Cancel</button>
+              <button id="confirm-play" class="btn primary" type="button">Confirm</button>
+            </div>
+            </div>
+            </div>
+          </div>
+
+          <!-- the hand between two fixed slots: Undo (left) and Sort (right); either can come and go
+               without moving anything -->
+          <div class="hand-row">
+            <button id="tool-undo" class="hand-slot undo-slot" type="button" hidden aria-label="Undo: take back your last move" title="Take back your last move (you can until you throw)"><span class="i" data-icon="undo"></span></button>
+            <div id="hand" class="hand" role="group" aria-label="Your cards"></div>
+            <button id="hand-sort" class="hand-slot hand-sort icon-sort" type="button" hidden><span class="i" data-icon="sort"></span></button>
+          </div>
+          <!-- floating above the dock: never changes its height -->
+          <div class="dock-overlays">
+          <section id="coach" class="coach" aria-label="Coach" hidden>
+            <div class="coach-head">
+              <span class="i" data-icon="coach"></span>
+              <b>Coach</b>
+              <span id="coach-step" class="muted small"></span>
+            </div>
+            <div id="coach-advice">
+              <p id="coach-suggested" class="coach-main"></p>
+              <p id="coach-tip" class="tip"></p>
+              <p id="coach-why" class="muted" hidden></p>
+              <div class="coach-actions">
+                <button id="coach-show" class="btn small" type="button" aria-pressed="false">Show me where</button>
+                <button id="coach-why-btn" class="btn link small" type="button" aria-expanded="false">Why?</button>
+              </div>
+            </div>
+            <div id="coach-summary" hidden>
+              <p><b id="coach-summary-title"></b></p>
+              <ul id="coach-summary-list"></ul>
+              <button id="coach-summary-ok" class="btn small" type="button">Got it</button>
+            </div>
+          </section>
+
+          <div id="first-tip" class="first-tip" role="note" hidden>
+            <b id="first-tip-title"></b>
+            <p id="first-tip-text"></p>
+            <div id="first-tip-demo" class="draw-demo" aria-hidden="true" hidden><i></i><i></i><i></i><span class="finger"></span></div>
+            <button id="first-tip-ok" class="btn ghost small" type="button">Got it</button>
+          </div>
+          </div>
+        </aside>
+      </div>
+      <!-- The opponent's own card motion: one absolutely positioned flyer at a time, above the
+           board and the cockpit but below the lesson glass and highlight. pointer-events:none, so
+           it can never swallow a tap. The seat anchor is placed on layout/resize only. -->
+      <div id="enemy-flight" class="enemy-flight" aria-hidden="true">
+        <div id="opp-seat" class="opp-seat" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <!-- ===== Sheets and overlays ===== -->
+    <div id="scrim" class="scrim" hidden></div>
+
+    <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+      <header class="sheet-head"><h2 id="settings-title" data-copy="title"></h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body">
+        <!-- OWNER DIRECTION (2026-10-17): "settings should hold only essentials". The surface is
+             now the things a player changes while playing — colours, sound, comfort, and the two
+             playing choices. EVERYTHING else sits in two folded groups: "More options" (look, motion
+             and volume detail) and "More playing options" (the teaching aids). Nothing was deleted
+             except the Coach switch, which is gone because the coach is always on now (see
+             main.ts currentAdvice). Reduce motion and Large text MUST stay outside every group —
+             they are accessibility, not clutter. The phone layout rows are injected at the top of
+             this body by player/thumb.ts. -->
+        <h3 data-copy="lookHeading"></h3>
+        <div class="row"><span data-copy="colours"></span><div class="seg" role="radiogroup" aria-label="Colours" id="palette-seg"></div></div>
+        <h3 data-copy="soundHeading"></h3>
+        <label class="row"><span data-copy="sound"></span><input type="checkbox" data-setting="sound" /></label>
+        <label class="row"><span data-copy="music"></span><input type="checkbox" data-setting="music" /></label>
+        <label class="row"><span id="vibration-label"></span><input type="checkbox" data-setting="vibration" /></label>
+        <h3 data-copy="motionHeading"></h3>
+        <label class="row"><span data-copy="reduceMotion"></span><input type="checkbox" data-setting="reduceMotion" /></label>
+        <label class="row"><span data-copy="largeText"></span><input type="checkbox" data-setting="largeText" /></label>
+        <h3 data-copy="playingHeading"></h3>
+        <div class="row"><span data-copy="confirmMoves"></span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
+        <label class="row"><span data-copy="autoSkip"></span><input type="checkbox" data-setting="autoSkip" /></label>
+        <details class="settings-lab" id="settings-look">
+          <summary><span><strong data-copy="lookGroup"></strong><small data-copy="lookGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="lab-inside">
+            <div class="row"><span data-copy="materialDetail"></span><div class="seg" role="radiogroup" aria-label="Material detail" id="detail-seg"></div></div>
+            <div class="row"><span data-copy="topGlow"></span><div class="seg" role="radiogroup" aria-label="Top-rank glow" id="glow-seg"></div></div>
+            <label class="row"><span data-copy="eyeCandy"></span><input type="checkbox" data-setting="eyeCandy" /></label>
+            <div class="row"><span data-copy="speed"></span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
+            <div class="row"><span data-copy="effects"></span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
+            <label class="row slider"><span data-copy="sfxVolume"></span><input type="range" min="0" max="100" step="5" data-volume="sfxVolume" aria-label="Effects volume" /></label>
+            <label class="row slider"><span data-copy="musicVolume"></span><input type="range" min="0" max="100" step="5" data-volume="musicVolume" aria-label="Music volume" /></label>
+            <div class="test-row">
+              <button id="test-sound" class="btn ghost small" type="button" data-copy="testSound"></button>
+              <button id="test-vibration" class="btn ghost small" type="button" data-copy="testVibration"></button>
+            </div>
+            <p id="test-note" class="muted small"></p>
+          </div>
+        </details>
+        <details class="settings-lab" id="settings-help">
+          <summary><span><strong data-copy="helpGroup"></strong><small data-copy="helpGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="lab-inside">
+            <!-- the Step guidance row is injected here by player/guide.ts -->
+            <label class="row"><span data-copy="placementList"></span><input type="checkbox" data-setting="placementList" /></label>
+            <label class="row"><span data-copy="weakSpots"></span><input type="checkbox" data-setting="weakSpots" /></label>
+            <label class="row"><span data-copy="weakPulse"></span><input type="checkbox" data-setting="weakPulse" /></label>
+            <button id="restart-tutorial" class="btn ghost small" type="button" data-copy="restartTutorial"></button>
+          </div>
+        </details>
+        <h3>Online</h3>
+        <p id="online-storage-note" class="muted small">Your online matches live on this device until accounts exist.</p>
+        <div id="online-link-block" class="online-link-block" hidden>
+          <p class="muted small" id="online-link-help">Creates a one-time code (10 minutes). It never moves your existing token.</p>
+          <button id="online-link-make" class="btn ghost small" type="button">Make a link code</button>
+          <label class="row" for="online-link-redeem-input"><span>Enter a link code</span>
+            <input id="online-link-redeem-input" type="text" maxlength="16" autocomplete="off" spellcheck="false" />
+          </label>
+          <button id="online-link-redeem" class="btn ghost small" type="button">Use code</button>
+          <p id="online-link-status" class="muted small" role="status"></p>
+        </div>
+        <details id="settings-lab" class="settings-lab">
+          <summary><span class="lab-sigil" aria-hidden="true"></span><span><strong>Lab</strong><small>20 ways to tune the same game</small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="lab-inside">
+            <p>Small experiments made from the controls already inside Futasaku. Try one; your original setup stays ready to restore.</p>
+            <div id="lab-categories" class="lab-categories" role="group" aria-label="Lab experiments"></div>
+            <div id="lab-cards" class="lab-cards" role="group"></div>
+            <p id="lab-status" class="lab-status" role="status" aria-live="polite"></p>
+            <div class="lab-actions"><button id="lab-surprise" type="button">Surprise me <span aria-hidden="true">↗</span></button><button id="lab-restore" type="button" disabled>Restore my setup</button></div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
+      <header class="sheet-head"><h2 id="gm-title">Paused</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body stack">
+        <button id="gm-exit-tutorial" class="btn primary" type="button" aria-label="Exit tutorial" hidden>Exit tutorial</button>
+        <button id="gm-resume" class="btn primary" type="button" aria-label="Back to the game">Back to the game</button>
+        <button id="gm-new" class="btn ghost" type="button" aria-label="New game">New game</button>
+        <button id="gm-howto" class="btn ghost" type="button" aria-label="How to play">How to play</button>
+        <button id="gm-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
+        <button id="gm-resign" class="btn ghost" type="button" aria-label="Resign the duel" hidden>Resign</button>
+        <button id="gm-main" class="btn link" type="button" aria-label="Main menu">Main menu</button>
+      </div>
+    </section>
+
+    <section id="sheet-campaign-start" class="sheet" role="dialog" aria-modal="true" aria-labelledby="csa-title" hidden>
+      <header class="sheet-head"><h2 id="csa-title">Your campaign match is unfinished.</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body stack">
+        <p id="csa-body" class="muted"></p>
+        <button id="csa-resume" class="btn primary" type="button">Resume</button>
+        <button id="csa-start" class="btn ghost" type="button">Start</button>
+      </div>
+    </section>
+
+    <section id="sheet-howto" class="sheet" role="dialog" aria-modal="true" aria-labelledby="howto-title" hidden>
+      <header class="sheet-head"><h2 id="howto-title">How to play</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body prose" id="howto-body"></div>
+    </section>
+
+    <section id="sheet-history" class="sheet" role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
+      <header class="sheet-head"><h2 id="history-title">What happened</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body"><ol id="history" class="history"></ol></div>
+    </section>
+
+    <section id="starter-lottery" class="starter-lottery" role="dialog" aria-modal="true" aria-labelledby="lottery-title" hidden>
+      <div class="lottery-card">
+        <p class="lottery-kicker">Who starts?</p>
+        <h2 id="lottery-title" class="lottery-title">Drawing lots…</h2>
+        <div class="lottery-lanes" aria-hidden="true">
+          <div class="lottery-lane you"><span>You</span></div>
+          <div class="lottery-lane bot"><span>Opponent</span></div>
+        </div>
+        <p id="lottery-result" class="lottery-result"></p>
+      </div>
+    </section>
+
+    <!-- ===== Finish screen (one card, shared by every mode: offline, campaign and online) ===== -->
+    <!-- Owner direction (2026-10-16): the card is SHORTER and never scrolls on a phone, in every
+         mode. The rule it follows: the outcome, the final score, the ONE reason and a way forward
+         are always on the card; every detail line and every extra action is marked `data-go-extra`
+         and lives behind the single "More" disclosure below (main.ts drives it). A mode marks an
+         extra as unavailable with `data-go-available="0"` (e.g. no big cut to replay), so the
+         disclosure hides itself when there is nothing behind it. -->
+    <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden>
+      <div class="go-card">
+        <h2 id="go-title" class="go-title"></h2>
+        <p id="go-sub" class="go-sub"></p>
+        <p id="go-learned" class="go-learned" hidden></p>
+        <p id="go-seeds" class="muted small" hidden></p>
+        <p id="go-score" class="go-score num"></p>
+        <p id="go-reason" class="muted"></p>
+        <p id="go-break" class="muted small" data-go-extra hidden></p>
+        <p id="go-moves" class="muted small" data-go-extra hidden></p>
+        <ul id="go-highlights" class="highlights" data-go-extra hidden></ul>
+        <div class="go-buttons">
+          <button id="go-rematch" class="btn primary big" type="button">Play again</button>
+          <button id="go-other" class="btn ghost" type="button"></button>
+          <!-- "See the board" stays on the card (not behind the disclosure): it is how a player looks
+               at the final position, and it is also the documented way to put the card away. -->
+          <button id="go-board" class="btn ghost" type="button">See the board</button>
+          <button id="go-more" class="btn link" type="button" aria-expanded="false">More</button>
+          <button id="go-share" class="btn ghost" type="button" data-go-extra hidden>Share</button>
+          <button id="go-cut" class="btn ghost" type="button" data-go-extra hidden>Replay the biggest cut</button>
+          <button id="go-menu" class="btn link" type="button">Back to menu</button>
+          <p id="go-stats" class="muted small stats-line" data-go-extra hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Install invitation. Shown once the player has actually played (never in the menu, never
+         during a match). It is a calm sheet that may open over the finish screen, so it carries
+         its own dimmer and sits above it; the words come from src/strings.ts (INSTALL). -->
+    <div id="install-prompt" class="install-prompt" hidden>
+      <div class="install-prompt-scrim" aria-hidden="true"></div>
+      <section class="sheet install-sheet" role="dialog" aria-modal="true" aria-labelledby="install-title" tabindex="-1">
+        <header class="sheet-head"><h2 id="install-title"></h2><button id="install-close" class="icon-only" type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+        <div class="sheet-body stack">
+          <ul id="install-why" class="install-why"></ul>
+          <ol id="install-steps" class="install-steps" hidden></ol>
+          <button id="install-accept" class="btn primary big" type="button"></button>
+          <button id="install-later" class="btn ghost" type="button"></button>
+          <button id="install-never" class="btn link small" type="button"></button>
+        </div>
+      </section>
+    </div>
+
+    <div id="guide-arrow" class="guide-arrow" aria-hidden="true" hidden>
+      <svg viewBox="0 0 40 48" width="40" height="48"><path d="M20 46 L4 26 H14 V2 H26 V26 H36 Z" /></svg>
+    </div>
+
+  </body>
+</html>

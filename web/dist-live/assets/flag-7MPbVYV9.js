@@ -1,0 +1,1 @@
+var e=new Set([`futa-test`,`futa05`]),t=t=>(t??{BASE_URL:`./`,DEV:!1,MODE:`production`,PROD:!0,SSR:!1})?.VITE_LIVE_DUELS?.trim()===`1`||e.has(`live`);export{t as liveDuelsEnabled};

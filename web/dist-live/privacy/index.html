@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy — Futasaku</title>
+    <meta name="description" content="FUTASAKU is a small independent game. We collect as little as we can, we never sell data, and there are no ads or tracking." />
+    <link rel="canonical" href="https://www.futasaku.com/privacy" />
+    <style>
+:root { color-scheme: dark; }
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #0e100f;
+  color: #ece2cd;
+  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+main { max-width: 46rem; margin: 0 auto; padding: clamp(1.25rem, 4vw, 3.5rem) clamp(1rem, 5vw, 2rem) 4rem; }
+.wordmark { display: inline-block; margin: 0 0 2rem; color: #b7a98a; font: 700 0.85rem/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.16em; text-decoration: none; }
+h1 { margin: 0 0 0.35rem; color: #f6ecd8; font-size: clamp(1.7rem, 6vw, 2.4rem); letter-spacing: 0.02em; }
+.updated { margin: 0 0 1.5rem; color: #b7a98a; font-size: 0.9rem; letter-spacing: 0.04em; }
+.intro { margin: 0 0 0.5rem; color: #f0e9dc; font-size: 1.05rem; }
+section { margin: 2rem 0 0; padding-top: 1.5rem; border-top: 1px solid rgba(214, 204, 177, 0.16); }
+h2 { margin: 0 0 0.75rem; color: #e2d4b4; font-size: 1.15rem; letter-spacing: 0.04em; }
+ul { margin: 0; padding-left: 1.15rem; display: grid; gap: 0.5rem; }
+li { color: #ece2cd; }
+a { color: #cfe0a6; text-decoration: underline; text-underline-offset: 3px; }
+footer { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(214, 204, 177, 0.16); color: #b7a98a; font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="wordmark" href="../">FUTASAKU</a>
+      <h1>Privacy</h1>
+      <p class="updated">Last updated 15 October 2026</p>
+      <p class="intro">FUTASAKU is a small independent game. We collect as little as we can, we never sell data, and there are no ads or tracking.</p>
+      <section>
+        <h2>Playing against the computer</h2>
+        <ul>
+          <li>Nothing leaves your device. Your settings and saved game are kept in your browser.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Playing online as a guest</h2>
+        <ul>
+          <li>We store a random player id, your generated name (like MapleFox #7QK2), your online matches (the moves, the result and the times), and sign-in keys that only work from your device (stored scrambled).</li>
+          <li>Your IP address is used for a short time to stop spam (counting requests per hour). Those counters are deleted after two days.</li>
+          <li>A guest with no matches is deleted after 30 days.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Signing in with Google</h2>
+        <ul>
+          <li>Sign-in runs through Supabase Auth. It receives from Google your email address, your name, your profile picture link and your Google account id.</li>
+          <li>We use them only to recognise you when you sign in again. Our game database keeps just a link between your sign-in and your player. Your email is shown only to you, in Settings.</li>
+          <li>We never see your Google password, and we never post anything or read anything else from your Google account.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Problem reports</h2>
+        <ul>
+          <li>When you use Report a problem, or the game crashes, we receive your message, your player id, the app version, your device type, screen size, browser and language, your game settings, and the game position (turn and step). Never your cards, your email or your sign-in keys.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Who handles the data</h2>
+        <ul>
+          <li>FUTASAKU is run by Patryk Socha, who is responsible for the data described here.</li>
+          <li>Supabase runs our game server and database, in the EU (Ireland).</li>
+          <li>GitHub Pages delivers the website itself.</li>
+          <li>Google handles signing in with Google.</li>
+          <li>Each of them may keep short technical logs, such as IP addresses, under their own privacy policies.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Deleting your data</h2>
+        <ul>
+          <li>Settings → Delete my account removes your Google sign-in and your email from FUTASAKU at once, and signs out your other devices.</li>
+          <li>Finished matches stay in your opponents’ history under your generated name, which is not linked to you any more.</li>
+          <li>To have everything removed, matches included, or to ask what we hold about you, use Report a problem and say so, or email info@futasaku.com.</li>
+          <li>You can also remove FUTASAKU from your Google account at myaccount.google.com/permissions.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Children</h2>
+        <ul>
+          <li>FUTASAKU is not made for children under 13, and we do not knowingly collect their data.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Contact</h2>
+        <ul>
+          <li>Any question about your data, or a request to see or remove it: info@futasaku.com. We reply within 30 days.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Changes</h2>
+        <ul>
+          <li>If this policy changes, the date above changes with it. A big change is announced in the game first.</li>
+        </ul>
+      </section>
+      <footer>The in-app policy sits in Settings; this page is the same document at futasaku.com/privacy.</footer>
+    </main>
+  </body>
+</html>
