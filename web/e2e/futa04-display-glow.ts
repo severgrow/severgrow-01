@@ -47,7 +47,7 @@ const openDuel = async (v: (typeof viewportSet)[number], reduceMotion: boolean) 
   }, reduceMotion);
   await page.goto(`${BASE}?seed=2`);
   await page.waitForSelector('#deck.ready');
-  await page.waitForFunction(() => !!document.getElementById('smart-led-spill') && !!document.getElementById('smart-panel'));
+  await page.waitForFunction(() => !!document.getElementById('smart-led-bloom') && !!document.getElementById('smart-panel'));
   // Let the opening score settle so the display rests rather than mid-reel.
   await page.waitForFunction(() => /^\d+:\d+$/.test(document.getElementById('smart-led-text')?.textContent ?? ''), undefined, { timeout: 6000 });
   await page.waitForTimeout(300);
@@ -69,12 +69,13 @@ const force = async (page: Page, mode: Mode, state: State, text: string, urgency
     panel.classList.toggle('led-pulse', state === 'pulse');
     panel.classList.toggle('led-alarm', state === 'alarm');
     document.documentElement.classList.toggle('idle-urgency', urgency);
-    // Hold one message so every frame is comparable, and paint the glyph canvases in
-    // this mode's ink (the CSS maps all six inks; production only emits four).
+    // Hold one message so every frame is comparable, and paint the glyph canvases and their
+    // baked bloom in this mode's ink (the CSS maps all six inks; production only emits four).
     const spec = '/src/player/led-cells.ts';
     const m = await import(/* @vite-ignore */ spec);
     m.drawLedCells(document.getElementById('smart-led-cells') as HTMLCanvasElement, text, false, mode);
-    m.drawLedCells(document.getElementById('smart-led-spill-cells') as HTMLCanvasElement, text, false, mode);
+    m.drawLedHot(document.getElementById('smart-led-hot') as HTMLCanvasElement, text, false, mode);
+    m.drawLedBloom(document.getElementById('smart-led-bloom') as HTMLCanvasElement, text, false, mode);
   }, { mode, state, urgency, text });
 };
 
@@ -104,13 +105,13 @@ const shoot = async (page: Page, name: string) => {
       const r = el.getBoundingClientRect();
       return { id: `slot${i}`, x: r.x - base.x, y: r.y - base.y, w: r.width, h: r.height };
     });
-    return { panel: rel('smart-panel'), led: rel('smart-led'), window: rel('smart-led-window'), context: rel('smart-context'), spill: rel('smart-led-spill'), buttons };
+    return { panel: rel('smart-panel'), led: rel('smart-led'), window: rel('smart-led-window'), context: rel('smart-context'), bloom: rel('smart-led-bloom'), buttons };
   }, { x: clip.x, y: clip.y });
   const scaled = (r: { x: number; y: number; w: number; h: number } | null) => r ? { x: r.x * DPR, y: r.y * DPR, w: r.w * DPR, h: r.h * DPR } : null;
   const sidecar = {
     image: { width: Math.round(clip.width * DPR), height: Math.round(clip.height * DPR) },
     panel: scaled(regions.panel), led: scaled(regions.led), window: scaled(regions.window),
-    context: scaled(regions.context), spill: scaled(regions.spill),
+    context: scaled(regions.context), bloom: scaled(regions.bloom),
     buttons: regions.buttons.map((b) => ({ id: b.id, ...scaled(b)! })),
   };
   writeFileSync(`${OUT}/${name}.json`, JSON.stringify(sidecar));

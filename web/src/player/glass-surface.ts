@@ -418,14 +418,20 @@ html.futa04-lesson .sheet { z-index: 51; }
 #tutorial-focus[data-tier='guide'] .focus-dim { fill:rgba(0,0,0,.15); }
 #tutorial-focus[data-tier='whisper'] .focus-dim { fill:rgba(0,0,0,0); }
 #tutorial-focus[data-tier='whisper'] .focus-hole { fill:transparent; }
-#tutorial-focus[data-tier='whisper'] .focus-glow-soft { fill:rgba(233,216,173,.10); }
-#tutorial-focus[data-tier='whisper'] .focus-glow { fill:rgba(233,216,173,.14); filter:drop-shadow(0 0 10px rgba(233,216,173,.38)); }
-#tutorial-focus[data-lesson='1'] .focus-glow { fill:rgba(233,216,173,.16); }
+#tutorial-focus[data-tier='whisper'] .focus-glow-soft { fill:color-mix(in srgb,var(--light-core,#e9d8c5) 10%,transparent); }
+#tutorial-focus[data-tier='whisper'] .focus-glow { fill:color-mix(in srgb,var(--light-core,#e9d8c5) 14%,transparent); filter:drop-shadow(0 0 10px var(--light-bloom,rgba(233,216,173,.38))); }
+#tutorial-focus[data-lesson='1'] .focus-glow { fill:color-mix(in srgb,var(--light-core,#e9d8c5) 16%,transparent); }
 #tutorial-focus[data-lesson='1'] .focus-pointer-body { transform:scale(1.6); transform-origin:10px 1px; stroke:rgba(20,16,10,.85); stroke-width:1.6px; paint-order:stroke; }
-/* Contour-free highlight: soft cream fill only — no stroke/ring outline. */
-#tutorial-focus .focus-glow { fill:rgba(233,216,173,.10); stroke:none; stroke-width:0;
-  filter:drop-shadow(0 0 12px rgba(233,216,173,.55)); }
-#tutorial-focus .focus-glow-soft { fill:rgba(233,216,173,.18); stroke:none; filter:drop-shadow(0 0 16px rgba(233,216,173,.42)); }
+/* Contour-free highlight: soft cream fill only — no stroke/ring outline. The ink is the
+   published LIGHT tone, so the pointer and the display speak the same colour at low alpha. */
+#tutorial-focus .focus-glow { fill:color-mix(in srgb,var(--light-core,#e9d8c5) 10%,transparent); stroke:none; stroke-width:0;
+  filter:drop-shadow(0 0 12px var(--light-bloom,rgba(233,216,173,.55))); }
+#tutorial-focus .focus-glow-soft { fill:color-mix(in srgb,var(--light-core,#e9d8c5) 18%,transparent); stroke:none; filter:drop-shadow(0 0 16px var(--light-bloom,rgba(233,216,173,.42))); }
+/* ONE halo per target. When the target is the display, its own baked bloom IS the highlight;
+   when the board already lights it (a top-rank tile's glow), the lesson does not stack a second.
+   The paths stay in the DOM (only their ink is cleared), so the pointer's geometry is unchanged. */
+#tutorial-focus[data-light-target='display'] :is(.focus-glow,.focus-glow-soft),
+#tutorial-focus[data-light-target='lit'] :is(.focus-glow,.focus-glow-soft) { fill:transparent; filter:none; }
 #tutorial-focus .focus-lift { transform-box:fill-box; transform-origin:center; }
 /* Steady opacity pulse only — never scale (scale + live target breathe looked broken). */
 #tutorial-focus[data-pulse='1'] .focus-lift { animation:tutorial-glow-pulse 1.6s ease-in-out infinite; }
@@ -433,8 +439,8 @@ html.futa04-lesson .sheet { z-index: 51; }
   0%,100% { opacity:1; }
   50% { opacity:.72; }
 }
-#tutorial-focus .focus-pointer { filter:drop-shadow(0 1px 3px rgba(0,0,0,.4)); transform-origin:10px 4px; }
-#tutorial-focus .focus-pointer-body { fill:#fff; stroke:none; }
+#tutorial-focus .focus-pointer { filter:drop-shadow(0 1px 3px rgba(0,0,0,.4)) drop-shadow(0 0 8px var(--light-bloom,rgba(233,216,173,.32))); transform-origin:10px 4px; }
+#tutorial-focus .focus-pointer-body { fill:color-mix(in srgb,var(--light-core,#fff) 35%,#fff 65%); stroke:none; }
 #tutorial-focus[data-bob='1'] .focus-pointer { animation:tutorial-pointer-tap 1.1s ease-in-out infinite; }
 #tutorial-focus[data-bob='hard'] .focus-pointer { animation:tutorial-pointer-tap-hard .85s ease-in-out infinite; }
 @keyframes tutorial-pointer-tap { 0%,100% { transform:translate(0,0); } 45% { transform:translate(var(--bob-x,0px),var(--bob-y,7px)); } }
@@ -1367,6 +1373,18 @@ export const mountGlassSurface = (onClose: () => void) => {
     targetShape = !targetSelector || options.shape === 'none' ? 'none'
       : options.lesson && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
     setIfChanged(focus, 'data-lesson', options.lesson ? '1' : '0');
+    // One halo per target. If the target is the display, the baked bloom is the light; if the
+    // board already lights it (a top-rank tile's glow lives in the l-glow layer, not inside the
+    // hex cell), do not stack the lesson's halo on top. Measured once per step, never per frame.
+    const litByBoard = new Set(
+      [...document.querySelectorAll('#board .l-glow .top-glow[data-key]')].map(node => node.getAttribute('data-key')),
+    );
+    const lightTarget = lightOff || !targetSelector ? 'none'
+      : /#smart-led\b/.test(targetSelector) ? 'display'
+      : [...document.querySelectorAll(targetSelector)]
+        .some(node => litByBoard.has(node.getAttribute('data-key') ?? '')) ? 'lit'
+      : 'board';
+    setIfChanged(focus, 'data-light-target', lightTarget);
     focusTier = options.tier ?? 'spotlight';
     setIfChanged(focus, 'data-tier', focusTier);
     lessonFocus = !!options.lesson;

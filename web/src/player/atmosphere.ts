@@ -1,6 +1,7 @@
 // Futa04-only presentation. The grain is a static CSS background and the rim is baked once; no live
 // noise/blur filter, animation clock, gameplay input, state or per-frame drawing.
 import { cornerPts, S } from '../ui/geom.js';
+import { publishLight, restoreDisplayLight } from './light.js';
 export const ATMOSPHERE_CSS = `
 /* THE ANALOGUE FILM GRAIN. This is the ONE grain in the app, and it goes on top of EVERYTHING,
    always (owner's rule, 2026-10-16: "always on top top top layer - even when we add new things").
@@ -56,13 +57,13 @@ export const ATMOSPHERE_CSS = `
 body:has(#game:not([hidden])) #futa04-board-backdrop { display: block; }
 #futa04-outcome-light { position:absolute; inset:0; pointer-events:none; opacity:0; display:none; }
 body:has(#game:not([hidden])) #futa04-outcome-light { display:block; }
-#futa04-outcome-light[data-tone='good'] {
-  background:radial-gradient(ellipse 59% 63% at 43% 53%,rgba(89,177,107,.19),rgba(63,119,76,.06) 50%,transparent 83%),
-             radial-gradient(ellipse 35% 48% at 79% 73%,rgba(92,164,102,.09),transparent 82%);
-}
+/* The outcome light speaks the same LIGHT vocabulary as the display: the tone is published on
+   the root when the result appears, so this is the display's own bloom colour. Two thin rings of
+   that ink at a fraction of its alpha: the room picks up the result, it never becomes a pane. */
+#futa04-outcome-light[data-tone='good'],
 #futa04-outcome-light[data-tone='bad'] {
-  background:radial-gradient(ellipse 59% 63% at 43% 53%,rgba(188,79,61,.18),rgba(113,54,45,.06) 50%,transparent 83%),
-             radial-gradient(ellipse 35% 48% at 79% 73%,rgba(164,77,54,.08),transparent 82%);
+  background:radial-gradient(ellipse 59% 63% at 43% 53%,color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 62%,transparent),transparent 83%),
+             radial-gradient(ellipse 35% 48% at 79% 73%,color-mix(in srgb,var(--light-bloom,rgba(92,164,102,.30)) 40%,transparent),transparent 82%);
 }
 #futa04-map-rim { pointer-events: none; }
 #board .hex-cell.normal.futa04-empty { filter: brightness(1.15); }
@@ -116,11 +117,16 @@ export function mountAtmosphere(): OutcomeLight {
       lastStart = now; lastStrength = strength;
       running?.cancel();
       outcome.dataset.tone = tone;
+      // One contract: the room's light becomes the outcome's tone (green/red) for this beat,
+      // then hands back to whatever the display is showing. Two writes, never a per-frame loop.
+      publishLight(tone === 'good' ? 'green' : 'red');
       const peak = Math.min(.82, Math.max(.22, strength * .75));
-      running = outcome.animate([
+      const beat = outcome.animate([
         { opacity: 0, offset: 0 }, { opacity: peak, offset: .23 },
         { opacity: peak * .46, offset: .49 }, { opacity: 0, offset: 1 },
       ], { duration: 880, easing: 'cubic-bezier(.2,.55,.4,1)' });
+      running = beat;
+      beat.onfinish = () => { if (running === beat) restoreDisplayLight(); };
       if (strength >= .68) {
         const panel = document.getElementById('smart-panel');
         if (panel) {
@@ -132,6 +138,7 @@ export function mountAtmosphere(): OutcomeLight {
     },
     reset() {
       running?.cancel(); running = null; lastStart = 0; lastStrength = 0;
+      restoreDisplayLight();
       cancelAnimationFrame(reflectFrame);
       document.getElementById('smart-panel')?.classList.remove('hardware-reflect');
     },
