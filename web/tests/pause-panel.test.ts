@@ -125,9 +125,15 @@ describe('the face reads as 1970s hardware, not a second app', () => {
     expect(panelCss).not.toMatch(/filter:\s*blur/);
   });
 
-  it('draws the scores in the players own meaning colours and the rest from the palette', () => {
-    expect(bodyFor('.gm-you b')).toContain('var(--c-you)');
-    expect(bodyFor('.gm-bot b')).toContain('var(--c-bot)');
+  it('draws the scores NEUTRAL and the rest from the palette', () => {
+    // Owner (2026-10-20): no green/red on the points. Both digits use the palette's text ink;
+    // whose score is whose is said by which side it sits on and by the label under it.
+    expect(bodyFor('.gm-you b')).toContain('var(--c-text)');
+    expect(bodyFor('.gm-bot b')).toContain('var(--c-text)');
+    expect(bodyFor('.gm-you b')).not.toContain('var(--c-you)');
+    expect(bodyFor('.gm-bot b')).not.toContain('var(--c-bot)');
+    // The turn line is a word in the panel's ink, not a coloured score.
+    expect(bodyFor('.gm-turn')).toContain('var(--c-text)');
     // Quiet rows recede to the palette's muted ink; the loud row does not.
     expect(bodyFor('.gm-act-quiet')).toContain('var(--c-muted)');
     expect(bodyFor('.gm-mode')).toContain('var(--c-muted)');

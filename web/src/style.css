@@ -1889,11 +1889,12 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   line-height: 1;
   letter-spacing: 0.01em;
 }
-#sheet-menu .gm-you b {
-  color: var(--c-you);
-}
+/* Neutral score digits (owner, 2026-10-20: no green/red on the points). Whose score is whose is
+   said by which side it sits on and by the label under it — never by hue. The turn line below
+   keeps its colours, because that is a state, not a score. */
+#sheet-menu .gm-you b,
 #sheet-menu .gm-bot b {
-  color: var(--c-bot);
+  color: var(--c-text);
 }
 #sheet-menu .gm-scores small {
   font-size: 0.6rem;
