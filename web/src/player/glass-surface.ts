@@ -1137,7 +1137,9 @@ export const mountGlassSurface = (onClose: () => void) => {
   const paintFocus = (tracked: Tracked | null) => {
     setIfChanged(focus, 'viewBox', `0 0 ${innerWidth} ${innerHeight}`);
     // Steady pulse always while a target is live — never pauses for settle/jiggle.
-    // The levels' glow holds still: the lit thing already breathes on its own.
+    // In the levels the overlay glow holds still: the lit thing breathes on its own now
+    // (player/lesson-breath.ts puts one breath on a card, a pile or a key), so the halo must not
+    // pulse a second time on top of it. A whisper has no target of its own, so it keeps the pulse.
     setIfChanged(focus, 'data-pulse', reduceMotion || !tracked ? '0' : focusTier === 'whisper' ? '1' : lessonFocus ? '0' : '1');
     setIfChanged(focus, 'data-bob', reduceMotion || !tracked || focusTier === 'whisper' ? '0' : idleHard ? 'hard' : '1');
     setIfChanged(focus, 'data-on', tracked || mode === 'tutorial' ? '1' : '0');

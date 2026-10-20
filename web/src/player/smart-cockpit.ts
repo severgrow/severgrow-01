@@ -728,7 +728,9 @@ export function mountSmartCockpit() {
         // The bloom is the same baked strip, so it travels the same distance for the same time.
         for (const target of [cells,led]) {
           target.style.setProperty('--led-travel',`${travel}px`);
-          target.style.setProperty('--led-duration',`${Math.max(3.2,travel/42).toFixed(1)}s`);
+          // 56 px/s: a touch faster than the old 42, still a sentence you can read once. The
+          // 3.2 s floor keeps a short scroll from crawling.
+          target.style.setProperty('--led-duration',`${Math.max(3.2,travel/56).toFixed(1)}s`);
         }
         cells.classList.add('scrolling');
       }

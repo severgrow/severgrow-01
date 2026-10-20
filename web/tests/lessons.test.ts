@@ -505,11 +505,16 @@ describe('owner review 2026-10-19', () => {
     for (const b of ends) { expect(b.say).toBe(LESSON.tapThrow); expect(b.line).toBeUndefined(); }
   });
 
-  it('no beat ever says a single word, and no explanation lives on a fadable beat', () => {
+  it('every beat says a short action line of at most three words, and no explanation lives on a fadable beat', () => {
+    // Owner, 2026-10-20: three words at most on the display; a lone » key name is still a line
+    // ("TAP »"), but a bare word never is.
     const nWords = (t: string) => t.split(/\s+/).filter((w) => /[A-Za-z0-9]/.test(w)).length;
     for (const l of LESSONS) {
       for (const b of beatsOf(l)) {
-        if (b.say) expect(nWords(b.say), `L${l.level} ${b.id}: ${b.say}`).toBeGreaterThanOrEqual(2);
+        if (b.say) {
+          expect(nWords(b.say), `L${l.level} ${b.id}: ${b.say}`).toBeGreaterThanOrEqual(1);
+          expect(nWords(b.say), `L${l.level} ${b.id}: ${b.say}`).toBeLessThanOrEqual(3);
+        }
         if (!b.explain && !b.status && !b.hello) expect(b.line, `L${l.level} ${b.id}`).toBeUndefined();
       }
     }

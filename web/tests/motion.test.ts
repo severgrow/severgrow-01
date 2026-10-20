@@ -42,7 +42,7 @@ describe('motion tokens', () => {
       throw: 396,
       throwFlight: 320,
       liveReveal: 700,
-      displayDwell: 1000,
+      displayDwell: 2000,
       cutCap: 1800,
       flash: 60,
       hitStopShort: 60,

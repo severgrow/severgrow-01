@@ -322,7 +322,10 @@ export class DisplayMachine {
     this.clearDwellQueue();
     this.clearUrgencyPaint();
     this.active = null;
-    this.emit({ text, mode, compact: text.length <= 12 });
+    // A lesson's action line owns the sign: it never waits behind the score, a result or any
+    // other message (owner, 2026-10-20: the ACTION is always first in levels 1-10). Outside a
+    // lesson (a drag word) the dwell is unchanged.
+    this.emit({ text, mode, compact: text.length <= 12 }, { force: this.quiet });
   }
   /** Hold the score itself on the sign (the lesson that teaches the score); `release` ends it. */
   holdScore() {

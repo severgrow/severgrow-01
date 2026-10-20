@@ -28,6 +28,18 @@ export const litTarget = (lit: Lit, homes: readonly [string, string]): { selecto
 
 type Closest = { closest: (sel: string) => { getAttribute: (k: string) => string | null } | null };
 
+/**
+ * Everything a tap may land on and still count as the lit thing: the lit target itself plus its
+ * quiet alternatives (the other legal places), which `tapIsLit` in answer.ts also treats as lit.
+ * Used when a tap on the lit thing both reads an explanation and performs the move.
+ */
+export const litTargetAndQuiet = (lit: Lit, homes: readonly [string, string]): { selectors: string[]; shape: FocusShape } => {
+  const target = litTarget(lit, homes);
+  const quiet = lit.t === 'hex' ? (lit.quiet ?? []).map(hexSel)
+    : lit.t === 'card' ? (lit.quiet ?? []).map(cardSel)
+    : [];
+  return { selectors: [...target.selectors, ...quiet], shape: target.shape };
+};
 /** The lesson's reading of a tap on this element. `keyAt` resolves a tap on the map between paths. */
 export const tapOf = (el: Closest | null, keyAt: () => string | null = () => null): Tap => {
   if (!el || typeof el.closest !== 'function') return { t: 'other' };

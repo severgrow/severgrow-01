@@ -26,7 +26,7 @@ export const PINNED = Object.freeze({
   /** The shortest hold for a live enemy turn, so a quiet turn cannot blink past. */
   liveReveal: 700,
   /** The LED display's minimum dwell before another message may replace it. */
-  displayDwell: 1000,
+  displayDwell: 2000,
   /** A whole cut at Normal speed, whatever the number of tiles or chained cuts. */
   cutCap: 1800,
   /** The cut's local flash never exceeds this, even at Slow speed. */

@@ -40,12 +40,14 @@ describe('lesson words', () => {
     // Owner copy (2026-10-20): "three in order in one suit", never "in a row".
     expect(LESSON.cardsThatBloomLine).toBe('Bloom: three cards with the same number, or three in order in one suit.');
     expect(LESSON.cardsThatBloomLine).not.toMatch(/\bin a row\b/i);
-    expect(LESSON.tapThrow).toBe('TAP » TO THROW');
+    // Owner, 2026-10-20: the end-turn key is » alone; the display never spends words on "to throw".
+    expect(LESSON.tapThrow).toBe('TAP »');
   });
 
   it('the display labels use the game’s own names: Draw pile and Throw pile', () => {
-    expect(LESSON.tapDraw).toBe('TAP THE DRAW PILE');
-    expect(LESSON.tapThrowPile).toBe('TAP THE THROW PILE');
+    // Owner, 2026-10-20: at most three words on the display.
+    expect(LESSON.tapDraw).toBe('TAP DRAW PILE');
+    expect(LESSON.tapThrowPile).toBe('TAP THROW PILE');
     for (const k of DISPLAY) {
       expect(LESSON[k], `${k}: ${LESSON[k]}`).not.toMatch(/discard pile/i);
       // If a label names a pile, it is the game's name: DRAW PILE / THROW PILE.
@@ -54,12 +56,16 @@ describe('lesson words', () => {
     }
   });
 
-  it('the display says what to do, never a lone word', () => {
+  it('the display says what to do in at most three words', () => {
+    // Owner, 2026-10-20: the LED is read at a glance, so every action line is <= 3 words. A lone
+    // WORD is still not a line — except » itself, which is the key's own name ("TAP »").
     for (const k of DISPLAY) {
       const n = words(LESSON[k]).length;
-      expect(n, `${k}: ${LESSON[k]}`).toBeGreaterThanOrEqual(2);
-      expect(n, `${k}: ${LESSON[k]}`).toBeLessThanOrEqual(6);
+      expect(n, `${k}: ${LESSON[k]}`).toBeGreaterThanOrEqual(1);
+      expect(n, `${k}: ${LESSON[k]}`).toBeLessThanOrEqual(3);
     }
+    expect(words(LESSON.tapThrow)).toEqual(['TAP']);
+    expect(LESSON.tapThrow).toBe('TAP »');
   });
 
   it('answers and finish titles are 6 words or fewer', () => {

@@ -62,7 +62,8 @@ describe('match display state', () => {
     expect(frames.at(-1)?.text).toBe('-7');
     sign.event({ message: 'COMBO READY', priority: 10, duration: 500 });
     expect(frames.at(-1)?.text).toBe('-7'); // lower priority ignored
-    vi.advanceTimersByTime(1300);
+    // A play fact holds for its own duration, floored by the 2 s display dwell (owner, 2026-10-20).
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
     expect(frames.at(-1)).toMatchObject({ text: '4:3', mode: 'score' });
     vi.advanceTimersByTime(2200);
     expect(frames.at(-1)?.pulse || frames.at(-1)?.alarm).toBe(true);
@@ -116,7 +117,7 @@ describe('match display state', () => {
     expect(frames.at(-1)?.text).toBe(urgent);
   });
 
-  it('holds every distinct message at least 1s; the next message queues', () => {
+  it('holds every distinct message at least 2s; the next message queues', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));
     sign.reset('GROW OR SKIP', 0, 0);
@@ -201,7 +202,7 @@ describe('match display state', () => {
     expect(frames.at(-1)).toMatchObject({ text: '1:1', mode: 'score' });
   });
 
-  it('scales step holds with the Speed factor but never under the 1s dwell', () => {
+  it('scales step holds with the Speed factor but never under the 2s dwell', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame), () => 0.5);
     sign.reset('DRAW!', 1, 0);
@@ -212,17 +213,18 @@ describe('match display state', () => {
     expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
   });
 
-  it('replaces a SKIP hint with THROW! after the 1s dwell — never leaves SKIP on throw', () => {
+  it('replaces a SKIP hint with THROW! after the 2s dwell — never leaves SKIP on throw', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));
     sign.reset('GROW!', 3, 1);
-    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    // Step word, then the resting score, each for a full dwell (owner, 2026-10-20: 2 s).
+    vi.advanceTimersByTime(2 * DISPLAY_MIN_DWELL_MS);
     // Cockpit used to flash SKIP when the skip control appeared after a grow.
     sign.hint('SKIP');
     expect(frames.at(-1)?.text).toBe('SKIP');
     // EndAct → throw while SKIP is still holding.
     sign.phase('THROW!');
-    expect(frames.at(-1)?.text).toBe('SKIP'); // 1s dwell respected
+    expect(frames.at(-1)?.text).toBe('SKIP'); // dwell respected
     vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
     expect(frames.at(-1)?.text === 'THROW!' || frames.at(-1)?.text === 'THROW').toBe(true);
     // Must not return to SKIP after THROW has landed.
@@ -333,5 +335,34 @@ describe('the sign can hold the score (the lesson that teaches it)', () => {
     sign.phase('THROW!');
     vi.advanceTimersByTime(3000);
     expect(frames.some((f) => f.text?.startsWith('THROW'))).toBe(true);
+  });
+});
+
+describe('the lesson action line owns the sign (levels 1-10)', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('window', globalThis); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  // Owner, 2026-10-20: "in lessons 1-10 the display must ALWAYS prioritise the ACTION". The score
+  // is only what is left when there is nothing to do, so an action line never queues behind it.
+  it('paints the action line at once, even when the score has just landed', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('DRAW!', 2, 1);
+    sign.setQuiet(true);
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS); // the step word ends and the score lands now
+    expect(frames.at(-1)).toMatchObject({ mode: 'score' });
+    sign.hold('TAP DRAW PILE');
+    expect(frames.at(-1)).toMatchObject({ text: 'TAP DRAW PILE' });
+  });
+
+  it('outside a lesson a drag word still waits out the dwell — today’s behaviour is untouched', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW OR SKIP', 2, 1);
+    expect(frames.at(-1)?.text).toBe('2:1');
+    sign.hold('DRAW');
+    expect(frames.at(-1)?.text).toBe('2:1'); // queued behind the score's dwell
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)?.text).toBe('DRAW');
   });
 });

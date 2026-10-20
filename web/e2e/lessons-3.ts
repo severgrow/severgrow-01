@@ -52,6 +52,11 @@ const idle = (p: Page) => p.waitForFunction(() => { const h = (window as any).__
 
 const newPage = async (w = 390, h = 844) => {
   const page = await browser.newPage({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+  // A page that is not the active tab gets its requestAnimationFrame loop throttled to about 1 fps,
+  // which turns the page's own clock (the 650 ms guard is measured on it) into a coin toss. Bring
+  // each page to the front so the timings this suite asserts are the app's, not the browser's
+  // background policy. Nothing about the app changes; the measurement becomes truthful.
+  await page.bringToFront();
   // No audio in a headless run: a machine without an output device raises an AudioContext
   // pageerror, which the suite (rightly) counts, and it has nothing to do with the lessons.
   await page.addInitScript(() => {
@@ -373,6 +378,46 @@ const tapAnywhere = async (p: Page) => {
   const box = await p.evaluate(() => { const r = document.getElementById('board-wrap')!.getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height * 0.5 }; });
   await p.mouse.click(box.x, box.y);
 };
+
+/**
+ * What an element is animating right now: every animation on it, the lesson's own breath, and the
+ * CSS properties those keyframes touch (so a filter or a shadow can be ruled out by name).
+ */
+const ANIMATIONS_OF = `(sel) => {
+  const el = document.querySelector(sel);
+  if (!el) return null;
+  const SKIP = ['offset', 'computedOffset', 'easing', 'composite'];
+  const propsOf = (a) => {
+    try {
+      if (!a.effect || !a.effect.getKeyframes) return [];
+      return a.effect.getKeyframes().flatMap((k) => Object.keys(k).filter((n) => !SKIP.includes(n)));
+    } catch { return []; }
+  };
+  const anims = el.getAnimations();
+  const breath = anims.filter((a) => a.id === 'lesson-beat-breath');
+  return {
+    count: anims.length,
+    names: anims.map((a) => a.id || a.animationName || a.constructor.name),
+    each: anims.map((a) => ({ name: a.id || a.animationName || a.constructor.name, state: a.playState, props: [...new Set(propsOf(a))] })),
+    running: anims.filter((a) => a.playState === 'running').length,
+    breath: breath.map((a) => ({ state: a.playState, props: [...new Set(propsOf(a))] })),
+    props: [...new Set(anims.flatMap(propsOf))],
+  };
+}`;
+type Anims = {
+  count: number; names: string[]; running: number;
+  each: { name: string; state: string; props: string[] }[];
+  breath: { state: string; props: string[] }[];
+  props: string[];
+};
+const animationsOf = (p: Page, sel: string) => p.evaluate(`(${ANIMATIONS_OF})(${JSON.stringify(sel)})`) as Promise<Anims | null>;
+
+/** The display's own text and tone, and the action line as words. */
+const displayState = (p: Page) => p.evaluate(() => ({
+  text: document.querySelector('#smart-led-text')?.textContent?.trim() ?? '',
+  mode: document.getElementById('smart-led')?.dataset.mode ?? '',
+})) as Promise<{ text: string; mode: string }>;
+const wordCount = (t: string) => t.replace(/[»:]/g, ' ').split(/\s+/).filter((w) => /[A-Za-z0-9]/.test(w)).length;
 
 /**
  * Player (c): ignores the words, taps only the lit thing (and anywhere on an explanation). Counts
@@ -727,6 +772,7 @@ try {
 
       // The same box under Reduce motion: present, still, and clear of the lit card.
       const rm = await browser.newPage({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+      await rm.bringToFront();
       const rmErrors: string[] = [];
       rm.on('pageerror', (e) => rmErrors.push(e.message));
       await rm.addInitScript(`
@@ -762,6 +808,150 @@ try {
       assert.deepEqual(rmErrors, [], `${tag} reduce motion Bloom example: no page errors: ${rmErrors.join(' | ')}`);
       await rm.close();
     }
+  }
+  if (ONLY === 'all' || ONLY === 'breath') {
+    console.log('\nThe lit thing breathes until the player acts, and the display speaks the action:');
+    const { page, errors } = await newPage();
+    await page.goto(URL3, { waitUntil: 'networkidle' });
+    await openNextLevel(page);
+    // Past the opening explanations to the plain Draw beat (a pile, no sentence).
+    for (let i = 0; i < 5; i++) {
+      const b = (await hook<any>(page, 'lesson'))?.beat;
+      if (!b?.explain) break;
+      await page.waitForTimeout(700);
+      await tapAnywhere(page);
+      await page.waitForTimeout(260);
+    }
+    await page.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === 'draw', undefined, { timeout: 15000 });
+    await page.waitForTimeout(300);
+
+    // THE DISPLAY: the action, in at most three words, and never the score.
+    const shown = await displayState(page);
+    check(shown.text === LESSON.tapDraw, `the display reads the action line (${shown.text})`);
+    check(wordCount(shown.text) <= 3 && wordCount(shown.text) >= 1, `and it is ${wordCount(shown.text)} words (<= 3)`);
+    check(!/^\d+:\d+$/.test(shown.text) && shown.mode !== 'score', `the score never holds the display while there is an action (${shown.mode})`);
+
+    // THE PULSE, on a pile: still running after ten seconds of no input.
+    const deckFirst = await animationsOf(page, '#deck');
+    check(!!deckFirst && deckFirst.breath.length === 1 && deckFirst.breath[0]!.state === 'running',
+      `the lit Draw pile has exactly one running lesson breath (${deckFirst?.names.join(' + ')})`);
+    const ownPile = deckFirst?.each.find((e) => e.name === 'futa04-draw-pile-breathe');
+    check(!ownPile || ownPile.state === 'paused',
+      `and its own breathe is held still, so two pulses never run out of step (${ownPile?.state ?? 'not running'})`);
+    await page.waitForTimeout(10_000);
+    const deckLater = await animationsOf(page, '#deck');
+    check(!!deckLater && deckLater.breath.length === 1 && deckLater.breath[0]!.state === 'running',
+      'after 10 s with no input the lit Draw pile is still breathing');
+    const ownPileLater = deckLater?.each.find((e) => e.name === 'futa04-draw-pile-breathe');
+    check(!ownPileLater || ownPileLater.state === 'paused',
+      `and still just the one pulse (${ownPileLater?.state ?? 'not running'})`);
+    check(!!deckLater && deckLater.breath[0]!.props.every((p) => p === 'scale' || p === 'opacity' || p === 'transform'),
+      `the breath animates transform only (${deckLater?.breath[0]?.props.join(', ')})`);
+    check(!!deckLater && !deckLater.props.some((p) => /filter|shadow|background/i.test(p)),
+      `and the lit pile carries no filter/shadow animation (${deckLater?.props.join(', ')})`);
+    const stillBeat = (await hook<any>(page, 'lesson'))?.beat?.id;
+    check(stillBeat === 'draw', `the beat is still live after the idle wait (${stillBeat})`);
+
+    // A hidden page holds the breath where it is (the same signal the hand's breath uses).
+    const hidden = await page.evaluate(`(async () => {
+      const were = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden');
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      const el = document.getElementById('deck');
+      const anims = el.getAnimations().filter((a) => a.id === 'lesson-beat-breath');
+      const paused = anims.map((a) => a.playState);
+      Object.defineProperty(document, 'hidden', were ?? { configurable: true, value: false });
+      document.dispatchEvent(new Event('visibilitychange'));
+      return { paused, resumed: el.getAnimations().filter((a) => a.id === 'lesson-beat-breath').map((a) => a.playState) };
+    })()`) as { paused: string[]; resumed: string[] };
+    check(hidden.paused.length === 1 && hidden.paused[0] === 'paused', `a hidden page pauses the breath (${hidden.paused.join(',')})`);
+    check(hidden.resumed.length === 1 && hidden.resumed[0] === 'running', `and coming back resumes it (${hidden.resumed.join(',')})`);
+
+    // THE PULSE, on a card: the Grow sentence's card keeps breathing for as long as it is live.
+    const deckPt = (await litPoints(page, { t: 'deck' }))[0]!;
+    await page.mouse.click(deckPt.x, deckPt.y);
+    await idle(page);
+    await page.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === '1:idea:first-grow', undefined, { timeout: 15000 });
+    const cardId = (await hook<any>(page, 'lesson')).beat.lit.id as number;
+    const cardSel = `#hand .card[data-card="${cardId}"]`;
+    const cardFirst = await animationsOf(page, cardSel);
+    check(!!cardFirst && cardFirst.breath.length === 1 && cardFirst.breath[0]!.state === 'running',
+      `the lit card breathes while its sentence is open (${cardFirst?.breath.length})`);
+    await page.waitForTimeout(10_000);
+    const cardLater = await animationsOf(page, cardSel);
+    check(!!cardLater && cardLater.breath.length === 1 && cardLater.breath[0]!.state === 'running',
+      'after 10 s with no input the lit card is still breathing');
+    check(!!cardLater && !cardLater.props.some((p) => /filter|shadow|background/i.test(p)),
+      `and the lit card carries no filter/shadow animation (${cardLater?.props.join(', ')})`);
+    check(!!cardLater && cardLater.breath[0]!.props.every((p) => p === 'scale' || p === 'opacity' || p === 'transform'),
+      `the card's breath animates transform only (${cardLater?.breath[0]?.props.join(', ')})`);
+
+    // THE GUARD: the 650 ms window belongs to a tap meant for the move that just happened. On the
+    // lit target it is gone — proven in the page's own clock, by tapping the instant the sentence
+    // appears (the watcher is installed before that sentence exists).
+    const guardRun = await newPage();
+    const guardPage = guardRun.page;
+    await guardPage.goto(URL3, { waitUntil: 'networkidle' });
+    await openNextLevel(guardPage);
+    for (let i = 0; i < 3; i++) {
+      const b = (await hook<any>(guardPage, 'lesson'))?.beat;
+      if (b?.explain && b.lit.t === 'deck') break;
+      await guardPage.waitForTimeout(700);
+      await tapAnywhere(guardPage);
+      await guardPage.waitForTimeout(280);
+    }
+    await guardPage.evaluate(`(() => {
+      window.__guard = new Promise((resolve) => {
+        const g = window.__severgrow;
+        const started = performance.now();
+        const tick = () => {
+          const l = g.lesson();
+          if (l && l.beat && l.beat.explain && l.beat.lit && l.beat.lit.t === 'deck') {
+            const age = Math.round(performance.now() - l.explainAt);
+            const before = g.state().history.length;
+            document.getElementById('deck').click();
+            resolve({ age, before, beat: l.beat.id });
+            return;
+          }
+          if (performance.now() - started > 20000) { resolve({ age: -1, before: -1, beat: '' }); return; }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    })()`);
+    const guard = await guardPage.evaluate('window.__guard') as { age: number; before: number; beat: string };
+    check(guard.age >= 0 && guard.age < 650, `the lit Draw pile was tapped ${guard.age} ms after its sentence appeared (inside the old 650 ms guard)`);
+    await guardPage.waitForFunction((n) => (window as any).__severgrow.state().history.length > n, guard.before, { timeout: 10000 }).catch(() => undefined);
+    const guardAfter = await hook<any>(guardPage, 'state');
+    check(guardAfter.history.length === guard.before + 1 && guardAfter.history.at(-1)?.t === 'Draw',
+      `and that one tap still drew (${guardAfter.history.length - guard.before} move)`);
+    const guardSeen = (await hook<any>(guardPage, 'lesson'))?.seen ?? [];
+    check(guardSeen.includes(guard.beat), 'and the sentence was marked read by the same tap');
+    assert.deepEqual(guardRun.errors, [], `the guard tap: no page errors: ${guardRun.errors.join(' | ')}`);
+    await guardPage.close();
+
+    // Reduce motion: a static lit state, no endless animation.
+    const rm = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await rm.bringToFront();
+    await rm.addInitScript(`
+      localStorage.setItem('futa05-3:severgrow.settings.v1', ${JSON.stringify(JSON.stringify({ sound: false, music: false, coach: true, autoSkip: false, reduceMotion: true, speed: 'normal' }))});
+    `);
+    await rm.goto(URL3, { waitUntil: 'networkidle' });
+    await openNextLevel(rm);
+    for (let i = 0; i < 5; i++) {
+      const b = (await hook<any>(rm, 'lesson'))?.beat;
+      if (!b?.explain) break;
+      await rm.waitForTimeout(700);
+      await tapAnywhere(rm);
+      await rm.waitForTimeout(260);
+    }
+    await rm.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === 'draw', undefined, { timeout: 15000 });
+    const rmAnims = await animationsOf(rm, '#deck');
+    check(!!rmAnims && rmAnims.breath.length === 0, `reduce motion: the lit pile is static (${rmAnims?.breath.length} breaths)`);
+    await rm.close();
+
+    assert.deepEqual(errors, [], `breath/display: no page errors: ${errors.join(' | ')}`);
+    await page.close();
   }
   if (ONLY === 'all' || ONLY === 'layout') {
     console.log('\nLayout: the header, the plate under the map, and the hexes:');
@@ -964,30 +1154,30 @@ try {
         check((await boxText(page)) === LESSON.tapDrawLine, `${tag}: the first-draw sentence is in the box`);
         copy.push(await boxText(page));
 
-        // 4. Dismiss with the lit deck: the action goes to the display, the box empties.
-        await page.waitForTimeout(750);
+        // 4. ONE tap on the lit Draw pile while the sentence is open: it closes the sentence AND
+        // draws (owner, 2026-10-20: "the first tap with this window open - if tapped on the
+        // highlighted item works first time - no double taps needed"). Deliberately inside the
+        // old 650 ms guard, which no longer applies to the lit target.
         const deck = (await litPoints(page, b3.lit))[0]!;
+        const draws0 = (await hook<any>(page, 'state')).history.length;
         await tap(page, deck);
+        await idle(page);
+        const s4 = await hook<any>(page, 'state');
+        const drawn = s4.history.length === draws0 + 1 && s4.history.at(-1)?.t === 'Draw' && s4.history.at(-1)?.player === 0;
+        check(drawn, `${tag}: one tap on the lit Draw pile draws the card (${s4.history.length - draws0} move)`);
         const b4 = (await hook<any>(page, 'lesson')).beat;
-        check(!!b4 && b4.id === 'draw' && b4.say === LESSON.tapDraw, `${tag}: the draw action is on the display`);
-        check((await boxText(page)) === '', `${tag}: the box is empty for a plain action`);
-        check((await displayText(page)) === LESSON.tapDraw, `${tag}: the display reads TAP THE DRAW PILE`);
-
-        // 5. Draw: the Grow explanation, and the suggested card is genuinely lifted.
-        await tap(page, deck);
-        await page.waitForTimeout(350);
-        const b5 = (await hook<any>(page, 'lesson')).beat;
-        check(!!b5 && b5.id === '1:idea:first-grow', `${tag}: the Grow explanation follows the draw`);
-        check((await boxText(page)) === LESSON.growLine, `${tag}: the Grow sentence uses "your hand"`);
+        check(!!b4 && b4.id === '1:idea:first-grow' && (await boxText(page)) === LESSON.growLine,
+          `${tag}: the same tap closed the first-draw sentence and brought the Grow one (${b4?.id})`);
         copy.push(await boxText(page));
-        // Never both voices at once: while the box explains there is no action line, and the
-        // display never falls back to a lone step word.
+
+        // 5. The Grow explanation: the suggested card is genuinely lifted, and the display is the
+        // other voice — never a lone step word, never the box's sentence.
         await page.waitForTimeout(1200);
         const settleDisplay = (await displayText(page)).trim();
         check(!/^(DRAW|GROW|THROW|BLOOM|BOMB|BLAST|SKIP)[!?]?$/.test(settleDisplay), `${tag}: no lone step word on the display (${settleDisplay})`);
         check(settleDisplay !== LESSON.growLine, `${tag}: the display does not repeat the box`);
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-card-${w}x${h}.png` });
-        const cardId = b5.lit.id;
+        const cardId = b4.lit.id;
         const lift = await page.evaluate(`(() => {
           const c = document.querySelector('#hand .card[data-card="${cardId}"]');
           if (!c) return null;
@@ -1002,33 +1192,29 @@ try {
         check(!!lift && lift.hit === String(cardId), `${tag}: the lifted card is still the tap target`);
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-lifted-${w}x${h}.png` });
 
-        // 6. Dismiss on the card itself; the card stays lifted while it is the suggestion.
-        await page.waitForTimeout(750);
-        const cardPt = (await litPoints(page, b5.lit))[0]!;
+        // 6. ONE tap on the lit card while the Grow sentence is open: it closes the sentence AND
+        // picks the card, in the same gesture.
+        const cardPt = (await litPoints(page, b4.lit))[0]!;
         await tap(page, cardPt);
-        const b6 = (await hook<any>(page, 'lesson')).beat;
-        check(!!b6 && b6.id.startsWith('pick:') && b6.say === LESSON.chooseCard, `${tag}: then the card action (${b6?.id})`);
-        check((await page.evaluate(`!!document.querySelector('#hand .card[data-card="${cardId}"].tutorial-target-card')`)) === true,
-          `${tag}: the suggested card is still lifted`);
-        // 7. Pick it: the tile is lit and no card is left lifted by the lesson.
-        await tap(page, cardPt);
-        const b7 = (await hook<any>(page, 'lesson')).beat;
-        check(!!b7 && b7.lit.t === 'hex', `${tag}: picking the card lights the tile (${b7?.id})`);
+        const b5 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b5 && b5.lit.t === 'hex' && b5.say === LESSON.tapTile,
+          `${tag}: one tap on the lit card picks it and lights the tile (${b5?.id})`);
+        check((await boxText(page)) === '', `${tag}: the Grow sentence closed on that same tap`);
         check((await page.evaluate(() => document.querySelectorAll('.tutorial-target-card').length)) === 0,
           `${tag}: no card stays lifted after the beat moves on`);
-        // 8. Place it: the explanation points at the TILE THAT WAS JUST PLACED and its number
+        // 7. Place it: the explanation points at the TILE THAT WAS JUST PLACED and its number
         // (owner, 2026-10-20: it used to light the score display, which taught the wrong thing).
-        const placedKey = b7.lit.t === 'hex' ? b7.lit.key : '';
-        const tilePt = (await litPoints(page, b7.lit))[0]!;
+        const placedKey = b5.lit.t === 'hex' ? b5.lit.key : '';
+        const tilePt = (await litPoints(page, b5.lit))[0]!;
         await tap(page, tilePt);
         await idle(page);
         await page.waitForTimeout(300);
-        const b8 = (await hook<any>(page, 'lesson')).beat;
-        check(!!b8 && b8.id === '1:grew' && (await boxText(page)) === LESSON.youGrewLine, `${tag}: the grow moment explains the tile rank`);
-        check(!!b8 && b8.lit.t === 'hex', `${tag}: it lights the tile, not the display (${b8?.lit?.t})`);
-        check(!!b8 && b8.lit.t !== 'score', `${tag}: the score display is not the lit target`);
-        check(!!b8 && !!placedKey && b8.lit.key === placedKey,
-          `${tag}: it lights the hex that was just grown (${b8?.lit?.key} vs ${placedKey})`);
+        const b6 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b6 && b6.id === '1:grew' && (await boxText(page)) === LESSON.youGrewLine, `${tag}: the grow moment explains the tile rank`);
+        check(!!b6 && b6.lit.t === 'hex', `${tag}: it lights the tile, not the display (${b6?.lit?.t})`);
+        check(!!b6 && b6.lit.t !== 'score', `${tag}: the score display is not the lit target`);
+        check(!!b6 && !!placedKey && b6.lit.key === placedKey,
+          `${tag}: it lights the hex that was just grown (${b6?.lit?.key} vs ${placedKey})`);
         // The tile really carries the card's rank, right where the light points.
         const rank = await page.evaluate((key) => {
           const g = document.querySelector(`#board .tile[data-key="${key}"]`);
@@ -1038,11 +1224,13 @@ try {
         }, placedKey);
         check(/^\d+$/.test(rank.text) && rank.w > 0, `${tag}: the placed tile shows its rank (${rank.text})`);
         // The caption never covers the number it is talking about.
-        await checkPlateClear(page, b8.lit, `${tag} grow rank`);
+        await checkPlateClear(page, b6.lit, `${tag} grow rank`);
         // The display is the OTHER voice: a play fact (YOU LEAD, +N) or the resting score — never
         // the box's sentence, never a lone step word. It used to be pinned to a held score, but
         // that hold existed only so the lesson could point at the display; this beat points at
-        // the tile now, and the sign is free to report what just happened.
+        // the tile now, and the sign is free to report what just happened. The previous action
+        // line finishes its own 2 s dwell first (owner, 2026-10-20: no message changes faster).
+        await page.waitForTimeout(2200);
         const spoken = (await displayText(page)).trim();
         check(spoken !== LESSON.youGrewLine, `${tag}: the explanation is not on the display (${spoken})`);
         check(!/^(DRAW|GROW|THROW|BLOOM|BOMB|BLAST|SKIP)[!?]?$/.test(spoken), `${tag}: no lone step word on the display (${spoken})`);
@@ -1062,21 +1250,21 @@ try {
         await idle(page);
         await page.waitForTimeout(250);
         check((await page.evaluate('window.__endLit')) === 0, `${tag}: » is never lit before the game moves on to the Throw`);
-        const b10 = (await hook<any>(page, 'lesson')).beat;
-        check(!!b10 && b10.id === '1:idea:first-throw', `${tag}: the Throw explanation follows the Grow`);
+        const b7 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b7 && b7.id === '1:idea:first-throw', `${tag}: the Throw explanation follows the Grow`);
         check((await boxText(page)) === LESSON.throwLine, `${tag}: the Throw sentence is in the box`);
         copy.push(await boxText(page));
-        check(b10.lit.t === 'card', `${tag}: the Throw explanation points at a card`);
-        // 11. Dismiss on the card, pick it, and throw it: the lifted card is fully usable.
-        await page.waitForTimeout(750);
-        const throwCardPt = (await litPoints(page, b10.lit))[0]!;
+        check(b7.lit.t === 'card', `${tag}: the Throw explanation points at a card`);
+        // 10. ONE tap on the lit Throw card: the sentence closes AND the card is picked for the
+        // throw, so the Throw pile is the only thing left to tap.
+        const throwCardPt = (await litPoints(page, b7.lit))[0]!;
         await tap(page, throwCardPt);
-        const b11 = (await hook<any>(page, 'lesson')).beat;
-        check(!!b11 && b11.id.startsWith('throw:') && b11.say === LESSON.throwCard, `${tag}: then the throw action (${b11?.id})`);
-        await tap(page, throwCardPt);
-        const b12 = (await hook<any>(page, 'lesson')).beat;
-        check(!!b12 && b12.lit.t === 'discard', `${tag}: the Throw pile is lit for the second tap`);
-        const pilePt = (await litPoints(page, b12.lit))[0]!;
+        const b8 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b8 && b8.id === 'throw-pile' && b8.say === LESSON.tapThrowPile && b8.lit.t === 'discard',
+          `${tag}: one tap on the lit Throw card picks it and lights the Throw pile (${b8?.id})`);
+        check((await boxText(page)) === '', `${tag}: the Throw sentence closed on that same tap`);
+        // 11. The Throw pile: the tap throws the card and ends the turn.
+        const pilePt = (await litPoints(page, b8.lit))[0]!;
         await tap(page, pilePt);
         await idle(page);
         const st = await hook<any>(page, 'state');

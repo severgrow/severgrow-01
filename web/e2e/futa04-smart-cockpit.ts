@@ -43,6 +43,7 @@ const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
 try {
   for (const [width,height,side] of [[360,640,'right'],[390,664,'right'],[390,664,'left'],[390,844,'right'],[430,932,'right'],[768,1024,'right'],[1280,800,'right'],[1440,900,'right'],[1600,980,'right'],[1920,1080,'right'],[390,844,'left']] as const) {
     const name=`${width}x${height} ${side}`, mobile=width<600;
+    console.log('ITERATION', name);
     const page=await browser.newPage({viewport:{width,height},isMobile:mobile,hasTouch:mobile});
     const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
     await page.addInitScript(which => {

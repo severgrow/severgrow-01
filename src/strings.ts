@@ -1176,20 +1176,23 @@ export const CAMPAIGN = Object.freeze({
 // docs/LESSON-SCRIPTS.md holds the same text beat by beat; web/tests/lesson-words.test.ts pins both.
 // ======================================================================================
 export const LESSON = Object.freeze({
-  // ---- the display: what to do now (never a lone word) ----
-  tapDraw: 'TAP THE DRAW PILE',
-  tapThrowPile: 'TAP THE THROW PILE',
+  // ---- the display: what to do now (never more than three words) ----
+  // Owner, 2026-10-20: the LED is small and read at a glance, so the action is at most three
+  // words ("TAP THE DRAW PILE" -> "TAP DRAW PILE"). The game's own names stay: DRAW PILE and
+  // THROW PILE, never "discard". The box keeps the full sentences below.
+  tapDraw: 'TAP DRAW PILE',
+  tapThrowPile: 'TAP THROW PILE',
   chooseCard: 'CHOOSE A CARD',
-  tapTile: 'TAP THE LIT TILE',
-  tapTiles: 'TAP THE LIT TILES',
+  tapTile: 'TAP LIT TILE',
+  tapTiles: 'TAP LIT TILES',
   throwCard: 'THROW A CARD',
-  tapThrow: 'TAP » TO THROW',
+  tapThrow: 'TAP »',
   tapBloom: 'TAP BLOOM',
-  tapBlast: 'TAP BLOOM TO BLAST',
+  tapBlast: 'TAP BLOOM',
   chooseBomb: 'CHOOSE THE BOMB',
   bombTile: 'BOMB THEIR TILE',
   tapTheirTile: 'TAP THEIR TILE',
-  tapLastSide: 'TAP THE LAST SIDE',
+  tapLastSide: 'TAP LAST SIDE',
   // a power's once-ever hello (the card itself glows)
   bloomHello: 'TAP TO BLOOM',
   bombHello: 'TAP THE BOMB',

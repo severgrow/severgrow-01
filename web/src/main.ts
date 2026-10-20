@@ -96,7 +96,8 @@ import {
 import type { Beat, Lesson } from './lessons/lessons.js';
 import { scriptedOpponentAction } from './lessons/opponent.js';
 import { tapAnswer } from './lessons/answer.js';
-import { litTarget, tapOf } from './lessons/lesson-view.js';
+import { litTarget, litTargetAndQuiet, tapOf } from './lessons/lesson-view.js';
+import { LESSON_BREATH_ID } from './player/lesson-breath.js';
 import { LESSON_META_KEY, decodeLessonMeta, encodeLessonMeta, lessonResumable } from './lessons/lesson-save.js';
 import {
   LESSON_MASTERY_KEY, LESSON_VERSION, actionKindOf, decodeMastery, displayTier, encodeMastery,
@@ -1257,6 +1258,8 @@ function dealIn() {
 let placeTeachingPanel: typeof import('./player/overlay-placement.js').placeTeachingPanel | null = null;
 let futa04Help: ReturnType<typeof import('./player/help.js').mountHelp> | null = null;
 let smartCockpit: ReturnType<typeof import('./player/smart-cockpit.js').mountSmartCockpit> | null = null;
+/** The lesson's live breath on the lit thing (a card, a pile, a key) — see player/lesson-breath.ts. */
+let lessonBreath: ReturnType<typeof import('./player/lesson-breath.js').mountLessonBreath> | null = null;
 let outcomeLight: OutcomeLight | null = null;
 let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
@@ -1395,6 +1398,7 @@ async function mountPlayerEnhancements() {
     });
     futa04Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
     smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
+    lessonBreath = (await import('./player/lesson-breath.js')).mountLessonBreath();
     layoutKey = '';
     if (session) render();
   }
@@ -2736,6 +2740,7 @@ function setPaused(on: boolean) {
   if (paused === on) return;
   paused = on;
   document.body.classList.toggle('paused', on);
+  syncBreathHold();
   if (!on) {
     const w = unpauseWaiters;
     unpauseWaiters = [];
@@ -2761,9 +2766,11 @@ function fastForward() {
   quietAmbient(false);
   board.focus(null);
   for (const w of [...waiters]) w();
-  // Finish our own one-off effects (never the endless CSS decorations like the root pulse).
+  // Finish our own one-off effects (never the endless CSS decorations like the root pulse, and
+  // never the lesson's lit breath, which must outlive the move it sits on).
   for (const a of document.getAnimations()) {
     if (typeof CSSAnimation !== 'undefined' && a instanceof CSSAnimation) continue;
+    if (a.id === LESSON_BREATH_ID) continue;
     const t = a.effect instanceof KeyframeEffect ? a.effect.target : null;
     if (!(t instanceof Element) || !t.closest('.l-fx, .l-tiles, .l-veins, .flyer, #board-wrap, #hand, .hud')) continue;
     try {
@@ -4208,6 +4215,41 @@ function lessonMarkSeen(id: string) {
 }
 
 /**
+ * The same, for the tap that is ALSO the move. The seen set is updated at once (so the game's own
+ * render already drops the sentence), but the repaint waits until the gesture has been delivered:
+ * a render inside pointerdown would replace the tapped card or pile before the game reads it, and
+ * the move would be lost. So: flush on the click that ends this gesture, never before.
+ */
+let lessonSeenFlush = 0;
+function lessonMarkSeenAfterTap(id: string) {
+  if (!lessonSeen.has(id)) {
+    lessonSeen.add(id);
+    saveLessonMeta();
+  }
+  lessonShownKey = '';
+  if (lessonSeenFlush) return;
+  const flush = () => {
+    if (!lessonSeenFlush) return;
+    window.clearTimeout(lessonSeenFlush);
+    lessonSeenFlush = 0;
+    document.removeEventListener('pointerup', after, true);
+    document.removeEventListener('pointercancel', after, true);
+    document.removeEventListener('click', after, true);
+    render();
+  };
+  const after = () => {
+    if (!lessonSeenFlush) return;
+    // Next task, so the game's own click handler has already run on the node we must not replace.
+    window.setTimeout(flush, 0);
+  };
+  document.addEventListener('pointerup', after, true);
+  document.addEventListener('pointercancel', after, true);
+  document.addEventListener('click', after, true);
+  // A gesture that never ends (a cancelled pointer, a keyboard activation) still closes the box.
+  lessonSeenFlush = window.setTimeout(flush, 600);
+}
+
+/**
  * The safety net: 6 s WHISPER, 12 s GUIDE, 20 s the light guide. Any input resets all three. The
  * watch reports the stage; render turns it into at least that tier for the current move.
  */
@@ -4257,11 +4299,31 @@ function lessonSay(text: string, x: number | null, y: number | null) {
 
 /**
  * Every tap during a lesson is read once, before the game sees it. An explanation moves on with a
- * tap anywhere. A tap that cannot do anything gets its answer. In levels 1-3 (locked) a tap that is
- * not the lit one does not reach the game at all; from level 4 on the game takes every legal tap
- * (a different legal move is the player's choice) and only the answer is added.
+ * tap anywhere — and a tap ON the lit thing both reads the sentence and performs the move on the
+ * same gesture (owner, 2026-10-20: "the first tap with this window open - if tapped on the
+ * highlighted item works first time - no double taps needed"). A tap that cannot do anything gets
+ * its answer. In levels 1-3 (locked) a tap that is not the lit one does not reach the game at all;
+ * from level 4 on the game takes every legal tap (a different legal move is the player's choice)
+ * and only the answer is added.
  */
 let lessonVeto = false;
+
+/**
+ * A tap on an explanation's lit thing that would really do something: the lit target itself or one
+ * of its quiet alternatives, and the same answer the game gives on the next tap (no refusal).
+ * A home, a rock or the display that is only being explained is not a move: that tap dismisses.
+ */
+function lessonTapMoves(beat: Beat, target: Element, e: Event, locked: boolean): boolean {
+  if (!session) return false;
+  const selectors = litTargetAndQuiet(beat.lit, SMALL_HOMES).selectors;
+  if (!selectors.length || !target.closest(selectors.join(', '))) return false;
+  const pe = e as PointerEvent;
+  const keyAt = () => (Number.isFinite(pe.clientX) ? board.keyAtClient(pe.clientX, pe.clientY) : null);
+  const tap = tapOf(target as never, keyAt);
+  if (tap.t === 'other') return false;
+  return tapAnswer(session.state, session.sel.card, tap, beat.lit, locked, !!lessonPlacing()) === null;
+}
+
 function lessonDecide(e: Event): boolean {
   const lesson = lessonActive();
   if (!lesson || !session || openSheet || session.state.phase === 'GAME_OVER') return false;
@@ -4272,7 +4334,15 @@ function lessonDecide(e: Event): boolean {
   if (target.closest('#hud, #hud-menu, #futasaku-glass, #gameover, .sheet, #scrim')) return false;
   const guided = !guidanceOff();
   const beat = lessonBeatNow;
+  const lockedNow = lessonLocked(lesson, session.state) && guided;
   if (guided && beat?.explain) {
+    // The lit thing is the move: one tap reads the sentence AND plays it. Never the 650 ms guard
+    // here — that guard exists for a tap meant for the move that just happened, and this tap is
+    // aimed at the thing the lesson is pointing at now.
+    if (lessonTapMoves(beat, target, e, lockedNow)) {
+      lessonMarkSeenAfterTap(beat.id);
+      return false;
+    }
     // A tap meant for the move that just happened must not swallow the explanation unread.
     if (performance.now() - lessonExplainAt < 650) return true;
     lessonMarkSeen(beat.id);
@@ -4290,7 +4360,7 @@ function lessonDecide(e: Event): boolean {
     lessonSay(LESSON.theirTurnNow, x, y);
     return lessonLocked(lesson, session.state);
   }
-  const locked = lessonLocked(lesson, session.state) && guided;
+  const locked = lockedNow;
   if (tap.t === 'other') {
     // A control that is not the lit one (Undo, sort, Bloom) does not react in the locked levels.
     if (locked && target.closest('button') && !(beat?.lit.t === 'bloom' && target.closest('#smart-bloom'))) {
@@ -4649,6 +4719,7 @@ function renderLessonGuide(): void {
   // The header stays the menu and the logo; the words are chosen below.
   if (guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
     lessonBeatNow = null;
+    lessonBreath?.clear();
     hideLessonPlate();
     smartCockpit?.quiet?.(false);
     if (!lessonHoldingScore) smartCockpit?.led?.(null);
@@ -4663,6 +4734,7 @@ function renderLessonGuide(): void {
   if (lessonStageActive()) {
     const stageKey = `stage:${level}`;
     lessonBeatNow = null;
+    lessonBreath?.clear();
     if (lessonShownKey !== stageKey) {
       lessonShownKey = stageKey;
       glassSurface.hide();
@@ -4675,6 +4747,7 @@ function renderLessonGuide(): void {
   // The first light waits for the opening hand to stop moving — never a fixed delay.
   if (!handSettled) {
     lessonBeatNow = null;
+    lessonBreath?.clear();
     hideLessonPlate();
     if (lessonShownKey) {
       lessonShownKey = '';
@@ -4728,15 +4801,20 @@ function renderLessonGuide(): void {
   lessonTierShown = tier;
   lessonTierKind = kind;
   if (beat?.explain && beat.id !== lessonExplainId) { lessonExplainId = beat.id; lessonExplainAt = performance.now(); }
-  // The one moment that teaches the score: the sign shows the score itself.
-  const holdScore = shown?.lit.t === 'score';
-  if (holdScore !== lessonHoldingScore) { lessonHoldingScore = holdScore; smartCockpit?.holdScore?.(holdScore); }
-  const lit = shown && mine ? litTarget(shown.lit, SMALL_HOMES) : { selectors: [] as string[], shape: 'none' as const };
   // The box explains; the display says what to do. They never carry the same words, and the box
   // never holds a title, a mission or a button.
   const voice = lessonVoiceFor({
     beat: shown, answer: lessonAnswerText || null, stuck, restartLine: LESSON.restartLine,
   });
+  // The one moment that teaches the score: the sign shows the score itself — but only when this
+  // beat has no action line. In lessons 1-10 the ACTION always wins the display (owner,
+  // 2026-10-20); the score is what is left when there is nothing to do.
+  const holdScore = shown?.lit.t === 'score' && !voice.display;
+  if (holdScore !== lessonHoldingScore) { lessonHoldingScore = holdScore; smartCockpit?.holdScore?.(holdScore); }
+  const lit = shown && mine ? litTarget(shown.lit, SMALL_HOMES) : { selectors: [] as string[], shape: 'none' as const };
+  // The lit thing keeps breathing for as long as the beat is live: a card, a pile, a key. A hex
+  // already breathes on the board and the display is its own light, so neither is doubled.
+  lessonBreath?.sync(lit.selectors, lit.shape, !!shown && mine && motionOn() && !settings.reduceMotion);
   const key = JSON.stringify([
     level, shown?.id, voice.box, voice.display, shown?.lit, lessonAnswerText, lessonIdle, tier,
     lessonHelloNow, holdScore, mine, settings.reduceMotion, handSettled,
@@ -4749,6 +4827,7 @@ function renderLessonGuide(): void {
   if (!holdScore && !lessonAnswerText) smartCockpit?.led?.(voice.display);
   if (!shown && !voice.box) {
     lessonBeatNow = null;
+    lessonBreath?.clear();
     hideLessonPlate();
     glassSurface.hide();
     return;
@@ -4759,6 +4838,7 @@ function renderLessonGuide(): void {
   // An explanation with no lit move (the way out of a stuck lesson): the box speaks, the map is
   // not dimmed and there is nothing to point at.
   if (!shown) {
+    lessonBreath?.clear();
     glassSurface.hide();
     return;
   }
@@ -4780,6 +4860,7 @@ function renderOnboardingGuide(v: View) {
   if (lessonActive()) return renderLessonGuide();
   // Every other screen keeps its own chrome: the plate never shows outside a lesson.
   hideLessonPlate();
+  lessonBreath?.clear();
   smartCockpit?.quiet?.(false);
   delete document.documentElement.dataset.lesson;
   syncLessonPile(null);
@@ -6221,12 +6302,13 @@ function showTip(id: FirstTip) {
 /**
  * Phase 4: the idle breath is CSS-only, but it must not move under a finger. A pointer pressed on
  * the hand (or a tab that went away, a sheet, a pause) holds it; releasing resumes the same phase.
+ * The lesson's lit breath follows the very same hold, so a hidden tab or a pause freezes it too.
  */
 let breathPointers = 0;
 function syncBreathHold() {
-  const hand = document.getElementById('hand');
-  if (!hand) return;
-  hand.classList.toggle('breath-hold', breathPointers > 0 || document.hidden || paused || !!openSheet);
+  const hold = breathPointers > 0 || document.hidden || paused || !!openSheet || !!$('game').hidden;
+  document.getElementById('hand')?.classList.toggle('breath-hold', hold);
+  lessonBreath?.hold(hold);
 }
 function installHandBreath(hand: HTMLElement) {
   hand.addEventListener('pointerdown', () => {
@@ -8475,6 +8557,8 @@ let appReady = false;
     return l ? {
       level: l.level, beat: lessonBeatNow, answer: lessonAnswerText, answers: lessonAnswerSeq,
       idle: lessonIdle, idleStage: lessonIdleStage, tier: lessonTierShown,
+      /** Tests: when this explanation first appeared (the 650 ms guard's own clock). */
+      explainAt: lessonExplainAt,
       stage: lessonStageActive(), stageLeft: Math.max(0, Math.round(lessonStageUntil - performance.now())),
       handSettled, shownKey: lessonShownKey, seen: [...lessonSeen], powerSeen: [...lessonPowerSeen],
     } : null;
