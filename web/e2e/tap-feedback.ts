@@ -163,12 +163,14 @@ try {
   const throttled = await throttle(page);
   console.log(`CPU throttling: ${throttled ? '4x' : 'not supported by this harness'}`);
 
-  // Menu button, then a settings control behind it.
-  await pressSurface(page, '#menu-settings', { name: 'menu button' });
+  // Menu entry, then a settings control behind it (the chip/seg are the same primitive).
+  await pressSurface(page, '#menu-settings', { name: 'menu entry' });
   await page.waitForSelector('#sheet-settings:not([hidden])', { timeout: 10_000 });
   const settings = await firstVisible(page, ['#sheet-settings [data-close]', '#test-sound', '#palette-seg button']);
   assert(settings, 'settings exposes a pressable control');
   await pressSurface(page, settings!, { name: 'settings control' });
+  const chip = await firstVisible(page, ['#sheet-settings .chip', '#sheet-settings .seg-btn']);
+  if (chip) await pressSurface(page, chip, { name: 'settings chip' });
   await page.keyboard.press('Escape');
 
   // The game's own surfaces.
@@ -178,6 +180,66 @@ try {
   const card = await firstVisible(page, ['#hand .card']);
   assert(card, 'the hand exposes a card');
   await pressSurface(page, card!, { name: 'hand card' });
+
+  // Phase 1: every card carries a weight (0..1, monotonic by rank) and a press never changes
+  // its hit box. The weight is read from the page's own state, never guessed from the face.
+  const WEIGHTS = `(() => {
+    const hand = window.__severgrow.state().hands[0];
+    return [...document.querySelectorAll('#hand [data-card]')].map(el => {
+      const c = hand.find(x => x.id === Number(el.dataset.card)) || { rank: 0 };
+      return {
+        rank: c.rank,
+        weight: Number(el.style.getPropertyValue('--weight')),
+        lift: parseFloat(el.style.getPropertyValue('--lift')),
+        w: el.offsetWidth, h: el.offsetHeight,
+      };
+    });
+  })()`;
+  const weights = await page.evaluate(WEIGHTS) as { rank: number; weight: number; lift: number; w: number; h: number }[];
+  check(weights.length > 0, 'every hand card is measured');
+  check(weights.every((c) => c.weight >= 0 && c.weight <= 1), 'every card weight is inside 0..1');
+  check(weights.every((c) => Number.isFinite(c.lift) && c.lift >= 16 && c.lift <= 22), 'every card lift is 22 px light to 16 px heavy');
+  const byRank = [...weights].sort((a, b) => a.rank - b.rank);
+  check(byRank.every((c, i) => i === 0 || c.weight >= byRank[i - 1]!.weight), 'card weight never decreases with rank');
+  const ranks = new Set(weights.map((c) => c.rank));
+  if (ranks.size > 1) {
+    const firstW = byRank[0]!.weight;
+    const lastW = byRank.at(-1)!.weight;
+    check(lastW > firstW, `the heaviest rank outweighs the lightest (${firstW} < ${lastW})`);
+  }
+
+  // Press the heaviest card and prove depth is 1.5-3 px and the layout box is untouched.
+  const target = await page.evaluate(`(() => {
+    const hand = window.__severgrow.state().hands[0];
+    const rankOf = (el) => (hand.find(x => x.id === Number(el.dataset.card)) || { rank: 0 }).rank;
+    const cards = [...document.querySelectorAll('#hand [data-card]')];
+    let best = cards[0];
+    for (const el of cards) if (rankOf(el) > rankOf(best)) best = el;
+    const b = best.getBoundingClientRect();
+    let point = { x: b.left + b.width / 2, y: b.top + b.height * 0.6 };
+    for (const yf of [0.6, 0.5, 0.7, 0.4, 0.8]) {
+      for (const xf of [0.8, 0.7, 0.6, 0.9, 0.5, 0.4, 0.3]) {
+        const x = b.left + b.width * xf;
+        const y = b.top + b.height * yf;
+        const hit = document.elementFromPoint(x, y);
+        if (hit === best || best.contains(hit)) { point = { x, y }; return { ...point, w: best.offsetWidth, h: best.offsetHeight, id: Number(best.dataset.card) }; }
+      }
+    }
+    return { ...point, w: best.offsetWidth, h: best.offsetHeight, id: Number(best.dataset.card) };
+  })()`) as { x: number; y: number; w: number; h: number; id: number };
+  await page.mouse.move(target.x, target.y);
+  await page.mouse.down();
+  await page.waitForTimeout(120);
+  const pressed = await page.evaluate(`(() => {
+    const el = document.querySelector('#hand .card[data-card="${target.id}"]');
+    return { w: el.offsetWidth, h: el.offsetHeight, translate: getComputedStyle(el).translate, depth: el.style.getPropertyValue('--press-drop') };
+  })()`) as { w: number; h: number; translate: string; depth: string };
+  await page.mouse.up();
+  check(pressed.w === target.w && pressed.h === target.h, 'a pressed card keeps its exact hit box');
+  check(/calc/.test(pressed.depth), `a card's press depth follows its weight (${pressed.depth})`);
+  const dropY = Math.abs(parseFloat((pressed.translate.split(/\s+/)[1] ?? '0').replace('px', '')));
+  check(dropY >= 0.8 && dropY <= 3.2, `a card presses 1.5-3 px (${pressed.translate})`);
+
   await pressSurface(page, '#deck', { name: 'draw pile', drag: true });
   if (await page.locator('#discard').isVisible() && !(await page.locator('#discard').isDisabled())) {
     await pressSurface(page, '#discard', { name: 'discard pile' });
@@ -190,6 +252,8 @@ try {
   await pressSurface(page, cockpit!, { name: 'smart cockpit key' });
   const hardware = await firstVisible(page, ['.futa04-hardware-control']);
   if (hardware) await pressSurface(page, hardware, { name: 'hardware key' });
+  const bloomKey = await firstVisible(page, ['#smart-bloom-button']);
+  if (bloomKey) await pressSurface(page, bloomKey, { name: 'smart cockpit chip' });
 
   // Space paints immediately; the primitive itself does not change game state before keyup.
   await page.locator(card!).first().focus();
@@ -202,6 +266,11 @@ try {
   await page.keyboard.up('Space');
   await page.waitForTimeout(20);
   check(!(await isPressed(page, card!)), 'Space release clears the press');
+
+  // The HUD is a pressable surface too (the menu key); do it last, since it opens the pause sheet.
+  await pressSurface(page, '#hud-menu', { name: 'HUD button' });
+  await page.waitForTimeout(120);
+  await page.keyboard.press('Escape');
 
   const feel = await page.evaluate(() => (window as unknown as {
     __severgrow: { feel: () => { pressLatency: { count: number; max: number | null } } };

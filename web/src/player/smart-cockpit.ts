@@ -1,6 +1,7 @@
 /** Futasaku 0.4 cockpit presentation. Game-owned buttons remain the action source. */
-import { LED_ADVANCE, drawLedCells, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage, ledToken } from './led-cells.js';
+import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage, ledToken } from './led-cells.js';
 import type { LedTone } from './led-cells.js';
+import { publishDisplayLight, LIGHT_CAPS } from './light.js';
 import { DisplayMachine } from './display-machine.js';
 import type { DisplayFrame } from './display-machine.js';
 import type { DisplayEvent } from './display-readout.js';
@@ -88,7 +89,7 @@ html.futa04-information #futa04-box #smart-context { grid-column:3; grid-row:1; 
 html.futa04-information #futa04-box #smart-context svg { width:21px; height:21px; }
 html.futa04-information .dock #futa04-box :is(#smart-context,#futa04-actions > .hand-slot) :is(svg,.i) { opacity:.94; }
 html.futa04-information #futa04-box #smart-context:is(:hover,:focus-visible,[aria-expanded='true']) {
-  color:#fff1cf; box-shadow:0 0 9px rgba(196,150,88,.22);
+  color:#fff1cf; box-shadow:0 0 9px var(--light-bloom,rgba(196,150,88,.22));
 }
 /* NO lit state on the Skip key (owner, 2026-10-15: "skip is highlighted on every grow — remove;
    i just wanted it to be possible during grow, but not extra highlighted"). Skip is therefore
@@ -126,25 +127,54 @@ html.futa04-information #futa04-box #smart-led-cells {
 }
 @media (min-width:1500px) {
   html.futa04-information #smart-led[data-mode='score'] #smart-led-cells { scale:1.32; }
+  /* The bloom is baked from the same dots, so a scaled strip needs the same scale or the
+     halo would sit inside the glyphs on a wide desktop. */
+  html.futa04-information #smart-led[data-mode='score'] #smart-led-bloom { scale:1.32; }
 }
 html.futa04-information #smart-led-cells.scrolling { position:absolute; left:0; }
 @keyframes smart-led-scroll { from { transform:translateX(0); } to { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
 html.futa04-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
-/* Attention pulses and impact flashes are short, one-shot and fully skipped under reduce-motion. */
-html.futa04-information #smart-led-window.led-pulse { animation:smart-led-pulse 500ms ease-in-out 1; }
+/* Attention pulses and impact flashes are short, one-shot and fully skipped under reduce-motion.
+   Every one of them animates OPACITY on a sprite that was baked once; none of them animates a
+   filter or a shadow, so the compositor never re-rasterises the LED. */
+html.futa04-information #smart-led-window.led-pulse #smart-led-hot { animation:smart-led-pulse 500ms ease-in-out 1; }
 /* Idle re-prompt: keep blinking with the board cues until the player starts the next move. */
-html.futa04-information #smart-led-window.led-alarm { animation:smart-led-alarm 1200ms ease-in-out infinite; }
-@keyframes smart-led-pulse { 0%,100% { filter:none; } 50% { filter:brightness(1.22); } }
+html.futa04-information #smart-led-window.led-alarm #smart-led-hot { animation:smart-led-alarm 1200ms ease-in-out infinite; }
+@keyframes smart-led-pulse { 0%,100% { opacity:0; } 50% { opacity:.62; } }
 @keyframes smart-led-alarm {
-  0%,100% { filter:none; }
-  20% { filter:brightness(1.45) contrast(1.08); }
-  40% { filter:none; }
-  60% { filter:brightness(1.4) contrast(1.06); }
-  80% { filter:none; }
+  0%,100% { opacity:0; }
+  20% { opacity:.62; }
+  40% { opacity:0; }
+  60% { opacity:.54; }
+  80% { opacity:0; }
+}
+/* A flash is one 60 ms breath of at most 35% white on the display's own glass. Never a strobe,
+   never a filter on the glyph canvas. */
+html.futa04-information #smart-led-flash {
+  position:absolute; inset:0; pointer-events:none; background:#fff; opacity:0;
+  border-radius:inherit; z-index:3;
+}
+html.futa04-information #smart-led-window.led-flash-cut #smart-led-flash { animation:smart-led-flash-cut 60ms linear 1; }
+html.futa04-information #smart-led-window.led-flash-bloom #smart-led-flash { animation:smart-led-flash-bloom 60ms linear 1; }
+@keyframes smart-led-flash-cut { 0% { opacity:0; } 22% { opacity:.35; } 100% { opacity:0; } }
+@keyframes smart-led-flash-bloom { 0% { opacity:0; } 28% { opacity:.26; } 100% { opacity:0; } }
+/* The baked brightness layer: the same lit dots as the cells, one draw, opacity-only cues. */
+html.futa04-information #smart-led-hot {
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  pointer-events:none; opacity:0; z-index:2;
+}
+html.futa04-information #smart-led-window.scrolling #smart-led-hot {
+  left:0; transform:translate(0,-50%);
+  animation:smart-led-hot-scroll var(--led-duration,8s) linear infinite;
+}
+@keyframes smart-led-hot-scroll {
+  from { transform:translate(0,-50%); }
+  to { transform:translate(calc(-1 * var(--led-travel,0px)),-50%); }
 }
 /* The old "chrome" pulse ran brightness()+drop-shadow() on every key's own frame art,
-   which is why the buttons looked like a second lamp. It is gone: reflected light now
-   arrives through #smart-led-spill, so the keys themselves never animate. */
+   which is why the buttons looked like a second lamp. It is gone, and so is the masked
+   gradient spill: light now arrives as the display's own baked bloom, which starts at the
+   lit dots and fades in every direction with no edge to read. */
 @keyframes idle-urgency-draw {
   0%,100% { box-shadow:0 0 0 1px rgba(239,234,220,.44),0 1px 3px rgba(242,237,224,.10) !important; }
   50% { box-shadow:0 0 0 1px rgba(239,234,220,.72),0 1px 4px rgba(242,237,224,.20) !important; }
@@ -201,99 +231,46 @@ html.futa04-information.reduce-motion.idle-urgency #smart-bloom-button .futa04-c
     animation:none !important;
   }
 }
-html.futa04-information #smart-led-window.led-flash-cut { animation:smart-led-flash-cut 380ms ease-out; }
-@keyframes smart-led-flash-cut { 0% { filter:brightness(1.9) contrast(1.06); } 100% { filter:none; } }
-html.futa04-information #smart-led-window.led-flash-bloom { animation:smart-led-flash-bloom 320ms ease-out; }
-@keyframes smart-led-flash-bloom { 0% { filter:brightness(1.5); } 100% { filter:none; } }
-html.futa04-information.reduce-motion #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) { animation:none; }
+html.futa04-information.reduce-motion #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) :is(#smart-led-hot,#smart-led-flash) { animation:none !important; }
 @media (prefers-reduced-motion:reduce) {
-  html.futa04-information #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) { animation:none; }
+  html.futa04-information #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) :is(#smart-led-hot,#smart-led-flash) { animation:none !important; }
 }
 /* Opponent replay: the read-out says "not yours" by going a little quieter. A modest luminance
    drop that stays fully legible — never a blackout, never a flash, no border, no badge: the DIM
    is the whole signal. It is a STATE, not motion, so Reduce motion keeps it and adds nothing. */
 html.futa04-information #smart-panel.led-theirs #smart-led { filter:brightness(.8) saturate(.9); }
-html.futa04-information #smart-panel.led-theirs #smart-led-spill { opacity:calc(var(--spill-opacity,.16) * .6); }
-/* Reflected light from the display, falling on the keys below. This is NOT a lamp: it is
-   the display's own light bouncing off the control strip. Three physical cues only — a
-   thin catch on each key's top edge, faint light in the seam between keys, and a whisper
-   down the faces — decaying over roughly one key row. Screen blending is used because reflected
-   light adds luminance, but the mask confines it to those rims and seams so a key's own
-   mid-tone is never brightened. The blurred glyph copy (old #smart-led-spill-cells) was
-   the additive face wash that made the keys look self-lit, so it is retired. */
-html.futa04-information #smart-led-spill {
-  --spill-opacity:.16;
-  --spill-ink:rgba(255,205,135,.22);
-  --spill-rim:rgba(255,215,160,.50);
-  position:absolute;
-  left:0; top:var(--control-size);
-  width:calc(2 * var(--control-size) + 2 * var(--control-gap));
-  height:calc(var(--control-gap) + var(--control-size));
-  overflow:hidden; pointer-events:none; z-index:7;
-  opacity:var(--spill-opacity); mix-blend-mode:screen;
-  filter:saturate(.78);
-  -webkit-mask-image:
-    linear-gradient(180deg,#000 0,#000 var(--control-gap),rgba(0,0,0,.60) 42%,transparent 80%),
-    linear-gradient(90deg,#000 0,#000 86%,transparent 100%);
-  -webkit-mask-composite:source-in;
-  mask-image:
-    linear-gradient(180deg,#000 0,#000 var(--control-gap),rgba(0,0,0,.60) 42%,transparent 80%),
-    linear-gradient(90deg,#000 0,#000 86%,transparent 100%);
-  mask-composite:intersect;
-  background:
-    /* thin bright catch on the keys' top edge, just below the row gap */
-    linear-gradient(180deg,transparent 0,transparent calc(var(--control-gap) + 1px),var(--spill-rim) calc(var(--control-gap) + 1px),var(--spill-rim) calc(var(--control-gap) + 2px),transparent calc(var(--control-gap) + 4px)),
-    /* light passing through the row gap between the display and the keys */
-    linear-gradient(180deg,var(--spill-ink) 0,var(--spill-ink) var(--control-gap),transparent calc(var(--control-gap) + 2px)),
-    /* the deepest seams between keys keep a thread of light (one period = key pitch) */
-    repeating-linear-gradient(90deg,transparent 0,transparent calc(var(--control-size) - 1px),var(--spill-ink) calc(var(--control-size) - 1px),var(--spill-ink) calc(var(--control-size) + var(--control-gap)),transparent calc(var(--control-size) + var(--control-gap))),
-    /* one faint bounce below each top edge, then almost nothing on the faces */
-    linear-gradient(180deg,transparent calc(var(--control-gap) + 3px),var(--spill-ink) calc(var(--control-gap) + 6px),transparent 46%);
+/* THE BLOOM. One baked sprite of the display's actual lit dots, directionally blurred along the
+   tone's angle, padded so its falloff ends well before the bitmap edge. It sits over the frame
+   art and the glass (z 2) and is normal-blended: low-alpha light over a dark cockpit, not a
+   screen wash and not a rectangle. The sprite writes --led-bloom-pad, so the strip of dots
+   inside the bitmap lands exactly on the window's dots. */
+html.futa04-information #smart-led-bloom {
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  pointer-events:none; z-index:2; opacity:var(--light-bloom-op,.44);
+  will-change:opacity, transform;
 }
-html.futa04-information #smart-led-spill-cells { display:none; }
-/* Mode lives on #smart-panel (spill is not a child of #smart-led). Inks are the LED family,
-   softened and desaturated by the element's own saturate() filter. */
-html.futa04-information #smart-panel[data-led-mode='amber'] #smart-led-spill,
-html.futa04-information #smart-panel[data-led-mode='score'] #smart-led-spill,
-html.futa04-information #smart-panel:not([data-led-mode]) #smart-led-spill {
-  --spill-opacity:.16; --spill-ink:rgba(255,205,135,.22); --spill-rim:rgba(255,215,160,.50);
+html.futa04-information #smart-led-bloom.scrolling {
+  left:calc(6px - var(--led-bloom-pad,0px));
+  transform:translate(0,-50%);
+  animation:smart-led-bloom-scroll var(--led-duration,8s) linear infinite;
 }
-html.futa04-information #smart-panel[data-led-mode='ivory'] #smart-led-spill {
-  --spill-opacity:.14; --spill-ink:rgba(246,236,214,.20); --spill-rim:rgba(250,243,226,.46);
+@keyframes smart-led-bloom-scroll {
+  from { transform:translate(0,-50%); }
+  to { transform:translate(calc(-1 * var(--led-travel,0px)),-50%); }
 }
-html.futa04-information #smart-panel[data-led-mode='green'] #smart-led-spill {
-  --spill-opacity:.17; --spill-ink:rgba(150,200,125,.22); --spill-rim:rgba(178,214,150,.46);
+/* A major event catches the display's own bezel: an opacity step on the baked sprite. It never
+   re-rasterises the LED and never passes the bloom cap (light-bloom-op * 1.18 <= .55). */
+html.futa04-information #smart-panel.hardware-reflect #smart-led-bloom {
+  animation:futa04-hardware-reflect 640ms ease-out;
 }
-html.futa04-information #smart-panel[data-led-mode='red'] #smart-led-spill {
-  --spill-opacity:.18; --spill-ink:rgba(214,92,72,.24); --spill-rim:rgba(232,124,104,.46);
+@keyframes futa04-hardware-reflect {
+  0%,100% { opacity:var(--light-bloom-op,.44); }
+  27% { opacity:calc(var(--light-bloom-op,.44) * 1.18); }
+  55% { opacity:calc(var(--light-bloom-op,.44) * 1.06); }
 }
-html.futa04-information #smart-panel[data-led-mode='pink'] #smart-led-spill {
-  --spill-opacity:.17; --spill-ink:rgba(226,158,180,.22); --spill-rim:rgba(240,186,202,.44);
-}
-html.futa04-information #smart-panel[data-led-mode='cyan'] #smart-led-spill {
-  --spill-opacity:.16; --spill-ink:rgba(150,200,200,.22); --spill-rim:rgba(180,214,214,.44);
-}
-/* The reflected wash breathes with the display; it never flashes with it. */
-html.futa04-information #smart-panel.led-pulse #smart-led-spill {
-  animation:smart-spill-pulse 500ms ease-in-out 1;
-}
-html.futa04-information #smart-panel.led-alarm #smart-led-spill {
-  animation:smart-spill-alarm 1200ms ease-in-out infinite;
-}
-@keyframes smart-spill-pulse {
-  0%,100% { opacity:var(--spill-opacity,.16); }
-  50% { opacity:calc(var(--spill-opacity,.16) * 1.14); }
-}
-@keyframes smart-spill-alarm {
-  0%,100% { opacity:var(--spill-opacity,.16); }
-  20% { opacity:calc(var(--spill-opacity,.16) * 1.22); }
-  40% { opacity:var(--spill-opacity,.16); }
-  60% { opacity:calc(var(--spill-opacity,.16) * 1.14); }
-  80% { opacity:var(--spill-opacity,.16); }
-}
-html.futa04-information.reduce-motion #smart-panel:is(.led-pulse,.led-alarm) #smart-led-spill { animation:none; }
+html.futa04-information.reduce-motion #smart-panel.hardware-reflect #smart-led-bloom { animation:none; }
 @media (prefers-reduced-motion:reduce) {
-  html.futa04-information #smart-panel:is(.led-pulse,.led-alarm) #smart-led-spill { animation:none; }
+  html.futa04-information #smart-panel.hardware-reflect #smart-led-bloom { animation:none; }
 }
 /* On a wide desktop the cockpit and its piles grow as one instrument. Phone
    controls retain their exact existing footprint. */
@@ -455,7 +432,8 @@ html.futa04-information #board .l-over .receptive-well:is(.kind-strengthen,.kind
 html.futa04-information #board .l-over .receptive-well:is(.kind-replace,.kind-fruit) { fill:rgba(192,83,65,.11); }
 html.futa04-information #board .l-over .target.kind-grow {
   fill:#ded6bd; fill-opacity:calc(.10 + var(--near,0) * .22);
-  stroke:#d8c8a5; stroke-width:1.45; stroke-opacity:calc(.42 + var(--near,0) * .4);
+  stroke:color-mix(in srgb,#d8c8a5 76%,var(--light-core,#f5d8a4) 24%);
+  stroke-width:1.45; stroke-opacity:calc(.42 + var(--near,0) * .4);
   stroke-dasharray:none; animation:target-in .2s ease-out both;
   transition:fill-opacity .14s ease,stroke-opacity .14s ease;
 }
@@ -466,8 +444,8 @@ html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom,.
   animation:target-in .2s ease-out both;
   transition:fill-opacity .14s ease,stroke-opacity .14s ease;
 }
-html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom) { fill:#a6d49b; stroke:#a5d294; }
-html.futa04-information #board .l-over .target:is(.kind-replace,.kind-fruit) { fill:#e5a18b; stroke:#db917a; }
+html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom) { fill:#a6d49b; stroke:color-mix(in srgb,#a5d294 76%,var(--light-core,#f5d8a4) 24%); }
+html.futa04-information #board .l-over .target:is(.kind-replace,.kind-fruit) { fill:#e5a18b; stroke:color-mix(in srgb,#db917a 76%,var(--light-core,#f5d8a4) 24%); }
 html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom,.kind-replace,.kind-fruit):hover { fill-opacity:.23; stroke-opacity:.74; }
 html.futa04-information #board .l-over .will-cut,
 html.futa04-information #board .l-over .blast-affected {
@@ -529,8 +507,8 @@ html.futa04-information #board .l-territory-contour .territory-contour.grow-in {
 }
 html.futa04-information.reduce-motion #board .l-territory-contour .territory-contour.grow-in { animation:none; }
 @media (prefers-reduced-motion:reduce) { html.futa04-information #board .l-territory-contour .territory-contour.grow-in { animation:none; } }
-@media (prefers-reduced-motion:reduce) { html.futa04-information :is(#smart-led-cells,#smart-led-spill-cells).scrolling { animation:none; } }
-html.futa04-information.reduce-motion :is(#smart-led-cells,#smart-led-spill-cells).scrolling { animation:none; }
+@media (prefers-reduced-motion:reduce) { html.futa04-information :is(#smart-led-cells,#smart-led-bloom,#smart-led-hot).scrolling { animation:none; } }
+html.futa04-information.reduce-motion :is(#smart-led-cells,#smart-led-bloom,#smart-led-hot).scrolling { animation:none; }
 @media (prefers-reduced-motion:reduce) { html.futa04-information #board .l-over .target.kind-grow { animation:none; transition:none; } }
 html.futa04-information.reduce-motion #board .l-over .target.kind-grow { animation:none; transition:none; }
 `;
@@ -547,9 +525,13 @@ export function mountSmartCockpit() {
   const windowEl = document.createElement('div'); windowEl.id = 'smart-led-window';
   const text = document.createElement('span'); text.id = 'smart-led-text';
   const cells = document.createElement('canvas'); cells.id = 'smart-led-cells'; cells.setAttribute('aria-hidden','true');
-  windowEl.append(text,cells); led.append(windowEl);
-  const spill = document.createElement('div'); spill.id = 'smart-led-spill'; spill.setAttribute('aria-hidden','true');
-  const spillCells = document.createElement('canvas'); spillCells.id = 'smart-led-spill-cells'; spill.append(spillCells);
+  // The one-shot brightness layer (pulse/alarm) and the capped flash, both opacity-only.
+  const hot = document.createElement('canvas'); hot.id = 'smart-led-hot'; hot.setAttribute('aria-hidden','true');
+  const flashEl = document.createElement('i'); flashEl.id = 'smart-led-flash'; flashEl.setAttribute('aria-hidden','true');
+  // The bloom lives outside the glass (the window clips the marquee) so its falloff can pass the
+  // bezel instead of being cut into a rectangle.
+  const bloomEl = document.createElement('canvas'); bloomEl.id = 'smart-led-bloom'; bloomEl.setAttribute('aria-hidden','true');
+  windowEl.append(text,cells,hot,flashEl); led.append(windowEl,bloomEl);
   const context = document.createElement('button'); context.id = 'smart-context'; context.type = 'button'; context.setAttribute('aria-haspopup','menu'); context.setAttribute('aria-expanded','false');
   const selector = document.createElement('div'); selector.id = 'smart-selector'; selector.setAttribute('role','menu'); selector.hidden = true;
   context.setAttribute('aria-controls',selector.id);
@@ -559,7 +541,7 @@ export function mountSmartCockpit() {
   const bloomSelector = document.createElement('div'); bloomSelector.id = 'smart-bloom-selector'; bloomSelector.setAttribute('role','menu'); bloomSelector.hidden = true;
   bloomButton.setAttribute('aria-controls',bloomSelector.id);
   bloom.append(bloomButton,bloomSelector);
-  panel.append(led,spill,context,actions,selector); box.append(panel,bloom);
+  panel.append(led,context,actions,selector); box.append(panel,bloom);
   moves.setAttribute('aria-hidden','true');
   let current: Action[] = [];
   let signature = '';
@@ -610,19 +592,24 @@ export function mountSmartCockpit() {
   const setText = (frame: DisplayFrame) => {
     const { text:value, mode } = frame;
     const reduceNow = () => document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
-    const pulsing = !!frame.pulse && !frame.alarm && !reduceNow();
-    const alarming = !!frame.alarm && !reduceNow();
+    // Speed "Off" sets --anim to 0: like reduce motion, the light holds still (a steady glow).
+    const anim = Number.parseFloat(document.documentElement.style.getPropertyValue('--anim'));
+    const still = reduceNow() || (Number.isFinite(anim) && anim === 0);
+    const pulsing = !!frame.pulse && !frame.alarm && !still;
+    const alarming = !!frame.alarm && !still;
     windowEl.classList.toggle('led-pulse', pulsing);
     windowEl.classList.toggle('led-alarm', alarming);
-    // Frame + button metal edges share the LED beat and ink color.
-    panel.classList.toggle('led-pulse', pulsing);
-    panel.classList.toggle('led-alarm', alarming);
+    // The pulse/alarm is the display's own glass now (the baked hot layer inside the window).
+    // The keys never animate, so the panel carries no beat class of its own.
     panel.dataset.ledMode = mode;
+    // ONE light contract: the root publishes the tone once, and every CSS consumer follows.
+    // `publishLight` writes only when the tone changes (the bloom never changes per frame).
+    publishDisplayLight(mode);
     // Same flag drives LED alarm + board cue blinks (piles / hand / bloom).
     document.documentElement.classList.toggle('idle-urgency', !!frame.alarm);
     if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif && frame.flash === lastFlash) return;
     const previous = lastText;
-    const animated = !reduceNow();
+    const animated = !still;
     const scoreTick = animated && mode === 'score' && lastMode === 'score' && previous.length === value.length;
     const animateReel = previous && animated && !scoreTick;
     for (const running of reel) running.cancel(); reel = [];
@@ -644,21 +631,46 @@ export function mountSmartCockpit() {
     }
     lastText = value; lastMode = mode; lastCompact = !!frame.compact; lastMotif = frame.motif; lastFlash = frame.flash;
     text.textContent = value; led.title = value; led.dataset.mode = mode;
-    cells.classList.remove('scrolling'); spillCells.classList.remove('scrolling');
+    cells.classList.remove('scrolling');
+    led.style.setProperty('--led-bloom-pad', `${BLOOM_PAD}px`);
     requestAnimationFrame(() => {
       if (value !== lastText || mode !== lastMode || !!frame.compact !== lastCompact || frame.motif !== lastMotif || frame.flash !== lastFlash) { old?.remove(); return; }
       const reduced = reduceNow();
       // A recognised caption/banner gets its short token even with motion on; other copy keeps its scroll.
       const token = ledToken(value);
       const shown = token ?? (reduced || frame.compact ? ledStaticMessage(value) : value);
-      const scrolling = !frame.motif && !reduced && mode !== 'score' && ledMessageWidth(shown) > windowEl.clientWidth - 2;
+      const scrolling = animated && !frame.motif && mode !== 'score' && ledMessageWidth(shown) > windowEl.clientWidth - 2;
       if (frame.motif) {
         const frames = ledMotifFrames(frame.motif);
+        // Bake the whole small set ONCE: the 11 fps loop only swaps finished pictures.
+        const bloomFrames = frames.map(picture => ledBloomSprite(picture,false,mode));
+        const hotFrames = frames.map(picture => ledHotSprite(picture,false,mode));
+        const first = bloomFrames.find(Boolean);
+        if (first) {
+          bloomEl.width = first.canvas.width; bloomEl.height = first.canvas.height;
+          bloomEl.style.width = `${first.width}px`; bloomEl.style.height = `${first.height}px`;
+        }
+        // Contexts are looked up once per motif, not once per 11 fps frame.
+        const hotCtx = hot.getContext('2d');
+        const bloomCtx = bloomEl.getContext('2d');
         let index = 0;
         const paint = () => {
-          const picture = frames[index++ % frames.length]!;
-          drawLedCells(cells,picture,false,mode);
-          drawLedCells(spillCells,picture,false,mode);
+          const at = index++ % frames.length;
+          drawLedCells(cells,frames[at]!,false,mode);
+          const hotFrame = hotFrames[at];
+          if (hotFrame) {
+            if (hot.width !== hotFrame.canvas.width || hot.height !== hotFrame.canvas.height) { hot.width = hotFrame.canvas.width; hot.height = hotFrame.canvas.height; }
+            hot.style.width = `${hotFrame.width}px`; hot.style.height = `${hotFrame.height}px`;
+            hotCtx?.clearRect(0,0,hot.width,hot.height);
+            hotCtx?.drawImage(hotFrame.canvas,0,0);
+          }
+          const bloomFrame = bloomFrames[at];
+          if (bloomFrame) {
+            if (bloomEl.width !== bloomFrame.canvas.width || bloomEl.height !== bloomFrame.canvas.height) { bloomEl.width = bloomFrame.canvas.width; bloomEl.height = bloomFrame.canvas.height; }
+            bloomEl.style.width = `${bloomFrame.width}px`; bloomEl.style.height = `${bloomFrame.height}px`;
+            bloomCtx?.clearRect(0,0,bloomEl.width,bloomEl.height);
+            bloomCtx?.drawImage(bloomFrame.canvas,0,0);
+          }
         };
         motifPaint = paint;
         paint();
@@ -669,24 +681,28 @@ export function mountSmartCockpit() {
       } else {
         motifPaint = null;
         drawLedCells(cells,shown,scrolling,mode);
-        drawLedCells(spillCells,shown,scrolling,mode);
+        // One bake per message: the bloom and the brightness layer come from those same dots.
+        drawLedHot(hot,shown,scrolling,mode);
+        drawLedBloom(bloomEl,shown,scrolling,mode);
       }
+      bloomEl.classList.toggle('scrolling', scrolling);
+      windowEl.classList.toggle('scrolling', scrolling);
       window.clearTimeout(flashTimer);
       windowEl.classList.remove('led-flash-cut','led-flash-bloom');
-      if (frame.flash && !reduced) {
+      if (frame.flash && animated) {
         void windowEl.offsetWidth; // restart the one-shot accent
         windowEl.classList.add(frame.flash === 'bloom' ? 'led-flash-bloom' : 'led-flash-cut');
-        // Match CSS: bloom 320ms, cut 380ms.
-        const flashMs = frame.flash === 'bloom' ? 320 : 380;
-        flashTimer = window.setTimeout(() => windowEl.classList.remove('led-flash-cut','led-flash-bloom'), flashMs);
+        // A flash is one capped breath (LIGHT_CAPS.flashMs), never a brightness filter.
+        flashTimer = window.setTimeout(() => windowEl.classList.remove('led-flash-cut','led-flash-bloom'), LIGHT_CAPS.flashMs);
       }
       if (scrolling) {
         const travel = ledMarqueeTravel(shown);
-        for (const target of [cells,spillCells]) {
+        // The bloom is the same baked strip, so it travels the same distance for the same time.
+        for (const target of [cells,led]) {
           target.style.setProperty('--led-travel',`${travel}px`);
           target.style.setProperty('--led-duration',`${Math.max(3.2,travel/42).toFixed(1)}s`);
-          target.classList.add('scrolling');
         }
+        cells.classList.add('scrolling');
       }
       if (old && old.isConnected) {
         if (scoreTick) {
@@ -731,6 +747,7 @@ export function mountSmartCockpit() {
     return 'FUTASAKU';
   };
   machine.reset(phaseMessage());
+  publishDisplayLight('amber');
   const refreshMessage = () => machine.phase(phaseMessage());
   const flash = (value: string, ms = 1900) => machine.event({message:value.toUpperCase(),priority:30,duration:ms});
   const collect = (): Action[] => {

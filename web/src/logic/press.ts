@@ -1,12 +1,19 @@
-// Phase 0: ONE press primitive.
+// Phase 0+1: ONE press primitive.
 //
 // A single delegated listener in the capture phase answers every pressable surface: buttons,
 // hardware keys, smart-cockpit keys and chips, hand cards, the two piles, board hexes, lesson
 // CTAs and settings controls. It only paints state:
-//   data-pressed="true"  and  --press-depth
+//   data-pressed="true", --press-depth (the shape's compression) and --press-drop (its depth)
 // on pointerdown, holds while the pointer is down, and clears on pointerup / cancel / leave /
 // blur. A pointer that travels more than 10 px (a drag) cancels the visual press, so painting a
 // shape never looks like a tap. Space and Enter get the same press/release, auto-repeat is ignored.
+//
+// Phase 1: the depth is a PHYSICAL distance in px, chosen by the surface's size — 2 px on a 56 px
+// button, 1 px on a 44 px key / a hex / a pile, and 1.5-3 px on a hand card by its weight. A card
+// carries its own `--weight` (logic/card-weight.ts) so the CSS calc reads it, and its hit box never
+// changes: only `translate`/`scale` move. The shadow compression is a pre-baked `.press-shade`
+// layer added on press (one per surface, kept with opacity 0) whose OPACITY animates; no
+// box-shadow or filter is animated per frame.
 //
 // It NEVER calls preventDefault, stopPropagation, or an action handler. Clicks keep working.
 import { recordPressLatency } from './perf.js';
@@ -19,7 +26,10 @@ export const PRESS_SELECTOR = [
   '.futa04-hardware-control',
   '#smart-context',
   '#smart-bloom-button',
+  '#smart-panel button',
+  '#smart-panel [role="button"]',
   '.futa04-mini-card',
+  '.chip',
   '#hand .card',
   '#deck',
   '#discard',
@@ -75,6 +85,28 @@ export const pressSurface = (el: PressLike | null): 'key' | 'plain' =>
 /** The scale the visual press settles to. Kept as a custom property so CSS owns the shape. */
 export const pressDepth = (surface: 'key' | 'plain'): string => (surface === 'key' ? '0.98' : '0.97');
 
+/** Phase 1: how deep a surface physically goes, decided by its size (never measured per frame). */
+export type PressSize = 'card' | 'hex' | 'big' | 'key';
+
+/**
+ * A card's depth follows its weight: 1.5 px for the lightest, 3 px for the heaviest. The CSS calc
+ * reads the card's own `--weight`, so one value per press is all the JS writes.
+ */
+export const CARD_PRESS_DROP = 'calc(1.5px + 1.5px * var(--weight, 0))';
+
+/** The one place a surface's press distance comes from. */
+export const pressDrop = (size: PressSize): string =>
+  size === 'card' ? CARD_PRESS_DROP : size === 'big' ? '2px' : '1px';
+
+/** Which physical family the surface belongs to (56 px button / 44 px key / hex / hand card). */
+export const pressSize = (el: PressLike | null): PressSize => {
+  if (!el) return 'key';
+  if (el.closest('#board')) return 'hex';
+  if (el.closest('#hand .card, .card')) return 'card';
+  if (el.closest('.btn.big')) return 'big';
+  return 'key';
+};
+
 /** A short move is still a tap; this is the one drag threshold. */
 export const dragExceeded = (x0: number, y0: number, x: number, y: number, threshold = PRESS_DRAG_PX): boolean =>
   Math.hypot(x - x0, y - y0) > threshold;
@@ -82,22 +114,45 @@ export const dragExceeded = (x0: number, y0: number, x: number, y: number, thres
 export const isPressKey = (key: string): boolean => key === ' ' || key === 'Spacebar' || key === 'Enter';
 
 export type PressOptions = {
-  /** Defaults to the document; tests can install on any Document-like root. */
-  root?: Document;
+  /**
+   * Defaults to the window: its capture listeners run BEFORE the document's, so a surface that a
+   * later capture listener vetoes (a lesson's lit target during an explanation) still paints its
+   * press. Painting state is never a game action, so being first is safe. Tests can pass any root.
+   */
+  root?: Document | Window;
   now?: () => number;
   latency?: (ms: number) => void;
 };
 
 const paint = (el: PressLike, surface: 'key' | 'plain') => {
+  const size = pressSize(el);
   el.setAttribute('data-pressed', 'true');
   el.setAttribute('data-press-surface', surface);
+  el.setAttribute('data-press-size', size);
   el.style.setProperty('--press-depth', pressDepth(surface));
+  el.style.setProperty('--press-drop', pressDrop(size));
+  addShade(el);
+};
+
+/** The pre-baked shadow layer: it lives in the surface and only its opacity ever animates. */
+const SHADE = 'press-shade';
+const addShade = (el: PressLike) => {
+  if (typeof document === 'undefined' || typeof HTMLElement === 'undefined') return;
+  const host = el as unknown as HTMLElement;
+  if (!(host instanceof HTMLElement)) return; // SVG hexes use a static tone instead
+  if (host.querySelector(`:scope > .${SHADE}`)) return;
+  const shade = host.ownerDocument.createElement('span');
+  shade.className = SHADE;
+  shade.setAttribute('aria-hidden', 'true');
+  host.append(shade);
 };
 
 const unpaint = (el: PressLike) => {
   el.removeAttribute('data-pressed');
   el.removeAttribute('data-press-surface');
+  el.removeAttribute('data-press-size');
   el.style.removeProperty('--press-depth');
+  el.style.removeProperty('--press-drop');
 };
 
 /**
@@ -106,7 +161,7 @@ const unpaint = (el: PressLike) => {
  */
 export const installPress = (options: PressOptions = {}): (() => void) => {
   if (typeof document === 'undefined' && !options.root) return () => undefined;
-  const root = options.root ?? document;
+  const root: Document | Window = options.root ?? (typeof window !== 'undefined' ? window : document);
   const now = options.now ?? (() => performance.now());
   const latency = options.latency ?? recordPressLatency;
 
@@ -198,7 +253,7 @@ export const installPress = (options: PressOptions = {}): (() => void) => {
     clearAll();
   };
   const onVisibility = () => {
-    if (root.hidden) clearAll();
+    if (typeof document !== 'undefined' && document.hidden) clearAll();
   };
 
   root.addEventListener('pointerdown', onDown as EventListener, { capture: true, passive: true });

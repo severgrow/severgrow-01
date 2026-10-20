@@ -60,13 +60,14 @@ import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
 import { feel, observeLongTasks, perfStart, perfStep } from './logic/perf.js';
-import { installPress } from './logic/press.js';
+import { dragExceeded, installPress, PRESS_SELECTOR, shouldSkipPress } from './logic/press.js';
 import { attachSchedulerPause, scheduler } from './logic/scheduler.js';
 import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './logic/timing.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { EASE, MOTION, PINNED, motionAllowed } from './logic/motion.js';
+import { EASE, BREATH, MOTION, PINNED, breathAmpOf, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
+import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
 import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
@@ -505,6 +506,7 @@ function applyTheme() {
   if (lk.textures && !IS_FUTA04) warmPhotos();
   root.classList.toggle('large-text', settings.largeText);
   root.classList.toggle('reduce-motion', settings.reduceMotion);
+  sound.setReduceMotion(settings.reduceMotion);
   // overhaul Part 3: the decorations, all behind one switch (and quiet with Reduce motion)
   root.classList.toggle('eye-candy', settings.eyeCandy);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
@@ -1089,6 +1091,7 @@ function finishLabChange() {
   saveSettings();
   sound.enabled = settings.sound;
   sound.setEffects(settings.effects);
+  sound.setReduceMotion(settings.reduceMotion);
   if (settings.sound || settings.music) sound.unlock();
   sound.setMix(settings);
   sound.setMusic(settings.music);
@@ -2838,7 +2841,7 @@ async function anticipate(m: Moment, f: number, my: number) {
 async function impact(m: Moment, f: number, my: number) {
   const b = m.budget;
   if (b.shake > 0 && !IS_FUTA04) anim($('board-wrap'), shakeFrames(b.shake * motion()), { duration: 320 * Math.max(f, 0.5) });
-  if (b.thud) sound.thud();
+  if (b.thud) sound.thud(m.tier === 'severe' ? 0.72 : 1);
   if (b.vibrate) vibrate(settings.vibration, b.vibrate);
   if (m.banner && m.first) banner(m.banner, 'big');
   if (b.hitStopMs > 0) await wait(b.hitStopMs * Math.max(f, 0.5), my);
@@ -4300,10 +4303,56 @@ function lessonPlate(): HTMLElement {
   plate.id = 'lesson-plate';
   plate.hidden = true;
   plate.setAttribute('role', 'status');
-  plate.innerHTML = '<p class="lesson-copy"></p>';
+  // One box: the sentence, then (on the Bloom lesson only) a small static example inside it.
+  plate.innerHTML = '<p class="lesson-copy"></p><div class="lesson-example" hidden aria-hidden="true"></div>';
   document.body.append(plate);
   window.addEventListener('resize', () => placeLessonPlate(), { passive: true });
   return plate;
+}
+
+/** The owner-approved Bloom example: a set (same number, three suits) and a run (three in order). */
+const BLOOM_EXAMPLE_SET: readonly Card[] = Object.freeze([
+  { id: -501, suit: 0, rank: 3 }, { id: -502, suit: 1, rank: 3 }, { id: -503, suit: 2, rank: 3 },
+]);
+const BLOOM_EXAMPLE_RUN: readonly Card[] = Object.freeze([
+  { id: -511, suit: 0, rank: 3 }, { id: -512, suit: 0, rank: 4 }, { id: -513, suit: 0, rank: 5 },
+]);
+/** The same face the hand draws with, only smaller. No new art. */
+const lessonExampleFace = (c: Card) =>
+  `<span class="card lesson-example-card ${suitClass(c)}" aria-hidden="true">${cardFace(c)}</span>`;
+const lessonExampleRow = (cards: readonly Card[], cls: string) =>
+  `<span class="lesson-example-row ${cls}">${cards.map(lessonExampleFace).join('')}</span>`;
+
+/**
+ * Put the static example under the sentence — never a second overlay, never an animation. The run
+ * row is dropped when the box would grow past a third of the screen, so the map keeps its room.
+ */
+function setLessonExample(kind: 'bloom' | null) {
+  const plate = lessonPlate();
+  const box = plate.querySelector<HTMLElement>('.lesson-example');
+  if (!box) return;
+  const on = kind === 'bloom';
+  box.hidden = !on;
+  if (!on) {
+    box.replaceChildren();
+    delete box.dataset.kind;
+    plate.classList.remove('example-tight');
+    return;
+  }
+  if (box.dataset.kind !== 'bloom') {
+    box.innerHTML = lessonExampleRow(BLOOM_EXAMPLE_SET, 'lesson-example-set')
+      + lessonExampleRow(BLOOM_EXAMPLE_RUN, 'lesson-example-run');
+    box.dataset.kind = 'bloom';
+  }
+  const run = box.querySelector<HTMLElement>('.lesson-example-run');
+  if (run) run.hidden = false;
+  // Fit decides again on every new beat: placeLessonPlate() calls fitLessonExample().
+  plate.classList.remove('example-tight');
+  const budget = Math.min(220, Math.round(innerHeight * 0.34));
+  if (plate.offsetHeight > budget && run) {
+    run.hidden = true; // one compact row still shows the set
+    plate.classList.add('example-tight');
+  }
 }
 
 type PlateEl = HTMLElement & {
@@ -4321,7 +4370,13 @@ const PLATE_KEEP_CLEAR = ['#hud', '#hud-menu', '#deck', '#discard', '#hand', '#s
 
 function hideLessonPlate() {
   const plate = document.getElementById('lesson-plate') as PlateEl | null;
-  if (plate) { plate.hidden = true; delete plate._lessonBox; }
+  if (plate) {
+    plate.hidden = true;
+    delete plate._lessonBox;
+    const example = plate.querySelector<HTMLElement>('.lesson-example');
+    if (example) { example.hidden = true; example.replaceChildren(); delete example.dataset.kind; }
+    plate.classList.remove('example-tight');
+  }
 }
 
 /** A box for an element that is actually on screen, or null. */
@@ -4410,14 +4465,58 @@ function placeLessonPlate() {
   const y = best?.y ?? fallbackY;
   plate.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
   plate._lessonBox = { left: Math.round(x), top: Math.round(y), right: Math.round(x) + width, bottom: Math.round(y) + h, width, height: h };
+  fitLessonExample();
+}
+
+/**
+ * On a tall phone the caption lives in the free gap, never over a hex. The Bloom example is the
+ * only thing that can make it too tall, so it gives way: the run row goes first ("if it fits"),
+ * then the whole example, and the sentence always stays. Never runs per frame — only when the
+ * words change, on resize and once after the camera settles.
+ */
+let fittingExample = false;
+function fitLessonExample() {
+  if (fittingExample) return;
+  const plate = document.getElementById('lesson-plate') as PlateEl | null;
+  if (!plate || plate.hidden || !plate._lessonBox || innerHeight < 800) return;
+  const example = plate.querySelector<HTMLElement>('.lesson-example');
+  if (!example || example.hidden) return;
+  const covers = () => {
+    const box = plate._lessonBox!;
+    const spot: Spot = { l: box.left, t: box.top, r: box.right, b: box.bottom };
+    for (const el of document.querySelectorAll('#board .hex-cell')) {
+      const hex = plateBox(el);
+      if (hex && boxesOverlap(spot, hex)) return true;
+    }
+    return false;
+  };
+  if (!covers()) return;
+  fittingExample = true;
+  try {
+    const run = example.querySelector<HTMLElement>('.lesson-example-run');
+    if (run && !run.hidden) run.hidden = true;
+    placeLessonPlate();
+    if (covers()) {
+      // No room even for the set: keep the sentence, drop the example's markup entirely, so the
+      // box is exactly what it was before this lesson had an example.
+      example.hidden = true;
+      example.replaceChildren();
+      delete example.dataset.kind;
+      plate.classList.add('example-tight');
+      placeLessonPlate();
+    }
+  } finally {
+    fittingExample = false;
+  }
 }
 
 /** Put the explanation in the box. `lift` is what the box must never cover (the lit target). */
-function showLessonPlate(text: string, lift: readonly string[]) {
+function showLessonPlate(text: string, lift: readonly string[], example: 'bloom' | null = null) {
   const plate = lessonPlate();
   plate.hidden = false;
   const copy = plate.querySelector<HTMLElement>('.lesson-copy');
   if (copy && copy.textContent !== text) copy.textContent = text;
+  setLessonExample(example);
   (plate as PlateEl)._avoid = lift;
   placeLessonPlate();
   // The camera eases for a moment after a beat. Correct once when it has settled.
@@ -4545,7 +4644,8 @@ function renderLessonGuide(): void {
     glassSurface.hide();
     return;
   }
-  if (voice.box) showLessonPlate(voice.box, holdScore ? ['#smart-led', ...lit.selectors] : lit.selectors);
+  if (voice.box) showLessonPlate(voice.box, holdScore ? ['#smart-led', ...lit.selectors] : lit.selectors,
+    level === 5 && shown?.id === '5:intro:bloom-cards' ? 'bloom' : null);
   else hideLessonPlate();
   // An explanation with no lit move (the way out of a stuck lesson): the box speaks, the map is
   // not dimmed and there is nothing to point at.
@@ -6009,6 +6109,35 @@ function showTip(id: FirstTip) {
   }
 }
 
+/**
+ * Phase 4: the idle breath is CSS-only, but it must not move under a finger. A pointer pressed on
+ * the hand (or a tab that went away, a sheet, a pause) holds it; releasing resumes the same phase.
+ */
+let breathPointers = 0;
+function syncBreathHold() {
+  const hand = document.getElementById('hand');
+  if (!hand) return;
+  hand.classList.toggle('breath-hold', breathPointers > 0 || document.hidden || paused || !!openSheet);
+}
+function installHandBreath(hand: HTMLElement) {
+  hand.addEventListener('pointerdown', () => {
+    breathPointers++;
+    syncBreathHold();
+  }, { capture: true, passive: true });
+  const release = () => {
+    if (!breathPointers) return;
+    breathPointers = Math.max(0, breathPointers - 1);
+    syncBreathHold();
+  };
+  window.addEventListener('pointerup', release, { passive: true });
+  window.addEventListener('pointercancel', release, { passive: true });
+  window.addEventListener('blur', () => {
+    breathPointers = 0;
+    syncBreathHold();
+  });
+  document.addEventListener('visibilitychange', syncBreathHold);
+}
+
 function renderHand(v: View, advice: Advice | null) {
   if (!session) return;
   const hand = $('hand');
@@ -6037,6 +6166,10 @@ function renderHand(v: View, advice: Advice | null) {
     before.set(Number(b.dataset.card), b.getBoundingClientRect());
   const n = cards.length;
   const spread = Math.min(3.5, 22 / Math.max(n, 1));
+  // Phase 4: the hand only breathes when it is the player's to touch.
+  const breathing = IS_FUTA04 && motionOn() && myTurn() && !busy();
+  hand.classList.toggle('breathing', breathing);
+  syncBreathHold();
   // Tutorial: the one card a step asks for sits above the fan, so only it shows in the glow.
   const tutorialCard = tutorialSingleCardId() ?? lessonSingleCardId();
   const existing = new Map([...hand.querySelectorAll<HTMLButtonElement>('[data-card]')].map((b) => [Number(b.dataset.card), b]));
@@ -6050,6 +6183,20 @@ function renderHand(v: View, advice: Advice | null) {
       b.innerHTML = cardFace(c);
       b.addEventListener('click', () => onCardTap(c.id));
     }
+    // Phase 1: the card's weight (0 light .. 1 heavy). Drives the press, the lift, the settle,
+    // the sway and the shadow. It never changes the card's box or any action's duration.
+    const weight = weightOf(c.rank);
+    b.style.setProperty('--weight', weight.toFixed(3));
+    b.style.setProperty('--lift', `${liftOf(weight).toFixed(1)}px`);
+    const shadow = shadowOf(weight);
+    b.style.setProperty('--shadow-y', `${shadow.y.toFixed(1)}px`);
+    b.style.setProperty('--shadow-blur', `${shadow.blur.toFixed(1)}px`);
+    b.style.setProperty('--shadow-alpha', shadow.alpha.toFixed(3));
+    if (i < BREATH.maxCards) {
+      b.style.setProperty('--breath-period', `${breathPeriodOf(c.id)}ms`);
+      b.style.setProperty('--breath-phase', `${breathPhaseOf(c.id)}ms`);
+      b.style.setProperty('--breath-scale', (1 + breathAmpOf(weight)).toFixed(4));
+    }
     const off = i - (n - 1) / 2;
     const lifted = sel.card === c.id || picked.has(c.id);
     const playable = legal.length > 0 && usable.has(c.id);
@@ -6057,6 +6204,7 @@ function renderHand(v: View, advice: Advice | null) {
     const fs = c.suit === null ? fruitCardState(v, legal, c.id) : null;
     const firstFruit = c.suit === null && cards[i - 1]?.suit !== null && i > 0;
     b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
+    if (i >= BREATH.maxCards) b.classList.add('breath-off');
     if (IS_FUTA04) {
       b.classList.toggle('futa04-bloom-card', bloomCards.has(c.id));
       b.classList.toggle('futa04-throw-picked', session!.pending?.t === 'Discard' && session!.pending.card === c.id);
@@ -6064,13 +6212,15 @@ function renderHand(v: View, advice: Advice | null) {
     if (fs?.reason && myTurn()) b.title = fs.reason;
     else b.removeAttribute('title');
     if (thumbLayout) {
-      // the test copy's thumb layout: each card on the arc, turned with it; picked: lifted outward
+      // the test copy's thumb layout: each card on the arc, turned with it; picked: lifted outward.
+      // A heavier card comes out a little less (the 22 px sheet lift scaled to the fan's 10 px).
       const p = fanSlots(thumbLayout, n)[i]!;
+      const lift = THUMB.lift * (liftOf(weight) / 22);
       b.style.setProperty('--fx', `${p.x.toFixed(1)}px`);
       b.style.setProperty('--fy', `${p.y.toFixed(1)}px`);
       b.style.setProperty('--rot', `${p.rot.toFixed(2)}deg`);
-      b.style.setProperty('--lx', `${(p.nx * THUMB.lift).toFixed(1)}px`);
-      b.style.setProperty('--ly', `${(p.ny * THUMB.lift).toFixed(1)}px`);
+      b.style.setProperty('--lx', `${(p.nx * lift).toFixed(1)}px`);
+      b.style.setProperty('--ly', `${(p.ny * lift).toFixed(1)}px`);
       // each card's number corner stays visible: right hand, later cards on top; left, earlier
       b.style.zIndex = String(thumbLayout.side === 'left' ? n - i : i + 1);
     } else {
@@ -6092,16 +6242,42 @@ function renderHand(v: View, advice: Advice | null) {
   });
   for (const b of existing.values()) b.remove();
   if (flip) {
-    for (const b of hand.querySelectorAll<HTMLElement>('[data-card]')) {
+    // Phase 4: a change in membership or order settles card by card, outward from the middle,
+    // with a small weight-scaled overshoot. This is the existing FLIP condition, never a
+    // re-render for selection or a phase tick.
+    const settleMs = MOTION.consequence * timeScale();
+    const stagger = (MOTION.ack / 2) * timeScale();
+    const centre = (n - 1) / 2;
+    [...hand.querySelectorAll<HTMLElement>('[data-card]')].forEach((b, i) => {
       const was = before.get(Number(b.dataset.card));
       const now = b.getBoundingClientRect();
       const dx = was === undefined ? 0 : was.left - now.left;
       const dy = was === undefined ? 0 : was.top - now.top;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) anim(b, [{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], {
-        duration: (IS_FUTA04 ? 190 : 280) * timeScale(),
-        easing: IS_FUTA04 ? 'cubic-bezier(.2,.72,.2,1)' : 'cubic-bezier(.2,.9,.3,1.25)',
-      });
-    }
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        if (IS_FUTA04) {
+          const weight = Number(b.style.getPropertyValue('--weight')) || 0;
+          const over = settleOvershootOf(weight);
+          const len = Math.hypot(dx, dy) || 1;
+          // Continue a touch past the landing spot, then settle back into the fan.
+          const ox = (-dx / len) * over;
+          const oy = (-dy / len) * over;
+          anim(b, [
+            { translate: `${dx}px ${dy}px` },
+            { translate: `${ox.toFixed(2)}px ${oy.toFixed(2)}px`, offset: 0.74 },
+            { translate: '0 0' },
+          ], {
+            duration: settleMs,
+            delay: Math.min(Math.abs(i - centre), 3) * stagger,
+            easing: EASE.settle,
+          });
+        } else {
+          anim(b, [{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], {
+            duration: 280 * timeScale(),
+            easing: 'cubic-bezier(.2,.9,.3,1.25)',
+          });
+        }
+      }
+    });
   }
   const sortBtn = $('hand-sort');
   sortBtn.hidden = false;
@@ -7359,18 +7535,51 @@ bind('csa-start', () => {
 });
 // Overhaul item 11: every button answers a press the same way: a 0.97 press (CSS), a soft
 // tick (Sound) and, with Effects High, a tiny tap (Vibration). Nothing plays before a tap.
+// Sound is a CONSUMER of the phase 0 press seam, never a second primitive: the same pointerdown
+// gets a quiet tick, the lift gets the click, and a drag (a paint, not a tap) gets neither.
+const BUTTON_SELECTOR = '.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile';
+let soundPress: { el: Element; x: number; y: number; id: number; cancelled: boolean } | null = null;
+const pressableAt = (target: EventTarget | null): Element | null => {
+  const el = target instanceof Element ? target.closest(PRESS_SELECTOR) : null;
+  return el && !shouldSkipPress(el as unknown as Parameters<typeof shouldSkipPress>[0]) ? el : null;
+};
 document.addEventListener(
   'pointerdown',
   (e) => {
-    const b = (e.target as Element | null)?.closest?.('.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile');
-    if (!b || (b as HTMLButtonElement).disabled) return;
+    const el = pressableAt(e.target);
+    if (!el) return;
     sound.unlock();
-    if (settings.sound) sound.click();
+    if (settings.sound) sound.tick();
+    soundPress = { el, x: e.clientX, y: e.clientY, id: e.pointerId, cancelled: false };
+    const b = el.closest(BUTTON_SELECTOR);
+    if (!b || (b as HTMLButtonElement).disabled) return;
     const hp = hapticFor('press', settings);
     if (hp) vibrate(true, hp as number | number[]);
   },
-  { capture: true },
+  { capture: true, passive: true },
 );
+document.addEventListener(
+  'pointermove',
+  (e) => {
+    if (!soundPress || soundPress.id !== e.pointerId || soundPress.cancelled) return;
+    if (dragExceeded(soundPress.x, soundPress.y, e.clientX, e.clientY)) soundPress.cancelled = true;
+  },
+  { capture: true, passive: true },
+);
+document.addEventListener(
+  'pointerup',
+  (e) => {
+    const p = soundPress;
+    soundPress = null;
+    if (!p || p.cancelled || p.id !== e.pointerId) return;
+    // Lift is the click layer; only button-like surfaces get it. Cards and hexes already click
+    // with their action, so they are not clicked twice.
+    if (!p.el.closest(BUTTON_SELECTOR)) return;
+    if (settings.sound) sound.click();
+  },
+  { capture: true, passive: true },
+);
+document.addEventListener('pointercancel', () => (soundPress = null), { capture: true, passive: true });
 bind('hand-sort', () => {
   settings = { ...settings, handSort: nextSort(settings.handSort) };
   saveSettings();
@@ -7603,7 +7812,7 @@ const dragLayer = mountDragLayer({
       ? document.elementsFromPoint(x, y)
       : [document.elementFromPoint(x, y)].filter((el): el is Element => !!el);
     for (const el of stack) {
-      if (el.closest?.('.drag-ghost, #smart-led-window, #smart-led-spill, #smart-spill')) continue;
+      if (el.closest?.('.drag-ghost, #smart-led-window, #smart-led-bloom, #smart-spill')) continue;
       if (el.closest?.('#hand, #futa04-actions, #smart-context, #smart-bloom, #moves, button, .bloom-options, .bloom-toggle')) return false;
       if (el.closest?.('#discard, #futa04-box')) return true;
     }
@@ -8076,6 +8285,8 @@ document.addEventListener(
 );
 // Phase 0: the one delegated press primitive and the one frame scheduler.
 installPress();
+// Phase 4: the hand's breath pauses under a finger and in a hidden tab.
+installHandBreath($('hand'));
 attachSchedulerPause($('game'), $('board-wrap'));
 observeLongTasks();
 document.addEventListener('keydown', (e) => {
@@ -8115,6 +8326,11 @@ let appReady = false;
   },
   settings: () => ({ ...settings }),
   busy: () => busy(),
+  /** Read-only sound diagnostics: the pre-rendered bank's size and the last cues played. */
+  soundBank: () => sound.bankStats(),
+  soundLog: () => [...sound.log()],
+  /** tests only: play a named cue through the real sound gate (never mutates the game) */
+  soundCue: (name: string) => sound.cue(name),
   /** Test-only feel harness: press latency, frame gaps, long tasks, live animations, RAF jobs. */
   feel: () => feel(scheduler.subscriberCount()),
   particles: () => ({ alive: particles.alive, peak: particles.peak }),

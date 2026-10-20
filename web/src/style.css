@@ -1524,12 +1524,34 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   transform: rotate(var(--rot, 0deg)) translateY(var(--dy, 0px));
   transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1.2), opacity 0.2s;
   margin-left: min(-6px, calc((100% - 28px - var(--n) * var(--cw)) / max(var(--n) - 1, 1)));
+  /* Phase 1: a card's weight is a shadow under it, set once per render (never per frame). */
+  box-shadow: 0 var(--shadow-y, 2px) var(--shadow-blur, 4px) rgba(0, 0, 0, var(--shadow-alpha, 0.28));
+}
+/* Phase 4: the idle breath. It animates `scale` only, so the fan's inline rotation/lift and the
+   press's `translate` still compose. A light card sways up to 0.8%, a heavy one 0.4%; the period
+   and phase are per-card (logic/motion.ts), and `linear` with four stops is the smooth loop. */
+@keyframes hand-breath {
+  0%, 100% { scale: 1; }
+  25% { scale: calc(1 + (var(--breath-scale, 1.006) - 1) * 0.5); }
+  50% { scale: var(--breath-scale, 1.006); }
+  75% { scale: calc(1 + (var(--breath-scale, 1.006) - 1) * 0.5); }
+}
+#hand.breathing .card:not(.breath-off) {
+  animation: hand-breath var(--breath-period, 5200ms) linear var(--breath-phase, 0ms) infinite;
+}
+/* A finger on the fan, a hidden tab or a pause freezes the breath where it is (no jump). */
+#hand.breathing.breath-hold .card:not(.breath-off) {
+  animation-play-state: paused;
+}
+.reduce-motion #hand.breathing .card { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  #hand.breathing .card { animation: none; }
 }
 .hand .card:first-child {
   margin-left: 0;
 }
 .hand .card.lifted {
-  transform: rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px));
+  transform: rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - var(--lift, 18px)));
   border-color: var(--c-accent);
   z-index: 2;
 }
@@ -3215,6 +3237,11 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   pointer-events: none;
   opacity: var(--op, 0.2);
 }
+/* The LIGHT contract's tint under a halo. Decoration only: it must never take a tap meant for
+   the hex beneath it (the lesson lights a tile and the player taps that tile). */
+.top-glow-tint {
+  pointer-events: none;
+}
 .top-glow.glow-in {
   animation: glow-in 500ms ease-out both;
 }
@@ -3804,7 +3831,7 @@ html[data-layout='side'] .dock-overlays {
   transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3), opacity 0.2s, filter 0.2s;
 }
 .dock .hand-row > .hand .card.lifted {
-  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.04);
+  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - var(--lift, 18px))) scale(1.04);
 }
 .dock .hand-row > .hand .card.dim {
   opacity: 0.62;
@@ -4272,24 +4299,69 @@ html[data-layout='side'] .dock-overlays {
   font-variant-numeric: lining-nums tabular-nums;
 }
 /* Primary = .btn.primary (one per moment), Secondary = .btn.ghost, Tertiary = .btn.link */
-/* The ONE press implementation. web/src/logic/press.ts paints data-pressed and --press-depth on
-   pointerdown (and on Space/Enter), holds while down, and clears on release/leave/blur or after
-   a 10 px drag. No surface declares its own :active transform. */
+/* The ONE press implementation. web/src/logic/press.ts paints data-pressed, --press-depth (the
+   shape's compression) and --press-drop (its physical depth in px) on pointerdown (and on
+   Space/Enter), holds while down, and clears on release/leave/blur or after a 10 px drag.
+   No surface declares its own :active transform. The press moves on `translate`/`scale`, not on
+   `transform`, so it composes with the hand's fan rotation and lift instead of replacing them. */
 [data-pressed="true"] {
-  transform: scale(var(--press-depth, var(--press-scale)));
-  transition: transform var(--dur-ack) var(--ease-standard), box-shadow var(--dur-ack) var(--ease-standard) !important;
-  box-shadow: inset 0 1px 2px color-mix(in srgb, #000 55%, transparent);
+  translate: 0 var(--press-drop, 1px);
+  scale: var(--press-depth, var(--press-scale));
+  transition: translate var(--dur-ack) var(--ease-standard), scale var(--dur-ack) var(--ease-standard) !important;
 }
-[data-pressed="true"][data-press-surface="key"] {
-  transform: translateY(1px) scale(var(--press-depth, 0.98));
+/* A hand card presses by its weight (1.5-3 px) and barely compresses: the fan already tilts it. */
+#hand .card[data-pressed="true"] {
+  scale: 0.996;
 }
-/* SVG hexes need an explicit origin so the press shrinks in place. */
+/* SVG hexes need an explicit origin so the press shrinks in place; the tone is the SVG's shade. */
 #board [data-pressed="true"] {
   transform-box: fill-box;
   transform-origin: center;
+  opacity: 0.9;
 }
+/* The pre-baked shadow layer. Its shadow is painted once here; only opacity animates, so no
+   box-shadow/filter is ever recomputed per frame. */
+.press-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: none;
+  box-shadow: inset 0 2px 3px color-mix(in srgb, #000 60%, transparent), inset 0 -1px 0 color-mix(in srgb, #fff 6%, transparent);
+  transition: opacity var(--dur-ack) var(--ease-standard);
+}
+:is(button, [role="button"], .card, .hand-slot, label, summary):has(> .press-shade) {
+  position: relative;
+}
+[data-pressed="true"] > .press-shade {
+  opacity: 1;
+}
+/* Reduce motion: the press is a static inset/tone change — no travel, no shrink, no transition. */
 .reduce-motion [data-pressed="true"] {
-  transform: none;
+  translate: none;
+  scale: none;
+  transition: none !important;
+}
+.reduce-motion [data-pressed="true"] > .press-shade,
+.reduce-motion .press-shade {
+  transition: none;
+  opacity: 0;
+}
+.reduce-motion [data-pressed="true"] > .press-shade {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-pressed="true"] {
+    translate: none;
+    scale: none;
+    transition: none !important;
+  }
+  [data-pressed="true"] > .press-shade {
+    transition: none;
+    opacity: 1;
+  }
 }
 /* overhaul item 14: the score race, a slim tug-of-war under the header */
 .race {

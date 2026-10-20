@@ -1,18 +1,16 @@
-// The sound palette (ui/sound.ts) is verified without a browser: a fake Web Audio context records
-// every voice that is scheduled, so we can check mute, the short durations, the attacks, and the
-// deterministic variation, without playing anything.
+// The sound palette (ui/sound.ts + ui/sound-bank.ts) is verified without a browser: a fake Web
+// Audio context records every voice that is scheduled, so we can check mute, the short durations,
+// the fades, and the deterministic variation, without playing anything. The bank is built once,
+// then every cue must play from buffers only.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Sound } from '../src/ui/sound.js';
 
-type Voice = { kind: 'osc' | 'noise'; start: number; end: number; freq: number; type: string; dur: number };
+type Played = { start: number; end: number; rate: number; length: number; hash: number };
 
 class FakeParam {
   value = 0;
-  initial: number | null = null;
   events: { op: string; value: number; time: number }[] = [];
-  constructor(readonly label: string) {}
   setValueAtTime(v: number, t: number) {
-    if (this.initial === null) this.initial = v;
     this.value = v;
     this.events.push({ op: 'set', value: v, time: t });
   }
@@ -38,91 +36,121 @@ class FakeNode {
   }
 }
 
-const voices: Voice[] = [];
+const played: Played[] = [];
 const envelopes: FakeParam[] = [];
+let bufferCount = 0;
 
-class FakeOsc extends FakeNode {
-  type = '';
-  frequency = new FakeParam('osc');
-  private at = 0;
-  private freq0 = 0;
-  start(t: number) {
-    this.at = t;
-    this.freq0 = this.frequency.initial ?? this.frequency.value;
+class FakeBuffer {
+  readonly data: Float32Array;
+  constructor(readonly channels: number, readonly length: number, readonly sampleRate: number) {
+    this.data = new Float32Array(length);
   }
-  stop(t: number) {
-    voices.push({ kind: 'osc', start: this.at, end: t, freq: this.freq0, type: this.type, dur: t - this.at });
+  get duration() {
+    return this.length / this.sampleRate;
+  }
+  getChannelData() {
+    return this.data;
   }
 }
 
 class FakeSource extends FakeNode {
-  buffer: { duration: number } = { duration: 0 };
+  buffer: FakeBuffer = new FakeBuffer(1, 1, 22050);
+  playbackRate = new FakeParam();
   start(t: number) {
-    voices.push({ kind: 'noise', start: t, end: t + this.buffer.duration, freq: 0, type: 'noise', dur: this.buffer.duration });
+    let hash = 0;
+    for (let i = 0; i < this.buffer.data.length; i += 17) hash = (hash * 31 + Math.round(this.buffer.data[i]! * 1000)) | 0;
+    const end = t + this.buffer.duration / (this.playbackRate.value || 1);
+    played.push({ start: t, end, rate: this.playbackRate.value, length: this.buffer.length, hash });
+  }
+  stop(_t: number) {
+    /* the fake keeps the scheduled end from start() */
   }
 }
 
 class FakeGain extends FakeNode {
-  gain = new FakeParam('gain');
+  gain = new FakeParam();
   constructor() {
     super();
     envelopes.push(this.gain);
   }
 }
 
-class FakeFilter extends FakeNode {
-  type = '';
-  frequency = new FakeParam('filter');
-  Q = new FakeParam('filterQ');
-}
+let lastCtx: FakeCtx | null = null;
 
 class FakeCtx {
   currentTime = 0;
-  sampleRate = 48000;
+  sampleRate = 22050;
+  state: AudioContextState = 'running';
   destination = {};
+  suspendCalls = 0;
+  resumeCalls = 0;
+  constructor() {
+    lastCtx = this;
+  }
   createGain() {
     return new FakeGain();
   }
-  createOscillator() {
-    return new FakeOsc();
-  }
-  createBuffer(_channels: number, len: number, rate: number) {
-    const data = new Float32Array(len);
-    return { getChannelData: () => data, duration: len / rate };
+  createBuffer(channels: number, length: number, rate: number) {
+    bufferCount += 1;
+    return new FakeBuffer(channels, length, rate);
   }
   createBufferSource() {
     return new FakeSource();
   }
-  createBiquadFilter() {
-    return new FakeFilter();
-  }
   createDynamicsCompressor() {
-    return { threshold: new FakeParam('lim'), knee: new FakeParam('lim'), ratio: new FakeParam('lim'), attack: new FakeParam('lim'), release: new FakeParam('lim'), connect: (d: unknown) => d };
+    const p = () => new FakeParam();
+    return { threshold: p(), knee: p(), ratio: p(), attack: p(), release: p(), connect: (d: unknown) => d };
+  }
+  suspend() {
+    this.suspendCalls += 1;
+    this.state = 'suspended';
+    return Promise.resolve();
+  }
+  resume() {
+    this.resumeCalls += 1;
+    this.state = 'running';
+    return Promise.resolve();
   }
 }
 
+type Listener = () => void;
+const visibility: Listener[] = [];
+const fakeDocument = {
+  hidden: false,
+  addEventListener(type: string, fn: Listener) {
+    if (type === 'visibilitychange') visibility.push(fn);
+  },
+};
+
 function makeSound(): Sound {
-  voices.length = 0;
+  played.length = 0;
   envelopes.length = 0;
+  bufferCount = 0;
+  visibility.length = 0;
+  fakeDocument.hidden = false;
   (globalThis as unknown as { window: unknown }).window = { AudioContext: FakeCtx };
+  (globalThis as unknown as { document: unknown }).document = fakeDocument;
   const s = new Sound();
   s.unlock();
-  voices.length = 0; // nothing sounds while unlocking
+  s.fillBank();
+  played.length = 0;
+  bufferCount = 0;
   return s;
 }
 
-function run(fn: () => void): Voice[] {
-  voices.length = 0;
+function run(fn: () => void): Played[] {
+  played.length = 0;
   fn();
-  return [...voices];
+  return [...played];
 }
 
-const signature = (v: Voice[]) => v.map((x) => (x.kind === 'osc' ? `o:${x.type}:${x.freq.toFixed(1)}` : `n:${x.dur.toFixed(3)}`)).join(',');
+const signature = (v: Played[]) => v.map((x) => `${x.length}:${x.hash}:${x.rate.toFixed(3)}`).join(',');
 
 /** Every cue the game can play. */
 const CUES: readonly [string, (s: Sound) => void][] = [
   ['press', (s) => s.press()],
   ['click', (s) => s.click()],
+  ['tick', (s) => s.tick()],
   ['draw', (s) => s.draw()],
   ['throw', (s) => s.throw()],
   ['place', (s) => s.place(3, 9)],
@@ -130,6 +158,7 @@ const CUES: readonly [string, (s: Sound) => void][] = [
   ['grow', (s) => s.grow([1.2], 0)],
   ['strengthen', (s) => s.strengthen()],
   ['bloom', (s) => s.bloom()],
+  ['bloomTile', (s) => s.bloomTile(1)],
   ['fruit', (s) => s.fruit()],
   ['megaBomb', (s) => s.megaBomb()],
   ['undo', (s) => s.undo([1])],
@@ -162,17 +191,22 @@ const CUES: readonly [string, (s: Sound) => void][] = [
 describe('the chain reaction', () => {
   it('each ring pops a whole tone higher than the last, a short wooden tick', () => {
     const s = makeSound();
-    const body = (step: number) => run(() => s.cascadePop(step)).filter((v) => v.kind === 'osc').map((v) => v.freq);
-    const freqs = [0, 1, 2, 3, 4, 5].map((i) => body(i)[0]!);
-    // every voice carries the palette's ±3% wobble, so a step is a whole tone give or take that,
+    // The bank plays one pre-rendered `place` voice per pop, so the step is the playback rate.
+    // each ring is a beat apart, so let the previous pop's voices end (the cap is per moment)
+    const rates = [0, 1, 2, 3, 4, 5].map((i) => {
+      lastCtx!.currentTime += 0.2;
+      return run(() => s.cascadePop(i))[0]!.rate;
+    });
+    // every voice carries the palette's ±5% wobble, so a step is a whole tone give or take that,
     // and always upward
-    for (let i = 1; i < freqs.length; i++) {
-      const r = freqs[i]! / freqs[i - 1]!;
+    for (let i = 1; i < rates.length; i++) {
+      const r = rates[i]! / rates[i - 1]!;
       expect(r).toBeGreaterThan(1.04);
       expect(r).toBeLessThan(2 ** (2 / 12) * 1.07);
     }
-    expect(freqs[5]! / freqs[0]!).toBeGreaterThan(2 ** (10 / 12) * 0.94);
-    for (const i of [0, 5]) expect(Math.max(...run(() => s.cascadePop(i)).map((v) => v.end))).toBeLessThanOrEqual(0.1);
+    expect(rates[5]! / rates[0]!).toBeGreaterThan(2 ** (10 / 12) * 0.94);
+    // a pop is a short tick, never a long tone (measured from its own start, not absolute time)
+    for (const i of [0, 5]) expect(Math.max(...run(() => s.cascadePop(i)).map((v) => v.end - v.start))).toBeLessThanOrEqual(0.1);
   });
 });
 
@@ -192,32 +226,41 @@ describe('sound palette', () => {
 
   it('plays something for every cue and nothing rings past 500ms', () => {
     for (const [name, fn] of CUES) {
+      lastCtx!.currentTime += 0.5;
       const v = run(() => fn(s));
       expect(v.length, name).toBeGreaterThan(0);
-      const end = Math.max(...v.map((x) => x.end));
+      const end = Math.max(...v.map((x) => x.end)) - Math.min(...v.map((x) => x.start));
       expect(end, `${name} lasts ${Math.round(end * 1000)}ms`).toBeLessThanOrEqual(0.5);
     }
   });
 
-  it('keeps every attack under 8ms', () => {
+  it('fades every voice in over about 5ms (no raw onset, no click)', () => {
     run(() => {
       for (const [, fn] of CUES) fn(s);
     });
-    const attacks: number[] = [];
+    const fades: number[] = [];
     for (const p of envelopes) {
       for (let i = 1; i < p.events.length; i++) {
         const a = p.events[i - 1]!;
         const b = p.events[i]!;
-        if (a.op === 'set' && b.op === 'exp' && b.value > 0.0002) attacks.push(b.time - a.time);
+        if (a.op === 'set' && b.op === 'lin' && b.value > 0.001) fades.push(b.time - a.time);
       }
     }
-    expect(attacks.length).toBeGreaterThan(0);
-    expect(Math.max(...attacks)).toBeLessThanOrEqual(0.008);
+    expect(fades.length).toBeGreaterThan(0);
+    expect(Math.max(...fades)).toBeLessThanOrEqual(0.0051);
+  });
+
+  it('does not allocate a buffer while playing', () => {
+    run(() => {
+      for (const [, fn] of CUES) fn(s);
+    });
+    expect(bufferCount).toBe(0);
   });
 
   it('gives each moment a distinct sound', () => {
     const seen = new Map<string, string>();
     for (const [name, fn] of CUES) {
+      lastCtx!.currentTime += 0.5; // let the previous cue's voices end (the cap is per moment)
       const sig = signature(run(() => fn(s)));
       const prior = seen.get(sig);
       expect(prior, `${name} sounds like ${prior}`).toBeUndefined();
@@ -226,26 +269,83 @@ describe('sound palette', () => {
   });
 
   it('never repeats a press variation twice in a row', () => {
-    const buckets: number[] = [];
+    const variants: number[] = [];
     const sigs: string[] = [];
     for (let i = 0; i < 10; i++) {
+      lastCtx!.currentTime += 0.1;
       const v = run(() => s.press());
-      const osc = v.find((x) => x.kind === 'osc')!;
-      buckets.push(osc.freq >= 950 ? 1 : 0);
+      expect(v.length).toBeGreaterThan(0);
+      variants.push(s.log().at(-1)!.variant);
       sigs.push(signature(v));
     }
-    expect(new Set(buckets).size).toBe(2); // both envelopes are used
-    for (let i = 1; i < buckets.length; i++) expect(buckets[i], `press ${i}`).not.toBe(buckets[i - 1]);
-    for (let i = 1; i < sigs.length; i++) expect(sigs[i]).not.toBe(sigs[i - 1]);
+    expect(new Set(variants).size).toBe(2); // both envelope variants are used
+    for (let i = 1; i < variants.length; i++) expect(variants[i], `press ${i}`).not.toBe(variants[i - 1]);
+    for (let i = 1; i < sigs.length; i++) expect(sigs[i], `press ${i}`).not.toBe(sigs[i - 1]);
   });
 
   it('drops the faint flourishes on Effects Low but keeps the important cues', () => {
     s.setEffects('low');
     expect(run(() => s.sparks())).toHaveLength(0);
     expect(run(() => s.rustle())).toHaveLength(0);
-    for (const name of ['cutBig', 'place', 'throw', 'draw', 'win', 'lose']) {
+    expect(run(() => s.chime())).toHaveLength(0);
+    for (const name of ['tick', 'click', 'thud', 'cutBig', 'place', 'throw', 'draw', 'win', 'lose']) {
+      lastCtx!.currentTime += 0.5;
       const fn = CUES.find(([n]) => n === name)![1];
       expect(run(() => fn(s)).length, name).toBeGreaterThan(0);
     }
+  });
+
+  it('keeps functional cues and drops motion flourishes under Reduce motion', () => {
+    s.setReduceMotion(true);
+    expect(run(() => s.rustle())).toHaveLength(0);
+    expect(run(() => s.sparks())).toHaveLength(0);
+    expect(run(() => s.chime())).toHaveLength(0);
+    for (const name of ['tick', 'click', 'thud', 'place', 'draw', 'cutMedium', 'win', 'lose']) {
+      lastCtx!.currentTime += 0.5;
+      const fn = CUES.find(([n]) => n === name)![1];
+      expect(run(() => fn(s)).length, name).toBeGreaterThan(0);
+    }
+  });
+
+  it('always plays the FIRST tick, even at ctx.currentTime 0', () => {
+    const ctx = lastCtx!;
+    ctx.currentTime = 0; // the state on the player's very first tap
+    expect(run(() => s.tick()).length).toBeGreaterThan(0);
+    // ...and only then does the 30ms window start counting.
+    ctx.currentTime = 0.02;
+    expect(run(() => s.tick())).toHaveLength(0);
+    ctx.currentTime = 0.031;
+    expect(run(() => s.tick()).length).toBeGreaterThan(0);
+  });
+
+  it('coalesces repeated selection ticks inside 30ms', () => {
+    const ctx = lastCtx!;
+    ctx.currentTime = 1;
+    run(() => s.tick());
+    ctx.currentTime = 1.02;
+    expect(run(() => s.tick())).toHaveLength(0);
+    ctx.currentTime = 1.04;
+    expect(run(() => s.tick()).length).toBeGreaterThan(0);
+  });
+
+  it('caps live voices near eight', () => {
+    const ctx = lastCtx!;
+    ctx.currentTime = 2;
+    run(() => {
+      for (let i = 0; i < 20; i++) s.thud();
+    });
+    expect(played.length).toBeLessThanOrEqual(8);
+  });
+
+  it('suspends the context while hidden and resumes on return', () => {
+    const ctx = lastCtx!;
+    fakeDocument.hidden = true;
+    for (const fn of visibility) fn();
+    expect(ctx.suspendCalls).toBe(1);
+    expect(run(() => s.click())).toHaveLength(0);
+    fakeDocument.hidden = false;
+    for (const fn of visibility) fn();
+    expect(ctx.resumeCalls).toBe(1);
+    expect(run(() => s.click()).length).toBeGreaterThan(0);
   });
 });

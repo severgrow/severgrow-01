@@ -1200,6 +1200,7 @@ export const LESSON = Object.freeze({
   theirHomeLine: 'To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the Draw pile runs out.',
   tapDrawLine: 'You start every turn by drawing 1 card from the Draw pile or the Throw pile.',
   growLine: 'Grow: drag one of your cards from your hand onto the board, or tap it to select and then place on the board.',
+  // Owner's word list (2026-10-20, "Draw pile / Throw pile"): keep the online line's wording.
   throwLine: 'Throw: swipe up, drag it to the Throw pile, or double tap to throw a card and finish your turn.',
   youGrewLine: 'Tiles keep the rank of the card used.',
   biggerWinsLine: 'Bigger number wins: a stronger card can replace your own tile.',
@@ -1208,7 +1209,7 @@ export const LESSON = Object.freeze({
   goldDoubleLine: 'A gold tile counts double, so it is worth two points.',
   cutLinkLine: 'Cut their link: take that tile and the tiles behind it wither.',
   witheredLine: 'Tiles cut off from their home wither and stop scoring.',
-  cardsThatBloomLine: 'Bloom: three cards with the same number, or three in a row in one suit.',
+  cardsThatBloomLine: 'Bloom: three cards with the same number, or three in order in one suit.',
   bloomedLine: 'A Bloom is an extra move: it grows several tiles at once.',
   surroundLine: 'Surround: fill every side of their home for an instant win.',
   bombLine: 'Bomb: it removes one enemy tile and replaces your Grow that turn.',

@@ -36,6 +36,13 @@ describe('lesson words', () => {
     }
   });
 
+  it('the Bloom explanation says three in order in one suit', () => {
+    // Owner copy (2026-10-20): "three in order in one suit", never "in a row".
+    expect(LESSON.cardsThatBloomLine).toBe('Bloom: three cards with the same number, or three in order in one suit.');
+    expect(LESSON.cardsThatBloomLine).not.toMatch(/\bin a row\b/i);
+    expect(LESSON.tapThrow).toBe('TAP » TO THROW');
+  });
+
   it('the display labels use the game’s own names: Draw pile and Throw pile', () => {
     expect(LESSON.tapDraw).toBe('TAP THE DRAW PILE');
     expect(LESSON.tapThrowPile).toBe('TAP THE THROW PILE');

@@ -74,6 +74,35 @@ export const EASE = Object.freeze({
 export const EASE_SPECIAL = Object.freeze({ marquee: 'linear', led: 'steps(1)' });
 
 /**
+ * The hand's idle breath (phase 4). It is ambient continuous motion, so it lives with the
+ * marquees rather than in a one-off duration: 4.5-6 s per card, 0.4-0.8% of the card's size.
+ * Lighter cards sway a little more; at most seven cards breathe at once. The values are
+ * presentation only and never reach a legal action's duration.
+ */
+export const BREATH = Object.freeze({ minPeriod: 4500, maxPeriod: 6000, minAmp: 0.004, maxAmp: 0.008, maxCards: 7 });
+
+/** A deterministic 32-bit mix: the same card id breathes the same way in every session. */
+const mix = (n: number): number => {
+  let h = Math.imul(n | 0, 0x9e3779b1) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+  h ^= h >>> 13;
+  return h >>> 0;
+};
+
+/** A card's breath period in ms, 4500-6000, fixed by its id. */
+export const breathPeriodOf = (cardId: number): number =>
+  BREATH.minPeriod + (mix(cardId) % (BREATH.maxPeriod - BREATH.minPeriod + 1));
+
+/** A negative delay in ms so cards do not breathe in step (the phase is part of the breath). */
+export const breathPhaseOf = (cardId: number): number => -(mix(cardId ^ 0x5bd1e995) % BREATH.maxPeriod);
+
+/** 0.8% for the lightest card down to 0.4% for the heaviest. */
+export const breathAmpOf = (weight: number): number => {
+  const w = Math.max(0, Math.min(1, weight));
+  return BREATH.maxAmp + (BREATH.minAmp - BREATH.maxAmp) * w;
+};
+
+/**
  * The one motion gate. Every path that animates reads this: a reduced-motion preference or a
  * time scale of zero (Speed Off / fast-forward) means "no motion", never a new preference.
  */
