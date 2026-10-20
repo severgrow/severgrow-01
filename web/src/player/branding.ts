@@ -1,6 +1,8 @@
 // Futasaku 0.4 uses the Futa04 presentation; historical channels keep their existing brand.
-import logoUrl from '../assets/futasaku-emblem.webp?url';
-import wordmarkUrl from '../assets/futasaku-white.webp?url';
+// This SVG deliberately uses only each mark's alpha (feFuncA below). The browser copies contain
+// the exact thresholded silhouettes; the original art stays intact for icon/OG generation.
+import logoUrl from '../assets/futasaku-emblem-silhouette.webp?url';
+import wordmarkUrl from '../assets/futasaku-wordmark-silhouette.webp?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
 
