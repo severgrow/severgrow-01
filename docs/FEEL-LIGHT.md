@@ -67,8 +67,19 @@ result is visually the same and old phones composite it far more cheaply.
 
 ## Verified
 
-- `npm run check` equivalent: `tsc --noEmit` (root, web, admin) + `vitest run` — see the branch
-  commit message for the exact numbers.
+Full `npm run check` equivalent on this branch (Cursor's bundled Node v22.14.0), box otherwise idle:
+
+```
+tsc --noEmit (root, web, admin)                    pass
+vitest run (whole repo, --maxWorkers=2)            237 files: 233 passed, 4 skipped
+                                                   2446 tests: 2392 passed, 1 expected fail, 53 skipped
+                                                   exit 0, 10m 21s
+```
+
+The stderr from that run is expected: several tests spawn the publishing guard scripts
+(`check-pages-parity-root.mjs`, `compose-futa05-preview.mjs`) precisely to prove they refuse a bad
+build. Their assertions are what makes those tests pass.
+
 - `web/tests/light.test.ts` — tone map, unknown-tone fallback, caps, monotonic falloff, sprite
   padding, dots-in-their-tone.
 - `web/e2e/light-source.ts` — 63 pixel checks: origin within 4 px of a lit dot, soft falloff ≥ 24 px
@@ -77,6 +88,11 @@ result is visually the same and old phones composite it far more cheaply.
   4× CPU grow keeps the bloom lit and adds no frame gap the app does not already have.
 - Green: `futa04-display-glow`, `futa04-smart-cockpit` (882), `futa04-tutorial-lock`,
   `futa04-tutorial-flow`, `lessons-3` (L1–L10, 0 wrong taps, plus robustness/layout/tiers/redesign).
+- `CHANNEL=futa04 npm run web:build` + `scripts/check-channel-assets.mjs` — 91 files, isolation passed.
+
+`futa04-living-display.ts` fails its **first** assertion ("minimal main menu") on the untouched tip
+`8586750` as well: the menu was redesigned on this branch before the light work, so that suite is
+stale rather than regressed by this change.
 
 Screenshots: [`screens/light/`](screens/light) at 360×640 and 390×844, each with a reduce-motion
 variant, plus every palette.
