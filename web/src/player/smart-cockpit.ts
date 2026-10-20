@@ -472,11 +472,14 @@ html.futa04-information #board .l-over :is(.selected,.ghost-tile).kind-replace {
   fill:#e5a18b; stroke:#db917a;
 }
 /* The hexes being painted: the same flat grid, green ink and stroke as a legal well, so the
-   shape you draw reads as one family with the legal-move highlights. Each hex pops softly as
-   it joins the shape (the group holds the ink and its stone, so both arrive together). */
+   shape you draw reads as one family with the legal-move highlights. The stroke is the SAME
+   light-warmed mix the well uses (#a5d294 76% + the light core), not the flat green: the two
+   have to compute to one value or the first painted hex reads as a different green from the
+   well it grew out of. Each hex pops softly as it joins the shape (the group holds the ink and
+   its stone, so both arrive together). */
 html.futa04-information #board .l-draw .ghost-tile {
   fill:#a6d49b; fill-opacity:.19;
-  stroke:#a5d294; stroke-width:1.45; stroke-opacity:.74;
+  stroke:color-mix(in srgb,#a5d294 76%,var(--light-core,#f5d8a4) 24%); stroke-width:1.45; stroke-opacity:.74;
   stroke-dasharray:none; animation:none;
   transition:fill-opacity .18s ease-out, stroke-opacity .18s ease-out, stroke .18s ease-out;
 }
