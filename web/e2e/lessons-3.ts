@@ -517,6 +517,9 @@ try {
       await page.goto(URL3, { waitUntil: 'networkidle' });
       await openNextLevel(page);
       await page.waitForSelector('#lesson-plate .lesson-copy', { timeout: 10000 });
+      // Measure in the game's own fonts: on a slow machine the box can be on screen before the web
+      // fonts have loaded, and the wider fallback font then wraps a line that players never see wrap.
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
       const over: string[] = [];
       for (const [k, v] of Object.entries(LESSON)) {
         if (typeof v !== 'string' || !k.endsWith('Line')) continue;
