@@ -42,8 +42,11 @@ describe('the beta line is a quiet version line between the wordmark and the ent
   });
 
   it('carries the version and the link words from the one strings module', () => {
-    expect(FEEDBACK.betaVersion).toMatch(/^\d+\.\d+$/);
-    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain(`(${FEEDBACK.betaVersion})`);
+    // PINNED to the shipped value, not merely the shape: the menu line is what a player reads, so a
+    // silent drift (0.6 -> 0.7 half-deployed) must fail here rather than ship. Bump this in the same
+    // commit that bumps FEEDBACK.betaVersion.
+    expect(FEEDBACK.betaVersion).toBe('0.6');
+    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('(0.6)');
     expect(FEEDBACK.betaLink).toBe('let us know here.');
     expect(mountSource).toContain('FEEDBACK.betaLink');
     // No second copy of the sentence in the markup or the module.
