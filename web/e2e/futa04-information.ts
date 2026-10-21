@@ -91,7 +91,20 @@ try {
         aligned: boxes.every(box => Math.abs(box.top + box.height / 2 - boxes[0]!.top - boxes[0]!.height / 2) < 1 && Math.abs(box.height-boxes[0]!.height) < 1),
         separate: boxes.every((box, i) => !i || box.left >= boxes[i-1]!.right + 3),
         fits: boxes.every(box => box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight),
-        matching: style.border === undo.border && style.backgroundColor === undo.backgroundColor && style.color === undo.color,
+        // 0.6 changed what "matching" means for a DISABLED key: it keeps the trio's chrome (border,
+        // face) and its place in the row, but its ink is deliberately muted so it reads unavailable.
+        // So chrome must match for all three, and the ink must match for the enabled ones only -
+        // plus an explicit check that a disabled key is quieter than a live one, which is the point
+        // of the change. This replaces a stricter-looking `color` comparison that pinned the old
+        // uniform ink; the assertions below are not loosened anywhere else.
+        // Chrome WITHOUT the ink: the `border` shorthand carries its colour, so comparing it whole
+        // would smuggle the colour rule back in. Width, style and face are the shared hardware.
+        chrome: (() => {
+          const parts = (s2: CSSStyleDeclaration) => `${s2.borderTopWidth}|${s2.borderTopStyle}|${s2.backgroundColor}`;
+          return [style, undo, getComputedStyle(buttons[2]!)].every(s2 => parts(s2) === parts(style));
+        })(),
+        // The rule, stated once: a disabled key is muted, an enabled one matches the others.
+        inkRule: (buttons[0] as HTMLButtonElement).disabled ? undo.color !== style.color : undo.color === style.color,
         offMap: hint.closest('#futa04-information-rail') === null && hint.parentElement?.id === 'futa04-actions',
         taps: buttons.every((button, i) => { const box = boxes[i]!; const pseudo = getComputedStyle(button,'::after');
           const extra = pseudo.display !== 'none' ? 16 : 0;
@@ -99,7 +112,7 @@ try {
         }), overlaps };
     });
     check(tools.icon && tools.offMap, `${width}: bulb replaces Hint text beside the existing tools`);
-    check(tools.aligned && tools.separate && tools.fits && tools.matching && tools.taps,
+    check(tools.aligned && tools.separate && tools.fits && tools.chrome && tools.inkRule && tools.taps,
       `${width}: tool trio matches, aligns and retains separate touch targets (${JSON.stringify(tools)})`);
     check(tools.overlaps.length === 0, `${width}: tools never cover piles, moves or cards (${tools.overlaps})`);
     check(await page.locator('#deck.coach-glow').count() === 0, `${width}: Deck has no square suggestion outline`);
