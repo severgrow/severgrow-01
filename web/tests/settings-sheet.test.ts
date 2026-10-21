@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 import { SETTINGS } from '../../src/strings.js';
 
 const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
+const styleCss = readFileSync(fileURLToPath(new URL('../src/style.css', import.meta.url)), 'utf8');
 const section = html.slice(html.indexOf('<section id="sheet-settings"'), html.indexOf('</section>', html.indexOf('<section id="sheet-settings"')));
 
 const idsIn = (chunk: string): string[] => [...chunk.matchAll(/data-setting="([^"]+)"/g)].map((m) => m[1]!);
@@ -77,6 +78,15 @@ describe('Settings sheet: essentials on the surface, everything else in two grou
     expect(SETTINGS.autoSkip).toBe('Auto-skip empty turns');
     expect(SETTINGS.music).toBe('Music'); // the "(quiet hum)" aside is gone
     expect(section, 'the old four-effect paragraph must not come back').not.toContain('opening splash, home heartbeat');
+  });
+
+  it('every choice control in the sheet is a 44px touch target (0.6 polish)', () => {
+    // The 36px segmented pills were the one interactive control below the 44px floor. The rule is
+    // scoped to #sheet-settings so the compact segment elsewhere is untouched.
+    const scoped = /#sheet-settings \.seg-btn,\s*#sheet-settings \.btn\.small\s*\{[^}]*min-height:\s*44px/s;
+    expect(styleCss, 'Settings choices must be at least 44px tall').toMatch(scoped);
+    // And the base control is still the compact one the other surfaces rely on.
+    expect(styleCss).toMatch(/\.seg-btn \{\s*min-height: var\(--h-compact\);/);
   });
 
   it('every word comes from src/strings.ts (SETTINGS), and every key it names exists', () => {

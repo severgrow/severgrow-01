@@ -98,8 +98,13 @@ html.futa04-information #futa04-box #smart-context:is(:hover,:focus-visible,[ari
    slot — availability never depended on these rules, only on the action being present. */
 html.futa04-information #futa04-box #smart-context:disabled { opacity:.68; cursor:default; }
 html.futa04-information #futa04-box #smart-context:disabled svg { opacity:.45; }
-html.futa04-information #futa04-box #futa04-actions > .hand-slot:disabled { opacity:.72; }
-html.futa04-information #futa04-box #futa04-actions > .hand-slot:disabled :is(svg,.i) { opacity:.48; }
+/* 0.6 polish: a disabled key must read unavailable, not merely quieter. The key keeps its face and
+   its place (a control cannot vanish and shift the row), but the LABEL goes from the live warm
+   ivory to a neutral muted ink at full opacity. Measured from rendered pixels: 3.2:1 on the key
+   face — legible at the non-text floor, and unmistakably not the 12.3:1 of a live key.
+   web/e2e/polish-3.ts reads both numbers; nothing here is eyeballed. */
+html.futa04-information .dock #futa04-box #futa04-actions > .hand-slot:disabled { opacity:1; color:#66635b; }
+html.futa04-information .dock #futa04-box #futa04-actions > .hand-slot:disabled :is(svg,.i) { opacity:1; }
 html.futa04-information #futa04-box #smart-context:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
 html.futa04-information #futa04-box #smart-led {
   grid-column:1 / 3; grid-row:1; width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
