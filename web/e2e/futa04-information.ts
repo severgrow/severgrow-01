@@ -74,16 +74,31 @@ try {
     await page.goto(`${base}?seed=219682080`);
     await page.waitForFunction(() => (window as any).__severgrow?.state() && !(window as any).__severgrow.busy());
     await page.waitForTimeout(250);
-    // MEASURE THE INFORMATION LAYOUT ONLY ONCE IT IS MOUNTED. `mountInformation` adds the
-    // `futa04-information` class, the rail and the stylesheet after the game starts, and every
-    // style this check reads (the trio's chrome, the muted disabled ink) lives in that stylesheet.
-    // Sampling before it landed read the unstyled default and reported `inkRule: false` on a loaded
-    // CI runner for a UI that was correct a moment later. This is a readiness gate: no assertion
-    // below is relaxed, and the same values are still compared.
+    // MEASURE THE INFORMATION LAYOUT ONLY ONCE IT IS MOUNTED AND SETTLED. `mountInformation` adds
+    // the `futa04-information` class, the rail and the stylesheet after the game starts, and the
+    // cockpit then repaints its keys; every style this check reads (the trio's chrome, the muted
+    // disabled ink) comes from that fresh stylesheet and the key's own final state. Sampling too
+    // early read the pre-mount default and reported `inkRule: false` on a loaded CI runner for a UI
+    // that was correct a moment later (at 768 once, then at 1440 - so a timing race, not a width).
+    // This waits for the mount AND for the trio's computed styles to be identical twice in a row,
+    // so "settled" is observed rather than assumed. No assertion below is relaxed.
     await page.waitForFunction(() => {
       const rail = document.getElementById('futa04-information-rail');
       return !!rail && document.documentElement.classList.contains('futa04-information');
     }, undefined, { timeout: 15_000 });
+    const trioStyles = () => page.evaluate(() => ['tool-undo', 'futa04-help-button', 'hand-sort']
+      .map((id) => {
+        const el = document.getElementById(id) as HTMLButtonElement | null;
+        if (!el) return 'missing';
+        const s = getComputedStyle(el);
+        return `${el.disabled}/${s.color}/${s.borderTopWidth}/${s.borderTopStyle}/${s.backgroundColor}`;
+      }).join('|'));
+    for (let attempt = 0, stable = 0, last = await trioStyles(); attempt < 100 && stable < 3; attempt++) {
+      await page.waitForTimeout(100);
+      const now = await trioStyles();
+      stable = now === last && now !== 'missing|missing|missing' ? stable + 1 : 0;
+      last = now;
+    }
     check(await page.locator('#futa04-help-button').isVisible(), `${width}: hint is discoverable`);
     const tools = await page.evaluate(() => {
       const hint = document.querySelector<HTMLElement>('#futa04-help-button')!;
