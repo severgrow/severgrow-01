@@ -370,6 +370,10 @@ for (const theme of THEMES) {
     await openSettingsGroup(page, 'settings-look');
     await page.locator('#speed-seg .seg-btn', { hasText: 'Off' }).click();
     await page.click('#sheet-settings [data-close]');
+    // Settings now returns to the pause panel it was opened from (0.6: a sheet returns to its
+    // opener), and a paused game does not drain its queue, so resuming is an explicit second step.
+    // The animation assertions below are unchanged.
+    await page.click('#gm-resume');
     await page.waitForTimeout(100);
     const same = (await boardTiles(page)) === (await stateTiles(page));
     check(`${theme}: ADVERSARIAL 3 animations off mid-animation leaves a correct board`, midBusy && same && !(await isBusy(page)));
