@@ -166,17 +166,24 @@
                key, and pressing it opens their profile (web/src/accounts/mount.ts). It ships hidden
                because the accounts module only reveals it once it knows Google is on. -->
           <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
-        </div>
-        <!-- The menu's footer (owner brief, 2026-10-21): one row, two equal keys, account left and
-             Settings right. It is the LAST thing in the menu's own tab order, and it is a group so a
-             screen reader reads the pair as one row. `.menu-buttons` is reused on purpose: every key
-             on every menu is the same 50px key (`--menu-key-h`), and this row must not be a second
-             button system. `grid` (not the column's `flex-direction: column`) is all that makes it a
-             row; LOG IN/name is pinned to column 1 and Settings to column 2, so Settings stays on the
-             right even while the account key is hidden (channels with no Google). -->
-        <div id="menu-foot" class="menu-buttons menu-footer" role="group" aria-label="Account and settings">
-          <button id="menu-login" class="btn ghost" type="button" aria-label="Log in" hidden>LOG IN</button>
-          <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
+          <!-- The menu's footer (owner brief, 2026-10-21): one row, two equal keys, account left and
+               Settings right. It is the LAST thing in the menu's own tab order, and it is a group so
+               a screen reader reads the pair as one row. `.menu-buttons` is reused on purpose: every
+               key on every menu is the same 50px key (`--menu-key-h`), and this row must not be a
+               second button system. `grid` (not the column's `flex-direction: column`) is all that
+               makes it a row; LOG IN/name is pinned to column 1 and Settings to column 2, so Settings
+               stays on the right even while the account key is hidden (channels with no Google).
+
+               It lives INSIDE the column (owner, 2026-10-21: "in main menu now we have a big gap
+               between territory and account and settings - make the spacing between buttons always
+               equal"). As a sibling of the column it inherited the menu's distributed free space
+               (measured 50px above it) while the keys above it sat 9px apart. As the column's last
+               child it takes the column's own gap, so every key on the menu is spaced identically by
+               construction — no value to keep in sync. -->
+          <div id="menu-foot" class="menu-buttons menu-footer" role="group" aria-label="Account and settings">
+            <button id="menu-login" class="btn ghost" type="button" aria-label="Log in" hidden>LOG IN</button>
+            <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
+          </div>
         </div>
       </div>
     </section>

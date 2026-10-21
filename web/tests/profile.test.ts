@@ -143,11 +143,12 @@ describe('the footer row is two keys: the account key left, Settings right', () 
     expect(foot).toContain('id="menu-login"');
     expect(foot).toContain('id="menu-settings"');
     expect(foot.indexOf('id="menu-login"')).toBeLessThan(foot.indexOf('id="menu-settings"'));
-    // The footer follows the column and is the last block of the menu.
+    // The footer is the column's last child, so its keys share the column's gap (owner, 2026-10-21:
+    // equal spacing between every key). It still comes after TERRITORY in the DOM and in tab order.
     expect(menuSection.indexOf('menu-footer')).toBeGreaterThan(menuSection.indexOf('id="menu-world"'));
-    const columnEnd = menuSection.indexOf('</div>', menuSection.indexOf('<div class="menu-buttons">'));
-    expect(columnEnd).toBeGreaterThan(-1);
-    expect(menuSection.indexOf('menu-footer')).toBeGreaterThan(columnEnd);
+    const columnOpen = menuSection.indexOf('<div class="menu-buttons">');
+    expect(columnOpen).toBeGreaterThan(-1);
+    expect(menuSection.indexOf('menu-footer')).toBeGreaterThan(columnOpen);
   });
 
   it('is the last thing in tab order (DOM order is tab order)', () => {

@@ -59,6 +59,20 @@ const MEASURE = `(() => {
   const visible = buttons.length;
   const menuScroll = Math.max(0, menu.scrollHeight - menu.clientHeight);
   const innerScroll = Math.max(0, inner.scrollHeight - inner.clientHeight);
+  // The owner's rule (2026-10-21): every key on the menu is the same distance from the next. Measure
+  // the space between CONSECUTIVE visible keys, including the footer row, in visual (y) order.
+  const keyGaps = (() => {
+    const all = [...buttons].sort((a, b) => a.getBoundingClientRect().y - b.getBoundingClientRect().y || a.getBoundingClientRect().x - b.getBoundingClientRect().x);
+    const out = [];
+    for (let i = 1; i < all.length; i++) {
+      const prev = all[i - 1].getBoundingClientRect();
+      const cur = all[i].getBoundingClientRect();
+      // Keys on the same row (the footer pair) are not a vertical gap.
+      if (Math.abs(cur.y - prev.y) < 1) continue;
+      out.push(+(cur.y - prev.bottom).toFixed(1));
+    }
+    return out;
+  })();
   const gaps = [];
   if (ib && lb && wb) {
     gaps.push(+(lb.y - ib.y).toFixed(1));
@@ -78,6 +92,7 @@ const MEASURE = `(() => {
     beta: betaVisible ? { ...box(betaEl), link: box(betaBtn) } : null,
     seen: [...(betaVisible ? ['menu-beta'] : []), ...buttons.map((b) => b.id)],
     gaps,
+    keyGaps,
     menuScroll, innerScroll,
     docScroll: Math.max(0, document.documentElement.scrollHeight - innerHeight),
     docWide: Math.max(0, document.documentElement.scrollWidth - innerWidth),
@@ -100,6 +115,9 @@ type Measure = {
   /** Everything the player sees in DOM (and tab) order: the beta line, then the entries. */
   seen: string[];
   gaps: number[];
+  /** The vertical space between each CONSECUTIVE pair of visible keys (the owner's equal-spacing
+   *  rule, 2026-10-21). Same-row pairs (the footer's two keys) are not vertical gaps. */
+  keyGaps: number[];
   menuScroll: number; innerScroll: number; docScroll: number; docWide: number;
   justify: string; overflowY: string; visible: number; allIds: string[];
 };
@@ -125,6 +143,14 @@ const openMenu = async (page: Page, largeText = false) => {
 
 const checkFit = (m: Measure, tag: string, tall: boolean) => {
   check(m.overflowY === 'hidden', `${tag}: the menu cannot scroll (overflow-y: ${m.overflowY})`);
+  // Owner (2026-10-21): "make the spacing between buttons always equal". Every consecutive pair of
+  // keys in the menu — including the footer row that used to sit in the menu's distributed space —
+  // must be the same distance apart. One pixel of tolerance for sub-pixel rounding.
+  if (m.keyGaps.length > 1) {
+    const min = Math.min(...m.keyGaps);
+    const max = Math.max(...m.keyGaps);
+    check(max - min <= 1, `${tag}: every key is spaced equally (gaps ${m.keyGaps.join('/')}px)`);
+  }
   check(m.menuScroll <= 1 && m.innerScroll <= 1, `${tag}: no menu overflow (${m.menuScroll}/${m.innerScroll})`);
   check(m.docScroll <= 1, `${tag}: no page scroll (${m.docScroll}px)`);
   check(m.docWide <= 1, `${tag}: nothing runs off the side (${m.docWide}px)`);

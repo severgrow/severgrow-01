@@ -41,9 +41,24 @@ describe('the product menu is PLAY, TERRITORY, LOG IN, Settings', () => {
     for (let i = 1; i < order.length; i++) {
       expect(menuSection.indexOf(order[i - 1]!), `${order[i - 1]} before ${order[i]}`).toBeLessThan(menuSection.indexOf(order[i]!));
     }
-    // The footer is outside the column: the column closes before the row opens.
-    const columnEnd = menuSection.indexOf('</div>', menuSection.indexOf('<div class="menu-buttons">'));
-    expect(columnEnd).toBeLessThan(menuSection.indexOf('menu-footer'));
+    // The footer is the column's LAST CHILD (owner, 2026-10-21: every key must be spaced equally).
+    // As a sibling it inherited the menu's distributed free space and sat 50px below TERRITORY while
+    // the keys above it were 9px apart; inside the column it takes the column's own gap.
+    const columnOpen = menuSection.indexOf('<div class="menu-buttons">');
+    const footerAt = menuSection.indexOf('menu-footer');
+    expect(columnOpen).toBeGreaterThan(-1);
+    expect(footerAt).toBeGreaterThan(columnOpen);
+    // The footer opens before the column closes: slice from the column's opening tag to the first
+    // `</div>` that closes IT by counting nested opens.
+    const slice = menuSection.slice(columnOpen);
+    let depth = 0;
+    let closeAt = -1;
+    for (let i = 0; i < slice.length; i++) {
+      if (slice.startsWith('<div', i)) depth++;
+      else if (slice.startsWith('</div>', i)) { depth--; if (depth === 0) { closeAt = i; break; } }
+    }
+    expect(closeAt).toBeGreaterThan(-1);
+    expect(columnOpen + closeAt).toBeGreaterThan(footerAt);
     // LOG IN still starts hidden (the accounts module reveals it to a guest).
     expect(menuSection).toMatch(/id="menu-login"[^>]*hidden/);
   });
