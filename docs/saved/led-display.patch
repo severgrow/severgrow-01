@@ -1,0 +1,639 @@
+From d154f640a7291947a2f1aff0816b43dbda0f033b Mon Sep 17 00:00:00 2001
+From: Patryk <patryk@Patryks-MacBook.local>
+Date: Sat, 10 Oct 2026 12:13:22 +0100
+Subject: [PATCH] Cockpit LED: sparse, fresh flavour and shorter, clearer
+ messages
+
+- Shorten the sign's idle and hint copy and drop FAST: the skip hint is SKIP
+  (also CLEAR/FLIP/CANCEL/BLOOM, and GROW/BLOOM as the resting instructions).
+- Add web/src/player/led-flavour.ts: short reaction pools per moment kind, drawn
+  from a shuffled bag so a line cannot repeat until its pool is exhausted. A
+  reproducible gate shows flavour on ~14% of eligible moments and a kind never
+  speaks twice in a row; pools reset each match.
+- display-readout: emit the plain fact first (CUT-N, +N, YOU WIN...), with an
+  optional flavour pool, an optional cut/bloom accent and a wait pulse.
+- display-machine: show the fact for its full duration, then allow a flavour tail
+  only; pass flash/pulse through the frame.
+- led-cells: ledToken() shortens known captions/banners for the physical window
+  only, leaving the live region's full sentence intact; adds short static
+  mappings (FUTASAKU, CANCEL, CUT-N).
+- smart-cockpit: one-shot cut/bloom flash and a subtle WAIT/OPP pulse on the
+  window, both skipped under reduce-motion.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ web/src/main.ts                   |  4 +-
+ web/src/player/display-machine.ts | 76 ++++++++++++++---------------
+ web/src/player/display-readout.ts | 36 ++++++++------
+ web/src/player/led-cells.ts       | 39 +++++++++++++++
+ web/src/player/led-flavour.ts     | 80 +++++++++++++++++++++++++++++++
+ web/src/player/smart-cockpit.ts   | 52 ++++++++++++++------
+ web/tests/display-machine.test.ts | 69 ++++++++++++++++++++++----
+ web/tests/led-readability.test.ts | 23 ++++++++-
+ 8 files changed, 299 insertions(+), 80 deletions(-)
+ create mode 100644 web/src/player/led-flavour.ts
+
+diff --git a/web/src/main.ts b/web/src/main.ts
+index 3139267..074389e 100644
+--- a/web/src/main.ts
++++ b/web/src/main.ts
+@@ -1077,8 +1077,8 @@ function rememberRemoved(steps: readonly Step[], before: State) {
+ 
+ function afterPlay(p: Played, by: Player, advice: Advice | null) {
+   let displayEvent = IS_TEST2 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN) : null;
+-  if (displayEvent?.personality && coach.tutorial && coach.tutorial.chapter<5) {
+-    const {personality: _personality,...quiet}=displayEvent;
++  if (displayEvent?.flavour && coach.tutorial && coach.tutorial.chapter<5) {
++    const {flavour: _flavour,...quiet}=displayEvent;
+     displayEvent=quiet;
+   }
+   log.unshift(describe(p.before, p.action, p.after, HUMAN));
+diff --git a/web/src/player/display-machine.ts b/web/src/player/display-machine.ts
+index c31b065..7b5e748 100644
+--- a/web/src/player/display-machine.ts
++++ b/web/src/player/display-machine.ts
+@@ -1,7 +1,8 @@
+ import type { DisplayEvent } from './display-readout.js';
++import { FlavourDeck } from './led-flavour.js';
+ import type { LedMotif, LedTone } from './led-cells.js';
+ 
+-export type DisplayFrame = { text: string; mode: LedTone; pulse?: boolean; compact?: boolean; motif?: LedMotif };
++export type DisplayFrame = { text: string; mode: LedTone; pulse?: boolean; compact?: boolean; motif?: LedMotif; flash?: 'cut' | 'bloom' };
+ 
+ /** One match-scoped clock owns the sign. Its resting face is always the real score. */
+ export class DisplayMachine {
+@@ -13,8 +14,7 @@ export class DisplayMachine {
+   private idleReturn = 0;
+   private epoch = 0;
+   private eventCount = 0;
+-  private lastReactionAt = -10;
+-  private recentReactions: string[] = [];
++  private flavour = new FlavourDeck();
+   private idleCycles = 0;
+   private idleSecretShown = false;
+   private frame: DisplayFrame = { text:'', mode:'score' };
+@@ -22,7 +22,8 @@ export class DisplayMachine {
+ 
+   private emit(frame: DisplayFrame) {
+     if (this.frame.text === frame.text && this.frame.mode === frame.mode &&
+-      this.frame.pulse === frame.pulse && this.frame.motif === frame.motif) return;
++      this.frame.pulse === frame.pulse && this.frame.motif === frame.motif &&
++      this.frame.flash === frame.flash) return;
+     this.frame = frame;
+     this.show(frame);
+   }
+@@ -43,48 +44,46 @@ export class DisplayMachine {
+     window.clearTimeout(this.idleTimer);
+     window.clearTimeout(this.idleReturn);
+   }
++  private reduced() {
++    return typeof document !== 'undefined' &&
++      (document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches);
++  }
++  /** A flavour line for this moment, or null. Rare, and never twice in a row for one kind. */
+   private pickReaction(event: DisplayEvent): string | null {
+-    this.eventCount++;
+-    const personality = event.personality;
+-    if (!personality || (event.priority < 95 && this.eventCount - this.lastReactionAt < 3)) return null;
+-    // Cosmetic choice is reproducible and never consumes the engine's random stream.
+-    let hash = 2166136261;
+-    for (const char of event.key ?? `${event.message}:${this.eventCount}`)
+-      hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+-    if ((hash >>> 0) % 100 >= personality.chance) return null;
+-    const choices = personality.lines.filter(line => !this.recentReactions.includes(line));
+-    const pool = choices.length ? choices : personality.lines;
+-    const chosen = pool[((hash >>> 8) % pool.length)] ?? null;
+-    if (chosen) {
+-      this.lastReactionAt = this.eventCount;
+-      this.recentReactions.push(chosen);
+-      this.recentReactions = this.recentReactions.slice(-2);
+-    }
+-    return chosen;
++    if (!event.flavour) return null;
++    return this.flavour.draw(event.flavour.kind, event.flavour.pool, event.key ?? `${event.message}:${this.eventCount}`);
+   }
+   event(event: DisplayEvent) {
+     if (this.active && this.active.priority > event.priority) return;
+     this.clearTimers();
+     this.active = event;
++    this.eventCount++;
+     const id = ++this.epoch;
+-    const reaction = this.pickReaction(event);
+-    const reduced = typeof document !== 'undefined' && (document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches);
+-    const message = () => {
+-      if (id !== this.epoch) return;
+-      this.emit({text:event.message,mode:event.mode ?? 'amber',compact:event.message.length <= 12});
+-      this.timer = window.setTimeout(() => this.finish(id),event.duration);
+-    };
+-    if (reaction && !reduced && event.personality?.motif) {
+-      this.emit({text:'',mode:event.personality.tone ?? event.mode ?? 'amber',motif:event.personality.motif});
++    const reaction = this.reduced() ? null : this.pickReaction(event);
++    const tone = event.flavour?.pool.tone ?? event.mode ?? 'amber';
++    this.emit({text:event.message,mode:event.mode ?? 'amber',compact:event.message.length <= 12,
++      ...(event.accent?{flash:event.accent}:{}),...(event.pulse?{pulse:true}:{})});
++    // The fact lands first and holds for its full duration. A flavour line may only follow it.
++    const motif = event.flavour?.pool.motif;
++    if (reaction && motif) {
+       this.timer = window.setTimeout(() => {
+         if (id !== this.epoch) return;
+-        this.emit({text:reaction,mode:event.personality?.tone ?? event.mode ?? 'amber',compact:true});
+-        this.timer = window.setTimeout(message,680);
+-      },440);
+-    } else if (reaction && !reduced) {
+-      this.emit({text:reaction,mode:event.personality?.tone ?? event.mode ?? 'amber',compact:true});
+-      this.timer = window.setTimeout(message,680);
+-    } else message();
++        this.emit({text:'',mode:tone,motif});
++        this.timer = window.setTimeout(() => {
++          if (id !== this.epoch) return;
++          this.emit({text:reaction,mode:tone,compact:true});
++          this.timer = window.setTimeout(() => this.finish(id),620);
++        },440);
++      },event.duration);
++    } else if (reaction) {
++      this.timer = window.setTimeout(() => {
++        if (id !== this.epoch) return;
++        this.emit({text:reaction,mode:tone,compact:true});
++        this.timer = window.setTimeout(() => this.finish(id),620);
++      },event.duration);
++    } else {
++      this.timer = window.setTimeout(() => this.finish(id),event.duration);
++    }
+   }
+   hint(text: string) { this.event({message:text,priority:20,duration:1050,mode:'amber'}); }
+   private finish(id: number) {
+@@ -126,8 +125,7 @@ export class DisplayMachine {
+     this.clearTimers();
+     this.active = null;
+     this.eventCount = 0;
+-    this.lastReactionAt = -10;
+-    this.recentReactions = [];
++    this.flavour.reset();
+     this.idleCycles = 0;
+     this.idleSecretShown = false;
+     this.instruction = text;
+diff --git a/web/src/player/display-readout.ts b/web/src/player/display-readout.ts
+index f764e2b..47072e2 100644
+--- a/web/src/player/display-readout.ts
++++ b/web/src/player/display-readout.ts
+@@ -1,13 +1,20 @@
+ import type { Player, State } from '../../../src/engine/index.js';
+ import { viewFor } from '../../../src/engine/index.js';
+ import type { Step } from '../logic/anim.js';
+-import type { LedMotif, LedTone } from './led-cells.js';
++import type { LedTone } from './led-cells.js';
++import type { FlavourPool } from './led-flavour.js';
++import { FLAVOUR_POOLS } from './led-flavour.js';
+ 
+-export type DisplayPersonality = { chance: number; lines: readonly string[]; motif?: LedMotif; tone?: LedTone };
++export type DisplayFlavour = { kind: string; pool: FlavourPool };
+ export type DisplayEvent = {
++  /** The clear factual token (DRAW, +N, CUT-N, YOU WIN...). Always shown. */
+   message: string; priority: number; duration: number; mode?: LedTone;
+   /** Cosmetic choice only; the engine's RNG and hidden hands are never read. */
+-  key?: string; personality?: DisplayPersonality;
++  key?: string; flavour?: DisplayFlavour;
++  /** A short non-informative accent for a cut or a bloom. */
++  accent?: 'cut' | 'bloom';
++  /** A gentle attention pulse (waiting states). */
++  pulse?: boolean;
+ };
+ 
+ const owned = (state: State, player: Player) => Object.values(state.board).filter(tile => tile?.owner === player && !tile.root).length;
+@@ -23,8 +30,10 @@ export function displayEventForPlay(before: State, after: State, steps: readonly
+   const cutTheirs = cuts.filter(step=>step.player!==human).reduce((sum,step)=>sum+step.keys.length,0);
+   const bloom = steps.find((step): step is Extract<Step,{k:'grow'}> => step.k === 'grow' && step.style === 'bloom');
+   const mega = steps.find((step): step is Extract<Step,{k:'megaBomb'}> => step.k === 'megaBomb');
+-  const make = (kind:string, message:string, priority:number, duration:number, mode:LedTone, personality?:DisplayPersonality):DisplayEvent =>
+-    ({message,priority,duration,mode,key:eventKey(after,kind),...(personality?{personality}:{})});
++  const as = (kind: keyof typeof FLAVOUR_POOLS): DisplayFlavour => ({ kind, pool: FLAVOUR_POOLS[kind] });
++  const make = (kind:string, message:string, priority:number, duration:number, mode:LedTone,
++    extra: Pick<DisplayEvent,'flavour'|'accent'|'pulse'> = {}):DisplayEvent =>
++    ({message,priority,duration,mode,key:eventKey(after,kind),...extra});
+ 
+   if (after.phase === 'GAME_OVER' && after.result) {
+     const winner = after.result.winner;
+@@ -34,24 +43,23 @@ export function displayEventForPlay(before: State, after: State, steps: readonly
+   if (mega) {
+     const mine = mega.player===human;
+     return make('mega',`${mine?'+':'-'}${mega.destroyed.length}`,96,1150,mine?'green':'red',
+-      {chance:100,lines:mine?['OH.','BOOM']:['OH.','RUDE.'],motif:'shock',tone:'ivory'});
++      {flavour:as(mine?'mega':'mega-hit'),accent:'cut'});
+   }
+-  if (cutMine>=3) return make('loss',`-${cutMine}`,90,1050,'red',
+-    {chance:cutMine>=6?35:18,lines:['RUDE.','OUCH','RIP'],motif:'scatter',tone:'red'});
++  if (cutMine>=3) return make('loss',`CUT-${cutMine}`,90,1050,'red',
++    {flavour:as('cut-mine'),accent:'cut'});
+   if (cutTheirs>=3) return make('cut',`+${cutTheirs}`,88,1050,'green',
+-    {chance:cutTheirs>=6?32:16,lines:['CLEAN','NICE.','OOOH'],motif:'stars',tone:'green'});
++    {flavour:as('cut-theirs'),accent:'cut'});
+ 
+   const wasLead = Math.sign(a.score-a.opponentScore), nowLead = Math.sign(b.score-b.opponentScore);
+   const comeback = a.score<=a.opponentScore-4 && b.score>=b.opponentScore && b.score>a.score;
+-  if (comeback) return make('comeback',`+${b.score-a.score}`,85,1050,'green',
+-    {chance:45,lines:['BACK!','HELLO','♥'],motif:'heart',tone:'pink'});
++  if (comeback) return make('comeback',`+${b.score-a.score}`,85,1050,'green',{flavour:as('comeback')});
+   if (bloom && bloom.player===human && myTiles>=2) return make('bloom',`+${myTiles}`,80,1000,'green',
+-    {chance:myTiles>=5?30:12,lines:['NICE.','OOOH','CLEAN'],motif:'stars',tone:'green'});
+-  if (myTiles<=-3) return make('lost-tiles',`-${-myTiles}`,75,960,'red');
++    {flavour:as('bloom'),accent:'bloom'});
++  if (myTiles<=-3) return make('lost-tiles',`-${-myTiles}`,75,960,'red',{flavour:as('loss')});
+   if (myTiles>=3) return make('gain',`+${myTiles}`,70,900,'green');
+   if (theirTiles>=3 && before.turnPlayer!==human) return make('opponent-gain',`OPP +${theirTiles}`,68,960,'red');
+   if (nowLead && nowLead!==wasLead) return make('lead',nowLead>0?'YOU LEAD':'OPP LEADS',65,1050,nowLead>0?'green':'red',
+-    {chance:18,lines:['OOOH','BOLD'],tone:nowLead>0?'green':'red'});
++    {flavour:as(nowLead>0?'lead-you':'lead-them')});
+   const delta = b.score-a.score;
+   if (Math.abs(delta)>=3) return make('score-swing',`${delta>0?'+':''}${delta}`,60,900,delta>0?'green':'red');
+   return null;
+diff --git a/web/src/player/led-cells.ts b/web/src/player/led-cells.ts
+index 5f30914..441af8d 100644
+--- a/web/src/player/led-cells.ts
++++ b/web/src/player/led-cells.ts
+@@ -104,10 +104,49 @@ export function ledStaticMessage(message: string) {
+   if (message === 'MEGA BOMB') return 'MEGA';
+   if (/^[+-]\d+ TILES$/.test(message)) return message.split(' ')[0]!;
+   if (message === 'UNDONE') return 'UNDO';
++  if (message === 'FUTASAKU') return 'FUTA';
++  if (message === 'CANCEL') return 'CANCEL';
++  const cut = /^CUT-(\d+)$/.exec(message);
++  if (cut) return cut[1]!.length < 2 ? `CUT-${cut[1]}` : `C-${cut[1]}`;
+   if (message.length <= 5) return message;
+   return message.split(' ')[0]!.slice(0,5);
+ }
+ 
++/**
++ * Short LED form for long, known game copy (captions, banners, warnings). Returns null when
++ * the copy is not recognised, so unfamiliar text keeps its existing scroll/shorthand path.
++ * The live region always keeps the full sentence; this only shapes the physical window.
++ */
++export function ledToken(message: string): string | null {
++  const m = message.toUpperCase().replace(/\s+/g, ' ').trim();
++  const num = (re: RegExp, index = 1): string | null => { const g = re.exec(m); return g ? g[index]! : null; };
++  let n: string | null;
++  if ((n = num(/^YOU CUT OFF (\d+) (?:OPPONENT )?TILES?!?$/))) return `CUT+${n}`;
++  if ((n = num(/^YOUR OPPONENT CUT OFF (\d+) OF YOUR TILES$/))) return `CUT-${n}`;
++  if ((n = num(/^YOU TOOK OVER (\d+) (?:OPPONENT )?TILES?!?$/))) return `+${n}`;
++  if ((n = num(/^YOUR OPPONENT GREW (\d+) TILES?, TAKING (\d+) OF YOURS$/, 2))) return `-${n}`;
++  if ((n = num(/^YOUR OPPONENT GREW (\d+) TILES?$/))) return `OPP+${n}`;
++  if (m === 'YOUR TREE IS SURROUNDED!' || m === "OPPONENT'S VOLCANO IS SURROUNDED!") return 'CAUGHT';
++  if ((n = num(/^STRENGTHENED (\d+) . (\d+)$/, 2))) return `UP${n}`;
++  if ((n = num(/^YOUR OPPONENT STRENGTHENED A (\d+) TO A (\d+)$/, 2))) return `UP${n}`;
++  if (m.startsWith('FRUITED!')) return 'FRUIT';
++  if ((n = num(/^OPPONENT USED A FRUIT CARD ON YOUR (\d+)$/))) return `-${n}`;
++  if ((n = num(/^MEGA BOMB CLEARED (\d+) TILES$/))) return `BOOM${n}`;
++  if (m === 'PLAY IT IN YOUR GROW STEP.') return 'GROW';
++  if (m === 'FRUIT IS BACK NEXT TURN') return 'NEXT';
++  if (m === 'NO OPPONENT TILE BY YOURS') return 'NONE';
++  if (m === 'HOME IN DANGER') return 'WARN';
++  if (m === 'STRANGLED!') return 'ENDED';
++  if (m === 'BIG GROW!') return 'GROW+';
++  if ((n = num(/^CUT OFF (\d+)!$/))) return `CUT-${n}`;
++  if ((n = num(/^LOST (\d+) TILES$/))) return `LOST${n}`;
++  if ((n = num(/^LAST (\d+) TURNS$/))) return `LAST${n}`;
++  if (m === 'LAST TURN' || m === 'DECK EMPTY: LAST TURN') return 'LAST';
++  if (m === 'THE DECK IS RUNNING LOW') return 'LOW';
++  if (m.startsWith('REPLAY:')) return 'REPLAY';
++  return null;
++}
++
+ /** Full-size square LED cells. Longer copy repeats as one seamless marquee strip. */
+ export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat = false, mode: LedTone = 'amber') {
+   const shown = repeat ? `${message}${SEPARATOR}${message}${SEPARATOR}${message}` : message;
+diff --git a/web/src/player/led-flavour.ts b/web/src/player/led-flavour.ts
+new file mode 100644
+index 0000000..58eb0a8
+--- /dev/null
++++ b/web/src/player/led-flavour.ts
+@@ -0,0 +1,80 @@
++// Cockpit-sign flavour: short asides that stay out of the way of the facts. Presentation
++// only. The engine's RNG is never read and no game state or rule depends on any of this.
++//
++// Two rules keep it feeling like one instrument instead of a quote machine:
++//   1. It is rare: roughly FLAVOUR_RATE percent of eligible moments show a line at all.
++//   2. It never repeats: a line cannot come back until its whole pool has been seen, a kind
++//      never speaks twice in a row, and a refilled pool keeps its last line out of the first slot.
++import type { LedMotif, LedTone } from './led-cells.js';
++
++export type FlavourPool = { lines: readonly string[]; tone: LedTone; motif?: LedMotif };
++
++/** Share of eligible moments that may show a flavour line instead of the plain token (%). */
++export const FLAVOUR_RATE = 14;
++
++/** Short pools (1-5 characters) for every kind of moment that can earn an aside. */
++export const FLAVOUR_POOLS = {
++  'cut-theirs': { tone: 'green', motif: 'stars', lines: ['NICE', 'CLEAN', 'SNAP', 'CLIP', 'ZAP', 'NIP', 'SWISH', 'GOOD', 'YES', 'HA.'] },
++  'cut-mine': { tone: 'red', motif: 'scatter', lines: ['OUCH', 'RIP', 'RUDE.', 'OOF', 'YIKES', 'HURT', 'UGH', 'NOPE', 'CREAK', 'OW.'] },
++  'loss': { tone: 'red', motif: 'scatter', lines: ['OUCH', 'RIP', 'OOF', 'UGH', 'NOPE', 'YIKES', 'HURT', 'OW.'] },
++  'mega': { tone: 'green', motif: 'shock', lines: ['BOOM', 'OH.', 'BOOM!', 'BIG', 'WOW', 'CRASH', 'HA.', 'YES', 'WHOOM', 'YEAH'] },
++  'mega-hit': { tone: 'red', motif: 'shock', lines: ['RUDE.', 'OH.', 'YIKES', 'OOF', 'NO.', 'UGH', 'WHY.', 'OW.', 'HEY.', 'WOW'] },
++  'bloom': { tone: 'green', motif: 'stars', lines: ['NICE', 'OOOH', 'CLEAN', 'LUSH', 'POP', 'SNAP', 'YES', 'OH.', 'GROW', 'WOW'] },
++  'comeback': { tone: 'pink', motif: 'heart', lines: ['BACK', 'HELLO', '♥', 'PHEW', 'YES', 'UP', 'CLIMB', 'HOLD', 'NICE', 'GOOD'] },
++  'lead-you': { tone: 'green', lines: ['BOLD', 'AHEAD', 'UP', 'YES', 'NICE', 'OOOH', 'LEAD', 'GOOD', 'PUSH', 'MOVE'] },
++  'lead-them': { tone: 'red', lines: ['UH OH', 'TRAIL', 'DOWN', 'NO.', 'OOF', 'WATCH', 'FALL', 'HMM', 'LOST', 'HOLD'] },
++} as const satisfies Record<string, FlavourPool>;
++
++export type FlavourKind = keyof typeof FLAVOUR_POOLS;
++
++const fnv = (text: string) => {
++  let hash = 2166136261;
++  for (const char of text) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
++  return hash >>> 0;
++};
++
++/** The reproducible probability gate: the same event key always makes the same call. */
++export const flavourGate = (key: string) => fnv(key) % 100 < FLAVOUR_RATE;
++
++/**
++ * A shuffled bag per event kind. A line cannot repeat until every other line of its pool has
++ * been seen, and the kind that just spoke is muted for the next moment of the same kind.
++ */
++export class FlavourDeck {
++  private bags = new Map<string, { order: number[]; pos: number }>();
++  private lastLine = '';
++  private lastKind = '';
++  private salt = 1;
++
++  reset() { this.bags.clear(); this.lastLine = ''; this.lastKind = ''; this.salt = 1; }
++
++  /** A flavour line for this eligible moment, or null to stay on the plain token. */
++  draw(kind: string, pool: FlavourPool, key: string): string | null {
++    if (pool.lines.length === 0) return null;
++    const backToBack = kind === this.lastKind;
++    this.lastKind = kind;
++    if (backToBack || !flavourGate(key)) return null;
++    return this.next(kind, pool.lines);
++  }
++
++  /** Raw bag draw (no gate). Returns a line, refilling a fresh shuffled bag when spent. */
++  pick(kind: string, pool: FlavourPool): string | null {
++    return this.next(kind, pool.lines);
++  }
++
++  private next(kind: string, lines: readonly string[]): string | null {
++    let bag = this.bags.get(kind);
++    if (!bag || bag.pos >= bag.order.length) {
++      const salt = this.salt++;
++      const order = [...lines.keys()].sort(
++        (a, b) => (fnv(`${kind}:${salt}:${a}`) - fnv(`${kind}:${salt}:${b}`)) || a - b);
++      // Keep the line just shown out of the first slot after a refill.
++      if (order.length > 1 && lines[order[0]!] === this.lastLine) order.push(order.shift()!);
++      bag = { order, pos: 0 };
++      this.bags.set(kind, bag);
++    }
++    const line = lines[bag.order[bag.pos++]!] ?? null;
++    if (line) this.lastLine = line;
++    return line;
++  }
++}
+diff --git a/web/src/player/smart-cockpit.ts b/web/src/player/smart-cockpit.ts
+index c0745cd..0ece98c 100644
+--- a/web/src/player/smart-cockpit.ts
++++ b/web/src/player/smart-cockpit.ts
+@@ -1,5 +1,5 @@
+ /** Futasaku 0.3 cockpit presentation. Game-owned buttons remain the action source. */
+-import { LED_ADVANCE, drawLedCells, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage } from './led-cells.js';
++import { LED_ADVANCE, drawLedCells, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage, ledToken } from './led-cells.js';
+ import type { LedTone } from './led-cells.js';
+ import { DisplayMachine } from './display-machine.js';
+ import type { DisplayFrame } from './display-machine.js';
+@@ -125,7 +125,17 @@ html.test2-information #test2-box #smart-led-cells {
+ html.test2-information #smart-led-cells.scrolling { position:absolute; left:0; }
+ @keyframes smart-led-scroll { from { transform:translateX(0); } to { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
+ html.test2-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
+-html.test2-information #smart-led-window.led-pulse #smart-led-cells { filter:brightness(1.22); }
++/* Attention pulses and impact flashes are short, one-shot and fully skipped under reduce-motion. */
++html.test2-information #smart-led-window.led-pulse { animation:smart-led-pulse 1050ms ease-in-out; }
++@keyframes smart-led-pulse { 0%,100% { filter:none; } 50% { filter:brightness(1.16); } }
++html.test2-information #smart-led-window.led-flash-cut { animation:smart-led-flash-cut 380ms ease-out; }
++@keyframes smart-led-flash-cut { 0% { filter:brightness(1.9) contrast(1.06); } 100% { filter:none; } }
++html.test2-information #smart-led-window.led-flash-bloom { animation:smart-led-flash-bloom 320ms ease-out; }
++@keyframes smart-led-flash-bloom { 0% { filter:brightness(1.5); } 100% { filter:none; } }
++html.test2-information.reduce-motion #smart-led-window:is(.led-pulse,.led-flash-cut,.led-flash-bloom) { animation:none; }
++@media (prefers-reduced-motion:reduce) {
++  html.test2-information #smart-led-window:is(.led-pulse,.led-flash-cut,.led-flash-bloom) { animation:none; }
++}
+ /* A faint optical spill from the actual LED pixels reaches the two keys below it. */
+ html.test2-information #smart-led-spill {
+   position:absolute; left:-38px; top:calc(var(--control-size) - 17px);
+@@ -371,7 +381,9 @@ export function mountSmartCockpit() {
+   let lastMode: LedTone = 'amber';
+   let lastCompact = false;
+   let lastMotif: DisplayFrame['motif'];
++  let lastFlash: DisplayFrame['flash'];
+   let motifTimer = 0;
++  let flashTimer = 0;
+   let lastReduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+   let reel: Animation[] = [];
+   const close = () => { selector.hidden = true; context.setAttribute('aria-expanded','false'); };
+@@ -407,10 +419,11 @@ export function mountSmartCockpit() {
+   };
+   const setText = (frame: DisplayFrame) => {
+     const { text:value, mode } = frame;
+-    windowEl.classList.toggle('led-pulse',!!frame.pulse && !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches);
+-    if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif) return;
++    const reduceNow = () => document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
++    windowEl.classList.toggle('led-pulse',!!frame.pulse && !reduceNow());
++    if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif && frame.flash === lastFlash) return;
+     const previous = lastText;
+-    const animated = !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches;
++    const animated = !reduceNow();
+     const scoreTick = animated && mode === 'score' && lastMode === 'score' && previous.length === value.length;
+     const animateReel = previous && animated && !scoreTick;
+     for (const running of reel) running.cancel(); reel = [];
+@@ -430,13 +443,15 @@ export function mountSmartCockpit() {
+       }
+       windowEl.append(old);
+     }
+-    lastText = value; lastMode = mode; lastCompact = !!frame.compact; lastMotif = frame.motif;
++    lastText = value; lastMode = mode; lastCompact = !!frame.compact; lastMotif = frame.motif; lastFlash = frame.flash;
+     text.textContent = value; led.title = value; led.dataset.mode = mode;
+     cells.classList.remove('scrolling'); spillCells.classList.remove('scrolling');
+     requestAnimationFrame(() => {
+-      if (value !== lastText || mode !== lastMode || !!frame.compact !== lastCompact || frame.motif !== lastMotif) { old?.remove(); return; }
+-      const reduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+-      const shown = reduced || frame.compact ? ledStaticMessage(value) : value;
++      if (value !== lastText || mode !== lastMode || !!frame.compact !== lastCompact || frame.motif !== lastMotif || frame.flash !== lastFlash) { old?.remove(); return; }
++      const reduced = reduceNow();
++      // A recognised caption/banner gets its short token even with motion on; other copy keeps its scroll.
++      const token = ledToken(value);
++      const shown = token ?? (reduced || frame.compact ? ledStaticMessage(value) : value);
+       const scrolling = !frame.motif && !reduced && mode !== 'score' && ledMessageWidth(shown) > windowEl.clientWidth - 2;
+       if (frame.motif) {
+         const frames = ledMotifFrames(frame.motif);
+@@ -452,6 +467,13 @@ export function mountSmartCockpit() {
+         drawLedCells(cells,shown,scrolling,mode);
+         drawLedCells(spillCells,shown,scrolling,mode);
+       }
++      window.clearTimeout(flashTimer);
++      windowEl.classList.remove('led-flash-cut','led-flash-bloom');
++      if (frame.flash && !reduced) {
++        void windowEl.offsetWidth; // restart the one-shot accent
++        windowEl.classList.add(frame.flash === 'bloom' ? 'led-flash-bloom' : 'led-flash-cut');
++        flashTimer = window.setTimeout(() => windowEl.classList.remove('led-flash-cut','led-flash-bloom'),420);
++      }
+       if (scrolling) {
+         const travel = ledMarqueeTravel(shown);
+         for (const target of [cells,spillCells]) {
+@@ -479,8 +501,8 @@ export function mountSmartCockpit() {
+     if (root.dataset.step === 'opp') return 'WAIT';
+     if (root.dataset.step === 'draw') return 'DRAW';
+     if (root.dataset.step === 'throw') return 'THROW';
+-    if (root.dataset.test2Bloom === 'true') return 'BLOOM READY';
+-    if (root.dataset.step === 'grow') return 'GROW OR SKIP';
++    if (root.dataset.test2Bloom === 'true') return 'BLOOM';
++    if (root.dataset.step === 'grow') return 'GROW';
+     return 'FUTASAKU';
+   };
+   machine.reset(phaseMessage());
+@@ -560,12 +582,12 @@ export function mountSmartCockpit() {
+     if (key !== signature) { close(); signature = key; renderSelector(); }
+     const first = current[0];
+     if (lastPhase === phase && lastAction && first?.key !== lastAction) {
+-      const hint = first?.icon === 'clear' ? 'CLEAR SHAPE' : first?.icon === 'reverse' ? 'REVERSE ORDER'
+-        : first?.icon === 'cancel' ? 'CANCEL SELECTION' : first?.icon === 'bloom' ? 'BLOOM READY'
+-        : first?.source.id === 'tool-skip' ? 'FAST FORWARD' : '';
++      const hint = first?.icon === 'clear' ? 'CLEAR' : first?.icon === 'reverse' ? 'FLIP'
++        : first?.icon === 'cancel' ? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM'
++        : first?.source.id === 'tool-skip' ? 'SKIP' : '';
+       if (hint) machine.hint(hint);
+     }
+-    if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red'});
++    if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});
+     lastPhase = phase; lastAction = first?.key ?? '';
+     context.innerHTML = svg(first?.icon ?? 'neutral'); context.disabled = !first;
+     context.setAttribute('aria-haspopup',current.length > 1 ? 'menu' : 'false');
+diff --git a/web/tests/display-machine.test.ts b/web/tests/display-machine.test.ts
+index ed0990e..0c2eeb6 100644
+--- a/web/tests/display-machine.test.ts
++++ b/web/tests/display-machine.test.ts
+@@ -1,6 +1,13 @@
+ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+ import { DisplayMachine, type DisplayFrame } from '../src/player/display-machine.js';
+ import { ledMessageWidth, ledStaticMessage } from '../src/player/led-cells.js';
++import { FLAVOUR_POOLS, FlavourDeck, flavourGate } from '../src/player/led-flavour.js';
++
++/** A key the reproducible gate lets through, so flavour tests are not flaky. */
++const firingKey = (seed: string) => {
++  for (let i = 0; i < 500; i++) { const key = `${seed}:${i}`; if (flavourGate(key)) return key; }
++  throw new Error('no flavour-firing key found');
++};
+ 
+ describe('match display state', () => {
+   beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('window',globalThis); });
+@@ -63,19 +70,27 @@ describe('match display state', () => {
+     expect(frames.at(-1)).toMatchObject({text:'5:7',mode:'score'});
+   });
+ 
+-  it('uses deterministic rare reactions and keeps the score as fallback', () => {
++  it('lands the informative token first and lets flavour only follow it', () => {
+     const frames: DisplayFrame[] = [];
+     const sign = new DisplayMachine(frame=>frames.push(frame));
+     sign.reset('GROW',9,10);
+-    sign.event({message:'+6',priority:90,duration:900,mode:'green',key:'seed:turn:cut',
+-      personality:{chance:100,lines:['NICE.'],motif:'stars',tone:'green'}});
+-    expect(frames.at(-1)).toMatchObject({motif:'stars',mode:'green'});
+-    vi.advanceTimersByTime(440);
+-    expect(frames.at(-1)?.text).toBe('NICE.');
+-    vi.advanceTimersByTime(680);
+-    expect(frames.at(-1)?.text).toBe('+6');
++    sign.event({message:'CUT+4',priority:90,duration:900,mode:'green',key:firingKey('reaction'),
++      flavour:{kind:'test',pool:{lines:['NICE'],tone:'green',motif:'stars'}},accent:'cut'});
++    expect(frames.at(-1)).toMatchObject({text:'CUT+4',mode:'green',flash:'cut'});
+     vi.advanceTimersByTime(900);
+-    expect(frames.at(-1)?.text).toBe('9:10');
++    expect(frames.at(-1)).toMatchObject({motif:'stars'});
++    vi.advanceTimersByTime(440);
++    expect(frames.at(-1)?.text).toBe('NICE');
++    vi.advanceTimersByTime(620);
++    expect(frames.at(-1)).toMatchObject({text:'9:10',mode:'score'});
++  });
++
++  it('passes a waiting pulse through to the frame', () => {
++    const frames: DisplayFrame[] = [];
++    const sign = new DisplayMachine(frame=>frames.push(frame));
++    sign.reset('DRAW',1,2);
++    sign.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});
++    expect(frames.at(-1)).toMatchObject({text:'WAIT',pulse:true});
+   });
+ 
+   it('keeps a quiet idle secret rare and cancels it on input', () => {
+@@ -96,3 +111,39 @@ it('keeps compact readouts legible at full dot size', () => {
+     expect(ledMessageWidth(ledStaticMessage(message)),message).toBeLessThan(76);
+   }
+ });
++
++describe('cockpit flavour stays sparse and never repeats', () => {
++  it('fires on roughly one eligible moment in seven, reproducibly', () => {
++    let fired = 0;
++    for (let i = 0; i < 4000; i++) if (flavourGate(`seed:${i}`)) fired++;
++    expect(fired / 4000).toBeGreaterThan(0.10);
++    expect(fired / 4000).toBeLessThan(0.20);
++    expect(flavourGate('same:key')).toBe(flavourGate('same:key'));
++  });
++
++  it('never speaks twice in a row for the same kind, but another kind may follow', () => {
++    const deck = new FlavourDeck();
++    const pool = FLAVOUR_POOLS['bloom'];
++    const key = firingKey('repeat');
++    expect(deck.draw('bloom', pool, key)).not.toBeNull();
++    expect(deck.draw('bloom', pool, key)).toBeNull();
++    expect(deck.draw('cut-theirs', pool, key)).not.toBeNull();
++  });
++
++  it('shows every line before any line returns, and dodges the last line on refill', () => {
++    const deck = new FlavourDeck();
++    const pool = FLAVOUR_POOLS['bloom'];
++    const first = pool.lines.map(() => deck.pick('bloom', pool));
++    expect(first.every(Boolean)).toBe(true);
++    expect(new Set(first).size).toBe(pool.lines.length);
++    expect(deck.pick('bloom', pool)).not.toBe(first.at(-1));
++  });
++
++  it('starts fresh on a new match', () => {
++    const deck = new FlavourDeck();
++    const pool = FLAVOUR_POOLS['bloom'];
++    expect(deck.draw('bloom', pool, firingKey('a'))).not.toBeNull();
++    deck.reset();
++    expect(deck.draw('bloom', pool, firingKey('a'))).not.toBeNull();
++  });
++});
+diff --git a/web/tests/led-readability.test.ts b/web/tests/led-readability.test.ts
+index 2d86e6e..4156e9b 100644
+--- a/web/tests/led-readability.test.ts
++++ b/web/tests/led-readability.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, expect, it } from 'vitest';
+-import { ledMarqueeTravel, ledMessageWidth, ledStaticMessage } from '../src/player/led-cells.js';
++import { ledMarqueeTravel, ledMessageWidth, ledStaticMessage, ledToken } from '../src/player/led-cells.js';
+ 
+ describe('compact LED readouts', () => {
+   it('keeps event numbers readable within the physical display', () => {
+@@ -17,3 +17,24 @@ describe('compact LED readouts', () => {
+     expect(gap).toBeGreaterThan(0);
+   });
+ });
++
++describe('long game copy is shortened for the physical window', () => {
++  it('maps known captions and banners to short tokens', () => {
++    expect(ledToken('You cut off 3 opponent tiles!')).toBe('CUT+3');
++    expect(ledToken('Your opponent cut off 4 of your tiles')).toBe('CUT-4');
++    expect(ledToken('Your opponent grew 2 tiles, taking 2 of yours')).toBe('-2');
++    expect(ledToken('Your opponent grew 3 tiles')).toBe('OPP+3');
++    expect(ledToken('Strengthened 5 → 9')).toBe('UP9');
++    expect(ledToken('Mega Bomb cleared 5 tiles')).toBe('BOOM5');
++    expect(ledToken('Fruited! Their 9 is gone')).toBe('FRUIT');
++    expect(ledToken('Your tree is surrounded!')).toBe('CAUGHT');
++    expect(ledToken('Home in danger')).toBe('WARN');
++    expect(ledToken('Last turn')).toBe('LAST');
++    expect(ledToken('The deck is running low')).toBe('LOW');
++  });
++
++  it('leaves unknown copy alone so it keeps its scroll/shorthand path', () => {
++    expect(ledToken('THIS IS A LONG MESSAGE TO TEST THE MECHANICAL LED WINDOW')).toBeNull();
++    expect(ledToken('+4')).toBeNull();
++  });
++});
+-- 
+2.50.1 (Apple Git-155)
+
