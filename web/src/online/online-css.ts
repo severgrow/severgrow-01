@@ -428,10 +428,10 @@ export const ONLINE_CSS = `
    roughly half the screen empty below it. He chose to fill that space with a BIGGER map rather than
    by centring, accepting a horizontal crop. So the window now takes the column's whole height and
    the map scales up to it.
-   The world is very nearly square (274.49 x 272 units), so on a portrait phone filling the height
-   means the map is wider than the column and the surplus is cropped horizontally — the window shows
-   the world's middle and pans to the edges (world-view.ts frames the view to the window's own
-   aspect, clamped to the world's extent). Cropping, never stretching: the SVG scales uniformly, so
+   The world is very nearly square (331.77 x 320 units, plus an 18-unit gutter on every side), so on a
+   portrait phone filling the height means the map is wider than the column and the surplus is
+   cropped horizontally — the window shows the world's middle and pans to the edges in BOTH axes
+   (world-view.ts frames the view to the window's own aspect, clamped to the world's extent). Cropping, never stretching: the SVG scales uniformly, so
    the hexes keep their true shape.
    The width cap keeps a WIDE screen honest: there the height is not the limiting dimension, so the
    window never grows wider than the map's aspect at the available height and the whole world stays
@@ -443,9 +443,12 @@ export const ONLINE_CSS = `
 .world-grid {
   position: relative;
   flex: 1 1 0; min-height: 0;
-  width: min(100%, 1100px, calc((100dvh - 210px) * 271.11 / 256.48));
+  width: min(100%, 1100px, calc((100dvh - 210px) * 367.77 / 356));
   max-height: 100%; margin: 0 auto;
   display: grid; place-items: center; overflow: hidden;
+  /* A gesture that runs out of map can never chain to the page behind it, and touch-action: none
+     means a drag is always the map's own (owner, 2026-10-21: the page must never scroll). */
+  overscroll-behavior: contain; touch-action: none;
   border-radius: 14px; background: radial-gradient(ellipse at 50% 44%, #232721 0, #171b18 55%, #101412 100%);
   box-shadow: inset 0 0 0 1px rgba(232,221,190,.04), inset 0 20px 65px #090c0b69;
 }
@@ -458,6 +461,22 @@ export const ONLINE_CSS = `
 }
 .world-map-svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 .world-map-svg:active { cursor: grabbing; }
+/* THE ONE MAP CONTROL: FIT (owner, 2026-10-21: "keep it large and pannable in both axes, with a
+   'fit' toggle"). It rides the panel's top-right corner the way a map control does — absolutely
+   positioned, so it is never a grid item, never part of the pannable content, and never takes a
+   pan. 44px square at least, because it is a touch control too. Quiet: the same cream ink and
+   hairline border as the selection bar, no fill of its own beyond the panel's own dark glass. */
+.world-fit {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  box-sizing: border-box; min-width: 44px; min-height: 44px; padding: 0 10px;
+  display: grid; place-items: center;
+  color: #cfc8ae; background: #161b17cc; border: 1px solid #d5c89b40; border-radius: 9px;
+  font: inherit; font-size: .72rem; font-weight: 700; letter-spacing: .12em;
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); cursor: pointer;
+}
+.world-fit[aria-pressed='true'] { color: #f2e5c5; border-color: #d5c89b9c; background: #2b3029e6; }
+.world-fit:focus { outline: none; }
+.world-fit:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 /* THE TWO LAYERS (world-view.ts). Each tile is drawn TWICE: a FACE (its surface) and a LINE (its
    edge, plus the whole touch target). Every face paints first, then every line, so a neighbour's
    fill can never bury an edge — that was the owner's uneven highlight (2026-10-16: a cream edge

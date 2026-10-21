@@ -263,6 +263,14 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     // both must name the same screen.
     $('online-world-title').textContent = ONLINE.worldTitle;
     $('online-world-screen').setAttribute('aria-label', ONLINE.worldTitle);
+    // THE ONE MAP CONTROL (owner, 2026-10-21): one quiet FIT toggle. Spoken as a plain sentence,
+    // shown as one word; `aria-pressed` is owned by world-view.ts, which owns the toggle's state.
+    const fitButton = document.getElementById('online-world-fit');
+    if (fitButton) {
+      fitButton.textContent = ONLINE.worldFitLabel;
+      fitButton.setAttribute('aria-label', ONLINE.worldFit);
+      fitButton.title = ONLINE.worldFit;
+    }
     $('online-matches-title').textContent = ONLINE.yourMatches;
     $('online-matches-empty').textContent = ONLINE.emptyMatches;
     // The waiting TITLE is owned by `setWaitingTitle` (it carries the shared animated dots), so it

@@ -84,7 +84,7 @@ const report = await page.evaluate(() => {
 });
 console.log(JSON.stringify(report, null, 2));
 console.log('errors:', errors.length ? errors.slice(0, 5) : 'none');
-if (!report.screenVisible || report.cells !== 183 || report.held !== 5) throw new Error('The shared world did not render correctly.');
+if (!report.screenVisible || report.cells !== WORLD_CELLS.length || report.held !== 5) throw new Error('The shared world did not render correctly.');
 
 // A mobile first-claim gesture must select, confirm, debit and appear in the refreshed world.
 const free = page.locator('.world-hex.available').first();
@@ -108,7 +108,7 @@ await other.route('**/v1/guests*', (r) => r.fulfill({ status: 429, contentType: 
 await other.goto(BASE, { waitUntil: 'load' });
 await other.click('#menu-world');
 await other.locator('.world-hex').first().waitFor({ state: 'attached' });
-if ((await other.locator('.world-hex').count()) !== 183 ||
+if ((await other.locator('.world-hex').count()) !== WORLD_CELLS.length ||
   !(await other.locator(`.world-hex[data-cell-id="${claimedCell}"].held`).count())) {
   throw new Error('The second browser did not see the public updated territory.');
 }
