@@ -25,7 +25,11 @@ import { SEEDS_WORD } from '../src/online/seed-icon.js';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
 const SHOTS = process.env.SHOTS === '1';
-const SUPA = 'https://example.supabase.co';
+// A LOCAL, unreachable target (the repo's convention for a build that must carry an online config
+// without being able to reach a real project). Using a *.supabase.co literal here would mark this
+// suite as real-capable in server/tests/quota-guard.test.ts and demand a classification it does
+// not need: it only ever serves the local dist and fakes the wallet answer.
+const SUPA = 'http://127.0.0.1:9';
 const API = `${SUPA}/functions/v1/duel`;
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
