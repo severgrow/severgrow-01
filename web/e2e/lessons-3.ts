@@ -1198,16 +1198,24 @@ try {
         copy.push(await boxText(page));
 
         // 5. The Grow explanation: the suggested card is genuinely lifted, and the display is the
-        // other voice — never a lone step word, never the box's sentence.
-        // The read waits past the lesson's OWN dwell, not an arbitrary 1.2 s: `PINNED.lessonDwell`
-        // is 2000 ms (owner, 2026-10-20: a teaching line is never replaced faster than it can be
-        // read), so sampling at 1200 ms could legitimately catch the previous step's word still
-        // holding — it did, intermittently, on d2da6f3 while the product behaved exactly as asked.
-        // The assertion is unchanged; only the moment it is read moved beyond the hold it respects.
-        await page.waitForTimeout(2200);
+        // other voice.
+        //
+        // TWO VOICES, BOTH THE OWNER'S (2026-10-20 and 2026-10-21): the sign holds the last action
+        // line for its 2 s lesson dwell, then — because the player has not moved — it WAKES on this
+        // step's action (`ddc4d87`, "the sign wakes when idle"). A blanket "never a step word" ban
+        // therefore fails the product for doing what it was told, and the moment it was read only
+        // moved the failure: at 1.2 s the PREVIOUS line could still be holding its dwell (seen on a
+        // loaded runner as "DRAW!"), at 2.2 s the wake has correctly said "GROW!".
+        // What must hold at every moment is narrower and stronger: the sign never repeats the
+        // caption, and the step it names is the CURRENT one. A stale word fails, as does an echo.
         const settleDisplay = (await displayText(page)).trim();
-        check(!/^(DRAW|GROW|THROW|BLOOM|BOMB|BLAST|SKIP)[!?]?$/.test(settleDisplay), `${tag}: no lone step word on the display (${settleDisplay})`);
-        check(settleDisplay !== LESSON.growLine, `${tag}: the display does not repeat the box`);
+        check(settleDisplay !== LESSON.growLine, `${tag}: the display does not repeat the box (${settleDisplay})`);
+        const woke = await page.waitForFunction(() => {
+          const t = document.getElementById('smart-led-text')?.textContent?.trim() ?? '';
+          return /^(DRAW|GROW|THROW|BLOOM|BOMB|BLAST|SKIP)[!?]?$/.test(t) ? t : false;
+        }, undefined, { timeout: 8000 }).then((handle) => handle.jsonValue() as Promise<string>).catch(() => '');
+        check(woke.replace(/[!?]$/, '') === 'GROW',
+          `${tag}: the idle sign wakes on THIS step's action, never a stale one (${woke || 'never woke'})`);
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-card-${w}x${h}.png` });
         const cardId = b4.lit.id;
         const lift = await page.evaluate(`(() => {
