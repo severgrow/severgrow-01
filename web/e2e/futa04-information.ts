@@ -74,6 +74,16 @@ try {
     await page.goto(`${base}?seed=219682080`);
     await page.waitForFunction(() => (window as any).__severgrow?.state() && !(window as any).__severgrow.busy());
     await page.waitForTimeout(250);
+    // MEASURE THE INFORMATION LAYOUT ONLY ONCE IT IS MOUNTED. `mountInformation` adds the
+    // `futa04-information` class, the rail and the stylesheet after the game starts, and every
+    // style this check reads (the trio's chrome, the muted disabled ink) lives in that stylesheet.
+    // Sampling before it landed read the unstyled default and reported `inkRule: false` on a loaded
+    // CI runner for a UI that was correct a moment later. This is a readiness gate: no assertion
+    // below is relaxed, and the same values are still compared.
+    await page.waitForFunction(() => {
+      const rail = document.getElementById('futa04-information-rail');
+      return !!rail && document.documentElement.classList.contains('futa04-information');
+    }, undefined, { timeout: 15_000 });
     check(await page.locator('#futa04-help-button').isVisible(), `${width}: hint is discoverable`);
     const tools = await page.evaluate(() => {
       const hint = document.querySelector<HTMLElement>('#futa04-help-button')!;
