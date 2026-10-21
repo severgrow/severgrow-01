@@ -2759,6 +2759,12 @@ let lessonStageTimer = 0;
 let handSettled = true;
 /** When the explanation on screen appeared: a tap in its first moments is not "tap anywhere". */
 let lessonExplainAt = 0;
+/**
+ * How long a lesson explanation must stay up before a dismissing tap may take it away (owner,
+ * 2026-10-21: "make sure the window can't be skipped for 3s — always shows for at least 3s").
+ * It applies to DISMISSAL only: a tap on the lit target is a MOVE and still acts on the first tap.
+ */
+const LESSON_READ_MS = 3000;
 let lessonHoldingScore = false;
 let lessonExplainId = '';
 /** The lesson's box explains; the cockpit display carries the action (levels 1-10 only). */
@@ -4424,15 +4430,20 @@ function lessonDecide(e: Event): boolean {
   const beat = lessonBeatNow;
   const lockedNow = lessonLocked(lesson, session.state) && guided;
   if (guided && beat?.explain) {
-    // The lit thing is the move: one tap reads the sentence AND plays it. Never the 650 ms guard
+    // The lit thing is the move: one tap reads the sentence AND plays it. Never the dwell guard
     // here — that guard exists for a tap meant for the move that just happened, and this tap is
     // aimed at the thing the lesson is pointing at now.
     if (lessonTapMoves(beat, target, e, lockedNow)) {
       lessonMarkSeenAfterTap(beat.id);
       return false;
     }
-    // A tap meant for the move that just happened must not swallow the explanation unread.
-    if (performance.now() - lessonExplainAt < 650) return true;
+    // THE READING FLOOR (owner, 2026-10-21): the explanation is up for at least 3 s before a
+    // DISMISSING tap can take it away. Taps that are not a move are swallowed inside that floor, so
+    // a sentence cannot be lost to a stray finger. Deliberately scoped to DISMISSAL only — the lit
+    // target above still plays the move on one tap, because the owner also requires that (making
+    // the lit thing wait would recreate the "my first tap did nothing" bug). The old floor was
+    // 650 ms, which only stopped a tap aimed at the move that had just happened.
+    if (performance.now() - lessonExplainAt < LESSON_READ_MS) return true;
     lessonMarkSeen(beat.id);
     return true;
   }
@@ -6940,6 +6951,29 @@ function clearBloomPaintUi() {
   board.ghost(null);
 }
 
+/**
+ * UNDO BRINGS THE LAST EXPLANATION BACK (owner, 2026-10-21: "after closing, clicking undo shows it
+ * again" — and explicitly even if it had already been read). Taking a move back means the player is
+ * about to redo it, so the sentence that taught it is worth re-reading; it is the same beat, so the
+ * words are unchanged.
+ *
+ * Implemented by forgetting that this beat was read: `lessonSeen` is what suppresses it, so removing
+ * the id re-opens the box on the next render. The read clock is reset too, so the fresh showing gets
+ * its own full 3 s floor rather than inheriting an already-expired one.
+ *
+ * Levels 1-3 never reach here: there every non-lit control is refused, so Undo does not undo.
+ */
+function lessonReopenExplanation() {
+  if (!lessonActive() || !lessonExplainId) return;
+  const opened = lessonSeen.delete(lessonExplainId);
+  if (!opened) return;
+  saveLessonMeta();
+  lessonShownKey = '';
+  lessonExplainId = '';
+  lessonExplainAt = 0;
+  render();
+}
+
 /** Takes back the player's last move of this turn (nothing hidden was revealed by it). */
 function undoMove() {
   if (!session) return;
@@ -6952,6 +6986,8 @@ function undoMove() {
     syncSessionFromOnline(true);
     paintOnlineHudFromSession();
   } else if (!session.undo()) return;
+  // An undo inside a lesson re-opens the sentence that taught the move being taken back.
+  lessonReopenExplanation();
   // Overhaul item 9: the move runs backwards (its tiles sink away, cut tiles come back),
   // with a falling sound and a light double tap. The state itself is restored exactly.
   const after = session.state.board;
@@ -8652,7 +8688,7 @@ let appReady = false;
     return l ? {
       level: l.level, beat: lessonBeatNow, answer: lessonAnswerText, answers: lessonAnswerSeq,
       idle: lessonIdle, idleStage: lessonIdleStage, tier: lessonTierShown,
-      /** Tests: when this explanation first appeared (the 650 ms guard's own clock). */
+      /** Tests: when this explanation first appeared — the start of its reading floor (LESSON_READ_MS). */
       explainAt: lessonExplainAt,
       stage: lessonStageActive(), stageLeft: Math.max(0, Math.round(lessonStageUntil - performance.now())),
       handSettled, shownKey: lessonShownKey, seen: [...lessonSeen], powerSeen: [...lessonPowerSeen],
