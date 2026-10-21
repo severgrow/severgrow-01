@@ -397,6 +397,9 @@ for (const theme of THEMES) {
     await page.click('#gm-settings');
     await page.locator('[data-setting="largeText"]').click();
     await page.click('#sheet-settings [data-close]');
+    // Settings now returns to the pause panel it was opened from (0.6: a sheet returns to its
+    // opener), so resuming is an explicit second step. The rest of the check is unchanged.
+    await page.click('#gm-resume');
     await page.setViewportSize({ width: 844, height: 390 }); // rotate to landscape
     await page.waitForTimeout(200);
     await page.setViewportSize({ width: 390, height: 844 });
@@ -506,6 +509,9 @@ const big = bigCutDemo();
   await page.click('#gm-settings');
   await page.click('#palette-seg [data-value="moss"]');
   await page.click('#sheet-settings [data-close]');
+    // Settings now returns to the pause panel it was opened from (0.6: a sheet returns to its
+    // opener), so resuming is an explicit second step. The rest of the check is unchanged.
+  await page.click('#gm-resume');
   const ok = await settled(page);
   const look = await page.evaluate(() => document.documentElement.dataset.theme);
   check('juice ADVERSARIAL 6: switching palette mid-animation keeps a correct board', ok && look === 'moss' && errors.length === 0);
@@ -540,6 +546,8 @@ const big = bigCutDemo();
   await page.click('#gm-settings');
   await page.click('#palette-seg [data-value="ink"]');
   await page.click('#sheet-settings [data-close]');
+  // Settings returns to the pause panel it was opened from (0.6), so resume explicitly.
+  await page.click('#gm-resume');
   const ok = await settled(page);
   const s = (await getState(page))!;
   const wrong = await page.evaluate((board) => {

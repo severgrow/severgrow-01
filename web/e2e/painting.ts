@@ -384,6 +384,9 @@ const ghostKeys = (page: Page) => page.evaluate(() => [...document.querySelector
   await page.click('#gm-settings');
   await page.click('#palette-seg .seg-btn:not(.on)');
   await page.locator('#sheet-settings [data-close]').click();
+    // Settings now returns to the pause panel it was opened from (0.6: a sheet returns to its
+    // opener), so resuming is an explicit second step. The rest of the check is unchanged.
+  await page.click('#gm-resume');
   await page.waitForTimeout(300);
   const afterTheme = (await ghostKeys(page)).length === 2;
   await tDrag(page, ['0,1', '1,1']);
