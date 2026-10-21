@@ -43,6 +43,8 @@ type Snap = {
   laneClient: number;
   scroll: string | undefined;
   anims: number;
+  /** The turn word's painted display: 'none' while it is hidden (owner, 2026-10-21). */
+  msgDisplay: string;
 };
 
 const PROBE = (long: string) => `(() => {
@@ -67,7 +69,10 @@ const PROBE = (long: string) => `(() => {
   const tileEls = [...document.querySelectorAll('.l-tiles .tile[data-key]')];
   const snap = () => ({ board: rect(board), tiles: union(tileEls), hud: rect(hud), lane: rect(lane),
     msgScroll: msg.scrollHeight, msgClient: msg.clientHeight, laneScroll: lane.scrollHeight, laneClient: lane.clientHeight,
-    scroll: msg.dataset.scroll, anims: track.getAnimations().length });
+    scroll: msg.dataset.scroll, anims: track.getAnimations().length,
+    // The turn word is hidden for now (owner, 2026-10-21: the top text is going away, and its
+    // ticker looked jumpy), so "is it painted" is the fact this probe has to report.
+    msgDisplay: getComputedStyle(msg).display });
   const before = snap();
   window.__futasakuHeader.set(${JSON.stringify(long)});
   const after = snap();
@@ -141,8 +146,8 @@ const waitState = async (s: SeatSession, want: (v: string | null) => boolean): P
 const circleGone = (display: string): boolean => display === 'none' || display === 'none-found';
 
 /** Stop the ticker: set a short message and read the lane back. */
-const shortProbe = (s: SeatSession): Promise<{ scroll: string | undefined; anims: number }> =>
-  ev(s, `(() => { window.__futasakuHeader.set('Your turn'); const m = document.querySelector('#duel-hud [data-duel-turn]'); const t = document.querySelector('#duel-hud [data-duel-track]'); return { scroll: m.dataset.scroll, anims: t.getAnimations().length }; })()`);
+const shortProbe = (s: SeatSession): Promise<{ scroll: string | undefined; anims: number; msgDisplay: string }> =>
+  ev(s, `(() => { window.__futasakuHeader.set('Your turn'); const m = document.querySelector('#duel-hud [data-duel-turn]'); const t = document.querySelector('#duel-hud [data-duel-track]'); return { scroll: m.dataset.scroll, anims: t.getAnimations().length, msgDisplay: getComputedStyle(m).display }; })()`);
 
 /** Put the match into real time: A challenges, B accepts (both pages already in the match). */
 const goLive = async (duel: LocalDuel, match: LocalMatch): Promise<void> => {
@@ -247,12 +252,16 @@ try {
       check(`[${tag}] the lane never intersects the board's tiles`, p.laneTilesOverlap === 0 && p.hudTilesOverlap === 0, `${Math.round(p.laneTilesOverlap)}px² lane, ${Math.round(p.hudTilesOverlap)}px² hud`);
       check(`[${tag}] the board rectangle is IDENTICAL with and without a message`, JSON.stringify(p.before.board) === JSON.stringify(p.after.board), `${JSON.stringify(p.before.board)} vs ${JSON.stringify(p.after.board)}`);
       check(`[${tag}] the lane is a fixed-height row (<= 46px)`, (p.after.lane?.height ?? 0) <= 46, `${p.after.lane?.height}px`);
-      check(`[${tag}] the ticker runs when the words overflow`, p.after.scroll === '1' && p.after.anims > 0, `scroll=${p.after.scroll} anims=${p.after.anims}`);
+      // DELIBERATE CHANGE (owner, 2026-10-21): the turn words are hidden, so nothing may ticker.
+      // This replaces a check that required the ticker to run on overflow. The stronger fact now is
+      // that the word is not painted at all - and, because an unpainted element cannot animate,
+      // that no ticker runs either.
+      check(`[${tag}] the turn words are hidden, so nothing tickers`, p.after.msgDisplay === 'none' && p.after.anims === 0, `display=${p.after.msgDisplay} anims=${p.after.anims}`);
       check(`[${tag}] the header text has no border, outline, shadow or fill`, isFrameless(p.msgFrame) && isFrameless(p.trackFrame) && isFrameless(p.hudFrame) && isFrameless(p.laneFrame), JSON.stringify({ msg: p.msgFrame, track: p.trackFrame, hud: p.hudFrame }));
       check(`[${tag}] the two small circles are gone`, circleGone(p.chipDisplay) && circleGone(p.dotDisplay), `chip=${p.chipDisplay} dot=${p.dotDisplay}`);
       check(`[${tag}] the lane holds no real-time pill (it is the bolt under the wordmark now)`, !p.pillFrame, JSON.stringify(p.pillFrame));
       const stopped = await shortProbe(phone);
-      check(`[${tag}] the ticker stops when the words fit`, stopped.scroll === '0' && stopped.anims === 0, `scroll=${stopped.scroll} anims=${stopped.anims}`);
+      check(`[${tag}] a short message does not ticker either`, stopped.scroll === '0' && stopped.anims === 0 && stopped.msgDisplay === 'none', `scroll=${stopped.scroll} anims=${stopped.anims} display=${stopped.msgDisplay}`);
       if (size.w === 390) await shot(phone, `long-message-${tag}`);
     }
 
@@ -321,7 +330,7 @@ try {
     await shot(phone, 'real-time-counter-390');
     // A long message with the counter present: the ticker scrolls it, still one row, still off the board.
     const live = await ev<Probe>(phone, PROBE(LONG));
-    check('[real time] a long message still tickers on one row', live.after.scroll === '1' && live.after.anims > 0 && live.after.msgScroll === live.after.msgClient, `scroll=${live.after.scroll} anims=${live.after.anims}`);
+    check('[real time] a long message is hidden and never tickers', live.after.msgDisplay === 'none' && live.after.anims === 0 && live.after.msgScroll === live.after.msgClient, `display=${live.after.msgDisplay} anims=${live.after.anims}`);
     check('[real time] a long message never reaches the board', live.laneTilesOverlap === 0 && JSON.stringify(live.before.board) === JSON.stringify(live.after.board), `${Math.round(live.laneTilesOverlap)}px²`);
     await shot(phone, 'real-time-long-message-390');
   } finally {

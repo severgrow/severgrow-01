@@ -264,6 +264,13 @@ export const ONLINE_CSS = `
   box-shadow: none;
   outline: none;
 }
+/* HIDDEN FOR NOW (owner, 2026-10-21): "on top, opponent's turn was trying to scroll but was
+   jumpy and weird ... I think we'll delete all the text from top, so for now maybe just hide it."
+   So the turn word is not painted at all. It stays in the DOM with its text intact (and the clock
+   and urgency slots still own the lane), so nothing that reads the state breaks and restoring the
+   strip later is one rule. The ticker's transform is what looked jumpy; an unpainted element
+   cannot ticker. */
+.duel-hud .duel-msg { display: none; }
 .duel-hud .duel-msg[hidden] { display: none; }
 .duel-hud .duel-msg[data-scroll='1'] {
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
