@@ -339,12 +339,15 @@ export class WorldView {
    * no transition either way — a viewBox animation would be motion the owner did not ask for (and
    * the reduce-motion rule forbids adding it), so the switch is instant by construction.
    */
-  private applyView() {
+  private applyView(measure = true) {
     if (!this.svg) return;
-    // The LIVE measured aspect, not a remembered one: see `reconcile`.
-    const rect = this.svg.getBoundingClientRect();
-    const aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : this.aspect;
-    if (aspect > 0) { this.aspect = aspect; this.pixels = rect.width; }
+    // The LIVE measured aspect, not a remembered one: see `reconcile`. A PAN passes `false`: the
+    // panel cannot change shape between two pointer moves, and the ResizeObserver already refreshes
+    // `this.aspect` when it does, so there is no reason to force a layout read on every move (the
+    // owner's 2026-10-21 map pans freely; this keeps it one style write per frame, never a measure).
+    const rect = measure ? this.svg.getBoundingClientRect() : null;
+    const aspect = rect && rect.width > 0 && rect.height > 0 ? rect.width / rect.height : this.aspect;
+    if (rect && aspect > 0) { this.aspect = aspect; this.pixels = rect.width; }
     const box = this.fitted ? this.containFor(aspect) : this.reconcile(this.box, aspect);
     const target = box ?? this.fit;
     if (target) this.svg.setAttribute('viewBox', target.join(' '));
@@ -442,7 +445,8 @@ export class WorldView {
       // can therefore come fully inside the panel, clear of its rounded corner, on both axes.
       this.box[0] = Math.max(fx, Math.min(fx + fw - this.box[2], this.box[0]));
       this.box[1] = Math.max(fy, Math.min(fy + fh - this.box[3], this.box[1]));
-      this.applyView();
+      // A pan never re-measures: `this.aspect` is kept by the ResizeObserver (and by open/repaint).
+      this.applyView(false);
     };
     const zoom = (scale: number, x: number, y: number) => {
       if (!this.box || !this.fit || this.fitted) return;
