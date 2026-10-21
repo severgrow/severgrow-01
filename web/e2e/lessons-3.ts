@@ -1199,7 +1199,12 @@ try {
 
         // 5. The Grow explanation: the suggested card is genuinely lifted, and the display is the
         // other voice — never a lone step word, never the box's sentence.
-        await page.waitForTimeout(1200);
+        // The read waits past the lesson's OWN dwell, not an arbitrary 1.2 s: `PINNED.lessonDwell`
+        // is 2000 ms (owner, 2026-10-20: a teaching line is never replaced faster than it can be
+        // read), so sampling at 1200 ms could legitimately catch the previous step's word still
+        // holding — it did, intermittently, on d2da6f3 while the product behaved exactly as asked.
+        // The assertion is unchanged; only the moment it is read moved beyond the hold it respects.
+        await page.waitForTimeout(2200);
         const settleDisplay = (await displayText(page)).trim();
         check(!/^(DRAW|GROW|THROW|BLOOM|BOMB|BLAST|SKIP)[!?]?$/.test(settleDisplay), `${tag}: no lone step word on the display (${settleDisplay})`);
         check(settleDisplay !== LESSON.growLine, `${tag}: the display does not repeat the box`);

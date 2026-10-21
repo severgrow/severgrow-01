@@ -869,14 +869,23 @@ function restoreSheetFocus() {
   if (target?.isConnected && target.getClientRects().length) target.focus();
 }
 
-function sheet(id: string | null) {
+/**
+ * A sheet opened ON TOP of another one returns to it when it closes (0.6 polish). Settings can be
+ * opened from the main menu and from the pause panel; closing it must land where the player came
+ * from, with the keyboard on the control they pressed (main menu → main menu, pause → pause).
+ * A stack, because one surface may chain more than once (a report form over Settings, say), and a
+ * root sheet starts a fresh chain.
+ */
+const sheetReturns: { to: string; focus: HTMLElement | null }[] = [];
+
+/** The one opener/closer of a sheet. `sheet()` decides where a close RETURNS before calling this. */
+function openSheetNow(id: string | null, wasOpen: boolean) {
   if (id && glassSurface?.isOpen()) {
     glassSurface.hide();
     $('futa04-help-button').setAttribute('aria-expanded','false');
   }
   // Remember the opener once per chain: opening Settings from the pause menu must still give the
   // keyboard back to the control that opened the pause menu, not to a button the sheet replaced.
-  const wasOpen = !!openSheet;
   if (id && !wasOpen && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
     sheetOpener = document.activeElement;
   }
@@ -912,6 +921,29 @@ function sheet(id: string | null) {
     }
   }
   if (!openSheet && wasOpen) restoreSheetFocus();
+}
+
+/**
+ * Show `id` (null closes), returning a chained sheet to its opener first. The rule at the door:
+ * while something is open and a DIFFERENT sheet is asked for, remember the one below and the
+ * control that asked for the next one; on close, land back on it and restore that control's focus.
+ */
+function sheet(id: string | null) {
+  if (id === null && openSheet && sheetReturns.length > 0) {
+    const back = sheetReturns.pop()!;
+    openSheetNow(back.to, true);
+    // The opener may have been removed with the screen that held it; focus only a painted control.
+    if (back.focus?.isConnected && back.focus.getClientRects().length) back.focus.focus();
+    return;
+  }
+  if (!openSheet) sheetReturns.length = 0;
+  if (id && openSheet && openSheet.id !== id) {
+    sheetReturns.push({
+      to: openSheet.id,
+      focus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    });
+  }
+  openSheetNow(id, !!openSheet);
 }
 
 /** Legacy channels (no glass surface) still show the reference in the old sheet. */
