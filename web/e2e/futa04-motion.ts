@@ -264,8 +264,19 @@ try {
       }, action);
       const tier = await p.evaluate(() => document.documentElement.dataset.cutTier ?? null);
       const m = (await readMotion(p)) as Recorded;
+      // What the step PLANNED, not when the DOM happened to settle. The 700 ms wall-clock bound
+      // used to sit only 60 ms above the product's own 640 ms floor hold, so a shared runner's
+      // frame and pump-wake latency (715 ms on 0e1e720, with the product unchanged) failed it.
+      // The step publishes its hold; 640 ms is the floor, and it must never become a cut-length
+      // wait. `ms` stays as an end-to-end sanity bound with room for a loaded runner, still well
+      // under a doubled hold (2 × 640 = 1280 ms) or the cut's 1800 ms cap.
+      const plan = await p.evaluate(() => {
+        const marks = (window as any).__severgrow.animLog() as { ev: string; ms?: number; ring?: number }[];
+        return marks.filter(mark => mark.ev === 'megaBomb:hold').at(-1) ?? null;
+      });
+      assert.equal(plan?.ms, 640, `the Mega Bomb plans its 640ms floor hold (${JSON.stringify(plan)})`);
       assert.equal(tier, null, 'a Mega Bomb never runs the cut plan');
-      assert(ms < 700, `a Mega Bomb disappears in under 700ms (${ms}ms)`);
+      assert(ms < 1000, `a Mega Bomb disappears in under 1000ms (${ms}ms)`);
       assert(m.darks >= 1, 'the Mega Bomb has one dark pulse');
       assert(m.sparks === 0, 'the Mega Bomb adds no sparks');
       assert(m.motes >= 1, 'each destroyed tile leaves one ash mote');

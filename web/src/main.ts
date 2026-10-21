@@ -3495,7 +3495,12 @@ async function playStep(step: Step, my: number) {
       }
       // Blast is the heaviest move: it holds the screen long enough to register (at least 640ms)
       // even when it only clears one ring, which used to be gone in ~430ms.
-      await wait(Math.max(BLAST_MIN_MS, Math.min(840, lastRing * 36 + MOTION.move * 1.15)) * f, my);
+      const hold = Math.max(BLAST_MIN_MS, Math.min(840, lastRing * 36 + MOTION.move * 1.15)) * f;
+      // The PLANNED hold, published for the motion suite (a diagnostic, like every animLog mark).
+      // Tests used to tax the wall clock to the end of the busy gate, which also counts this
+      // runner's frame and pump-wake latency; the plan is what the product actually intends.
+      animLog('megaBomb:hold', { ms: Math.round(hold), ring: lastRing });
+      await wait(hold, my);
       quietAmbient(false);
       show();
       return;

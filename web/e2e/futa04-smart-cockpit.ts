@@ -148,14 +148,30 @@ try {
   }
   // A real Bloom result owns the sign until its event → score sequence finishes.
   await page.waitForTimeout(2600);
-  await page.evaluate(()=>{const banner=document.getElementById('banner')!;banner.textContent='THIS IS A LONG MESSAGE TO TEST THE MECHANICAL LED WINDOW';});
+  const longLed = 'THIS IS A LONG MESSAGE TO TEST THE MECHANICAL LED WINDOW';
+  await page.evaluate(message=>{const banner=document.getElementById('banner')!;banner.textContent=message;},longLed);
   await page.waitForFunction(()=>document.querySelector('#smart-led-text')?.textContent?.startsWith('THIS IS A LONG'));
   check(await page.locator('#smart-led-cells').evaluate(el=>(el as HTMLCanvasElement).width/(window.devicePixelRatio||1)<76),'LED: reduced motion uses readable full-size static shorthand');
   check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='none','LED: reduced motion keeps long text still');
   await page.evaluate(()=>{document.documentElement.classList.remove('reduce-motion');window.dispatchEvent(new Event('resize'));});
-  await page.waitForFunction(()=>document.querySelector('#smart-led-cells')?.classList.contains('scrolling'));
-  check(await page.locator('#smart-led-cells').evaluate(el=>(el as HTMLCanvasElement).width/(window.devicePixelRatio||1)>400),'LED: long copy uses full-width cells and repeated marquee');
-  check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='smart-led-scroll','LED: long text scrolls with motion enabled');
+  // `setText` clears `.scrolling` synchronously and re-adds it a frame later, and any repaint of the
+  // strip (the reduce-motion flip does one) opens that one-frame gap again. Reading the class, the
+  // canvas width and the computed animation in separate round trips could land in the gap and see
+  // `animation-name: none` on a strip that was scrolling — the flake on ddc4d87, which passed on the
+  // next commit. A flash message also only owns the sign for 2.2 s, so re-publish the long line to
+  // start a fresh window, then wait for the REAL condition (long copy, a scrolling strip, full-width
+  // cells) and assert the ONE frame that satisfied it. The animation assertion is unchanged.
+  await page.evaluate(message=>{document.getElementById('banner')!.textContent=message;},longLed);
+  const marquee = await page.waitForFunction(()=>{
+    const cells=document.querySelector<HTMLCanvasElement>('#smart-led-cells');
+    const text=document.querySelector('#smart-led-text')?.textContent??'';
+    if(!cells||!text.startsWith('THIS IS A LONG')) return false;
+    const width=cells.width/(window.devicePixelRatio||1);
+    if(!cells.classList.contains('scrolling')||!(width>400)) return false;
+    return {animation:getComputedStyle(cells).animationName,width};
+  },undefined,{timeout:6000}).then(handle=>handle.jsonValue() as Promise<{animation:string;width:number}>);
+  check(marquee.width>400,'LED: long copy uses full-width cells and repeated marquee');
+  check(marquee.animation==='smart-led-scroll','LED: long text scrolls with motion enabled');
   await page.close();
   const discard=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await discard.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
