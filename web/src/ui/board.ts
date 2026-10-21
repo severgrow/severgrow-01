@@ -221,7 +221,11 @@ export class BoardView {
    *  hex the player has just painted animates in. Every hex uses the flat grid on Futa04, so the
    *  painted shape matches the legal-move wells exactly. */
   ghost(g: GhostView | null) {
-    const layer = this.layers.draw;
+    // Before the board is mounted (the menu and the Territory screen both live above the game) a
+    // document-level pointer listener can still ask for a ghost clear. There is no layer to paint
+    // into: do nothing rather than throw on `layers` being undefined.
+    const layer = this.layers?.draw;
+    if (!layer) return;
     if (!g) {
       if (this.ghostPool.size > 0) { layer.replaceChildren(); this.ghostPool.clear(); }
       return;
