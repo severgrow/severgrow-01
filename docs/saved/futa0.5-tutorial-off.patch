@@ -1,0 +1,257 @@
+From b1241040ebb654f7a7ebc69cb468d55116201cbb Mon Sep 17 00:00:00 2001
+From: Patryk <patryk@Patryks-MacBook.local>
+Date: Mon, 19 Oct 2026 12:17:45 +0100
+Subject: [PATCH] feat(0.5): hide Tutorial on the product menu, restart
+ campaign at level 1
+
+Tutorial entry (owner decision, 2026-10-19): campaign levels 1-10 ARE the
+tutorial, so #menu-tutorial is hidden on the product channel. Hidden, never
+deleted: the mode, its markup, its bind and its suites stay for other builds.
+
+Campaign storage (owner decision, 2026-10-19): bump the progress and match
+keys from .v1 to .v2. The bump retires existing records permanently instead
+of migrating them, so every player starts over at level 1 and an old
+unfinished match cannot be resumed. parseProgress tolerance is unchanged.
+
+Update the admin reset suffixes, screenshot scripts, docs and callsites that
+pinned the old key. Tests pin the hidden entry, the retired v1 record and
+the .v2 round trip.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ admin/src/game-campaign.ts             |  6 +--
+ docs/ADMIN.md                          |  2 +-
+ docs/CAMPAIGN.md                       |  8 +++-
+ scripts/campaign-chapter-shots.ts      |  2 +-
+ src/campaign/progress.ts               |  9 +++-
+ web/e2e/campaign-shots.ts              |  2 +-
+ web/src/main.ts                        |  5 +++
+ web/tests/campaign-progress-v2.test.ts | 62 ++++++++++++++++++++++++++
+ web/tests/menu-restructure.test.ts     | 18 ++++++++
+ 9 files changed, 104 insertions(+), 10 deletions(-)
+ create mode 100644 web/tests/campaign-progress-v2.test.ts
+
+diff --git a/admin/src/game-campaign.ts b/admin/src/game-campaign.ts
+index f2c72ad..93c4689 100644
+--- a/admin/src/game-campaign.ts
++++ b/admin/src/game-campaign.ts
+@@ -1,7 +1,7 @@
+ // CAMPAIGN RESET — the one piece of player state the server never holds.
+ //
+ // Which campaign levels are unlocked is NOT a database row: the game keeps it in the player's own
+-// browser (`severgrow.campaign.progress.v1`, plus the unfinished match and a "last mode" note; see
++// browser (`severgrow.campaign.progress.v2`, plus the unfinished match and a "last mode" note; see
+ // src/campaign/progress.ts). The server only ever records the Seeds a first clear paid. So "reset
+ // the campaign" from the dashboard can only mean the browser the owner is sitting in front of —
+ // this module does exactly that, and nothing else.
+@@ -21,8 +21,8 @@
+ 
+ /** The game's campaign record, the unfinished campaign match, and which mode Continue resumes. */
+ export const CAMPAIGN_SUFFIXES = [
+-  'severgrow.campaign.progress.v1',
+-  'severgrow.campaign.save.v1',
++  'severgrow.campaign.progress.v2',
++  'severgrow.campaign.save.v2',
+   'severgrow.lastmode.v1',
+ ] as const;
+ 
+diff --git a/docs/ADMIN.md b/docs/ADMIN.md
+index 964fb47..bc47020 100644
+--- a/docs/ADMIN.md
++++ b/docs/ADMIN.md
+@@ -207,7 +207,7 @@ by that rule (a test asserts the literal message still appears in JSON).
+ 
+ Campaign progress is the single piece of player state the database does not hold. Unlocked levels,
+ the best attempt per level and the unfinished campaign match live in the player's browser
+-(`severgrow.campaign.progress.v1`, `severgrow.campaign.save.v1`, `severgrow.lastmode.v1`; see
++(`severgrow.campaign.progress.v2`, `severgrow.campaign.save.v2`, `severgrow.lastmode.v1`; see
+ `src/campaign/progress.ts`). The server records only the Seeds a first clear paid.
+ 
+ So the Player screen offers **“Reset campaign progress”**, which clears those keys in **the browser
+diff --git a/docs/CAMPAIGN.md b/docs/CAMPAIGN.md
+index 72c3272..0bc1457 100644
+--- a/docs/CAMPAIGN.md
++++ b/docs/CAMPAIGN.md
+@@ -460,10 +460,14 @@ device, or produced by a bundle built before the change, must never be refused b
+   70 levels and miss one: nothing past the gap opens**) and a save cannot be edited into a shortcut.
+   A loss removes nothing. A completed level stays replayable. Restarting a level reproduces the
+   intended fixed start (the seed is never rerolled).
+-- Progress is its own record, `severgrow.campaign.progress.v1`: the completed ids, the best attempt
++- Progress is its own record, `severgrow.campaign.progress.v2`: the completed ids, the best attempt
+   per level, and the derived unlocked count. Classic's `severgrow.stats.v1` (`winsByLevel`, a length-9
+   array) is never migrated or reshaped.
+-- A campaign match is saved under its **own** key (`severgrow.campaign.save.v1`, wrapped with the
++- **Restart from level 1 (owner, 2026-10-19).** The progress and match keys were bumped from `.v1` to
++  `.v2`, which **retires** earlier records rather than migrating them: a browser that still holds
++  `.v1` data is read as a fresh player (level 1, nothing completed), and an old unfinished match
++  cannot be resumed. The `.v1` keys are intentionally left in place, unread.
++- A campaign match is saved under its **own** key (`severgrow.campaign.save.v2`, wrapped with the
+   level id around the normal offline save), so the classic save
+   (`severgrow.save.v7`) is never overwritten by a campaign game. `severgrow.lastmode.v1` records
+   which offline match was played last, and **Continue** resumes that one. An unfinished campaign
+diff --git a/scripts/campaign-chapter-shots.ts b/scripts/campaign-chapter-shots.ts
+index 1a66ca1..3f49140 100644
+--- a/scripts/campaign-chapter-shots.ts
++++ b/scripts/campaign-chapter-shots.ts
+@@ -62,7 +62,7 @@ try {
+       localStorage.setItem(`${prefix}severgrow.settings.v1`, JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: true, confirmPolicy: 'never' }));
+       // The app's Storage wrapper adds the channel prefix itself, so the raw key carries it.
+       const completed = Array.from({ length: 20 }, (_, i) => `c${i < 10 ? 1 : 2}-${String((i % 10) + 1).padStart(2, '0')}`);
+-      localStorage.setItem(`${prefix}severgrow.campaign.progress.v1`, JSON.stringify({ version: 1, unlocked: 30, completed, best: {} }));
++      localStorage.setItem(`${prefix}severgrow.campaign.progress.v2`, JSON.stringify({ version: 1, unlocked: 30, completed, best: {} }));
+     }, PREFIX);
+ 
+     await page.goto(`http://localhost:${PORT}/`);
+diff --git a/src/campaign/progress.ts b/src/campaign/progress.ts
+index facb6b8..1a7f54e 100644
+--- a/src/campaign/progress.ts
++++ b/src/campaign/progress.ts
+@@ -7,12 +7,17 @@
+ import type { CampaignLevel } from './levels.js';
+ import { CAMPAIGN_LEVELS, FIRST_CAMPAIGN_LEVEL } from './levels.js';
+ 
++// Storage-key versioning, owner decision (2026-10-19): EVERYONE STARTS THE CAMPAIGN OVER AT LEVEL 1.
++// The key bump retires existing saves permanently instead of migrating them: whatever a browser
++// still holds under `.v1` is never read, so a returning player is a fresh player (level 1, nothing
++// completed) and an old unfinished match cannot be resumed. The `severgrow.` prefix and the record
++// schema (`version: 1`, parsed tolerantly) are unchanged — the KEY is what carries the retirement.
+ /** The campaign's own resume save — a saved unfinished campaign match. */
+-export const CAMPAIGN_SAVE_KEY = 'severgrow.campaign.save.v1';
++export const CAMPAIGN_SAVE_KEY = 'severgrow.campaign.save.v2';
+ /** Which offline match the player last played, so Continue resumes the right one. */
+ export const LAST_MODE_KEY = 'severgrow.lastmode.v1';
+ /** The campaign progress record. */
+-export const CAMPAIGN_PROGRESS_KEY = 'severgrow.campaign.progress.v1';
++export const CAMPAIGN_PROGRESS_KEY = 'severgrow.campaign.progress.v2';
+ 
+ export const CAMPAIGN_PROGRESS_VERSION = 1;
+ 
+diff --git a/web/e2e/campaign-shots.ts b/web/e2e/campaign-shots.ts
+index 7076cff..244c46c 100644
+--- a/web/e2e/campaign-shots.ts
++++ b/web/e2e/campaign-shots.ts
+@@ -241,7 +241,7 @@ try {
+     if (finished.result!.winner === 0) {
+       // A win: the progress record moves and the next level is now unlocked and current.
+       // The app's Storage wrapper adds the channel prefix itself, so this reads the UNPREFIXED key.
+-      const stored = await page.evaluate(() => localStorage.getItem('severgrow.campaign.progress.v1'));
++      const stored = await page.evaluate(() => localStorage.getItem('severgrow.campaign.progress.v2'));
+       const progress = JSON.parse(stored ?? '{}') as { unlocked?: number; completed?: string[] };
+       assert.equal(progress.unlocked, 2, 'the win unlocked level 2');
+       assert.deepEqual(progress.completed, [level1.id]);
+diff --git a/web/src/main.ts b/web/src/main.ts
+index 73f0159..3a7773f 100644
+--- a/web/src/main.ts
++++ b/web/src/main.ts
+@@ -702,6 +702,11 @@ function layoutMenu(canContinue: boolean) {
+   }
+   $('menu-tutorial').classList.remove('primary');
+   $('menu-tutorial').classList.add('ghost');
++  // Owner decision (2026-10-19): campaign levels 1-10 ARE the tutorial, so the standalone Tutorial
++  // entry is hidden on the product channel — it would be a second way into what the campaign now
++  // teaches. Hidden, never deleted: the mode, its wiring and its own suites stay intact for other
++  // builds, and `[hidden] { display: none !important }` wins over `.ghost`. Other channels keep it.
++  $('menu-tutorial').hidden = FEATURES.campaign;
+   // Rename the one tutorial entry from src/strings.ts (single source).
+   $('menu-tutorial').textContent = HELP.tutorial;
+   $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
+diff --git a/web/tests/campaign-progress-v2.test.ts b/web/tests/campaign-progress-v2.test.ts
+new file mode 100644
+index 0000000..4bbd751
+--- /dev/null
++++ b/web/tests/campaign-progress-v2.test.ts
+@@ -0,0 +1,62 @@
++// Owner decision (2026-10-19): everyone starts the campaign over from level 1.
++//
++// The mechanism is a storage-key version bump, not a migration: progress and the unfinished match
++// move to `.v2`, so whatever a browser still holds under `.v1` is simply never read again. These
++// assertions pin that retirement — an old record must produce a FRESH player (level 1, nothing
++// completed) and the new key must round-trip a real record.
++import { describe, expect, it } from 'vitest';
++import {
++  CAMPAIGN_LEVELS,
++  CAMPAIGN_PROGRESS_KEY,
++  CAMPAIGN_SAVE_KEY,
++  freshProgress,
++  parseProgress,
++  recordCampaignResult,
++  serializeProgress,
++} from '../../src/campaign/index.js';
++
++/** The record an earlier build (key `.v1`) would have left behind: nine levels won. */
++const v1Record = JSON.stringify({
++  version: 1,
++  unlocked: 10,
++  completed: CAMPAIGN_LEVELS.slice(0, 9).map((level) => level.id),
++  best: Object.fromEntries(
++    CAMPAIGN_LEVELS.slice(0, 9).map((level) => [level.id, { won: true, score: 12, turns: 20 }]),
++  ),
++});
++
++describe('campaign storage is versioned to .v2', () => {
++  it('names both campaign keys .v2 and keeps the severgrow. prefix', () => {
++    expect(CAMPAIGN_PROGRESS_KEY).toBe('severgrow.campaign.progress.v2');
++    expect(CAMPAIGN_SAVE_KEY).toBe('severgrow.campaign.save.v2');
++    expect(CAMPAIGN_PROGRESS_KEY.startsWith('severgrow.')).toBe(true);
++    expect(CAMPAIGN_SAVE_KEY.startsWith('severgrow.')).toBe(true);
++    expect(CAMPAIGN_PROGRESS_KEY).not.toBe(CAMPAIGN_SAVE_KEY);
++  });
++
++  it('never reads a record left under the retired .v1 key: the player starts at level 1', () => {
++    // Exactly how main.ts reads it: store.get(CAMPAIGN_PROGRESS_KEY). Only the old key is populated.
++    const store = new Map<string, string>([['severgrow.campaign.progress.v1', v1Record]]);
++    const stored = store.get(CAMPAIGN_PROGRESS_KEY) ?? null;
++    expect(stored, 'the old record must not be reachable through the new key').toBeNull();
++    const p = parseProgress(stored);
++    expect(p).toEqual(freshProgress());
++    expect(p.unlocked).toBe(1);
++    expect(p.completed).toEqual([]);
++    expect(p.best).toEqual({});
++  });
++
++  it('the new key round-trips a real progress record', () => {
++    const p = recordCampaignResult(freshProgress(), CAMPAIGN_LEVELS[0]!, { won: true, score: 9, turns: 14 });
++    const store = new Map<string, string>([[CAMPAIGN_PROGRESS_KEY, serializeProgress(p)]]);
++    expect(parseProgress(store.get(CAMPAIGN_PROGRESS_KEY) ?? null)).toEqual(p);
++  });
++
++  it('an unfinished match left under .v1 cannot be resumed', () => {
++    // main.ts reads the campaign save through CAMPAIGN_SAVE_KEY; the old key is a different entry.
++    const store = new Map<string, string>([
++      ['severgrow.campaign.save.v1', '{"v":1,"levelId":"c1-05","match":"stale"}'],
++    ]);
++    expect(store.get(CAMPAIGN_SAVE_KEY) ?? null).toBeNull();
++  });
++});
+diff --git a/web/tests/menu-restructure.test.ts b/web/tests/menu-restructure.test.ts
+index 04cd89b..e14f930 100644
+--- a/web/tests/menu-restructure.test.ts
++++ b/web/tests/menu-restructure.test.ts
+@@ -124,6 +124,24 @@ describe('the campaign entry reads LEVEL <n> from the player progress', () => {
+   });
+ });
+ 
++// Owner decision (2026-10-19): campaign levels 1-10 ARE the tutorial, so the standalone Tutorial
++// entry is hidden on the product channel. Hidden, never deleted — the mode, its wiring and its own
++// suites stay intact for every other build.
++describe('the Tutorial entry is hidden on the product channel', () => {
++  it('hides Tutorial while the campaign entry stays visible', () => {
++    expect(FEATURES.campaign).toBe(true); // this suite runs the product (futa04) channel
++    const start = mainSource.indexOf('function layoutMenu(');
++    const body = mainSource.slice(start, mainSource.indexOf('\nfunction showScreen(', start));
++    // The owner decision is pinned WITH its comment: a later "cleanup" cannot silently unhide it.
++    expect(body).toMatch(/Owner decision \(2026-10-19\): campaign levels 1-10 ARE the tutorial[\s\S]{0,600}\$\('menu-tutorial'\)\.hidden = FEATURES\.campaign/);
++    // The campaign entry is still revealed on the same channel.
++    expect(body).toMatch(/cmp\.hidden = false/);
++    // The element and every tutorial wire-up remain: hiding is not deletion.
++    expect(menuSection).toMatch(/id="menu-tutorial"/);
++    expect(mainSource).toContain("bind('menu-tutorial', () => {");
++  });
++});
++
+ describe('the Training entry opens the three tiers', () => {
+   it('is named Training and opens the tier picker', () => {
+     expect(MENU.training).toBe('Training');
+-- 
+2.50.1 (Apple Git-155)
+

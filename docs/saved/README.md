@@ -1,14 +1,14 @@
 # Work saved as patches (not as branches)
 
-Two local commits could not be pushed as their own branches on 2026-10-21. The push was rejected
+Three local commits could not be pushed as their own branches on 2026-10-21. The push was rejected
 by GitHub, not by git:
 
 > refusing to allow an OAuth App to create or update workflow
 > `.github/workflows/futasaku03-preview.yml` without `workflow` scope
 
 GitHub scans every commit reachable from a **new** ref, including old ancestors that already exist
-on other remote branches. Both commits sit on histories that contain a workflow edit, so the whole
-branch is refused. The credential stored on this machine is an OAuth App token without the
+on other remote branches. All three commits sit on histories that contain a workflow edit, so the
+whole branch is refused. The credential stored on this machine is an OAuth App token without the
 `workflow` scope, so no branch with that history can be created. Nothing was force-pushed and no
 existing branch was rewritten.
 
@@ -19,6 +19,7 @@ author, date, diff):
 | --- | --- | --- | --- |
 | `led-display.patch` | `d154f640a7291947a2f1aff0816b43dbda0f033b` | worktree `/Users/patryk/severgrow-led`, branch `led-display`, parent `afed6b7` | Cockpit LED: sparse, fresh flavour, shorter and clearer messages (8 files, +299/−80) |
 | `admin-publish-pending.patch` | `f33163d` | branch `admin-publish-pending` in the main checkout | Publish the admin dashboard at `/admin/` on the futa0.5 deploy (CI workflow only, 11 lines) |
+| `futa0.5-tutorial-off.patch` | `b124104` | branch `futa0.5-tutorial-off` in the main checkout | Hide Tutorial on the product menu, restart the campaign at level 1 (9 files, +104/−10) |
 
 ## Restoring one
 
