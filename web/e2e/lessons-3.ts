@@ -508,6 +508,12 @@ try {
     await page.goto(URL3, { waitUntil: 'networkidle' });
     await installDealAudit(page);
     await openNextLevel(page);
+    // THE COLD FIRST BOARD (owner, 2026-10-20): the first level of a fresh visit may wait for the
+    // art it composes, but only briefly — an 800 ms cap, never over 1.2 s — and the visit is then
+    // marked warmed. This page is cold (a fresh context), so the wait is reported here.
+    const warm = await page.evaluate(() => (window as any).__severgrow.warm());
+    check(!!warm && warm.cold === true && warm.waitedMs >= 0 && warm.waitedMs <= 1200,
+      `the cold first board waits for its art, bounded (${warm?.waitedMs} ms, cap 800)`);
     for (let level = 1; level <= 10; level++) {
       if (level > 1) {
         await page.waitForSelector('#gameover:not([hidden])', { timeout: 30000 });
@@ -564,6 +570,33 @@ try {
     check(!keys.some((k) => k.startsWith('futa05:')), '/3 never writes the root or /2 keys');
     assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
     await page.close();
+
+    // A REPEAT VISIT ADDS NOTHING (owner, 2026-10-20): the first cold board writes the warmed
+    // marker, so a later start must not wait for art again. "Start this level over" is the path
+    // that really calls startGame afresh (a resume reuses the saved match and never reaches the
+    // warm at all), so it is the honest place to prove the marker works.
+    {
+      const { page: again, errors: againErrors } = await newPage();
+      await again.goto(URL3, { waitUntil: 'networkidle' });
+      await openNextLevel(again);
+      await again.reload({ waitUntil: 'networkidle' });
+      await again.waitForSelector('#menu-play:not([hidden])', { timeout: 20000 });
+      await dismissInstall(again);
+      await again.evaluate(() => (document.getElementById('menu-play') as HTMLButtonElement).click());
+      await again.waitForSelector('#menu-campaign:not([hidden])', { timeout: 10000 });
+      await dismissInstall(again);
+      await again.evaluate(() => (document.getElementById('menu-campaign') as HTMLButtonElement).click());
+      await again.waitForSelector('#sheet-campaign-start:not([hidden])', { timeout: 15000 });
+      await again.evaluate(() => (document.getElementById('csa-start') as HTMLButtonElement).click());
+      await again.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
+      const warmAgain = await again.evaluate(() => (window as any).__severgrow.warm());
+      check(!!warmAgain && warmAgain.cold === false && warmAgain.waitedMs === 0,
+        `a repeat visit does not wait for art (${JSON.stringify(warmAgain)})`);
+      const marker = await again.evaluate(() => Object.keys(localStorage).some((k) => k.endsWith('severgrow.board-warmed.v1')));
+      check(marker, 'the warmed marker is written for the next visit');
+      assert.deepEqual(againErrors, [], `the repeat visit: no page errors: ${againErrors.join(' | ')}`);
+      await again.close();
+    }
   }
   if (ONLY === 'all' || ONLY === 'robust') {
     console.log('\nRobustness:');

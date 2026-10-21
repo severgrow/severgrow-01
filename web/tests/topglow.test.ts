@@ -81,6 +81,16 @@ describe('the top-rank glow', () => {
     expect(board).toContain('class: `top-glow ${kind}`');
   });
 
+  it('the removed tint’s rule stays inert, so a decoration over a hex can never eat a tap', () => {
+    // The board no longer paints this node, but when it existed it sat over lit hexes and swallowed
+    // the tap meant for the tile beneath it (the lesson lights a tile; the player taps that tile).
+    // Rule and node were removed together, and the rule is kept as the guard against a re-add.
+    const style = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+    const at = style.indexOf('.top-glow-tint {');
+    expect(at).toBeGreaterThan(-1);
+    expect(style.slice(at, style.indexOf('}', at))).toContain('pointer-events: none');
+  });
+
   it('the setting "Top-rank glow" defaults to Subtle and is saved', () => {
     expect(DEFAULT_SETTINGS.topGlow).toBe('subtle');
     expect(parseSettings(JSON.stringify({ topGlow: 'off' })).topGlow).toBe('off');
