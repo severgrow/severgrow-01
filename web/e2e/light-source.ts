@@ -261,10 +261,11 @@ try {
   check(metrics.filter === 'none' && metrics.windowFilter === 'none', 'the bloom and the LED window carry no live filter');
   check(metrics.spill === null, 'the old masked gradient spill is gone');
   // Owner, 2026-10-20: intensity down by ~35% (the old amber rest was .44; x .65 = .286).
-  // Owner, 2026-10-21: another 15% down, so the amber rest is .243.
-  check(Math.abs(metrics.opacity - .243) <= .006, `the bloom rests at 65% x 85% of its old strength (${metrics.opacity}, was .44)`);
-  check(metrics.opacity < .26, `the bloom no longer rests at the old strength (${metrics.opacity})`);
-  check(metrics.opacity > .18, `the bloom is still a visible halo (${metrics.opacity})`);
+  // Owner, 2026-10-21: another 15% down, so the amber rest was .243.
+  // Owner, 2026-10-21: another 15% of current strength, so the amber rest is .207 (.44 x .4696).
+  check(Math.abs(metrics.opacity - .207) <= .006, `the bloom rests at 65% x 85% x 85% of its old strength (${metrics.opacity}, was .44)`);
+  check(metrics.opacity < .22, `the bloom no longer rests at the old strength (${metrics.opacity})`);
+  check(metrics.opacity > .17, `the bloom is still a visible halo (${metrics.opacity})`);
   // The tail is longer BELOW the dots: the light catches the keys under the display.
   check(metrics.atDown > metrics.atUp,
     `at equal distance the light is stronger below the dots than above (${metrics.atDown} below vs ${metrics.atUp} above)`);

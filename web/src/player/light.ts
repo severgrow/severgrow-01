@@ -36,17 +36,22 @@ export type LightSpec = {
 /** The one angle the whole light leans at: a touch clockwise, never sideways enough to smear. */
 export const LIGHT_ANGLE = 22;
 
-/* The bloom's rest strength. Owner, 2026-10-20: "the display glow is too strong right now,
-   reduce its intensity by around 35%". Each peak is the old value x 0.65 (.44->.286,
-   .46->.299, .42->.273); the colour, the angle and the falloff shape are untouched, and the
-   photosensitivity ceiling (`LIGHT_CAPS.bloomPeak`) is unchanged. */
+/* The bloom's rest strength. THREE owner passes have dimmed it, and each peak is the ORIGINAL
+   value x 0.65 x 0.85 x 0.85 (= x 0.4696):
+     2026-10-20  x 0.65  "the display glow is too strong right now, reduce its intensity by
+                          around 35%"
+     2026-10-21  x 0.85  "decrease its glow strength by 15%"
+     2026-10-21  x 0.85  "decrease the strength of the casting glow of the display by another
+                          15% of current strength"
+   (.44->.207, .46->.216, .42->.197). The colour, the angle and the falloff shape are untouched,
+   and the photosensitivity ceiling (`LIGHT_CAPS.bloomPeak`) is unchanged. */
 export const LIGHT_TONES: Record<LightTone, LightSpec> = {
-  amber: { core: '#f5d8a4', bloom: 'rgba(255,195,104,.30)', angle: LIGHT_ANGLE, peak: .243 },
-  red: { core: '#e4705e', bloom: 'rgba(234,68,48,.32)', angle: LIGHT_ANGLE, peak: .254 },
-  green: { core: '#a9d886', bloom: 'rgba(143,210,111,.28)', angle: LIGHT_ANGLE, peak: .243 },
-  ivory: { core: '#f5ead1', bloom: 'rgba(255,233,182,.26)', angle: LIGHT_ANGLE, peak: .232 },
-  pink: { core: '#edabc0', bloom: 'rgba(237,150,178,.26)', angle: LIGHT_ANGLE, peak: .232 },
-  cyan: { core: '#a7d3d0', bloom: 'rgba(132,209,206,.24)', angle: LIGHT_ANGLE, peak: .232 },
+  amber: { core: '#f5d8a4', bloom: 'rgba(255,195,104,.30)', angle: LIGHT_ANGLE, peak: .207 },
+  red: { core: '#e4705e', bloom: 'rgba(234,68,48,.32)', angle: LIGHT_ANGLE, peak: .216 },
+  green: { core: '#a9d886', bloom: 'rgba(143,210,111,.28)', angle: LIGHT_ANGLE, peak: .207 },
+  ivory: { core: '#f5ead1', bloom: 'rgba(255,233,182,.26)', angle: LIGHT_ANGLE, peak: .197 },
+  pink: { core: '#edabc0', bloom: 'rgba(237,150,178,.26)', angle: LIGHT_ANGLE, peak: .197 },
+  cyan: { core: '#a7d3d0', bloom: 'rgba(132,209,206,.24)', angle: LIGHT_ANGLE, peak: .197 },
 };
 
 /**

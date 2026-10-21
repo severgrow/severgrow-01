@@ -46,17 +46,20 @@ describe('the one LIGHT contract', () => {
     for (const tone of TONES) expect(lightTone(tone), tone).toBeDefined();
   });
 
-  it('rests at 65% x 85% of the previous strength (two owner reductions)', () => {
-    // The values the first brief was measured against. Two passes have since dimmed the bloom:
-    // x0.65 (owner, 2026-10-20: "too strong, reduce by around 35%") and x0.85 (owner, 2026-10-21:
-    // "decrease its glow strength by 15%"). Pinning the ratio, not just a ceiling, is what stops a
-    // later pass from quietly turning the glow back up.
+  it('rests at 65% x 85% x 85% of the previous strength (three owner reductions)', () => {
+    // The values the first brief was measured against. Three passes have since dimmed the bloom:
+    // x0.65 (owner, 2026-10-20: "too strong, reduce by around 35%"), x0.85 (owner, 2026-10-21:
+    // "decrease its glow strength by 15%") and x0.85 again (owner, 2026-10-21: "another 15% of
+    // current strength"). Pinning the ratio, not just a ceiling, is what stops a later pass from
+    // quietly turning the glow back up.
     const before: Record<string, number> = { amber: .44, red: .46, green: .44, ivory: .42, pink: .42, cyan: .42 };
     for (const tone of ROOM_TONES) {
-      expect(LIGHT_TONES[tone].peak, `${tone} peak`).toBeCloseTo(before[tone]! * .65 * .85, 3);
+      expect(LIGHT_TONES[tone].peak, `${tone} peak`).toBeCloseTo(before[tone]! * .65 * .85 * .85, 3);
       expect(LIGHT_TONES[tone].peak, `${tone} is visibly weaker`).toBeLessThan(before[tone]! * .6);
-      // Still a visible halo, not a ghost: above the 15% floor of the original.
-      expect(LIGHT_TONES[tone].peak, `${tone} still reads`).toBeGreaterThan(.22);
+      // Still a visible halo, not a ghost. The floor moved down with the third pass (the smallest
+      // peak is .197): it is not a percentage of the original but the point where the bloom still
+      // reads as a halo against the dark window, while the flash and alarm caps stay untouched.
+      expect(LIGHT_TONES[tone].peak, `${tone} still reads`).toBeGreaterThan(.19);
       expect(LIGHT_TONES[tone].peak, `${tone} stays under the photosensitivity cap`).toBeLessThanOrEqual(LIGHT_CAPS.bloomPeak);
     }
   });
