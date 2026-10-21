@@ -576,5 +576,14 @@ export const ONLINE_CSS = `
 }
 .world-invitation-card button:last-child { background: transparent; opacity: .75; }
 
+/* 0.6: a lobby action in flight (find / create / join). The guard refuses a second tap before any
+   request; the key it locked says so with aria-busy and a calmer face. NO second spinner: the
+   screen's own line (or the waiting screen) already carries the animated dots. */
+.online-actions .btn[aria-busy='true'],
+.online-actions .btn[aria-busy='true']:disabled {
+  cursor: progress;
+  opacity: .62;
+}
+
 `;
 

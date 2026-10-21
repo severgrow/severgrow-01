@@ -6,6 +6,7 @@ import { ONLINE } from '../../../src/strings.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
 import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
+import { createLobbyActionGuard } from './lobby-action.js';
 import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
 import { WorldView } from './world-view.js';
@@ -120,6 +121,35 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   identityStore = identity;
   let identityReplaced = false;
   const now = hooks.now ?? (() => Date.now());
+
+  /**
+   * ONE lobby action at a time. The server ignores a duplicate find/create/join, but the client
+   * must not send one either: a second tap while the first request is in flight is refused before
+   * it can reach the network, the key it came from is locked with `aria-busy` (a pending face),
+   * and the lock is released on success, failure and timeout. The guard itself is DOM-free and
+   * unit-tested (web/tests/lobby-action-guard.test.ts); this only paints the control.
+   */
+  const pendingControlIds: Record<string, string> = { find: 'online-find', create: 'online-create', join: 'online-join-submit' };
+  let pendingControl: HTMLButtonElement | null = null;
+  const paintPending = (action: string | null) => {
+    if (pendingControl) {
+      // Give the key back exactly as it was: a control disabled for its own reason stays disabled.
+      pendingControl.disabled = pendingControl.dataset.pendingWasDisabled === '1';
+      pendingControl.removeAttribute('aria-busy');
+      pendingControl.classList.remove('is-pending');
+      delete pendingControl.dataset.pendingWasDisabled;
+      pendingControl = null;
+    }
+    if (!action) return;
+    const el = document.getElementById(pendingControlIds[action] ?? '') as HTMLButtonElement | null;
+    if (!el) return;
+    pendingControl = el;
+    el.dataset.pendingWasDisabled = el.disabled ? '1' : '0';
+    el.disabled = true;
+    el.setAttribute('aria-busy', 'true');
+    el.classList.add('is-pending');
+  };
+  const guard = createLobbyActionGuard({ onPending: paintPending });
 
   let matches: MatchListEntry[] = [];
   let waiting: { matchId: string; inviteCode: string } | null = null;
@@ -610,48 +640,58 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
   };
 
-  /** Creates a fresh match and opens the invite/share screen. `false` when it could not. */
-  const createMatch = async (): Promise<boolean> => {
-    const id = await ensureIdentity();
-    if (!id) return false;
-    try {
-      const res = await client.createMatch(id.token);
-      serverOffset = res.serverNow - now();
-      openWaiting(res.match);
-      return true;
-    } catch (error) {
-      notice('online-hub-notice', errorMessage(error));
-      return false;
-    }
+  /**
+   * Creates a fresh match and opens the invite/share screen. `started` is false when the guard
+   * refused a second tap, so a caller such as rematch can tell "declined" from "failed".
+   */
+  const createMatch = async (): Promise<{ ok: boolean; started: boolean }> => {
+    const out = await guard.run('create', async () => {
+      const id = await ensureIdentity();
+      if (!id) return false;
+      try {
+        const res = await client.createMatch(id.token);
+        serverOffset = res.serverNow - now();
+        openWaiting(res.match);
+        return true;
+      } catch (error) {
+        notice('online-hub-notice', errorMessage(error));
+        return false;
+      }
+    });
+    return { ok: out.started && !out.timedOut && out.value === true, started: out.started };
   };
 
   /**
    * A rematch from a finished standard duel. Identical to "Create a duel" from the hub — a fresh
    * match with a fresh invite code, shown on the same waiting/share screen. On failure, land on the
-   * hub, which is where "Create a duel" reports its error line.
+   * hub, which is where "Create a duel" reports its error line. A refused second tap (the first
+   * create is still in flight) leaves the screen alone: that request is already doing the work.
    */
   const rematch = async (): Promise<void> => {
-    if (!(await createMatch())) await openHub();
+    const created = await createMatch();
+    if (created.started && !created.ok) await openHub();
   };
 
   const findOpponent = async () => {
     if (!findOpponentEnabled()) return;
-    const id = await ensureIdentity();
-    if (!id) return;
-    noticeWithDots('online-hub-notice', ONLINE.findOpponentLooking);
-    try {
-      const res = await client.findOpponent(id.token);
-      serverOffset = res.serverNow - now();
-      if (res.paired && res.player.status === 'active') {
-        // Paired with an opponent right now: a live join.
-        launchDuel(id.token, res.player, true);
-        return;
+    await guard.run('find', async () => {
+      const id = await ensureIdentity();
+      if (!id) return;
+      noticeWithDots('online-hub-notice', ONLINE.findOpponentLooking);
+      try {
+        const res = await client.findOpponent(id.token);
+        serverOffset = res.serverNow - now();
+        if (res.paired && res.player.status === 'active') {
+          // Paired with an opponent right now: a live join.
+          launchDuel(id.token, res.player, true);
+          return;
+        }
+        // Parked: we stay in the queue and keep polling, even if the player leaves the screen.
+        startSearch(id.token, res.match.matchId);
+      } catch (error) {
+        notice('online-hub-notice', errorMessage(error));
       }
-      // Parked: we stay in the queue and keep polling, even if the player leaves the screen.
-      startSearch(id.token, res.match.matchId);
-    } catch (error) {
-      notice('online-hub-notice', errorMessage(error));
-    }
+    });
   };
 
   const joinWithCode = async (raw: string) => {
@@ -666,21 +706,23 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       notice('online-join-notice', ONLINE.errCodeFormat);
       return;
     }
-    const id = await ensureIdentity();
-    if (!id) return;
-    try {
-      const res = await client.joinMatch(id.token, cleaned);
-      serverOffset = res.serverNow - now();
-      // Joining a duel in person is the joiner's live-join moment.
-      launchDuel(id.token, res.player, true);
-    } catch (error) {
-      if (error instanceof DuelError && error.code === 'ALREADY_JOINED') {
-        notice('online-join-notice', ONLINE.errAlreadyJoined);
-        await reloadMatches();
-        return;
+    await guard.run('join', async () => {
+      const id = await ensureIdentity();
+      if (!id) return;
+      try {
+        const res = await client.joinMatch(id.token, cleaned);
+        serverOffset = res.serverNow - now();
+        // Joining a duel in person is the joiner's live-join moment.
+        launchDuel(id.token, res.player, true);
+      } catch (error) {
+        if (error instanceof DuelError && error.code === 'ALREADY_JOINED') {
+          notice('online-join-notice', ONLINE.errAlreadyJoined);
+          await reloadMatches();
+          return;
+        }
+        notice('online-join-notice', error instanceof DuelError ? friendlyJoinError(error.code) : errorMessage(error));
       }
-      notice('online-join-notice', error instanceof DuelError ? friendlyJoinError(error.code) : errorMessage(error));
-    }
+    });
   };
 
   /**
