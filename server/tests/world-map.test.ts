@@ -7,13 +7,13 @@ const grant = (store: MemoryWorldEconomyStore, playerId: string, sourceKey: stri
   store.settle({ playerId, sourceKey, mode: 'campaign', outcome: 'win', opponentId: null, campaignLevel: 1, now });
 
 describe('frozen shared hex world', () => {
-  it('is 275 unique connected cells with no one-cell tails (v2)', () => {
-    expect(WORLD_CELLS).toHaveLength(275);
-    expect(WORLD_CELL_IDS.size).toBe(275);
+  it('is 274 unique connected cells with no one-cell tails (v2)', () => {
+    expect(WORLD_CELLS).toHaveLength(274);
+    expect(WORLD_CELL_IDS.size).toBe(274);
     const seen = new Set<string>([WORLD_CELLS[0]!.id]);
     const queue = [WORLD_CELLS[0]!.id];
     while (queue.length) for (const id of worldNeighbours(queue.shift()!)) if (!seen.has(id)) { seen.add(id); queue.push(id); }
-    expect(seen.size).toBe(275);
+    expect(seen.size).toBe(274);
     expect(WORLD_CELLS.every((c) => worldNeighbours(c.id).length >= 2)).toBe(true);
   });
 
@@ -31,12 +31,22 @@ describe('frozen shared hex world', () => {
     for (const id of v1) expect(WORLD_CELL_IDS.has(id), id).toBe(true);
   });
 
-  it('grew by about half and its edge is irregular, not a bigger hexagon', () => {
+  it('grew by about half, along a coastline: smooth runs with a few bays and points', () => {
     expect(WORLD_CELLS.length).toBeGreaterThan(183 * 1.4);
     expect(WORLD_CELLS.length).toBeLessThan(183 * 1.6);
-    // A bigger hexagon (or any ring-grown shape) has an edge that moves by at most one cell per
-    // row. The grown map does not: measure both edges and require at least one row where an edge
-    // jumps by two or more, which is what makes the silhouette irregular.
+    // The shape is FROZEN: this is its row profile, top to bottom. The previous v2 was
+    // 3 10 11 13 14 16 17 17 17 18 18 17 16 16 16 14 13 12 11 6 — a rounded lozenge with a 3-hex
+    // crown and one separated bottom tooth (owner, 2026-10-21). A change here means the generator was
+    // re-run: regenerate the table from its output, never by hand.
+    const widths = new Map<number, number>();
+    for (const c of WORLD_CELLS) widths.set(c.r, (widths.get(c.r) ?? 0) + 1);
+    const profile = [...widths.entries()].sort((a, b) => a[0] - b[0]).map(([, n]) => n);
+    expect(profile).toEqual([6, 7, 9, 13, 14, 16, 17, 17, 18, 18, 18, 17, 17, 16, 11, 10, 10, 11, 11, 10, 8]);
+
+    // A bigger hexagon (or any ring-grown shape) has an edge that moves by at most one cell per row.
+    // A coastline does not: it takes a 2-4 cell step where a bay cuts in or a point runs out. Measure
+    // both edges and require at least two such steps — but require the change to be LOCAL: most row
+    // steps are still 0 or 1, so the step is a bay, not a sawtooth.
     const rows = new Map<number, { lo: number; hi: number }>();
     for (const c of WORLD_CELLS) {
       const row = rows.get(c.r);
@@ -44,14 +54,29 @@ describe('frozen shared hex world', () => {
       else { row.lo = Math.min(row.lo, c.q); row.hi = Math.max(row.hi, c.q); }
     }
     const ordered = [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row);
-    const jumps: number[] = [];
+    const steps: number[] = [];
     for (let i = 1; i < ordered.length; i++) {
-      jumps.push(Math.abs(ordered[i]!.lo - ordered[i - 1]!.lo));
-      jumps.push(Math.abs(ordered[i]!.hi - ordered[i - 1]!.hi));
+      steps.push(Math.abs(ordered[i]!.lo - ordered[i - 1]!.lo));
+      steps.push(Math.abs(ordered[i]!.hi - ordered[i - 1]!.hi));
     }
-    expect(Math.max(...jumps)).toBeGreaterThanOrEqual(2);
-    // And it is not a single row of teeth either: several rows have a non-trivial edge step.
-    expect(jumps.filter((j) => j >= 2).length).toBeGreaterThan(3);
+    expect(steps.filter((step) => step >= 2).length, 'a coastline has bays and points, not one ring')
+      .toBeGreaterThanOrEqual(2);
+    expect(steps.filter((step) => step >= 2).length, 'and it is not a sawtooth either')
+      .toBeLessThan(steps.length / 3);
+    expect(steps.filter((step) => step <= 1).length / steps.length, 'the shore grows in smooth runs')
+      .toBeGreaterThan(0.7);
+  });
+
+  it('has NO lone tooth: no cell alone in its row with land hanging off it', () => {
+    // The owner's definition, checked in BOTH directions: a cell whose row-neighbours on both sides
+    // are outside the map while it has a cell below it is a comb tooth — and the same cell hanging
+    // UNDER a bay's lip is the same pimple pointing up. v1 has none (its rows are contiguous), and
+    // the growth rule refuses any candidate that would leave one.
+    const has = (q: number, r: number) => WORLD_CELL_IDS.has(`${q},${r}`);
+    const teeth = WORLD_CELLS.filter((c) => !has(c.q - 1, c.r) && !has(c.q + 1, c.r) &&
+      (has(c.q, c.r + 1) || has(c.q - 1, c.r + 1) || has(c.q, c.r - 1) || has(c.q + 1, c.r - 1)))
+      .map((c) => c.id);
+    expect(teeth, `lone teeth: ${teeth.join(' ') || '(none)'}`).toEqual([]);
   });
 
   it('keeps all 64 historical tile coordinates in the expanded map', () => {

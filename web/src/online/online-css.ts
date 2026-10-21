@@ -428,7 +428,7 @@ export const ONLINE_CSS = `
    roughly half the screen empty below it. He chose to fill that space with a BIGGER map rather than
    by centring, accepting a horizontal crop. So the window now takes the column's whole height and
    the map scales up to it.
-   The world is very nearly square (plus an 18-unit gutter on every side), so on a
+   The world is very nearly square (331.77 x 320 units, plus an 18-unit gutter on every side), so on a
    portrait phone filling the height means the map is wider than the column and the surplus is
    cropped horizontally — the window shows the world's middle and pans to the edges in BOTH axes
    (world-view.ts frames the view to the window's own aspect, clamped to the world's extent). Cropping, never stretching: the SVG scales uniformly, so
@@ -443,7 +443,7 @@ export const ONLINE_CSS = `
 .world-grid {
   position: relative;
   flex: 1 1 0; min-height: 0;
-  width: min(100%, 1100px, calc((100dvh - 210px) * 359.11 / 341));
+  width: min(100%, 1100px, calc((100dvh - 210px) * 367.77 / 356));
   max-height: 100%; margin: 0 auto;
   display: grid; place-items: center; overflow: hidden;
   /* A gesture that runs out of map can never chain to the page behind it, and touch-action: none
