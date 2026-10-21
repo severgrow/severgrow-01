@@ -225,6 +225,8 @@ button {
   place-items: center;
   font-size: 1.3rem;
   cursor: pointer;
+  /* A tap is a tap: no double-tap zoom armed on the menu key, no 300 ms wait on a phone. */
+  touch-action: manipulation;
 }
 .icon-only.small {
   width: 36px;
@@ -2439,6 +2441,8 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   background: transparent;
   cursor: pointer;
   font-size: 0.85rem;
+  /* The settings choices are tapped one after another: never arm double-tap zoom here. */
+  touch-action: manipulation;
 }
 .seg-btn.on {
   background: var(--c-text);

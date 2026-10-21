@@ -853,10 +853,32 @@ function syncTutorialChrome() {
   syncTutorialMenuExit();
 }
 
+/** The control that opened the current sheet, so closing it gives the keyboard back. */
+let sheetOpener: HTMLElement | null = null;
+
+/** Closing (Escape, scrim, Close) returns focus to the control that opened the sheet. */
+function restoreSheetFocus() {
+  const target = sheetOpener;
+  sheetOpener = null;
+  // A sheet chained on top, or the lesson glass, owns focus now. Only a sheet that is actually
+  // painted counts: the install prompt keeps a `.sheet` inside itself while it is hidden.
+  const chained = [...document.querySelectorAll<HTMLElement>('.sheet')].some((el) => !el.hidden && !!el.getClientRects().length);
+  if (chained || glassSurface?.isOpen()) return;
+  // The opener may have gone with the screen it lived on (a campaign sheet, a new game): then
+  // there is nothing honest to focus and the page keeps whatever focus it has.
+  if (target?.isConnected && target.getClientRects().length) target.focus();
+}
+
 function sheet(id: string | null) {
   if (id && glassSurface?.isOpen()) {
     glassSurface.hide();
     $('futa04-help-button').setAttribute('aria-expanded','false');
+  }
+  // Remember the opener once per chain: opening Settings from the pause menu must still give the
+  // keyboard back to the control that opened the pause menu, not to a button the sheet replaced.
+  const wasOpen = !!openSheet;
+  if (id && !wasOpen && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+    sheetOpener = document.activeElement;
   }
   if (openSheet) openSheet.hidden = true;
   openSheet = id ? $(id) : null;
@@ -889,6 +911,7 @@ function sheet(id: string | null) {
       render();
     }
   }
+  if (!openSheet && wasOpen) restoreSheetFocus();
 }
 
 /** Legacy channels (no glass surface) still show the reference in the old sheet. */
@@ -4398,6 +4421,13 @@ function lessonDecide(e: Event): boolean {
 function lessonCapture(e: Event) {
   if (!lessonActive()) return;
   if (lessonStageActive()) {
+    // A tap skips the intro. The pause menu is the one control that must ALSO act on that tap:
+    // the tutorial gate keeps it reachable for exactly this reason (leaving a level), and eating
+    // the press made it cost two taps. The stage still skips, then the button's own click runs.
+    if (e.type === 'pointerdown' && (e.target as Element | null)?.closest?.('#hud-menu')) {
+      skipLessonStage();
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
