@@ -1,0 +1,82 @@
+Level,When it appears,Where it appears,Text,Source key
+Level 1,Introduction,Info box,This is your home. Place cards on the board so they connect to it.,yourHomeLine
+Level 1,Introduction,Info box,"To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the Draw pile runs out.",theirHomeLine
+Level 1,Introduction,Info box,You start every turn by drawing 1 card from the Draw pile or the Throw pile.,tapDrawLine
+Level 1,First grow,Info box,"Grow: drag one of your cards from your hand onto the board, or tap it to select and then place on the board.",growLine
+Level 1,First throw,Info box,"Throw: swipe up, drag it to the Throw pile, or double tap to throw a card and finish your turn.",throwLine
+Level 1,Right after you grow,Info box,Tiles keep the rank of the card used.,youGrewLine
+Level 1,Draw pile down to 3,Display,LAST CARDS,lastCards
+Level 1,Draw pile empty,Info box,"The Draw pile is empty: each tile is now 1 point, and the numbers on tiles don’t count.",lastTurnLine
+Level 1,Draw pile empty,Display,LAST TURN,lastTurn
+Level 1,Their first turn,Info box,"They draw, grow and throw too.",theirTurnLine
+Level 1,Win card,Finish card,You had more points – you won!,wonOnPoints
+Level 1,Win card,"Finish card (""you learned"")","DRAW, GROW, THROW","DRAW, GROW, THROW"
+Level 2,Before you strengthen,Info box,Bigger number wins: a stronger card can replace your own tile.,biggerWinsLine
+Level 2,Before you take their tile,Info box,Cut through: a stronger card can take an opponent’s tile next to yours.,takeTileLine
+Level 2,Win card,Finish card,You had more points – you won!,wonOnPoints
+Level 2,Win card,"Finish card (""you learned"")",STRONGER TILES WIN,STRONGER TILES WIN
+Level 3,Introduction: rock,Info box,Nothing can Grow on a rock.,rocksBlockLine
+Level 3,Introduction: gold,Info box,"A gold tile counts double, so it is worth two points.",goldDoubleLine
+Level 3,Win card,Finish card,Gold put you ahead.,goldDecided
+Level 3,Win card,"Finish card (""you learned"")",GOLD COUNTS DOUBLE,GOLD COUNTS DOUBLE
+Level 4,Before you cut,Info box,Cut their link: take that tile and the tiles behind it wither.,cutLinkLine
+Level 4,After a tile withers,Info box,Tiles cut off from their home wither and stop scoring.,witheredLine
+Level 4,Win card,Finish card,You had more points – you won!,wonOnPoints
+Level 4,Win card,"Finish card (""you learned"")",CUT THEIR ROOT,CUT THEIR ROOT
+Level 5,Introduction: Bloom cards,Info box,"Bloom: three cards with the same number, or three in order in one suit.",cardsThatBloomLine
+Level 5,After your Bloom,Info box,A Bloom is an extra move: it grows several tiles at once.,bloomedLine
+Level 5,Win card,Finish card,You had more points – you won!,wonOnPoints
+Level 5,Win card,"Finish card (""you learned"")",BLOOM THREE AT ONCE,BLOOM THREE AT ONCE
+Level 6,Introduction: surround,Info box,Surround: fill every side of their home for an instant win.,surroundLine
+Level 6,Win card,Finish card,You surrounded their home.,wonByKo
+Level 6,Win card,"Finish card (""you learned"")",SURROUND THEIR HOME,SURROUND THEIR HOME
+Level 7,Introduction: Bomb,Info box,Bomb: it removes one enemy tile and replaces your Grow that turn.,bombLine
+Level 7,Win card,Finish card,You had more points – you won!,wonOnPoints
+Level 7,Win card,"Finish card (""you learned"")",BOMB ONE TILE,BOMB ONE TILE
+Level 8,Introduction: Blast,Info box,Blast: two Bombs clear a large area. Homes are safe.,blastLine
+Level 8,Free grow after a Blast,Info box,A Blast is an extra move: you can still Grow afterwards.,freeGrowLine
+Level 8,Win card,Finish card,You had more points – you won!,wonOnPoints
+Level 8,Win card,"Finish card (""you learned"")",BLAST A HOLE,BLAST A HOLE
+Level 9,Introduction: gold Throw pile,Info box,The Throw pile glows gold when its top card completes a Bloom in your hand.,pileGoldLine
+Level 9,After a pile Bloom: skipping,Info box,Bloom and Grow are never forced. Tap » to keep your cards for later.,optionalLine
+Level 9,Win card,Finish card,You had more points – you won!,wonOnPoints
+Level 9,Win card,"Finish card (""you learned"")",BLOOM FROM THE THROW PILE,BLOOM FROM THE THROW PILE
+Level 10,Win card,Finish card,YOU CAN PLAY FUTASAKU,canPlay
+Level 10,Win card,Finish card,Next: the big board.,canPlayLine
+Level 10,Win card,"Finish card (""you learned"")",THE WHOLE GAME,THE WHOLE GAME
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP DRAW PILE,tapDraw
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP THROW PILE,tapThrowPile
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),CHOOSE A CARD,chooseCard
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP LIT TILE,tapTile
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP LIT TILES,tapTiles
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),THROW A CARD,throwCard
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP »,tapThrow
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP BLOOM,tapBloom
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP BLOOM,tapBlast
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),CHOOSE THE BOMB,chooseBomb
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),BOMB THEIR TILE,bombTile
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP THEIR TILE,tapTheirTile
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP LAST SIDE,tapLastSide
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP TO BLOOM,bloomHello
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),TAP THE BOMB,bombHello
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),THEIR TURN,theirTurn
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),LAST CARDS,lastCards
+Levels 1-10 (any step),Shown while guiding you,Display (the LED),LAST TURN,lastTurn
+Levels 1-10 (any step),After a wrong tap,Display (the LED),DRAW FIRST,drawFirst
+Levels 1-10 (any step),After a wrong tap,Display (the LED),NOT YET,notYet
+Levels 1-10 (any step),After a wrong tap,Display (the LED),TAP THE LIT ONE,tapLit
+Levels 1-10 (any step),After a wrong tap,Display (the LED),CONNECT TO YOUR HOME,connect
+Levels 1-10 (any step),After a wrong tap,Display (the LED),ROCK BLOCKS THIS,rockBlocks
+Levels 1-10 (any step),After a wrong tap,Display (the LED),THAT IS THEIR HOME,isTheirHome
+Levels 1-10 (any step),After a wrong tap,Display (the LED),THAT IS YOUR HOME,isYourHome
+Levels 1-10 (any step),After a wrong tap,Display (the LED),YOUR TILE NEEDS A HIGHER CARD,ownTile
+Levels 1-10 (any step),After a wrong tap,Display (the LED),MUST TOUCH YOUR TILES,mustTouch
+Levels 1-10 (any step),After a wrong tap,Display (the LED),HOMES ARE SAFE,homesSafe
+Levels 1-10 (any step),After a wrong tap,Display (the LED),PICK A CARD FIRST,pickFirst
+Levels 1-10 (any step),After a wrong tap,Display (the LED),ONE CARD PER TURN,oneDraw
+Levels 1-10 (any step),After a wrong tap,Display (the LED),THREE CARDS OR MORE,bloomNeeds
+Levels 1-10 (any step),After a wrong tap,Display (the LED),"SAME NUMBER, OR COUNTING UP",bloomMatch
+Levels 1-10 (any step),After a wrong tap,Display (the LED),THEIR TURN,theirTurnNow
+Levels 1-10 (any step),On the win card / a stuck lesson,Other,This lesson cannot finish now. Open the menu to start again.,restartLine
+Levels 1-10 (any step),On the win card / a stuck lesson,Other,YOU LEARNED,learned
+Levels 1-10 (any step),On the win card / a stuck lesson,Other,YOU WIN,youWin
