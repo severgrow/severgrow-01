@@ -378,13 +378,18 @@ export class DisplayMachine {
   }
   private scheduleIdle(delay = 2500) {
     window.clearTimeout(this.idleTimer);
-    if (this.active || this.held || this.urgency || this.quiet) return;
+    if (this.active || this.held || this.urgency) return;
+    // A LESSON is quiet by design (the window carries the words), but the sign must still come back
+    // to life when the player goes idle — otherwise it sits dark for the whole level, which reads as
+    // broken (owner, 2026-10-21). So `quiet` no longer suppresses the idle prompt; it only changes
+    // which word is re-prompted and how long a message holds.
     if (this.instruction === 'WAIT' || this.instruction === 'OPPONENT TURN' || this.instruction === 'FUTASAKU') return;
     this.idleTimer = window.setTimeout(() => {
       if (this.active || this.held || this.urgency) return;
       this.idleCycles++;
-      // Re-prompt the step word only — no idle motif chatter.
-      const word = this.instruction;
+      // Re-prompt the step word only — no idle motif chatter. In a lesson the instruction is an
+      // action line ("TAP DRAW PILE"), so it is reduced to its step word first.
+      const word = this.idleWord(this.instruction);
       if (!STEP_WORDS.has(word)) {
         // Blank beat — never touch sticky urgency (already guarded above).
         this.emit({ text: '', mode: 'score' });
@@ -401,6 +406,20 @@ export class DisplayMachine {
       this.clearDwellQueue();
       this.emit({ text: soft ? word.slice(0, -1) : word, mode: 'amber', pulse: true, alarm: true, compact: true });
     }, delay);
+  }
+  /**
+   * A lesson went quiet, and the step word is only a phase name (DRAW / GROW / THROW). The idle
+   * prompt above needs a step word to re-light, so a quiet sign gets one derived from the phase —
+   * that is what makes the display come back to life instead of staying dark.
+   */
+  idleWord(word: string): string {
+    if (STEP_WORDS.has(word)) return word;
+    if (!this.quiet) return word;
+    if (word === 'TAP DRAW PILE' || word === 'DRAW') return 'DRAW';
+    if (word.startsWith('TAP LIT') || word.startsWith('PICK') || word.startsWith('CHOOSE') || word.startsWith('TAP THEIR')) return 'GROW';
+    if (word.startsWith('THROW') || word.startsWith('TAP THROW')) return 'THROW';
+    if (word.startsWith('TAP BLOOM') || word.startsWith('TAP »')) return 'GROW';
+    return word;
   }
   interact() {
     window.clearTimeout(this.idleTimer);

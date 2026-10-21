@@ -41,12 +41,12 @@ export const LIGHT_ANGLE = 22;
    .46->.299, .42->.273); the colour, the angle and the falloff shape are untouched, and the
    photosensitivity ceiling (`LIGHT_CAPS.bloomPeak`) is unchanged. */
 export const LIGHT_TONES: Record<LightTone, LightSpec> = {
-  amber: { core: '#f5d8a4', bloom: 'rgba(255,195,104,.30)', angle: LIGHT_ANGLE, peak: .286 },
-  red: { core: '#e4705e', bloom: 'rgba(234,68,48,.32)', angle: LIGHT_ANGLE, peak: .299 },
-  green: { core: '#a9d886', bloom: 'rgba(143,210,111,.28)', angle: LIGHT_ANGLE, peak: .286 },
-  ivory: { core: '#f5ead1', bloom: 'rgba(255,233,182,.26)', angle: LIGHT_ANGLE, peak: .273 },
-  pink: { core: '#edabc0', bloom: 'rgba(237,150,178,.26)', angle: LIGHT_ANGLE, peak: .273 },
-  cyan: { core: '#a7d3d0', bloom: 'rgba(132,209,206,.24)', angle: LIGHT_ANGLE, peak: .273 },
+  amber: { core: '#f5d8a4', bloom: 'rgba(255,195,104,.30)', angle: LIGHT_ANGLE, peak: .243 },
+  red: { core: '#e4705e', bloom: 'rgba(234,68,48,.32)', angle: LIGHT_ANGLE, peak: .254 },
+  green: { core: '#a9d886', bloom: 'rgba(143,210,111,.28)', angle: LIGHT_ANGLE, peak: .243 },
+  ivory: { core: '#f5ead1', bloom: 'rgba(255,233,182,.26)', angle: LIGHT_ANGLE, peak: .232 },
+  pink: { core: '#edabc0', bloom: 'rgba(237,150,178,.26)', angle: LIGHT_ANGLE, peak: .232 },
+  cyan: { core: '#a7d3d0', bloom: 'rgba(132,209,206,.24)', angle: LIGHT_ANGLE, peak: .232 },
 };
 
 /**
@@ -68,12 +68,18 @@ export const LIGHT_CAPS = {
   reach: 52,
   /**
    * The light reaches this much further BELOW a lit dot than above it (owner, 2026-10-20:
-   * "stretch it out a tiny bit more downwards - on to the undo and match intel buttons"). The
-   * reach above is unchanged, so the bloom keeps its shape and its soft rim; only the lower tail
-   * is stretched, by a quarter, so it can catch the keys under the display. Not a wash: the
-   * falloff is the same curve, just 25% longer on the way down.
+   * "stretch it out a tiny bit more downwards - on to the undo and match intel buttons", then
+   * again 2026-10-21: "tilt it even more downwards, less above the screen more on the buttons
+   * below"). 1.25 was not enough, so the lower tail is now nearly twice the upper one: the bloom
+   * plainly leans onto the keys beneath the display instead of haloing evenly.
    */
-  reachDown: 1.25,
+  reachDown: 1.9,
+  /**
+   * How much of the reach is kept ABOVE the dots (owner, 2026-10-21: "less above the screen"). The
+   * upper side is trimmed, not removed, so the glow still starts at the glyphs rather than under
+   * them.
+   */
+  reachUp: 0.8,
 } as const;
 
 /** The LED glyph inks. One map for the painter and the light, so they cannot drift. */

@@ -66,6 +66,13 @@ export type LedTone = 'amber' | 'red' | 'green' | 'ivory' | 'pink' | 'cyan' | 's
 export const SCORE_INK: LightTone = 'ivory';
 /** The separator keeps the warm amber punctuation it always had; it is not a player's colour. */
 export const SCORE_SEPARATOR_INK: LightTone = 'amber';
+/**
+ * The two players' own inks (owner, 2026-10-21): the digits go back to green for you and red for the
+ * opponent, as they read before the interim neutral pass. Position still says whose is whose, so the
+ * colour reinforces rather than carries the meaning alone.
+ */
+export const SCORE_INK_YOU: LightTone = 'green';
+export const SCORE_INK_OPP: LightTone = 'red';
 export type LedMotif = 'stars' | 'heart' | 'shock' | 'scatter' | 'eyes';
 export const ledMotifFrames = (motif: LedMotif): readonly string[] => ({
   stars:['• ✦ •','✦ • ✦','• ✦ •','✦ ✦','• ✦ •'],
@@ -174,6 +181,8 @@ export function ledLayout(message: string, repeat = false, mode: LedTone = 'ambe
   const shown = repeat ? `${message}${SEPARATOR}${message}${SEPARATOR}${message}` : message;
   const width = Math.max(1, shown.length * advance - s);
   const colon = mode === 'score' ? shown.indexOf(':') : -1;
+  // In the score face the digits before the colon are YOUR score and the digits after are the
+  // opponent's, so each side takes its own ink (green / red) while the colon stays amber.
   const dots: LedDot[] = [];
   for (let i = 0; i < shown.length; i++) {
     const rows = GLYPHS[shown[i]!] ?? (shown[i] === ' ' ? '' : GLYPHS['?']!);
@@ -181,7 +190,9 @@ export function ledLayout(message: string, repeat = false, mode: LedTone = 'ambe
     const glyph = rows.split('/');
     for (let y = 0; y < 7; y++) for (let x = 0; x < 5; x++) {
       if (glyph[y]?.[x] !== '1') continue;
-      const tone: LightTone = mode === 'score' ? (i === colon ? SCORE_SEPARATOR_INK : SCORE_INK) : mode;
+      const tone: LightTone = mode === 'score'
+        ? (i === colon ? SCORE_SEPARATOR_INK : i < colon ? SCORE_INK_YOU : SCORE_INK_OPP)
+        : mode;
       dots.push({
         x: i * advance + x * dotX + 1.1 * s,
         y: y * rowStep + originY,
@@ -238,21 +249,22 @@ const BLOOM_RES = .5;
 /** The soft stamp is an ellipse leaning along the tone's angle. */
 const STAMP_STRETCH = 1.45;
 const STAMP_FLATTEN = .9;
-/* The falloff is a little longer below the dots than above (LIGHT_CAPS.reachDown): the top edge
-   of the stamp stays exactly where it was, and only the lower tail is stretched, so the light
-   reaches the undo / Match Intel keys under the display without brightening the bezel above and
-   without moving the brightest point off the lit dots. */
+/* The falloff leans DOWN: the lower tail is stretched to reachDown and the upper side is trimmed
+   to reachUp, so the light pools onto the keys under the display instead of haloing evenly. The
+   shift keeps the stamp centred on the new, asymmetric extent, and the brightest point stays on
+   the lit dots because the short upper side is still drawn through them. */
 const DOWN_EXTRA = LIGHT_CAPS.reachDown - 1;
-const STAMP_DOWN_SCALE = 1 + DOWN_EXTRA / 2;
-const STAMP_DOWN_SHIFT = LIGHT_CAPS.reach * STAMP_FLATTEN * (DOWN_EXTRA / 2);
+const UP_TRIM = 1 - LIGHT_CAPS.reachUp;
+const STAMP_DOWN_SCALE = 1 + (DOWN_EXTRA - UP_TRIM) / 2;
+const STAMP_DOWN_SHIFT = LIGHT_CAPS.reach * STAMP_FLATTEN * ((DOWN_EXTRA + UP_TRIM) / 2);
 /** The stamp's reach above and below a lit dot, in CSS px (equal horizontally by construction). */
-export const BLOOM_REACH_UP = LIGHT_CAPS.reach * STAMP_FLATTEN;
-export const BLOOM_REACH_DOWN = BLOOM_REACH_UP * LIGHT_CAPS.reachDown;
-/** CSS px of empty paper kept around the dot strip inside the sprite. It must cover the widest
- *  part of the stretched stamp — the horizontal stretch; even the longer lower vertical tail
- *  (BLOOM_REACH_DOWN) is shorter than it — or the sprite would clip the falloff into a rectangle. */
+export const BLOOM_REACH_UP = LIGHT_CAPS.reach * STAMP_FLATTEN * LIGHT_CAPS.reachUp;
+export const BLOOM_REACH_DOWN = LIGHT_CAPS.reach * STAMP_FLATTEN * LIGHT_CAPS.reachDown;
+/** CSS px of empty paper kept around the dot strip inside the sprite. It must cover the LONGEST
+ *  reach in any direction or the sprite would clip the falloff into a rectangle — and since the
+ *  lower tail is now the longest, the pad follows it rather than the horizontal stretch. */
 export const BLOOM_REACH = LIGHT_CAPS.reach * STAMP_STRETCH;
-export const BLOOM_PAD = Math.ceil(BLOOM_REACH) + 2;
+export const BLOOM_PAD = Math.ceil(Math.max(BLOOM_REACH, BLOOM_REACH_UP, BLOOM_REACH_DOWN)) + 2;
 /** Alpha at the centre of one dot's stamp. Hundreds of stamps sum with 'lighter', so this is the
  *  slope of the gradient rather than its ceiling: too high and the sum saturates into a flat
  *  plateau (light stops reading as light); too low and it is invisible once the sprite's own cap

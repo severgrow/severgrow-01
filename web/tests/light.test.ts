@@ -11,7 +11,7 @@ import {
 } from '../src/player/light.js';
 import {
   BLOOM_ALPHA_CAP, BLOOM_PAD, BLOOM_REACH, BLOOM_REACH_DOWN, BLOOM_REACH_UP,
-  SCORE_INK, SCORE_SEPARATOR_INK, ledLayout,
+  SCORE_INK_OPP, SCORE_INK_YOU, SCORE_SEPARATOR_INK, ledLayout,
 } from '../src/player/led-cells.js';
 import { SMART_COCKPIT_CSS } from '../src/player/smart-cockpit.js';
 
@@ -46,24 +46,33 @@ describe('the one LIGHT contract', () => {
     for (const tone of TONES) expect(lightTone(tone), tone).toBeDefined();
   });
 
-  it('rests at 65% of the previous strength (owner: intensity down by ~35%)', () => {
-    // The values the brief was measured against. Pinning the ratio (not just a ceiling) is what
-    // stops a later pass from quietly turning the glow back up.
+  it('rests at 65% x 85% of the previous strength (two owner reductions)', () => {
+    // The values the first brief was measured against. Two passes have since dimmed the bloom:
+    // x0.65 (owner, 2026-10-20: "too strong, reduce by around 35%") and x0.85 (owner, 2026-10-21:
+    // "decrease its glow strength by 15%"). Pinning the ratio, not just a ceiling, is what stops a
+    // later pass from quietly turning the glow back up.
     const before: Record<string, number> = { amber: .44, red: .46, green: .44, ivory: .42, pink: .42, cyan: .42 };
     for (const tone of ROOM_TONES) {
-      expect(LIGHT_TONES[tone].peak, `${tone} peak`).toBeCloseTo(before[tone]! * .65, 3);
-      expect(LIGHT_TONES[tone].peak, `${tone} is visibly weaker`).toBeLessThan(before[tone]! * .7);
-      expect(LIGHT_TONES[tone].peak, `${tone} still reads`).toBeGreaterThan(.25);
+      expect(LIGHT_TONES[tone].peak, `${tone} peak`).toBeCloseTo(before[tone]! * .65 * .85, 3);
+      expect(LIGHT_TONES[tone].peak, `${tone} is visibly weaker`).toBeLessThan(before[tone]! * .6);
+      // Still a visible halo, not a ghost: above the 15% floor of the original.
+      expect(LIGHT_TONES[tone].peak, `${tone} still reads`).toBeGreaterThan(.22);
+      expect(LIGHT_TONES[tone].peak, `${tone} stays under the photosensitivity cap`).toBeLessThanOrEqual(LIGHT_CAPS.bloomPeak);
     }
   });
 
-  it('reaches a little further below than above, without moving the top of the light', () => {
-    expect(LIGHT_CAPS.reachDown).toBeGreaterThan(1);
-    expect(LIGHT_CAPS.reachDown).toBeLessThanOrEqual(1.35);
-    expect(BLOOM_REACH_DOWN).toBeGreaterThan(BLOOM_REACH_UP);
-    expect(BLOOM_REACH_DOWN / BLOOM_REACH_UP).toBeCloseTo(LIGHT_CAPS.reachDown, 6);
-    // The longer tail still ends inside the sprite's empty margin, or it would be cut square.
+  it('leans DOWN hard: less light above the dots, more onto the keys below', () => {
+    // Owner (2026-10-21): "tilt it even more downwards, less above the screen more on the buttons
+    // below". The lower tail is nearly twice the upper one, and the upper side is trimmed.
+    expect(LIGHT_CAPS.reachDown).toBeGreaterThanOrEqual(1.8);
+    expect(LIGHT_CAPS.reachDown).toBeLessThanOrEqual(2.1);
+    expect(LIGHT_CAPS.reachUp).toBeLessThan(1);
+    expect(LIGHT_CAPS.reachUp).toBeGreaterThan(.7);
+    expect(BLOOM_REACH_DOWN).toBeGreaterThan(BLOOM_REACH_UP * 2);
+    expect(BLOOM_REACH_UP).toBeLessThan(LIGHT_CAPS.reach * .9);
+    // Both tails still end inside the sprite's empty margin, or they would be cut square.
     expect(BLOOM_REACH_DOWN).toBeLessThan(BLOOM_PAD);
+    expect(BLOOM_REACH_UP).toBeLessThan(BLOOM_PAD);
   });
 
   it('keeps the caps the owner set: flash, white, alarm and bloom', () => {
@@ -157,30 +166,30 @@ describe('the baked bloom geometry', () => {
     expect(red.dots.every(dot => dot.tone === 'red')).toBe(true);
   });
 
-  it('the score digits are ONE neutral cream: no green, no red, no team coding', () => {
+  it('the score digits are green for you and red for them, split at the separator', () => {
     const score = ledLayout('27:12', false, 'score', 1);
-    // Owner, 2026-10-20: green for you and red for them read as good/bad on the points.
-    expect(score.dots.some(dot => dot.tone === 'green')).toBe(false);
-    expect(score.dots.some(dot => dot.tone === 'red')).toBe(false);
-    const digits = score.dots.filter(dot => dot.tone === SCORE_INK);
-    expect(digits.length).toBeGreaterThan(20);
-    // Both sides of the separator use that same cream. Only the punctuation may differ.
-    const left = ledLayout('7', false, 'score', 1).dots.map(dot => dot.tone);
-    const right = ledLayout('7', false, 'score', 1).dots.map(dot => dot.tone);
-    expect(new Set(left)).toEqual(new Set([SCORE_INK]));
-    expect(new Set(right)).toEqual(new Set([SCORE_INK]));
-    // The one score layout with a separator: the ':' alone is the warm punctuation.
+    // Owner (2026-10-21): the two players keep their own inks, as they read before the interim
+    // neutral pass. Position still says whose is whose.
+    expect(SCORE_INK_YOU).toBe('green');
+    expect(SCORE_INK_OPP).toBe('red');
+    const mine = ledLayout('7:', false, 'score', 1).dots;
+    const theirs = ledLayout('7:1', false, 'score', 1).dots;
+    expect(mine.some(dot => dot.tone === 'green'), 'your digits are green').toBe(true);
+    expect(theirs.some(dot => dot.tone === 'red'), 'their digits are red').toBe(true);
+    // Exactly three inks on the score face: mine, the punctuation, theirs.
     const tones = new Set(score.dots.map(dot => dot.tone));
-    expect([...tones].sort()).toEqual([SCORE_INK, SCORE_SEPARATOR_INK].sort());
+    expect([...tones].sort()).toEqual([SCORE_INK_YOU, SCORE_SEPARATOR_INK, SCORE_INK_OPP].sort());
     expect(SCORE_SEPARATOR_INK).not.toBe('red');
     expect(SCORE_SEPARATOR_INK).not.toBe('green');
-    // Still the brightest quiet ink: the score must not be dimmed into the background.
+    // Both players' digits stay legible against the dark window.
     const luma = (hex: string) => {
       const n = Number.parseInt(hex.slice(1), 16);
       const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => v / 255);
       return .2126 * r! + .7152 * g! + .0722 * b!;
     };
-    for (const other of ROOM_TONES) expect(luma(LIGHT_TONES[SCORE_INK].core)).toBeGreaterThanOrEqual(luma(LIGHT_TONES[other].core));
+    for (const tone of [SCORE_INK_YOU, SCORE_INK_OPP] as const) {
+      expect(luma(LIGHT_TONES[tone].core), `${tone} reads on the dark window`).toBeGreaterThan(.25);
+    }
     // `score` still borrows amber as the ROOM tone (the bloom), which is warm and neutral too.
     expect(toneFor('score')).toBe('amber');
   });

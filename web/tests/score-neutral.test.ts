@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LIGHT_TONES } from '../src/player/light.js';
-import { SCORE_INK, SCORE_SEPARATOR_INK, ledLayout } from '../src/player/led-cells.js';
+import { SCORE_INK_OPP, SCORE_INK_YOU, SCORE_SEPARATOR_INK, ledLayout } from '../src/player/led-cells.js';
 
 const style = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
 const cssRule = (css: string, selector: string): string => {
@@ -14,15 +14,19 @@ const cssRule = (css: string, selector: string): string => {
 };
 
 describe('the score read-out is not colour-coded', () => {
-  it('both players’ LED digits are the one ivory, in the same run of dots', () => {
-    expect(SCORE_INK).toBe('ivory');
-    const dots = ledLayout('27:12', false, 'score', 1).dots;
-    const owned = dots.filter(dot => dot.tone === 'green' || dot.tone === 'red');
-    expect(owned).toHaveLength(0);
-    // The digits either side of the separator are the same tone: only position says whose is whose.
-    const colon = ledLayout('27:12', false, 'score', 1);
-    expect(colon.dots.every(dot => dot.tone === SCORE_INK || dot.tone === SCORE_SEPARATOR_INK)).toBe(true);
-    expect(LIGHT_TONES[SCORE_INK].core).toBe('#f5ead1');
+  it('each player’s LED digits take their own ink, split at the separator', () => {
+    // Owner (2026-10-21) reversed the interim neutral pass: you are green, they are red. The split
+    // is by POSITION (left of the colon vs right), so a colour-blind player still reads it.
+    expect(SCORE_INK_YOU).toBe('green');
+    expect(SCORE_INK_OPP).toBe('red');
+    const layout = ledLayout('27:12', false, 'score', 1);
+    const colon = 2; // the third glyph in "27:12"
+    expect(LIGHT_TONES[SCORE_INK_YOU].core).toBe('#a9d886');
+    expect(LIGHT_TONES[SCORE_INK_OPP].core).toBe('#e4705e');
+    // Only three inks may appear: my digits, the punctuation, their digits.
+    const allowed = new Set([SCORE_INK_YOU, SCORE_SEPARATOR_INK, SCORE_INK_OPP]);
+    expect(layout.dots.every(dot => allowed.has(dot.tone))).toBe(true);
+    expect(colon).toBeGreaterThan(0);
   });
 
   it('the header score numbers are the page’s text cream, not --c-you / --c-bot', () => {

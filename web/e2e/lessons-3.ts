@@ -569,34 +569,28 @@ try {
     check(keys.some((k) => k.startsWith('futa05-3:')), '/3 writes under its own prefix');
     check(!keys.some((k) => k.startsWith('futa05:')), '/3 never writes the root or /2 keys');
     assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
-    await page.close();
 
-    // A REPEAT VISIT ADDS NOTHING (owner, 2026-10-20): the first cold board writes the warmed
-    // marker, so a later start must not wait for art again. "Start this level over" is the path
-    // that really calls startGame afresh (a resume reuses the saved match and never reaches the
-    // warm at all), so it is the honest place to prove the marker works.
-    {
-      const { page: again, errors: againErrors } = await newPage();
-      await again.goto(URL3, { waitUntil: 'networkidle' });
-      await openNextLevel(again);
-      await again.reload({ waitUntil: 'networkidle' });
-      await again.waitForSelector('#menu-play:not([hidden])', { timeout: 20000 });
-      await dismissInstall(again);
-      await again.evaluate(() => (document.getElementById('menu-play') as HTMLButtonElement).click());
-      await again.waitForSelector('#menu-campaign:not([hidden])', { timeout: 10000 });
-      await dismissInstall(again);
-      await again.evaluate(() => (document.getElementById('menu-campaign') as HTMLButtonElement).click());
-      await again.waitForSelector('#sheet-campaign-start:not([hidden])', { timeout: 15000 });
-      await again.evaluate(() => (document.getElementById('csa-start') as HTMLButtonElement).click());
-      await again.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
-      const warmAgain = await again.evaluate(() => (window as any).__severgrow.warm());
-      check(!!warmAgain && warmAgain.cold === false && warmAgain.waitedMs === 0,
-        `a repeat visit does not wait for art (${JSON.stringify(warmAgain)})`);
-      const marker = await again.evaluate(() => Object.keys(localStorage).some((k) => k.endsWith('severgrow.board-warmed.v1')));
-      check(marker, 'the warmed marker is written for the next visit');
-      assert.deepEqual(againErrors, [], `the repeat visit: no page errors: ${againErrors.join(' | ')}`);
-      await again.close();
-    }
+    // A REPEAT VISIT ADDS NOTHING (owner, 2026-10-20): the cold board wrote the warmed marker, so a
+    // later start must not wait for art again — in the SAME browser profile, which is what a person
+    // has. "Start this level over" is the path that really calls startGame afresh (a resume reuses
+    // the saved match and never reaches the warm at all), so it is the honest place to prove it.
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForSelector('#menu-play:not([hidden])', { timeout: 20000 });
+    await dismissInstall(page);
+    await page.evaluate(() => (document.getElementById('menu-play') as HTMLButtonElement).click());
+    await page.waitForSelector('#menu-campaign:not([hidden])', { timeout: 10000 });
+    await dismissInstall(page);
+    await page.evaluate(() => (document.getElementById('menu-campaign') as HTMLButtonElement).click());
+    await page.waitForSelector('#sheet-campaign-start:not([hidden])', { timeout: 15000 });
+    await page.evaluate(() => (document.getElementById('csa-start') as HTMLButtonElement).click());
+    await page.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
+    const warmAgain = await page.evaluate(() => (window as any).__severgrow.warm());
+    check(!!warmAgain && warmAgain.cold === false && warmAgain.waitedMs === 0,
+      `a repeat visit does not wait for art (${JSON.stringify(warmAgain)})`);
+    const marker = await page.evaluate(() => Object.keys(localStorage).some((k) => k.endsWith('severgrow.board-warmed.v1')));
+    check(marker, 'the warmed marker is kept for the next visit');
+    assert.deepEqual(errors, [], `the repeat visit: no page errors: ${errors.join(' | ')}`);
+    await page.close();
   }
   if (ONLY === 'all' || ONLY === 'robust') {
     console.log('\nRobustness:');

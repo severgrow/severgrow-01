@@ -250,22 +250,31 @@ try {
   // Origin: the brightest bloom pixel is ON a lit dot (nearest dot pixel, in sprite space).
   check(metrics.nearest <= 4, `the bloom originates at the lit dots (${metrics.nearest.toFixed(1)} px from the nearest dot)`);
   check(metrics.reach >= 24, `the bloom fades softly for ${metrics.reach} px along the ${metrics.angle}° angle`);
-  check(metrics.sideReach >= 24, `the falloff is soft on every side too (shortest ${metrics.sideReach} px)`);
+  // The bloom leans DOWN by design (owner, 2026-10-21: "less above the screen more on the buttons
+  // below"), so the shortest side is the upper one. Sides must still fade softly rather than stop,
+  // and the downward side must clearly beat the upward one.
+  check(metrics.sideReach >= 14, `the falloff is soft on every side (shortest ${metrics.sideReach} px)`);
+  check(metrics.downReach > metrics.upReach * 1.6, `the light leans down (${metrics.downReach} px below vs ${metrics.upReach} px above)`);
   check(metrics.worstStep <= 14 && metrics.sideWorst <= 14, `no hard edge in the falloff (worst 1 px step ${Math.max(metrics.worstStep, metrics.sideWorst)}/255)`);
   check(metrics.edgeMax === 0, `every sprite edge is empty, so nothing is cut into a rectangle (edge alpha ${metrics.edgeMax})`);
   check(metrics.within10 <= 6, `the outer ring carries no clipped light (max ${metrics.within10}/255 in the last 10 px)`);
   check(metrics.filter === 'none' && metrics.windowFilter === 'none', 'the bloom and the LED window carry no live filter');
   check(metrics.spill === null, 'the old masked gradient spill is gone');
   // Owner, 2026-10-20: intensity down by ~35% (the old amber rest was .44; x .65 = .286).
-  check(Math.abs(metrics.opacity - .286) <= .006, `the bloom rests at 65% of its old strength (${metrics.opacity}, was .44)`);
-  check(metrics.opacity < .32, `the bloom no longer rests at the old strength (${metrics.opacity})`);
+  // Owner, 2026-10-21: another 15% down, so the amber rest is .243.
+  check(Math.abs(metrics.opacity - .243) <= .006, `the bloom rests at 65% x 85% of its old strength (${metrics.opacity}, was .44)`);
+  check(metrics.opacity < .26, `the bloom no longer rests at the old strength (${metrics.opacity})`);
+  check(metrics.opacity > .18, `the bloom is still a visible halo (${metrics.opacity})`);
   // The tail is longer BELOW the dots: the light catches the keys under the display.
   check(metrics.atDown > metrics.atUp,
     `at equal distance the light is stronger below the dots than above (${metrics.atDown} below vs ${metrics.atUp} above)`);
-  check(metrics.downReach > metrics.upReach,
-    `the reach below is longer than above (${metrics.downReach} vs ${metrics.upReach} px in the sprite)`);
-  check(metrics.downReach <= metrics.upReach * 1.6 + 2,
-    `the downward stretch is a tail, not a wash (${metrics.downReach} vs ${metrics.upReach} px)`);
+  check(metrics.downReach > metrics.upReach * 1.6,
+    `the reach below is much longer than above (${metrics.downReach} vs ${metrics.upReach} px in the sprite)`);
+  // The old 2.5x-ish ceiling belonged to the gentle 1.25 tail; the owner asked for a much steeper
+  // lean, so the bound follows the published ratio. The real "not a wash" guard is the spill check
+  // below (nothing meaningful beyond ~30 px) and the peak/intensity checks above.
+  check(metrics.downReach <= metrics.upReach * 2.6,
+    `the downward stretch stays a tail, not a wash (${metrics.downReach} vs ${metrics.upReach} px)`);
 
   // No screen wash: the four corners must not change when the bloom is switched off.
   const corners: Sample[] = [
@@ -349,10 +358,10 @@ try {
   }));
   check(published.core === '#f5d8a4' && published.bloom.length > 0 && published.angle === '22deg', `the root publishes one LIGHT contract (${JSON.stringify(published)})`);
 
-  /* 1a. THE SCORE'S DIGITS ARE NEUTRAL (owner, 2026-10-20).
-     The resting face reads "12:8". It used to paint your digits green and theirs red, which made
-     the points read as good/bad (or as two colour-coded teams). Both sides now use ONE cream. */
-  const IVORY = '245,234,209'; // #f5ead1, the palette's ivory
+  /* 1a. THE SCORE'S DIGITS CARRY THE TWO PLAYERS' COLOURS (owner, 2026-10-21).
+     The resting face reads "12:8": your digits green, theirs red, the colon the warm punctuation.
+     An interim pass made both sides one cream; the owner asked for the colours back, so position
+     AND hue now both say whose number is whose. */
   const AMBER = '245,216,164'; // #f5d8a4, the separator's warm punctuation
   // (Read by `open()` at the instant the sign came to rest.)
   check(scoreInk.mode === 'score', `the display rests on the score (mode ${scoreInk.mode}, "${scoreInk.text}")`);
@@ -362,21 +371,18 @@ try {
     const [ir, ig, ib] = ink.split(',').map(Number) as [number, number, number];
     return Math.abs(ir - r) <= tol && Math.abs(ig - g) <= tol && Math.abs(ib - b) <= tol;
   };
-  const ivory = (ink: string) => nearInk(ink, 245, 234, 209);
-  const [ir, ig, ib] = IVORY.split(',').map(Number) as [number, number, number];
-  const [ar, ag, ab] = AMBER.split(',').map(Number) as [number, number, number];
-  check(scoreInk.inks.every(ink => nearInk(ink, ir, ig, ib) || nearInk(ink, ar, ag, ab)),
-    `the score uses only the one neutral cream and its warm separator (inks: ${scoreInk.inks.join(' | ')})`);
-  check(scoreInk.inks.some(ivory), `the score digits are the ivory cream (${scoreInk.inks[0]})`);
-  // No red and no green anywhere on the score face — the exact inks the owner objected to
-  // (#a9d886 for you, #e4705e for them), matched loosely so a near-miss cannot slip through.
+  // Owner (2026-10-21): the score goes back to green for you and red for them, split at the
+  // separator. The separator stays the warm punctuation. This is the reverse of the interim
+  // neutral pass, so the assertion is inverted deliberately.
   const nearGreen = (ink: string) => nearInk(ink, 169, 216, 134, 45);
   const nearRed = (ink: string) => nearInk(ink, 228, 112, 94, 45);
-  check(!scoreInk.inks.some(ink => nearGreen(ink) || nearRed(ink)),
-    `no green or red ink on the score (${scoreInk.inks.join(' | ')})`);
-  // Both sides of the separator are the same ivory: whose number is whose is said by position.
-  check(ivory(scoreInk.left) && ivory(scoreInk.right),
-    `both players’ digits are the same ivory (left ${scoreInk.left}, right ${scoreInk.right})`);
+  const [ar, ag, ab] = AMBER.split(',').map(Number) as [number, number, number];
+  check(scoreInk.inks.every(ink => nearGreen(ink) || nearRed(ink) || nearInk(ink, ar, ag, ab)),
+    `the score uses only green, red and the warm separator (inks: ${scoreInk.inks.join(' | ')})`);
+  check(nearGreen(scoreInk.left), `your digits are green (${scoreInk.left})`);
+  check(nearRed(scoreInk.right), `their digits are red (${scoreInk.right})`);
+  check(!nearRed(scoreInk.left) && !nearGreen(scoreInk.right),
+    'the two players never swap inks (position still says whose is whose)');
   await page.screenshot({ path: `${DIR}/390x844-score.png` });
 
   // A marquee's bloom is the same baked strip: same travel and duration as the glyphs.
@@ -411,6 +417,9 @@ try {
     insideMax: number;
     insideAt: { x: number; y: number } | null;
     beyond28: number;
+    /** The same measure split by side: the bloom deliberately pools DOWN onto the keys. */
+    beyond28Up: number;
+    beyond28Down: number;
     outsideBand: number;
     uiLuma: number;
   };
@@ -474,7 +483,7 @@ try {
         return Math.hypot(dx, dy);
       };
       let insideMax = 0; let insideAt: { x: number; y: number } | null = null;
-      let beyond28 = 0; let outsideBand = 0; let uiLuma = 0;
+      let beyond28 = 0; let beyond28Up = 0; let beyond28Down = 0; let outsideBand = 0; let uiLuma = 0;
       for (let y = 0; y < on.h; y++) for (let x = 0; x < on.w; x++) {
         const add = lum(on, x, y) - lum(off, x, y);
         if (add <= 0) continue;
@@ -482,7 +491,11 @@ try {
         if (!inBand) { outsideBand = Math.max(outsideBand, add); continue; }
         if (own(x, y)) continue;
         if (add > insideMax) { insideMax = add; insideAt = { x, y }; }
-        if (away(x, y) > 30) beyond28 = Math.max(beyond28, add);
+        if (away(x, y) > 30) {
+          beyond28 = Math.max(beyond28, add);
+          if (y < ledR.top) beyond28Up = Math.max(beyond28Up, add);
+          else if (y > ledR.bottom) beyond28Down = Math.max(beyond28Down, add);
+        }
       }
       // The illuminated UI next to the display: the brightest pixel of the key row below it. The
       // bloom must stay well under it (it is light spilling on a bezel, not a lamp).
@@ -497,6 +510,7 @@ try {
         sprite: { w: Math.round(sprite.width), h: Math.round(sprite.height), peak },
         scrolling,
         insideMax: Math.round(insideMax), insideAt, beyond28: Math.round(beyond28),
+        beyond28Up: Math.round(beyond28Up), beyond28Down: Math.round(beyond28Down),
         outsideBand: Math.round(outsideBand), uiLuma: Math.round(uiLuma),
       };
     }, { withData: shotWith.toString('base64'), withoutData: shotWithout.toString('base64'), scrolling });
@@ -529,8 +543,13 @@ try {
     check(long.scrolling, `${tag}: the marquee really is scrolling (the state the owner saw)`);
     // (a) The hard bound: nothing at all outside the fixed band, whatever the message is.
     check(long.outsideBand <= 1, `${tag}: no bloom light outside the display's fixed band (max +${long.outsideBand}/255)`);
-    // (b) Inside the band, beyond 30 px from the display, the light is a whisper (< 4% of white).
-    check(long.beyond28 <= 10, `${tag}: beyond 30 px from the display the bloom adds at most +${long.beyond28}/255 (limit 10)`);
+    // (b) Inside the band the light must stay a whisper ABOVE the display, because there is nothing
+    // up there to light. BELOW it the owner deliberately asked for a pool on the undo / Match Intel
+    // keys, so that side gets its own (still small) ceiling. The absolute wash guard is
+    // `outsideBand` above: nothing at all escapes the fixed band, whatever the message is.
+    check(long.beyond28Up <= 10, `${tag}: above the display, beyond 30 px, the bloom adds at most +${long.beyond28Up}/255 (limit 10)`);
+    check(long.beyond28Down <= 45, `${tag}: below the display the pool stays a whisper, not a wash (+${long.beyond28Down}/255, limit 45)`);
+    check(long.insideMax < long.uiLuma, `${tag}: the bloom stays under the lit UI it spills on (${long.insideMax} vs ${long.uiLuma})`);
     // (c) The bloom's brightest spill stays well under the illuminated UI beside it, and is a
     //     halo at the bezel — never a panel wash.
     check(long.insideMax <= 30, `${tag}: the brightest bloom spill beside the glass is +${long.insideMax}/255 (limit 30)`);
@@ -551,7 +570,9 @@ try {
     check(short.clip.w === long.clip.w && short.clip.h === long.clip.h,
       `${tag}: a long marquee does not widen the light (short ${short.clip.w}x${short.clip.h}, long ${long.clip.w}x${long.clip.h})`);
     check(short.sprite.peak === long.sprite.peak, `${tag}: a long marquee does not brighten the light (peak ${short.sprite.peak} vs ${long.sprite.peak})`);
-    check(short.beyond28 <= 10, `${tag}: the short message is just as contained (+${short.beyond28}/255 beyond 30 px)`);
+    // Message LENGTH must not change the light: the same side-split ceilings apply to the short one.
+    check(short.beyond28Up <= 10, `${tag}: the short message is just as contained above (+${short.beyond28Up}/255)`);
+    check(short.beyond28Down <= 45, `${tag}: the short message pools below without washing (+${short.beyond28Down}/255)`);
     check(short.insideMax <= 30, `${tag}: the short message's spill is a halo too (+${short.insideMax}/255)`);
     check(run.errors.length === 0, `${tag}: no browser errors on a marquee (${run.errors.join(' | ')})`);
     await run.page.close();
