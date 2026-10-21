@@ -289,6 +289,10 @@ button {
 #online-waiting,
 #online-join,
 #online-matched {
+  /* OWNER RULE (2026-10-21): every key on a menu is the same 50px tall — the main menu's column,
+     its footer row and the PLAY submenu's entries. It is one token, not a number per surface; the
+     44px floor everywhere else (board, cockpit, sheets) is untouched. */
+  --menu-key-h: 50px;
   --fu-cream: #e8ddc5;
   --fu-ink: #17181a;
   --fu-cream-70: color-mix(in srgb, #e8ddc5 70%, transparent);
@@ -363,12 +367,46 @@ button {
   /* The action stack keeps its own rhythm; it tightens on a short screen before anything shrinks. */
   gap: clamp(5px, 1.1dvh, 10px);
 }
+/* The menu's footer (owner brief, 2026-10-21): ONE row at the bottom, account key left and Settings
+   right, both 50px and both the same menu key as the column above. It reuses `.menu-buttons` for
+   the frame/type/height system and only changes the direction. The two keys are placed EXPLICITLY,
+   so Settings stays the right-hand key even when the account key is hidden (a channel with no
+   Google): an empty auto-placed cell would drift it left. */
+#menu .menu-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+  gap: clamp(5px, 1.1dvh, 10px);
+}
+#menu .menu-footer .btn {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 12px;
+  /* Both keys are the same instrument: one label size, never one big and one small. */
+  font-size: 0.95rem;
+}
+#menu .menu-footer #menu-login {
+  grid-column: 1;
+  grid-row: 1;
+  /* A long display name must not push the key out of the row: it stays one line and ellipsises, and
+     the full name is always in the key's aria-label (and in the profile). Block + line-height is the
+     one layout that lets `text-overflow` work on a button's own text; it still fills the 50px key. */
+  display: block;
+  overflow: hidden;
+  padding: 0 10px;
+  line-height: calc(var(--menu-key-h) - 2px);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#menu .menu-footer #menu-settings { grid-column: 2; grid-row: 1; }
 /* One button system for the whole surface: a quiet 1px cream frame for the default, and a single
    cream fill (Continue) as the only emphasis. No gradient, no glow, no drop shadow.
    Difficulty tiles reuse the same frame so New game → pick level keeps one rhythm; the online
    submenu reuses `.menu-buttons` so its buttons match the menu exactly.
-   Height and corner come from the shared `.btn` scale (56 big / 44 normal, pill — UX.md §controls),
-   so a difficulty row IS a menu button instead of its own 52px / 14px shape. */
+   Height and corner: every MENU key is the owner's 50px `--menu-key-h` (2026-10-21); the shared
+   `.btn` scale still gives 56 big / 44 normal to controls OUTSIDE the menus (board, cockpit, sheets),
+   and the difficulty row is a menu button instead of its own 52px / 14px shape. */
 .menu-buttons .btn,
 #levels .level-grid .difficulty-tile {
   padding: 1px 20px 0;
@@ -381,6 +419,15 @@ button {
   line-height: 1.2;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+/* The owner's ONE key height (2026-10-21): the menu column, the footer row and the PLAY submenu are
+   all 50px, at every supported size. `height`, not only `min-height`, so a key can never stretch or
+   shrink with the column; the label is one line at every size (Large text included). */
+#menu .menu-buttons .btn,
+#menu .menu-footer .btn,
+#play-menu .menu-buttons .btn {
+  min-height: var(--menu-key-h);
+  height: var(--menu-key-h);
 }
 .menu-buttons .btn.primary,
 #levels .level-grid .difficulty-tile.primary,
@@ -2172,6 +2219,149 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   #sheet-menu .gm-key {
     min-height: 44px;
     height: 44px;
+  }
+}
+
+/* ---------- the player's profile: the pause panel's language, five read-only lines ----------
+   Owner brief (2026-10-21): a SKELETON built now, showing basic info about the player. It borrows
+   the pause panel's language on purpose — ONE content axis, hairline rules between neighbours,
+   neutral digits, no new colour, no glow — because it is the same kind of read-out surface. The
+   only control is Close: nothing is editable and there is no sign-out here (Settings owns both). */
+#sheet-profile {
+  --sp-pad: 16px;
+  --sp-row: 46px;
+  --sp-hair: color-mix(in srgb, var(--c-line) 58%, transparent);
+  padding: 4px var(--sp-pad) max(14px, env(safe-area-inset-bottom));
+  /* Five short lines always fit; the cap is honesty about being a brief sheet, not a scroll area. */
+  max-height: 94dvh;
+  animation: gm-panel-in var(--dur-quick) var(--ease-standard) both;
+}
+.reduce-motion #sheet-profile,
+#sheet-profile.reduce-motion {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #sheet-profile {
+    animation: none;
+  }
+}
+/* The nameplate: the same three cells as the pause panel (44px close | centred title | 44px), so
+   the title sits on the panel's own centre line. */
+#sheet-profile .sp-head {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 0 2px;
+  position: static;
+  background: transparent;
+  border-bottom: 1px solid var(--sp-hair);
+}
+#sheet-profile .sp-head h2 {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.35rem;
+  line-height: 1.1;
+  letter-spacing: -0.005em;
+  text-align: center;
+  color: var(--c-text);
+  white-space: nowrap;
+}
+#sheet-profile .sp-close {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  color: var(--c-muted);
+}
+/* The five rows: full width, one hairline between neighbours (never a box around each), label on
+   the left in the pause panel's small tracked caps and the value on the right in tabular digits. */
+#sheet-profile .sp-body {
+  display: block;
+  padding: 0;
+}
+#sheet-profile .sp-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+}
+#sheet-profile .sp-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: var(--sp-row);
+  padding: 12px 0;
+  box-sizing: border-box;
+}
+#sheet-profile .sp-row + .sp-row {
+  border-top: 1px solid var(--sp-hair);
+}
+#sheet-profile dt {
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  line-height: 1.2;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+#sheet-profile dd {
+  margin: 0;
+  min-width: 0;
+  max-width: 70%;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  color: var(--c-text);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* Short screens (320x568, 360x640): the air comes out first; every row stays at least 44px. */
+@media (max-height: 700px) {
+  #sheet-profile {
+    --sp-pad: 14px;
+    --sp-row: 44px;
+  }
+  #sheet-profile .sp-head {
+    min-height: 44px;
+  }
+  #sheet-profile .sp-head h2 {
+    font-size: 1.18rem;
+  }
+  #sheet-profile .sp-row {
+    padding: 9px 0;
+  }
+}
+/* Landscape phones: the same face as a centred dialog (the shared `.sheet` wide rule), with the
+   five rows on one column and the air tightened. */
+@media (max-height: 520px) and (min-width: 560px) {
+  #sheet-profile {
+    --sp-pad: 18px;
+    padding-top: 12px;
+  }
+  #sheet-profile::before {
+    display: none;
+  }
+  #sheet-profile .sp-body {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  #sheet-profile .sp-head {
+    min-height: 44px;
+  }
+  #sheet-profile .sp-head h2 {
+    font-size: 1.2rem;
+  }
+  #sheet-profile .sp-row {
+    min-height: 44px;
+    padding: 7px 0;
   }
 }
 
@@ -6478,7 +6668,8 @@ html.align-overlay::before {
     padding-block: clamp(6px, 1.6dvh, 20px);
   }
   #menu .title { font-size: clamp(1.8rem, min(8dvh, 10vw), 4.25rem); }
-  #menu .menu-buttons .btn.big { min-height: clamp(44px, 7.5dvh, 56px); }
+  /* The 50px key is the owner's fixed rule now (2026-10-21): a short screen compresses the gaps and
+     the wordmark, never the keys. Nothing may override `--menu-key-h`. */
 }
 @media (min-width: 600px) and (max-height: 760px) {
   html.futa04-branding body #menu #logo {

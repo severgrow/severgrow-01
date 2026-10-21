@@ -108,10 +108,12 @@
              fourth button, and its "let us know here." link opens Report a problem. The old main-menu
              tagline stays removed (2026-10-14): this slot belongs to the beta line now. -->
         <p id="menu-beta" class="tagline" hidden></p>
-        <!-- The entries are in SEEN order, which is also DOM and tab order. Owner decision
-             (2026-10-20): PLAY, TERRITORY, LOG IN, Settings. Entries a channel does not show
-             (Continue, Tutorial, the flat-menu extras) stay in place, hidden, so that order holds
-             for whatever is on screen. -->
+        <!-- The entries are in SEEN order, which is also DOM and tab order. The column holds the
+             game's own destinations: PLAY, then TERRITORY (and the legacy Tutorial). The account key
+             and Settings live in the footer row BELOW this column (owner brief, 2026-10-21), so the
+             menu ends with the two utility keys. Entries a channel does not show (Continue, Tutorial,
+             the flat-menu extras) stay in place, hidden, so that order holds for whatever is on
+             screen. -->
         <div class="menu-buttons">
           <!-- PLAY (product channels only) opens the submenu below, and carries the ONE cream fill
                on this screen. Revealed by main.ts, so no other channel ever shows it. Its three
@@ -156,12 +158,24 @@
               <span class="menu-territory-icon i" data-icon="tile" aria-hidden="true"></span>
             </span>
           </button>
-          <!-- LOG IN (product channels only): quiet (ghost), after TERRITORY and before Settings
-               (owner, 2026-10-20: the menu reads PLAY, TERRITORY, LOG IN, Settings), and hidden the
-               moment the player is signed in. The accounts module reveals it (and hides it again)
-               from the one Google flow it already owns — no second sign-in path lives here. -->
-          <button id="menu-login" class="btn ghost big" type="button" aria-label="Log in" hidden>LOG IN</button>
+          <!-- LOG IN and Settings used to be two entries of this column. Owner brief (2026-10-21):
+               the bottom row of the menu is TWO keys side by side, LOG IN (left) and Settings
+               (right), so the column above is exactly the game's own destinations (PLAY, TERRITORY,
+               and the legacy entries). LOG IN is now the LEFT key of that row: a guest sees LOG IN
+               and the key starts the one Google flow; a signed-in player sees their NAME on the same
+               key, and pressing it opens their profile (web/src/accounts/mount.ts). It ships hidden
+               because the accounts module only reveals it once it knows Google is on. -->
           <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
+        </div>
+        <!-- The menu's footer (owner brief, 2026-10-21): one row, two equal keys, account left and
+             Settings right. It is the LAST thing in the menu's own tab order, and it is a group so a
+             screen reader reads the pair as one row. `.menu-buttons` is reused on purpose: every key
+             on every menu is the same 50px key (`--menu-key-h`), and this row must not be a second
+             button system. `grid` (not the column's `flex-direction: column`) is all that makes it a
+             row; LOG IN/name is pinned to column 1 and Settings to column 2, so Settings stays on the
+             right even while the account key is hidden (channels with no Google). -->
+        <div id="menu-foot" class="menu-buttons menu-footer" role="group" aria-label="Account and settings">
+          <button id="menu-login" class="btn ghost" type="button" aria-label="Log in" hidden>LOG IN</button>
           <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
         </div>
       </div>
@@ -579,6 +593,33 @@
           <p class="gm-mode" id="gm-mode">Practice</p>
           <button id="gm-settings" class="btn ghost gm-key" type="button" aria-label="Settings">Settings</button>
         </footer>
+      </div>
+    </section>
+
+    <!-- The player's profile (owner brief, 2026-10-21): a SKELETON, reached from the menu's account
+         key. Same visual language as the pause panel — one content axis, hairline rules, neutral
+         digits, no new colour — because it is the same kind of read-out surface, not a second app.
+         Exactly five lines: name, sign-in status, Seeds, tiles, matches won. Nothing to press, no
+         editing, no sign-out: those live in Settings. Values are filled by web/src/accounts/profile.ts;
+         an unknown value is an em dash, never a 0. It is deliberately NOT `aria-modal`: it traps
+         nothing, closes on Escape, and returns focus to the key that opened it. -->
+    <div id="profile-scrim" class="scrim" hidden></div>
+    <section id="sheet-profile" class="sheet" role="dialog" aria-labelledby="profile-title" hidden>
+      <header class="sheet-head sp-head">
+        <h2 id="profile-title">Profile</h2>
+        <button class="icon-only sp-close" data-profile-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
+      </header>
+      <div class="sheet-body sp-body">
+        <dl class="sp-rows">
+          <div class="sp-row"><dt>Name</dt><dd id="profile-name">—</dd></div>
+          <div class="sp-row"><dt>Sign-in</dt><dd id="profile-signin">—</dd></div>
+          <!-- The Seeds label is filled by web/src/accounts/profile.ts from the economy's own word
+               (web/src/online/seed-icon.ts): this page must stay free of that word, the same rule the
+               rest of the markup follows (web/tests/seed-words.test.ts is about the removed mode). -->
+          <div class="sp-row"><dt></dt><dd id="profile-seeds">—</dd></div>
+          <div class="sp-row"><dt>Tiles</dt><dd id="profile-tiles">—</dd></div>
+          <div class="sp-row"><dt>Matches won</dt><dd id="profile-wins">—</dd></div>
+        </dl>
       </div>
     </section>
 

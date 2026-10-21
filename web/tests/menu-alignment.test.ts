@@ -73,9 +73,14 @@ describe('every menu surface centres the same column', () => {
     // …capped, so a very tall screen never becomes a sparse ladder.
     expect(inner).toMatch(/height:\s*min\(100%,\s*max\(\d+px,\s*[\d.]+dvh\)\)/);
     expect(inner).toContain('max-height: 100%');
-    // Short screens compress the gaps first; the tap targets keep the shared 44px floor.
-    const big = rulesFor(styleCss, '.menu-buttons .btn.big').map((r) => r.body).join('\n');
-    expect(big).toMatch(/min-height:\s*clamp\(44px/);
+    // Short screens compress the gaps first; the KEYS keep the owner's one 50px height (2026-10-21).
+    const keys = rules(styleCss)
+      .filter((r) => r.prelude.includes('#menu .menu-buttons .btn') || r.prelude.includes('#play-menu .menu-buttons .btn'))
+      .map((r) => r.body)
+      .join('\n');
+    expect(keys).toContain('min-height: var(--menu-key-h)');
+    expect(keys).toContain('height: var(--menu-key-h)');
+    expect(rules(styleCss).some((r) => r.body.includes('--menu-key-h: 50px'))).toBe(true);
     // The logo is never hidden: every supported screen keeps the mark.
     expect(styleCss).not.toMatch(/#menu #logo[^{]*\{\s*display:\s*none/);
   });

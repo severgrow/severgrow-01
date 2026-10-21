@@ -626,11 +626,15 @@ export const HELP = Object.freeze({
 });
 
 /** FUTASAKU 0.5 main menu and its PLAY submenu (owner direction, 2026-10-15). One place for the
- *  words: LOG IN above PLAY, and PLAY holding exactly LEVEL <n> / Play online / Practice match
- *  (LEVEL leads the column since the owner's 2026-10-20 decision). */
+ *  words: the bottom row's LOG IN (or the player's name) beside Settings (owner brief, 2026-10-21),
+ *  and PLAY holding exactly LEVEL <n> / Play online / Practice match (LEVEL leads the column since
+ *  the owner's 2026-10-20 decision). */
 export const MENU = Object.freeze({
-  /** the sign-in button at the top of the menu; hidden the moment the player is signed in */
+  /** The sign-in key, now the LEFT key of the menu's bottom row (owner brief, 2026-10-21). It reads
+   *  this only while signed out; a signed-in player's key carries their name instead. */
   login: 'LOG IN',
+  /** The spoken name of the bottom row's group: the account key and Settings, side by side. */
+  footerLabel: 'Account and settings',
   /** LEVEL <n>'s spoken label: the button starts the game, it does not open the level list. */
   levelAria: (number: number): string => `Play level ${number}`,
   /** the one doorway to the offline modes and the duel lobby */
@@ -986,6 +990,29 @@ export const ACCOUNT = Object.freeze({
   failed: 'Google sign-in did not finish. Please try again.',
   offline: 'You are offline. Connect and try again.',
   unavailable: 'Google sign-in is not available right now. Please try again later.',
+});
+
+/**
+ * The player's profile (owner brief, 2026-10-21). A SKELETON: five read-only lines and nothing to
+ * press. The words are here so a later rename is one line; the VALUES are never invented — an
+ * unknown number is an em dash, never a 0.
+ */
+export const PROFILE = Object.freeze({
+  title: 'Profile',
+  /** The account key's spoken label while signed in; the name is part of the label. */
+  open: (name: string): string => `${name}. Your profile`,
+  name: 'Name',
+  signIn: 'Sign-in',
+  signedIn: 'Signed in with Google',
+  guest: 'Guest on this device',
+  /** The Seeds line's label is the ECONOMY's word, and it lives with the wallet's own wording in
+   *  web/src/online/seed-icon.ts (`SEEDS_WORD`): this file must stay free of that word
+   *  (web/tests/seed-words.test.ts), and the profile takes it from the one place the currency is
+   *  named to the player. */
+  tiles: 'Tiles',
+  matchesWon: 'Matches won',
+  /** An em dash is a FACT: this value is not known. It is never a made-up 0. */
+  unknown: '—',
 });
 
 /**

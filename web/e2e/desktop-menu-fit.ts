@@ -53,7 +53,7 @@ try {
           wide: document.documentElement.scrollWidth <= innerWidth,
         };
       })()`)) as { n: number; last: number; first: number; minH: number; scrolls: boolean; wide: boolean };
-      if (withSave) check(`${label}: Continue is showing (the tallest menu)`, m.n >= 5, `${m.n} buttons`);
+      if (withSave) check(`${label}: Continue is showing (the tallest menu)`, m.n >= 4, `${m.n} buttons`);
       check(`${label}: the whole menu is on screen without scrolling`, m.last <= h && m.first >= 0 && !m.scrolls, JSON.stringify(m));
       check(`${label}: every button stays at least 44px tall`, m.minH >= 44, `${m.minH}px`);
       check(`${label}: nothing runs off the side`, m.wide);

@@ -3,14 +3,17 @@
 // guests, and an Account block in Settings (sign out, delete my account). Offline play never sees
 // any of it. Nothing shows until the Google provider is switched on in Supabase, so this is safe to
 // ship before the dashboard is set up. A failure here can never break the game (every path is caught).
-import { ACCOUNT, PRIVACY } from '../../../src/strings.js';
+import { ACCOUNT, MENU, PRIVACY, PROFILE } from '../../../src/strings.js';
 import { taggedName } from '../../../src/player-tag.js';
 import { DUEL_CLIENT_VERSION, browserStorage } from '../../../server/src/client.js';
 import type { KeyValue } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
 import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
+import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
 import { glassBaseCss } from '../player/glass-surface.js';
+import { installProfileUI } from './profile.js';
+import type { ProfileFacts } from './profile.js';
 import {
   WELCOME_KEY,
   authorizeUrl,
@@ -479,13 +482,48 @@ export const mountAccounts = async (): Promise<void> => {
     hubHead?.after(hub);
   }
 
-  // ---- 4b. the main menu's LOG IN: the same Google flow, one button, gone once signed in ----
-  // It sits at the TOP of the main menu and reuses `start` and `signedIn` — no second sign-in path,
-  // no second round trip. It returns to the menu (ReturnTo 'menu'), so a fresh sign-in lands back
-  // where the player was, and it is only ever wired here, inside the Google-on branch: with the
-  // provider off it stays hidden and untouched.
+  // ---- 4b. the main menu's account key: LOG IN when signed out, the player's NAME when signed in --
+  // Owner brief (2026-10-21): the menu's bottom row is two keys — this one on the left, Settings on
+  // the right. Signed out it reads LOG IN and starts the one Google flow (`start`, tagged 'menu', so
+  // a fresh sign-in lands back on the menu). Signed in it reads the player's NAME and opens their
+  // profile. It reuses `signedIn` and `shownName`: no second sign-in path, no second identity read.
   const menuLogin = document.getElementById('menu-login') as HTMLButtonElement | null;
-  menuLogin?.addEventListener('click', () => void start('menu', menuLogin, null));
+  const profile = installProfileUI();
+
+  /**
+   * The profile's facts. Seeds and tiles are the SAME pair the Territory entry shows: the cache is
+   * the lobby's own menu-show read, and an empty cache costs ONE more pair read, never a poll. The
+   * matches-won line has no player-facing source in this build (the server's win count is
+   * admin-only), so its fact is honestly null and the panel renders an em dash.
+   */
+  const profileFacts = (identity: Identity): ProfileFacts => {
+    const pair = cachedTerritory(identity.playerId);
+    return {
+      name: shownName(identity),
+      signedIn: true,
+      seeds: pair?.seeds ?? null,
+      tiles: pair?.tiles ?? null,
+      matchesWon: null,
+    };
+  };
+
+  const openProfile = () => {
+    const s = signedIn();
+    if (!s) return;
+    const facts = profileFacts(s.identity);
+    profile.open(facts, menuLogin);
+    // At most one pair read, and only when the Territory entry's read has not landed. The same
+    // request also paints the Territory entry (web/src/online/lobby-ui.ts), so nothing is doubled.
+    void readTerritory(s.identity.playerId).then((counts) => {
+      if (!counts) return;
+      profile.show({ ...facts, seeds: counts.seeds, tiles: counts.tiles });
+    });
+  };
+
+  menuLogin?.addEventListener('click', () => {
+    if (signedIn()) openProfile();
+    else void start('menu', menuLogin, null);
+  });
 
   // ---- 5. the Account block in Settings ----
   const note = document.getElementById('online-storage-note');
@@ -655,10 +693,25 @@ export const mountAccounts = async (): Promise<void> => {
 
   const refresh = () => {
     hub.hidden = signedIn() !== null;
-    // The main menu's LOG IN follows the same state on every channel: shown to a guest, hidden the
-    // moment the player is signed in (and never shown when this Google branch is skipped). Owner
-    // decision (2026-10-20): the product menu carries it too, after TERRITORY and before Settings.
-    if (menuLogin) menuLogin.hidden = signedIn() !== null;
+    // The main menu's LEFT footer key follows the account state (owner brief, 2026-10-21): a guest
+    // sees LOG IN and the key starts the Google flow; a signed-in player sees their NAME and the key
+    // opens the profile. It is hidden only when this Google branch is skipped entirely, so a channel
+    // with no sign-in never shows a dead key. `shownName` is the same name Settings and the lobby use.
+    if (menuLogin) {
+      const s = signedIn();
+      const name = s ? shownName(s.identity) : null;
+      // This branch only runs once Google is known to be on, so the key is live in both states:
+      // LOG IN for a guest, the player's name when signed in. (Channels/builds where the Google
+      // branch never runs keep the markup's hidden key, so no dead key is ever shown.)
+      menuLogin.hidden = false;
+      menuLogin.textContent = name ?? MENU.login;
+      // The spoken label carries the name, so a screen-reader user knows whose profile it opens.
+      menuLogin.setAttribute('aria-label', name ? PROFILE.open(name) : MENU.login);
+      menuLogin.title = name ? PROFILE.open(name) : MENU.login;
+    }
+    // A sign-out reloads the page, but storage can also change under us; never leave a profile open
+    // for an identity this device no longer has.
+    if (profile.isOpen() && signedIn() === null) profile.close();
   };
   renderSettings();
   refresh();

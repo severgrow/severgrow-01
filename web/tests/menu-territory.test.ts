@@ -163,13 +163,14 @@ describe('the entry ships the read-outs hidden, either side of a label that neve
     expect(styleCss).not.toMatch(/\.menu-territory-(seeds|tiles)::?(?:after|before)/);
   });
 
-  it('keeps the shared big-entry height and tap floor (the numbers add no height)', () => {
-    // `.btn.big` owns 56px / 44px floor; the Territory rule only changes padding and layout.
+  it('keeps the shared menu-key height and tap floor (the numbers add no height)', () => {
+    // Owner brief (2026-10-21): every menu key is 50px, from ONE token. The Territory rule only
+    // changes padding and layout; it must not carry a height of its own.
     const territory = /#menu \.menu-buttons \.btn\.menu-territory \{([^}]*)\}/.exec(styleCss)?.[1] ?? '';
     expect(territory).not.toMatch(/(^|;)\s*height\s*:/);
     expect(territory).not.toMatch(/(^|;)\s*min-height\s*:/);
-    expect(styleCss).toMatch(/\.btn\.big \{\s*min-height: 56px/);
-    expect(styleCss).toMatch(/#menu \.menu-buttons \.btn\.big \{ min-height: clamp\(44px, 7\.5dvh, 56px\); \}/);
+    expect(styleCss).toMatch(/--menu-key-h: 50px/);
+    expect(styleCss).toMatch(/#menu \.menu-buttons \.btn,\s*#menu \.menu-footer \.btn,\s*#play-menu \.menu-buttons \.btn \{\s*min-height: var\(--menu-key-h\);\s*height: var\(--menu-key-h\);/);
   });
 
   it('animates only a real change, on opacity, with the shared tokens and a static reduced mode', () => {
@@ -203,9 +204,14 @@ describe('the menu show pays ONE wallet read and ONE map read, never a poll', ()
     // Failure nulls both reads (so `territoryCounts` answers null) and paints null.
     expect(lobbySource).toMatch(/catch \{\s*\/\/[^\n]*\n\s*wallet = null;\s*\n\s*world = null;/);
     expect(lobbySource).toMatch(/territoryUI\.paint\(counts\)/);
-    expect(lobbySource).toContain('territoryUI.paint(null)');
+    expect(lobbySource).toMatch(/territoryUI\.paint\(null\)/);
     // The cached pair carries the identity it was read for, and is only reused for that identity.
-    expect(lobbySource).toMatch(/menuRead\?\.playerId === playerId/);
-    expect(lobbySource).toMatch(/identity\.peek\(\)\?\.playerId/);
+    // The one cache is shared with the profile (owner brief, 2026-10-21), so it lives in
+    // territory-cache.ts and both surfaces read the same fact.
+    const cacheSource = read('../src/online/territory-cache.ts');
+    expect(cacheSource).toMatch(/remembered\?\.playerId === playerId/);
+    expect(lobbySource).toMatch(/rememberTerritory\(id\.playerId, counts\)/);
+    expect(lobbySource).toContain("import { cachedTerritory, registerTerritoryReader, rememberTerritory } from './territory-cache.js'");
+    expect(lobbySource).toMatch(/territoryUI\.paint\(cachedTerritory\(identity\.peek\(\)\?\.playerId \?\? null\)\)/);
   });
 });

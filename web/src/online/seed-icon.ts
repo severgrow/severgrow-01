@@ -2,6 +2,15 @@
  *  wallet and the menu's read-out so the two can never drift apart. */
 export const seedBalanceLabel = (balance: number): string => `${balance} SEEDS`;
 
+/**
+ * The economy's own noun, for surfaces that need the word on its own (the profile's Seeds line,
+ * owner brief 2026-10-21). It lives HERE, beside the balance wording, because this module is the one
+ * place the game names the currency to the player: `web/index.html` and `src/strings.ts` must stay
+ * free of the word (web/tests/seed-words.test.ts), which is about the removed seed MODE, not the
+ * currency the Territory wallet has always written as "128 SEEDS".
+ */
+export const SEEDS_WORD = 'Seeds';
+
 /** One authored icon at every Seeds size; currentColor keeps the ivory material intact. */
 export const seedIcon = (size = 20): SVGSVGElement => {
   const ns = 'http://www.w3.org/2000/svg';

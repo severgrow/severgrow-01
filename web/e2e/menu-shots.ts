@@ -104,18 +104,20 @@ const leaders = (page: Page, scope: string) =>
 
 try {
   for (const vp of VIEWPORTS) {
-    // ---- 1. the main menu, signed out: LOG IN at the top, PLAY (the one leader), then the world
-    //         map, Tutorial and Settings ----
+    // ---- 1. the main menu, signed out: the column PLAY → TERRITORY, then the bottom row LOG IN |
+    //         Settings (owner brief, 2026-10-21) ----
     {
       const { context, page } = await device(vp, false, `out-${vp.key}`);
       const loginBox = await page.locator('#menu-login').boundingBox();
       const playBox = await page.locator('#menu-play').boundingBox();
+      const settingsBox = await page.locator('#menu-settings').boundingBox();
       check(`${vp.key}: LOG IN is visible on the signed-out menu`, await page.locator('#menu-login').isVisible());
-      check(`${vp.key}: LOG IN sits above PLAY`, !!loginBox && !!playBox && loginBox.y < playBox.y);
-      const order = await page.evaluate(() => [...document.querySelectorAll('#menu .menu-buttons > .btn')]
+      check(`${vp.key}: LOG IN is the LEFT key of the footer, below the column`,
+        !!loginBox && !!playBox && !!settingsBox && loginBox.y > playBox.y && loginBox.x < settingsBox.x);
+      const order = await page.evaluate(() => [...document.querySelectorAll('#menu .menu-buttons .btn')]
         .filter((b) => (b as HTMLElement).getClientRects().length > 0).map((b) => b.id));
-      check(`${vp.key}: the menu reads LOG IN / PLAY / Territory / Tutorial / Settings`,
-        JSON.stringify(order) === JSON.stringify(['menu-login', 'menu-play', 'menu-world', 'menu-tutorial', 'menu-settings']), order.join(' | '));
+      check(`${vp.key}: the menu reads PLAY / Territory / LOG IN / Settings`,
+        JSON.stringify(order) === JSON.stringify(['menu-play', 'menu-world', 'menu-login', 'menu-settings']), order.join(' | '));
       check(`${vp.key}: exactly one filled button on the menu, and it is PLAY`,
         JSON.stringify(await leaders(page, '#menu')) === JSON.stringify(['menu-play']), (await leaders(page, '#menu')).join(' | '));
       // Five entries must fit a 360x640 phone without the column scrolling or the page widening.
@@ -164,10 +166,12 @@ try {
       await context.close();
     }
 
-    // ---- 4. the main menu, signed in: no LOG IN ----
+    // ---- 4. the main menu, signed in: the SAME left key now carries the player's name ----
     {
       const { context, page } = await device(vp, true, `in-${vp.key}`);
-      check(`${vp.key}: LOG IN is gone once signed in`, !(await page.locator('#menu-login').isVisible()));
+      const label = ((await page.locator('#menu-login').textContent()) ?? '').trim();
+      check(`${vp.key}: the left footer key shows the player's name once signed in`, await page.locator('#menu-login').isVisible() && label.startsWith('Ann'), label);
+      check(`${vp.key}: the key says whose profile it opens`, ((await page.locator('#menu-login').getAttribute('aria-label')) ?? '').includes('Ann'));
       await shotName(page, `menu-signed-in-${vp.key}`);
       await context.close();
     }

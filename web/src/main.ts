@@ -687,15 +687,16 @@ function layoutMenu(canContinue: boolean) {
   $('menu-play').textContent = MENU.play;
   $('menu-play').setAttribute('aria-label', MENU.play);
   $('play-title').textContent = MENU.playTitle;
-  $('menu-login').textContent = MENU.login;
-  $('menu-login').setAttribute('aria-label', MENU.login);
-  // Owner decision (2026-10-20): the product menu is PLAY, TERRITORY, LOG IN, Settings, in that
-  // order. LOG IN is not hidden by the layout pass: the accounts module shows it to a guest and
-  // hides it again the moment the player is signed in (one entry, one flow, one place). It is left
-  // hidden here (the markup default) until that module knows Google is on.
-  // The label is its own node (owner brief, 2026-10-20): the Territory entry also carries the
-  // player's Seeds and tile counts, painted by web/src/online/lobby-ui.ts from ONE menu-show read.
-  // Writing the button's textContent here would wipe both read-outs, so this pass writes the label.
+  // The bottom row is a GROUP (owner brief, 2026-10-21): LOG IN (or the player's name) on the left,
+  // Settings on the right. Its spoken name comes from the one strings module.
+  $('menu-foot').setAttribute('aria-label', MENU.footerLabel);
+  // The account key's words are owned by the accounts module, not by this layout pass: a signed-out
+  // guest sees MENU.login, a signed-in player sees their NAME, and both are the SAME key (one entry,
+  // one flow, one place). Writing MENU.login here would stomp the name on every return to the menu.
+  // The label of the Territory entry is its own node (owner brief, 2026-10-20): the entry also
+  // carries the player's Seeds and tile counts, painted by web/src/online/lobby-ui.ts from ONE
+  // menu-show read. Writing the button's textContent here would wipe both read-outs, so this pass
+  // writes the label.
   $('menu-world-label').textContent = MENU.world;
   $('menu-world').setAttribute('aria-label', MENU.world);
   // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears

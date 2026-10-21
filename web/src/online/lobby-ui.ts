@@ -11,6 +11,7 @@ import { createHudBrandMark } from '../player/branding.js';
 import { WorldView } from './world-view.js';
 import { installTerritoryCountUI, territoryCounts } from './menu-territory.js';
 import type { TerritoryCounts } from './menu-territory.js';
+import { cachedTerritory, registerTerritoryReader, rememberTerritory } from './territory-cache.js';
 import { seedIcon } from './seed-icon.js';
 import { flushSeedProofs } from './seed-rewards.js';
 import type { RewardResult, SeedWallet } from '../../../server/src/seeds/types.js';
@@ -784,12 +785,39 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
    * 2026-10-20). This is not a poll: one read when the menu appears, and only while it is on show.
    */
   const territoryUI = installTerritoryCountUI();
-  /** The last pair read for a named player, so returning to the menu does not blink. */
-  let menuRead: (TerritoryCounts & { playerId: string }) | null = null;
   let menuPass: Promise<void> | null = null;
-  /** A cached pair only counts for the identity it was read for; anyone else starts blank. */
-  const countsFor = (playerId: string | null): TerritoryCounts | null =>
-    playerId && menuRead?.playerId === playerId ? menuRead : null;
+
+  /**
+   * The pair, read ONCE for this identity: the wallet and the map in one `Promise.all`. Used by the
+   * menu pass below AND by the profile (through `registerTerritoryReader`), so the two surfaces can
+   * never pay for two different reads of the same thing (owner brief, 2026-10-21). Unknown stays
+   * unknown; the caller paints an em dash, never a 0.
+   */
+  const readMenuCounts = async (playerId?: string): Promise<TerritoryCounts | null> => {
+    const id = await ensureIdentity();
+    if (!id || (playerId && id.playerId !== playerId)) {
+      if (menuEl?.hidden === false) territoryUI.paint(null);
+      return null;
+    }
+    let wallet: SeedWallet | null = null;
+    let world: WorldMapPayload['world'] | null = null;
+    try {
+      const [readWallet, map] = await Promise.all([client.seedWallet(id.token), client.worldMap()]);
+      wallet = readWallet;
+      world = map.world;
+    } catch {
+      // Offline, signed out, or a failed request: both read-outs stay hidden, together.
+      wallet = null;
+      world = null;
+    }
+    const counts = territoryCounts(wallet, world, id.playerId);
+    rememberTerritory(id.playerId, counts);
+    if (menuEl?.hidden === false) territoryUI.paint(counts);
+    // The invitation reads the SAME wallet response; it never costs a second request.
+    offerWorldInvitation(id, wallet);
+    return counts;
+  };
+  registerTerritoryReader((playerId) => readMenuCounts(playerId));
 
   const offerWorldInvitation = (id: { token: string }, wallet: SeedWallet | null) => {
     if (invitationOpen || invitationDismissedThisSession || menuEl?.hidden !== false || !worldEl.hidden) return;
@@ -835,36 +863,15 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (menuEl?.hidden !== false) return Promise.resolve();
     // A return from another screen never blinks: paint what is known for THIS identity, and clear
     // at once when the identity changed (a sign-out reload, or a fresh guest).
-    territoryUI.paint(countsFor(identity.peek()?.playerId ?? null));
+    territoryUI.paint(cachedTerritory(identity.peek()?.playerId ?? null));
     if (menuPass) return menuPass;
     menuPass = (async () => {
       try {
         // Settle queued Seed proofs first, so the wallet read below already includes them.
         await syncSeedRewards();
         if (menuEl?.hidden !== false) return;
-        const id = await ensureIdentity();
-        if (!id) {
-          menuRead = null;
-          territoryUI.paint(null);
-          return;
-        }
-        let wallet: SeedWallet | null = null;
-        let world: WorldMapPayload['world'] | null = null;
-        try {
-          const [readWallet, map] = await Promise.all([client.seedWallet(id.token), client.worldMap()]);
-          wallet = readWallet;
-          world = map.world;
-        } catch {
-          // Offline, signed out, or a failed request: both read-outs stay hidden, together.
-          wallet = null;
-          world = null;
-        }
-        if (menuEl?.hidden !== false) return;
-        const counts = territoryCounts(wallet, world, id.playerId);
-        menuRead = counts ? { ...counts, playerId: id.playerId } : null;
-        territoryUI.paint(counts);
-        // The invitation reads the SAME wallet response; it never costs a second request.
-        offerWorldInvitation(id, wallet);
+        // One wallet + one map read, remembered for the profile too (territory-cache.ts).
+        await readMenuCounts();
       } finally {
         menuPass = null;
       }

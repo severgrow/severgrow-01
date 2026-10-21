@@ -31,15 +31,20 @@ describe('the product menu is PLAY, TERRITORY, LOG IN, Settings', () => {
     expect(menuSection).not.toContain('beta version');
   });
 
-  it('orders the entries PLAY, TERRITORY, LOG IN, Settings', () => {
+  it('orders the entries PLAY, TERRITORY, then the footer row: LOG IN, Settings', () => {
     expect(MENU.login).toBe('LOG IN');
     expect(MENU.world).toBe('Territory');
-    const order = ['id="menu-play"', 'id="menu-world"', 'id="menu-login"', 'id="menu-settings"'];
+    // Owner brief (2026-10-21): LOG IN and Settings left the column and became ONE footer row at
+    // the bottom of the menu — LOG IN (the player's name once signed in) on the left, Settings on
+    // the right. The seen/tab order is still PLAY → TERRITORY → LOG IN → Settings.
+    const order = ['id="menu-play"', 'id="menu-world"', 'menu-footer', 'id="menu-login"', 'id="menu-settings"'];
     for (let i = 1; i < order.length; i++) {
       expect(menuSection.indexOf(order[i - 1]!), `${order[i - 1]} before ${order[i]}`).toBeLessThan(menuSection.indexOf(order[i]!));
     }
-    // LOG IN still starts hidden (the accounts module reveals it to a guest); PLAY and TERRITORY
-    // are hidden until main.ts reveals them on a product channel.
+    // The footer is outside the column: the column closes before the row opens.
+    const columnEnd = menuSection.indexOf('</div>', menuSection.indexOf('<div class="menu-buttons">'));
+    expect(columnEnd).toBeLessThan(menuSection.indexOf('menu-footer'));
+    // LOG IN still starts hidden (the accounts module reveals it to a guest).
     expect(menuSection).toMatch(/id="menu-login"[^>]*hidden/);
   });
 
@@ -178,18 +183,23 @@ describe('the Practice match entry opens the three tiers', () => {
 describe('LOG IN reuses the one Google flow and hides itself when signed in', () => {
   it('starts the existing flow (not a second sign-in path)', () => {
     expect(accountsSource).toMatch(/const menuLogin = document\.getElementById\('menu-login'\)/);
-    expect(accountsSource).toMatch(/menuLogin\?\.addEventListener\('click', \(\) => void start\('menu', menuLogin, null\)\)/);
+    expect(accountsSource).toMatch(/menuLogin\?\.addEventListener\('click', \(\) => \{[\s\S]{0,80}if \(signedIn\(\)\) openProfile\(\)/);
     // Still exactly one entry point into `start` from the menu button: no second button calls it.
     expect(accountsSource.match(/id="menu-login"|getElementById\('menu-login'\)/g) ?? []).toHaveLength(1);
   });
 
-  it('hides LOG IN whenever signedIn() is true, on every channel', () => {
-    // Owner decision (2026-10-20): the product menu carries LOG IN too (after TERRITORY), so the
-    // one state rule decides it everywhere: a guest sees it, a signed-in player does not.
-    expect(accountsSource).toMatch(/if \(menuLogin\) menuLogin\.hidden = signedIn\(\) !== null/);
-    expect(accountsSource).not.toMatch(/menuLogin\.hidden = FEATURES\.campaign/);
-    // The layout pass must not force it hidden on a product build any more (that would undo it).
+  it('shows LOG IN to a guest, and the player’s NAME on the same key when signed in', () => {
+    // Owner brief (2026-10-21): the left footer key is ONE key with two honest states — a guest sees
+    // LOG IN and the key starts the Google flow; a signed-in player sees their name and the key opens
+    // their profile. It is never shown when the whole Google branch is skipped.
+    expect(accountsSource).toMatch(/menuLogin\.hidden = false/);
+    expect(accountsSource).toMatch(/menuLogin\.textContent = name \?\? MENU\.login/);
+    expect(accountsSource).toMatch(/if \(signedIn\(\)\) openProfile\(\)/);
+    expect(accountsSource).toMatch(/else void start\('menu', menuLogin, null\)/);
+    // The layout pass must not force it hidden on a product build (that would undo it).
     expect(mainSource).not.toMatch(/\$\('menu-login'\)\.hidden = FEATURES\.campaign/);
+    // Nor may the layout pass overwrite the name with LOG IN on every return to the menu.
+    expect(mainSource).not.toMatch(/\$\('menu-login'\)\.textContent = MENU\.login/);
   });
 });
 

@@ -4,9 +4,11 @@
 //   SHOTS=docs/screens/menu-fit npx tsx web/e2e/menu-fit.ts   (also writes one shot per size)
 //
 // For each size the test reads the REAL menu: the logo, the wordmark and every visible button must
-// be fully inside the screen, at least 44px tall, with no page or menu scrolling. Tall screens must
-// SPREAD (the free height is shared, not clustered in the middle) without stretching into a sparse
-// ladder; short screens compress the gaps first. Large text is checked on the smallest phone.
+// be fully inside the screen, every menu key is the owner's 50px (2026-10-21), with no page or menu
+// scrolling. Tall screens must SPREAD (the free height is shared, not clustered in the middle)
+// without stretching into a sparse ladder; short screens compress the gaps first. Large text is
+// checked on the smallest phone. The bottom row (account key | Settings) must stay one row, below
+// the beta line and the logo, with Settings as the last control.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -46,11 +48,13 @@ const MEASURE = `(() => {
   const logo = document.getElementById('logo');
   const wordmark = document.querySelector('#menu .title');
   const buttons = [...document.querySelectorAll('#menu .menu-buttons .btn')].filter((b) => b.offsetParent !== null);
+  const foot = document.getElementById('menu-foot');
+  const footKeys = foot ? [...foot.querySelectorAll('.btn')].filter((b) => b.offsetParent !== null) : [];
   const betaEl = document.getElementById('menu-beta');
   const betaBtn = betaEl ? betaEl.querySelector('button') : null;
   const betaVisible = !!betaEl && betaEl.offsetParent !== null;
   const box = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x: +r.x.toFixed(1), y: +r.y.toFixed(1), w: +r.width.toFixed(1), h: +r.height.toFixed(1), bottom: +r.bottom.toFixed(1), right: +r.right.toFixed(1) }; };
-  const ib = box(inner), lb = box(logo), wb = box(wordmark);
+  const ib = box(inner), lb = box(logo), wb = box(wordmark), fb = box(foot);
   const bb = buttons.map((b) => ({ id: b.id, ...box(b), label: (b.textContent || '').trim().slice(0, 24) }));
   const visible = buttons.length;
   const menuScroll = Math.max(0, menu.scrollHeight - menu.clientHeight);
@@ -69,6 +73,8 @@ const MEASURE = `(() => {
   return {
     vw: innerWidth, vh: innerHeight,
     inner: ib, logo: lb, wordmark: wb, buttons: bb,
+    foot: fb,
+    footKeys: footKeys.map((b) => ({ id: b.id, ...box(b) })),
     beta: betaVisible ? { ...box(betaEl), link: box(betaBtn) } : null,
     seen: [...(betaVisible ? ['menu-beta'] : []), ...buttons.map((b) => b.id)],
     gaps,
@@ -86,6 +92,9 @@ type Box = { x: number; y: number; w: number; h: number; bottom: number; right: 
 type Measure = {
   vw: number; vh: number; inner: Box; logo: Box | null; wordmark: Box | null;
   buttons: (Box & { id: string; label: string })[];
+  /** The bottom row (owner brief, 2026-10-21): LOG IN/name left, Settings right, one row. */
+  foot: Box | null;
+  footKeys: (Box & { id: string })[];
   /** The beta line (owner, 2026-10-20): its own box and its link's 44px target. */
   beta: (Box & { link: Box | null }) | null;
   /** Everything the player sees in DOM (and tab) order: the beta line, then the entries. */
@@ -128,6 +137,22 @@ const checkFit = (m: Measure, tag: string, tall: boolean) => {
   check(ids.includes('menu-play'), `${tag}: Play is shown`);
   check(ids.includes('menu-settings'), `${tag}: Settings is shown`);
   check(m.visible >= 3, `${tag}: the whole menu is there (${m.visible} entries)`);
+  // The bottom row (owner brief, 2026-10-21): ONE footer after the column, Settings on its right.
+  check(!!m.foot, `${tag}: the footer row exists`);
+  check(m.footKeys.some((k) => k.id === 'menu-settings'), `${tag}: Settings is a footer key`);
+  check(m.seen.at(-1) === 'menu-settings', `${tag}: Settings is the LAST control in the menu (${m.seen.at(-1)})`);
+  const footLogin = m.footKeys.find((k) => k.id === 'menu-login');
+  const footSettings = m.footKeys.find((k) => k.id === 'menu-settings');
+  if (footLogin && footSettings) {
+    check(footLogin.right <= footSettings.x + 0.5, `${tag}: LOG IN is the left key (${footLogin.right} ≤ ${footSettings.x})`);
+    check(Math.abs(footLogin.y - footSettings.y) <= 0.5, `${tag}: LOG IN and Settings are one row (${footLogin.y}/${footSettings.y})`);
+  }
+  // Every key on the menu is the owner's 50px key, at every size and with Large text.
+  for (const k of m.footKeys) check(Math.abs(k.h - 50) <= 0.5, `${tag}: ${k.id} is the 50px menu key (${k.h})`);
+  // The footer must never collide with the beta line or the logo above it.
+  check(!!m.foot && !!m.beta && m.foot.y >= m.beta.bottom - 0.5, `${tag}: the footer sits below the beta line (${m.foot?.y} vs ${m.beta?.bottom})`);
+  check(!!m.foot && !!m.logo && m.foot.y >= m.logo.bottom - 0.5, `${tag}: the footer sits below the logo`);
+  check(!!m.foot && m.foot.y >= -0.5 && m.foot.bottom <= m.vh + 0.5, `${tag}: the footer is fully inside (${m.foot?.y}..${m.foot?.bottom} of ${m.vh})`);
   // The beta line sits between the wordmark and the first entry, and is part of the seen/tab order.
   check(!!m.beta, `${tag}: the beta line is shown`);
   check(!!m.beta && !!m.wordmark && m.beta.y >= m.wordmark.bottom - 0.5, `${tag}: the beta line follows the wordmark (${m.beta?.y} vs ${m.wordmark?.bottom})`);
@@ -144,7 +169,7 @@ const checkFit = (m: Measure, tag: string, tall: boolean) => {
   );
   for (const b of m.buttons) {
     check(b.y >= -0.5 && b.bottom <= m.vh + 0.5, `${tag}: ${b.id} is fully inside (${b.y}..${b.bottom} of ${m.vh})`);
-    check(b.h >= 44, `${tag}: ${b.id} is at least 44px tall (${b.h})`);
+    check(Math.abs(b.h - 50) <= 0.5, `${tag}: ${b.id} is the owner's 50px key (${b.h})`);
     check(b.w > 120, `${tag}: ${b.id} keeps a comfortable width (${b.w})`);
   }
   check(!!m.inner && m.inner.y >= -0.5 && m.inner.bottom <= m.vh + 0.5, `${tag}: the column is inside the safe area`);
@@ -191,7 +216,7 @@ try {
       check(m.docScroll <= 1 && m.menuScroll <= 1, `large text: no scroll (${m.docScroll}/${m.menuScroll})`);
       check(m.buttons.some((b) => b.id === 'menu-play') && m.buttons.some((b) => b.id === 'menu-settings'), 'large text: Play and Settings are shown');
       check(!!m.logo && m.logo.bottom <= m.vh, 'large text: the logo is on screen');
-      for (const b of m.buttons) check(b.h >= 44 && b.bottom <= m.vh + 0.5, `large text: ${b.id} fits and stays tappable (${b.h}px)`);
+      for (const b of m.buttons) check(Math.abs(b.h - 50) <= 0.5 && b.bottom <= m.vh + 0.5, `large text: ${b.id} is the 50px key and fits (${b.h}px)`);
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/menu-large-text-320x568.png` });
       results.push(`large text 320x568: ${m.visible} entries, gaps ${m.gaps.join('/')}px`);
     } finally {
