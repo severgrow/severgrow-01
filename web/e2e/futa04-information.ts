@@ -84,6 +84,19 @@ try {
       const rail = document.getElementById('futa04-information-rail');
       return !!rail && document.documentElement.classList.contains('futa04-information');
     }, undefined, { timeout: 15_000 });
+    // …and for the ONE property the ink rule reads, because the muted ink is a CSS outcome too.
+    // The mount class, the rail and the stylesheet arrive as separate steps, so on a loaded runner
+    // the row can exist while a disabled key still paints at the enabled ink: the measurement then
+    // reads `inkRule: false` for a key that is muted a frame later (seen at 1440x900 on a79e1c2's
+    // CI). This waits for the state the assertion describes, and times out — failing — if the mute
+    // never comes. Nothing is compared more loosely; the colours are still read from the page.
+    await page.waitForFunction(() => {
+      const undo = document.getElementById('tool-undo') as HTMLButtonElement | null;
+      const hint = document.getElementById('futa04-help-button');
+      if (!undo || !hint) return false;
+      const ink = (el: Element) => getComputedStyle(el).color;
+      return undo.disabled ? ink(undo) !== ink(hint) : ink(undo) === ink(hint);
+    }, undefined, { timeout: 8_000 });
     check(await page.locator('#futa04-help-button').isVisible(), `${width}: hint is discoverable`);
     const tools = await page.evaluate(() => {
       const hint = document.querySelector<HTMLElement>('#futa04-help-button')!;
