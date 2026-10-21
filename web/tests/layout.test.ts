@@ -1,9 +1,9 @@
 // Step 3: the board fills the screen in whichever orientation gives bigger tiles, the dock has
 // one fixed height, nothing overlaps, a full hand (Fruit cards included) is always visible, no
 // gap around the board is over 16pt, and the corner tools never cover a tile.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { allCoords, coordKey } from '../../src/engine/index.js';
-import { BOARD_MARGIN, CENTRE_MIN, HAND_EDGE, HEIGHTS, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, TOOL, boardUnits, computeLayout, overlaps } from '../src/logic/layout.js';
+import { BOARD_MARGIN, CENTRE_MIN, HAND_EDGE, HEIGHTS, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, TOOL, boardUnits, computeLayout, overlaps, setSlimHud } from '../src/logic/layout.js';
 import type { Box, Layout, Viewport } from '../src/logic/layout.js';
 import { setOrient } from '../src/logic/orient.js';
 import { cornerPts } from '../src/ui/geom.js';
@@ -162,6 +162,42 @@ describe('v0.8 UI pass: a bigger board, bigger piles, "?" on the board', () => {
       expect(overlaps(b, l.dock)).toBe(false);
     });
   }
+});
+
+// 0.6 polish: the thumb layout is the product's phone layout, and a card you cannot hit is not a
+// card. On the smallest supported phone the height cap used to force 40pt cards; the dock may spend
+// a little of the map's height instead, as long as the piles keep their row and the fan stays
+// symmetric. 360x640 already had wider cards and must not shrink.
+describe('thumb layout: cards are at least the 44pt touch minimum', () => {
+  // The product channels use the slim 44pt header (the browser's own reading). The default layout
+  // calculator keeps the taller legacy header unless told, which would test a different phone.
+  beforeEach(() => setSlimHud(true));
+  afterEach(() => setSlimHud(false));
+  const views = [{ w: 320, h: 568 }, { w: 360, h: 640 }] as const;
+  for (const v of views) {
+    it(`${v.w}x${v.h}: every card is at least 44pt wide, the piles stay clear and the fan is symmetric`, () => {
+      const l = computeLayout(v, 3, MAX_HAND, 'right');
+      const t = l.thumb;
+      expect(t, `${v.w}x${v.h} uses the thumb layout`).toBeTruthy();
+      expect(t!.card.w).toBeGreaterThanOrEqual(44);
+      // The fan only ever fills its band BELOW the pile row, so widening cannot clip the piles.
+      expect(t!.band.y).toBeGreaterThanOrEqual(t!.piles.y + t!.piles.h);
+      expect(t!.deck.x).toBeGreaterThanOrEqual(0);
+      expect(t!.deck.x + t!.deck.w).toBeLessThanOrEqual(v.w);
+      expect(t!.discard.x + t!.discard.w).toBeLessThanOrEqual(v.w);
+      // Symmetric about the dock's centre line, whatever the width.
+      const centre = t!.fan.cx ?? v.w / 2;
+      expect(Math.abs(centre - v.w / 2)).toBeLessThanOrEqual(0.5);
+      expect(t!.fan.anchorX - centre).toBeCloseTo(t!.fan.lhMax, 6);
+      // The dock itself stays on the screen.
+      expect(l.dock.y + l.dock.h).toBeLessThanOrEqual(v.h + 0.01);
+    });
+  }
+  it('360x640 is above the minimum on its own (the relaxed pass never touches it)', () => {
+    // The real page measures 56px here (web/e2e/polish-3.ts pins before/after); this asserts the
+    // one thing the change promises everywhere: no phone ships a card under 44pt.
+    expect(computeLayout({ w: 360, h: 640 }, 3, MAX_HAND, 'right').thumb!.card.w).toBeGreaterThanOrEqual(44);
+  });
 });
 
 // v0.8.1: on desktop (side layout) the dock had spare height but its rows touched: the piles sat

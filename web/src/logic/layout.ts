@@ -66,7 +66,7 @@ export type Thumb = {
  *  shared side margin (board, piles, fan, tools), icon buttons, the fan's end tilt (deg) and
  *  rise (of its width), the dock's cap (of the usable height), the most the board may reach
  *  under the dock (of its height), the bottom margin and the largest gap between map and dock. */
-export const THUMB = { slice: 44, minSlice: 34, maxSlice: 48, sliceOf: 0.64, lift: 10, pileW: 56, edge: 8, icon: 44, tilt: 7, rise: 0.12, cap: 0.45, overlapMax: 0, bottom: 12, mapGap: 24, gap: 14 } as const;
+export const THUMB = { slice: 44, minSlice: 34, maxSlice: 48, sliceOf: 0.64, lift: 10, pileW: 56, edge: 8, icon: 44, tilt: 7, rise: 0.12, cap: 0.45, /** the touch minimum a card may not go below */ minCard: 44, /** the dock cap allowed to reach it on the shortest phone */ minCardCap: 0.48, overlapMax: 0, bottom: 12, mapGap: 24, gap: 14 } as const;
 /** Room kept above the dock's top element (a picked card's lift reaches into it). */
 const TOP_KEEP = 2;
 
@@ -162,11 +162,26 @@ const thumbDock = (W: number, usable: number, maxHand: number, side: 'right' | '
   };
   // the biggest cards whose compact fan fits the width with at least a 34pt strip per card
   const sizes = [62, 60, 58, 56, 54, 52, 50, 48, 46, 44, 42, 40];
-  for (const cw of sizes) {
+  const fits = (cw: number, cap: number) => {
     const b = build(cw);
-    if (b.t.slice >= THUMB.minSlice && b.h <= usable * THUMB.cap) return b;
+    return b.t.slice >= THUMB.minSlice && b.h <= usable * cap ? b : null;
+  };
+  const best = build(40);
+  for (const cw of sizes) {
+    const b = fits(cw, THUMB.cap);
+    if (b) return b;
   }
-  return build(40);
+  // The normal 45% dock cap could not fit even the 40pt fallback on the shortest phone. A card
+  // below 44pt is not a touch target, so spend a little of the map's height instead: pick the
+  // SMALLEST card that reaches the minimum, never the biggest that happens to fit. The piles keep
+  // their own row and the fan keeps its band, so nothing is clipped; if even this cannot fit, the
+  // old 40pt fallback stands (honest, rather than an overflowing dock).
+  for (const cw of [...sizes].reverse()) {
+    if (cw < THUMB.minCard) continue;
+    const b = fits(cw, THUMB.minCardCap);
+    if (b) return b;
+  }
+  return best;
 };
 
 const mirrorThumb = (t: Thumb, W: number): Thumb => {
