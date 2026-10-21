@@ -310,6 +310,41 @@ try {
       `before ${roundTrip.before}, fit ${roundTrip.fittedBox}, after ${roundTrip.after}`);
     check(`[${tag}] the toggle is back to aria-pressed=false`, roundTrip.pressed === 'false');
 
+    // A PRESSED FIT BUTTON MUST STAY IN THE CORNER (2026-10-21, live regression). The global press
+    // feedback adds a `.press-shade` child on the first real click, and a generic
+    // `:is(button, …):has(> .press-shade) { position: relative }` used to outrank `.world-fit` and
+    // drop the control back into the panel's grid: it took a 44px row, the map lost that height and
+    // the large view re-framed 7% wider. Measured after the click above, i.e. in exactly the state
+    // that used to break.
+    await page.waitForTimeout(250);
+    const afterPress = await page.evaluate(() => {
+      const panel = document.getElementById('online-world-grid') as HTMLElement;
+      const svg = panel.querySelector('svg') as SVGSVGElement;
+      const button = document.getElementById('online-world-fit') as HTMLButtonElement;
+      const pr = panel.getBoundingClientRect();
+      const sr = svg.getBoundingClientRect();
+      const vb = (svg.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
+      const br = button.getBoundingClientRect();
+      return {
+        position: getComputedStyle(button).position,
+        rows: getComputedStyle(panel).gridTemplateRows,
+        shade: !!button.querySelector('.press-shade'),
+        panel: { width: pr.width, height: pr.height, top: pr.top, right: pr.right },
+        svg: { width: sr.width, height: sr.height },
+        viewAspect: vb[2]! / vb[3]!,
+        buttonInCorner: br.top - pr.top < 20 && pr.right - br.right < 20,
+      };
+    });
+    check(`[${tag}] a pressed FIT control stays absolutely positioned in the map's corner`,
+      afterPress.position === 'absolute' && afterPress.buttonInCorner,
+      `position ${afterPress.position}, in the corner ${afterPress.buttonInCorner}, press-shade ${afterPress.shade}, rows ${afterPress.rows}`);
+    check(`[${tag}] the map still fills the panel after a FIT round-trip (no stolen 44px)`,
+      Math.abs(afterPress.svg.height - afterPress.panel.height) <= 1 && Math.abs(afterPress.svg.width - afterPress.panel.width) <= 1,
+      `svg ${n1(afterPress.svg.width)}x${n1(afterPress.svg.height)} vs panel ${n1(afterPress.panel.width)}x${n1(afterPress.panel.height)}`);
+    check(`[${tag}] the restored large view keeps the panel's own aspect`,
+      Math.abs(afterPress.viewAspect - afterPress.panel.width / afterPress.panel.height) <= 0.01,
+      `view ${afterPress.viewAspect.toFixed(4)} vs panel ${(afterPress.panel.width / afterPress.panel.height).toFixed(4)}`);
+
     // In FIT mode a tap still selects the nearest cell, never nothing (a preview, but never dead).
     await fitButton.click();
     await page.waitForTimeout(150);

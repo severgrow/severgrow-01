@@ -465,8 +465,14 @@ export const ONLINE_CSS = `
    'fit' toggle"). It rides the panel's top-right corner the way a map control does — absolutely
    positioned, so it is never a grid item, never part of the pannable content, and never takes a
    pan. 44px square at least, because it is a touch control too. Quiet: the same cream ink and
-   hairline border as the selection bar, no fill of its own beyond the panel's own dark glass. */
-.world-fit {
+   hairline border as the selection bar, no fill of its own beyond the panel's own dark glass.
+   The .world-grid > prefix is LOAD-BEARING, not decoration. After the control's first press the
+   global feedback layer gives it a .press-shade child, and style.css's
+   :is(button, …):has(> .press-shade) { position: relative } outranks a plain .world-fit
+   (0,1,1 against 0,1,0). Relative put the control back INTO the panel's grid: it took a 44px row,
+   the map lost that height and the large view was re-framed 7% wider (measured on the live site,
+   2026-10-21). Scoping this rule to the panel restores the corner and the map's height. */
+.world-grid > .world-fit {
   position: absolute; top: 10px; right: 10px; z-index: 2;
   box-sizing: border-box; min-width: 44px; min-height: 44px; padding: 0 10px;
   display: grid; place-items: center;
