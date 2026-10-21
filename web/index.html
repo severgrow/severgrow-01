@@ -245,6 +245,10 @@
              screen, and the line is deleted from the markup rather than hidden so nothing can
              repaint it. The wallet above it carries the one number that matters. -->
         <div id="online-world-wallet" class="world-wallet" aria-live="polite"></div>
+        <!-- The challenge list: only the two participants ever see it, and it is hidden entirely
+             when there is nothing to answer. Each chip carries a small copy of the map's timer ring
+             (world-view.ts), so one shape means one thing on both surfaces. -->
+        <div id="online-world-challenges" class="world-challenges" aria-label="Challenges" hidden></div>
         <div id="online-world-grid" class="world-grid">
           <!-- THE ONE MAP CONTROL (owner, 2026-10-21: "with a 'fit' toggle"). It sits on the panel's
                corner like a map control, and it is a real <button> so it is keyboard reachable and

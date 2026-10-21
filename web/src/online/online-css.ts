@@ -561,6 +561,90 @@ export const ONLINE_CSS = `
 @media (max-height: 650px) { .online-world .online-inner { gap: 6px; } .world-selection { min-height: 48px; } }
 @media (prefers-reduced-motion: reduce) { .world-hex, .world-hex-face { transition: none; } }
 
+/* ---- Territory challenges (docs/TERRITORY-CHALLENGES.md) ------------------ */
+/* THE FRONTIER: a rival tile that shares a side with the selected cell of mine. It keeps the
+   owner's own --territory colour; only the weight lifts, and the notched corner (drawn in
+   world-view.ts) is the one new mark. Nothing else about the map changes. */
+.world-hex.frontier { stroke-width: 1.15; }
+.world-frontier-mark {
+  fill: none; stroke: var(--territory, #e8ddbe); stroke-width: 1.1;
+  stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke; pointer-events: none;
+}
+/* THE TIMER RING, traced on the cell's own six-point outline. pathLength=1 makes the dash a
+   fraction, so the drain is one attribute and never a measurement. The 12 s transition matches the
+   map's poll: each refresh hands it the next offset and it drains continuously between them. */
+.world-ring {
+  fill: none; stroke: var(--territory, #e8ddbe); stroke-width: 1.35;
+  stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none;
+  transition: stroke-dashoffset 12s linear;
+}
+.world-ring.low { animation: world-ring-breath 2.4s ease-in-out infinite; }
+/* Expiry: the ring drains the last of its length and fades over 400 ms (the design's collapse). */
+.world-ring.done { opacity: 0; transition: stroke-dashoffset 400ms ease, opacity 400ms ease; }
+@keyframes world-ring-breath {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .42; }
+}
+/* THE CHALLENGE LIST. Hidden when empty, a horizontal rail when not, so it costs the map no room
+   until there is something to answer. Each chip carries the same ring at chip size. */
+.world-challenges {
+  display: flex; gap: 8px; width: min(100%, 720px); margin-inline: auto;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  padding: 1px 0 2px;
+}
+.world-challenges::-webkit-scrollbar { display: none; }
+.world-challenges[hidden] { display: none; }
+.world-challenge-chip {
+  flex: 0 0 auto; min-height: 44px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 8px; padding: 4px 11px 4px 7px;
+  color: #e8ddbe; background: #161b17cc; border: 1px solid #d5c89b40; border-radius: 9px;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.world-challenge-chip:focus { outline: none; }
+.world-challenge-chip:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+.world-challenge-chip-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.world-challenge-chip-copy strong {
+  font-size: .64rem; font-weight: 700; letter-spacing: .1em; color: #f2e5c5; white-space: nowrap;
+}
+.world-challenge-chip-copy span {
+  font-size: .62rem; letter-spacing: .05em; color: #e8ddbe; opacity: .72; white-space: nowrap;
+}
+.world-chip-ring { width: 22px; height: 24px; flex: none; display: block; }
+.world-chip-ring-path {
+  fill: none; stroke: var(--territory, #e8ddbe); stroke-width: 1.5;
+  stroke-linejoin: round; vector-effect: non-scaling-stroke;
+  transition: stroke-dashoffset 12s linear;
+}
+.world-chip-ring-path.low { animation: world-ring-breath 2.4s ease-in-out infinite; }
+.world-chip-hex { fill: none; stroke: #e8ddbe66; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+
+/* THE SHEET. It reuses the established invitation surface (world-invitation / -card): the same
+   grained page showing through the same translucent glass, cream ink, one primary key. */
+.world-challenge-sheet[hidden] { display: none; }
+.world-challenge-card { width: min(100%, 380px); }
+.world-challenge-line { font-size: .82rem; color: #eee3c6; }
+.world-challenge-meta {
+  margin: -2px 0 10px; font-size: .68rem; letter-spacing: .12em; color: #cfc8ae;
+}
+.world-challenge-keys { width: 100%; display: flex; gap: 8px; }
+.world-challenge-primary { background: #3a4136; }
+.world-challenge-secondary { background: transparent; opacity: .75; }
+.world-challenge-notice { min-height: 0; margin: 0; font-size: .7rem; line-height: 1.35; color: #d9c89a; }
+.world-challenge-notice:not(:empty) { min-height: 1.1em; }
+
+/* The one new continuous motion is the ring; reduced motion keeps its DRAINED LENGTH and stops both
+   the breath and the smooth fill. The expiry fade is not information on its own. */
+@media (prefers-reduced-motion: reduce) {
+  /* The .low class carries the breath at higher specificity, so it must be named too. */
+  .world-ring, .world-ring.low, .world-ring.done,
+  .world-chip-ring-path, .world-chip-ring-path.low {
+    transition: none; animation: none;
+  }
+  .world-ring.done { opacity: 0; }
+}
+
 .world-invitation {
   position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
   padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))

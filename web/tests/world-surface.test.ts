@@ -216,7 +216,9 @@ describe('the world map rests on the ONE shared page surface', () => {
     // that paints first, every EDGE in a lines group above it, and one accent path above both.
     expect(worldView, 'the fills must live in their own group').toContain("faces.classList.add('world-faces')");
     expect(worldView, 'the edges must live in their own group').toContain("lines.classList.add('world-lines')");
-    expect(worldView, 'the edge group must be appended after the fill group').toMatch(/svg\.append\(faces, lines\)/);
+    // The challenge layer (frontier marks, timer rings) paints above the edges and below the
+    // selection accent; the fills still paint first and the edges above them.
+    expect(worldView, 'the edge group must be appended after the fill group').toMatch(/svg\.append\(faces, lines, marks, rings\)/);
     expect(worldView, 'the selection must draw last of all, above every edge').toMatch(/svg\.append\(accentGroup\)/);
     // The fill layer MUST paint before the stroke layer, and a face must not swallow a tap.
     const face = bodyOf(onlineCss, '.world-hex-face');

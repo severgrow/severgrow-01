@@ -1,6 +1,18 @@
 import type { DuelClient } from '../../../server/src/client.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
-import type { SeedWallet } from '../../../server/src/seeds/types.js';
+import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload } from '../../../server/src/seeds/types.js';
+import { worldNeighbours } from '../../../server/src/world.js';
+import { CHALLENGE } from './challenge-copy.js';
+import {
+  challengeForCell as challengeOnCell,
+  isLow,
+  opponentName,
+  playerName,
+  remainingLabel,
+  ringFraction,
+  sheetModeFor,
+  winnerName,
+} from './challenge-view.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { ownerLine } from './world-selection.js';
 
@@ -71,12 +83,50 @@ export class WorldView {
   private pointers = new Map<number, { x: number; y: number }>();
   private dragged = false;
 
+  // ---- Territory challenges -------------------------------------------------
+  /** The authenticated challenge lists. Empty for a guest until identity resolves. */
+  private challenges: WorldChallengesPayload = { incoming: [], outgoing: [], serverNow: Date.now() };
+  /** When the payload landed, so the ring keeps draining between 12 s polls. */
+  private challengeReceivedAt = Date.now();
+  private challengeSignature = '';
+  /** The live ring paths, reused across polls so `stroke-dashoffset` can transition smoothly. */
+  private readonly ringPaths = new Map<string, { path: SVGPathElement; challenge: WorldChallengeWire }>();
+  private ringsGroup: SVGGElement | null = null;
+  private marksGroup: SVGGElement | null = null;
+  /** Set by lobby-ui once `openMatch` exists, so an accepted challenge can open its duel. */
+  private matchOpener: ((matchId: string) => void) | null = null;
+  private sheet: {
+    root: HTMLElement;
+    line: HTMLElement;
+    meta: HTMLElement;
+    primary: HTMLButtonElement;
+    secondary: HTMLButtonElement;
+    notice: HTMLElement;
+  } | null = null;
+  private sheetMode: 'send' | 'defend' | 'wait' | 'duel' | 'confirm' | 'resolved' | 'closed' = 'closed';
+  private sheetCellId: string | null = null;
+  private sheetChallenge: WorldChallengeWire | null = null;
+  private sheetRequestId: string | null = null;
+  private sheetBusy = false;
+  private sheetReturnFocus: HTMLElement | null = null;
+  private readonly onSheetKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && this.sheet && !this.sheet.root.hidden) {
+      event.preventDefault();
+      this.closeSheet();
+    }
+  };
+
   constructor(private readonly client: DuelClient, private readonly ensureIdentity: () => Promise<Identity | null>) {
     document.addEventListener('visibilitychange', () => { if (this.active && !document.hidden) void this.refresh(); });
     // ONE quiet control (see `fitted`). A toggle button: aria-pressed carries the state, the label
     // is set from `ONLINE.worldFit` in lobby-ui.ts. Keyboard and screen readers get it for free
     // because it is a real <button>.
     document.getElementById('online-world-fit')?.addEventListener('click', () => this.setFitted(!this.fitted));
+  }
+
+  /** lobby-ui owns opening a duel; the challenge layer only knows the match id. */
+  setMatchOpener(open: (matchId: string) => void): void {
+    this.matchOpener = open;
   }
 
   async open() {
@@ -100,6 +150,7 @@ export class WorldView {
     this.active = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.closeSheet(false);
   }
   private notice(text: string) { document.getElementById('online-world-notice')!.textContent = text; }
   private schedule() {
@@ -110,13 +161,24 @@ export class WorldView {
     if (!this.active) return;
     try {
       const identityAtRequest = this.identity;
-      const [map, wallet] = await Promise.all([
+      const [map, wallet, challenges] = await Promise.all([
         this.client.worldMap(),
         identityAtRequest ? this.client.seedWallet(identityAtRequest.token).catch(() => null) : Promise.resolve(null),
+        identityAtRequest ? this.client.worldChallenges(identityAtRequest.token).catch(() => null) : Promise.resolve(null),
       ]);
       if (!this.active) return;
-      const walletChanged = identityAtRequest === this.identity && this.wallet?.balance !== wallet?.balance;
-      if (identityAtRequest === this.identity) this.wallet = wallet;
+      const sameIdentity = identityAtRequest === this.identity;
+      const walletChanged = sameIdentity && this.wallet?.balance !== wallet?.balance;
+      if (sameIdentity) this.wallet = wallet;
+      if (sameIdentity && challenges) {
+        this.challenges = challenges;
+        this.challengeReceivedAt = Date.now();
+      } else if (!this.identity) {
+        this.challenges = { incoming: [], outgoing: [], serverNow: Date.now() };
+      }
+      const signature = this.challengeSignatureOf();
+      const challengeChanged = signature !== this.challengeSignature;
+      this.challengeSignature = signature;
       const ownerChanged = this.world?.claims.length !== map.world.claims.length ||
         map.world.claims.some((claim, index) => {
           const previous = this.world?.claims[index];
@@ -124,15 +186,34 @@ export class WorldView {
             previous.ownerId !== claim.ownerId;
         });
       if (!this.world || map.world.revision > this.world.revision ||
-        (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged))) {
+        (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged))) {
         this.world = map.world;
         this.paint();
       }
       this.paintWallet();
       this.paintSelection();
+      // The ring must keep draining even when the world revision is unchanged (a 24 h timer does not
+      // bump ownership). These two only touch attributes and the challenge strip, never the map.
+      this.paintRings();
+      this.paintChallenges();
     } catch {
       if (this.active) this.notice('The world could not refresh. Tap here to try again.');
     } finally { this.schedule(); }
+  }
+
+  private challengeSignatureOf(): string {
+    return [...this.challenges.incoming, ...this.challenges.outgoing]
+      .map((c) => `${c.id}:${c.status}:${c.matchFinished}:${c.winnerId ?? ''}`)
+      .join('|');
+  }
+
+  private get allChallenges(): WorldChallengeWire[] {
+    return [...this.challenges.incoming, ...this.challenges.outgoing];
+  }
+
+  /** Server time plus the time elapsed since the payload landed (no client-clock dependency). */
+  private challengeNow(): number {
+    return (this.challenges.serverNow || Date.now()) + Math.max(0, Date.now() - this.challengeReceivedAt);
   }
     private paintWallet() {
       const node = document.getElementById('online-world-wallet')!;
@@ -240,7 +321,15 @@ export class WorldView {
       });
       lines.append(path);
     }
-    svg.append(faces, lines);
+    // THE CHALLENGE LAYER (docs/TERRITORY-CHALLENGES.md): a frontier mark and a timer ring are the
+    // only additions to the map, and both are above every tile edge so no neighbour can bury them.
+    // The ring traces the cell's OWN `hexPath` — the same six points as the tile — so it is the
+    // shape of the ground, not a circle stuck on top of it.
+    const marks = document.createElementNS(NS, 'g');
+    marks.classList.add('world-frontier-marks');
+    const rings = document.createElementNS(NS, 'g');
+    rings.classList.add('world-rings');
+    svg.append(faces, lines, marks, rings);
     // The accent: ONE path, above every outline, that carries the selection highlight.
     const accentGroup = document.createElementNS(NS, 'g');
     accentGroup.classList.add('world-accent');
@@ -249,6 +338,9 @@ export class WorldView {
     accentGroup.append(accent);
     svg.append(accentGroup);
     this.accent = accent;
+    this.marksGroup = marks;
+    this.ringsGroup = rings;
+    this.ringPaths.clear();
     this.paintAccent();
     // THE FIT BOX carries `PAD` on all four sides, so the outermost cell can be panned clear of the
     // panel's rounded corner (see `PAD`).
@@ -270,6 +362,8 @@ export class WorldView {
     container.append(svg);
     this.svg = svg;
     this.applyView();
+    this.paintFrontier();
+    this.paintRings();
   }
   /**
    * The smallest view the window allows: the largest rect with the WINDOW's own aspect that fits
@@ -376,8 +470,14 @@ export class WorldView {
       path.classList.toggle('selected', path.getAttribute('data-cell-id') === cellId);
       path.classList.toggle('same-owner', !!owner && path.getAttribute('data-owner-id') === owner);
     }
+    this.paintFrontier();
     this.paintAccent();
     this.paintSelection();
+    // A challenged tile opens the challenge sheet; a rival tile on my frontier opens the challenge
+    // offer. Everything else keeps the claim bar, so the map's original behaviour is unchanged.
+    const challenge = challengeOnCell(this.allChallenges, cellId);
+    if (challenge) return this.openChallengeSheet(challenge);
+    if (this.isFrontier(cellId)) this.openSendSheet(cellId);
   }
   private paintSelection(confirm = false) {
     const pane = document.getElementById('online-world-selection')!;
@@ -426,6 +526,421 @@ export class WorldView {
       await this.refresh(true);
     } finally { this.busy = false; this.paintSelection(); }
   }
+  // ---- the challenge layer -------------------------------------------------
+
+  /**
+   * THE FRONTIER mark. It appears only when a cell of MINE is selected: each rival tile that shares
+   * a hex side with it gets a quietly lifted `--territory` edge and a small notched corner. No other
+   * tile changes, so the map stays a map rather than becoming a wall of affordances.
+   */
+  private paintFrontier() {
+    const group = this.marksGroup;
+    if (!group || !this.world) return;
+    group.replaceChildren();
+    const me = this.identity?.playerId ?? null;
+    const selected = this.selected;
+    const selectedMine = !!me && !!selected &&
+      this.world.claims.some((claim) => claim.cellId === selected && claim.ownerId === me);
+    const frontier = new Set<string>();
+    if (selectedMine && selected) {
+      for (const id of worldNeighbours(selected)) {
+        const claim = this.world.claims.find((candidate) => candidate.cellId === id);
+        if (claim && claim.ownerId !== me) frontier.add(id);
+      }
+    }
+    for (const path of this.svg?.querySelectorAll('.world-hex') ?? []) {
+      path.classList.toggle('frontier', frontier.has(path.getAttribute('data-cell-id') ?? ''));
+    }
+    for (const id of frontier) {
+      const cell = this.world.cells.find((candidate) => candidate.id === id);
+      const claim = this.world.claims.find((candidate) => candidate.cellId === id);
+      if (!cell || !claim) continue;
+      const at = coords(cell.q, cell.r);
+      // The top-right vertex of this tile: a small L inset from it reads as a notched corner.
+      const vx = at.x + (X / 2) * R;
+      const vy = at.y - 0.5 * R;
+      const notch = document.createElementNS(NS, 'path');
+      notch.setAttribute('d',
+        `M${(vx - 2.6).toFixed(2)},${(vy + 0.15).toFixed(2)} ` +
+        `L${(vx + 0.15).toFixed(2)},${(vy + 0.15).toFixed(2)} ` +
+        `L${(vx + 0.15).toFixed(2)},${(vy + 2.6).toFixed(2)}`);
+      notch.classList.add('world-frontier-mark');
+      notch.style.setProperty('--territory', claim.colour);
+      group.append(notch);
+    }
+  }
+
+  /** A rival tile that shares a side with any of my cells can be challenged from the map. */
+  private isFrontier(cellId: string): boolean {
+    const me = this.identity?.playerId;
+    if (!me || !this.world) return false;
+    const claim = this.world.claims.find((candidate) => candidate.cellId === cellId);
+    if (!claim || claim.ownerId === me) return false;
+    return worldNeighbours(cellId).some((id) =>
+      this.world!.claims.some((candidate) => candidate.cellId === id && candidate.ownerId === me));
+  }
+
+  /**
+   * THE TIMER RING. One `stroke-dashoffset` on the cell's own six-point `hexPath`, `pathLength=1` so
+   * no measurement is ever needed. Paths are REUSED between polls, so the CSS transition drains the
+   * ring continuously; a ring whose challenge has closed collapses over 400 ms and is removed.
+   */
+  private paintRings() {
+    const group = this.ringsGroup;
+    if (!group || !this.world) return;
+    const now = this.challengeNow();
+    const open = this.allChallenges.filter((challenge) => challenge.status === 'pending');
+    const byId = new Map(open.map((challenge) => [challenge.id, challenge]));
+    for (const [id, entry] of [...this.ringPaths]) {
+      if (byId.has(id)) continue;
+      this.ringPaths.delete(id);
+      entry.path.classList.add('done');
+      entry.path.setAttribute('stroke-dashoffset', '1');
+      setTimeout(() => entry.path.remove(), 450);
+    }
+    for (const challenge of open) {
+      const cell = this.world.cells.find((candidate) => candidate.id === challenge.cellId);
+      const claim = this.world.claims.find((candidate) => candidate.cellId === challenge.cellId);
+      if (!cell || !claim) continue;
+      let entry = this.ringPaths.get(challenge.id);
+      if (!entry) {
+        const at = coords(cell.q, cell.r);
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', hexPath(at.x, at.y));
+        path.setAttribute('pathLength', '1');
+        path.setAttribute('stroke-dasharray', '1');
+        path.setAttribute('fill', 'none');
+        path.classList.add('world-ring');
+        path.setAttribute('data-challenge-id', challenge.id);
+        path.setAttribute('data-cell-id', challenge.cellId);
+        path.setAttribute('aria-hidden', 'true');
+        group.append(path);
+        entry = { path, challenge };
+        this.ringPaths.set(challenge.id, entry);
+      }
+      entry.challenge = challenge;
+      entry.path.style.setProperty('--territory', claim.colour);
+      entry.path.setAttribute('stroke-dashoffset', String(1 - ringFraction(challenge, now)));
+      entry.path.classList.toggle('low', isLow(challenge, now));
+      entry.path.setAttribute('data-remaining-ms', String(Math.max(0, challenge.expiresAt - now)));
+    }
+  }
+
+  /** The incoming/outgoing strip. Hidden when there is nothing to answer, so the map keeps its room. */
+  private paintChallenges() {
+    const strip = document.getElementById('online-world-challenges');
+    if (!strip) return;
+    const rows = this.allChallenges.slice(0, 8);
+    strip.replaceChildren();
+    if (rows.length === 0) {
+      strip.hidden = true;
+      strip.setAttribute('aria-label', CHALLENGE.listLabel);
+      return;
+    }
+    strip.hidden = false;
+    strip.setAttribute('aria-label', CHALLENGE.listLabel);
+    const now = this.challengeNow();
+    for (const challenge of rows) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'world-challenge-chip';
+      chip.dataset.challengeId = challenge.id;
+      chip.append(this.smallRing(challenge, now));
+      const copy = document.createElement('span');
+      copy.className = 'world-challenge-chip-copy';
+      const head = document.createElement('strong');
+      const other = challenge.fromMe ? challenge.defenderName : challenge.challengerName;
+      head.textContent = `${challenge.fromMe ? CHALLENGE.outgoing : CHALLENGE.incoming} · ${other ?? 'Player'}`;
+      const sub = document.createElement('span');
+      sub.textContent = this.chipStatus(challenge, now);
+      copy.append(head, sub);
+      chip.append(copy);
+      chip.setAttribute('aria-label', `${head.textContent}. ${sub.textContent}`);
+      chip.addEventListener('click', () => this.openChallengeSheet(challenge));
+      strip.append(chip);
+    }
+  }
+
+  private chipStatus(challenge: WorldChallengeWire, now: number): string {
+    switch (challenge.status) {
+      case 'pending':
+        return `${challenge.cellId} · ${CHALLENGE.remaining(remainingLabel(challenge.expiresAt - now))}`;
+      case 'accepted':
+        return `${challenge.cellId} · ${challenge.matchFinished ? CHALLENGE.ready : CHALLENGE.duel}`;
+      case 'resolved':
+        return `${challenge.cellId} · ${CHALLENGE.settledShort}`;
+      case 'expired':
+        return `${challenge.cellId} · ${CHALLENGE.forfeited}`;
+      case 'stale':
+        return `${challenge.cellId} · ${CHALLENGE.stale}`;
+      default:
+        return `${challenge.cellId} · ${CHALLENGE.declinedShort}`;
+    }
+  }
+
+  /** The same ring at chip size: the cell's own hex outline, never a circle. */
+  private smallRing(challenge: WorldChallengeWire, now: number): SVGSVGElement {
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '-12 -12 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.classList.add('world-chip-ring');
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', hexPath(0, 0));
+    if (challenge.status === 'pending') {
+      path.setAttribute('pathLength', '1');
+      path.setAttribute('stroke-dasharray', '1');
+      path.setAttribute('stroke-dashoffset', String(1 - ringFraction(challenge, now)));
+      path.classList.add('world-chip-ring-path');
+      path.classList.toggle('low', isLow(challenge, now));
+    } else {
+      path.classList.add('world-chip-hex');
+    }
+    const claim = this.world?.claims.find((candidate) => candidate.cellId === challenge.cellId);
+    if (claim) path.style.setProperty('--territory', claim.colour);
+    svg.append(path);
+    return svg;
+  }
+
+  // ---- the two-state challenge sheet ---------------------------------------
+
+  private ensureSheet(): NonNullable<WorldView['sheet']> {
+    if (this.sheet) return this.sheet;
+    const root = document.createElement('div');
+    root.className = 'world-invitation world-challenge-sheet';
+    root.hidden = true;
+    const card = document.createElement('div');
+    card.className = 'world-invitation-card world-challenge-card';
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+    card.setAttribute('aria-labelledby', 'world-challenge-title');
+    const title = document.createElement('strong');
+    title.id = 'world-challenge-title';
+    title.textContent = CHALLENGE.title;
+    const line = document.createElement('p');
+    line.className = 'world-challenge-line';
+    const meta = document.createElement('p');
+    meta.className = 'world-challenge-meta';
+    const keys = document.createElement('div');
+    keys.className = 'world-challenge-keys';
+    const primary = document.createElement('button');
+    primary.type = 'button';
+    primary.className = 'world-challenge-primary';
+    const secondary = document.createElement('button');
+    secondary.type = 'button';
+    secondary.className = 'world-challenge-secondary';
+    const notice = document.createElement('p');
+    notice.className = 'world-challenge-notice';
+    notice.setAttribute('role', 'status');
+    notice.setAttribute('aria-live', 'polite');
+    keys.append(primary, secondary);
+    card.append(title, line, meta, keys, notice);
+    root.append(card);
+    document.body.append(root);
+    // Dismiss on POINTERDOWN, not click: the tap that opens the sheet is followed by a synthetic
+    // click whose target is now this overlay, and a click listener would close it in the same
+    // gesture. A pointerdown can only belong to a new touch.
+    root.addEventListener('pointerdown', (event) => { if (event.target === root) this.closeSheet(); });
+    primary.addEventListener('click', () => void this.sheetPrimary());
+    secondary.addEventListener('click', () => this.sheetSecondary());
+    this.sheet = { root, line, meta, primary, secondary, notice };
+    return this.sheet;
+  }
+
+  private setSheetKeys(primary: string | null, secondary: string) {
+    const sheet = this.ensureSheet();
+    sheet.primary.hidden = primary === null;
+    sheet.primary.textContent = primary ?? '';
+    sheet.secondary.hidden = false;
+    sheet.secondary.textContent = secondary;
+    sheet.primary.disabled = false;
+    sheet.secondary.disabled = false;
+    this.sheetBusy = false;
+  }
+
+  private showSheet() {
+    const sheet = this.ensureSheet();
+    sheet.root.hidden = false;
+    this.sheetReturnFocus = (document.activeElement as HTMLElement | null) ?? null;
+    document.addEventListener('keydown', this.onSheetKey);
+    const target = !sheet.primary.hidden ? sheet.primary : sheet.secondary;
+    target.focus({ preventScroll: true });
+  }
+
+  private closeSheet(restoreFocus = true) {
+    const sheet = this.sheet;
+    if (!sheet) return;
+    sheet.root.hidden = true;
+    document.removeEventListener('keydown', this.onSheetKey);
+    this.sheetMode = 'closed';
+    this.sheetChallenge = null;
+    this.sheetCellId = null;
+    this.sheetRequestId = null;
+    this.sheetBusy = false;
+    if (restoreFocus && this.sheetReturnFocus?.isConnected) this.sheetReturnFocus.focus({ preventScroll: true });
+    this.sheetReturnFocus = null;
+  }
+
+  /** The challenger's offer: one sentence, one primary key. */
+  private openSendSheet(cellId: string) {
+    const tile = this.world?.claims.find((claim) => claim.cellId === cellId);
+    if (!tile || !this.identity) return;
+    const sheet = this.ensureSheet();
+    const stake = this.world?.cost ?? 100;
+    this.sheetMode = 'send';
+    this.sheetCellId = cellId;
+    this.sheetChallenge = null;
+    this.sheetRequestId = crypto.randomUUID();
+    sheet.line.textContent = CHALLENGE.sendLine(tile.ownerName ?? 'Player', stake);
+    sheet.meta.textContent = `${cellId} · ${stake} SEEDS`;
+    sheet.notice.textContent = '';
+    if (this.wallet && this.wallet.balance < stake) {
+      this.setSheetKeys(null, CHALLENGE.notNow);
+      sheet.notice.textContent = CHALLENGE.noFunds;
+    } else {
+      this.setSheetKeys(CHALLENGE.sendKey, CHALLENGE.notNow);
+    }
+    this.showSheet();
+  }
+
+  /** Every other state of the same sheet. The server's status chooses it; the client never guesses. */
+  private openChallengeSheet(challenge: WorldChallengeWire) {
+    const me = this.identity?.playerId;
+    if (!me) return;
+    const sheet = this.ensureSheet();
+    this.sheetChallenge = challenge;
+    this.sheetCellId = challenge.cellId;
+    this.sheetRequestId = crypto.randomUUID();
+    this.sheetMode = sheetModeFor(challenge, me);
+    const now = this.challengeNow();
+    const other = opponentName(challenge, me);
+    sheet.notice.textContent = '';
+    switch (this.sheetMode) {
+      case 'defend':
+        sheet.line.textContent = CHALLENGE.defendLine(challenge.challengerName ?? 'Player', challenge.stake);
+        sheet.meta.textContent = CHALLENGE.stakeMeta(challenge.stake, remainingLabel(challenge.expiresAt - now));
+        this.setSheetKeys(CHALLENGE.acceptKey, CHALLENGE.declineKey);
+        break;
+      case 'wait':
+        sheet.line.textContent = CHALLENGE.waitLine(challenge.defenderName ?? 'Player');
+        sheet.meta.textContent = CHALLENGE.remaining(remainingLabel(challenge.expiresAt - now));
+        this.setSheetKeys(null, CHALLENGE.close);
+        break;
+      case 'duel':
+        sheet.line.textContent = CHALLENGE.duelLine;
+        sheet.meta.textContent = `${challenge.cellId} · ${other}`;
+        this.setSheetKeys(CHALLENGE.openDuelKey, CHALLENGE.close);
+        break;
+      case 'confirm': {
+        const winner = playerName(challenge, challenge.matchWinnerId);
+        if (winner === null) {
+          sheet.line.textContent = CHALLENGE.drawLine;
+          this.setSheetKeys(CHALLENGE.drawKey, CHALLENGE.notNow);
+        } else {
+          sheet.line.textContent = CHALLENGE.confirmLine(winner);
+          this.setSheetKeys(CHALLENGE.takeKey, CHALLENGE.notNow);
+        }
+        sheet.meta.textContent = `${challenge.cellId} · ${challenge.stake} SEEDS`;
+        break;
+      }
+      case 'resolved':
+        sheet.line.textContent = CHALLENGE.resolvedLine(winnerName(challenge));
+        sheet.meta.textContent = challenge.cellId;
+        this.setSheetKeys(null, CHALLENGE.close);
+        break;
+      default:
+        sheet.line.textContent = CHALLENGE.closedLine;
+        sheet.meta.textContent = challenge.cellId;
+        this.setSheetKeys(null, CHALLENGE.close);
+    }
+    this.showSheet();
+  }
+
+  private async sheetPrimary(): Promise<void> {
+    if (this.sheetBusy) return;
+    switch (this.sheetMode) {
+      case 'send': return this.sheetSend();
+      case 'defend': return this.sheetRespond(true);
+      case 'confirm': return this.sheetConfirm();
+      case 'duel': {
+        const matchId = this.sheetChallenge?.matchId;
+        this.closeSheet();
+        if (matchId) this.matchOpener?.(matchId);
+        return;
+      }
+      default: return;
+    }
+  }
+
+  private sheetSecondary(): void {
+    if (this.sheetMode === 'defend') return void this.sheetRespond(false);
+    this.closeSheet();
+  }
+
+  private async runSheet(work: () => Promise<void>, failure: string): Promise<void> {
+    const sheet = this.sheet;
+    if (!sheet || this.sheetBusy) return;
+    this.sheetBusy = true;
+    sheet.primary.disabled = true;
+    sheet.secondary.disabled = true;
+    sheet.notice.textContent = '';
+    try {
+      await work();
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      sheet.notice.textContent =
+        code === 'NO_FUNDS' ? CHALLENGE.noFunds :
+          code === 'CELL_BUSY' ? CHALLENGE.busy : failure;
+    } finally {
+      this.sheetBusy = false;
+      if (this.sheet) {
+        this.sheet.primary.disabled = false;
+        this.sheet.secondary.disabled = false;
+      }
+    }
+  }
+
+  private async sheetSend(): Promise<void> {
+    const me = this.identity;
+    const cellId = this.sheetCellId;
+    if (!me || !cellId) return;
+    this.sheetRequestId ??= crypto.randomUUID();
+    const requestId = this.sheetRequestId;
+    await this.runSheet(async () => {
+      await this.client.sendWorldChallenge(me.token, cellId, requestId);
+      this.notice(CHALLENGE.sent);
+      this.closeSheet();
+      await this.refresh(true);
+    }, CHALLENGE.sendFailed);
+  }
+
+  private async sheetRespond(accept: boolean): Promise<void> {
+    const me = this.identity;
+    const challenge = this.sheetChallenge;
+    if (!me || !challenge) return;
+    await this.runSheet(async () => {
+      const result = await this.client.respondWorldChallenge(me.token, challenge.id, accept, this.sheetRequestId ?? undefined);
+      this.closeSheet();
+      await this.refresh(true);
+      if (accept && result.matchId) this.matchOpener?.(result.matchId);
+    }, CHALLENGE.answerFailed);
+  }
+
+  private async sheetConfirm(): Promise<void> {
+    const me = this.identity;
+    const challenge = this.sheetChallenge;
+    if (!me || !challenge) return;
+    this.sheetRequestId ??= crypto.randomUUID();
+    const requestId = this.sheetRequestId;
+    await this.runSheet(async () => {
+      const result = await this.client.confirmWorldChallenge(me.token, challenge.id, requestId);
+      this.notice(result.settled
+        ? (result.winnerId === me.playerId ? CHALLENGE.settled : CHALLENGE.resultSettled)
+        : CHALLENGE.alreadySettled);
+      this.closeSheet();
+      await this.refresh(true);
+    }, CHALLENGE.confirmFailed);
+  }
+
   private installPanZoom(svg: SVGSVGElement) {
     const set = () => {
       if (!this.box || !this.fit) return;

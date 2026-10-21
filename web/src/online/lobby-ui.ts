@@ -640,6 +640,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
   };
 
+  // The Territory challenge sheet can open the linked duel it created. `openMatch` is declared here,
+  // after the view was constructed, so the view is handed the opener once it exists.
+  worldView?.setMatchOpener((matchId) => void openMatch(matchId));
+
   /**
    * Creates a fresh match and opens the invite/share screen. `started` is false when the guard
    * refused a second tap, so a caller such as rematch can tell "declined" from "failed".
