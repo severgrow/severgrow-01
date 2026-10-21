@@ -268,6 +268,50 @@ describe('draft + session storage', () => {
     }
   });
 
+  it('undo is offered exactly when it can be honoured, after a grow and after a restore', () => {
+    // Owner, 2026-10-21: a player could not undo after growing. `canUndo` answered from the
+    // drafted actions alone while `undo()` also needed a saved state, so the control could be
+    // offered and then refuse. The two must agree in every state, including one restored from
+    // sessionStorage (a refresh mid-draft).
+    const store = memoryStore();
+    const state = newGame(11);
+    let s = state;
+    const actor = s.actor;
+    if (s.phase === 'DRAW') {
+      const draw = legalActions(viewFor(s, actor)).find((a) => a.t === 'Draw');
+      if (draw) s = applyAs(s, actor, draw);
+    }
+    const view = viewFor(s, s.actor);
+    const draft = createDraftEngine({ matchId: 'undo1', storage: store });
+    draft.syncFromServer(view, 3);
+
+    // Nothing drafted yet: neither offered nor honourable.
+    expect(draft.canUndo()).toBe(false);
+    expect(draft.undo()).toBe(false);
+
+    const grow = draft.legal().find((a) => a.t === 'Sprout' || a.t === 'Bloom' || a.t === 'PlayFruit' || a.t === 'MegaBomb');
+    expect(!!grow).toBe(true);
+    expect(draft.play(grow!)).toBe(true);
+
+    // After a grow: offered AND honourable, and undoing really takes the move back.
+    expect(draft.canUndo()).toBe(true);
+    const before = draft.actions().length;
+    expect(draft.undo()).toBe(true);
+    expect(draft.actions().length).toBe(before - 1);
+    expect(draft.canUndo()).toBe(false); // nothing left to take back
+    expect(draft.undo()).toBe(false); // and it says so, rather than pretending
+
+    // The same must hold for a draft restored from storage.
+    expect(draft.play(grow!)).toBe(true);
+    draft.persist();
+    const restored = createDraftEngine({ matchId: 'undo1', storage: store });
+    restored.syncFromServer(view, 3);
+    expect(restored.actions().length).toBe(1);
+    expect(restored.canUndo()).toBe(true);
+    expect(restored.undo()).toBe(true);
+    expect(restored.canUndo()).toBe(false);
+  });
+
   it('survives offline: draft stays in memory when storage writes fail', () => {
     const view = sampleView(newGame(3));
     const draft = createDraftEngine({ matchId: 'm2', storage: failingStore() });

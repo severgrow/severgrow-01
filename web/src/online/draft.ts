@@ -87,11 +87,24 @@ export const createDraftEngine = (options: {
     }
     let s = shadowFromView(serverView);
     undoStack = [];
-    for (const action of draftActions) {
-      undoStack.push(s);
-      s = applyAs(s, serverView.player, action);
+    try {
+      for (const action of draftActions) {
+        undoStack.push(s);
+        s = applyAs(s, serverView.player, action);
+      }
+      shadow = s;
+    } catch {
+      // A draft that no longer replays against the server's view is STALE (the server moved on,
+      // or the board changed under it). Dropping it is the honest outcome: better a clean turn
+      // than a half-built shadow that throws on the next tap - which is what a player would read
+      // as "undo is broken" (owner, 2026-10-21).
+      draftActions = [];
+      undoStack = [];
+      shadow = shadowFromView(serverView);
+      if (storage) {
+        try { storage.remove(draftStorageKey(matchId)); } catch { /* storage blocked */ }
+      }
     }
-    shadow = s;
   };
 
   const restore = (stored: DraftSnapshot | null): void => {
@@ -162,7 +175,12 @@ export const createDraftEngine = (options: {
       return true;
     },
 
-    canUndo: () => draftActions.length > 0,
+    // ONE SOURCE OF TRUTH (owner, 2026-10-21: "one player wasn't able to undo after growing").
+    // This used to answer from `draftActions` alone while `undo()` also needs an `undoStack`
+    // entry, so the two could disagree and offer a button that then refused. They now agree by
+    // construction: undo is available exactly when there is both an action and a state to go
+    // back to.
+    canUndo: () => draftActions.length > 0 && undoStack.length > 0,
 
     actions: () => draftActions,
 
