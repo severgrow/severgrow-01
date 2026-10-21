@@ -243,6 +243,24 @@ try {
       `y ${scroll.y}, ${scroll.height}/${scroll.viewport}`);
     const chipBox = await page.locator('.world-challenge-chip').first().boundingBox();
     check(`[${tag}] a challenge chip is a 44px touch target`, !!chipBox && chipBox.height >= 44, `${n2(chipBox?.height ?? 0)}px`);
+    const chipRings = await page.evaluate(() => [...document.querySelectorAll('.world-chip-ring-path')].map((node) => {
+      const path = node as SVGPathElement;
+      const d = path.getAttribute('d') ?? '';
+      return {
+        pathLength: path.getAttribute('pathLength'),
+        offset: Number(path.getAttribute('stroke-dashoffset')),
+        commands: d.split('L').length - 1,
+        closed: d.trim().endsWith('Z'),
+        low: path.classList.contains('low'),
+      };
+    }));
+    const chipLow = chipRings.find((ring) => ring.low);
+    // The list's small ring is the SAME instrument: a closed six-point path, a fractional dash, and
+    // the same .75 offset the 6 h map ring shows.
+    check(`[${tag}] the list carries the same drained ring at chip size`,
+      chipRings.length >= 2 && !!chipLow && chipLow.pathLength === '1' && chipLow.commands === 5 &&
+      chipLow.closed && Math.abs(chipLow.offset - 0.75) < 0.02,
+      `${chipRings.length} rings, low offset ${n2(chipLow?.offset ?? -1)}`);
 
     // ---- 2. the ring is the cell's own hex, draining by fraction -----------------------------
     const incoming = await ringData(page, 'in-1');
