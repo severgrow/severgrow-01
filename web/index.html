@@ -245,7 +245,13 @@
              screen, and the line is deleted from the markup rather than hidden so nothing can
              repaint it. The wallet above it carries the one number that matters. -->
         <div id="online-world-wallet" class="world-wallet" aria-live="polite"></div>
-        <div id="online-world-grid" class="world-grid"></div>
+        <div id="online-world-grid" class="world-grid">
+          <!-- THE ONE MAP CONTROL (owner, 2026-10-21: "with a 'fit' toggle"). It sits on the panel's
+               corner like a map control, and it is a real <button> so it is keyboard reachable and
+               announces its pressed state. Its words come from `ONLINE.worldFit*` (lobby-ui.ts);
+               world-view.ts only owns the state and the viewBox. -->
+          <button id="online-world-fit" class="world-fit" type="button" aria-pressed="false"></button>
+        </div>
         <div id="online-world-selection" class="world-selection" aria-live="polite"></div>
         <p id="online-world-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>

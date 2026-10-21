@@ -9,6 +9,20 @@ type World = WorldMapPayload['world'];
 const NS = 'http://www.w3.org/2000/svg';
 const R = 10;
 const X = Math.sqrt(3);
+/**
+ * THE MAP'S OWN GUTTER, in world units, on all four sides of the world's extent. It is the inner
+ * padding of the pannable content (owner, 2026-10-21: an edge cell must clear the panel's 14px
+ * rounded corner at the end of a pan). At 18 units — a little under one hex height — it is ~40px at
+ * the large view's scale, so the outermost column/row is never clipped by the border.
+ */
+const PAD = 18;
+/**
+ * THE SMALLEST A CELL MAY BE DRAWN in the large view, in CSS pixels. The owner's touch minimum is
+ * 44px; one hex is √3·R = 17.32 world units wide, so the framed view is capped at the width that
+ * keeps a cell at 46px — two pixels of headroom over the minimum, for stroke and rounding. FIT mode
+ * is exempt: there the whole silhouette is a preview.
+ */
+const MIN_CELL_PX = 46;
 const coords = (q: number, r: number) => ({ x: X * (q + r / 2) * R, y: 1.5 * r * R });
 const hexPath = (x: number, y: number) => {
   const points = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]];
@@ -43,12 +57,26 @@ export class WorldView {
   private bounds: [number, number, number, number] | null = null;
   /** True once the player has panned or zoomed, so a re-frame never throws their view away. */
   private touched = false;
+  /**
+   * THE FIT TOGGLE (owner, 2026-10-21: "keep it large and pannable in both axes, with a 'fit'
+   * toggle"). FIT is a PURE VIEW change: it draws `containFor` in place of `box` and leaves `box`,
+   * `touched` and every cell untouched, so turning it off restores the exact view the player had.
+   */
+  private fitted = false;
+  /** The panel's measured aspect from the last paint/resize, so a FIT view can be rebuilt on demand. */
+  private aspect = 0;
+  /** The panel's measured width in CSS pixels — the only way to hold the MIN_CELL_PX floor. */
+  private pixels = 0;
   private observer: ResizeObserver | null = null;
   private pointers = new Map<number, { x: number; y: number }>();
   private dragged = false;
 
   constructor(private readonly client: DuelClient, private readonly ensureIdentity: () => Promise<Identity | null>) {
     document.addEventListener('visibilitychange', () => { if (this.active && !document.hidden) void this.refresh(); });
+    // ONE quiet control (see `fitted`). A toggle button: aria-pressed carries the state, the label
+    // is set from `ONLINE.worldFit` in lobby-ui.ts. Keyboard and screen readers get it for free
+    // because it is a real <button>.
+    document.getElementById('online-world-fit')?.addEventListener('click', () => this.setFitted(!this.fitted));
   }
 
   async open() {
@@ -204,7 +232,9 @@ export class WorldView {
       path.tabIndex = 0;
       path.setAttribute('aria-label', owner
         ? `${owner.ownerName ?? 'Player'} #${owner.ownerTag} territory` : `Free world tile ${cell.id}`);
-      path.addEventListener('click', () => { if (!this.dragged) this.select(cell.id); this.dragged = false; });
+      // NO per-path click handler: a tap is resolved once, on the SVG, by snapping to the nearest
+      // cell centre (see `tapAt`). That is the touch-target guarantee — a tap never lands on the
+      // wrong neighbour and never selects nothing. Keyboard selection stays per tile.
       path.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.select(cell.id); }
       });
@@ -220,17 +250,26 @@ export class WorldView {
     svg.append(accentGroup);
     this.accent = accent;
     this.paintAccent();
-    if (!this.fit) this.fit = [minX - 6, minY - 6, maxX - minX + 12, maxY - minY + 12];
+    // THE FIT BOX carries `PAD` on all four sides, so the outermost cell can be panned clear of the
+    // panel's rounded corner (see `PAD`).
+    if (!this.fit) this.fit = [minX - PAD, minY - PAD, maxX - minX + 2 * PAD, maxY - minY + 2 * PAD];
     // Frame the view to the WINDOW, so the map scales up to fill it. A portrait phone crops the
-    // surplus width and pans to the edges; a wide screen resolves to the whole world.
+    // surplus width and pans to the edges; a wide screen resolves to the whole world. The DEFAULT
+    // view is then the framed view capped so one cell is at least MIN_CELL_PX (see `detailFor`).
     const rect = container.getBoundingClientRect();
-    this.bounds = this.boundsFor(rect.height > 0 ? rect.width / rect.height : 0);
-    if (!this.box || !this.touched) this.box = [...(this.bounds ?? this.fit)];
-    svg.setAttribute('viewBox', this.box.join(' '));
+    this.aspect = rect.height > 0 ? rect.width / rect.height : 0;
+    this.pixels = rect.width;
+    this.bounds = this.boundsFor(this.aspect);
+    if (!this.box || !this.touched) {
+      this.box = [...(this.detailFor(this.aspect, rect.width) ?? this.bounds ?? this.fit)];
+    }
     this.observer?.disconnect();
     this.installPanZoom(svg);
-    container.replaceChildren(svg);
+    // Keep the ONE control: the panel's markup owns the FIT button, and only the SVG is replaced.
+    container.querySelector('.world-map-svg')?.remove();
+    container.append(svg);
     this.svg = svg;
+    this.applyView();
   }
   /**
    * The smallest view the window allows: the largest rect with the WINDOW's own aspect that fits
@@ -246,6 +285,77 @@ export class WorldView {
     let w = fh * aspect, h = fh;
     if (w > fw) { w = fw; h = fw / aspect; }
     return [fx + (fw - w) / 2, fy + (fh - h) / 2, w, h];
+  }
+  /**
+   * THE LARGE VIEW AT REST (owner, 2026-10-21: "keep it large and pannable in both axes"). It is the
+   * framed view, shrunk no further than the width that keeps one cell at MIN_CELL_PX. A smaller box
+   * is the same window aspect, so the SVG still fills the panel — it is a zoom-in, never a stretch.
+   * Phones are the only place the cap binds; a wide screen's frame is already well above it.
+   */
+  private detailFor(aspect: number, pixelWidth: number): [number, number, number, number] | null {
+    const frame = this.boundsFor(aspect);
+    if (!frame || !(pixelWidth > 0)) return frame;
+    const [fx, fy, fw, fh] = frame;
+    const width = Math.min(fw, pixelWidth * (X * R) / MIN_CELL_PX);
+    const height = width / aspect;
+    return [fx + (fw - width) / 2, fy + (fh - height) / 2, width, height];
+  }
+  /**
+   * The widest view that still draws one cell at MIN_CELL_PX, in world units. A view WIDER than this
+   * would shrink the touch target below the owner's 44px minimum, so it is a hard limit of the large
+   * view (FIT is exempt).
+   */
+  private cellFloor(): number {
+    return this.pixels > 0 ? this.pixels * (X * R) / MIN_CELL_PX : Infinity;
+  }
+  /**
+   * THE FIT VIEW: the smallest rect with the panel's own aspect that CONTAINS the whole fit box.
+   * The silhouette is entirely on screen with `PAD` as a visible frame — hexes are small here, and
+   * that is expected (the owner: "with a 'fit' toggle"). Used only while `fitted` is on.
+   */
+  private containFor(aspect: number): [number, number, number, number] | null {
+    if (!this.fit || !Number.isFinite(aspect) || aspect <= 0) return null;
+    const [fx, fy, fw, fh] = this.fit;
+    let w = fw, h = fh;
+    if (fw / fh > aspect) h = fw / aspect; else w = fh * aspect;
+    return [fx + (fw - w) / 2, fy + (fh - h) / 2, w, h];
+  }
+  /**
+   * The view's aspect is ALWAYS the panel's. A box measured a frame too early (the panel is a flex
+   * child, so its height can change with the chrome under it) would make `preserveAspectRatio` centre
+   * the map inside a box of the wrong shape — a letterbox band, the exact thing the owner rejected on
+   * 2026-10-16. Keeping the box's WIDTH and re-deriving its height (about the same centre) is the
+   * smallest correction: the pan's horizontal window is untouched.
+   */
+  private reconcile(box: [number, number, number, number] | null, aspect: number): [number, number, number, number] | null {
+    if (!box || !(aspect > 0) || !(box[3] > 0)) return box;
+    if (Math.abs(box[2] / box[3] - aspect) <= 0.002) return box;
+    const height = box[2] / aspect;
+    return [box[0], box[1] + (box[3] - height) / 2, box[2], height];
+  }
+  /**
+   * Write the view. FIT is a pure viewBox change on the SAME svg: cell identity, `box` and
+   * `touched` are untouched, so toggling back lands exactly where the player left the map. There is
+   * no transition either way — a viewBox animation would be motion the owner did not ask for (and
+   * the reduce-motion rule forbids adding it), so the switch is instant by construction.
+   */
+  private applyView() {
+    if (!this.svg) return;
+    // The LIVE measured aspect, not a remembered one: see `reconcile`.
+    const rect = this.svg.getBoundingClientRect();
+    const aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : this.aspect;
+    if (aspect > 0) { this.aspect = aspect; this.pixels = rect.width; }
+    const box = this.fitted ? this.containFor(aspect) : this.reconcile(this.box, aspect);
+    const target = box ?? this.fit;
+    if (target) this.svg.setAttribute('viewBox', target.join(' '));
+  }
+  /** The one control: FIT shows the whole silhouette; off is the large, pannable view. */
+  private setFitted(on: boolean) {
+    this.fitted = on;
+    const button = document.getElementById('online-world-fit');
+    button?.setAttribute('aria-pressed', String(on));
+    document.getElementById('online-world-grid')?.classList.toggle('fitted', on);
+    this.applyView();
   }
   /** The selection highlight, drawn in the ONE accent path above every tile edge. */
   private paintAccent() {
@@ -323,14 +433,19 @@ export class WorldView {
       // the two axes always scale together and the hexes stay true.
       const frame = this.bounds ?? this.fit;
       const aspect = this.box[3] > 0 ? this.box[2] / this.box[3] : 1;
-      this.box[2] = Math.max(frame[2] / 4, Math.min(frame[2], this.box[2]));
+      // As far in as a quarter of the framed view — but never so far that the 44px floor could not be
+      // drawn: on a narrow (landscape-phone) window a quarter is still wider than one cell at 46px.
+      const closest = Math.min(frame[2] / 4, this.cellFloor());
+      this.box[2] = Math.max(closest, Math.min(frame[2], this.box[2]));
       this.box[3] = this.box[2] / aspect;
+      // Panning clamps to the FIT BOX, which carries `PAD` on every side: the outermost column/row
+      // can therefore come fully inside the panel, clear of its rounded corner, on both axes.
       this.box[0] = Math.max(fx, Math.min(fx + fw - this.box[2], this.box[0]));
       this.box[1] = Math.max(fy, Math.min(fy + fh - this.box[3], this.box[1]));
-      svg.setAttribute('viewBox', this.box.join(' '));
+      this.applyView();
     };
     const zoom = (scale: number, x: number, y: number) => {
-      if (!this.box || !this.fit) return;
+      if (!this.box || !this.fit || this.fitted) return;
       const [bx, by, bw, bh] = this.box;
       const rect = svg.getBoundingClientRect();
       const fx = (x - rect.left) / rect.width, fy = (y - rect.top) / rect.height;
@@ -342,6 +457,34 @@ export class WorldView {
       this.box = [bx + fx * (bw - width), by + fy * (bh - height), width, height];
       this.touched = true;
       set();
+    };
+    /**
+     * A TAP RESOLVES TO THE CELL THE FINGER IS NEAREST (owner, 2026-10-21). The large view already
+     * draws a cell at MIN_CELL_PX, so a hex is its own >=44px target; this is the second half of the
+     * guarantee — a tap in the padding, between two cells, or anywhere in the small FIT view still
+     * selects the nearest cell and never nothing. Nearest CENTRE is the honest rule: the hexagons
+     * tile the plane, so "nearest centre" is the cell under the finger, and a shared edge cannot pick
+     * an arbitrary neighbour from DOM paint order.
+     */
+    const tapAt = (event: PointerEvent) => {
+      const cells = this.world?.cells;
+      if (!cells?.length) return;
+      // The box ACTUALLY on screen, read from the SVG: it is the only mapping that cannot disagree
+      // with what the finger saw (FIT, pan and the aspect correction all land in this attribute).
+      const box = (svg.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
+      if (box.length !== 4 || box.some((value) => !Number.isFinite(value))) return;
+      const rect = svg.getBoundingClientRect();
+      if (!(rect.width > 0) || !(rect.height > 0)) return;
+      const wx = box[0]! + (event.clientX - rect.left) / rect.width * box[2]!;
+      const wy = box[1]! + (event.clientY - rect.top) / rect.height * box[3]!;
+      let best: string | null = null;
+      let bestDistance = Infinity;
+      for (const cell of cells) {
+        const at = coords(cell.q, cell.r);
+        const distance = (at.x - wx) ** 2 + (at.y - wy) ** 2;
+        if (distance < bestDistance) { bestDistance = distance; best = cell.id; }
+      }
+      if (best) this.select(best);
     };
     svg.addEventListener('wheel', (event) => {
       event.preventDefault(); zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX, event.clientY);
@@ -356,10 +499,18 @@ export class WorldView {
       const dx = event.clientX - old.x, dy = event.clientY - old.y;
       if (Math.abs(dx) + Math.abs(dy) > 3) {
         this.dragged = true;
-        this.touched = true;
-        // Capturing on pointerdown retargets a touch tap's click to the SVG,
-        // so a tile never receives it. Capture only once the gesture is a pan.
-        if (!svg.hasPointerCapture(event.pointerId)) svg.setPointerCapture(event.pointerId);
+        // FIT mode is a preview of the whole silhouette: a drag there must not move the saved view,
+        // so the finger can still be lifted without selecting a tile.
+        if (!this.fitted) {
+          this.touched = true;
+          // Capturing on pointerdown retargets a touch tap's click to the SVG,
+          // so a tile never receives it. Capture only once the gesture is a pan.
+          if (!svg.hasPointerCapture(event.pointerId)) svg.setPointerCapture(event.pointerId);
+        }
+      }
+      if (this.fitted) {
+        this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        return;
       }
       const rect = svg.getBoundingClientRect();
       if (this.pointers.size === 1) {
@@ -375,19 +526,30 @@ export class WorldView {
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     });
     const end = (event: PointerEvent) => { this.pointers.delete(event.pointerId); };
-    svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
+    svg.addEventListener('pointerup', (event) => {
+      end(event);
+      // A tap, not the end of a pan: select the nearest cell. (Mouse's right/middle buttons and a
+      // second finger are not taps.)
+      if (!this.dragged && event.button === 0) tapAt(event);
+      this.dragged = false;
+    });
+    svg.addEventListener('pointercancel', (event) => { end(event); this.dragged = false; });
     // Re-frame when the WINDOW changes shape (a phone rotating, the on-screen keyboard, a notice line
     // changing the column's chrome). Untouched: the view follows the new frame exactly. Touched: the
     // player's zoom level is kept and re-derived at the new aspect, so the view stays band-free.
     if (typeof ResizeObserver === 'function') {
       this.observer = new ResizeObserver(() => {
         const r = svg.getBoundingClientRect();
-        const next = this.boundsFor(r.height > 0 ? r.width / r.height : 0);
+        const aspect = r.height > 0 ? r.width / r.height : 0;
+        const next = this.boundsFor(aspect);
         if (!next || !this.box) return;
         const prev = this.bounds;
+        this.aspect = aspect;
+        this.pixels = r.width;
         this.bounds = next;
         if (!this.touched || !prev) {
-          this.box = [...next];
+          // The large view is re-derived too, so a rotated phone keeps the 44px floor.
+          this.box = [...(this.detailFor(aspect, r.width) ?? next)];
         } else {
           const z = this.box[2] / prev[2];
           this.box[2] = next[2] * z;

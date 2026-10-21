@@ -146,11 +146,13 @@ describe('the world map rests on the ONE shared page surface', () => {
 
   it('the world geometry drives the width cap, and the framing lives in the view', () => {
     // Mirrors the viewBox `web/src/online/world-view.ts` builds from the cells: R = 10, X = sqrt(3),
-    // and a 6-unit pad on every side. If the world's shape ever changes, this fails and the cap has
-    // to move with it. (The view itself is framed by the WINDOW’s aspect at runtime, which is why
-    // the ratio appears in the dvh cap and in world-view.ts, and no longer as a CSS aspect-ratio.)
+    // and world-view.ts's own `PAD` (18 units) on every side. If the world's shape ever changes, this
+    // fails and the cap has to move with it. (The view itself is framed by the WINDOW’s aspect at
+    // runtime, which is why the ratio appears in the dvh cap and in world-view.ts, and no longer as a
+    // CSS aspect-ratio.)
     const R = 10;
     const X = Math.sqrt(3);
+    const PAD = 18;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const { q, r } of WORLD_CELLS) {
       const x = X * (q + r / 2) * R;
@@ -158,7 +160,7 @@ describe('the world map rests on the ONE shared page surface', () => {
       minX = Math.min(minX, x - R); maxX = Math.max(maxX, x + R);
       minY = Math.min(minY, y - R); maxY = Math.max(maxY, y + R);
     }
-    const svgRatio = (maxX - minX + 12) / (maxY - minY + 12);
+    const svgRatio = (maxX - minX + 2 * PAD) / (maxY - minY + 2 * PAD);
     expect(svgRatio, `the world is nearly square: ${svgRatio.toFixed(4)}`).toBeGreaterThan(0.99);
 
     const grid = bodyOf(onlineCss, '.world-grid')!;
