@@ -4157,6 +4157,14 @@ function guidanceOff(): boolean {
  * other. Guidance is derived from the live position (logic/onboarding.ts), never scripted.
  */
 function onboardingActive(): boolean {
+  // AN ONLINE DUEL IS NEVER A LESSON (owner, 2026-10-21). The two gates differ in where they read
+  // their state: `lessonActive` matches `campaignLevel` against the level whose script is loaded,
+  // but this one only asks "campaign level <= 10", and `campaignLevel` is NOT cleared when an
+  // online match starts. So a player who had reached, say, level 5 and then opened an online duel
+  // still looked like a beginner here: onboarding came back on, which adds the `futa04-tutorial`
+  // class (the padded "tutorial window" that shrinks the map) and explains Bloom again mid-duel.
+  // Guard on the mode itself, exactly as `lessonActive` does, so no stale campaign state can leak.
+  if (isOnlineDuel()) return false;
   if (lessonActive()) return false;
   return FEATURES.guidance && !guidanceOff() && !coach.tutorial && !!campaignLevel
     && campaignLevel.number <= ONBOARDING_LEVELS && !!session && !watching;
@@ -8931,6 +8939,10 @@ void import('./online/lobby-ui.js').then(async (m) => {
       });
       const os = new OnlineSession(driver);
       setOnlineSession(os);
+      // An online duel is not a campaign match: drop the campaign level so no campaign-only
+      // surface (guidance, the tutorial window, lesson copy) can read a stale one. The save keeps
+      // the campaign's own progress; this is only what THIS match is.
+      campaignLevel = null;
       syncSessionFromOnline(true);
       if (session) {
         board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
