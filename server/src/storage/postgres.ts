@@ -90,6 +90,9 @@ const rowToMatch = (row: PgRow): MatchRecord => ({
   liveManaged: row.live_since != null || row.live_tail_rev != null || row.live_autoplay_rev != null,
   // Migration 0013. Like the player mapper: read-through only, never written by `persistMatch`.
   isTest: row.is_test === true || row.is_test === 't',
+  // Migration 0014. A historical row predates the column's default only in a read against an
+  // unmigrated database; it is still an ordinary duel.
+  kind: row.kind === 'territory' ? 'territory' : 'duel',
 });
 
 const rowToParticipant = (row: PgRow): Participant => ({
@@ -130,8 +133,8 @@ const INSERT_MATCH_SQL = `insert into matches
   (id, invite_code, rules_version, seed, config, starting_player, status, revision, state, result,
    created_at, updated_at, finished_at, turn_deadline_at, turn_timeout_ms, turn_start_revision,
    turn_start_state, expires_at, open_queue, grace_used_seat0, grace_used_seat1, grace_periods,
-   grace_extension_ms)
- values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`;
+   grace_extension_ms, kind)
+ values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`;
 
 const matchInsertValues = (match: MatchRecord): unknown[] => [
   match.id,
@@ -157,6 +160,7 @@ const matchInsertValues = (match: MatchRecord): unknown[] => [
   match.graceUsed[1],
   match.gracePeriods,
   match.graceExtensionMs,
+  match.kind ?? 'duel',
 ];
 
 /**

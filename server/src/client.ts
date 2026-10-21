@@ -25,7 +25,13 @@ import type {
   UpgradeResponse,
   WorldMapPayload,
 } from './protocol.js';
-import type { ClaimResult, RewardResult, SeedWallet } from './seeds/types.js';
+import type {
+  ClaimResult,
+  RewardResult,
+  SeedWallet,
+  WorldChallengeWire,
+  WorldChallengesPayload,
+} from './seeds/types.js';
 import type { Action } from '../../src/engine/index.js';
 
 /** Protocol version the browser/build reports (P-5 handshake). */
@@ -292,6 +298,42 @@ export class DuelClient {
 
   async acknowledgeWorldInvitation(token: string): Promise<void> {
     await this.request('POST', '/v1/world/invitation', { token, body: {} });
+  }
+
+  // ---- Territory challenges (docs/TERRITORY-CHALLENGES.md) ----
+
+  async worldChallenges(token: string): Promise<WorldChallengesPayload> {
+    const response = await this.request<WorldChallengesPayload & { ok: true }>('GET', '/v1/world/challenges', { token });
+    return { incoming: response.incoming, outgoing: response.outgoing, serverNow: response.serverNow };
+  }
+
+  async sendWorldChallenge(token: string, cellId: string, requestId: string): Promise<{ challenge: WorldChallengeWire; replayed: boolean }> {
+    return await this.request('POST', '/v1/world/challenges', { token, body: { cellId, requestId } });
+  }
+
+  async respondWorldChallenge(
+    token: string,
+    challengeId: string,
+    accept: boolean,
+    requestId?: string,
+  ): Promise<{ challenge: WorldChallengeWire; matchId: string | null }> {
+    return await this.request('POST', `/v1/world/challenges/${encodeURIComponent(challengeId)}/respond`, {
+      token,
+      body: { accept, ...(requestId === undefined ? {} : { requestId }) },
+    });
+  }
+
+  async confirmWorldChallenge(token: string, challengeId: string, requestId?: string): Promise<{
+    settled: boolean;
+    winnerId: string | null;
+    cellId: string;
+    replayed: boolean;
+    challenge: WorldChallengeWire;
+  }> {
+    return await this.request('POST', `/v1/world/challenges/${encodeURIComponent(challengeId)}/confirm`, {
+      token,
+      body: requestId === undefined ? {} : { requestId },
+    });
   }
 
   async issueTrainingTicket(token: string, botLevel: number): Promise<{ id: string; seed: number; botLevel: number; expiresAt: number }> {

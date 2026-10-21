@@ -1,7 +1,27 @@
-import { SEED_ECONOMY, campaignLevelOfSourceKey, utcDay } from './config.js';
+import {
+  SEED_ECONOMY,
+  WORLD_CHALLENGE_OPEN_LIMIT,
+  WORLD_CHALLENGE_STALE_MS,
+  WORLD_CHALLENGE_TTL_MS,
+  campaignLevelOfSourceKey,
+  utcDay,
+} from './config.js';
 import { newId } from '../ids.js';
 import { planSeedReward } from './rewards.js';
-import type { ClaimResult, RewardInput, RewardResult, SeedWallet, TrainingTicket, WorldClaim, WorldEconomyStore, WorldSnapshot } from './types.js';
+import type {
+  ChallengeRespondResult,
+  ChallengeSendResult,
+  ChallengeSettleResult,
+  ClaimResult,
+  RewardInput,
+  RewardResult,
+  SeedWallet,
+  TrainingTicket,
+  WorldChallenge,
+  WorldClaim,
+  WorldEconomyStore,
+  WorldSnapshot,
+} from './types.js';
 import { emptyWallet } from './types.js';
 import { WORLD_CELL_IDS, worldNeighbours } from '../world.js';
 
@@ -21,6 +41,9 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   readonly tickets = new Map<string, TrainingTicket>();
   readonly purchases = new Map<string, string>();
   readonly wallets = new Map<string, SeedWallet>();
+  readonly challenges = new Map<string, WorldChallenge>();
+  /** `${challengerId}:${requestId}` → challenge id, the idempotency key of a send. */
+  readonly challengeRequests = new Map<string, string>();
   revision = 0;
 
   private current(playerId: string): SeedWallet {
@@ -93,4 +116,167 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   async acknowledgeInvitation(playerId: string): Promise<void> { this.current(playerId).worldInvitationSeen = true; }
   async issueTrainingTicket(ticket: TrainingTicket): Promise<void> { this.tickets.set(ticket.id, { ...ticket }); }
   async trainingTicket(id: string): Promise<TrainingTicket | null> { return this.tickets.get(id) ?? null; }
+
+  // ---- Territory challenges -------------------------------------------------
+  //
+  // Every mutation below runs to completion without an `await`, exactly like the claim path above:
+  // Node's single-threaded event loop gives the same all-or-nothing guarantee the Postgres store
+  // gets from its transactions and row locks. Seeds are only MOVED — the escrow debit plus the one
+  // matching credit (refund or payout) always nets to zero across the two players.
+
+  /** A refund or payout. Lifetime counters are untouched: this moves value, it does not earn it. */
+  private credit(playerId: string, amount: number, sourceKey: string, now: number): void {
+    const wallet = this.current(playerId);
+    wallet.balance += amount;
+    this.ledger.push({ id: newId(), playerId, delta: amount, category: 'world_challenge', sourceKey, balanceAfter: wallet.balance, createdAt: now });
+  }
+  private openChallenges(): WorldChallenge[] {
+    return [...this.challenges.values()].filter((c) => c.status === 'pending' || c.status === 'accepted');
+  }
+  /** Re-own a held cell. Returns false when the expected holder no longer holds it. */
+  private takeCell(cellId: string, expectedOwnerId: string, toPlayerId: string, now: number): boolean {
+    const claim = this.claims.get(cellId);
+    if (!claim || claim.ownerId !== expectedOwnerId) return false;
+    this.claims.set(cellId, { ...claim, ownerId: toPlayerId, ownerName: null, ownerLevel: null, claimedAt: now });
+    // The old purchase receipt still belongs to the old owner; it must not replay as a claim.
+    for (const [key, id] of this.purchases) if (id === cellId) this.purchases.delete(key);
+    return true;
+  }
+
+  async challenge(id: string): Promise<WorldChallenge | null> {
+    const found = this.challenges.get(id);
+    return found ? { ...found } : null;
+  }
+
+  async sendChallenge(input: { challengerId: string; cellId: string; requestId: string; stake: number; now: number }): Promise<ChallengeSendResult> {
+    const wallet = this.current(input.challengerId);
+    const replayId = this.challengeRequests.get(`${input.challengerId}:${input.requestId}`);
+    if (replayId) {
+      const replay = this.challenges.get(replayId);
+      if (replay) return { ok: true, challenge: { ...replay }, replayed: true };
+    }
+    const fail = (code: Extract<ChallengeSendResult, { ok: false }>['code']): ChallengeSendResult => ({ ok: false, code });
+    if (!WORLD_CELL_IDS.has(input.cellId)) return fail('INVALID_CELL');
+    const target = this.claims.get(input.cellId);
+    if (!target) return fail('NOT_OWNED');
+    if (target.ownerId === input.challengerId) return fail('OWN_TILE');
+    const ownNeighbour = worldNeighbours(input.cellId)
+      .some((id) => this.claims.get(id)?.ownerId === input.challengerId);
+    if (!ownNeighbour) return fail('NOT_ADJACENT');
+    if (this.openChallenges().some((c) => c.cellId === input.cellId)) return fail('CELL_BUSY');
+    if (this.openChallenges().filter((c) => c.challengerId === input.challengerId).length >= WORLD_CHALLENGE_OPEN_LIMIT) return fail('TOO_MANY_OPEN');
+    if (this.openChallenges().filter((c) => c.defenderId === target.ownerId).length >= WORLD_CHALLENGE_OPEN_LIMIT) return fail('DEFENDER_TOO_MANY');
+    if (wallet.balance < input.stake) return fail('NO_FUNDS');
+
+    const id = newId();
+    const challenge: WorldChallenge = {
+      id,
+      cellId: input.cellId,
+      challengerId: input.challengerId,
+      defenderId: target.ownerId,
+      status: 'pending',
+      stake: input.stake,
+      createdAt: input.now,
+      expiresAt: input.now + WORLD_CHALLENGE_TTL_MS,
+      respondedAt: null,
+      matchId: null,
+      winnerId: null,
+      resolvedAt: null,
+    };
+    wallet.balance -= input.stake;
+    wallet.lifetimeSpent += input.stake;
+    this.ledger.push({
+      id: newId(), playerId: input.challengerId, delta: -input.stake, category: 'world_challenge',
+      sourceKey: `world-challenge:${id}:escrow`, balanceAfter: wallet.balance, createdAt: input.now,
+    });
+    this.challenges.set(id, challenge);
+    this.challengeRequests.set(`${input.challengerId}:${input.requestId}`, id);
+    return { ok: true, challenge: { ...challenge }, replayed: false };
+  }
+
+  async respondChallenge(input: { id: string; defenderId: string; accept: boolean; matchId: string | null; now: number }): Promise<ChallengeRespondResult> {
+    const challenge = this.challenges.get(input.id);
+    if (!challenge || challenge.defenderId !== input.defenderId) return { ok: false, code: 'CHALLENGE_NOT_FOUND' };
+    // A repeated answer is the original answer, not a second change.
+    if (challenge.status === 'accepted' && input.accept) return { ok: true, challenge: { ...challenge }, replayed: true };
+    if (challenge.status === 'declined' && !input.accept) return { ok: true, challenge: { ...challenge }, replayed: true };
+    if (challenge.status !== 'pending') return { ok: false, code: 'CHALLENGE_CLOSED' };
+    if (input.accept && !input.matchId) return { ok: false, code: 'CHALLENGE_CLOSED' };
+    if (input.accept) {
+      challenge.status = 'accepted';
+      challenge.matchId = input.matchId;
+      challenge.respondedAt = input.now;
+    } else {
+      challenge.status = 'declined';
+      challenge.respondedAt = input.now;
+      this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:refund`, input.now);
+    }
+    return { ok: true, challenge: { ...challenge }, replayed: false };
+  }
+
+  async settleChallenge(input: { id: string; playerId: string; winnerId: string | null; now: number }): Promise<ChallengeSettleResult> {
+    const challenge = this.challenges.get(input.id);
+    if (!challenge || (challenge.challengerId !== input.playerId && challenge.defenderId !== input.playerId)) {
+      return { ok: false, code: 'CHALLENGE_NOT_FOUND' };
+    }
+    if (challenge.status === 'resolved') {
+      // First-confirmed-wins: the second confirmation returns the stored result and touches nothing.
+      return {
+        ok: true, challenge: { ...challenge }, settled: false,
+        winnerId: challenge.winnerId, cellId: challenge.cellId, replayed: true,
+      };
+    }
+    if (challenge.status !== 'accepted') return { ok: false, code: 'CHALLENGE_CLOSED' };
+
+    // Only an actual re-own bumps the shared revision; the state change alone does not move the map.
+    if (input.winnerId === challenge.challengerId &&
+      this.takeCell(challenge.cellId, challenge.defenderId, challenge.challengerId, input.now)) {
+      this.revision += 1;
+    }
+    // The stake follows the win. A draw has no winner: the challenger gets it back and the tile stays.
+    if (input.winnerId === challenge.defenderId) {
+      this.credit(challenge.defenderId, challenge.stake, `world-challenge:${challenge.id}:payout`, input.now);
+    } else {
+      this.credit(challenge.challengerId, challenge.stake,
+        `world-challenge:${challenge.id}:${input.winnerId === null ? 'refund' : 'payout'}`, input.now);
+    }
+    challenge.status = 'resolved';
+    challenge.winnerId = input.winnerId;
+    challenge.resolvedAt = input.now;
+    return { ok: true, challenge: { ...challenge }, settled: true, winnerId: challenge.winnerId, cellId: challenge.cellId, replayed: false };
+  }
+
+  async challengesInvolving(playerId: string, since: number): Promise<WorldChallenge[]> {
+    return [...this.challenges.values()]
+      .filter((c) =>
+        (c.challengerId === playerId && c.createdAt >= since) ||
+        (c.defenderId === playerId && (c.status === 'pending' || c.status === 'accepted' || c.createdAt >= since)))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 50)
+      .map((c) => ({ ...c }));
+  }
+
+  async expireChallenges(now: number): Promise<number> {
+    let changed = 0;
+    for (const challenge of this.challenges.values()) {
+      if (challenge.status === 'pending' && challenge.expiresAt <= now) {
+        // The owner's decision: an unanswered challenge is a FORFEIT. The challenger takes the tile
+        // and their own stake comes back (they won it); the defender loses the tile.
+        if (this.takeCell(challenge.cellId, challenge.defenderId, challenge.challengerId, now)) this.revision += 1;
+        challenge.status = 'expired';
+        challenge.winnerId = challenge.challengerId;
+        challenge.resolvedAt = now;
+        this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:payout`, now);
+        changed += 1;
+      } else if (challenge.status === 'accepted' && challenge.respondedAt !== null &&
+        challenge.respondedAt + WORLD_CHALLENGE_STALE_MS <= now) {
+        // Never transfers: a linked duel that never resolved simply hands the stake back.
+        challenge.status = 'stale';
+        challenge.resolvedAt = now;
+        this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:refund`, now);
+        changed += 1;
+      }
+    }
+    return changed;
+  }
 }

@@ -71,6 +71,11 @@ export type MatchRecord = {
    * `PlayerRecord.isTest`: never written by the game, only read by the admin dashboard.
    */
   isTest?: boolean;
+  /**
+   * What kind of duel this is (migration 0014): `duel` is the ordinary match, `territory` is the
+   * linked duel a Territory challenge creates. Absent on historical rows means `duel`.
+   */
+  kind?: 'duel' | 'territory';
 };
 
 export type Participant = {

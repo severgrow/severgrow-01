@@ -11,6 +11,18 @@ export const SEED_ECONOMY = Object.freeze({
 } as const);
 
 /**
+ * Territory challenges (docs/TERRITORY-CHALLENGES.md). The stake is `SEED_ECONOMY.tileCost` — one
+ * tile's price — so the two sides wager the same value. The timers are not economy values: they are
+ * the defender's answer window and the outer bound on a linked duel that never resolves.
+ */
+export const WORLD_CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
+export const WORLD_CHALLENGE_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+/** At most this many OPEN outgoing challenges per challenger, and incoming per defender. */
+export const WORLD_CHALLENGE_OPEN_LIMIT = 3;
+/** Rows older than this are no longer listed in a player's outgoing history. */
+export const WORLD_CHALLENGE_LIST_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
  * The last Campaign level the economy pays for. One constant, because three places must agree: the
  * award guard here, the admin's chapter rollup, and the campaign data. It moved 50 → 70 on
  * 2026-10-18 when chapters IV-VII were added.

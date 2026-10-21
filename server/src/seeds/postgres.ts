@@ -1,9 +1,27 @@
 import type { PgClient, PgPool } from '../storage/postgres.js';
 import { newId } from '../ids.js';
 import { WORLD_CELL_IDS, worldNeighbours } from '../world.js';
-import { SEED_ECONOMY, utcDay } from './config.js';
+import {
+  SEED_ECONOMY,
+  WORLD_CHALLENGE_OPEN_LIMIT,
+  WORLD_CHALLENGE_STALE_MS,
+  WORLD_CHALLENGE_TTL_MS,
+  utcDay,
+} from './config.js';
 import { planSeedReward } from './rewards.js';
-import type { ClaimResult, RewardInput, RewardResult, SeedWallet, TrainingTicket, WorldEconomyStore } from './types.js';
+import type {
+  ChallengeRespondResult,
+  ChallengeSendResult,
+  ChallengeSettleResult,
+  ClaimResult,
+  RewardInput,
+  RewardResult,
+  SeedWallet,
+  TrainingTicket,
+  WorldChallenge,
+  WorldChallengeStatus,
+  WorldEconomyStore,
+} from './types.js';
 import { emptyWallet } from './types.js';
 
 const number = (v: unknown): number => Number(v ?? 0);
@@ -31,6 +49,64 @@ const transaction = async <T>(pool: PgPool, work: (client: PgClient) => Promise<
   } finally {
     client.release?.();
   }
+};
+
+const challengeFromRow = (r: Record<string, unknown>): WorldChallenge => ({
+  id: String(r.id),
+  cellId: String(r.cell_id),
+  challengerId: String(r.challenger_id),
+  defenderId: String(r.defender_id),
+  status: String(r.status) as WorldChallengeStatus,
+  stake: number(r.stake),
+  createdAt: number(r.created_at),
+  expiresAt: number(r.expires_at),
+  respondedAt: r.responded_at == null ? null : number(r.responded_at),
+  matchId: r.match_id == null ? null : String(r.match_id),
+  winnerId: r.winner_id == null ? null : String(r.winner_id),
+  resolvedAt: r.resolved_at == null ? null : number(r.resolved_at),
+});
+
+/**
+ * Credit a wallet and record the matching positive ledger row in the caller's transaction. The
+ * wallet row is created lazily, so a defender who has never earned Seeds can still be paid a stake.
+ * Lifetime counters are deliberately untouched: this is a transfer, not an earning.
+ */
+const creditWallet = async (
+  client: PgClient,
+  playerId: string,
+  amount: number,
+  sourceKey: string,
+  now: number,
+): Promise<void> => {
+  await client.query('insert into seed_wallets(player_id) values ($1) on conflict do nothing', [playerId]);
+  const changed = await client.query('update seed_wallets set balance=balance+$2 where player_id=$1 returning *', [playerId, amount]);
+  const wallet = walletFromRow(changed.rows[0]!);
+  await client.query(
+    `insert into seed_ledger(id,player_id,delta,balance_after,category,source_key,economy_version,created_at)
+     values($1,$2,$3,$4,'world_challenge',$5,$6,$7)`,
+    [newId(), playerId, amount, wallet.balance, sourceKey, SEED_ECONOMY.version, now],
+  );
+};
+
+/**
+ * Re-own a held cell, but ONLY while the expected holder still holds it. Returns true when the
+ * ownership actually moved; that is the single condition that also bumps the world revision.
+ */
+const takeCell = async (
+  client: PgClient,
+  cellId: string,
+  expectedOwnerId: string,
+  toPlayerId: string,
+  now: number,
+): Promise<boolean> => {
+  const updated = await client.query(
+    `update world_claims
+        set owner_id=$3, claimed_at=$4, source='challenge', purchase_request_key=null
+      where cell_id=$1 and owner_id=$2
+      returning cell_id`,
+    [cellId, expectedOwnerId, toPlayerId, now],
+  );
+  return updated.rows.length > 0;
 };
 
 /** All debits, credits, caps and claims are checked and written inside Postgres transactions. */
@@ -178,5 +254,172 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
       id: String(r.id), playerId: String(r.player_id), seed: number(r.seed), botLevel: number(r.bot_level),
       createdAt: number(r.created_at), expiresAt: number(r.expires_at), usedAt: r.used_at == null ? null : number(r.used_at),
     } : null;
+  },
+
+  // ---- Territory challenges -------------------------------------------------
+  //
+  // The send path is the proven `claim()` shape: lock the wallet, then insert the escrow row, the
+  // challenge row and the signed ledger entry in ONE transaction. Every settlement path locks the
+  // challenge row first and moves the stake in that same transaction, so a retry can never pay
+  // twice and the two players' balances always net to the value that existed before the challenge.
+
+  async challenge(id) {
+    const { rows } = await pool.query('select * from world_challenges where id=$1', [id]);
+    return rows[0] ? challengeFromRow(rows[0]) : null;
+  },
+
+  async sendChallenge(input): Promise<ChallengeSendResult> {
+    try {
+      return await transaction(pool, async (client) => {
+        const wallet = await lockedWallet(client, input.challengerId);
+        const prior = await client.query('select * from world_challenges where challenger_id=$1 and request_key=$2', [input.challengerId, input.requestId]);
+        if (prior.rows[0]) return { ok: true, challenge: challengeFromRow(prior.rows[0]), replayed: true };
+        const fail = (code: Extract<ChallengeSendResult, { ok: false }>['code']): ChallengeSendResult => ({ ok: false, code });
+        if (!WORLD_CELL_IDS.has(input.cellId)) return fail('INVALID_CELL');
+        const target = await client.query('select owner_id from world_claims where cell_id=$1', [input.cellId]);
+        if (!target.rows[0]) return fail('NOT_OWNED');
+        const defenderId = String(target.rows[0].owner_id);
+        if (defenderId === input.challengerId) return fail('OWN_TILE');
+        const own = await client.query('select cell_id from world_claims where owner_id=$1', [input.challengerId]);
+        if (!worldNeighbours(input.cellId).some((id) => own.rows.some((r) => String(r.cell_id) === id))) return fail('NOT_ADJACENT');
+        const busy = await client.query("select 1 from world_challenges where cell_id=$1 and status in ('pending','accepted')", [input.cellId]);
+        if (busy.rows.length) return fail('CELL_BUSY');
+        const outgoing = await client.query("select count(*)::int as n from world_challenges where challenger_id=$1 and status in ('pending','accepted')", [input.challengerId]);
+        if (number(outgoing.rows[0]?.n) >= WORLD_CHALLENGE_OPEN_LIMIT) return fail('TOO_MANY_OPEN');
+        const incoming = await client.query("select count(*)::int as n from world_challenges where defender_id=$1 and status in ('pending','accepted')", [defenderId]);
+        if (number(incoming.rows[0]?.n) >= WORLD_CHALLENGE_OPEN_LIMIT) return fail('DEFENDER_TOO_MANY');
+        if (wallet.balance < input.stake) return fail('NO_FUNDS');
+        const id = newId();
+        const inserted = await client.query(
+          `insert into world_challenges(id,cell_id,challenger_id,defender_id,status,stake,request_key,created_at,expires_at)
+           values($1,$2,$3,$4,'pending',$5,$6,$7,$8) returning *`,
+          [id, input.cellId, input.challengerId, defenderId, input.stake, input.requestId, input.now, input.now + WORLD_CHALLENGE_TTL_MS],
+        );
+        const updated = await client.query(
+          `update seed_wallets set balance=balance-$2, lifetime_spent=lifetime_spent+$2
+            where player_id=$1 and balance >= $2 returning *`, [input.challengerId, input.stake],
+        );
+        if (!updated.rows[0]) throw new Error('Wallet debit failed after locked balance check.');
+        const next = walletFromRow(updated.rows[0]);
+        await client.query(
+          `insert into seed_ledger(id,player_id,delta,balance_after,category,source_key,economy_version,created_at)
+           values($1,$2,$3,$4,'world_challenge',$5,$6,$7)`,
+          [newId(), input.challengerId, -input.stake, next.balance, `world-challenge:${id}:escrow`, SEED_ECONOMY.version, input.now],
+        );
+        return { ok: true, challenge: challengeFromRow(inserted.rows[0]!), replayed: false };
+      });
+    } catch (error) {
+      // A genuine unique violation is one of the two database-enforced guarantees: the request key
+      // (the send was already applied) or the one-open-per-cell index (somebody else got there
+      // first). Both are normal outcomes, never a 500.
+      const unique = typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505';
+      if (!unique) throw error;
+      const prior = await pool.query('select * from world_challenges where challenger_id=$1 and request_key=$2', [input.challengerId, input.requestId]);
+      if (prior.rows[0]) return { ok: true, challenge: challengeFromRow(prior.rows[0]), replayed: true };
+      return { ok: false, code: 'CELL_BUSY' };
+    }
+  },
+
+  async respondChallenge(input): Promise<ChallengeRespondResult> {
+    return transaction(pool, async (client) => {
+      const locked = await client.query('select * from world_challenges where id=$1 for update', [input.id]);
+      if (!locked.rows[0]) return { ok: false, code: 'CHALLENGE_NOT_FOUND' };
+      const c = challengeFromRow(locked.rows[0]);
+      if (c.defenderId !== input.defenderId) return { ok: false, code: 'CHALLENGE_NOT_FOUND' };
+      if (c.status === 'accepted' && input.accept) return { ok: true, challenge: c, replayed: true };
+      if (c.status === 'declined' && !input.accept) return { ok: true, challenge: c, replayed: true };
+      if (c.status !== 'pending') return { ok: false, code: 'CHALLENGE_CLOSED' };
+      if (input.accept && !input.matchId) return { ok: false, code: 'CHALLENGE_CLOSED' };
+      if (input.accept) {
+        const updated = await client.query(
+          "update world_challenges set status='accepted', match_id=$2, responded_at=$3 where id=$1 returning *",
+          [c.id, input.matchId, input.now],
+        );
+        return { ok: true, challenge: challengeFromRow(updated.rows[0]!), replayed: false };
+      }
+      const updated = await client.query(
+        "update world_challenges set status='declined', responded_at=$2 where id=$1 returning *", [c.id, input.now],
+      );
+      await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:refund`, input.now);
+      return { ok: true, challenge: challengeFromRow(updated.rows[0]!), replayed: false };
+    });
+  },
+
+  async settleChallenge(input): Promise<ChallengeSettleResult> {
+    return transaction(pool, async (client) => {
+      const locked = await client.query('select * from world_challenges where id=$1 for update', [input.id]);
+      if (!locked.rows[0]) return { ok: false, code: 'CHALLENGE_NOT_FOUND' };
+      const c = challengeFromRow(locked.rows[0]);
+      if (c.challengerId !== input.playerId && c.defenderId !== input.playerId) {
+        return { ok: false, code: 'NOT_PARTICIPANT' };
+      }
+      if (c.status === 'resolved') {
+        return { ok: true, challenge: c, settled: false, winnerId: c.winnerId, cellId: c.cellId, replayed: true };
+      }
+      if (c.status !== 'accepted') return { ok: false, code: 'CHALLENGE_CLOSED' };
+      // The first confirmation settles. The row lock makes a concurrent second confirmation wait,
+      // then see `resolved` above and replay the stored result instead of transferring again.
+      if (input.winnerId === c.challengerId &&
+        await takeCell(client, c.cellId, c.defenderId, c.challengerId, input.now)) {
+        await client.query('update world_meta set revision=revision+1 where version=1', []);
+      }
+      if (input.winnerId === c.defenderId) {
+        await creditWallet(client, c.defenderId, c.stake, `world-challenge:${c.id}:payout`, input.now);
+      } else {
+        await creditWallet(client, c.challengerId, c.stake,
+          `world-challenge:${c.id}:${input.winnerId === null ? 'refund' : 'payout'}`, input.now);
+      }
+      const updated = await client.query(
+        "update world_challenges set status='resolved', winner_id=$2, resolved_at=$3 where id=$1 returning *",
+        [c.id, input.winnerId, input.now],
+      );
+      const next = challengeFromRow(updated.rows[0]!);
+      return { ok: true, challenge: next, settled: true, winnerId: next.winnerId, cellId: next.cellId, replayed: false };
+    });
+  },
+
+  async challengesInvolving(playerId, since) {
+    const { rows } = await pool.query(
+      `select * from world_challenges
+        where (challenger_id=$1 and created_at >= $2)
+           or (defender_id=$1 and (status in ('pending','accepted') or created_at >= $2))
+        order by created_at desc limit 50`,
+      [playerId, since],
+    );
+    return rows.map(challengeFromRow);
+  },
+
+  async expireChallenges(now) {
+    return transaction(pool, async (client) => {
+      const due = await client.query(
+        `select * from world_challenges
+          where (status='pending' and expires_at <= $1)
+             or (status='accepted' and responded_at is not null and responded_at + $2 <= $1)
+          for update`,
+        [now, WORLD_CHALLENGE_STALE_MS],
+      );
+      let changed = 0;
+      for (const row of due.rows) {
+        const c = challengeFromRow(row);
+        if (c.status === 'pending') {
+          // Unanswered for 24 h: the owner's decision is a forfeit. The tile moves to the
+          // challenger and their own stake comes back; the defender loses the tile.
+          if (await takeCell(client, c.cellId, c.defenderId, c.challengerId, now)) {
+            await client.query('update world_meta set revision=revision+1 where version=1', []);
+          }
+          await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:payout`, now);
+          await client.query(
+            "update world_challenges set status='expired', winner_id=$2, resolved_at=$3 where id=$1",
+            [c.id, c.challengerId, now],
+          );
+        } else {
+          // Accepted but unresolved for 7 days: close honestly and refund. Never transfers.
+          await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:refund`, now);
+          await client.query("update world_challenges set status='stale', resolved_at=$2 where id=$1", [c.id, now]);
+        }
+        changed += 1;
+      }
+      return changed;
+    });
   },
 });

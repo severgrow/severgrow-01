@@ -28,6 +28,32 @@ export const createWorldEconomyRouter = (deps: {
   if (!path.startsWith('/v1/world') && !path.startsWith('/v1/seeds')) return null;
   const player = await deps.authenticate(bearer(req));
   if (req.method === 'GET' && path === '/v1/seeds/wallet') return ok(200, { wallet: await economy.wallet(player) });
+  // ---- Territory challenges -------------------------------------------------
+  // The list is private to the two participants (the map is public, the challenges are not), and
+  // no route exposes a balance: a challenge names a stake, never a wallet.
+  if (path === '/v1/world/challenges') {
+    if (req.method === 'GET') return ok(200, await economy.challenges(player));
+    if (req.method === 'POST') {
+      const body = await bodyOf(req);
+      if (typeof body.cellId !== 'string' || typeof body.requestId !== 'string') {
+        throw new ApiError('INVALID_REQUEST', 'Choose a rival tile.');
+      }
+      const result = await economy.sendChallenge(player, body.cellId, body.requestId);
+      if (!result.ok) return { status: 409, body: { ok: false, code: result.code, message: 'That challenge could not be sent.' } };
+      return ok(201, { challenge: result.challenge, replayed: result.replayed });
+    }
+  }
+  const challengeWrite = /^\/v1\/world\/challenges\/([0-9a-fA-F-]{8,64})\/(respond|confirm)$/.exec(path);
+  if (challengeWrite && req.method === 'POST') {
+    const id = challengeWrite[1]!;
+    if (challengeWrite[2] === 'respond') {
+      const body = await bodyOf(req);
+      if (typeof body.accept !== 'boolean') throw new ApiError('INVALID_REQUEST', 'Answer the challenge.');
+      return ok(200, await economy.respond(player, id, body.accept));
+    }
+    await bodyOf(req);
+    return ok(200, await economy.confirm(player, id));
+  }
   if (req.method === 'POST' && path === '/v1/world/claims') {
     const body = await bodyOf(req);
     if (typeof body.cellId !== 'string' || typeof body.requestId !== 'string') throw new ApiError('INVALID_REQUEST', 'Choose a world tile.');

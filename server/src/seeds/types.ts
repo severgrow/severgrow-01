@@ -38,6 +38,99 @@ export type ClaimResult =
   | { ok: false; code: 'NO_FUNDS' | 'OCCUPIED' | 'NOT_ADJACENT' | 'INVALID_CELL'; revision: number; wallet: SeedWallet };
 export type TrainingTicket = { id: string; playerId: string; seed: number; botLevel: number; createdAt: number; expiresAt: number; usedAt: number | null };
 
+/**
+ * Territory challenges — one paid tile may change hands when a linked duel finishes.
+ *
+ * `status` mirrors the design doc exactly:
+ *   pending   the defender has 24 h to answer (the challenger's stake is escrowed)
+ *   accepted  a linked `kind = 'territory'` duel exists; the first confirm settles it
+ *   declined  the defender refused; the stake is refunded
+ *   expired   the 24 h window passed unanswered; the challenger takes the tile by forfeit
+ *   resolved  a played duel settled it; the winner took the tile and the stake
+ *   stale     accepted but not settled within 7 days; the stake is refunded, nothing transfers
+ */
+export type WorldChallengeStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'resolved' | 'stale';
+
+export type WorldChallenge = {
+  id: string;
+  cellId: string;
+  challengerId: string;
+  defenderId: string;
+  status: WorldChallengeStatus;
+  stake: number;
+  createdAt: number;
+  expiresAt: number;
+  respondedAt: number | null;
+  matchId: string | null;
+  winnerId: string | null;
+  resolvedAt: number | null;
+};
+
+export type ChallengeSendFailure =
+  | 'INVALID_CELL'
+  | 'NOT_OWNED'
+  | 'OWN_TILE'
+  | 'NOT_ADJACENT'
+  | 'CELL_BUSY'
+  | 'TOO_MANY_OPEN'
+  | 'DEFENDER_TOO_MANY'
+  | 'NO_FUNDS';
+
+export type ChallengeSendResult =
+  | { ok: true; challenge: WorldChallenge; replayed: boolean }
+  | { ok: false; code: ChallengeSendFailure };
+
+export type ChallengeRespondResult =
+  | { ok: true; challenge: WorldChallenge; replayed: boolean }
+  | { ok: false; code: 'CHALLENGE_NOT_FOUND' | 'CHALLENGE_CLOSED' };
+
+export type ChallengeSettleResult =
+  | {
+      ok: true;
+      challenge: WorldChallenge;
+      /** True only for the confirmation that actually applied the settlement. */
+      settled: boolean;
+      winnerId: string | null;
+      cellId: string;
+      replayed: boolean;
+    }
+  | { ok: false; code: 'CHALLENGE_NOT_FOUND' | 'CHALLENGE_CLOSED' | 'NOT_PARTICIPANT' };
+
+/** The challenge as one participant sees it. Names only; no balance, no email, no token. */
+export type WorldChallengeWire = {
+  id: string;
+  cellId: string;
+  challengerId: string;
+  defenderId: string;
+  challengerName: string | null;
+  defenderName: string | null;
+  fromMe: boolean;
+  status: WorldChallengeStatus;
+  stake: number;
+  createdAt: number;
+  expiresAt: number;
+  respondedAt: number | null;
+  matchId: string | null;
+  /** True once the linked duel is over: the signal that `confirm` may be used. */
+  matchFinished: boolean;
+  /**
+   * The finished duel's winner, before settlement (null for a draw or a running match). It lets the
+   * confirmation sheet say who actually won without exposing anything about the board.
+   */
+  matchWinnerId: string | null;
+  winnerId: string | null;
+  resolvedAt: number | null;
+  /** Pending only: milliseconds left on the 24 h answer timer (never negative). */
+  remainingMs: number;
+  serverNow: number;
+};
+
+export type WorldChallengesPayload = {
+  incoming: WorldChallengeWire[];
+  outgoing: WorldChallengeWire[];
+  serverNow: number;
+};
+
 export interface WorldEconomyStore {
   wallet(playerId: string): Promise<SeedWallet>;
   world(): Promise<WorldSnapshot>;
@@ -46,6 +139,20 @@ export interface WorldEconomyStore {
   acknowledgeInvitation(playerId: string): Promise<void>;
   issueTrainingTicket(ticket: TrainingTicket): Promise<void>;
   trainingTicket(id: string): Promise<TrainingTicket | null>;
+
+  // ---- Territory challenges -------------------------------------------------
+  /** One challenge by id (unlocked read; a transition re-reads it under its row lock). */
+  challenge(id: string): Promise<WorldChallenge | null>;
+  /** Send: locks the wallet, inserts the escrow and the challenge in ONE transaction. */
+  sendChallenge(input: { challengerId: string; cellId: string; requestId: string; stake: number; now: number }): Promise<ChallengeSendResult>;
+  /** Accept (with the linked match id) or decline. Decline refunds in the same transaction. */
+  respondChallenge(input: { id: string; defenderId: string; accept: boolean; matchId: string | null; now: number }): Promise<ChallengeRespondResult>;
+  /** First-confirmed-wins settlement. Only the first call transfers; later calls replay it. */
+  settleChallenge(input: { id: string; playerId: string; winnerId: string | null; now: number }): Promise<ChallengeSettleResult>;
+  /** Rows involving this player: open incoming plus recent outgoing. */
+  challengesInvolving(playerId: string, since: number): Promise<WorldChallenge[]>;
+  /** Apply due forfeits (24 h) and stale closes (7 d). Returns how many rows changed. */
+  expireChallenges(now: number): Promise<number>;
 }
 
 export const emptyWallet = (): SeedWallet => ({ balance: 0, lifetimeEarned: 0, lifetimeSpent: 0, worldInvitationSeen: false });
