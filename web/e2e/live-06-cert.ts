@@ -137,12 +137,16 @@ try {
   await page.goto(LIVE, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#menu:not([hidden]) .menu-inner', { timeout: 40000 });
   // The menu's click handlers arrive with late dynamic imports, so a single click can land before
-  // they exist. Click, and only accept the submenu actually opening.
-  for (let attempt = 0; attempt < 5; attempt++) {
+  // they exist. PLAY is a TOGGLE, so never click it blind twice: because closing is as easy as
+  // opening, the loop checks the state first and only presses when the submenu is actually shut.
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const open = await page.evaluate(() => {
+      const menu = document.getElementById('play-menu');
+      return !!menu && !menu.hidden;
+    });
+    if (open) break;
     await page.evaluate(() => document.getElementById('menu-play')!.click());
-    const opened = await page.waitForSelector('#play-menu:not([hidden])', { timeout: 5000 }).then(() => true).catch(() => false);
-    if (opened) break;
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(900);
   }
   await page.waitForSelector('#menu-campaign:not([hidden])', { timeout: 20000 });
   await page.evaluate(() => document.getElementById('menu-campaign')!.click());
