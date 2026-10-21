@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LIGHT_TONES } from '../src/player/light.js';
 import { SCORE_INK, SCORE_SEPARATOR_INK, ledLayout } from '../src/player/led-cells.js';
-import { PLAYER_CSS } from '../src/player/player-css.js';
 
 const style = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
 const cssRule = (css: string, selector: string): string => {
@@ -37,11 +36,15 @@ describe('the score read-out is not colour-coded', () => {
   });
 
   it('the pause menu’s score numbers are neutral too, while its turn line keeps its colour', () => {
-    const scores = cssRule(PLAYER_CSS, '.gm-you b,');
+    // The pause panel's read-out lives in style.css (`#sheet-menu .gm-readout`) since the panel was
+    // rebuilt as one machine face; the digits are neutral there, and whose is whose is said by
+    // position and the separator, never by hue.
+    const scores = cssRule(style, '#sheet-menu .gm-you b,');
     expect(scores).toContain('color: var(--c-text)');
     expect(scores).not.toContain('--c-you');
     expect(scores).not.toContain('--c-bot');
+    expect(cssRule(style, '#sheet-menu .gm-bot b')).toContain('color: var(--c-text)');
     // The turn word is not a score digit: it may still say whose turn it is in colour.
-    expect(PLAYER_CSS).toContain('.gm-turn.you b');
+    expect(style).toContain('.gm-turn');
   });
 });

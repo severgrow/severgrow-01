@@ -25,8 +25,14 @@ export const PINNED = Object.freeze({
   throwFlight: 320,
   /** The shortest hold for a live enemy turn, so a quiet turn cannot blink past. */
   liveReveal: 700,
-  /** The LED display's minimum dwell before another message may replace it. */
-  displayDwell: 2000,
+  /** The LED display's minimum dwell before another message may replace it (normal play). */
+  displayDwell: 1000,
+  /**
+   * A LESSON message's minimum dwell (levels 1-10). The owner asked for 2 s there so a teaching
+   * line cannot be replaced before it is read; normal play keeps 1 s, because the sign is a live
+   * scoreboard and a 2 s floor makes every step feel sluggish.
+   */
+  lessonDwell: 2000,
   /** A whole cut at Normal speed, whatever the number of tiles or chained cuts. */
   cutCap: 1800,
   /** The cut's local flash never exceeds this, even at Slow speed. */

@@ -14,8 +14,10 @@ export type DisplayFrame = {
   flash?: 'cut' | 'bloom';
 };
 
-/** Hard floor: no LED message may be replaced sooner than this. */
+/** Hard floor: no LED message may be replaced sooner than this in normal play. */
 export const DISPLAY_MIN_DWELL_MS = PINNED.displayDwell;
+/** The larger floor a LESSON message gets (owner, 2026-10-20): 2 s, so a teaching line is readable. */
+export const LESSON_MIN_DWELL_MS = PINNED.lessonDwell;
 
 const STEP_WORDS = new Set(['DRAW', 'DRAW!', 'GROW', 'GROW!', 'THROW', 'THROW!', 'BLOOM', 'BLOOM!', 'SKIP?']);
 
@@ -57,6 +59,11 @@ export class DisplayMachine {
   private quiet = false;
   /** The score is held on the sign (a lesson is pointing at it): nothing replaces it. */
   private scoreHeld = false;
+  /** The dwell that applies right now: a lesson message gets the longer floor. */
+  private dwellMs(): number {
+    return this.quiet ? LESSON_MIN_DWELL_MS : DISPLAY_MIN_DWELL_MS;
+  }
+
   /** Queued step announcement while a higher-priority event finishes. */
   private pendingStep: string | null = null;
   private frame: DisplayFrame = { text: '', mode: 'score' };
@@ -77,14 +84,14 @@ export class DisplayMachine {
 
   private remainingDwell(): number {
     if (this.shownAt === 0) return 0;
-    return Math.max(0, DISPLAY_MIN_DWELL_MS - (this.now() - this.shownAt));
+    return Math.max(0, this.dwellMs() - (this.now() - this.shownAt));
   }
 
   /** Ms until a newly queued frame will land (0 if it can paint now). */
   private delayUntilPaint(): number {
     const rem = this.remainingDwell();
     if (rem <= 0 && this.queue.length === 0) return 0;
-    return rem + this.queue.length * DISPLAY_MIN_DWELL_MS;
+    return rem + this.queue.length * this.dwellMs();
   }
 
   private clearDwellQueue() {
@@ -245,7 +252,7 @@ export class DisplayMachine {
       ? { shown: text, duration: this.scaled(1200) }
       : this.stepPersonality(text);
     // Logical hold never undercuts the visual 1s floor.
-    const hold = Math.max(DISPLAY_MIN_DWELL_MS, duration);
+    const hold = Math.max(this.dwellMs(), duration);
     const id = ++this.epoch;
     // Below WAIT (20) and play moments so a turn cue can still interrupt; above idle hints.
     this.active = { message: shown, priority: 18, duration: hold, mode: 'amber' };
@@ -284,7 +291,7 @@ export class DisplayMachine {
     const reaction = this.reduced() ? null : this.pickReaction(event);
     const tone = event.flavour?.pool.tone ?? event.mode ?? 'amber';
     // Logical duration also respects the 1s visual floor so finish aligns with paint.
-    const duration = Math.max(DISPLAY_MIN_DWELL_MS, event.duration);
+    const duration = Math.max(this.dwellMs(), event.duration);
     const gate = this.emit({
       text: event.message, mode: event.mode ?? 'amber', compact: event.message.length <= 12,
       ...(event.accent ? { flash: event.accent } : {}), ...(event.pulse ? { pulse: true } : {}),
@@ -300,14 +307,14 @@ export class DisplayMachine {
         this.timer = window.setTimeout(() => {
           if (id !== this.epoch) return;
           this.emit({ text: reaction, mode: tone, compact: true });
-          this.timer = window.setTimeout(() => this.finish(id), DISPLAY_MIN_DWELL_MS);
-        }, DISPLAY_MIN_DWELL_MS);
+          this.timer = window.setTimeout(() => this.finish(id), this.dwellMs());
+        }, this.dwellMs());
       }, factHold);
     } else if (reaction) {
       this.timer = window.setTimeout(() => {
         if (id !== this.epoch) return;
         this.emit({ text: reaction, mode: tone, compact: true });
-        this.timer = window.setTimeout(() => this.finish(id), DISPLAY_MIN_DWELL_MS);
+        this.timer = window.setTimeout(() => this.finish(id), this.dwellMs());
       }, factHold);
     } else {
       this.timer = window.setTimeout(() => this.finish(id), factHold);

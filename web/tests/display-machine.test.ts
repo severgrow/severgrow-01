@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DISPLAY_MIN_DWELL_MS, DisplayMachine, type DisplayFrame } from '../src/player/display-machine.js';
+import { DISPLAY_MIN_DWELL_MS, LESSON_MIN_DWELL_MS, DisplayMachine, type DisplayFrame } from '../src/player/display-machine.js';
 import { ledMessageWidth, ledStaticMessage } from '../src/player/led-cells.js';
 import { FLAVOUR_POOLS, FlavourDeck, flavourGate } from '../src/player/led-flavour.js';
 
@@ -62,8 +62,9 @@ describe('match display state', () => {
     expect(frames.at(-1)?.text).toBe('-7');
     sign.event({ message: 'COMBO READY', priority: 10, duration: 500 });
     expect(frames.at(-1)?.text).toBe('-7'); // lower priority ignored
-    // A play fact holds for its own duration, floored by the 2 s display dwell (owner, 2026-10-20).
-    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    // A play fact holds for its own duration, floored by the display dwell (1 s in normal play;
+    // a LESSON message gets the longer 2 s floor).
+    vi.advanceTimersByTime(1300);
     expect(frames.at(-1)).toMatchObject({ text: '4:3', mode: 'score' });
     vi.advanceTimersByTime(2200);
     expect(frames.at(-1)?.pulse || frames.at(-1)?.alarm).toBe(true);
@@ -117,7 +118,7 @@ describe('match display state', () => {
     expect(frames.at(-1)?.text).toBe(urgent);
   });
 
-  it('holds every distinct message at least 2s; the next message queues', () => {
+  it('holds every distinct message at least 1s in normal play; the next message queues', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));
     sign.reset('GROW OR SKIP', 0, 0);
@@ -202,7 +203,7 @@ describe('match display state', () => {
     expect(frames.at(-1)).toMatchObject({ text: '1:1', mode: 'score' });
   });
 
-  it('scales step holds with the Speed factor but never under the 2s dwell', () => {
+  it('scales step holds with the Speed factor but never under the 1s dwell', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame), () => 0.5);
     sign.reset('DRAW!', 1, 0);
@@ -213,12 +214,11 @@ describe('match display state', () => {
     expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
   });
 
-  it('replaces a SKIP hint with THROW! after the 2s dwell — never leaves SKIP on throw', () => {
+  it('replaces a SKIP hint with THROW! after the dwell — never leaves SKIP on throw', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));
     sign.reset('GROW!', 3, 1);
-    // Step word, then the resting score, each for a full dwell (owner, 2026-10-20: 2 s).
-    vi.advanceTimersByTime(2 * DISPLAY_MIN_DWELL_MS);
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
     // Cockpit used to flash SKIP when the skip control appeared after a grow.
     sign.hint('SKIP');
     expect(frames.at(-1)?.text).toBe('SKIP');
@@ -349,10 +349,25 @@ describe('the lesson action line owns the sign (levels 1-10)', () => {
     const sign = new DisplayMachine(frame => frames.push(frame));
     sign.reset('DRAW!', 2, 1);
     sign.setQuiet(true);
-    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS); // the step word ends and the score lands now
+    vi.advanceTimersByTime(LESSON_MIN_DWELL_MS); // the step word ends and the score lands now
     expect(frames.at(-1)).toMatchObject({ mode: 'score' });
     sign.hold('TAP DRAW PILE');
     expect(frames.at(-1)).toMatchObject({ text: 'TAP DRAW PILE' });
+  });
+
+  it('a lesson message holds 2 s, while normal play keeps 1 s', () => {
+    // Owner (2026-10-20): a teaching line must never change faster than 2 s. Normal play keeps the
+    // 1 s floor, because there the sign is a live scoreboard and a longer floor feels sluggish.
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('DRAW!', 1, 0);
+    sign.setQuiet(true);
+    // 1 s in: the step word is still up, because a lesson waits 2 s.
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)?.text).toBe('DRAW!');
+    // 2 s in: it has handed over to the score.
+    vi.advanceTimersByTime(LESSON_MIN_DWELL_MS - DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)).toMatchObject({ mode: 'score' });
   });
 
   it('outside a lesson a drag word still waits out the dwell — today’s behaviour is untouched', () => {
