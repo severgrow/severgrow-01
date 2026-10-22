@@ -574,6 +574,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (nowBtn) nowBtn.textContent = ONLINE.matchedPlayNow;
     if (laterBtn) laterBtn.textContent = ONLINE.matchedLater;
     el.hidden = false;
+    el.classList.remove('ix-closing');
     const card = el.querySelector<HTMLElement>('.online-card');
     if (card) enterSurface(card);
   };
@@ -583,8 +584,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const el = document.getElementById('online-matched');
     if (!el) return;
     const card = el.querySelector<HTMLElement>('.online-card');
+    el.classList.add('ix-closing');
     const done = () => {
       if (!pendingMatched) el.hidden = true;
+      el.classList.remove('ix-closing');
     };
     if (!exitSurface(card ?? el, { onDone: done })) done();
   };

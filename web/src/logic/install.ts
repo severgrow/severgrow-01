@@ -175,11 +175,13 @@ export const mountInstallPrompt = (options: {
     if (!root || !open) return;
     open = false;
     document.removeEventListener('keydown', onKey, true);
+    root.classList.add('ix-closing');
     // The invitation leaves on the same quiet beat as every other surface. The root stays painted
     // for those 150ms (its scrim cannot flash away first) and is hidden by the motion layer, so a
     // rapid re-open simply interrupts the exit and nothing is left behind.
     const done = () => {
       if (!open) root.hidden = true;
+      root.classList.remove('ix-closing');
     };
     if (!exitSurface(sheet ?? root, { onDone: done })) done();
   };
@@ -189,6 +191,7 @@ export const mountInstallPrompt = (options: {
     paint();
     open = true;
     root.hidden = false;
+    root.classList.remove('ix-closing');
     enterSurface(sheet ?? root);
     document.addEventListener('keydown', onKey, true);
     // Match the sheets: focus the first real control (a keyboard player lands inside the dialog).
