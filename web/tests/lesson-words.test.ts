@@ -13,7 +13,7 @@ const entries = Object.entries(LESSON).flatMap(([k, v]) => (typeof v === 'string
 const DISPLAY = [
   'tapDraw', 'tapThrowPile', 'chooseCard', 'tapTile', 'tapTiles', 'throwCard', 'tapThrow',
   'tapBloom', 'tapBlast', 'chooseBomb', 'bombTile', 'tapTheirTile', 'tapLastSide',
-  'bloomHello', 'bombHello', 'theirTurn', 'lastCards', 'lastTurn',
+  'bloomHello', 'bombHello', 'theirTurn', 'lastCards', 'lastTurn', 'welcome',
 ] as const;
 
 const FINISH_LINES = new Set(['wonOnPoints', 'wonByKo', 'goldDecided']);
@@ -21,26 +21,45 @@ const FINISH_LINES = new Set(['wonOnPoints', 'wonByKo', 'goldDecided']);
 describe('lesson words', () => {
   it('the lesson explanations are the owner’s sentences, exactly', () => {
     // The owner's wording, verbatim (owner, 2026-10-22, replacing the 2026-10-19 sentences). The two
-    // piles are the Draw pile and the Throw pile everywhere, as on the board (2026-10-20).
-    expect(LESSON.yourHomeLine).toBe('This is your home. Place cards on the tiles that connect to your home to GROW.');
+    // piles are the Draw pile and the Throw pile everywhere, as on the board (2026-10-20). The final
+    // sign-off (2026-10-22) capitalises the three steps everywhere and pairs Bloom with Blast.
+    expect(LESSON.yourHomeLine).toBe('This is your home. Place cards on the tiles that connect to your home to Grow.');
     expect(LESSON.theirHomeLine).toBe('TO WIN: surround opponent’s home tile, or have more tiles on the board when the Draw pile runs out.');
-    expect(LESSON.tapDrawLine).toBe('Every turn has 3 steps - DRAW, GROW and THROW. You start by drawing 1 card from the top of the Draw pile or the Throw pile.');
+    expect(LESSON.tapDrawLine).toBe('Every turn has 3 steps – Draw, Grow and Throw. You start by drawing 1 card from the top of the Draw pile or the Throw pile.');
     expect(LESSON.growLine).toBe('Grow: drag one of your cards from your hand onto the board, or tap it to select and then place it on the board.');
     expect(LESSON.youGrewLine).toBe('Tiles keep the rank of the card used. Higher ranks are harder to cut.');
-    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to the Throw pile, or double tap to throw a card. This ends your turn.');
+    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to the Throw pile, or double tap to Throw a card. This ends your turn.');
     expect(LESSON.biggerWinsLine).toBe('Strengthen: a stronger card can replace your own tile.');
     expect(LESSON.takeTileLine).toBe('Cut: a higher card can take an opponent’s tile.');
     expect(LESSON.rocksBlockLine).toBe('Nothing can Grow on a rock.');
     expect(LESSON.goldDoubleLine).toBe('A gold tile counts double, so it is worth two points.');
     expect(LESSON.cutLinkLine).toBe('Cut a tile to break the chain behind it.');
     expect(LESSON.witheredLine).toBe('Tiles cut off from their home disappear.');
-    expect(LESSON.bloomedLine).toBe('Bloom grows several tiles at once and does NOT cost your GROW turn.');
+    expect(LESSON.bloomedLine).toBe('Bloom grows several tiles at once and does NOT use your Grow.');
     expect(LESSON.surroundLine).toBe('Surround: fill every tile around their home for an instant win.');
     expect(LESSON.bombLine).toBe('Bomb: removes one enemy tile, even a 9. Uses your Grow.');
     expect(LESSON.blastLine).toBe('Blast: two Bombs clear a large area. Homes are safe.');
-    expect(LESSON.freeGrowLine).toBe('A Blast is an extra move: you can still Grow afterwards.');
+    expect(LESSON.freeGrowLine).toBe('Blast clears several tiles at once and does NOT use your Grow.');
     expect(LESSON.pileGoldLine).toBe('The Throw pile glows gold when its top card completes a Bloom in your hand.');
     expect(LESSON.optionalLine).toBe('Tap » to skip Grow/Bloom and keep your cards for later.');
+    // Owner, 2026-10-22: the last-turn line is short, and Undo is taught straight after the skip.
+    expect(LESSON.lastTurnLine).toBe('The Draw pile is empty – this is your last turn.');
+    expect(LESSON.theirTurnLine).toBe('They Draw, Grow and Throw too.');
+    expect(LESSON.undoLine).toBe('You are able to undo your previous moves until you Throw a card at the end of your turn.');
+  });
+
+  it('the three steps are always Draw, Grow and Throw, capital first letter (owner, 2026-10-22)', () => {
+    for (const [k, v] of entries.filter(([k]) => k.endsWith('Line'))) {
+      expect(v, `${k}: ${v}`).not.toMatch(/\b(?:draw|grow|throw)\b/);
+      // ...and never shouted in a sentence: GROW, DRAW, THROW belong on the display.
+      expect(v, `${k}: ${v}`).not.toMatch(/\b(?:DRAW|GROW|THROW)\b/);
+    }
+  });
+
+  it('Bloom and Blast say the same thing the same way: they do NOT use your Grow', () => {
+    expect(LESSON.bloomedLine.startsWith('Bloom ')).toBe(true);
+    expect(LESSON.freeGrowLine.startsWith('Blast ')).toBe(true);
+    for (const line of [LESSON.bloomedLine, LESSON.freeGrowLine]) expect(line).toMatch(/does NOT use your Grow\.$/);
   });
 
   it('two piles, two names: the Draw pile and the Throw pile, never "discard" (owner, 2026-10-20)', () => {
@@ -57,6 +76,12 @@ describe('lesson words', () => {
     expect(LESSON.cardsThatBloomLine).not.toMatch(/\bin a row\b/i);
     // Owner, 2026-10-20: the end-turn key is » alone; the display never spends words on "to throw".
     expect(LESSON.tapThrow).toBe('TAP »');
+  });
+
+  it('level 1 opens with a welcome on the display, drawn in the display’s own glyphs', () => {
+    // Owner, 2026-10-22: HELLO ❤️ WELCOME ❤️ while the first three sentences are read. The sign's
+    // 5x7 alphabet has the heart as ♥ (led-cells.ts), so that is the character used.
+    expect(LESSON.welcome).toBe('HELLO ♥ WELCOME ♥');
   });
 
   it('the display labels use the game’s own names: Draw pile and Throw pile', () => {

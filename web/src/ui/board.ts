@@ -463,6 +463,9 @@ export class BoardView {
 
   /** Redraws the networks and overlays for `board`. */
   protected lastRender: [Record<string, Tile | null>, Overlay] | null = null;
+  /** The legal tiles the invitation breath is running for, and when they first appeared. */
+  private inviteKey = '';
+  private inviteT0 = 0;
   private previousContourEdges: [Set<string>, Set<string>] = [new Set(),new Set()];
 
   render(board: Record<string, Tile | null>, o: Overlay) {
@@ -608,10 +611,27 @@ export class BoardView {
         if (o.targets.has(key) || key === o.selectedHex) continue;
         el('path', { d: hexPath(key, S - 1.2, IS_FUTA04 ? 'flat' : st.tileShape), class: 'dim' }, over);
       }
+      // The invitation rolls out from the mover's own home: the nearer home to the legal tiles.
+      const targets = o.targets;
+      const [h0, h1] = [parseKey(this.rootKey(0)), parseKey(this.rootKey(1))];
+      const reach = (h: typeof h0) => [...targets].reduce((n, k) => n + hexDistance(parseKey(k), h), 0);
+      const from = reach(h0) <= reach(h1) ? h0 : h1;
+      // The overlay is rebuilt on every render; the breath keeps its own clock from the moment this
+      // set of legal tiles first appeared, so a re-render resumes it mid-breath instead of restarting.
+      const inviteKey = [...targets].sort().join('|');
+      const now = performance.now();
+      if (inviteKey !== this.inviteKey) { this.inviteKey = inviteKey; this.inviteT0 = now; }
+      const since = now - this.inviteT0;
       for (const key of o.targets) {
         const kind = o.targetKinds?.[key] ?? 'grow';
         // A legal empty socket gets a recessed inner edge beneath the existing target hitbox.
         if (IS_FUTA04) el('path', { d: hexPath(key, S - 5, 'flat'), class: `receptive-well kind-${kind}`, 'aria-hidden': 'true' }, over);
+        // ...and a soft light that breathes in it, a step later the further it is from home:
+        // "tap here", said quietly. Light only — no scale, so the board's proportions never move.
+        if (IS_FUTA04) el('path', {
+          d: hexPath(key, S - 3, 'flat'), class: `target-invite kind-${kind}`, 'aria-hidden': 'true',
+          style: `animation-delay:${(220 + Math.max(0, hexDistance(parseKey(key), from) - 1) * 160 - since).toFixed(0)}ms`,
+        }, over);
         el('path', { d: hexPath(key, S - 3, IS_FUTA04 ? 'flat' : st.tileShape), class: `target kind-${kind}${o.coachHexes.includes(key) ? ' coached' : ''}`, 'data-key': key, 'data-kind': kind }, over);
         // a shape, not only a colour: + strengthens my tile, ⇆ replaces a bot tile
         // (a Fruit card's targets keep a calm ring, no badge)

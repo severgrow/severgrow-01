@@ -470,6 +470,23 @@ html.futa04-information #board .l-over .receptive-well {
 }
 html.futa04-information #board .l-over .receptive-well:is(.kind-strengthen,.kind-bloom) { fill:rgba(99,171,96,.11); }
 html.futa04-information #board .l-over .receptive-well:is(.kind-replace,.kind-fruit) { fill:rgba(192,83,65,.11); }
+/* Legal tiles invite the tap (owner, 2026-10-22: "slight movement inviting for tapping ... CLICK
+   HERE but subtly"). A glow in the tile's own ink breathes in and out, rolling outward from home
+   one ring at a time; light only, never a scale, so the board's ratios stay exact. The hit target
+   and its hover brightening are the .target path above it, untouched. */
+html.futa04-information #board .l-over .target-invite {
+  fill:#ded6bd; stroke:none; opacity:0; pointer-events:none;
+  animation:target-invite 2400ms cubic-bezier(.45,0,.55,1) infinite both; /* delay: board.ts (its clock) */
+}
+html.futa04-information #board .l-over .target-invite:is(.kind-strengthen,.kind-bloom) { fill:#a6d49b; }
+html.futa04-information #board .l-over .target-invite:is(.kind-replace,.kind-fruit) { fill:#e5a18b; }
+@keyframes target-invite {
+  0%, 100% { opacity:0; }
+  45% { opacity:.17; }
+  60% { opacity:.13; }
+}
+@media (prefers-reduced-motion:reduce) { html.futa04-information #board .l-over .target-invite { animation:none; opacity:0; } }
+html.futa04-information.reduce-motion #board .l-over .target-invite { animation:none; opacity:0; }
 html.futa04-information #board .l-over .target.kind-grow {
   fill:#ded6bd; fill-opacity:calc(.10 + var(--near,0) * .22);
   stroke:color-mix(in srgb,#d8c8a5 76%,var(--light-core,#f5d8a4) 24%);

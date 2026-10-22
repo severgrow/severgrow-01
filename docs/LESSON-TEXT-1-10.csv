@@ -1,44 +1,45 @@
 Level,When it appears,Where it appears,Text,Source key
-Level 1,Introduction,Info box,This is your home. Place cards on the tiles that connect to your home to GROW.,yourHomeLine
+Level 1,Introduction,Info box,This is your home. Place cards on the tiles that connect to your home to Grow.,yourHomeLine
 Level 1,Introduction,Info box,"TO WIN: surround opponent’s home tile, or have more tiles on the board when the Draw pile runs out.",theirHomeLine
-Level 1,Introduction,Info box,"Every turn has 3 steps - DRAW, GROW and THROW. You start by drawing 1 card from the top of the Draw pile or the Throw pile.",tapDrawLine
+Level 1,Introduction,Info box,"Every turn has 3 steps – Draw, Grow and Throw. You start by drawing 1 card from the top of the Draw pile or the Throw pile.",tapDrawLine
 Level 1,First grow,Info box,"Grow: drag one of your cards from your hand onto the board, or tap it to select and then place it on the board.",growLine
-Level 1,First throw,Info box,"Throw: swipe up, drag it to the Throw pile, or double tap to throw a card. This ends your turn.",throwLine
+Level 1,First throw,Info box,"Throw: swipe up, drag it to the Throw pile, or double tap to Throw a card. This ends your turn.",throwLine
 Level 1,Right after you grow,Info box,Tiles keep the rank of the card used. Higher ranks are harder to cut.,youGrewLine
 Level 1,Draw pile down to 3,Display,LAST CARDS,lastCards
-Level 1,Draw pile empty,Info box,"The Draw pile is empty: each tile is now 1 point, and the numbers on tiles don’t count.",lastTurnLine
+Level 1,Draw pile empty,Info box,The Draw pile is empty – this is your last turn.,lastTurnLine
 Level 1,Draw pile empty,Display,LAST TURN,lastTurn
-Level 1,Their first turn,Info box,"They draw, grow and throw too.",theirTurnLine
+Level 1,Their first turn,Info box,"They Draw, Grow and Throw too.",theirTurnLine
 Level 1,Win card,Finish card,You had more points – you won!,wonOnPoints
 Level 1,Win card,"Finish card (""you learned"")","DRAW, GROW, THROW","DRAW, GROW, THROW"
-Level 2,Before you strengthen,Info box,Strengthen: a stronger card can replace your own tile.,biggerWinsLine
-Level 2,Before you take their tile,Info box,Cut: a higher card can take an opponent’s tile.,takeTileLine
+Level 2,After your first draw: before you strengthen,Info box,Strengthen: a stronger card can replace your own tile.,biggerWinsLine
+Level 2,Your second turn: right before you take their tile,Info box,Cut: a higher card can take an opponent’s tile.,takeTileLine
 Level 2,Win card,Finish card,You had more points – you won!,wonOnPoints
 Level 2,Win card,"Finish card (""you learned"")",STRONGER TILES WIN,STRONGER TILES WIN
-Level 3,Introduction: rock,Info box,Nothing can Grow on a rock.,rocksBlockLine
-Level 3,Introduction: gold,Info box,"A gold tile counts double, so it is worth two points.",goldDoubleLine
+Level 3,Introduction (before the first draw): rock,Info box,Nothing can Grow on a rock.,rocksBlockLine
+Level 3,After your first draw: before you Grow onto the gold,Info box,"A gold tile counts double, so it is worth two points.",goldDoubleLine
 Level 3,Win card,Finish card,Gold put you ahead.,goldDecided
 Level 3,Win card,"Finish card (""you learned"")",GOLD COUNTS DOUBLE,GOLD COUNTS DOUBLE
-Level 4,Before you cut,Info box,Cut a tile to break the chain behind it.,cutLinkLine
-Level 4,After a tile withers,Info box,Tiles cut off from their home disappear.,witheredLine
+Level 4,After the draw: right before you cut,Info box,Cut a tile to break the chain behind it.,cutLinkLine
+Level 4,Right after the cut,Info box,Tiles cut off from their home disappear.,witheredLine
 Level 4,Win card,Finish card,You had more points – you won!,wonOnPoints
 Level 4,Win card,"Finish card (""you learned"")",CUT THEIR ROOT,CUT THEIR ROOT
-Level 5,Introduction: Bloom cards,Info box,"BLOOM: three cards with the same number, or three in order in one suit.",cardsThatBloomLine
-Level 5,After your Bloom,Info box,Bloom grows several tiles at once and does NOT cost your GROW turn.,bloomedLine
+Level 5,After your first draw: before you Bloom,Info box,"BLOOM: three cards with the same number, or three in order in one suit.",cardsThatBloomLine
+Level 5,After your Bloom,Info box,Bloom grows several tiles at once and does NOT use your Grow.,bloomedLine
 Level 5,Win card,Finish card,You had more points – you won!,wonOnPoints
 Level 5,Win card,"Finish card (""you learned"")",BLOOM THREE AT ONCE,BLOOM THREE AT ONCE
-Level 6,Introduction: surround,Info box,Surround: fill every tile around their home for an instant win.,surroundLine
+Level 6,After your first draw: before you surround,Info box,Surround: fill every tile around their home for an instant win.,surroundLine
 Level 6,Win card,Finish card,You surrounded their home.,wonByKo
 Level 6,Win card,"Finish card (""you learned"")",SURROUND THEIR HOME,SURROUND THEIR HOME
-Level 7,Introduction: Bomb,Info box,"Bomb: removes one enemy tile, even a 9. Uses your Grow.",bombLine
+Level 7,After your first draw: before you Bomb,Info box,"Bomb: removes one enemy tile, even a 9. Uses your Grow.",bombLine
 Level 7,Win card,Finish card,You had more points – you won!,wonOnPoints
 Level 7,Win card,"Finish card (""you learned"")",BOMB ONE TILE,BOMB ONE TILE
-Level 8,Introduction: Blast,Info box,Blast: two Bombs clear a large area. Homes are safe.,blastLine
-Level 8,Free grow after a Blast,Info box,A Blast is an extra move: you can still Grow afterwards.,freeGrowLine
+Level 8,After your first draw: before you Blast,Info box,Blast: two Bombs clear a large area. Homes are safe.,blastLine
+Level 8,After the Blast: before your Grow,Info box,Blast clears several tiles at once and does NOT use your Grow.,freeGrowLine
 Level 8,Win card,Finish card,You had more points – you won!,wonOnPoints
 Level 8,Win card,"Finish card (""you learned"")",BLAST A HOLE,BLAST A HOLE
 Level 9,Introduction: gold Throw pile,Info box,The Throw pile glows gold when its top card completes a Bloom in your hand.,pileGoldLine
 Level 9,After a pile Bloom: skipping,Info box,Tap » to skip Grow/Bloom and keep your cards for later.,optionalLine
+Level 9,Right after the skip sentence (the Undo key is lit),Info box,You are able to undo your previous moves until you Throw a card at the end of your turn.,undoLine
 Level 9,Win card,Finish card,You had more points – you won!,wonOnPoints
 Level 9,Win card,"Finish card (""you learned"")",BLOOM FROM THE THROW PILE,BLOOM FROM THE THROW PILE
 Level 10,Win card,Finish card,YOU CAN PLAY FUTASAKU,canPlay
@@ -77,6 +78,7 @@ Levels 1-10 (any step),After a wrong tap,Display (the LED),ONE CARD PER TURN,one
 Levels 1-10 (any step),After a wrong tap,Display (the LED),THREE CARDS OR MORE,bloomNeeds
 Levels 1-10 (any step),After a wrong tap,Display (the LED),"SAME NUMBER, OR COUNTING UP",bloomMatch
 Levels 1-10 (any step),After a wrong tap,Display (the LED),THEIR TURN,theirTurnNow
-Levels 1-10 (any step),On the win card / a stuck lesson,Other,This lesson cannot finish now. Open the menu to start again.,restartLine
+Levels 1-10 (any step),A stuck lesson,Info box,This lesson cannot finish from here.,restartLine
+Levels 1-10 (any step),A stuck lesson,Info box (button),START AGAIN,startAgain
 Levels 1-10 (any step),On the win card / a stuck lesson,Other,YOU LEARNED,learned
 Levels 1-10 (any step),On the win card / a stuck lesson,Other,YOU WIN,youWin

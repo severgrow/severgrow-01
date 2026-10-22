@@ -11,8 +11,8 @@ import { botFor, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { SMALL_BOARD_RADIUS } from '../../src/campaign/small-board.js';
 import { LESSON } from '../../src/strings.js';
 import {
-  LESSONS, currentGoal, goalDone, goalReachable, lessonBeat, lessonFor, lessonLocked, lessonOpening,
-  presentedLessonBeat, suggestMove,
+  LESSONS, currentGoal, goalDone, goalReachable, lessonAllows, lessonBeat, lessonFor, lessonLegal, lessonLocked,
+  lessonOffersBloom, lessonOpening, presentedLessonBeat, suggestMove,
 } from '../src/lessons/lessons.js';
 import type { BeatCtx, Lesson, Lit } from '../src/lessons/lessons.js';
 import {
@@ -52,12 +52,15 @@ const TURNS: Record<number, [number, number]> = {
   1: [4, 4], 2: [3, 5], 3: [3, 5], 4: [3, 5], 5: [3, 5], 6: [2, 5], 7: [3, 5], 8: [2, 5], 9: [3, 5], 10: [3, 10],
 };
 
-/** The game's own rule for a tapped card: one that shares a face with a legal Bloom opens the Bloom. */
-const opensBloomInGame = (s: State, card: number): boolean => {
+/**
+ * The game's own rule for a tapped card: one that shares a face with a Bloom the page OFFERS opens
+ * the Bloom (the page's moves are the lesson's: no Bloom before level 5 — Session.allow).
+ */
+const opensBloomInGame = (l: Lesson, s: State, card: number): boolean => {
   const hand = s.hands[0];
   const c = hand.find((x) => x.id === card);
   if (!c || c.suit === null) return false;
-  return legalActions(viewFor(s, 0)).some((a) => a.t === 'Bloom'
+  return lessonLegal(l, s).some((a) => a.t === 'Bloom'
     && a.cards.some((id) => { const o = hand.find((x) => x.id === id); return !!o && o.suit === c.suit && o.rank === c.rank; }));
 };
 
@@ -69,8 +72,8 @@ describe('the light never asks for a tap the game reads differently', () => {
         if (s.actor === 0) {
           const a = suggestMove(l, s);
           if (!a) { const legal = legalActions(viewFor(s, 0)); s = apply(s, legal.find((x) => x.t === 'EndAct') ?? legal[0]!); continue; }
-          if (a.t === 'Sprout' && opensBloomInGame(s, a.card)) {
-            const other = legalActions(viewFor(s, 0)).some((x) => x.t === 'Sprout' && !opensBloomInGame(s, x.card));
+          if (a.t === 'Sprout' && opensBloomInGame(l, s, a.card)) {
+            const other = lessonLegal(l, s).some((x) => x.t === 'Sprout' && !opensBloomInGame(l, s, x.card));
             expect(other, `L${l.level} turn ${s.turnNumber}: Grow with Bloom card ${a.card}`).toBe(false);
           }
           s = apply(s, a);
@@ -125,15 +128,28 @@ describe('lesson openings', () => {
     }
   });
 
-  it('levels 1-4: no Bloom in the opening hand, and none ever lights up while you follow the light', () => {
+  it('levels 1-4 never offer a Bloom, whatever the player does (owner, 2026-10-22)', () => {
+    // "Make it impossible to have bloom in hand before the bloom lesson": the cards are the engine's,
+    // but the lesson never OFFERS the move, so no button, glow or hint can appear before level 5.
     for (const l of LESSONS.filter((x) => x.level <= 4)) {
-      let s = lessonOpening(l);
-      for (let i = 0; i < 400 && s.phase !== 'GAME_OVER'; i++) {
-        if (s.actor === 0) {
-          expect(legalActions(viewFor(s, 0)).some((a) => a.t === 'Bloom'), `L${l.level} turn ${s.turnNumber}`).toBe(false);
-          s = apply(s, suggestMove(l, s)!);
-        } else s = apply(s, opponentMove(l, s));
+      for (let seed = 0; seed <= 30; seed++) {
+        const rand = mulberry32(seed * 131 + l.level);
+        let s = lessonOpening(l);
+        for (let i = 0; i < 400 && s.phase !== 'GAME_OVER'; i++) {
+          if (s.actor === 0) {
+            const offered = lessonLegal(l, s);
+            expect(offered.some((a) => a.t === 'Bloom'), `L${l.level} seed ${seed} turn ${s.turnNumber}`).toBe(false);
+            expect(offered.length, `L${l.level}: there is always a move`).toBeGreaterThan(0);
+            const a = seed === 0 ? suggestMove(l, s)! : offered[Math.floor(rand() * offered.length)]!;
+            expect(offered, `L${l.level}: the light points at an offered move`).toContainEqual(a);
+            s = apply(s, a);
+          } else s = apply(s, opponentMove(l, s));
+        }
       }
+    }
+    for (const l of LESSONS) {
+      expect(lessonOffersBloom(l), `L${l.level}`).toBe(l.level >= 5);
+      expect(lessonAllows(l, { t: 'Bloom', cards: [1, 2, 3], hexes: [] }), `L${l.level}`).toBe(l.level >= 5);
     }
   });
 
@@ -201,7 +217,10 @@ describe('player (b): random legal moves', () => {
 });
 
 /** The UI's own flow, driven only by the lit thing: tap it, nothing else. */
-const tapOnlyTheLight = (lesson: Lesson, powerSeen = new Set(['bloom', 'bomb', 'blast'] as const)): { end: State; taps: number; wrong: number } => {
+const tapOnlyTheLight = (
+  lesson: Lesson, powerSeen = new Set(['bloom', 'bomb', 'blast'] as const),
+  onBeat: (beat: ReturnType<typeof lessonBeat>, s: State) => void = () => {},
+): { end: State; taps: number; wrong: number } => {
   let s = lessonOpening(lesson);
   const ctx: { card: number | null; placing: BeatCtx['placing']; throwPending: number | null; seen: Set<string>; powerSeen: Set<'bloom' | 'bomb' | 'blast'> } =
     { card: null, placing: null, throwPending: null, seen: new Set(), powerSeen };
@@ -211,6 +230,7 @@ const tapOnlyTheLight = (lesson: Lesson, powerSeen = new Set(['bloom', 'bomb', '
   for (let i = 0; i < 2000 && s.phase !== 'GAME_OVER'; i++) {
     if (s.actor !== 0) { playIt(opponentMove(lesson, s)); continue; }
     const beat = lessonBeat(lesson, s, ctx);
+    onBeat(beat, s);
     taps++;
     if (!beat) {
       // SILENT: the calm neutral window. The player still chooses the same legal move.
@@ -273,6 +293,147 @@ describe('player (c): taps only the lit thing', () => {
     const { taps } = tapOnlyTheLight(lessonFor(1)!);
     expect(taps).toBeLessThan(60);
     expect(lessonFor(1)!.intro.length).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('final sign-off (owner, 2026-10-22)', () => {
+  type Seen = { id: string; phase: State['phase']; turn: number; state: State; lit: Lit };
+  const walk = (lesson: Lesson): Seen[] => {
+    const out: Seen[] = [];
+    tapOnlyTheLight(lesson, undefined, (beat, s) => {
+      if (beat && !out.some((x) => x.id === beat.id && beat.explain)) out.push({ id: beat.id, phase: s.phase, turn: myTurns(s) + 1, state: s, lit: beat.lit });
+    });
+    return out;
+  };
+
+  it('a move is explained after the draw, the moment it can be played', () => {
+    const cases: [number, string, (s: State) => boolean][] = [
+      [3, '3:intro:gold', (s) => lessonLegal(lessonFor(3)!, s).some((a) => a.t === 'Sprout' && coordKey(a.coord) === '0,0')],
+      [5, '5:intro:bloom-cards', (s) => lessonLegal(lessonFor(5)!, s).some((a) => a.t === 'Bloom')],
+      [6, '6:intro:surround', (s) => {
+        const sides = new Set(neighbors(homeCoord(1, s.config), s.config.boardRadius).map(coordKey));
+        return lessonLegal(lessonFor(6)!, s).some((a) => a.t === 'Sprout' && sides.has(coordKey(a.coord)));
+      }],
+      [7, '7:intro:bomb', (s) => lessonLegal(lessonFor(7)!, s).some((a) => a.t === 'PlayFruit')],
+      [8, '8:intro:blast', (s) => lessonLegal(lessonFor(8)!, s).some((a) => a.t === 'MegaBomb')],
+    ];
+    for (const [level, id, playable] of cases) {
+      const seen = walk(lessonFor(level)!);
+      const intro = seen.find((x) => x.id === id);
+      expect(intro, `L${level}: ${id} is shown`).toBeDefined();
+      expect(intro!.phase, `L${level}: after the draw`).toBe('ACT');
+      expect(intro!.turn, `L${level}: on the first turn`).toBe(1);
+      expect(playable(intro!.state), `L${level}: its move can be played right then`).toBe(true);
+      // Before the draw the display only asks for the draw: nothing about the move yet.
+      const before = seen.filter((x) => x.phase === 'DRAW' && x.turn === 1).map((x) => x.id);
+      expect(before.some((x) => x.includes('intro:') && x !== '3:intro:rock'), `L${level}: ${before}`).toBe(false);
+    }
+    // Board facts and the opening's own explanations still come before the first draw.
+    expect(walk(lessonFor(1)!).filter((x) => x.phase === 'DRAW' && x.turn === 1).map((x) => x.id))
+      .toEqual(expect.arrayContaining(['1:intro:tree', '1:intro:their-home', '1:intro:first-draw']));
+    expect(walk(lessonFor(3)!).find((x) => x.id === '3:intro:rock')!.phase).toBe('DRAW');
+    expect(walk(lessonFor(9)!).find((x) => x.id === '9:intro:pile-gold')!.phase).toBe('DRAW');
+  });
+
+  it('level 1: the first three sentences welcome on the display, then it goes back to the action', () => {
+    const seen = walk(lessonFor(1)!);
+    const ids = ['1:intro:tree', '1:intro:their-home', '1:intro:first-draw'];
+    const ctx = { card: null, placing: null, throwPending: null, seen: new Set<string>() };
+    const s0 = lessonOpening(lessonFor(1)!);
+    for (const id of ids) {
+      const beat = lessonBeat(lessonFor(1)!, s0, ctx)!;
+      expect(beat.id).toBe(id);
+      expect(lessonVoiceFor({ beat, answer: null, stuck: false, restartLine: LESSON.restartLine }))
+        .toEqual({ box: beat.line, display: LESSON.welcome, restart: false });
+      ctx.seen.add(id);
+    }
+    expect(lessonBeat(lessonFor(1)!, s0, ctx)!.say, 'then the display asks for the draw').toBe(LESSON.tapDraw);
+    expect(seen.filter((x) => x.id !== 'draw').every((x) => ids.includes(x.id) || x.phase !== 'DRAW' || x.turn > 1)).toBe(true);
+    // No other level, and no later beat, uses the welcome.
+    for (const l of LESSONS.filter((x) => x.level > 1)) {
+      tapOnlyTheLight(l, undefined, (b) => expect(b?.say, `L${l.level} ${b?.id}`).not.toBe(LESSON.welcome));
+    }
+  });
+
+  it('level 2: the cut is explained on the next turn, when a cut is there to play', () => {
+    const seen = walk(lessonFor(2)!);
+    const strengthen = seen.find((x) => x.id === '2:idea:strengthen')!;
+    const take = seen.find((x) => x.id === '2:idea:take')!;
+    expect(strengthen.turn).toBe(1);
+    expect(take.turn, 'not straight after the strengthen').toBe(2);
+    expect(take.phase).toBe('ACT');
+    const takes = lessonLegal(lessonFor(2)!, take.state).filter((a) => a.t === 'Sprout' && coordKey(a.coord) === '0,0');
+    expect(takes.length, 'their tile can be taken right then').toBeGreaterThan(0);
+    expect(take.lit).toEqual({ t: 'hex', key: '0,0' });
+  });
+
+  it('level 2: whatever card the first turn throws, the cut is open on the next turn', () => {
+    const l = lessonFor(2)!;
+    let s = lessonOpening(l);
+    // Turn 1 is locked to the lit moves: draw, strengthen, then the lit throw.
+    while (!(s.phase === 'DISCARD' && s.actor === 0)) s = apply(s, s.actor === 0 ? suggestMove(l, s)! : opponentMove(l, s));
+    for (const t of lessonLegal(l, s).filter((a) => a.t === 'Discard')) {
+      let n = apply(s, t);
+      while (!(n.phase === 'ACT' && n.actor === 0) && n.phase !== 'GAME_OVER') n = apply(n, n.actor === 0 ? suggestMove(l, n)! : opponentMove(l, n));
+      expect(n.board['0,0']?.owner, 'their tile is still there').toBe(1);
+      const lit = t.t === 'Discard' && t.card === (suggestMove(l, s) as { card: number }).card;
+      if (lit) expect(lessonLegal(l, n).some((a) => a.t === 'Sprout' && coordKey(a.coord) === '0,0'), 'the lit throw keeps the cut open').toBe(true);
+    }
+  });
+
+  it('level 9: right after the skip sentence, the Undo key is explained', () => {
+    const seen = walk(lessonFor(9)!);
+    const i = seen.findIndex((x) => x.id === '9:optional');
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(seen[i + 1]?.id).toBe('9:undo');
+    expect(seen[i + 1]?.lit).toEqual({ t: 'undo' });
+    expect(seen[i + 1]?.phase).toBe('ACT');
+  });
+
+  it('the last turn is announced in one short sentence', () => {
+    expect(LESSON.lastTurnLine).toBe('The Draw pile is empty – this is your last turn.');
+  });
+
+  it('levels 1-9: the opponent makes a Grow on every turn it can, whatever you do', () => {
+    const GROWS = new Set(['Sprout', 'Strengthen', 'Overgrow']);
+    for (const l of LESSONS.filter((x) => 'script' in x.opponent)) {
+      for (let seed = 0; seed <= 12; seed++) {
+        const rand = mulberry32(seed * 977 + l.level);
+        let s = lessonOpening(l);
+        let turnStart = -1;
+        for (let i = 0; i < 600 && s.phase !== 'GAME_OVER'; i++) {
+          if (s.actor === 1) {
+            if (s.phase === 'ACT' && turnStart < 0) {
+              turnStart = s.history?.length ?? 0;
+              const couldGrow = legalActions(viewFor(s, 1)).some((a) => a.t === 'Sprout'
+                && !isStrangled(apply(s, a), 0));
+              s = apply(s, opponentMove(l, s));
+              const grew = (s.history ?? []).slice(turnStart).some((e) => GROWS.has(e.t) && 'player' in e && e.player === 1);
+              if (couldGrow) expect(grew, `L${l.level} seed ${seed} turn ${s.turnNumber}`).toBe(true);
+              continue;
+            }
+            s = apply(s, opponentMove(l, s));
+          } else {
+            turnStart = -1;
+            const offered = lessonLegal(l, s);
+            s = apply(s, seed === 0 ? suggestMove(l, s) ?? offered[0]! : offered[Math.floor(rand() * offered.length)]!);
+          }
+        }
+      }
+    }
+  });
+
+  it('every level stays a game: following the light wins, and very poor play can lose', () => {
+    let losses = 0;
+    for (const l of LESSONS.filter((x) => 'script' in x.opponent)) {
+      expect(play(l, (s) => suggestMove(l, s)!).result?.winner, `L${l.level}`).toBe(0);
+      for (let seed = 1; seed <= 20; seed++) {
+        const rand = mulberry32(seed * 7 + l.level);
+        const end = play(l, (s) => { const o = lessonLegal(l, s); return o[Math.floor(rand() * o.length)]!; });
+        if (end.result?.winner !== 0) losses++;
+      }
+    }
+    expect(losses, 'a random player loses some games').toBeGreaterThan(0);
   });
 });
 
@@ -527,11 +688,12 @@ describe('owner review 2026-10-19', () => {
     expect(line('1:idea:first-grow')).toBe(LESSON.growLine);
     expect(line('1:idea:first-throw')).toBe(LESSON.throwLine);
     expect(line('1:intro:first-draw')).toBe(LESSON.tapDrawLine);
-    // Each is an explanation: the box, not the display.
+    // Each is an explanation: the box, not the display. The display never carries an action here;
+    // during level 1's opening it scrolls the welcome instead (owner, 2026-10-22).
     for (const id of ['1:idea:first-grow', '1:idea:first-throw', '1:intro:first-draw']) {
       const b = beats.find((x) => x.id === id)!;
       expect(b.explain, id).toBe(true);
-      expect(b.say, id).toBeUndefined();
+      expect(b.say, id).toBe(id === '1:intro:first-draw' ? LESSON.welcome : undefined);
     }
   });
 
@@ -581,7 +743,8 @@ describe('the light never points at » while a power is playable', () => {
         let s = lessonOpening(lesson);
         for (let i = 0; i < 700 && s.phase !== 'GAME_OVER'; i++) {
           if (s.actor === 0) {
-            const legal = legalActions(viewFor(s, 0));
+            // The powers the page offers (none before the level that teaches each one).
+            const legal = lessonLegal(lesson, s);
             if (powers(legal).length) {
               const beat = lessonBeat(lesson, s, { card: null, placing: null, throwPending: null, seen: new Set(), powerSeen: ALL_POWERS });
               expect(beat?.lit.t, `L${lesson.level} ${name} beat`).not.toBe('end');
@@ -678,7 +841,7 @@ describe('per-action mastery fade', () => {
   });
 
   it('the lesson version is bumped, so explain-once and mastery start clean', () => {
-    expect(LESSON_VERSION).toBe(2);
+    expect(LESSON_VERSION).toBe(3);
     for (const l of LESSONS) expect(l.version, `L${l.level}`).toBe(LESSON_VERSION);
     // Saves round-trip under that version; a record from another version is ignored.
     const saved = encodeMastery(recordHello(recordAction(freshMastery(), 'draw', { level: 1, tier: 'guide' }), 'bloom'));

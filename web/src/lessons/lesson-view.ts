@@ -22,6 +22,7 @@ export const litTarget = (lit: Lit, homes: readonly [string, string]): { selecto
     case 'discard': return { selectors: ['#discard'], shape: 'pill' };
     case 'end': return { selectors: ['#smart-context'], shape: 'pill' };
     case 'bloom': return { selectors: ['#smart-bloom-button'], shape: 'pill' };
+    case 'undo': return { selectors: ['#tool-undo'], shape: 'pill' };
     default: return { selectors: [], shape: 'none' };
   }
 };

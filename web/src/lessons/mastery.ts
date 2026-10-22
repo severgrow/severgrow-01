@@ -10,7 +10,7 @@
 import type { Action, State } from '../../../src/engine/index.js';
 
 /** Bump with the lessons. A saved count from another version is ignored, never migrated. */
-export const LESSON_VERSION = 2;
+export const LESSON_VERSION = 3;
 
 /** One channel-local record. The /3/ storage prefix is applied below the app by channel.ts. */
 export const LESSON_MASTERY_KEY = 'severgrow.lesson.mastery.v1';

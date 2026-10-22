@@ -90,7 +90,7 @@ import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { throwPileAction } from './logic/throw-pile.js';
 import {
-  goalReachable, lessonBeat, lessonFor, lessonLocked, lessonOpening,
+  goalReachable, lessonAllows, lessonBeat, lessonFor, lessonLocked, lessonOffersBloom, lessonOpening,
   presentedLessonBeat, suggestMove,
 } from './lessons/lessons.js';
 import type { Beat, Lesson } from './lessons/lessons.js';
@@ -1278,6 +1278,8 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   for (const id of ['score-you', 'score-bot']) $(id).getAnimations().forEach(animation => animation.cancel());
   pumping = false;
   session = new Session(state, HUMAN, log, base);
+  // A lesson never offers a power before the level that teaches it (Bloom from level 5).
+  { const l = lessonNow && campaignLevel?.number === lessonNow.level ? lessonNow : null; session.allow = l ? (a) => lessonAllows(l, a) : null; }
   finalShown = false;
   lastDeckSeen = -1;
   goCounted = false;
@@ -4242,6 +4244,12 @@ function lessonActive(): Lesson | null {
   return lessonNow;
 }
 
+/** Levels 1-4 never show a Bloom in any form: no button, no glow, no bracket, no gold pile. */
+function bloomsShown(): boolean {
+  const l = lessonActive();
+  return !l || lessonOffersBloom(l);
+}
+
 function saveLessonMeta() {
   if (!lessonNow) return;
   store.set(LESSON_META_KEY, encodeLessonMeta({ level: lessonNow.level, version: lessonNow.version, seen: [...lessonSeen] }));
@@ -5626,7 +5634,7 @@ function hintCtx(v: View): HintCtx {
     canSprout: session!.legal.some((a) => a.t === 'Sprout'),
     canCombo: session!.legal.some((a) => a.t === 'Bloom'),
     bloomBlocked: (() => {
-      const groups = bloomGroups(v.hand);
+      const groups = bloomsShown() ? bloomGroups(v.hand) : [];
       return groups.length ? Math.min(...groups.map((g) => g.cards.length)) : null;
     })(),
     throwEndsTurn: v.phase === 'DISCARD' && discardEndsTurn(v),
@@ -6507,8 +6515,8 @@ function renderHand(v: View, advice: Advice | null) {
     ? kindCards(sel.kind) : sel.card === null && sel.kind === null
       ? legal.flatMap(a => a.t === 'Bloom' || a.t === 'MegaBomb' ? a.cards : []) : []) : new Set<number>();
   // overhaul item 3: cards of the same combo share a small bracket under them
-  const combos = comboGroups(v.hand);
-  const showBloomHints = (settings.bloomHints || !!coach.tutorial || IS_TEST) && myTurn() && !busy();
+  const combos = bloomsShown() ? comboGroups(v.hand) : new Map<number, number>();
+  const showBloomHints = (settings.bloomHints || !!coach.tutorial || IS_TEST) && myTurn() && !busy() && bloomsShown();
   const bloomHintIds = showBloomHints
     ? new Set(bloomHintGroups(v, legal).flat())
     : new Set<number>();
@@ -6719,7 +6727,7 @@ function renderPiles(v: View, advice: Advice | null) {
     const key = (cards: readonly Card[]) => cards.map(c => `${c.suit}:${c.rank}`).sort().join('|');
     const before = looks.discard.enabled && top ? new Set(bloomGroups(v.hand).map(g => key(g.cards))) : null;
     const createsBloom = !!before && !!top && bloomGroups([...v.hand, top]).some(g => !before.has(key(g.cards)));
-    $('discard').classList.toggle('futa04-bloom-draw', looks.discard.enabled && createsBloom);
+    $('discard').classList.toggle('futa04-bloom-draw', looks.discard.enabled && createsBloom && bloomsShown());
   }
   $('deck').setAttribute('aria-label', `${PILES.draw}: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
   $('discard').setAttribute('aria-label', top ? `${PILES.discard}: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : tossReady ? ' Tap to throw your card.' : ''}` : `${PILES.discard}: empty${tossReady ? '. Tap to throw your card.' : ''}`);
