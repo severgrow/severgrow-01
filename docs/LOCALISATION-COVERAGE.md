@@ -25,6 +25,7 @@ Languages: **en**, **pl**, **es**, **ja**. Reserved, not exposed: pt-BR, fr, de.
 | Tile card (rock, empty, gold, strength, risk, weak link) | ✅ | `HOME`, `FRUIT` + `ui.tooltip.*` |
 | Match Intel: tabs, move verbs, meters, observation | ✅ | Uppercase instrument tokens per locale |
 | Forecast / Confirm bar and risk lines | ✅ | `ui.forecast.*` |
+| Coach tips, explanations and summary bullets | ✅ | `ui.coach.*`, including the glossary words it introduces |
 | Finish card: title, reason, breakdown, actions, More/Less | ✅ | `RESULT`, `CAMPAIGN`, `ONLINE` |
 | How to play reference | ✅ | Full rule sentences, HTML preserved |
 | Install invitation (mobile and desktop) | ✅ | `INSTALL` group |
