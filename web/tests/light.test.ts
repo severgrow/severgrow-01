@@ -81,7 +81,11 @@ describe('the one LIGHT contract', () => {
   it('keeps the caps the owner set: flash, white, alarm and bloom', () => {
     expect(LIGHT_CAPS.flashMs).toBeLessThanOrEqual(60);
     expect(LIGHT_CAPS.flashWhite).toBeLessThanOrEqual(.35);
-    expect(LIGHT_CAPS.alarmMs).toBe(1200);
+    // Owner, 2026-10-22: the idle blink was barely visible, so it uses negative space - the dots
+    // switch OFF for 0.2 s of every 1 s. At 1 Hz it stays far under the 3 flashes/s seizure line.
+    expect(LIGHT_CAPS.alarmMs).toBe(1000);
+    expect(LIGHT_CAPS.alarmOffMs).toBe(200);
+    expect(1000 / LIGHT_CAPS.alarmMs).toBeLessThanOrEqual(3);
     // A major event may catch the bezel, but the stepped opacity still lands under the cap.
     expect(LIGHT_CAPS.bloomPeak).toBeLessThanOrEqual(.55);
     for (const tone of ROOM_TONES) {

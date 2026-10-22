@@ -858,7 +858,8 @@ export const FEEDBACK = Object.freeze({
   close: 'Close',
   /** The beta line on the main menu, between the wordmark and the buttons. */
   betaVersion: '0.6',
-  betaNote: (version: string) => `This is a beta version (${version}) of an evolving game. If you spot any problems or have suggestions for improvement,`,
+  betaNote: (version: string, deployed: string | null = null) =>
+    `This is a beta version (${version}${deployed ? `, last deploy: ${deployed}` : ''}) of an evolving game. If you spot any problems or have suggestions for improvement,`,
   betaLink: 'let us know here.',
 });
 

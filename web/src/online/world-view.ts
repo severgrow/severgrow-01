@@ -3,6 +3,8 @@ import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet } from '../../../server/src/seeds/types.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { ownerLine } from './world-selection.js';
+import { browserStorage } from '../../../server/src/client.js';
+import { lastWorld, rememberWorld } from './world-memory.js';
 
 type Identity = { token: string; playerId: string };
 type World = WorldMapPayload['world'];
@@ -45,6 +47,8 @@ export class WorldView {
   private identity: Identity | null = null;
   private wallet: SeedWallet | null = null;
   private world: World | null = null;
+  /** The map on screen came from the device's memory (./world-memory.ts), not this session's server. */
+  private fromMemory = false;
   private selected: string | null = null;
   private pendingRequest: string | null = null;
   private busy = false;
@@ -86,6 +90,16 @@ export class WorldView {
     this.touched = false;
     this.box = null;
     this.notice('');
+    // Drawn at once from the last good map this device saw, so the panel is never empty while the
+    // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
+    if (!this.world) {
+      const remembered = lastWorld(browserStorage());
+      if (remembered) {
+        this.world = remembered;
+        this.fromMemory = true;
+        this.paint();
+      }
+    }
     // The world is public. A guest token may be slow, offline or rate-limited; it must never
     // prevent the player from seeing the map. Attach the private wallet when identity resolves.
     const publicRefresh = this.refresh(true);
@@ -123,10 +137,12 @@ export class WorldView {
           return !previous || previous.cellId !== claim.cellId || previous.ownerName !== claim.ownerName ||
             previous.ownerId !== claim.ownerId;
         });
-      if (!this.world || map.world.revision > this.world.revision ||
+      if (this.fromMemory || !this.world || map.world.revision > this.world.revision ||
         (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged))) {
         this.world = map.world;
+        this.fromMemory = false;
         this.paint();
+        rememberWorld(browserStorage(), map.world);
       }
       this.paintWallet();
       this.paintSelection();

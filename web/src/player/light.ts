@@ -58,7 +58,8 @@ export const LIGHT_TONES: Record<LightTone, LightSpec> = {
  * Hard caps from the owner's brief. Everything that animates light is checked against
  * these, in code and in `web/tests/light.test.ts`:
  *   - a flash is at most 60 ms and never more than 35% white;
- *   - the alarm keeps its 1.2 s beat (no strobe);
+ *   - the idle alarm blinks by switching the dots OFF for `alarmOffMs` of every `alarmMs` (owner,
+ *     2026-10-22: "make it flash a bit more by using negative space"), 1 Hz, never a strobe;
  *   - the baked bloom's peak is capped;
  *   - a major event may catch the display's bezel, but only by an opacity step on the
  *     already-baked sprite, and never past the bloom cap.
@@ -66,7 +67,8 @@ export const LIGHT_TONES: Record<LightTone, LightSpec> = {
 export const LIGHT_CAPS = {
   flashMs: 60,
   flashWhite: .35,
-  alarmMs: 1200,
+  alarmMs: 1000,
+  alarmOffMs: 200,
   bloomPeak: .55,
   reflect: 1.18,
   /** how far the baked bloom reaches from a lit dot, in CSS px along the angle */

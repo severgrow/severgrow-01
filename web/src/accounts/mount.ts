@@ -3,7 +3,7 @@
 // guests, and an Account block in Settings (sign out, delete my account). Offline play never sees
 // any of it. Nothing shows until the Google provider is switched on in Supabase, so this is safe to
 // ship before the dashboard is set up. A failure here can never break the game (every path is caught).
-import { ACCOUNT, MENU, PRIVACY, PROFILE } from '../../../src/strings.js';
+import { ACCOUNT, PRIVACY } from '../../../src/strings.js';
 import { taggedName } from '../../../src/player-tag.js';
 import { DUEL_CLIENT_VERSION, browserStorage } from '../../../server/src/client.js';
 import type { KeyValue } from '../../../server/src/client.js';
@@ -13,6 +13,7 @@ import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
 import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
 import { glassBaseCss } from '../player/glass-surface.js';
 import { installProfileUI } from './profile.js';
+import { GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
 import type { ProfileFacts } from './profile.js';
 import {
   WELCOME_KEY,
@@ -197,26 +198,46 @@ const apiPost = (path: string, body: unknown, token: string | null) => apiReques
 const apiPatch = (path: string, body: unknown, token: string | null) => apiRequest('PATCH', path, body, token);
 
 const SETTINGS_CACHE = 'futasaku.auth.google.v1';
-/** Is "Continue with Google" switched on in the Supabase dashboard? Asked once per session. */
-const probeGoogle = async (supa: { url: string; key: string }): Promise<boolean> => {
+/**
+ * Is "Continue with Google" switched on in the Supabase dashboard? The answer is REMEMBERED on the
+ * device (GOOGLE_ON_KEY) so the menu can paint its account key with the other keys on the next
+ * visit (./menu-key.ts), and it is re-asked in the background once per session so a change in the
+ * dashboard still reaches the device. Only a first visit waits for the network.
+ */
+const probeGoogle = async (supa: { url: string; key: string }, kv: KeyValue | null): Promise<boolean> => {
+  let askedThisSession = false;
   try {
-    const hit = sessionStorage.getItem(SETTINGS_CACHE);
-    if (hit === '1' || hit === '0') return hit === '1';
+    askedThisSession = sessionStorage.getItem(SETTINGS_CACHE) !== null;
   } catch {
     /* no session storage */
   }
-  try {
-    const res = await fetch(`${supa.url}/auth/v1/settings`, { headers: { apikey: supa.key } });
-    const on = res.ok && googleEnabled(await res.json());
+  const ask = async (): Promise<boolean | null> => {
     try {
-      sessionStorage.setItem(SETTINGS_CACHE, on ? '1' : '0');
+      const res = await fetch(`${supa.url}/auth/v1/settings`, { headers: { apikey: supa.key } });
+      if (!res.ok) return null;
+      const on = googleEnabled(await res.json());
+      try {
+        sessionStorage.setItem(SETTINGS_CACHE, on ? '1' : '0');
+        kv?.set(GOOGLE_ON_KEY, on ? '1' : '0');
+      } catch {
+        /* fine */
+      }
+      return on;
     } catch {
-      /* fine */
+      return null;
     }
-    return on;
+  };
+  let known: string | null = null;
+  try {
+    known = kv?.get(GOOGLE_ON_KEY) ?? null;
   } catch {
-    return false;
+    known = null;
   }
+  if (known === '1' || known === '0') {
+    if (!askedThisSession) void ask();
+    return known === '1';
+  }
+  return (await ask()) ?? false;
 };
 
 let mounted = false;
@@ -386,14 +407,22 @@ export const mountAccounts = async (): Promise<void> => {
     }
   }
 
+  // The main menu's account key (section 4b). Looked up once: the menu's first layout may already have
+  // painted it from the device's memory (./menu-key.ts).
+  const menuLogin = document.getElementById('menu-login') as HTMLButtonElement | null;
   // ---- 2. is Google switched on? Nothing below shows until it is. ----
-  const available = await probeGoogle(supa);
+  const available = await probeGoogle(supa, kv);
   const flash = takeFlash(kv);
   if (flash) {
     say(flash.text, flash.kind === 'failed');
     setTimeout(() => go(flash.returnTo), 0);
   }
-  if (!available) return;
+  if (!available) {
+    // The menu may have painted the key early from the device's memory (./menu-key.ts); Google is
+    // off, so take it away rather than leave a key that cannot work.
+    if (menuLogin) menuLogin.hidden = true;
+    return;
+  }
   document.body.classList.add('acct-on');
 
   const start = async (returnTo: ReturnTo, btn: HTMLButtonElement | null, status: HTMLElement | null) => {
@@ -487,7 +516,6 @@ export const mountAccounts = async (): Promise<void> => {
   // the right. Signed out it reads LOG IN and starts the one Google flow (`start`, tagged 'menu', so
   // a fresh sign-in lands back on the menu). Signed in it reads the player's NAME and opens their
   // profile. It reuses `signedIn` and `shownName`: no second sign-in path, no second identity read.
-  const menuLogin = document.getElementById('menu-login') as HTMLButtonElement | null;
   const profile = installProfileUI();
 
   /**
@@ -702,12 +730,10 @@ export const mountAccounts = async (): Promise<void> => {
       const name = s ? shownName(s.identity) : null;
       // This branch only runs once Google is known to be on, so the key is live in both states:
       // LOG IN for a guest, the player's name when signed in. (Channels/builds where the Google
-      // branch never runs keep the markup's hidden key, so no dead key is ever shown.)
-      menuLogin.hidden = false;
-      menuLogin.textContent = name ?? MENU.login;
-      // The spoken label carries the name, so a screen-reader user knows whose profile it opens.
-      menuLogin.setAttribute('aria-label', name ? PROFILE.open(name) : MENU.login);
-      menuLogin.title = name ? PROFILE.open(name) : MENU.login;
+      // branch never runs keep the markup's hidden key, so no dead key is ever shown.) The menu's
+      // first layout already painted it the same way (./menu-key.ts); from here this module owns it.
+      paintAccountKey(menuLogin, name);
+      menuLogin.dataset.owned = '1';
     }
     // A sign-out reloads the page, but storage can also change under us; never leave a profile open
     // for an identity this device no longer has.
@@ -715,6 +741,11 @@ export const mountAccounts = async (): Promise<void> => {
   };
   renderSettings();
   refresh();
+  // A tap on the early-painted key, made before this module arrived, is honoured now.
+  if (menuLogin?.dataset.earlyClick) {
+    delete menuLogin.dataset.earlyClick;
+    menuLogin.click();
+  }
   // ---- 6. the one-time nickname step, right after the sign-in that formed this account ----
   // Consumed here (single use), so it is asked exactly once: skipping leaves the generated nature
   // name in place and never nags again. A later sign-in on another device is 'signed-in' and sets

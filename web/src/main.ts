@@ -215,6 +215,8 @@ import type { Beats } from './logic/emptyturn.js';
 // The product menu shows the world map only when this build really has an online endpoint to read
 // it from (the same predicate the lobby uses), so the entry can never open a dead screen.
 import { onlineBuildEnabled } from './online/config.js';
+import { accountsConfiguredInThisBuild, paintEarlyAccountKey } from './accounts/menu-key.js';
+import { paintBetaLine } from './feedback/beta-line.js';
 import { queueSeedProof } from './online/seed-rewards.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 
@@ -672,8 +674,9 @@ function syncMenuResume(): boolean {
  * Every control of the product menu that depends only on compile-time channel flags, the saved-game
  * storage and `src/strings.ts` — never the network. Extracted from `showScreen` so boot can lay the
  * menu out in its SYNCHRONOUS prefix (before the first `await`): a first-time tester then sees a way
- * to play with the first paint, not after the async player mounts. LOG IN is deliberately NOT here:
- * it depends on the Google probe and is revealed by the accounts module when that returns.
+ * to play with the first paint, not after the async player mounts. LOG IN is painted here too, from
+ * what the device already knows (owner, 2026-10-22: it used to arrive up to a second after the other
+ * keys); the accounts module re-checks Google in the background and owns the key once it mounts.
  * `canContinue` is the saved-game resume decision (see `syncMenuResume`), passed in so the caller
  * keeps recomputing it on every menu show.
  */
@@ -690,6 +693,8 @@ function layoutMenu(canContinue: boolean) {
   // The bottom row is a GROUP (owner brief, 2026-10-21): LOG IN (or the player's name) on the left,
   // Settings on the right. Its spoken name comes from the one strings module.
   $('menu-foot').setAttribute('aria-label', MENU.footerLabel);
+  paintEarlyAccountKey($('menu-login') as HTMLButtonElement, accountsConfiguredInThisBuild());
+  paintBetaLine(document.getElementById('menu-beta'));
   // The account key's words are owned by the accounts module, not by this layout pass: a signed-out
   // guest sees MENU.login, a signed-in player sees their NAME, and both are the SAME key (one entry,
   // one flow, one place). Writing MENU.login here would stomp the name on every return to the menu.
@@ -706,9 +711,8 @@ function layoutMenu(canContinue: boolean) {
     setLead($('menu-play'), true);
     setLead($('menu-continue'), false);
     setLead($('menu-world'), false);
-    // Inside PLAY exactly one entry leads: Play online, the duel lobby. LEVEL <n> and Practice match
-    // are the next tier down and the back control is the quietest of all. A build with no online
-    // endpoint has no Play online at all, so the campaign (the primary offline mode) leads.
+    // Inside PLAY exactly one entry leads: LEVEL <n>, the campaign (owner, 2026-10-22). Play online
+    // and Practice match are the next tier down and the back control is the quietest of all.
     const cmp = $('menu-campaign');
     cmp.hidden = false;
     // The entry and the press now come from ONE decision (campaignEntry), so the label can no longer
@@ -724,8 +728,10 @@ function layoutMenu(canContinue: boolean) {
       cmp.setAttribute('aria-label', MENU.levelAria(current));
     }
     $('menu-online').hidden = !online;
-    setLead($('menu-online'), online);
-    setLead(cmp, !online);
+    // LEVEL <n> carries the cream fill inside PLAY (owner, 2026-10-22: "highlight 'level n'
+    // instead" of Play online); Play online is a quiet ghost key like Practice match.
+    setLead($('menu-online'), false);
+    setLead(cmp, true);
     // There is deliberately NO "Levels" entry (owner, 2026-10-16): the player does not get access to
     // the whole list. LEVEL <n> above starts the next level they have NOT completed, and that is the
     // only way in. The list still renders; the finish card's "Back to campaign" is where the campaign
@@ -760,6 +766,8 @@ function layoutMenu(canContinue: boolean) {
   // Rename the one tutorial entry from src/strings.ts (single source).
   $('menu-tutorial').textContent = HELP.tutorial;
   $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
+  // Laid out: every key is now in its final state, so the column may show (style.css).
+  $('menu').dataset.laidOut = '1';
 }
 function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   const same = shownScreen === name;
@@ -7842,8 +7850,8 @@ const bind = (id: string, fn: () => void) =>
  *
  * The ARRAY IS THE VISUAL ORDER (`append` one by one, in order), so it is also the tab order and the
  * screen reader's order. Owner decision (2026-10-20): LEVEL is the FIRST entry, above Play online -
- * the offline campaign is the thing a player opens most, and it leads the column. Play online keeps
- * the cream fill (the one leader inside PLAY) exactly as before; only its position moved.
+ * the offline campaign is the thing a player opens most, and it leads the column. Since 2026-10-22 it
+ * also carries the cream fill (the one leader inside PLAY); Play online is a quiet ghost key.
  */
 const PLAY_MENU_ENTRIES = ['menu-campaign', 'menu-online', 'menu-new'] as const;
 if (FEATURES.campaign) {

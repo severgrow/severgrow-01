@@ -29,7 +29,15 @@ export default defineConfig({
   base: './',
   // Default product build is Futasaku 0.4. `futa-test` is the experiment copy.
   define: { __CHANNEL__: JSON.stringify(['live', 'test', 'futa04', 'futa-test', 'futa05'].includes(process.env.CHANNEL ?? '') ? process.env.CHANNEL : 'futa04') },
-  plugins: [{ name: 'futasaku-preview-icons', transformIndexHtml: { order: 'pre', handler(html) {
+  plugins: [{
+    // The menu's "last deploy" time (web/src/feedback/deploy.ts). Stamped at BUILD time only: the
+    // deploy workflow builds right before it publishes, so this is when the build went live. A dev
+    // server stamps nothing, and DEPLOYED_AT overrides the clock when a workflow wants to pin it.
+    name: 'futasaku-deployed-at',
+    config: (_config, { command }) => ({
+      define: { __DEPLOYED_AT__: JSON.stringify(command === 'build' ? (process.env.DEPLOYED_AT || new Date().toISOString()) : '') },
+    }),
+  }, { name: 'futasaku-preview-icons', transformIndexHtml: { order: 'pre', handler(html) {
     const modern = process.env.CHANNEL === 'futa04' || process.env.CHANNEL === 'futa-test'
       || process.env.CHANNEL === 'futa05' || !process.env.CHANNEL;
     return modern ? html

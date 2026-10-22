@@ -362,6 +362,12 @@ button {
   padding: 0 2px;
   text-wrap: balance;
 }
+/* Every key lands in the same frame (owner, 2026-10-22: no key may arrive after the others). The
+   static HTML would otherwise show Settings ~100 ms before the keys main.ts reveals, so the column
+   waits for the menu's first layout (layoutMenu sets data-laid-out). If that never ran, the keys
+   still appear after 1.5 s rather than never. */
+#menu:not([data-laid-out]) .menu-buttons { visibility: hidden; animation: menu-keys-fallback 0s linear 1.5s forwards; }
+@keyframes menu-keys-fallback { to { visibility: visible; } }
 .menu-buttons {
   width: 100%;
   display: flex;
