@@ -2765,25 +2765,6 @@ let lessonExplainAt = 0;
  * It applies to DISMISSAL only: a tap on the lit target is a MOVE and still acts on the first tap.
  */
 const LESSON_READ_MS = 3000;
-/**
- * How many times a tap was refused by the reading floor. Each refusal is acknowledged on screen (see
- * `lessonAckFloor`), and the count is exposed to the tests so "every tap did something or was
- * answered" can include a refusal that pulsed the caption.
- */
-let lessonFloorAcks = 0;
-
-/** Acknowledge a tap the reading floor refused: one quiet pulse of the caption, never words. */
-function lessonAckFloor() {
-  lessonFloorAcks++;
-  if (settings.reduceMotion) return;
-  const plate = document.getElementById('lesson-plate');
-  // A pulse on the caption itself: it says the tap landed, and that the sentence is staying. No
-  // layout, no new CSS, and reduce-motion opts out.
-  plate?.animate?.(
-    [{ opacity: 1 }, { opacity: 0.55 }, { opacity: 1 }],
-    { duration: 220, easing: 'ease-out' },
-  );
-}
 let lessonHoldingScore = false;
 let lessonExplainId = '';
 /** The lesson's box explains; the cockpit display carries the action (levels 1-10 only). */
@@ -4462,14 +4443,7 @@ function lessonDecide(e: Event): boolean {
     // target above still plays the move on one tap, because the owner also requires that (making
     // the lit thing wait would recreate the "my first tap did nothing" bug). The old floor was
     // 650 ms, which only stopped a tap aimed at the move that had just happened.
-    if (performance.now() - lessonExplainAt < LESSON_READ_MS) {
-      // A refused dismissal must still be ACKNOWLEDGED. A swallowed tap with no feedback is the
-      // "my first tap did nothing" smell the owner reported in the same breath, and the random-tap
-      // robustness check caught it: the tap changed nothing and said nothing. A single quiet pulse
-      // of the caption says "I felt that, the sentence stays a moment" without adding words.
-      lessonAckFloor();
-      return true;
-    }
+    if (performance.now() - lessonExplainAt < LESSON_READ_MS) return true;
     lessonMarkSeen(beat.id);
     return true;
   }
@@ -8716,8 +8690,6 @@ let appReady = false;
       idle: lessonIdle, idleStage: lessonIdleStage, tier: lessonTierShown,
       /** Tests: when this explanation first appeared — the start of its reading floor (LESSON_READ_MS). */
       explainAt: lessonExplainAt,
-      /** Tests: taps the reading floor refused, each acknowledged on screen (lessonAckFloor). */
-      floorAcks: lessonFloorAcks,
       stage: lessonStageActive(), stageLeft: Math.max(0, Math.round(lessonStageUntil - performance.now())),
       handSettled, shownKey: lessonShownKey, seen: [...lessonSeen], powerSeen: [...lessonPowerSeen],
     } : null;
