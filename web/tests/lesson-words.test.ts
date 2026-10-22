@@ -19,13 +19,28 @@ const DISPLAY = [
 const FINISH_LINES = new Set(['wonOnPoints', 'wonByKo', 'goldDecided']);
 
 describe('lesson words', () => {
-  it('the four core explanations are the owner’s sentences, exactly', () => {
-    // The owner's wording, verbatim (owner, 2026-10-19), with one decision since (2026-10-20): the
-    // two piles are the Draw pile and the Throw pile everywhere, as on the board.
-    expect(LESSON.theirHomeLine).toBe('To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the Draw pile runs out.');
-    expect(LESSON.tapDrawLine).toBe('You start every turn by drawing 1 card from the Draw pile or the Throw pile.');
-    expect(LESSON.growLine).toBe('Grow: drag one of your cards from your hand onto the board, or tap it to select and then place on the board.');
-    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to the Throw pile, or double tap to throw a card and finish your turn.');
+  it('the lesson explanations are the owner’s sentences, exactly', () => {
+    // The owner's wording, verbatim (owner, 2026-10-22, replacing the 2026-10-19 sentences). The two
+    // piles are the Draw pile and the Throw pile everywhere, as on the board (2026-10-20).
+    expect(LESSON.yourHomeLine).toBe('This is your home. Place cards on the tiles that connect to your home to GROW.');
+    expect(LESSON.theirHomeLine).toBe('TO WIN: surround opponent’s home tile, or have more tiles on the board when the Draw pile runs out.');
+    expect(LESSON.tapDrawLine).toBe('Every turn has 3 steps - DRAW, GROW and THROW. You start by drawing 1 card from the top of the Draw pile or the Throw pile.');
+    expect(LESSON.growLine).toBe('Grow: drag one of your cards from your hand onto the board, or tap it to select and then place it on the board.');
+    expect(LESSON.youGrewLine).toBe('Tiles keep the rank of the card used. Higher ranks are harder to cut.');
+    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to the Throw pile, or double tap to throw a card. This ends your turn.');
+    expect(LESSON.biggerWinsLine).toBe('Strengthen: a stronger card can replace your own tile.');
+    expect(LESSON.takeTileLine).toBe('Cut: a higher card can take an opponent’s tile.');
+    expect(LESSON.rocksBlockLine).toBe('Nothing can Grow on a rock.');
+    expect(LESSON.goldDoubleLine).toBe('A gold tile counts double, so it is worth two points.');
+    expect(LESSON.cutLinkLine).toBe('Cut a tile to break the chain behind it.');
+    expect(LESSON.witheredLine).toBe('Tiles cut off from their home disappear.');
+    expect(LESSON.bloomedLine).toBe('Bloom grows several tiles at once and does NOT cost your GROW turn.');
+    expect(LESSON.surroundLine).toBe('Surround: fill every tile around their home for an instant win.');
+    expect(LESSON.bombLine).toBe('Bomb: removes one enemy tile, even a 9. Uses your Grow.');
+    expect(LESSON.blastLine).toBe('Blast: two Bombs clear a large area. Homes are safe.');
+    expect(LESSON.freeGrowLine).toBe('A Blast is an extra move: you can still Grow afterwards.');
+    expect(LESSON.pileGoldLine).toBe('The Throw pile glows gold when its top card completes a Bloom in your hand.');
+    expect(LESSON.optionalLine).toBe('Tap » to skip Grow/Bloom and keep your cards for later.');
   });
 
   it('two piles, two names: the Draw pile and the Throw pile, never "discard" (owner, 2026-10-20)', () => {
@@ -38,7 +53,7 @@ describe('lesson words', () => {
 
   it('the Bloom explanation says three in order in one suit', () => {
     // Owner copy (2026-10-20): "three in order in one suit", never "in a row".
-    expect(LESSON.cardsThatBloomLine).toBe('Bloom: three cards with the same number, or three in order in one suit.');
+    expect(LESSON.cardsThatBloomLine).toBe('BLOOM: three cards with the same number, or three in order in one suit.');
     expect(LESSON.cardsThatBloomLine).not.toMatch(/\bin a row\b/i);
     // Owner, 2026-10-20: the end-turn key is » alone; the display never spends words on "to throw".
     expect(LESSON.tapThrow).toBe('TAP »');
