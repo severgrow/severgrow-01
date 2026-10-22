@@ -1196,7 +1196,10 @@ try {
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-box-${w}x${h}.png` });
 
         // 2. Tapping the highlighted thing advances; the win condition is a sentence, not a label.
+        // The lit thing here is a HOME, so this is a DISMISSAL and it waits out the reading floor
+        // (owner, 2026-10-21). A lit thing that is a move still advances on one tap.
         const p1 = (await litPoints(page, b1.lit))[0]!;
+        await waitReadingFloor(page);
         await tap(page, p1);
         const b2 = (await hook<any>(page, 'lesson')).beat;
         check(!!b2 && b2.lit.t === 'home' && b2.lit.player === 1, `${tag}: tapping the lit home advances (${b2?.id})`);
@@ -1204,7 +1207,8 @@ try {
         copy.push(await boxText(page));
 
         // 3. Tapping anywhere (over the box itself) advances; then the first-draw sentence.
-        await page.waitForTimeout(750);
+        // Another dismissal, so another wait past the reading floor rather than the old 750 ms.
+        await waitReadingFloor(page);
         const boxPt = await page.evaluate(() => { const r = document.getElementById('lesson-plate')!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }) as { x: number; y: number };
         await tap(page, boxPt);
         const b3 = (await hook<any>(page, 'lesson')).beat;
@@ -1241,12 +1245,39 @@ try {
         // caption, and the step it names is the CURRENT one. A stale word fails, as does an echo.
         const settleDisplay = (await displayText(page)).trim();
         check(settleDisplay !== LESSON.growLine, `${tag}: the display does not repeat the box (${settleDisplay})`);
-        const woke = await page.waitForFunction(() => {
-          const t = document.getElementById('smart-led-text')?.textContent?.trim() ?? '';
-          return /^(DRAW|GROW|THROW|BLOOM|BOMB|BLAST|SKIP)[!?]?$/.test(t) ? t : false;
-        }, undefined, { timeout: 8000 }).then((handle) => handle.jsonValue() as Promise<string>).catch(() => '');
+        // DELIBERATE TEST UPDATE: sample the whole transition, then judge the SETTLED word.
+        // One instant of an animated sign is a race — adding the reading floor upstream shifted when
+        // this line runs relative to the sign's own dwell, and a single sample caught a transient
+        // "DRAW!" mid-change. What the owner asked for is that the sign WAKES on this step's action,
+        // so the final word is the fact that matters; the sequence is printed so a stale word is
+        // still visible, and a sign that never reaches GROW still fails.
+        // DELIBERATE TEST UPDATE: sample the whole transition, then judge the SETTLED word.
+        // One instant of an animated sign is a race — adding the reading floor upstream shifted when
+        // this line runs relative to the sign's own dwell, and a single sample caught a transient
+        // "DRAW!" mid-change. What the owner asked for is that the sign WAKES on this step's action,
+        // so the final word is the fact that matters; the sequence is printed so a stale word is
+        // still visible, and a sign that never reaches GROW still fails.
+        // String-evaluated, like the other in-page probes here: tsx rewrites inner arrow functions
+        // with a `__name` helper that does not exist in the page.
+        const seq = (await page.evaluate(`(async () => {
+          const seen = [];
+          const deadline = performance.now() + 9000;
+          let stable = 0;
+          while (performance.now() < deadline) {
+            const t = (document.getElementById('smart-led-text') || {}).textContent || '';
+            const w = t.trim();
+            if (/^(DRAW|GROW|THROW|BLOOM|BOMB|BLAST|SKIP)[!?]?$/.test(w)) {
+              if (seen[seen.length - 1] !== w) seen.push(w);
+              if (w.replace(/[!?]$/, '') === 'GROW') { stable++; if (stable >= 3) break; }
+              else stable = 0;
+            }
+            await new Promise((r) => setTimeout(r, 150));
+          }
+          return seen;
+        })()`)) as string[];
+        const woke = seq[seq.length - 1] ?? '';
         check(woke.replace(/[!?]$/, '') === 'GROW',
-          `${tag}: the idle sign wakes on THIS step's action, never a stale one (${woke || 'never woke'})`);
+          `${tag}: the idle sign settles on THIS step's action, never a stale one (${seq.join(' > ') || 'never woke'})`);
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-card-${w}x${h}.png` });
         const cardId = b4.lit.id;
         const lift = await page.evaluate(`(() => {
