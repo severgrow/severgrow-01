@@ -76,7 +76,7 @@ describe('offline keeps its own words (the campaign now leads with a level)', ()
     // A plain offline game still uses the two words it always had, verbatim. The CAMPAIGN branch
     // was added ahead of them by owner direction (2026-10-16): a won level leads with "Next level"
     // (`web/src/logic/finish-actions.ts` decides which one, and its test covers the whole matrix).
-    expect(mainSource).toContain("won ? 'Play again' : 'Try again'");
+    expect(mainSource).toMatch(/won \? t\('ui\.game\.playAgain', 'Play again'\) : t\('ui\.game\.tryAgain', 'Try again'\)/);
     expect(mainSource).toContain("lead === 'next-level' ? CAMPAIGN.nextLevel");
     expect(mainSource).toMatch(/const lead = finishLead\(\{ online: false, campaign: !!campaign, won, hasNext: !!next \}\)/);
   });

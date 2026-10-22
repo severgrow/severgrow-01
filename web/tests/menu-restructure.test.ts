@@ -185,7 +185,7 @@ describe('the Practice match entry opens the three tiers', () => {
   it('its heading is the practice-match title on a product channel and the legacy words elsewhere', () => {
     expect(MENU.trainingTitle).toBe('Practice match');
     expect(mainSource).toMatch(/if \(FEATURES\.campaign\)[\s\S]*?\$\('levels-heading'\)\.textContent = MENU\.trainingTitle/);
-    expect(mainSource).toMatch(/else \{[\s\S]*?\$\('levels-heading'\)\.textContent = 'Choose difficulty'/);
+    expect(mainSource).toMatch(/else \{[\s\S]*?\$\('levels-heading'\)\.textContent = (?:t\('ui\.menu\.chooseDifficulty', )?'Choose difficulty'/);
   });
 
   it('the picker renders exactly the three carry-over tiers', () => {

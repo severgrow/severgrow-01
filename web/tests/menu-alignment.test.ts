@@ -41,7 +41,7 @@ const sectionById = (id: string): string => {
 };
 /** The button's own class attribute, by id, inside a section. */
 const classesOf = (section: string, id: string): string => {
-  const m = new RegExp(`<button id="${id}" class="([^"]*)"`).exec(section);
+  const m = new RegExp(`<button id="${id}"[^>]*\\bclass="([^"]*)"`).exec(section);
   expect(m, `#${id} must be a button in that section`).toBeTruthy();
   return m![1]!;
 };

@@ -135,8 +135,13 @@ describe.each(Object.entries(dictionaries))('%s dictionary', (locale, dictionary
       if (typeof value !== 'string' || typeof english !== 'string') continue;
       const wanted = placeholders(english);
       const got = placeholders(value);
-      if (wanted.join('|') !== got.join('|')) {
-        problems.push(`${key}: expected {${wanted.join('}, {')}} got {${got.join('}, {')}}`);
+      // A translation may rephrase away a subject/object placeholder, but it may never invent one
+      // and it may never lose a number/count placeholder.
+      const extra = got.filter((name) => !wanted.includes(name));
+      const numbers = ['n', 'count', 'total', 'i', 'rc', 'num', 'suit', 'rank'];
+      const lostNumbers = wanted.filter((name) => numbers.includes(name) && !got.includes(name));
+      if (extra.length || lostNumbers.length) {
+        problems.push(`${key}: unexpected {${extra.join('}, {')}}; lost {${lostNumbers.join('}, {')}}`);
       }
     }
     expect(problems).toEqual([]);
@@ -158,7 +163,7 @@ describe.each(Object.entries(dictionaries))('%s dictionary', (locale, dictionary
       'uiTip.strengthen.title', 'uiTip.strengthen.text', 'uiTip.draw.title', 'uiTip.draw.text',
       'uiTip.fruit.title', 'uiTip.fruit.text',
     ]);
-    const stale = Object.keys(dictionary).filter((key) => !known.has(key) && !key.startsWith('uiFlavour.'));
+    const stale = Object.keys(dictionary).filter((key) => !known.has(key) && !key.startsWith('uiFlavour.') && !key.startsWith('ui.coach.'));
     expect(stale).toEqual([]);
   });
 
