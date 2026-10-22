@@ -11,6 +11,7 @@ import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
 import { glassBaseCss } from '../player/glass-surface.js';
 import { buildContext, cleanStack, createCrashGate, createQueue, safePath } from './core.js';
 import type { FeedbackKind, FeedbackPayload } from './core.js';
+import { paintBetaLine, replayEarlyTap } from './beta-line.js';
 
 declare const __CHANNEL__: string;
 
@@ -273,25 +274,20 @@ export const mountFeedback = (): void => {
 
   // ---- the beta line on the main menu (between the wordmark and the buttons) ----
   // The element is in the markup in source order (logo → beta line → PLAY …), so its seen, tab and
-  // screen-reader order is right before any JS runs. This fills it and reveals it; it is a quiet
-  // version line, not a fourth button (owner, 2026-10-20), and it is on every channel.
-  const beta = document.getElementById('menu-beta');
-  let betaLink: HTMLButtonElement | null = null;
-  if (beta && !beta.querySelector('button')) {
-    beta.append(document.createTextNode(`${FEEDBACK.betaNote(FEEDBACK.betaVersion)} `));
-    betaLink = el('button', '', FEEDBACK.betaLink);
-    betaLink.type = 'button';
-    betaLink.dataset.fb = 'menu-link';
+  // screen-reader order is right before any JS runs. It is a quiet version line, not a fourth button
+  // (owner, 2026-10-20), on every channel. The menu's first layout has normally painted it already
+  // (./beta-line.ts); this paints it through the same function if not, and gives the link its sheet.
+  let betaLink = paintBetaLine(document.getElementById('menu-beta'));
+  if (betaLink) {
+    betaLink.dataset.owned = '1';
     betaLink.addEventListener('click', () => openGuide()); // replaced by the report form below when a server exists
-    beta.append(betaLink);
-    beta.hidden = false;
-  } else if (beta) {
-    betaLink = beta.querySelector('button');
-    beta.hidden = false;
   }
 
   // ---- "Report a problem" ----
-  if (!api) return; // a build with no server (offline only) has nowhere to send a report
+  if (!api) {
+    replayEarlyTap(betaLink); // offline-only builds: the link opens the tester guide
+    return; // a build with no server (offline only) has nowhere to send a report
+  }
   const report = sheet('fb-report', FEEDBACK.title);
   const status = el('p', 'fb-status');
   status.setAttribute('role', 'status');
@@ -360,7 +356,9 @@ export const mountFeedback = (): void => {
     const fresh = betaLink.cloneNode(true) as HTMLButtonElement;
     fresh.addEventListener('click', openReport);
     betaLink.replaceWith(fresh);
+    betaLink = fresh;
   }
+  replayEarlyTap(betaLink);
   const button = (id: string, cls: string) => {
     const b = el('button', cls, FEEDBACK.open);
     b.type = 'button';

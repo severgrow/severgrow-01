@@ -215,6 +215,8 @@ import type { Beats } from './logic/emptyturn.js';
 // The product menu shows the world map only when this build really has an online endpoint to read
 // it from (the same predicate the lobby uses), so the entry can never open a dead screen.
 import { onlineBuildEnabled } from './online/config.js';
+import { accountsConfiguredInThisBuild, paintEarlyAccountKey } from './accounts/menu-key.js';
+import { paintBetaLine } from './feedback/beta-line.js';
 import { queueSeedProof } from './online/seed-rewards.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 
@@ -672,8 +674,9 @@ function syncMenuResume(): boolean {
  * Every control of the product menu that depends only on compile-time channel flags, the saved-game
  * storage and `src/strings.ts` — never the network. Extracted from `showScreen` so boot can lay the
  * menu out in its SYNCHRONOUS prefix (before the first `await`): a first-time tester then sees a way
- * to play with the first paint, not after the async player mounts. LOG IN is deliberately NOT here:
- * it depends on the Google probe and is revealed by the accounts module when that returns.
+ * to play with the first paint, not after the async player mounts. LOG IN is painted here too, from
+ * what the device already knows (owner, 2026-10-22: it used to arrive up to a second after the other
+ * keys); the accounts module re-checks Google in the background and owns the key once it mounts.
  * `canContinue` is the saved-game resume decision (see `syncMenuResume`), passed in so the caller
  * keeps recomputing it on every menu show.
  */
@@ -690,6 +693,8 @@ function layoutMenu(canContinue: boolean) {
   // The bottom row is a GROUP (owner brief, 2026-10-21): LOG IN (or the player's name) on the left,
   // Settings on the right. Its spoken name comes from the one strings module.
   $('menu-foot').setAttribute('aria-label', MENU.footerLabel);
+  paintEarlyAccountKey($('menu-login') as HTMLButtonElement, accountsConfiguredInThisBuild());
+  paintBetaLine(document.getElementById('menu-beta'));
   // The account key's words are owned by the accounts module, not by this layout pass: a signed-out
   // guest sees MENU.login, a signed-in player sees their NAME, and both are the SAME key (one entry,
   // one flow, one place). Writing MENU.login here would stomp the name on every return to the menu.
@@ -706,9 +711,8 @@ function layoutMenu(canContinue: boolean) {
     setLead($('menu-play'), true);
     setLead($('menu-continue'), false);
     setLead($('menu-world'), false);
-    // Inside PLAY exactly one entry leads: Play online, the duel lobby. LEVEL <n> and Practice match
-    // are the next tier down and the back control is the quietest of all. A build with no online
-    // endpoint has no Play online at all, so the campaign (the primary offline mode) leads.
+    // Inside PLAY exactly one entry leads: LEVEL <n>, the campaign (owner, 2026-10-22). Play online
+    // and Practice match are the next tier down and the back control is the quietest of all.
     const cmp = $('menu-campaign');
     cmp.hidden = false;
     // The entry and the press now come from ONE decision (campaignEntry), so the label can no longer
@@ -724,8 +728,10 @@ function layoutMenu(canContinue: boolean) {
       cmp.setAttribute('aria-label', MENU.levelAria(current));
     }
     $('menu-online').hidden = !online;
-    setLead($('menu-online'), online);
-    setLead(cmp, !online);
+    // LEVEL <n> carries the cream fill inside PLAY (owner, 2026-10-22: "highlight 'level n'
+    // instead" of Play online); Play online is a quiet ghost key like Practice match.
+    setLead($('menu-online'), false);
+    setLead(cmp, true);
     // There is deliberately NO "Levels" entry (owner, 2026-10-16): the player does not get access to
     // the whole list. LEVEL <n> above starts the next level they have NOT completed, and that is the
     // only way in. The list still renders; the finish card's "Back to campaign" is where the campaign
@@ -760,6 +766,8 @@ function layoutMenu(canContinue: boolean) {
   // Rename the one tutorial entry from src/strings.ts (single source).
   $('menu-tutorial').textContent = HELP.tutorial;
   $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
+  // Laid out: every key is now in its final state, so the column may show (style.css).
+  $('menu').dataset.laidOut = '1';
 }
 function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   const same = shownScreen === name;
@@ -2759,6 +2767,31 @@ let lessonStageTimer = 0;
 let handSettled = true;
 /** When the explanation on screen appeared: a tap in its first moments is not "tap anywhere". */
 let lessonExplainAt = 0;
+/**
+ * How long a lesson explanation must stay up before a dismissing tap may take it away (owner,
+ * 2026-10-21: "make sure the window can't be skipped for 3s — always shows for at least 3s").
+ * It applies to DISMISSAL only: a tap on the lit target is a MOVE and still acts on the first tap.
+ */
+const LESSON_READ_MS = 3000;
+/**
+ * How many times a tap was refused by the reading floor. Each refusal is acknowledged on screen (see
+ * `lessonAckFloor`), and the count is exposed to the tests so "every tap did something or was
+ * answered" can include a refusal that pulsed the caption.
+ */
+let lessonFloorAcks = 0;
+
+/** Acknowledge a tap the reading floor refused: one quiet pulse of the caption, never words. */
+function lessonAckFloor() {
+  lessonFloorAcks++;
+  if (settings.reduceMotion) return;
+  const plate = document.getElementById('lesson-plate');
+  // A pulse on the caption itself: it says the tap landed, and that the sentence is staying. No
+  // layout, no new CSS, and reduce-motion opts out.
+  plate?.animate?.(
+    [{ opacity: 1 }, { opacity: 0.55 }, { opacity: 1 }],
+    { duration: 220, easing: 'ease-out' },
+  );
+}
 let lessonHoldingScore = false;
 let lessonExplainId = '';
 /** The lesson's box explains; the cockpit display carries the action (levels 1-10 only). */
@@ -4424,15 +4457,27 @@ function lessonDecide(e: Event): boolean {
   const beat = lessonBeatNow;
   const lockedNow = lessonLocked(lesson, session.state) && guided;
   if (guided && beat?.explain) {
-    // The lit thing is the move: one tap reads the sentence AND plays it. Never the 650 ms guard
+    // The lit thing is the move: one tap reads the sentence AND plays it. Never the dwell guard
     // here — that guard exists for a tap meant for the move that just happened, and this tap is
     // aimed at the thing the lesson is pointing at now.
     if (lessonTapMoves(beat, target, e, lockedNow)) {
       lessonMarkSeenAfterTap(beat.id);
       return false;
     }
-    // A tap meant for the move that just happened must not swallow the explanation unread.
-    if (performance.now() - lessonExplainAt < 650) return true;
+    // THE READING FLOOR (owner, 2026-10-21): the explanation is up for at least 3 s before a
+    // DISMISSING tap can take it away. Taps that are not a move are swallowed inside that floor, so
+    // a sentence cannot be lost to a stray finger. Deliberately scoped to DISMISSAL only — the lit
+    // target above still plays the move on one tap, because the owner also requires that (making
+    // the lit thing wait would recreate the "my first tap did nothing" bug). The old floor was
+    // 650 ms, which only stopped a tap aimed at the move that had just happened.
+    if (performance.now() - lessonExplainAt < LESSON_READ_MS) {
+      // A refused dismissal must still be ACKNOWLEDGED. A swallowed tap with no feedback is the
+      // "my first tap did nothing" smell the owner reported in the same breath, and the random-tap
+      // robustness check caught it: the tap changed nothing and said nothing. A single quiet pulse
+      // of the caption says "I felt that, the sentence stays a moment" without adding words.
+      lessonAckFloor();
+      return true;
+    }
     lessonMarkSeen(beat.id);
     return true;
   }
@@ -6940,6 +6985,29 @@ function clearBloomPaintUi() {
   board.ghost(null);
 }
 
+/**
+ * UNDO BRINGS THE LAST EXPLANATION BACK (owner, 2026-10-21: "after closing, clicking undo shows it
+ * again" — and explicitly even if it had already been read). Taking a move back means the player is
+ * about to redo it, so the sentence that taught it is worth re-reading; it is the same beat, so the
+ * words are unchanged.
+ *
+ * Implemented by forgetting that this beat was read: `lessonSeen` is what suppresses it, so removing
+ * the id re-opens the box on the next render. The read clock is reset too, so the fresh showing gets
+ * its own full 3 s floor rather than inheriting an already-expired one.
+ *
+ * Levels 1-3 never reach here: there every non-lit control is refused, so Undo does not undo.
+ */
+function lessonReopenExplanation() {
+  if (!lessonActive() || !lessonExplainId) return;
+  const opened = lessonSeen.delete(lessonExplainId);
+  if (!opened) return;
+  saveLessonMeta();
+  lessonShownKey = '';
+  lessonExplainId = '';
+  lessonExplainAt = 0;
+  render();
+}
+
 /** Takes back the player's last move of this turn (nothing hidden was revealed by it). */
 function undoMove() {
   if (!session) return;
@@ -6952,6 +7020,8 @@ function undoMove() {
     syncSessionFromOnline(true);
     paintOnlineHudFromSession();
   } else if (!session.undo()) return;
+  // An undo inside a lesson re-opens the sentence that taught the move being taken back.
+  lessonReopenExplanation();
   // Overhaul item 9: the move runs backwards (its tiles sink away, cut tiles come back),
   // with a falling sound and a light double tap. The state itself is restored exactly.
   const after = session.state.board;
@@ -7780,8 +7850,8 @@ const bind = (id: string, fn: () => void) =>
  *
  * The ARRAY IS THE VISUAL ORDER (`append` one by one, in order), so it is also the tab order and the
  * screen reader's order. Owner decision (2026-10-20): LEVEL is the FIRST entry, above Play online -
- * the offline campaign is the thing a player opens most, and it leads the column. Play online keeps
- * the cream fill (the one leader inside PLAY) exactly as before; only its position moved.
+ * the offline campaign is the thing a player opens most, and it leads the column. Since 2026-10-22 it
+ * also carries the cream fill (the one leader inside PLAY); Play online is a quiet ghost key.
  */
 const PLAY_MENU_ENTRIES = ['menu-campaign', 'menu-online', 'menu-new'] as const;
 if (FEATURES.campaign) {
@@ -8314,9 +8384,12 @@ bind('go-rematch', () => {
     // stray resize render from painting the finished board's overlay over the opaque invite screen.
     $('gameover').hidden = true;
     $('game').hidden = true;
+    // The finished duel's id, read BEFORE the teardown clears the session: the server pairs both
+    // players' presses on it (a mutual rematch, 2026-10-22).
+    const finishedMatchId = getOnlineSession()?.driver.snapshot().matchId ?? null;
     void runRematch({
       tearDown: tearDownOnlineDuel,
-      createMatch: () => onlineLobbyCtl?.rematch() ?? Promise.resolve(),
+      createMatch: () => onlineLobbyCtl?.rematch(finishedMatchId) ?? Promise.resolve(),
     });
     return;
   }
@@ -8652,8 +8725,10 @@ let appReady = false;
     return l ? {
       level: l.level, beat: lessonBeatNow, answer: lessonAnswerText, answers: lessonAnswerSeq,
       idle: lessonIdle, idleStage: lessonIdleStage, tier: lessonTierShown,
-      /** Tests: when this explanation first appeared (the 650 ms guard's own clock). */
+      /** Tests: when this explanation first appeared — the start of its reading floor (LESSON_READ_MS). */
       explainAt: lessonExplainAt,
+      /** Tests: taps the reading floor refused, each acknowledged on screen (lessonAckFloor). */
+      floorAcks: lessonFloorAcks,
       stage: lessonStageActive(), stageLeft: Math.max(0, Math.round(lessonStageUntil - performance.now())),
       handSettled, shownKey: lessonShownKey, seen: [...lessonSeen], powerSeen: [...lessonPowerSeen],
     } : null;
@@ -8674,6 +8749,7 @@ let appReady = false;
     if (!os) return null;
     const snap = os.driver.snapshot();
     return {
+      matchId: snap.matchId,
       revealing: os.isRevealing,
       live: os.revealIsLive,
       myTurn: os.myTurn,
@@ -8806,7 +8882,7 @@ if (SHOW_MENU_TAGLINE) {
 // Phase 4–5: online lobby + duel on the shared board (Draw / draft / Throw / resign).
 type OnlineLobbyCtl = {
   openHub(): Promise<void>;
-  rematch(): Promise<void>;
+  rematch(finishedMatchId?: string | null): Promise<void>;
   trainingSeedTicket(level: number): Promise<{ id: string; seed: number } | null>;
   syncSeedRewards(): Promise<{ key: string; reward: { awarded: number } }[]>;
 };

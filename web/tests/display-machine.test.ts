@@ -314,6 +314,25 @@ describe('quiet sign (a lesson message is on screen)', () => {
     vi.advanceTimersByTime(3000);
     expect(frames.some((f, i) => i >= before && isStep(f.text))).toBe(true);
   });
+
+  it('drops an idle step word the moment the step moves on, as normal play does', () => {
+    // The 3 s reading floor makes the idle wake near-certain before a lesson player acts: DRAW!
+    // starts blinking while they read, they draw, and the sign must not keep saying DRAW!.
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('DRAW!', 1, 0);
+    sign.setQuiet(true);
+    vi.advanceTimersByTime(20000);
+    expect(frames.at(-1)).toMatchObject({ alarm: true });
+    expect(frames.at(-1)?.text.replace(/!$/, '')).toBe('DRAW');
+    sign.phase('GROW!');
+    expect(frames.at(-1)?.text.replace(/!$/, ''), 'the stale DRAW is gone at once').not.toBe('DRAW');
+    expect(frames.at(-1)?.alarm, 'and it no longer blinks').toBeFalsy();
+    // Idle again, and the sign wakes on the CURRENT step.
+    vi.advanceTimersByTime(20000);
+    const woke = frames.filter((f) => f.alarm).at(-1);
+    expect(woke?.text.replace(/!$/, '')).toBe('GROW');
+  });
 });
 
 describe('the sign can hold the score (the lesson that teaches it)', () => {

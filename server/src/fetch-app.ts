@@ -168,7 +168,7 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return { status: 200, body: { ok: true, ...result, serverNow: service.serverNow() } };
     }
 
-    const matchRoute = /^\/v1\/matches\/([^/]+)(\/view|\/reconnect|\/actions|\/resign|\/cancel)?$/.exec(path);
+    const matchRoute = /^\/v1\/matches\/([^/]+)(\/view|\/reconnect|\/actions|\/resign|\/cancel|\/rematch)?$/.exec(path);
     if (matchRoute) {
       const matchId = decodeURIComponent(matchRoute[1]!);
       const sub = matchRoute[2] ?? '';
@@ -219,6 +219,12 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
         await readJson(req, config.maxBodyBytes);
         const resigned = await service.resign(player, matchId);
         return { status: 200, body: { ok: true, ...resigned, serverNow: service.serverNow() } };
+      }
+      if (method === 'POST' && sub === '/rematch') {
+        const player = await service.authenticate(bearer(req.headers.get('authorization')));
+        await readJson(req, config.maxBodyBytes);
+        const rematch = await service.rematch(player, matchId);
+        return { status: 200, body: { ok: true, ...rematch, serverNow: service.serverNow() } };
       }
     }
 

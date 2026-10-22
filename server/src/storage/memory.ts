@@ -113,6 +113,28 @@ export class MemoryStorage implements Storage {
     return { ok: true };
   }
 
+  /** finished match id → its rematch's id (migration 0015's unique `matches.rematch_of`). */
+  private readonly rematches = new Map<string, string>();
+
+  async createRematch(match: MatchRecord, rematchOf: string, playerId: string, now: number): Promise<{ ok: true } | Fail> {
+    // No await between the check and the writes: Node's event loop makes this all-or-nothing, the
+    // same guarantee the Postgres store gets from its transaction and unique index.
+    if (this.rematches.has(rematchOf)) return { ok: false, code: 'REMATCH_EXISTS', reason: 'A rematch already exists.' };
+    if (this.inviteIndex.has(match.inviteCode)) return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
+    this.matches.set(match.id, copy({ ...match, openQueue: !!match.openQueue }));
+    this.inviteIndex.set(match.inviteCode, match.id);
+    this.participants.set(match.id, [{ matchId: match.id, playerId, seat: 0, joinedAt: now, lastSeenAt: now }]);
+    this.moves.set(match.id, []);
+    this.rematches.set(rematchOf, match.id);
+    return { ok: true };
+  }
+
+  async rematchOf(finishedMatchId: string): Promise<MatchRecord | null> {
+    const id = this.rematches.get(finishedMatchId);
+    const match = id ? this.matches.get(id) : undefined;
+    return match ? copy(match) : null;
+  }
+
   async findOpenQueueMatch(playerId: string): Promise<MatchRecord | null> {
     const waiting = [...this.matches.values()]
       .filter((m) => m.status === 'waiting' && m.openQueue)

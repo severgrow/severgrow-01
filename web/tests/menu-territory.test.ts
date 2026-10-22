@@ -102,7 +102,7 @@ describe('the two read-outs show the server wallet and the player’s OWN tiles'
     expect(seedBalanceLabel(128)).toBe('128 SEEDS');
     expect(ONLINE.worldHeld(3, 183)).toBe('3 of 183 tiles grown');
     // The wording lives in the ONE place the Territory screen reads it from.
-    expect(worldSource).toMatch(/seedBalanceLabel\(this\.wallet\.balance\)/);
+    expect(worldSource).toMatch(/seedBalanceLabel\((this|s)\.wallet\.balance\)/);
     expect(moduleSource).toContain('seedBalanceLabel(counts.seeds)');
     expect(moduleSource).toContain('ONLINE.worldHeld(counts.tiles, counts.cells)');
     // And the noun is never re-coined in the copy or the read-out module: the game says tiles.

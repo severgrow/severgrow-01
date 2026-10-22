@@ -159,7 +159,10 @@ describe('the footer row is two keys: the account key left, Settings right', () 
 
   it('the account key’s label carries the name and the key is the only sign-in path', () => {
     expect(PROFILE.open('Ann #7QK2')).toBe('Ann #7QK2. Your profile');
-    expect(mountSource).toMatch(/menuLogin\.setAttribute\('aria-label', name \? PROFILE\.open\(name\) : MENU\.login\)/);
+    // Painted by the one shared function (accounts/menu-key.ts), which the accounts module calls.
+    const keySource = readFileSync(fileURLToPath(new URL('../src/accounts/menu-key.ts', import.meta.url)), 'utf8');
+    expect(keySource).toMatch(/btn\.setAttribute\('aria-label', name \? PROFILE\.open\(name\) : MENU\.login\)/);
+    expect(mountSource).toContain('paintAccountKey(menuLogin, name)');
     expect(mountSource.match(/start\('menu', menuLogin, null\)/g) ?? []).toHaveLength(1);
   });
 });

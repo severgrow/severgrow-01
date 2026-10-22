@@ -36,7 +36,10 @@ try {
       const context = await browser.newContext({ viewport: { width: w, height: h } });
       const page = await context.newPage();
       await page.goto(`http://127.0.0.1:${PORT}/`);
-      await page.waitForSelector('#menu-beta', { timeout: 20_000 });
+      // The beta line is painted in the menu's FIRST layout (2026-10-22), before boot finishes and
+      // lays the menu out again; wait for the feedback module to own its link, i.e. boot is done,
+      // so a forced Continue below is not undone by that second layout.
+      await page.waitForSelector('#menu-beta button[data-owned="1"]', { state: 'attached', timeout: 20_000 });
       // The tallest menu a player can see: with a saved game, "Continue" sits above the rest.
       if (withSave) await page.evaluate("document.getElementById('menu-continue').hidden = false");
       await page.waitForTimeout(300);

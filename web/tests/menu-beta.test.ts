@@ -9,10 +9,14 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { FEEDBACK } from '../../src/strings.js';
+import { deployLabel } from '../src/feedback/deploy.js';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const html = read('../index.html');
 const mountSource = read('../src/feedback/mount.ts');
+/** The line's words and link are painted by ONE function, called from the menu's first layout. */
+const lineSource = read('../src/feedback/beta-line.ts');
+const mainSource = read('../src/main.ts');
 
 const menuSection = html.slice(html.indexOf('<section id="menu"'), html.indexOf('</section>', html.indexOf('<section id="menu"')));
 /** The `#menu-beta` rule block from the feedback module's own CSS. */
@@ -32,9 +36,13 @@ describe('the beta line is a quiet version line between the wordmark and the ent
   });
 
   it('fills the existing slot and reveals it, on every channel', () => {
-    expect(mountSource).toContain("const beta = document.getElementById('menu-beta')");
-    expect(mountSource).toMatch(/beta\.append\(document\.createTextNode\(`\$\{FEEDBACK\.betaNote\(FEEDBACK\.betaVersion\)\} `\)\)/);
-    expect(mountSource).toMatch(/beta\.hidden = false/);
+    expect(lineSource).toMatch(/beta\.append\(document\.createTextNode\(`\$\{FEEDBACK\.betaNote\(FEEDBACK\.betaVersion, deployLabel\(DEPLOYED_AT\)\)\} `\)\)/);
+    expect(lineSource).toMatch(/beta\.hidden = false/);
+    // Painted with the other menu keys (owner, 2026-10-22: everything on the menu appears at once),
+    // and the feedback module paints through the same function if it arrives first.
+    const layout = mainSource.slice(mainSource.indexOf('function layoutMenu('), mainSource.indexOf('function layoutMenu(') + 6000);
+    expect(layout).toContain("paintBetaLine(document.getElementById('menu-beta'))");
+    expect(mountSource).toContain("paintBetaLine(document.getElementById('menu-beta'))");
     // The old rule that hid it on the product menu is gone (owner, 2026-10-20).
     expect(mountSource).not.toMatch(/note\.hidden = FEATURES\.campaign/);
     // It never creates a duplicate element of its own.
@@ -48,10 +56,27 @@ describe('the beta line is a quiet version line between the wordmark and the ent
     expect(FEEDBACK.betaVersion).toBe('0.6');
     expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('(0.6)');
     expect(FEEDBACK.betaLink).toBe('let us know here.');
-    expect(mountSource).toContain('FEEDBACK.betaLink');
-    // No second copy of the sentence in the markup or the module.
+    expect(lineSource).toContain('FEEDBACK.betaLink');
+    // No second copy of the sentence in the markup or the modules.
     expect(html).not.toContain('This is a beta version');
     expect(mountSource).not.toContain('This is a beta version');
+    expect(lineSource).not.toContain('This is a beta version');
+  });
+
+  // Owner, 2026-10-22: "make sure any future update from any agent adds ... last deploy: <time when
+  // it was pushed to the live website>". The BUILD stamps the time (web/vite.config.ts), and the
+  // deploy workflow builds the site right before it publishes, so no agent has to remember it.
+  it('says when the live build was deployed, in the reader\'s own time, and nothing when unknown', () => {
+    expect(FEEDBACK.betaNote('0.6', '22 Oct, 12:12')).toContain('(0.6, last deploy: 22 Oct, 12:12)');
+    expect(FEEDBACK.betaNote('0.6', null)).toContain('(0.6)');
+    expect(FEEDBACK.betaNote('0.6', null)).not.toContain('last deploy');
+    expect(deployLabel('2026-10-22T11:12:20Z', 'Europe/London')).toBe('22 Oct, 12:12');
+    expect(deployLabel('2026-10-22T11:12:20Z', 'UTC')).toBe('22 Oct, 11:12');
+    // A dev server, a test run or a garbled stamp shows no time rather than a wrong one.
+    for (const bad of ['', 'not a date', undefined, null]) expect(deployLabel(bad as never)).toBeNull();
+    const vite = read('../vite.config.ts');
+    expect(vite).toContain('__DEPLOYED_AT__');
+    expect(vite).toMatch(/command === 'build'/);
   });
 
   it('opens its sheet: the tester guide before a server, the report form once there is one', () => {

@@ -29,6 +29,9 @@ const actionKind = (button: HTMLButtonElement) => button.matches('[data-kind],.b
   : button.matches('.empty-continue') ? 'continue' : button.matches('.primary') ? 'confirm' : 'continue';
 const priority: Record<string, number> = { back: -1, clear: 0, confirm: 1, cancel: 2, bloom: 3, reverse: 4, next: 5, previous: 6, continue: 7, skip: 8, whole: 9 };
 
+/** Where in each idle-blink beat the dots go dark (80% for 200 ms of 1000 ms). */
+const ALARM_ON_PCT = Math.round((1 - LIGHT_CAPS.alarmOffMs / LIGHT_CAPS.alarmMs) * 100);
+
 export const SMART_COCKPIT_CSS = `
 html.futa04-information #step-cue { display:none !important; }
 /* The match computer owns instructions; leave the entire board unobstructed. */
@@ -146,15 +149,23 @@ html.futa04-information #smart-led-cells.scrolling { animation:smart-led-scroll 
    Every one of them animates OPACITY on a sprite that was baked once; none of them animates a
    filter or a shadow, so the compositor never re-rasterises the LED. */
 html.futa04-information #smart-led-window.led-pulse #smart-led-hot { animation:smart-led-pulse 500ms ease-in-out 1; }
-/* Idle re-prompt: keep blinking with the board cues until the player starts the next move. */
-html.futa04-information #smart-led-window.led-alarm #smart-led-hot { animation:smart-led-alarm 1200ms ease-in-out infinite; }
+/* Idle re-prompt: keep blinking with the board cues until the player starts the next move.
+   NEGATIVE SPACE (owner, 2026-10-22: the brightening was barely visible): the dots and their glow
+   switch OFF for LIGHT_CAPS.alarmOffMs of every LIGHT_CAPS.alarmMs. Opacity only, on sprites that
+   were already baked, so nothing re-rasterises. */
+html.futa04-information #smart-led.led-alarm #smart-led-cells { animation:smart-led-alarm ${LIGHT_CAPS.alarmMs}ms linear infinite; }
+/* The glow rests at its own dimmed strength (--light-bloom-op), so it blinks between THAT and off. */
+html.futa04-information #smart-led.led-alarm #smart-led-bloom { animation:smart-led-alarm-bloom ${LIGHT_CAPS.alarmMs}ms linear infinite; }
 @keyframes smart-led-pulse { 0%,100% { opacity:0; } 50% { opacity:.62; } }
 @keyframes smart-led-alarm {
-  0%,100% { opacity:0; }
-  20% { opacity:.62; }
-  40% { opacity:0; }
-  60% { opacity:.54; }
-  80% { opacity:0; }
+  0%, ${ALARM_ON_PCT - 2}% { opacity:1; }
+  ${ALARM_ON_PCT}%, ${100 - 2}% { opacity:0; }
+  100% { opacity:1; }
+}
+@keyframes smart-led-alarm-bloom {
+  0%, ${ALARM_ON_PCT - 2}% { opacity:var(--light-bloom-op,.286); }
+  ${ALARM_ON_PCT}%, ${100 - 2}% { opacity:0; }
+  100% { opacity:var(--light-bloom-op,.286); }
 }
 /* A flash is one 60 ms breath of at most 35% white on the display's own glass. Never a strobe,
    never a filter on the glyph canvas. */
@@ -240,8 +251,10 @@ html.futa04-information.reduce-motion.idle-urgency #smart-bloom-button .futa04-c
   }
 }
 html.futa04-information.reduce-motion #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) :is(#smart-led-hot,#smart-led-flash) { animation:none !important; }
+html.futa04-information.reduce-motion #smart-led.led-alarm :is(#smart-led-cells,#smart-led-bloom) { animation:none !important; }
 @media (prefers-reduced-motion:reduce) {
   html.futa04-information #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) :is(#smart-led-hot,#smart-led-flash) { animation:none !important; }
+  html.futa04-information #smart-led.led-alarm :is(#smart-led-cells,#smart-led-bloom) { animation:none !important; }
 }
 /* Opponent replay: the read-out says "not yours" by going a little quieter. A modest luminance
    drop that stays fully legible — never a blackout, never a flash, no border, no badge: the DIM
@@ -632,6 +645,8 @@ export function mountSmartCockpit() {
     const alarming = !!frame.alarm && !still;
     windowEl.classList.toggle('led-pulse', pulsing);
     windowEl.classList.toggle('led-alarm', alarming);
+    // The blink dims the bloom too, which sits outside the window, so the class rides on #smart-led.
+    led.classList.toggle('led-alarm', alarming);
     // The pulse/alarm is the display's own glass now (the baked hot layer inside the window).
     // The keys never animate, so the panel carries no beat class of its own.
     panel.dataset.ledMode = mode;

@@ -15,8 +15,21 @@ import {
 } from './challenge-view.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { ownerLine } from './world-selection.js';
+import { browserStorage } from '../../../server/src/client.js';
+import { lastWorld, rememberWorld } from './world-memory.js';
 
 type Identity = { token: string; playerId: string };
+
+/**
+ * The wallet line above the map (2026-10-22). It never tells a signed-in player to sign in: before
+ * the identity resolves it says nothing, a player with an identity sees their balance once it
+ * arrives (and nothing while it has not), and only a player with NO identity is asked to sign in.
+ */
+export const walletLine = (s: { identityKnown: boolean; hasIdentity: boolean; wallet: SeedWallet | null }): string | null => {
+  if (s.wallet) return seedBalanceLabel(s.wallet.balance);
+  if (!s.identityKnown || s.hasIdentity) return null;
+  return 'SIGN IN TO GROW';
+};
 type World = WorldMapPayload['world'];
 const NS = 'http://www.w3.org/2000/svg';
 const R = 10;
@@ -57,6 +70,10 @@ export class WorldView {
   private identity: Identity | null = null;
   private wallet: SeedWallet | null = null;
   private world: World | null = null;
+  /** The map on screen came from the device's memory (./world-memory.ts), not this session's server. */
+  private fromMemory = false;
+  /** The player's identity has resolved (to someone, or to nobody). Until then the wallet line is blank. */
+  private identityKnown = false;
   private selected: string | null = null;
   private pendingRequest: string | null = null;
   private busy = false;
@@ -136,14 +153,29 @@ export class WorldView {
     this.touched = false;
     this.box = null;
     this.notice('');
+    // Drawn at once from the last good map this device saw, so the panel is never empty while the
+    // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
+    if (!this.world) {
+      const remembered = lastWorld(browserStorage());
+      if (remembered) {
+        this.world = remembered;
+        this.fromMemory = true;
+        this.paint();
+      }
+    }
     // The world is public. A guest token may be slow, offline or rate-limited; it must never
     // prevent the player from seeing the map. Attach the private wallet when identity resolves.
     const publicRefresh = this.refresh(true);
     void this.ensureIdentity().then((identity) => {
+      this.identityKnown = true;
       if (!this.active) return;
       this.identity = identity;
       void this.refresh(true);
-    }).catch(() => { /* Public world remains usable without an identity. */ });
+    }).catch(() => {
+      // Public world remains usable without an identity; the wallet line may now say so.
+      this.identityKnown = true;
+      if (this.active) this.paintWallet();
+    });
     await publicRefresh;
   }
   close() {
@@ -163,13 +195,14 @@ export class WorldView {
       const identityAtRequest = this.identity;
       const [map, wallet, challenges] = await Promise.all([
         this.client.worldMap(),
-        identityAtRequest ? this.client.seedWallet(identityAtRequest.token).catch(() => null) : Promise.resolve(null),
+        // A failed wallet read is `undefined`, not null: the last known balance stays on screen.
+        identityAtRequest ? this.client.seedWallet(identityAtRequest.token).catch(() => undefined) : Promise.resolve(null),
         identityAtRequest ? this.client.worldChallenges(identityAtRequest.token).catch(() => null) : Promise.resolve(null),
       ]);
       if (!this.active) return;
       const sameIdentity = identityAtRequest === this.identity;
-      const walletChanged = sameIdentity && this.wallet?.balance !== wallet?.balance;
-      if (sameIdentity) this.wallet = wallet;
+      const walletChanged = sameIdentity && wallet !== undefined && this.wallet?.balance !== wallet?.balance;
+      if (sameIdentity && wallet !== undefined) this.wallet = wallet;
       if (sameIdentity && challenges) {
         this.challenges = challenges;
         this.challengeReceivedAt = Date.now();
@@ -185,10 +218,12 @@ export class WorldView {
           return !previous || previous.cellId !== claim.cellId || previous.ownerName !== claim.ownerName ||
             previous.ownerId !== claim.ownerId;
         });
-      if (!this.world || map.world.revision > this.world.revision ||
+      if (this.fromMemory || !this.world || map.world.revision > this.world.revision ||
         (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged))) {
         this.world = map.world;
+        this.fromMemory = false;
         this.paint();
+        rememberWorld(browserStorage(), map.world);
       }
       this.paintWallet();
       this.paintSelection();
@@ -218,7 +253,8 @@ export class WorldView {
     private paintWallet() {
       const node = document.getElementById('online-world-wallet')!;
       node.replaceChildren();
-      node.append(seedIcon(22), document.createTextNode(this.wallet ? seedBalanceLabel(this.wallet.balance) : 'SIGN IN TO GROW'));
+      const line = walletLine({ identityKnown: this.identityKnown, hasIdentity: this.identity !== null, wallet: this.wallet });
+      if (line) node.append(seedIcon(22), document.createTextNode(line));
       // The old "N / 183 grown - one shared world" caption is GONE (owner, 2026-10-16): the map shows
       // the world, so a caption counting it was noise. The element no longer exists in the markup, and
       // this method no longer writes to it.

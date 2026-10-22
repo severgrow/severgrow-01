@@ -207,8 +207,12 @@ describe('LOG IN reuses the one Google flow and hides itself when signed in', ()
     // Owner brief (2026-10-21): the left footer key is ONE key with two honest states — a guest sees
     // LOG IN and the key starts the Google flow; a signed-in player sees their name and the key opens
     // their profile. It is never shown when the whole Google branch is skipped.
-    expect(accountsSource).toMatch(/menuLogin\.hidden = false/);
-    expect(accountsSource).toMatch(/menuLogin\.textContent = name \?\? MENU\.login/);
+    // The key is painted by ONE function (accounts/menu-key.ts, 2026-10-22), used both by the menu's
+    // first layout and by the accounts module, so the two can never disagree about what it says.
+    const keySource = readFileSync(fileURLToPath(new URL('../src/accounts/menu-key.ts', import.meta.url)), 'utf8');
+    expect(accountsSource).toContain('paintAccountKey(menuLogin, name)');
+    expect(keySource).toMatch(/btn\.hidden = false/);
+    expect(keySource).toMatch(/btn\.textContent = name \?\? MENU\.login/);
     expect(accountsSource).toMatch(/if \(signedIn\(\)\) openProfile\(\)/);
     expect(accountsSource).toMatch(/else void start\('menu', menuLogin, null\)/);
     // The layout pass must not force it hidden on a product build (that would undo it).
@@ -271,5 +275,14 @@ describe('the saved-game resume is recomputed on every menu show', () => {
     // The legacy channels still reveal it from storage; the product menu never does.
     expect(sync).toMatch(/const showContinue = canContinue && !FEATURES\.campaign/);
     expect(sync).toMatch(/btn\.hidden = !showContinue/);
+  });
+});
+
+describe('inside PLAY, LEVEL n carries the cream fill', () => {
+  it('leads with the campaign level, and Play online is a quiet ghost key (owner, 2026-10-22)', () => {
+    // "in submenu play - play online is highlighted atm - highlight 'level n' instead".
+    expect(mainSource).toMatch(/setLead\(cmp, true\);/);
+    expect(mainSource).toMatch(/setLead\(\$\('menu-online'\), false\);/);
+    expect(mainSource).not.toMatch(/setLead\(\$\('menu-online'\), online\)/);
   });
 });

@@ -14,13 +14,13 @@ export type ApiErrorCode =
   | 'MATCH_FULL'
   | 'MATCH_FINISHED'
   | 'MATCH_NOT_ACTIVE'
+  | 'MATCH_NOT_FINISHED'
   | 'MATCH_EXPIRED'
   | 'NOT_A_PARTICIPANT'
   | 'TOO_MANY_MATCHES'
   // Territory challenges: private to their two participants, so "not yours" is a 404.
   | 'CHALLENGE_NOT_FOUND'
   | 'CHALLENGE_CLOSED'
-  | 'MATCH_NOT_FINISHED'
   // concurrency / idempotency
   | 'STALE_REVISION'
   | 'REQUEST_ID_CONFLICT'
@@ -50,12 +50,12 @@ const STATUS: Record<ApiErrorCode, number> = {
   MATCH_FULL: 409,
   MATCH_FINISHED: 409,
   MATCH_NOT_ACTIVE: 409,
+  MATCH_NOT_FINISHED: 409,
   MATCH_EXPIRED: 409,
   NOT_A_PARTICIPANT: 403,
   TOO_MANY_MATCHES: 409,
   CHALLENGE_NOT_FOUND: 404,
   CHALLENGE_CLOSED: 409,
-  MATCH_NOT_FINISHED: 409,
   STALE_REVISION: 409,
   REQUEST_ID_CONFLICT: 409,
   TOO_MANY_MOVES: 409,

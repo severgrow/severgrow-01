@@ -129,6 +129,9 @@ export const ONLINE = Object.freeze({
   codeTapCopy: 'Tap to copy',
   codeCopied: 'Code copied',
   waitingTitle: 'Waiting for a friend',
+  /** A standard duel's mutual rematch: the first to press waits here for the other's press. */
+  rematchWaitingTitle: 'Waiting for their rematch',
+  rematchWaitingBody: 'The new game starts the moment they press Rematch too.',
   waitingBody: 'Send the link. The duel opens when they join.',
   waitingExpiry: 'Invite expires in 48 hours.',
   waitingInviteHint: 'Waiting for a friend to join',
@@ -858,7 +861,8 @@ export const FEEDBACK = Object.freeze({
   close: 'Close',
   /** The beta line on the main menu, between the wordmark and the buttons. */
   betaVersion: '0.6',
-  betaNote: (version: string) => `This is a beta version (${version}) of an evolving game. If you spot any problems or have suggestions for improvement,`,
+  betaNote: (version: string, deployed: string | null = null) =>
+    `This is a beta version (${version}${deployed ? `, last deploy: ${deployed}` : ''}) of an evolving game. If you spot any problems or have suggestions for improvement,`,
   betaLink: 'let us know here.',
 });
 

@@ -281,9 +281,10 @@ try {
     check('A: sees finished after opponent resign', false, 'timed out waiting for sync');
   }
 
-  // ---------------- the real rematch: B taps Rematch, A joins the NEW duel and plays -------------
-  // A finished session must not leak: first Rematch tears the old duel down, then it creates a
-  // brand-new match and shows the existing invite/share screen with a FRESH code.
+  // ---------------- the MUTUAL rematch: B taps Rematch, then A taps Rematch, both are in ----------
+  // Owner, 2026-10-22: "they both press rematch = they're straight in a new game". A finished session
+  // must not leak: the first Rematch tears the old duel down, then waits on the new match (its fresh
+  // invite code is still on screen as a second way in).
   await pageB.locator('#go-rematch').click();
   await waitVisible(pageB, '#online-waiting', 25_000);
   const hudGone = await pageB.locator('#duel-hud').isHidden().catch(() => false);
@@ -302,18 +303,20 @@ try {
     `${rematchInvite} (was ${invite})`,
   );
   check('B: Rematch surfaces the same Share invite control', await pageB.locator('#online-share').isVisible().catch(() => false));
+  const waitingTitle = ((await pageB.locator('#online-waiting-title').textContent()) ?? '').trim();
+  check('B: the waiting screen says it is waiting for THEIR rematch', /Waiting for their rematch/.test(waitingTitle), waitingTitle);
 
-  // A leaves the finish screen through the secondary exit and joins the new duel with the new code.
+  // A presses Rematch on their own finish screen - ONE tap - and both are straight in the new game.
   await dismissInstall(pageA);
-  await pageA.locator('#go-other').click();
-  await waitVisible(pageA, '#online-hub', 20_000);
-  await pageA.click('#online-join-open');
-  await waitVisible(pageA, '#online-join');
-  await pageA.fill('#online-join-code', rematchInvite);
-  await pageA.click('#online-join-submit');
+  await pageA.locator('#go-rematch').click();
 
   await waitVisible(pageA, '#game', 25_000);
   await waitVisible(pageB, '#game', 25_000);
+  const matchOf = (page: Page) => page.evaluate(
+    'window.__severgrow && window.__severgrow.online ? (window.__severgrow.online() || {}).matchId ?? null : null',
+  ) as Promise<string | null>;
+  const [newA, newB] = [await matchOf(pageA), await matchOf(pageB)];
+  check('one tap each: A and B are in the SAME new match', !!newA && newA === newB, `${newA} / ${newB}`);
   const rematchSessionB = await pageB.evaluate(
     'window.__severgrow && window.__severgrow.online ? window.__severgrow.online() : null',
   );
