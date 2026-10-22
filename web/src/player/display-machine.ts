@@ -178,7 +178,18 @@ export class DisplayMachine {
     }
   }
   phase(text: string) {
-    if (this.quiet) { this.instruction = text; return; }
+    if (this.quiet) {
+      this.instruction = text;
+      // A lesson keeps its own step words off the sign, but an idle wake blinking the OLD step is
+      // a stale cue: drop it as soon as the step moves on, exactly as supersedeStep does in play.
+      if (this.urgency && isObsoleteStepCue(this.frame.text, this.idleWord(text))) {
+        this.urgency = false;
+        this.clearUrgencyPaint();
+        this.rest();
+        this.scheduleIdle();
+      }
+      return;
+    }
     if (text === this.instruction && !isObsoleteStepCue(this.frame.text, text)
       && !(this.active && isObsoleteStepCue(this.active.message, text))) {
       return;
