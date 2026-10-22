@@ -390,6 +390,16 @@ describe('final sign-off (owner, 2026-10-22)', () => {
     expect(seen[i + 1]?.phase).toBe('ACT');
   });
 
+  it('when the light points at one of their tiles, the display says so', () => {
+    for (const l of LESSONS.filter((x) => x.level <= 9)) {
+      tapOnlyTheLight(l, undefined, (beat, s) => {
+        if (beat?.lit.t === 'hex' && beat.id.startsWith('tile:') && s.board[beat.lit.key]?.owner === 1) {
+          expect(beat.say, `L${l.level} ${beat.id}`).toBe(LESSON.tapTheirTile);
+        }
+      });
+    }
+  });
+
   it('the last turn is announced in one short sentence', () => {
     expect(LESSON.lastTurnLine).toBe('The Draw pile is empty – this is your last turn.');
   });

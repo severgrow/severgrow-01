@@ -887,7 +887,8 @@ const lightFor = (lesson: Lesson, s: State, ctx: BeatCtx, move: Action, legal: r
       if (ctx.card !== move.card) return beat(`pick:${move.card}`, W.chooseCard, { t: 'card', id: move.card });
       const others = legal.filter((a): a is Sprout => a.t === 'Sprout' && a.card === move.card).map((a) => keyOf(a.coord)).filter((k) => k !== key);
       if (goal?.t === 'strangle' && strangleMove(s, legal)) return beat('can-win', W.tapLastSide, { t: 'hex', key });
-      const say = goal?.t === 'take' || goal?.t === 'cut' ? W.tapTheirTile : W.tapTile;
+      // Their tile (a lesson's cut, or the light taking one of theirs) is named as theirs.
+      const say = goal?.t === 'take' || goal?.t === 'cut' || s.board[key]?.owner === THEM ? W.tapTheirTile : W.tapTile;
       return beat(`tile:${key}`, say, { t: 'hex', key, ...(goal ? {} : { quiet: others }) });
     }
     case 'Bloom': {

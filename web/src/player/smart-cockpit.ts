@@ -449,12 +449,25 @@ html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53),0 5px 12px rgba(20,11,10,.34); }
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53) !important; }
 html.futa04-information #discard .gd-halo { inset:0; border-radius:6px; }
-/* Both legal draw choices catch a cool white edge light on the actual card.
-   The discard's amber edge is reserved for a card that completes a combo. */
+/* Both legal draw choices glow softly: a cool white light around the actual card, no outline box
+   (owner, 2026-10-22: "remove the contour thing, make the glow a tiny bit brighter and make it
+   breathe"). The light is its own layer whose OPACITY breathes on the pile's 1.8 s breath
+   (information.ts), so the two move as one and no shadow is ever re-painted per frame. The
+   discard's amber edge is reserved for a card that completes a combo. */
 html.futa04-information[data-step='draw'] :is(#deck,#discard).ready .pile-card {
   border-radius:calc(var(--cw) * .075);
-  box-shadow:0 0 0 1px rgba(239,234,220,.63),0 0 8px 1px rgba(242,237,224,.27) !important;
+  box-shadow:none !important;
 }
+html.futa04-information[data-step='draw'] :is(#deck,#discard).ready .pile-card::after {
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  box-shadow:0 0 12px 2px rgba(242,237,224,.42);
+  opacity:.8;
+  animation:futa04-draw-pile-glow 1.8s ease-in-out 240ms infinite;
+}
+@keyframes futa04-draw-pile-glow { 0%, 100% { opacity:.6; } 50% { opacity:1; } }
+html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-card::after { display:none; }
+html.futa04-information.reduce-motion[data-step='draw'] :is(#deck,#discard).ready .pile-card::after { animation:none; }
+@media (prefers-reduced-motion:reduce) { html.futa04-information[data-step='draw'] :is(#deck,#discard).ready .pile-card::after { animation:none; } }
 html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-card { box-shadow:none !important; }
 html.futa04-information[data-step='draw'] :is(#deck,#discard) .gd-fx { display:none !important; }
 html.futa04-information[data-step='draw'] #discard.ready:not(.futa04-bloom-draw) .pile-top.card { border-color:var(--c-line); box-shadow:0 1px 2px rgba(0,0,0,.4); }

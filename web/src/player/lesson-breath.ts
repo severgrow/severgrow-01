@@ -32,17 +32,18 @@ export const breathesWithLesson = (shape: FocusShape): boolean => shape === 'car
 const LIGHTS_ITSELF = /#smart-led\b/;
 
 /**
- * A surface with its own dedicated breathe: the Draw pile in the Draw step (information.ts). Two
- * 3% scales out of step read as one doubled, uneven breath, so that rule is HELD where it is while
+ * A surface with its own dedicated breathe: the Draw pile in the Draw step (information.ts) and its
+ * glow (smart-cockpit.ts). Two pulses out of step read as one doubled, uneven breath, so they are HELD where they are while
  * the lesson's breath is the only pulse — and released, still in phase, when the beat moves on.
  * If the pile's own rule is not running at all, the lesson's breath fills in and the pile is never
  * left still.
  */
-const OWN_BREATH = 'futa04-draw-pile-breathe';
+const OWN_BREATH = new Set(['futa04-draw-pile-breathe', 'futa04-draw-pile-glow']);
 const ownBreathOf = (el: Element): Animation[] => {
   if (typeof el.getAnimations !== 'function') return [];
-  return el.getAnimations().filter((animation) => animation.playState === 'running'
-    && (animation as Animation & { animationName?: string }).animationName === OWN_BREATH);
+  // The pile's glow breathes on its card's ::after (smart-cockpit.ts), so look inside the pile too.
+  return el.getAnimations({ subtree: true }).filter((animation) => animation.playState === 'running'
+    && OWN_BREATH.has((animation as Animation & { animationName?: string }).animationName ?? ''));
 };
 
 export type LessonBreath = {
