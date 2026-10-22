@@ -326,8 +326,9 @@ html.futa04-lesson #hud-menu {
 html.futa04-lesson #scrim { z-index: 50; }
 html.futa04-lesson .sheet { z-index: 51; }
 /* THE lesson info box: a caption floating over the felt. A soft translucent fill at .77 — no
-   border, no outline, no ring, no shadow, no buttons. Flat (no blur: a blur would repaint the
-   board underneath on every camera frame). pointer-events:none lets every tap through. */
+   border, no outline, no ring, no shadow, no buttons (START AGAIN aside, below). Flat (no blur:
+   a blur would repaint the board underneath on every camera frame). pointer-events:none lets
+   every tap through. */
 #lesson-plate {
   position: fixed;
   left: 0; top: 0;
@@ -348,6 +349,13 @@ html.futa04-lesson .sheet { z-index: 51; }
   transition: transform 160ms ease, opacity 180ms ease;
 }
 #lesson-plate[hidden] { display: none !important; }
+/* START AGAIN, only while a lesson cannot finish: the box's one button takes taps itself. */
+#lesson-plate .lesson-restart {
+  display: flex;
+  width: 100%;
+  margin-top: 8px;
+  pointer-events: auto;
+}
 #lesson-plate .lesson-copy {
   margin: 0;
   /* One explanation, up to four centred lines on the smallest phone. The placement measures the

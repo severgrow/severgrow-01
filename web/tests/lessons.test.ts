@@ -744,32 +744,36 @@ describe('the lesson’s two voices (display + info box)', () => {
 
   it('an explanation goes in the box; the display keeps the score', () => {
     expect(lessonVoiceFor({ ...base, beat: { line: 'This is your home.' } }))
-      .toEqual({ box: 'This is your home.', display: null });
+      .toEqual({ box: 'This is your home.', display: null, restart: false });
   });
 
   it('an action goes on the display; the box stays empty', () => {
     expect(lessonVoiceFor({ ...base, beat: { say: LESSON.tapDraw } }))
-      .toEqual({ box: null, display: LESSON.tapDraw });
+      .toEqual({ box: null, display: LESSON.tapDraw, restart: false });
   });
 
   it('a notification brings its own explanation, never the same words twice', () => {
     const voice = lessonVoiceFor({ ...base, beat: { say: LESSON.lastTurn, line: LESSON.lastTurnLine } });
-    expect(voice).toEqual({ box: LESSON.lastTurnLine, display: LESSON.lastTurn });
+    expect(voice).toEqual({ box: LESSON.lastTurnLine, display: LESSON.lastTurn, restart: false });
     expect(voice.box).not.toBe(voice.display);
   });
 
   it('a wrong tap owns the display and never the box', () => {
     expect(lessonVoiceFor({ ...base, beat: { say: LESSON.tapDraw }, answer: 'TOO WEAK: 2 VS 4' }))
-      .toEqual({ box: null, display: 'TOO WEAK: 2 VS 4' });
+      .toEqual({ box: null, display: 'TOO WEAK: 2 VS 4', restart: false });
   });
 
-  it('a lesson that cannot finish explains the way out — no button, no display label', () => {
+  it('a lesson that cannot finish explains it and offers START AGAIN in the box, no display label', () => {
+    // Owner, 2026-10-22: the way out is one tap that restarts the level in place, never a trip to
+    // the menu. It is the ONE button the box ever holds, and only while the lesson is stuck.
     expect(lessonVoiceFor({ ...base, stuck: true, beat: { line: 'x' } }))
-      .toEqual({ box: LESSON.restartLine, display: null });
+      .toEqual({ box: LESSON.restartLine, display: null, restart: true });
+    expect(LESSON.restartLine).not.toMatch(/menu/i);
+    expect(LESSON.startAgain).toBe('START AGAIN');
   });
 
   it('a silent step says nothing at all (no empty box, no display text)', () => {
-    expect(lessonVoiceFor({ ...base, beat: null })).toEqual({ box: null, display: null });
+    expect(lessonVoiceFor({ ...base, beat: null })).toEqual({ box: null, display: null, restart: false });
   });
 });
 

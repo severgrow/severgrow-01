@@ -4644,6 +4644,7 @@ function hideLessonPlate() {
     const example = plate.querySelector<HTMLElement>('.lesson-example');
     if (example) { example.hidden = true; example.replaceChildren(); delete example.dataset.kind; }
     plate.classList.remove('example-tight');
+    setLessonRestart(plate, false);
   }
   unwatchPlateSettle();
 }
@@ -4828,13 +4829,37 @@ function fitLessonExample() {
   }
 }
 
+/**
+ * START AGAIN: the one button the box ever holds, and only while the lesson cannot finish (owner,
+ * 2026-10-22). It exists in the DOM only then, so the box is otherwise information only.
+ */
+function setLessonRestart(plate: HTMLElement, on: boolean) {
+  let btn = plate.querySelector<HTMLButtonElement>('.lesson-restart');
+  if (!on) { btn?.remove(); return; }
+  if (btn) return;
+  btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn primary lesson-restart';
+  btn.textContent = LESSON.startAgain;
+  btn.addEventListener('click', restartStuckLesson);
+  plate.append(btn);
+}
+
+/** The same level from its opening, in place: no menu, no start sheet. */
+function restartStuckLesson() {
+  if (!lessonActive() || !campaignLevel) return;
+  hideLessonPlate();
+  startCampaignLevel(campaignLevel);
+}
+
 /** Put the explanation in the box. `lift` is what the box must never cover (the lit target). */
-function showLessonPlate(text: string, lift: readonly string[], example: 'bloom' | null = null) {
+function showLessonPlate(text: string, lift: readonly string[], example: 'bloom' | null = null, restart = false) {
   const plate = lessonPlate();
   plate.hidden = false;
   const copy = plate.querySelector<HTMLElement>('.lesson-copy');
   if (copy && copy.textContent !== text) copy.textContent = text;
   setLessonExample(example);
+  setLessonRestart(plate, restart);
   (plate as PlateEl)._avoid = lift;
   placeLessonPlate();
   watchPlateSettle();
@@ -4973,7 +4998,7 @@ function renderLessonGuide(): void {
     return;
   }
   if (voice.box) showLessonPlate(voice.box, holdScore ? ['#smart-led', ...lit.selectors] : lit.selectors,
-    level === 5 && shown?.id === '5:intro:bloom-cards' ? 'bloom' : null);
+    level === 5 && shown?.id === '5:intro:bloom-cards' ? 'bloom' : null, voice.restart);
   else hideLessonPlate();
   // An explanation with no lit move (the way out of a stuck lesson): the box speaks, the map is
   // not dimmed and there is nothing to point at.

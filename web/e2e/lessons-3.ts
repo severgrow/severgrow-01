@@ -1004,6 +1004,66 @@ try {
     assert.deepEqual(errors, [], `breath/display: no page errors: ${errors.join(' | ')}`);
     await page.close();
   }
+  if (ONLY === 'all' || ONLY === 'restart') {
+    // Owner, 2026-10-22: a lesson that can no longer teach its idea offers START AGAIN in the box,
+    // and one tap restarts the same level in place (never a trip to the menu).
+    console.log('\nA stuck lesson: START AGAIN in the box restarts the level in place:');
+    const { page, errors } = await newPage(390, 844);
+    await page.goto(URL3, { waitUntil: 'networkidle' });
+    const done = CAMPAIGN_LEVELS.slice(0, 7).map((l) => l.id);
+    await page.evaluate(`localStorage.setItem('severgrow.campaign.progress.v3', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 8, completed: done, best: {} }))})`);
+    await page.reload({ waitUntil: 'networkidle' });
+    await openNextLevel(page);
+    check((await hook<any>(page, 'lesson'))?.level === 8, 'the Blast lesson is open');
+    // Spend ONE Bomb on its own: two Bombs are needed for the Blast, so the lesson cannot finish.
+    let spent = false;
+    for (let i = 0; i < 6 && !spent; i++) {
+      await idle(page);
+      spent = await page.evaluate(() => {
+        const h = (window as any).__severgrow;
+        if (h.state().actor !== 0) return false;
+        const legal = h.legal() as { t: string }[];
+        const bomb = legal.find((a) => a.t === 'PlayFruit');
+        if (bomb) return h.playFor(bomb, 0) && 'spent';
+        const draw = legal.find((a) => a.t === 'Draw');
+        if (draw) h.playFor(draw, 0);
+        return false;
+      }) === 'spent';
+    }
+    check(spent, 'one Bomb was played on its own');
+    await page.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === 'restart', undefined, { timeout: 15000 });
+    await page.waitForSelector('#lesson-plate:not([hidden]) .lesson-restart', { timeout: 5000 });
+    const stuck = await page.evaluate(() => {
+      const plate = document.getElementById('lesson-plate')!;
+      const btn = plate.querySelector<HTMLButtonElement>('.lesson-restart')!;
+      const r = btn.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return {
+        copy: plate.querySelector('.lesson-copy')?.textContent ?? '', label: btn.textContent ?? '',
+        hit: at === btn || btn.contains(at), w: r.width, h: r.height,
+        onScreen: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth,
+      };
+    });
+    check(stuck.copy === LESSON.restartLine, `the box explains why (${stuck.copy})`);
+    check(stuck.label === LESSON.startAgain, `the button says ${LESSON.startAgain} (${stuck.label})`);
+    check(stuck.onScreen && stuck.h >= 40, `the button is on screen and thumb-sized (${stuck.w}x${stuck.h})`);
+    check(stuck.hit, 'a tap on the button reaches the button');
+    await page.tap('#lesson-plate .lesson-restart');
+    await page.waitForFunction(() => {
+      const h = (window as any).__severgrow;
+      const s = h?.state?.();
+      return !!s && s.hands[0].filter((c: { suit: number | null }) => c.suit === null).length >= 2 && h.lesson?.()?.beat?.id !== 'restart';
+    }, undefined, { timeout: 15000 });
+    const after = await page.evaluate(() => ({
+      level: (window as any).__severgrow.lesson()?.level,
+      game: !document.getElementById('game')!.hidden,
+      buttons: document.querySelectorAll('#lesson-plate button').length,
+    }));
+    check(after.level === 8 && after.game, 'the same level starts again, in place');
+    check(after.buttons === 0, 'the box holds no button once the lesson can finish again');
+    assert.deepEqual(errors, [], `restart: no page errors: ${errors.join(' | ')}`);
+    await page.close();
+  }
   if (ONLY === 'all' || ONLY === 'layout') {
     console.log('\nLayout: the header, the plate under the map, and the hexes:');
     for (const [w, h] of [[390, 844], [1440, 900]] as const) {

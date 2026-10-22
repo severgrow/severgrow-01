@@ -1258,7 +1258,9 @@ export const LESSON = Object.freeze({
   optionalLine: 'Tap » to skip Grow/Bloom and keep your cards for later.',
   lastTurnLine: 'The Draw pile is empty: each tile is now 1 point, and the numbers on tiles don’t count.',
   theirTurnLine: 'They draw, grow and throw too.',
-  restartLine: 'This lesson cannot finish now. Open the menu to start again.',
+  restartLine: 'This lesson cannot finish from here.',
+  // the one button the box ever holds, only while the lesson cannot finish (owner, 2026-10-22)
+  startAgain: 'START AGAIN',
   // finish cards: the one idea learned, with a small mark, then the way on
   learned: 'YOU LEARNED',
   youWin: 'YOU WIN',
