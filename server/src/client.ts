@@ -174,6 +174,11 @@ export class DuelClient {
     return this.request<CreateMatchResponse>('POST', '/v1/matches', { token, body: {} });
   }
 
+  /** A mutual rematch of a finished standard duel (POST /v1/matches/:id/rematch, migration 0015). */
+  rematch(token: string, finishedMatchId: string): Promise<JoinMatchResponse> {
+    return this.request<JoinMatchResponse>('POST', `/v1/matches/${encodeURIComponent(finishedMatchId)}/rematch`, { token, body: {} });
+  }
+
   joinMatch(token: string, inviteCode: string): Promise<JoinMatchResponse> {
     return this.request<JoinMatchResponse>('POST', '/v1/matches/join', { token, body: { inviteCode } });
   }

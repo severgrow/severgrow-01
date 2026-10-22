@@ -242,6 +242,14 @@ export interface Storage {
   cancelWaitingMatch(playerId: string, matchId: string): Promise<boolean>;
   matchById(id: string): Promise<MatchRecord | null>;
   matchByInviteCode(code: string): Promise<MatchRecord | null>;
+  /**
+   * A standard duel's mutual rematch (migration 0015): create `match`, tag it as the rematch of
+   * `rematchOf` and seat `playerId` in seat 0, all at once. At most ONE rematch per finished match:
+   * when another already exists it is not created, and `REMATCH_EXISTS` is returned.
+   */
+  createRematch(match: MatchRecord, rematchOf: string, playerId: string, now: number): Promise<{ ok: true } | Fail>;
+  /** The rematch match created for `finishedMatchId`, if any. */
+  rematchOf(finishedMatchId: string): Promise<MatchRecord | null>;
   /** Every match the player is a participant of (any status). */
   matchesOfPlayer(playerId: string): Promise<MatchRecord[]>;
   /** One-query match list with opponent names (P-15). */

@@ -72,10 +72,11 @@ export type OnlineLobbyController = {
   /** Live duels: open one of my matches by id (web/src/online/live/). */
   openMatch?(matchId: string): Promise<void>;
   /**
-   * A rematch from a finished standard duel: create a fresh match and show the existing
-   * invite/share screen (the same one `createMatch` / "Create a duel" opens).
+   * A rematch from a finished standard duel. Mutual (2026-10-22): the first press waits, the
+   * second press starts the game for both. `finishedMatchId` is the duel that just ended; with an
+   * older server (no rematch endpoint) it falls back to a fresh invite, as before.
    */
-  rematch(): Promise<void>;
+  rematch(finishedMatchId?: string | null): Promise<void>;
   trainingSeedTicket(botLevel: number): Promise<{ id: string; seed: number } | null>;
   syncSeedRewards(): Promise<{ key: string; reward: RewardResult }[]>;
 };
@@ -460,6 +461,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     show('waiting');
     setWaitingMode('invite');
     setWaitingTitle(ONLINE.waitingTitle, true);
+    $('online-waiting-body').textContent = ONLINE.waitingBody; // a rematch wait rewrites it
     $('online-invite-code').textContent = match.inviteCode;
     $('online-invite-code').setAttribute('aria-label', `${match.inviteCode}. ${ONLINE.codeTapCopy}.`);
     notice('online-waiting-notice', '');
@@ -662,12 +664,43 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   };
 
   /**
-   * A rematch from a finished standard duel. Identical to "Create a duel" from the hub — a fresh
-   * match with a fresh invite code, shown on the same waiting/share screen. On failure, land on the
-   * hub, which is where "Create a duel" reports its error line. A refused second tap (the first
-   * create is still in flight) leaves the screen alone: that request is already doing the work.
+   * A rematch from a finished standard duel (owner, 2026-10-22: "they both press rematch = they're
+   * straight in a new game"). The server pairs the two presses: the first creates the rematch and
+   * waits on the usual waiting screen (which already enters the game the moment the seat fills),
+   * the second enters it at once. The invite code stays on that screen as a second way in.
+   * A server without the endpoint (before its deploy) answers NOT_FOUND, and then this is exactly
+   * the old behaviour: a fresh invite via "Create a duel". On failure, land on the hub. A refused
+   * second tap (the first request is still in flight) leaves the screen alone.
    */
-  const rematch = async (): Promise<void> => {
+  const rematch = async (finishedMatchId: string | null = null): Promise<void> => {
+    if (finishedMatchId) {
+      const out = await guard.run('create', async (): Promise<'done' | 'failed' | 'older-server'> => {
+        const id = await ensureIdentity();
+        if (!id) return 'failed';
+        try {
+          const res = await client.rematch(id.token, finishedMatchId);
+          serverOffset = res.serverNow - now();
+          if (res.player.status === 'active') {
+            launchDuel(id.token, res.player, true);
+            return 'done';
+          }
+          openWaiting(res.match);
+          setWaitingTitle(ONLINE.rematchWaitingTitle, true);
+          $('online-waiting-body').textContent = ONLINE.rematchWaitingBody;
+          return 'done';
+        } catch (error) {
+          if (error instanceof DuelError && error.status === 404 && error.code === 'NOT_FOUND') return 'older-server';
+          notice('online-hub-notice', errorMessage(error));
+          return 'failed';
+        }
+      });
+      if (!out.started) return;
+      if (!out.timedOut && out.value === 'done') return;
+      if (out.timedOut || out.value === 'failed') {
+        await openHub();
+        return;
+      }
+    }
     const created = await createMatch();
     if (created.started && !created.ok) await openHub();
   };

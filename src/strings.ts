@@ -129,6 +129,9 @@ export const ONLINE = Object.freeze({
   codeTapCopy: 'Tap to copy',
   codeCopied: 'Code copied',
   waitingTitle: 'Waiting for a friend',
+  /** A standard duel's mutual rematch: the first to press waits here for the other's press. */
+  rematchWaitingTitle: 'Waiting for their rematch',
+  rematchWaitingBody: 'The new game starts the moment they press Rematch too.',
   waitingBody: 'Send the link. The duel opens when they join.',
   waitingExpiry: 'Invite expires in 48 hours.',
   waitingInviteHint: 'Waiting for a friend to join',

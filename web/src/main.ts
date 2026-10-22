@@ -8384,9 +8384,12 @@ bind('go-rematch', () => {
     // stray resize render from painting the finished board's overlay over the opaque invite screen.
     $('gameover').hidden = true;
     $('game').hidden = true;
+    // The finished duel's id, read BEFORE the teardown clears the session: the server pairs both
+    // players' presses on it (a mutual rematch, 2026-10-22).
+    const finishedMatchId = getOnlineSession()?.driver.snapshot().matchId ?? null;
     void runRematch({
       tearDown: tearDownOnlineDuel,
-      createMatch: () => onlineLobbyCtl?.rematch() ?? Promise.resolve(),
+      createMatch: () => onlineLobbyCtl?.rematch(finishedMatchId) ?? Promise.resolve(),
     });
     return;
   }
@@ -8746,6 +8749,7 @@ let appReady = false;
     if (!os) return null;
     const snap = os.driver.snapshot();
     return {
+      matchId: snap.matchId,
       revealing: os.isRevealing,
       live: os.revealIsLive,
       myTurn: os.myTurn,
@@ -8878,7 +8882,7 @@ if (SHOW_MENU_TAGLINE) {
 // Phase 4–5: online lobby + duel on the shared board (Draw / draft / Throw / resign).
 type OnlineLobbyCtl = {
   openHub(): Promise<void>;
-  rematch(): Promise<void>;
+  rematch(finishedMatchId?: string | null): Promise<void>;
   trainingSeedTicket(level: number): Promise<{ id: string; seed: number } | null>;
   syncSeedRewards(): Promise<{ key: string; reward: { awarded: number } }[]>;
 };

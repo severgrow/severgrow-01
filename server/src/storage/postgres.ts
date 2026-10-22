@@ -494,6 +494,34 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     }
   },
 
+  async createRematch(match: MatchRecord, rematchOf: string, playerId: string, now: number): Promise<{ ok: true } | Fail> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      await client.query(INSERT_MATCH_SQL, matchInsertValues(match));
+      // The unique partial index on rematch_of (migration 0015) is the "one rematch per match" rule.
+      await client.query('update matches set rematch_of = $2 where id = $1', [match.id, rematchOf]);
+      await client.query(
+        'insert into match_participants (match_id, player_id, seat, joined_at, last_seen_at) values ($1,$2,0,$3,$3)',
+        [match.id, playerId, now],
+      );
+      await client.query('commit');
+      return { ok: true };
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      if (isInviteCodeCollision(error)) return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
+      if (isUniqueViolation(error)) return { ok: false, code: 'REMATCH_EXISTS', reason: 'A rematch already exists.' };
+      throw error;
+    } finally {
+      client.release?.();
+    }
+  },
+
+  async rematchOf(finishedMatchId: string): Promise<MatchRecord | null> {
+    const { rows } = await pool.query('select * from matches where rematch_of = $1 limit 1', [finishedMatchId]);
+    return rows[0] ? rowToMatch(rows[0]) : null;
+  },
+
   async findOpenQueueMatch(playerId: string): Promise<MatchRecord | null> {
     const { rows } = await pool.query(
       `select m.*

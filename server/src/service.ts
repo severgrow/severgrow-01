@@ -421,6 +421,51 @@ export class MatchService {
     return { match: await this.summary(resolved), player: await this.payload(resolved, seat, []) };
   }
 
+  /**
+   * A mutual rematch of a finished standard duel (owner, 2026-10-22: "they both press rematch =
+   * they're straight in a new game"). The first press creates the rematch match, tagged with the
+   * finished match's id, and waits on it; the second press, by the other player, takes seat 1 and
+   * the match goes active for both. A repeated press returns the same match, and the storage's
+   * one-rematch-per-match rule turns two simultaneous presses into one match.
+   */
+  async rematch(player: PlayerRecord, matchId: string): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
+    await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
+    if (typeof matchId !== 'string' || matchId.length === 0) throw new ApiError('INVALID_REQUEST', 'A match id is required.');
+    const finished = await this.requireParticipantFresh(player, matchId);
+    if (finished.status !== 'finished') throw new ApiError('MATCH_NOT_FINISHED', 'Finish this match before a rematch.');
+    for (let attempt = 0; attempt < MAX_INVITE_CODE_ATTEMPTS; attempt++) {
+      const existing = await this.storage.rematchOf(matchId);
+      if (existing) return this.takeRematchSeat(player, existing);
+      const open = (await this.storage.matchesOfPlayer(player.id)).filter((m) => m.status !== 'finished').length;
+      if (open >= this.config.maxOpenMatchesPerPlayer) {
+        throw new ApiError('TOO_MANY_MATCHES', 'Finish or leave a match before starting another.');
+      }
+      const now = this.now();
+      const created = this.buildWaitingMatch(now, false);
+      const result = await this.storage.createRematch(created, matchId, player.id, now);
+      if (result.ok) return { match: await this.summary(created), player: await this.payload(created, 0, []) };
+      // The other player's press won the race (or an invite code collided): read theirs, or retry.
+      if (result.code !== 'REMATCH_EXISTS' && result.code !== 'DUPLICATE_INVITE_CODE') {
+        throw new ApiError('INTERNAL', 'Could not start the rematch.');
+      }
+    }
+    throw new ApiError('INTERNAL', 'Could not start the rematch right now. Please try again.');
+  }
+
+  /** The second press of a rematch: the player's own seat if they have one, otherwise seat 1. */
+  private async takeRematchSeat(player: PlayerRecord, match: MatchRecord): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
+    const now = this.now();
+    const current = (await this.storage.applyExpiry(match.id, now)) ?? match;
+    const mine = await this.storage.participantOf(current.id, player.id);
+    if (mine) return { match: await this.summary(current), player: await this.payload(current, mine.seat, []) };
+    if (current.status !== 'waiting') throw new ApiError('MATCH_EXPIRED', 'That rematch is no longer open.');
+    const added = await this.storage.addParticipant({ matchId: current.id, playerId: player.id, seat: 1, joinedAt: now, lastSeenAt: now });
+    if (!added.ok && added.code !== 'ALREADY_JOINED') throw new ApiError('MATCH_FULL', 'That rematch already has two players.');
+    const resolved = (await this.storage.activateMatch(current.id, now, this.config.turnTimeoutMs)) ?? current;
+    await safePublish(this.broadcaster, resolved.id, { revision: resolved.revision, status: resolved.status });
+    return { match: await this.summary(resolved), player: await this.payload(resolved, 1, []) };
+  }
+
   // ---- reading a match ----
 
   async getMatch(player: PlayerRecord, matchId: string): Promise<MatchSummary> {

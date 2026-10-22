@@ -1,20 +1,18 @@
 /**
  * A rematch from a finished **standard (async) online duel**.
  *
- * The plan is one sentence: *"Rematch = create a fresh invite to the same friend and show it."*
- * So this does exactly two things, in this order:
+ * It does two things, in this order:
  *
  *   1. **Tear the finished duel's session down.** A finished session must never leak into the new
  *      match — the driver would otherwise keep polling a match that is already over.
- *   2. **Create a brand-new match and surface the existing invite/share screen** — the same
- *      "create a duel" path (the 4-character code, tap-to-copy and `Share invite`), so no new
- *      share UI is invented.
+ *   2. **Ask the server for the rematch** (`lobby-ui.ts` `rematch`). It is MUTUAL (owner,
+ *      2026-10-22: "they both press rematch = they're straight in a new game"): the first press
+ *      creates the new match and waits on the usual waiting screen, the second press by the other
+ *      player takes the other seat, and both are in. The invite code stays on the waiting screen as
+ *      a second way in. A server without the endpoint falls back to a fresh invite, as before.
  *
- * The opponent is deliberately **not pinged**: async duels have no presence/challenge plumbing
- * (that is wired only for live duels, on purpose). The opponent joins the new duel by the shared
- * code/link, exactly as they joined the first one. The LIVE end window's rematch *does* ping the
- * opponent, because live has a challenge channel; the flow the player sees is the same otherwise
- * (tap Rematch → a waiting surface for the same opponent).
+ * The LIVE end window's rematch goes through live's own challenge channel; the flow the player sees
+ * is the same (tap Rematch → straight in, or wait for the other's tap).
  */
 export type RematchDeps = {
   /** The ONE teardown of an online duel (`tearDownOnlineDuel` in `main.ts`). */
