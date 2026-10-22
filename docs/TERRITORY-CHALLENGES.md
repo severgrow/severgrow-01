@@ -195,9 +195,15 @@ Everything below describes the build that followed.
 
 ## What is still NOT proven — read before deploying
 
-1. **The Postgres path has never executed.** The migration and the Postgres store are typechecked and
-   reviewed; the integration test skips without `REQUIRE_DATABASE=1`. The memory store passing does
-   not prove the SQL does. **Apply the migration to a staging copy first.**
+1. **The Postgres path has run locally, not on Supabase.** On 2026-10-22 all 15 migrations
+   (0014 included) applied from scratch to a local Postgres 16, a re-run was a no-op, and
+   `server/tests/territory-postgres.integration.test.ts` passed 5/5 through the real service and
+   SQL store: accept → duel → two simultaneous confirms (exactly one settles), a defender win, the
+   24 h forfeit, the 7-day stale close, and two challengers racing for one tile, with Seeds conserved
+   in every case. `pg_cron`/`pg_net` and the `anon`/`authenticated` roles were local stand-ins, so the
+   three Supabase-ownership checks in `postgres.integration.test.ts` could not pass there. **Still
+   apply the migration to a staging copy of the real schema first** - the live data and Supabase's
+   own roles are what that local run could not cover.
 2. **No two-real-account pass.** The browser suite stubs every API call. Nobody has watched a real
    challenge go from send to a transferred tile against the live API.
 3. **Nothing is deployed.** No migration applied, no Edge deploy, not on the publishing branch.
@@ -212,7 +218,8 @@ Everything below describes the build that followed.
 ## What still has to happen before a player sees this
 
 1. Apply `0014_world_challenges.sql` to a **staging copy** of the production schema and back up the
-   live database first. Run `REQUIRE_DATABASE=1` against it so the Postgres store is exercised.
+   live database first. Run `REQUIRE_DATABASE=1 npx vitest run server/tests/seeds-postgres.integration.test.ts
+   server/tests/territory-postgres.integration.test.ts` against it.
 2. A **two-real-account pass** on that staging API: send, decline, and accept → duel → confirm, with
    both wallets watched. Nothing in CI covers this and no unit test can.
 3. Rebuild and deploy the Edge bundle only after 1 and 2, then verify `/v1/health?db=1` and
