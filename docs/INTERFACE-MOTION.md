@@ -103,10 +103,10 @@ express a movement, change this file, its CSS block, this document and the test 
 ## Adoption status (2026-10-22)
 
 Wired: the central `sheet()` path (so Settings, pause, How to play, What happened, the campaign
-start confirmation and the new restart confirmation all share it), the finish plate, the install
-invitation, the starter lottery's exit, the online hub/waiting/join screens, the matched card, and
-the screen-to-screen changes between menu-like screens. The pre-game card ritual and all gameplay
-animation are untouched.
+start confirmation and the new restart confirmation all share it), the profile read-out, the finish
+plate, the install invitation, the starter lottery's exit, the online hub/waiting/join screens, the
+matched card, and the screen-to-screen changes between menu-like screens. The pre-game card ritual
+and all gameplay animation are untouched.
 
 ## Files
 
