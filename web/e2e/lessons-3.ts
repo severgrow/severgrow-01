@@ -388,14 +388,6 @@ const tapAnywhere = async (p: Page) => {
  * it stays quick when the sentence has already been up a while.
  */
 const READ_FLOOR_MS = 3000;
-/** Wait out whatever is left of the reading floor, so a DISMISSING tap is not refused. */
-const waitReadingFloor = async (p: Page) => {
-  const left = await p.evaluate(`(() => {
-    const l = window.__severgrow?.lesson?.();
-    return l && l.explainAt ? Math.max(0, ${READ_FLOOR_MS} - (performance.now() - l.explainAt)) : 0;
-  })()`) as number;
-  if (left > 0) await p.waitForTimeout(left + 120);
-};
 const dismissExplanation = async (p: Page) => {
   const left = await p.evaluate(`(() => {
     const l = window.__severgrow?.lesson?.();
@@ -1028,10 +1020,6 @@ try {
       const pts = await litPoints(page, before.beat.lit);
       check(!!pts[0], `${w}x${h}: the explanation lights a thing to tap`);
       if (pts[0]) {
-        // The lit thing here is a HOME, which is not a move: tapping it DISMISSES the sentence, so
-        // it waits out the reading floor like any other dismissal (owner, 2026-10-21). A lit thing
-        // that IS a move still acts on one tap - that is proven by the guard check below.
-        await waitReadingFloor(page);
         await page.mouse.click(pts[0].x, pts[0].y);
         await page.waitForTimeout(350);
         const after = await hook<any>(page, 'lesson');
@@ -1040,10 +1028,9 @@ try {
       // And a tap over the box itself passes through (pointer-events:none) to the board.
       const nextBeat = (await hook<any>(page, 'lesson')).beat;
       if (nextBeat?.explain) {
-        // A dismissing tap inside the explanation's reading floor is refused on purpose
-        // (owner, 2026-10-21: the 3 s floor replaced the old 650 ms one); wait it out, as a reader
-        // would.
-        await waitReadingFloor(page);
+        // A tap in an explanation's first 0.65 s is deliberately ignored (it belonged to the move
+        // that opened it); wait past that, as a person would.
+        await page.waitForTimeout(800);
         const boxPt = await page.evaluate(() => { const p = document.getElementById('lesson-plate'); const r = p!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }) as { x: number; y: number };
         const under = await page.evaluate(`(() => { const e = document.elementFromPoint(${boxPt.x}, ${boxPt.y}); return e ? e.id || e.className || e.tagName : 'none'; })()`);
         check(under !== 'lesson-plate', `${w}x${h}: a tap over the box reaches the board (${under})`);
