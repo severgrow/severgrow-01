@@ -1,4 +1,6 @@
 import type { Card } from '../../../src/engine/index.js';
+import { t } from '../../../src/i18n/index.js';
+import { HELP, TUTORIAL } from '../../../src/strings.js';
 import type { MatchIntel } from '../logic/match-intel.js';
 import { drawLedCells, ledMessageWidth } from './led-cells.js';
 import { cardFace, suitClass } from '../ui/effects.js';
@@ -808,7 +810,7 @@ export type GlassSurface = ReturnType<typeof mountGlassSurface>;
 export const mountGlassSurface = (onClose: () => void) => {
   const style = document.createElement('style'); style.id = 'futasaku-glass-style'; style.textContent = CSS; document.head.append(style);
   const panel = document.createElement('section'); panel.id = 'futasaku-glass'; panel.hidden = true;
-  panel.setAttribute('aria-label', 'Match details');
+  panel.setAttribute('aria-label', t('ui.glass.matchDetails', 'Match details'));
   const focus = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); focus.id = 'tutorial-focus'; focus.setAttribute('hidden', '');
   focus.setAttribute('aria-hidden', 'true');
   const bloomDemo = document.createElement('div');
@@ -825,7 +827,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   let moveCursor = -1;
   let lastMoveLen = -1;
   let intelTab: IntelTabId = 'intel';
-  let intelLabels: IntelTabLabels = { intel: 'Match Intel', howto: 'How to' };
+  let intelLabels: IntelTabLabels = { intel: HELP.intelTab, howto: HELP.howToTab };
   let howToHtml = '';
   let reduceMotion = false;
   let idleHard = false;
@@ -1328,21 +1330,21 @@ export const mountGlassSurface = (onClose: () => void) => {
       : options.lesson ? '<p class="glass-why" aria-hidden="true"></p>' : '';
     const missionHtml = options.mission ? `<p class="glass-mission">${safe(options.mission)}</p>` : '';
     const icons = options.turnIcons
-      ? `<div class="glass-icons" aria-hidden="true"><span>Draw</span><span>Grow</span><span>Throw</span></div>` : '';
+      ? `<div class="glass-icons" aria-hidden="true"><span>${t('ui.glass.draw', 'Draw')}</span><span>${t('ui.glass.grow', 'Grow')}</span><span>${t('ui.glass.throw', 'Throw')}</span></div>` : '';
     const b = options.buttons ?? {};
-    const nextLabel = b.nextLabel || 'NEXT';
+    const nextLabel = b.nextLabel || TUTORIAL.next;
     // Exit tutorial lives in the pause menu (#hud-menu), not on the glass.
     // Head row always has 3 equal slots so the title stays centred.
     const prevBtn = b.previous
-      ? `<button type="button" data-tut="previous">PREVIOUS</button>` : '';
+      ? `<button type="button" data-tut="previous">${TUTORIAL.previous}</button>` : '';
     const nextBtn = b.next
       ? `<button type="button" data-tut="next" class="${b.nextBlink ? 'glass-blink' : ''}">${safe(nextLabel)}</button>`
-      : (b.playReal ? `<button type="button" data-tut="play">Play</button>` : '');
+      : (b.playReal ? `<button type="button" data-tut="play">${TUTORIAL.playReal}</button>` : '');
     const titleHtml = `<p class="glass-instruction glass-copy" data-led-title="1">`
       + `<span class="glass-led-sr">${safe(line)}</span>`
       + `<span class="glass-led-window" aria-hidden="true"><canvas class="glass-led-cells"></canvas></span>`
       + `</p>`;
-    const headHtml = `<div class="glass-head" role="group" aria-label="Tutorial step">`
+    const headHtml = `<div class="glass-head" role="group" aria-label="${t('ui.glass.tutorialStep', 'Tutorial step')}">`
       + `<div class="glass-head-slot glass-head-prev">${prevBtn}</div>`
       + `<div class="glass-head-slot glass-head-title">${titleHtml}</div>`
       + `<div class="glass-head-slot glass-head-next">${nextBtn}</div>`
@@ -1409,7 +1411,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     panel.hidden = false;
     showFocus(!lightOff);
     setBloomDemo(!!options.bloomDemo);
-    panel.setAttribute('aria-label', options.kicker ? `${options.kicker} guidance` : 'Tutorial guidance');
+    panel.setAttribute('aria-label', options.kicker ? t('ui.glass.kickerGuidance', '{kicker} guidance', { kicker: options.kicker }) : t('ui.glass.tutorialGuidance', 'Tutorial guidance'));
     panel.setAttribute('role', 'status');
     panel.setAttribute('aria-live', 'polite');
     if (options.kicker) panel.dataset.kicker = options.kicker;
@@ -1451,11 +1453,11 @@ export const mountGlassSurface = (onClose: () => void) => {
     } else if (total) {
       moveCursor = Math.max(0, Math.min(total - 1, moveCursor < 0 ? total - 1 : moveCursor));
     } else moveCursor = -1;
-    const tabs = `<div class="intel-tabs" role="tablist" aria-label="Match help">`
+    const tabs = `<div class="intel-tabs" role="tablist" aria-label="${t('ui.glass.matchHelp', 'Match help')}">`
       + `<button type="button" class="intel-tab" role="tab" data-intel-tab="intel" aria-selected="${intelTab === 'intel'}">${safe(intelLabels.intel)}</button>`
       + `<button type="button" class="intel-tab" role="tab" data-intel-tab="howto" aria-selected="${intelTab === 'howto'}">${safe(intelLabels.howto)}</button>`
       + `</div>`;
-    const bar = `<div class="intel-bar">${tabs}<button class="intel-close" type="button" aria-label="Close">×</button></div>`;
+    const bar = `<div class="intel-bar">${tabs}<button class="intel-close" type="button" aria-label="${t('ui.common.close', 'Close')}">×</button></div>`;
     if (intelTab === 'howto') {
       panel.innerHTML = bar + `<div class="intel-body" role="tabpanel" data-intel-panel="howto"><div class="intel-howto">${howToHtml}</div></div>`;
     } else {
@@ -1469,11 +1471,11 @@ export const mountGlassSurface = (onClose: () => void) => {
         else groups.set(key, { card, count: 1 });
       }
       const sorted = [...groups.values()].sort((a, b) => (a.card.suit ?? 4) - (b.card.suit ?? 4) || a.card.rank - b.card.rank);
-      const cards = sorted.map(({ card, count }) => `<span class="intel-card-wrap" title="${card.suit === null ? 'Bomb' : `Suit ${card.suit + 1}, ${card.rank}`}${count > 1 ? ` — seen ${count} times` : ''}"><span class="intel-card card ${suitClass(card)}">${cardFace(card)}</span>${count > 1 ? `<span class="intel-card-count">${count}</span>` : ''}</span>`).join('');
-      const who = move ? (move.who === 'you' ? 'YOU' : 'OPP') : 'MATCH';
-      const verb = move ? move.verb : (data.discarded.length ? 'FACE' : 'READY');
-      const detail = move?.detail ?? (data.discarded.length ? 'OPEN PILE' : 'NO MOVES YET');
-      panel.innerHTML = bar + `<div class="intel-body" role="tabpanel" data-intel-panel="intel"><div class="intel-step">${stepLabel}</div><div class="intel-readout"><span class="intel-who">${who}</span><span class="intel-verb">${safe(verb)}</span><span class="intel-detail">${safe(detail)}</span></div><div class="intel-nav"><button type="button" class="intel-newer" ${!total || moveCursor >= total - 1 ? 'disabled' : ''}>‹ NEWER</button><button type="button" class="intel-older" ${!total || moveCursor <= 0 ? 'disabled' : ''}>OLDER ›</button></div><div class="intel-meters"><label class="intel-meter"><span>SCORE</span><b>${data.score[0]}:${data.score[1]}</b></label><label class="intel-meter"><span>TILES</span><b>${data.territory[0]}:${data.territory[1]}</b></label><label class="intel-meter"><span>DRAW</span><b>${data.deckCount}</b></label><label class="intel-meter"><span>OPP</span><b>${data.oppHand}</b></label><label class="intel-meter"><span>BOMBS</span><b>${data.fruitUnseen}</b></label><label class="intel-meter"><span>TURN</span><b>${data.turn}</b></label></div><div class="intel-cards">${cards || ''}</div>${data.observation ? `<p class="intel-observation">${safe(data.observation)}</p>` : ''}</div>`;
+      const cards = sorted.map(({ card, count }) => `<span class="intel-card-wrap" title="${card.suit === null ? t('ui.intel.bombShort', 'Bomb') : t('ui.intel.suitCard', 'Suit {suit}, {rank}', { suit: card.suit + 1, rank: card.rank })}${count > 1 ? ' — ' + t('ui.intel.seenTimes', 'seen {n} times', { n: count }) : ''}"><span class="intel-card card ${suitClass(card)}">${cardFace(card)}</span>${count > 1 ? `<span class="intel-card-count">${count}</span>` : ''}</span>`).join('');
+      const who = move ? (move.who === 'you' ? t('ui.intel.you', 'YOU') : t('ui.intel.opp', 'OPP')) : t('ui.intel.match', 'MATCH');
+      const verb = move ? move.verb : (data.discarded.length ? t('ui.intel.face', 'FACE') : t('ui.intel.ready', 'READY'));
+      const detail = move?.detail ?? (data.discarded.length ? t('ui.intel.openPile', 'OPEN PILE') : t('ui.intel.noMoves', 'NO MOVES YET'));
+      panel.innerHTML = bar + `<div class="intel-body" role="tabpanel" data-intel-panel="intel"><div class="intel-step">${stepLabel}</div><div class="intel-readout"><span class="intel-who">${who}</span><span class="intel-verb">${safe(verb)}</span><span class="intel-detail">${safe(detail)}</span></div><div class="intel-nav"><button type="button" class="intel-newer" ${!total || moveCursor >= total - 1 ? 'disabled' : ''}>‹ ${t('ui.intel.newer', 'NEWER')}</button><button type="button" class="intel-older" ${!total || moveCursor <= 0 ? 'disabled' : ''}>${t('ui.intel.older', 'OLDER')} ›</button></div><div class="intel-meters"><label class="intel-meter"><span>${t('ui.intel.score', 'SCORE')}</span><b>${data.score[0]}:${data.score[1]}</b></label><label class="intel-meter"><span>${t('ui.intel.tiles', 'TILES')}</span><b>${data.territory[0]}:${data.territory[1]}</b></label><label class="intel-meter"><span>${t('ui.intel.draw', 'DRAW')}</span><b>${data.deckCount}</b></label><label class="intel-meter"><span>${t('ui.intel.oppShort', 'OPP')}</span><b>${data.oppHand}</b></label><label class="intel-meter"><span>${t('ui.intel.bombs', 'BOMBS')}</span><b>${data.fruitUnseen}</b></label><label class="intel-meter"><span>${t('ui.intel.turn', 'TURN')}</span><b>${data.turn}</b></label></div><div class="intel-cards">${cards || ''}</div>${data.observation ? `<p class="intel-observation">${safe(data.observation)}</p>` : ''}</div>`;
     }
     panel.querySelector('.intel-close')?.addEventListener('click', close, { once: true });
     panel.querySelectorAll<HTMLButtonElement>('.intel-tab').forEach(tab => {
@@ -1498,7 +1500,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     mode = 'intel'; stopLoop(); smooth = null;
     delete panel.dataset.kicker;
     panel.dataset.mode = 'intel'; panel.hidden = false; showFocus(false);
-    panel.setAttribute('aria-label', 'Match details'); panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', t('ui.glass.matchDetails', 'Match details')); panel.setAttribute('role', 'dialog');
     panel.removeAttribute('aria-live');
     renderIntel(data);
   };
@@ -1509,7 +1511,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     mode = 'guidance'; stopLoop(); smooth = null;
     delete panel.dataset.kicker;
     panel.dataset.mode = 'guidance'; panel.hidden = false; showFocus(false);
-    panel.setAttribute('aria-label', 'Turn guidance'); panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', t('ui.glass.turnGuidance', 'Turn guidance')); panel.setAttribute('role', 'dialog');
     panel.removeAttribute('aria-live');
     ledTitle = line;
     if (same) {

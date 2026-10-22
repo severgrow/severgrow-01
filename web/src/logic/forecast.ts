@@ -5,6 +5,7 @@ import { allNeighbors, coordKey, homeCoord, onBoard, parseKey } from '../../../s
 import type { Action, Player, Terrain, Tile, View } from '../../../src/engine/index.js';
 import { simulate, threats } from '../../../src/bots/evaluate.js';
 import { OPP } from '../../../src/strings.js';
+import { t } from '../../../src/i18n/index.js';
 
 export type Forecast = {
   kind: 'grow' | 'strengthen' | 'fruit' | 'throw';
@@ -110,15 +111,15 @@ export const riskLines = (f: Forecast, rules = CONFIRM_RULES): { reason: RiskRea
     const n = f.cutMine.length;
     switch (reason) {
       case 'atRisk':
-        return { reason, icon: '⚠', text: `${OPP.The} could cut ${f.atRisk!.loss} of yours` };
+        return { reason, icon: '⚠', text: t('ui.forecast.atRisk', '{opp} could cut {n} of yours', { opp: OPP.The, n: f.atRisk!.loss }) };
       case 'cutsOwn':
-        return { reason, icon: '✂', text: `Cuts off ${n} of your tiles` };
+        return { reason, icon: '✂', text: t('ui.forecast.cutsOwn', 'Cuts off {n} of your tiles', { n }) };
       case 'fruit':
-        return { reason, icon: '✿', text: 'Uses a Bomb' };
+        return { reason, icon: '✿', text: t('ui.forecast.usesBomb', 'Uses a Bomb') };
       case 'lastCard':
-        return { reason, icon: '▢', text: 'Uses your last card' };
+        return { reason, icon: '▢', text: t('ui.forecast.lastCard', 'Uses your last card') };
       case 'root':
-        return { reason, icon: '◉', text: 'Your home gets boxed in' };
+        return { reason, icon: '◉', text: t('ui.forecast.root', 'Your home gets boxed in') };
     }
   });
 

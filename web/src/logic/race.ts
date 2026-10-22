@@ -4,6 +4,7 @@
 import type { Player, View } from '../../../src/engine/index.js';
 import { score } from '../../../src/engine/index.js';
 import { scoreBreakdown } from './endgame.js';
+import { t, tPlural } from '../../../src/i18n/index.js';
 
 /** How much of the bar is mine (0.5 = level). Never fully one colour: the other side keeps a sliver. */
 export const raceShare = (me: number, opp: number): number => {
@@ -15,7 +16,7 @@ export const raceShare = (me: number, opp: number): number => {
 
 /** The bar in words (for screen readers): who leads and by how much. */
 export const raceWords = (me: number, opp: number, oppLabel: string): string =>
-  me === opp ? `Level at ${me}` : me > opp ? `You lead by ${me - opp}` : `${oppLabel} leads by ${opp - me}`;
+  me === opp ? t('ui.race.level', 'Level at {n}', { n: me }) : me > opp ? t('ui.race.youLead', 'You lead by {n}', { n: me - opp }) : t('ui.race.oppLeads', '{opp} leads by {n}', { opp: oppLabel, n: opp - me });
 
 export type Breakdown = { tiles: number; gold: number; root: number; total: number; lines: string[] };
 
@@ -25,9 +26,9 @@ export const breakdownOf = (v: Pick<View, 'board' | 'terrain' | 'config'>, p: Pl
   const b = scoreBreakdown(v, p);
   const root = v.config.rootsScore && Object.values(v.board).some((t) => t?.owner === p && t.root) ? 1 : 0;
   const total = score(v, p);
-  const lines = [`${b.tiles} tile${b.tiles === 1 ? '' : 's'}: ${b.tiles}`];
-  if (b.gold) lines.push(`${b.gold} on gold: +${b.gold}`);
-  if (root) lines.push('Root: +1');
-  lines.push(`Total: ${total}`);
+  const lines = [t('ui.race.tilesLine', '{tiles}: {n}', { tiles: tPlural('ui.count.tiles', { one: '{n} tile', other: '{n} tiles' }, b.tiles), n: b.tiles })];
+  if (b.gold) lines.push(t('ui.race.goldLine', '{n} on gold: +{n}', { n: b.gold }));
+  if (root) lines.push(t('ui.race.rootLine', 'Root: +1'));
+  lines.push(t('ui.race.totalLine', 'Total: {n}', { n: total }));
   return { tiles: b.tiles, gold: b.gold, root, total, lines };
 };

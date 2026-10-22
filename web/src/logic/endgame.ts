@@ -1,6 +1,7 @@
 // So the end of a game is never a surprise: short warnings near the end, and how the
 // final score was made.
 import type { BoardCtx, Player, View } from '../../../src/engine/index.js';
+import { t, tPlural } from '../../../src/i18n/index.js';
 
 /**
  * Step 3 item 9: how many of my turns are left (this one included), from public information:
@@ -27,8 +28,8 @@ export type FinalTurns = { final: boolean; turnsLeft: number | null; reason: 'li
 export const finalTurns = (v: Pick<View, 'config' | 'turnNumber' | 'deckCount'>): FinalTurns => {
   const max = v.config.maxTurnsPerPlayer;
   const left = max > 0 ? max - Math.ceil(v.turnNumber / 2) + 1 : null; // this turn included
-  if (left !== null && left <= FINAL_TURNS) return { final: true, turnsLeft: left, reason: 'limit', banner: left <= 1 ? 'Last turn' : `Last ${left} turns` };
-  if (!v.config.reshuffleDiscard && v.deckCount <= FINAL_DECK) return { final: true, turnsLeft: null, reason: 'deck', banner: v.deckCount === 0 ? 'Draw pile out: last turn' : 'Draw pile running low' };
+  if (left !== null && left <= FINAL_TURNS) return { final: true, turnsLeft: left, reason: 'limit', banner: left <= 1 ? t('ui.endgame.lastTurn', 'Last turn') : t('ui.endgame.lastTurns', 'Last {n} turns', { n: left }) };
+  if (!v.config.reshuffleDiscard && v.deckCount <= FINAL_DECK) return { final: true, turnsLeft: null, reason: 'deck', banner: v.deckCount === 0 ? t('ui.endgame.deckOut', 'Draw pile out: last turn') : t('ui.endgame.deckLow', 'Draw pile running low') };
   return { final: false, turnsLeft: left, reason: null, banner: null };
 };
 
@@ -47,5 +48,6 @@ export const scoreBreakdown = (ctx: BoardCtx, p: Player): { tiles: number; gold:
 /** One side's part of the finish-screen breakdown: "12 tiles (3 on gold)". Shared offline/online. */
 export const breakdownPart = (ctx: BoardCtx, p: Player): string => {
   const b = scoreBreakdown(ctx, p);
-  return `${b.tiles} tile${b.tiles === 1 ? '' : 's'}${b.gold ? ` (${b.gold} on gold)` : ''}`;
+  const tiles = tPlural('ui.count.tiles', { one: '{n} tile', other: '{n} tiles' }, b.tiles);
+  return b.gold ? t('ui.endgame.tilesOnGold', '{tiles} ({gold} on gold)', { tiles, gold: b.gold }) : tiles;
 };

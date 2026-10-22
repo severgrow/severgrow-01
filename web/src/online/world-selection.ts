@@ -1,4 +1,5 @@
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
+import { t } from '../../../src/i18n/index.js';
 
 /** One claim as the public world payload carries it. */
 export type WorldClaimView = WorldMapPayload['world']['claims'][number];
@@ -16,9 +17,9 @@ export type WorldClaimView = WorldMapPayload['world']['claims'][number];
  * would give one word two jobs — the whole board and the bit you own. `YOURS` keeps one job per word.
  */
 export const ownerLine = (claim: WorldClaimView, mine: boolean): string => {
-  const parts = [`${claim.ownerName ?? 'Player'} #${claim.ownerTag}`];
+  const parts = [`${claim.ownerName ?? t('ui.world.player', 'Player')} #${claim.ownerTag}`];
   const level = claim.ownerLevel;
-  if (typeof level === 'number' && Number.isInteger(level) && level > 0) parts.push(`LEVEL ${level}`);
-  if (mine) parts.push('YOURS');
+  if (typeof level === 'number' && Number.isInteger(level) && level > 0) parts.push(t('ui.world.level', 'LEVEL {n}', { n: level }));
+  if (mine) parts.push(t('ui.world.yours', 'YOURS'));
   return parts.join(' · ');
 };

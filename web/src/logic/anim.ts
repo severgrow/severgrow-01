@@ -6,6 +6,7 @@ import { coordKey, eventsOf, hexDistance, parseKey, scores } from '../../../src/
 import type { Action, Card, GameResult, Player, State, Tile } from '../../../src/engine/index.js';
 import { cardName } from '../../../src/playtest/names.js';
 import { FRUIT, HOME, OPP } from '../../../src/strings.js';
+import { t, tPlural } from '../../../src/i18n/index.js';
 
 export type Board = Record<string, Tile | null>;
 export type GrowTile = { key: string; strength: number; replaced: boolean };
@@ -186,31 +187,31 @@ export class AnimQueue {
   }
 }
 
-const tiles = (n: number) => `${n} tile${n === 1 ? '' : 's'}`;
-
 /** A short caption shown near the action, or null. */
 export const captionFor = (s: Step, viewer: Player): string | null => {
   switch (s.k) {
     case 'sever':
-      return s.player !== viewer ? `You cut off ${s.keys.length} ${OPP.noun} tile${s.keys.length === 1 ? '' : 's'}!` : `${OPP.The} cut off ${s.keys.length} of your tiles`;
+      return s.player !== viewer
+        ? tPlural('ui.caption.youCut', { one: 'You cut off {n} {opp} tile!', other: 'You cut off {n} {opp} tiles!' }, s.keys.length, { opp: OPP.noun })
+        : tPlural('ui.caption.oppCut', { one: '{opp} cut off {n} of your tiles', other: '{opp} cut off {n} of your tiles' }, s.keys.length, { opp: OPP.The });
     case 'grow': {
       const taken = s.tiles.filter((t) => t.replaced).length;
-      if (s.player === viewer) return taken > 0 ? `You overgrew ${taken} ${OPP.noun} spot${taken === 1 ? '' : 's'}` : null;
-      return taken > 0 ? `${OPP.The} overgrew ${taken} of your spot${taken === 1 ? '' : 's'}` : `${OPP.The} grew ${tiles(s.tiles.length)}`;
+      if (s.player === viewer) return taken > 0 ? tPlural('ui.caption.youOvergrew', { one: 'You overgrew {n} {opp} spot', other: 'You overgrew {n} {opp} spots' }, taken, { opp: OPP.noun }) : null;
+      return taken > 0 ? tPlural('ui.caption.oppOvergrew', { one: '{opp} overgrew {n} of your spot', other: '{opp} overgrew {n} of your spots' }, taken, { opp: OPP.The }) : tPlural('ui.caption.oppGrew', { one: '{opp} grew {n} tile', other: '{opp} grew {n} tiles' }, s.tiles.length, { opp: OPP.The });
     }
     case 'strangle':
       return s.loser === viewer ? HOME.mineSurrounded : HOME.theirsSurrounded;
     case 'strengthen':
-      return s.player === viewer ? `Strengthened ${s.from} → ${s.to}` : `${OPP.The} strengthened a ${s.from} to a ${s.to}`;
+      return s.player === viewer ? t('ui.caption.strengthened', 'Strengthened {from} → {to}', { from: s.from, to: s.to }) : t('ui.caption.oppStrengthened', '{opp} strengthened a {from} to a {to}', { opp: OPP.The, from: s.from, to: s.to });
     case 'fruit':
-      return s.player === viewer ? `${FRUIT.banner} Their ${s.strength} is gone` : FRUIT.oppDid(s.strength);
+      return s.player === viewer ? t('ui.caption.fruitGone', '{banner} Their {n} is gone', { banner: FRUIT.banner, n: s.strength }) : FRUIT.oppDid(s.strength);
     case 'megaBomb':
-      return `Blast cleared ${s.destroyed.length} tiles`;
+      return tPlural('ui.caption.blastCleared', { one: 'Blast cleared {n} tiles', other: 'Blast cleared {n} tiles' }, s.destroyed.length);
     case 'discard':
-      return s.player === viewer ? null : `${OPP.The} threw away ${cardName(s.card)}`;
+      return s.player === viewer ? null : t('ui.caption.oppThrew', '{opp} threw away {card}', { opp: OPP.The, card: cardName(s.card) });
     case 'draw':
       if (s.player === viewer || s.from === 'deck') return null;
-      return s.card?.suit === null ? FRUIT.oppTook : `${OPP.The} took ${cardName(s.card!)}`;
+      return s.card?.suit === null ? FRUIT.oppTook : t('ui.caption.oppTook', '{opp} took {card}', { opp: OPP.The, card: cardName(s.card!) });
     default:
       return null;
   }

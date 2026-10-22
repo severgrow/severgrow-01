@@ -3,6 +3,7 @@ import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet } from '../../../server/src/seeds/types.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { ownerLine } from './world-selection.js';
+import { t } from '../../../src/i18n/index.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 
@@ -16,7 +17,7 @@ type Identity = { token: string; playerId: string };
 export const walletLine = (s: { identityKnown: boolean; hasIdentity: boolean; wallet: SeedWallet | null }): string | null => {
   if (s.wallet) return seedBalanceLabel(s.wallet.balance);
   if (!s.identityKnown || s.hasIdentity) return null;
-  return 'SIGN IN TO GROW';
+  return t('ui.world.signInToGrow', 'SIGN IN TO GROW');
 };
 type World = WorldMapPayload['world'];
 const NS = 'http://www.w3.org/2000/svg';
@@ -166,7 +167,7 @@ export class WorldView {
       this.paintWallet();
       this.paintSelection();
     } catch {
-      if (this.active) this.notice('The world could not refresh. Tap here to try again.');
+      if (this.active) this.notice(t('ui.world.refreshError', 'The world could not refresh. Tap here to try again.'));
     } finally { this.schedule(); }
   }
     private paintWallet() {
@@ -185,7 +186,7 @@ export class WorldView {
     const own = new Set(world.claims.filter((claim) => claim.ownerId === this.identity?.playerId).map((claim) => claim.cellId));
     const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('role', 'group');
-    svg.setAttribute('aria-label', 'Shared hexagonal world. Choose a tile to inspect it.');
+    svg.setAttribute('aria-label', t('ui.world.mapAria', 'Shared hexagonal world. Choose a tile to inspect it.'));
     svg.classList.add('world-map-svg');
     // Every tile is shaded by its OWN gradient, so a hex reads as a physical surface with a light
     // from the top-left rather than as flat paint (owner, 2026-10-16: "give it some personality and
@@ -267,7 +268,7 @@ export class WorldView {
       path.classList.toggle('selected', this.selected === cell.id);
       path.tabIndex = 0;
       path.setAttribute('aria-label', owner
-        ? `${owner.ownerName ?? 'Player'} #${owner.ownerTag} territory` : `Free world tile ${cell.id}`);
+        ? t('ui.world.territory', '{name} #{tag} territory', { name: owner.ownerName ?? t('ui.world.player', 'Player'), tag: owner.ownerTag }) : t('ui.world.freeTile', 'Free world tile {id}', { id: cell.id }));
       // NO per-path click handler: a tap is resolved once, on the SVG, by snapping to the nearest
       // cell centre (see `tapAt`). That is the touch-target guarantee — a tap never lands on the
       // wrong neighbour and never selects nothing. Keyboard selection stays per tile.
@@ -419,7 +420,7 @@ export class WorldView {
     const pane = document.getElementById('online-world-selection')!;
     pane.replaceChildren();
     if (!this.world || !this.selected) {
-      pane.textContent = 'Choose a tile to see who holds it.';
+      pane.textContent = t('ui.world.chooseTile', 'Choose a tile to see who holds it.');
       return;
     }
     const tile = this.world.claims.find((claim) => claim.cellId === this.selected);
@@ -432,13 +433,13 @@ export class WorldView {
     // OWNER WORDING (2026-10-16): "when placing a tile dont say 'claim hex' say grow a tile
     // everywhere". The verb is GROW and the noun is TILE throughout this screen - it also matches
     // the game's own Grow action, so the world map and the board speak the same language.
-    label.textContent = available ? `FREE TILE · ${this.world.cost} SEEDS` : this.wallet && this.wallet.balance < this.world.cost ? '100 SEEDS NEEDED' : 'GROW NEXT TO YOUR TILES';
+    label.textContent = available ? t('ui.world.freeTileCost', 'FREE TILE · {n} SEEDS', { n: this.world.cost }) : this.wallet && this.wallet.balance < this.world.cost ? t('ui.world.seedsNeeded', '{n} SEEDS NEEDED', { n: this.world.cost }) : t('ui.world.growNext', 'GROW NEXT TO YOUR TILES');
     pane.append(label);
     if (!available || this.busy) return;
     const action = document.createElement('button');
     action.type = 'button';
     action.className = 'world-claim-button';
-    action.textContent = confirm ? 'CONFIRM GROW' : 'GROW A TILE';
+    action.textContent = confirm ? t('ui.world.confirmGrow', 'CONFIRM GROW') : t('ui.world.growTile', 'GROW A TILE');
     action.addEventListener('click', () => {
       if (!confirm) return this.paintSelection(true);
       void this.claim();
@@ -453,11 +454,11 @@ export class WorldView {
     this.paintSelection();
     try {
       await this.client.claimWorld(this.identity.token, cellId, this.pendingRequest);
-      this.notice('A little place in the world is yours.');
+      this.notice(t('ui.world.claimed', 'A little place in the world is yours.'));
       this.pendingRequest = null;
       await this.refresh(true);
     } catch {
-      this.notice('That tile may have changed. The map has refreshed; no Seeds were taken.');
+      this.notice(t('ui.world.changed', 'That tile may have changed. The map has refreshed; no Seeds were taken.'));
       this.pendingRequest = null;
       await this.refresh(true);
     } finally { this.busy = false; this.paintSelection(); }

@@ -16,6 +16,7 @@ import type { Card } from '../../../src/engine/index.js';
 import { cardFace, suitClass } from '../ui/effects.js';
 import { preloadCardArt } from './cards.js';
 import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
+import { t } from '../../../src/i18n/index.js';
 
 export type StarterRitualPhase = 'idle' | 'arrive' | 'shuffle' | 'deal' | 'reveal' | 'result' | 'exit' | 'done';
 
@@ -385,10 +386,12 @@ class StarterRitual {
     const r = this.refs;
     const starter = this.options.view.starter;
     const opponent = this.options.opponentLabel ?? OPP.label;
-    r.title.textContent = starter === 'you' ? 'You start' : `${opponent} starts`;
+    r.title.textContent = starter === 'you'
+      ? t('online.starterYou', 'You start')
+      : t('online.starterOpponent', '{opp} starts', { opp: opponent });
     r.result.textContent = starter === 'you'
-      ? 'You drew the higher card.'
-      : `${opponent} drew the higher card.`;
+      ? t('ui.ritual.youHigher', 'You drew the higher card.')
+      : t('ui.ritual.oppHigher', '{opp} drew the higher card.', { opp: opponent });
     r.outcome.classList.add('is-shown');
   }
 

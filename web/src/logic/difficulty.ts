@@ -1,3 +1,4 @@
+import { t } from '../../../src/i18n/index.js';
 import type { Level } from '../../../src/bots/levels.js';
 
 /**
@@ -85,7 +86,8 @@ export const defaultDifficultyForLevel = (level: Level): DifficultyId =>
  * practice match is its difficulty (Easy / Medium / Hard), a campaign match is its level number.
  */
 export const matchLabel = (m: { campaign: number | null; difficulty: DifficultyId | null; botLevel: Level }): string => {
-  if (m.campaign !== null) return `Level ${m.campaign}`;
-  const label = difficultyById(m.difficulty ?? defaultDifficultyForLevel(m.botLevel))!.label;
+  if (m.campaign !== null) return t('ui.game.level', 'Level {level}', { level: m.campaign });
+  const id = m.difficulty ?? defaultDifficultyForLevel(m.botLevel);
+  const label = t(`ui.difficulty.${id}`, difficultyById(id)!.label);
   return label[0] + label.slice(1).toLowerCase();
 };

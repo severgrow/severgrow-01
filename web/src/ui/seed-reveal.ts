@@ -13,6 +13,7 @@
 // Not every game pays: only wins, daily caps apply, and the number is verified server-side AFTER
 // the finish card is already up. So there are three honest states — nothing, a calm notice, and an
 // award — and an award may replace a notice late, in the same single line, without reflowing.
+import { t } from '../../../src/i18n/index.js';
 import { EASE } from '../logic/motion.js';
 import { seedIcon } from '../online/seed-icon.js';
 
@@ -136,12 +137,12 @@ export function paintSeedReward(host: HTMLElement, reward: SeedReward, opts: See
   num.className = 'seed-gain-num';
   const word = document.createElement('span');
   word.className = 'seed-gain-word';
-  word.textContent = 'Seeds';
+  word.textContent = t('ui.seeds.word', 'Seeds');
   row.append(bloom, emblem, num, word);
   // The reader hears the same sentence the game always wrote; the visual row is decoration only.
   const sr = document.createElement('span');
   sr.className = 'sr-only';
-  sr.textContent = `+${amount} Seeds`;
+  sr.textContent = t('ui.seeds.awarded', '+{n} Seeds', { n: amount });
   host.replaceChildren(sr, row);
 
   const values = seedCountValues(amount, COUNT_STEPS);

@@ -1,4 +1,5 @@
 /** Futasaku 0.4 cockpit presentation. Game-owned buttons remain the action source. */
+import { t } from '../../../src/i18n/index.js';
 import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage, ledToken } from './led-cells.js';
 import type { LedTone } from './led-cells.js';
 import { publishDisplayLight, LIGHT_CAPS } from './light.js';
@@ -593,7 +594,7 @@ export function mountSmartCockpit() {
   const rail = document.getElementById('futa04-information-rail')!;
   const style = document.createElement('style');
   style.id = 'smart-cockpit-style'; style.textContent = SMART_COCKPIT_CSS; document.head.append(style);
-  const panel = document.createElement('div'); panel.id = 'smart-panel'; panel.setAttribute('role','group'); panel.setAttribute('aria-label','Game controls');
+  const panel = document.createElement('div'); panel.id = 'smart-panel'; panel.setAttribute('role','group'); panel.setAttribute('aria-label', t('ui.game.gameControls', 'Game controls'));
   const led = document.createElement('div'); led.id = 'smart-led'; led.setAttribute('role','status'); led.setAttribute('aria-live','polite');
   const windowEl = document.createElement('div'); windowEl.id = 'smart-led-window';
   const text = document.createElement('span'); text.id = 'smart-led-text';
@@ -652,8 +653,8 @@ export function mountSmartCockpit() {
     if (!bloomSources.length) return;
     const first = bloomSources[0]!;
     const face = first.querySelector('.futa04-combination')?.cloneNode(true);
-    bloomButton.replaceChildren(...(face ? [face] : [document.createTextNode('BLOOM')]),bloomCount);
-    bloomButton.setAttribute('aria-label',bloomSources.length === 1 ? first.getAttribute('aria-label') || 'Bloom' : `${bloomSources.length} Bloom combinations`);
+    bloomButton.replaceChildren(...(face ? [face] : [document.createTextNode(t('ui.led.bloomLabel', 'BLOOM'))]),bloomCount);
+    bloomButton.setAttribute('aria-label', bloomSources.length === 1 ? first.getAttribute('aria-label') || t('bloom.Name', 'Bloom') : t('ui.game.bloomCombos', '{n} Bloom combinations', { n: bloomSources.length }));
     bloomButton.setAttribute('aria-haspopup',bloomSources.length > 1 ? 'menu' : 'false');
     bloomCount.hidden = true; // The visible control is the recipe cards alone.
     bloomSelector.replaceChildren(...bloomSources.map((button,index) => {
@@ -815,14 +816,14 @@ export function mountSmartCockpit() {
   });
   const phaseMessage = () => {
     const root = document.documentElement;
-    if (root.dataset.step === 'opp') return 'WAIT';
-    if (root.dataset.step === 'draw') return 'DRAW!';
-    if (root.dataset.step === 'throw') return 'THROW!';
-    if (root.dataset.futa04Bloom === 'true') return 'BLOOM!';
+    if (root.dataset.step === 'opp') return t('ui.led.wait', 'WAIT');
+    if (root.dataset.step === 'draw') return t('ui.led.drawStep', 'DRAW!');
+    if (root.dataset.step === 'throw') return t('ui.led.throwStep', 'THROW!');
+    if (root.dataset.futa04Bloom === 'true') return t('ui.led.bloomStep', 'BLOOM!');
     if (root.dataset.step === 'grow') {
       // After the one Grow, Bloom is optional — make Skip feel like an invitation.
-      if (root.dataset.futa04Grew === 'true' && root.dataset.futa04BloomReady === 'true') return 'SKIP?';
-      return 'GROW!';
+      if (root.dataset.futa04Grew === 'true' && root.dataset.futa04BloomReady === 'true') return t('ui.led.skipQuestion', 'SKIP?');
+      return t('ui.led.growStep', 'GROW!');
     }
     return 'FUTASAKU';
   };
@@ -929,17 +930,17 @@ export function mountSmartCockpit() {
     // Never hint SKIP — phaseMessage already owns SKIP?/THROW!/GROW!, and a SKIP hint
     // was lingering into the throw step after EndAct.
     if (lastPhase === phase && lastAction && first?.key !== lastAction) {
-      const hint = first?.icon === 'clear' ? 'CLEAR' : first?.icon === 'reverse' ? 'FLIP'
-        : first?.icon === 'cancel' ? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM' : '';
+      const hint = first?.icon === 'clear' ? t('ui.led.clearToken', 'CLEAR') : first?.icon === 'reverse' ? t('ui.led.flipToken', 'FLIP')
+        : first?.icon === 'cancel' ? t('ui.led.cancelToken', 'CANCEL') : first?.icon === 'bloom' ? t('ui.led.bloomLabel', 'BLOOM') : '';
       if (hint) machine.hint(hint);
     }
-    if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});
+    if (lastPhase !== phase && phase === 'opp') machine.event({message:t('ui.led.wait', 'WAIT'),priority:20,duration:1050,mode:'red',pulse:true});
     lastPhase = phase; lastAction = first?.key ?? '';
     context.innerHTML = svg(first?.icon ?? 'neutral'); context.disabled = !first;
     // The slot's current action, so CSS can light a key that is the move (e.g. Skip).
     context.dataset.action = first?.icon ?? '';
     context.setAttribute('aria-haspopup',current.length > 1 ? 'menu' : 'false');
-    context.setAttribute('aria-label',first ? current.length > 1 ? `${first.label}. ${current.length} actions available` : first.label : 'No action available');
+    context.setAttribute('aria-label', first ? current.length > 1 ? t('ui.game.actionsAvailable', '{label}. {n} actions available', { label: first.label, n: current.length }) : first.label : t('ui.game.noAction', 'No action available'));
     context.title = context.getAttribute('aria-label') ?? '';
     for (const b of moves.querySelectorAll<HTMLButtonElement>('button')) b.tabIndex = -1;
     refreshMessage();

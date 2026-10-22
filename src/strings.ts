@@ -1,6 +1,7 @@
 // The words the player sees for the other side, in one place (UI polish pass 3). Only text
 // the player can read uses these; code names (src/bots/, botVersion, BOT, CSS classes) stay.
 import { INVITE_CODE_LENGTH, LINK_CODE_LENGTH } from './invite-code.js';
+import { localized, translate } from './i18n/core.js';
 
 /** What the other side is called everywhere on the page. */
 export const OPPONENT_LABEL = 'Opponent';
@@ -8,7 +9,7 @@ export const OPPONENT_LABEL = 'Opponent';
 const lower = OPPONENT_LABEL.toLowerCase();
 
 /** Ready-made phrases built from OPPONENT_LABEL, so the grammar stays right everywhere. */
-export const OPP = Object.freeze({
+const EN_OPP = Object.freeze({
   /** "Opponent" (a label: score bar, chips) */
   label: OPPONENT_LABEL,
   /** "opponent" (before a noun: "an opponent tile") */
@@ -24,6 +25,9 @@ export const OPP = Object.freeze({
   /** "Opponent's" (a label: "Opponent's tile", "Opponent's turn") */
   Label: `${OPPONENT_LABEL}'s`,
 });
+
+/** The localised view of the other side's words. */
+export const OPP = localized('opp', EN_OPP);
 
 /** The game's player-facing name. Historical save keys keep their original namespace. */
 export const GAME_TITLE = 'Futasaku';
@@ -44,7 +48,8 @@ export const SHOW_MENU_TAGLINE = false;
  * drift from the codes the server actually generates. The parameter defaults to the real length;
  * tests pass an explicit value to prove the wording tracks the number.
  */
-export const inviteCodeFormatHint = (length: number = INVITE_CODE_LENGTH): string => `Enter the ${length} characters.`;
+export const inviteCodeFormatHint = (length: number = INVITE_CODE_LENGTH): string =>
+  translate('inviteCodeFormatHint', (n: number) => `Enter the ${n} characters.`, [length]);
 
 /**
  * The Settings hint for the device link code ("Use my matches on another browser"). Built from the
@@ -55,10 +60,10 @@ export const inviteCodeFormatHint = (length: number = INVITE_CODE_LENGTH): strin
  * length; tests pass an explicit value to prove the wording tracks the number.
  */
 export const linkCodeHelpText = (length: number = LINK_CODE_LENGTH): string =>
-  `Creates a one-time ${length}-character code (10 minutes). It never moves your existing token.`;
+  translate('linkCodeHelpText', (n: number) => `Creates a one-time ${n}-character code (10 minutes). It never moves your existing token.`, [length]);
 
 /** Online Duels (FUTASAKU 0.5) — every lobby / menu word the player reads. */
-export const ONLINE = Object.freeze({
+const EN_ONLINE = Object.freeze({
   brand: 'FUTASAKU',
   tagline: 'GROW · CONNECT · CONQUER',
   playOnline: 'Play online',
@@ -253,7 +258,7 @@ export const ONLINE = Object.freeze({
  */
 export const HEADER_MAX = 32;
 
-export const HEADER = Object.freeze({
+const EN_HEADER = Object.freeze({
   /** A pressing danger/timeout line — outranks everything. */
   timeout: "Time's up",
   graceWarning: 'One more chance',
@@ -270,7 +275,7 @@ export const HEADER = Object.freeze({
   idle: 'In play',
 });
 
-export type HeaderKey = keyof typeof HEADER;
+export type HeaderKey = keyof typeof EN_HEADER;
 
 /** Highest priority first: the first source with something to say owns the lane. */
 export const HEADER_PRIORITY = Object.freeze(['danger', 'clock', 'turn', 'presence', 'idle'] as const);
@@ -291,14 +296,14 @@ export const HEADER_SOURCE: Readonly<Record<HeaderKey, HeaderSource>> = Object.f
 });
 
 /** The one accessor the header lane uses to get a word. */
-export const headerText = (key: HeaderKey): string => HEADER[key];
+export const headerText = (key: HeaderKey): string => HEADER[key] as string;
 
 /**
  * The end-of-game screen in ONE place, so offline and online say the same thing. Reasons are
  * perspective-aware: "you" is always the player reading the screen. The three outcome titles
  * (`won` / `lost` / `draw`) are the product's fixed names and are never renamed.
  */
-export const RESULT = Object.freeze({
+const EN_RESULT = Object.freeze({
   /** Outcome titles — the same three offline and online. */
   won: 'You won',
   lost: 'You lost',
@@ -366,7 +371,7 @@ export type MoveWords = {
   suggest: (hex: string, card: string) => string;
 };
 
-export const SPROUT: Readonly<MoveWords> = Object.freeze({
+const EN_SPROUT: Readonly<MoveWords> = Object.freeze({
   Name: 'Grow',
   name: 'grow',
   howto: ' Once per turn you can <b>Grow</b> one tile with any single card.',
@@ -386,7 +391,8 @@ export const SPROUT: Readonly<MoveWords> = Object.freeze({
 
 
 /** The turn pill's clock: "12 turns left", "Last turn". */
-export const turnsLeftText = (n: number) => (n <= 1 ? 'Last turn' : `${n} turns left`);
+export const turnsLeftText = (n: number) =>
+  translate('turnsLeftText', (count: number) => (count <= 1 ? 'Last turn' : `${count} turns left`), [n]);
 
 /**
  * The two piles on the board, named the way the tutorial names them: "Draw pile", "Throw pile"
@@ -395,7 +401,7 @@ export const turnsLeftText = (n: number) => (n <= 1 ? 'Last turn' : `${n} turns 
  * In the Futa04 skin the visible label is hidden, so `draw` is mostly what a screen reader and a
  * long-press tooltip say. `lastCard` is the deck's own clock label, not a pile name.
  */
-export const PILES = Object.freeze({
+const EN_PILES = Object.freeze({
   draw: 'Draw pile',
   discard: 'Throw pile',
   lastCard: 'Last card',
@@ -403,7 +409,7 @@ export const PILES = Object.freeze({
 
 /** v0.7: the two homes. Code says "root"; the player reads "home", "your tree", "opponent's volcano". */
 /** Step 7: the first-run welcome card on the main menu. */
-export const WELCOME = Object.freeze({
+const EN_WELCOME = Object.freeze({
   title: `Welcome to ${GAME_TITLE}`,
   steps: Object.freeze([
     Object.freeze({ icon: 'deck', name: 'Draw', text: 'Take a card from the Draw pile or the Throw pile.' }),
@@ -414,7 +420,7 @@ export const WELCOME = Object.freeze({
   tutorial: 'New here? The <b>tutorial</b> takes about 4 minutes, with a glow showing where to tap.',
 });
 
-export const HOME = Object.freeze({
+const EN_HOME = Object.freeze({
   word: 'home',
   Word: 'Home',
   /** the tile card and captions */
@@ -433,7 +439,7 @@ export const HOME = Object.freeze({
 });
 
 /** v0.7: the only combo, "Bloom", in one place. */
-export const BLOOM = Object.freeze({
+const EN_BLOOM = Object.freeze({
   Name: 'Bloom',
   name: 'bloom',
   /** the move button: "Bloom 3 tiles" / "Bloom 4 tiles" */
@@ -462,7 +468,7 @@ export const BLOOM = Object.freeze({
 });
 
 /** Player-facing Bomb words. Engine actions stay `PlayFruit` for compatibility. */
-export const FRUIT = Object.freeze({
+const EN_FRUIT = Object.freeze({
   /** "Bomb" */
   card: 'Bomb',
   /** "Bombs" */
@@ -499,7 +505,7 @@ export const FRUIT = Object.freeze({
 });
 
 /** Two Bombs together: target + six neighbours. Extra action like Bloom (does not use Grow). */
-export const BLAST = Object.freeze({
+const EN_BLAST = Object.freeze({
   Name: 'Blast',
   name: 'blast',
   howto: ' Two Bombs can <b>Blast</b> together: clear an enemy tile and its six neighbours (homes are safe). Blast is an extra play, like Bloom — it does not use your Grow.',
@@ -510,7 +516,7 @@ export const BLAST = Object.freeze({
 });
 
 /** The test copy's step guidance: the plate on the map when a step starts (at most ~24 letters). */
-export const STEP_CUE = Object.freeze({
+const EN_STEP_CUE = Object.freeze({
   draw: 'Draw a card',
   grow: 'Play a card',
   throw: 'Throw one card',
@@ -525,7 +531,7 @@ export const STEP_CUE = Object.freeze({
  * state (the terrain, the phase, the legal moves) — never a second rule book. Sentence case; the
  * plate uppercases it.
  */
-export const TAP_WHY = Object.freeze({
+const EN_TAP_WHY = Object.freeze({
   draw: 'Draw a card first',
   rock: 'Blocked by rock',
   connect: 'Connect to your tree',
@@ -555,7 +561,7 @@ const RECAP: Readonly<Record<number, string>> = Object.freeze({
  * in the game's own voice: an LED title (≤ 12 characters) and ONE line under it. They name the next
  * touch, never the whole rule book, and they never say "tutorial".
  */
-export const ONBOARD = Object.freeze({
+const EN_ONBOARD = Object.freeze({
   /**
    * The objective, said before anything else. Beta feedback (2026-10-17): players could not tell
    * what winning looked like, even after playing. Levels 1 and 2 spend their opening draw on it —
@@ -619,7 +625,7 @@ export const ONBOARD = Object.freeze({
 /** FUTASAKU 0.5 menu + Match Intel labels. One place to rename the single tutorial entry
  *  and the two Match Intel tabs. The moves reference text itself lives in SPROUT / BLOOM /
  *  FRUIT / BLAST and HOME above (the same shared rule words the game uses). */
-export const HELP = Object.freeze({
+const EN_HELP = Object.freeze({
   /** the only tutorial entry on the main menu */
   tutorial: 'Tutorial',
   /** Match Intel tab 1 — what happened in this match */
@@ -636,7 +642,7 @@ export const HELP = Object.freeze({
  *  words: the bottom row's LOG IN (or the player's name) beside Settings (owner brief, 2026-10-21),
  *  and PLAY holding exactly LEVEL <n> / Play online / Practice match (LEVEL leads the column since
  *  the owner's 2026-10-20 decision). */
-export const MENU = Object.freeze({
+const EN_MENU = Object.freeze({
   /** The sign-in key, now the LEFT key of the menu's bottom row (owner brief, 2026-10-21). It reads
    *  this only while signed out; a signed-in player's key carries their name instead. */
   login: 'LOG IN',
@@ -668,7 +674,7 @@ export const MENU = Object.freeze({
 });
 
 /** Tutorial Pro window copy — one place for every player-facing tutorial line. */
-export const TUTORIAL = Object.freeze({
+const EN_TUTORIAL = Object.freeze({
   showMe: 'Show me',
   skip: 'Skip',
   previous: 'Previous',
@@ -727,7 +733,7 @@ export const TUTORIAL = Object.freeze({
  * (iOS Safari especially). Promise only what is true today — no notifications, nothing about
  * accounts — so these words still read correctly once sign-in ships.
  */
-export const INSTALL = Object.freeze({
+const EN_INSTALL = Object.freeze({
   title: 'Grow FUTASAKU on your home screen',
   why: Object.freeze([
     'Opens full-screen — straight in, no browser bars',
@@ -775,7 +781,7 @@ export const INSTALL = Object.freeze({
  * Live duels (test channel only, `web/src/online/live/`). Two players who share an online match
  * switch the SAME match to a short per-turn clock. Nothing about the board or the rules changes.
  */
-export const LIVE = Object.freeze({
+const EN_LIVE = Object.freeze({
   // Owner's rename, 2026-10-14: the mode is "Real time" everywhere a player can read it. The
   // internal identifiers (LIVE_TURN_MS, the `live` mode id, DB columns, file names) stay.
   goLive: 'Real time',
@@ -844,7 +850,7 @@ export const LIVE = Object.freeze({
  * Beta feedback (web/src/feedback/): "Report a problem" (pause menu and Settings) and the tester
  * guide at futasaku.com/#beta. Plain words; promise only what is true.
  */
-export const FEEDBACK = Object.freeze({
+const EN_FEEDBACK = Object.freeze({
   open: 'Report a problem',
   title: 'Report a problem',
   prompt: 'What happened? What did you expect?',
@@ -867,7 +873,7 @@ export const FEEDBACK = Object.freeze({
 });
 
 /** The one-page tester guide (futasaku.com/#beta). Each section: a heading and a few lines. */
-export const BETA_GUIDE = Object.freeze({
+const EN_BETA_GUIDE = Object.freeze({
   title: 'Welcome, tester',
   intro: 'Thank you for helping test FUTASAKU. This page has everything you need — it takes two minutes.',
   sections: Object.freeze([
@@ -919,7 +925,7 @@ export const BETA_GUIDE = Object.freeze({
  * Accessibility rule, locked by that test: Reduce motion and Large text must stay OUTSIDE every
  * group. For some players they are the difference between playable and not.
  */
-export const SETTINGS = Object.freeze({
+const EN_SETTINGS = Object.freeze({
   title: 'Settings',
   lookHeading: 'Look',
   colours: 'Colours',
@@ -954,7 +960,7 @@ export const SETTINGS = Object.freeze({
 });
 
 /** Accounts: "Continue with Google" (web/src/accounts/, docs/ACCOUNTS.md). */
-export const ACCOUNT = Object.freeze({
+const EN_ACCOUNT = Object.freeze({
   continueGoogle: 'Continue with Google',
   playAsGuest: 'Play as guest',
   welcomeTitle: 'Keep your games',
@@ -1005,7 +1011,7 @@ export const ACCOUNT = Object.freeze({
  * press. The words are here so a later rename is one line; the VALUES are never invented — an
  * unknown number is an em dash, never a 0.
  */
-export const PROFILE = Object.freeze({
+const EN_PROFILE = Object.freeze({
   title: 'Profile',
   /** The account key's spoken label while signed in; the name is part of the label. */
   open: (name: string): string => `${name}. Your profile`,
@@ -1028,7 +1034,7 @@ export const PROFILE = Object.freeze({
  * line here is checked against the code in docs/ACCOUNTS.md ("Privacy policy — where each line comes
  * from"). Change the code, change this, change `updated`.
  */
-export const PRIVACY = Object.freeze({
+const EN_PRIVACY = Object.freeze({
   title: 'Privacy',
   updated: 'Last updated 15 October 2026',
   intro:
@@ -1108,7 +1114,7 @@ export const PRIVACY = Object.freeze({
  * NAMES are level data (`src/campaign/levels.ts`), exactly as the tutorial's lesson lines are.
  * The copy stays in the game's own voice and promises nothing the game does not do.
  */
-export const CAMPAIGN = Object.freeze({
+const EN_CAMPAIGN = Object.freeze({
   /** the main menu entry that opens the campaign */
   title: 'Campaign',
   /** the main menu entry that keeps the old difficulty picker */
@@ -1210,7 +1216,7 @@ export const CAMPAIGN = Object.freeze({
 // "set" or "run"; no tile colours. Scoring words follow SPEC ("Ending the game").
 // docs/LESSON-SCRIPTS.md holds the same text beat by beat; web/tests/lesson-words.test.ts pins both.
 // ======================================================================================
-export const LESSON = Object.freeze({
+const EN_LESSON = Object.freeze({
   // ---- the display: what to do now (never more than three words) ----
   // Owner, 2026-10-20: the LED is small and read at a glance, so the action is at most three
   // words ("TAP THE DRAW PILE" -> "TAP DRAW PILE"). The game's own names stay: DRAW PILE and
@@ -1292,3 +1298,37 @@ export const LESSON = Object.freeze({
   bloomMatch: 'SAME NUMBER, OR COUNTING UP',
   theirTurnNow: 'THEIR TURN',
 });
+
+// ======================================================================================
+// Localised views
+//
+// The English objects above are the canonical source. Each export below is a thin read-through
+// proxy keyed by the group's name (`online.playOnline`, `lesson.tapDraw`), so every existing call
+// site keeps working and picks up the active locale at read time. Missing keys fall back to English.
+// ======================================================================================
+export const SPROUT = localized('sprout', EN_SPROUT);
+export const ONLINE = localized('online', EN_ONLINE);
+export const HEADER = localized('header', EN_HEADER);
+export const RESULT = localized('result', EN_RESULT);
+export const PILES = localized('piles', EN_PILES);
+export const WELCOME = localized('welcome', EN_WELCOME);
+export const HOME = localized('home', EN_HOME);
+export const BLOOM = localized('bloom', EN_BLOOM);
+export const FRUIT = localized('fruit', EN_FRUIT);
+export const BLAST = localized('blast', EN_BLAST);
+export const STEP_CUE = localized('stepCue', EN_STEP_CUE);
+export const TAP_WHY = localized('tapWhy', EN_TAP_WHY);
+export const ONBOARD = localized('onboard', EN_ONBOARD);
+export const HELP = localized('help', EN_HELP);
+export const MENU = localized('menu', EN_MENU);
+export const TUTORIAL = localized('tutorial', EN_TUTORIAL);
+export const INSTALL = localized('install', EN_INSTALL);
+export const LIVE = localized('live', EN_LIVE);
+export const FEEDBACK = localized('feedback', EN_FEEDBACK);
+export const BETA_GUIDE = localized('betaGuide', EN_BETA_GUIDE);
+export const SETTINGS = localized('settings', EN_SETTINGS);
+export const ACCOUNT = localized('account', EN_ACCOUNT);
+export const PROFILE = localized('profile', EN_PROFILE);
+export const PRIVACY = localized('privacy', EN_PRIVACY);
+export const CAMPAIGN = localized('campaign', EN_CAMPAIGN);
+export const LESSON = localized('lesson', EN_LESSON);

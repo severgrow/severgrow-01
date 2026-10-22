@@ -1,3 +1,4 @@
+import { t } from '../../../src/i18n/index.js';
 // The test copy's smart camera: which part of the map the board shows. It only moves the board's
 // SVG viewBox (the view, in board units), so everything that finds hexes through the board's
 // screen matrix (taps, painting a Bloom, highlights, ghosts, tile cards, the idle tip, badges)
@@ -215,7 +216,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   const whole = () => !!view && !!base && view.w >= base.w - 0.5 && winOf(view).h >= base.h - 0.5;
   const syncWholeAction = (available: boolean) => {
     const hidden = !available;
-    const label = wholeOn ? 'Back to play' : 'Whole map';
+    const label = wholeOn ? 'Back to play' : t('ui.camera.wholeMap', 'Whole map');
     const changed = pill.hidden !== hidden || pill.textContent !== label;
     pill.hidden = hidden;
     pill.textContent = label;
@@ -287,7 +288,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
       b.style.left = `${(pt.x - wr.left).toFixed(1)}px`;
       b.style.top = `${(pt.y - wr.top).toFixed(1)}px`;
       b.style.setProperty('--a', `${((a * 180) / Math.PI).toFixed(1)}deg`);
-      b.setAttribute('aria-label', `${g.length} ${owner === input.me ? 'of your' : "of the opponent's"} tiles this way`);
+      b.setAttribute('aria-label', t('ui.camera.tilesThisWay', '{n} {who} tiles this way', { n: g.length, who: owner === input.me ? t('ui.camera.yours', 'of your') : t('ui.camera.opponents', "of the opponent's") }));
       b.innerHTML = `<i aria-hidden="true"></i><span>${g.length}</span>`;
       b.addEventListener('click', (e) => {
         e.stopPropagation();

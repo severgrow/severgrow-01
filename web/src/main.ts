@@ -1,5 +1,7 @@
 // first: the release channel (the test copy keeps its own storage)
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
+import { initI18n } from './i18n/boot.js';
+import { t, tPlural } from '../../src/i18n/index.js';
 import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
 import { runRematch } from './online/rematch.js';
 // Futasaku in the browser. You (player 1) against the computer. All rules come from the
@@ -152,7 +154,7 @@ import { cancelStarterRitual, isStarterRitualPlaying, playStarterRitual } from '
 import { offlineRitualKey, onlineRitualKey, starterRitualView } from './logic/starter-ritual.js';
 import type { StarterRitualView } from './logic/starter-ritual.js';
 import { previewMove } from './logic/preview.js';
-import { STUCK_MS, hintFor, hintWeight, isRoutineHint } from './logic/hint.js';
+import { STUCK_MS, hintFor, hintWeight } from './logic/hint.js';
 import type { Hint, HintCtx } from './logic/hint.js';
 import { CONFIRM_MODES, forecastMove, ghostLinks, needsConfirm, riskLines } from './logic/forecast.js';
 import { hapticFor, settleFor, undoPitches } from './logic/feedback.js';
@@ -210,7 +212,7 @@ import { pulseLandmark } from './ui/landmarks.js';
 import { debugLines, isDebug } from './logic/debug.js';
 import { NOTES_KEY, emptyNotes, noteEvent, notesSummary } from './logic/playnotes.js';
 import type { NoteEvent, Notes } from './logic/playnotes.js';
-import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
+import { nothingToPlay, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
 // The finish card's leading action per mode (online rematch / next level / try again), decided in
 // one pure place so the whole matrix is unit-tested (owner direction, 2026-10-16).
 import { finishLead } from './logic/finish-actions.js';
@@ -234,6 +236,27 @@ if (DESIGN_MODE) document.documentElement.classList.add('design-v2');
 // ---------- small helpers ----------
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+// Language comes first: <html lang>, the saved override and the static copy all settle before
+// any screen is laid out, so the first paint is already in the player's language.
+await initI18n();
+// A language switch redraws the copy the active screen owns. Game state is untouched: no match is
+// restarted, no move is undone, and nothing is replayed.
+window.addEventListener('futasaku:locale', () => {
+  layoutMenu(syncMenuResume());
+  if (shownScreen === 'levels') renderLevelGrid();
+  if (shownScreen === 'campaign') renderCampaignScreen();
+  applySettingsCopy();
+  syncSettingsForm();
+  if (openSheet?.id === 'sheet-howto') renderHowTo();
+  if (openSheet?.id === 'sheet-history') renderHistory();
+  if (shownScreen === 'game') {
+    render();
+    if (!$('gameover').hidden) renderGameOver();
+  }
+  onlineLobbyCtl?.refreshCopy?.();
+  if (!getOnlineSession()) document.title = 'Futasaku';
+});
 const store = {
   get(key: string): string | null {
     try {
@@ -254,7 +277,6 @@ const store = {
   },
 };
 const systemReduce = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 // ---------- settings ----------
 
@@ -668,7 +690,7 @@ function syncMenuResume(): boolean {
   const btn = $('menu-continue');
   btn.hidden = !showContinue;
   btn.classList.remove('version-btn');
-  const continueLabel = resumeCampaign ? CAMPAIGN.resume : resumeClassic && saved!.coach?.tutorial ? 'Continue tutorial' : 'Continue';
+  const continueLabel = resumeCampaign ? CAMPAIGN.resume : resumeClassic && saved!.coach?.tutorial ? t('ui.menu.continueTutorial', 'Continue tutorial') : t('ui.common.continue', 'Continue');
   btn.textContent = continueLabel;
   btn.setAttribute('aria-label', continueLabel);
   return showContinue;
@@ -740,7 +762,7 @@ function layoutMenu(canContinue: boolean) {
     // only way in. The list still renders; the finish card's "Back to campaign" is where the campaign
     // hands off to it once no next level is left.
     $('menu-new').textContent = MENU.training;
-    $('menu-new').setAttribute('aria-label', `${MENU.training}. Play against the computer.`);
+    $('menu-new').setAttribute('aria-label', t('ui.menu.trainingAria', '{training}. Play against the computer.', { training: MENU.training }));
     setLead($('menu-new'), false);
     $('levels-heading').textContent = MENU.trainingTitle;
   } else {
@@ -748,11 +770,11 @@ function layoutMenu(canContinue: boolean) {
     // picker, and no submenu at all. Untouched, so their own suites need no change.
     $('menu-campaign').hidden = true;
     $('menu-new').hidden = false;
-    $('menu-new').textContent = 'Play offline';
-    $('menu-new').setAttribute('aria-label', 'Play offline');
+    $('menu-new').textContent = t('online.playOffline', 'Play offline');
+    $('menu-new').setAttribute('aria-label', t('online.playOffline', 'Play offline'));
     $('menu-new').classList.toggle('primary', !canContinue);
     $('menu-new').classList.toggle('ghost', canContinue);
-    $('levels-heading').textContent = 'Choose difficulty';
+    $('levels-heading').textContent = t('ui.menu.chooseDifficulty', 'Choose difficulty');
   }
   $('menu-tutorial').classList.remove('primary');
   $('menu-tutorial').classList.add('ghost');
@@ -997,9 +1019,10 @@ function renderLevelGrid() {
       b.className = `btn big level-tile difficulty-tile${selected === tier.id ? ' primary on' : ' ghost'}`;
       b.dataset.difficulty = tier.id;
       // Visible label is CAPS via CSS; keep the spoken name title-case.
-      const spoken = tier.label.charAt(0) + tier.label.slice(1).toLowerCase();
-      b.setAttribute('aria-label', `${spoken}. Play a practice match against the computer at this difficulty.`);
-      b.textContent = tier.label;
+      const label = t(`ui.difficulty.${tier.id}`, tier.label);
+      const spoken = label.charAt(0) + label.slice(1).toLowerCase();
+      b.setAttribute('aria-label', t('ui.menu.difficultyAria', '{difficulty}. Play a practice match against the computer at this difficulty.', { difficulty: spoken }));
+      b.textContent = label;
       b.addEventListener('click', () => {
         sound.unlock();
         const seed = randomSeed();
@@ -1127,28 +1150,28 @@ function syncSettingsForm() {
     input.checked = !!settings[input.dataset.setting as keyof Settings];
   }
   for (const input of document.querySelectorAll<HTMLInputElement>('[data-volume]')) input.value = String(settings[input.dataset.volume as 'sfxVolume' | 'musicVolume']);
-  segmented('speed-seg', SPEEDS, settings.speed, (sp) => (sp === 'skip' ? 'Off' : cap(sp)), (sp) => {
+  segmented('speed-seg', SPEEDS, settings.speed, (sp) => t(`ui.setting.speed.${sp}`, sp === 'skip' ? 'Off' : cap(sp)), (sp) => {
     settings.speed = sp;
     if (sp === 'skip') fastForward();
   });
-  segmented('palette-seg', THEME_IDS, settings.palette, (id) => THEMES[id].name, (id) => {
+  segmented('palette-seg', THEME_IDS, settings.palette, (id) => t(`ui.theme.${id}`, THEMES[id].name), (id) => {
     settings.palette = id;
     applyTheme();
   });
-  segmented('effects-seg', EFFECTS, settings.effects, cap, (e) => {
+  segmented('effects-seg', EFFECTS, settings.effects, (e) => t(`ui.setting.effects.${e}`, cap(e)), (e) => {
     settings.effects = e;
     sound.setEffects(e);
   });
-  segmented('detail-seg', DETAILS, settings.materialDetail, cap, (d) => {
+  segmented('detail-seg', DETAILS, settings.materialDetail, (d) => t(`ui.setting.detail.${d}`, cap(d)), (d) => {
     settings.materialDetail = d;
     applyTheme();
   });
-  segmented('glow-seg', GLOW_SETTINGS, settings.topGlow, cap, (g) => {
+  segmented('glow-seg', GLOW_SETTINGS, settings.topGlow, (g) => t(`ui.setting.glow.${g}`, cap(g)), (g) => {
     settings.topGlow = g;
     render();
   });
   // "Confirm moves" (overhaul item 8): Smart asks only for risky moves; low-risk moves play at once with Undo
-  segmented('confirm-seg', CONFIRM_MODES, settings.confirmPolicy, (x) => (x === 'smart' ? 'Smart' : cap(x)), (x) => {
+  segmented('confirm-seg', CONFIRM_MODES, settings.confirmPolicy, (x) => t(`ui.setting.confirm.${x}`, x === 'smart' ? 'Smart' : cap(x)), (x) => {
     settings.confirmPolicy = x;
   });
   renderSettingsLab();
@@ -1200,7 +1223,7 @@ function renderSettingsLab() {
     button.type = 'button';
     button.dataset.labCategory = category.id;
     button.setAttribute('aria-pressed', String(labCategory === category.id));
-    button.textContent = category.label;
+    button.textContent = t(`ui.lab.cat.${category.id}`, category.label);
     button.addEventListener('click', () => {
       labCategory = category.id;
       renderSettingsLab();
@@ -1239,7 +1262,7 @@ function renderSettingsLab() {
   }));
   const active = LAB_PRESETS.find((preset) => preset.id === labActiveId);
   const matching = active && Object.entries(active.values).every(([key, value]) => settings[key as keyof Settings] === value);
-  $('lab-status').textContent = !labBaseline ? 'Your current setup is untouched.' : matching ? `${active.title} is on. Your original setup is saved.` : 'Custom mix is on. Your original setup is saved.';
+  $('lab-status').textContent = !labBaseline ? t('ui.lab.untouched', 'Your current setup is untouched.') : matching ? t('ui.lab.active', '{name} is on. Your original setup is saved.', { name: active.title }) : t('ui.lab.custom', 'Custom mix is on. Your original setup is saved.');
   ($<HTMLButtonElement>('lab-restore')).disabled = !labBaseline;
 }
 
@@ -1399,12 +1422,12 @@ function fillMenuStatus() {
   turn.innerHTML = $('turn').innerHTML;
   // Which level this is, where a paused player looks for it. A normal offline game keeps "Paused".
   const title = document.getElementById('gm-title');
-  if (title) title.textContent = campaignLevel ? CAMPAIGN.levelLabel(campaignLevel.number) : 'Paused';
+  if (title) title.textContent = campaignLevel ? CAMPAIGN.levelLabel(campaignLevel.number) : t('ui.game.paused', 'Paused');
   // In a campaign level this button leaves for the level list, and the match is SAVED (Resume brings
   // it back), so it is not a "New game" and nothing is lost.
   const leave = document.getElementById('gm-new');
   if (leave) {
-    const words = campaignLevel ? CAMPAIGN.back : 'New game';
+    const words = campaignLevel ? CAMPAIGN.back : t('ui.game.newGame', 'New game');
     leave.textContent = words;
     leave.setAttribute('aria-label', words);
   }
@@ -1641,7 +1664,7 @@ async function runStarterRitual(view: StarterRitualView): Promise<void> {
     view,
     reduceMotion: settings.reduceMotion,
     tempo: settings.speed,
-    youLabel: 'You',
+    youLabel: t('online.scoreYou', 'You'),
     opponentLabel: OPP.label,
     deckTarget: drawPileRect,
   });
@@ -1728,7 +1751,7 @@ async function startGame(
   if (ticketId) store.set(TRAINING_REWARD_TICKET_KEY, JSON.stringify({ seed, id: ticketId }));
   else store.remove(TRAINING_REWARD_TICKET_KEY);
   seedRewardMessage = difficulty && onlineBuildEnabled() && !ticketId
-    ? 'Seed rewards unavailable for this match' : '';
+    ? t('ui.seeds.unavailable', 'Seed rewards unavailable for this match') : '';
   drawPileAnchorKey = '';
   watching = IS_TEST ? watch : null;
   thumbOverlap = 0;
@@ -1757,8 +1780,8 @@ async function startGame(
   const state: State = opening;
   log = [
     campaign
-      ? `${CAMPAIGN.started(campaign.number)}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`
-      : `New ${matchLabel({ campaign: null, difficulty, botLevel: level })} practice match. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
+      ? `${CAMPAIGN.started(campaign.number)}. ${opponentStarts ? t('ui.game.opponentFirst', '{opp} goes first.', { opp: OPP.label }) : t('ui.game.youFirst', 'You go first.')}`
+      : `${t('ui.game.newPracticeMatch', 'New {match} practice match.', { match: matchLabel({ campaign: null, difficulty, botLevel: level }) })} ${opponentStarts ? t('ui.game.opponentFirst', '{opp} goes first.', { opp: OPP.label }) : t('ui.game.youFirst', 'You go first.')}`,
   ];
   // A campaign level's opening is authored and deliberately skips the draw, exactly as before; a
   // normal offline match keeps the ritual. The board/session is prepared BEFORE the ritual so the
@@ -1957,7 +1980,7 @@ const TUTORIAL_VERSION = 3 as const;
 function startTutorial(chapter = 0, track = tutorialTrackFor(chapter)) {
   clearTutorialTimers();
   const state = tutorialChapter(chapter);
-  log = ['A small match, played to learn.'];
+  log = [t('ui.tutorial.learnMatch', 'A small match, played to learn.')];
   gameLevel = 7;
   gameDifficulty = null; // the tutorial is its own match, never one of the training tiers
   tipOpen = null;
@@ -1975,7 +1998,7 @@ function startTutorial(chapter = 0, track = tutorialTrackFor(chapter)) {
 
 /** The full tutorial ('core') — the one guided run the main menu starts from its top. */
 function startTutorialFromMenu() {
-  if (!$('menu-continue').hidden && !window.confirm('Start the tutorial? Your saved game will be replaced.')) return;
+  if (!$('menu-continue').hidden && !window.confirm(t('ui.menu.startTutorialConfirm', 'Start the tutorial? Your saved game will be replaced.'))) return;
   startTutorial(0, 'core');
 }
 
@@ -2342,7 +2365,7 @@ function continueGame() {
       return advanceTutorialChapter(chapter, tutorialTrackFor(chapter));
     }
   }
-  log = ['Welcome back.'];
+  log = [t('ui.tutorial.welcomeBack', 'Welcome back.')];
   watching = null;
   if (IS_TEST) {
     document.body.classList.remove('lab-watching');
@@ -2455,12 +2478,12 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
             : null;
         if (proof) {
           queueSeedProof(store, proof);
-          seedRewardMessage = 'Seeds pending verification';
+          seedRewardMessage = t('ui.seeds.pending', 'Seeds pending verification');
           const key = proof.kind === 'campaign' ? `campaign:${proof.levelId}` : `training:${proof.ticketId}`;
           void onlineLobbyCtl?.syncSeedRewards().then((results) => {
             const verified = results.find((entry) => entry.key === key)?.reward;
             if (!verified) return;
-            seedRewardMessage = verified.awarded ? `+${verified.awarded} Seeds` : 'Seed limit reached today';
+            seedRewardMessage = verified.awarded ? t('ui.seeds.awarded', '+{n} Seeds', { n: verified.awarded }) : t('ui.seeds.limit', 'Seed limit reached today');
             // The reward can land while the finish card is already up: the SAME line repaints in
             // place (no reflow), and the award gets its one moment here rather than a silent swap.
             if (!$('gameover').hidden) paintGoSeeds();
@@ -2490,8 +2513,8 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   // the opponent's turn starts: work it out now, so its pace is known when its turn is shown
   if (p.after.phase === 'DRAW' && p.after.turnPlayer === BOT) void planBotTurn(p.after).then((plan) => (botPlan = plan));
   save();
-  if (!p.before.deckFinal && p.after.deckFinal) smartCockpit?.event({message:p.after.deckFinal.remaining === 2 ? 'FINAL TURNS' : 'FINAL TURN',priority:75,duration:1500,mode:'amber'});
-  else if (p.before.deckFinal?.remaining === 2 && p.after.deckFinal?.remaining === 1) smartCockpit?.event({message:'LAST TURN',priority:75,duration:1500,mode:'amber'});
+  if (!p.before.deckFinal && p.after.deckFinal) smartCockpit?.event({message:p.after.deckFinal.remaining === 2 ? t('ui.led.finalTurns', 'FINAL TURNS') : t('ui.led.finalTurn', 'FINAL TURN'),priority:75,duration:1500,mode:'amber'});
+  else if (p.before.deckFinal?.remaining === 2 && p.after.deckFinal?.remaining === 1) smartCockpit?.event({message:t('ui.led.lastTurn', 'LAST TURN'),priority:75,duration:1500,mode:'amber'});
   render();
   void pump();
   scheduleBot();
@@ -3010,7 +3033,7 @@ function autoAdvance() {
   // v0.8: after a sprout or a Fruit card the turn was not empty: go on to the throw quietly
   if (!grewThisTurn()) {
     note({ t: 'empty', at: Date.now() });
-    caption(NOTHING_TO_PLAY, null, 'info');
+    caption(nothingToPlay(), null, 'info');
   }
   humanPlay(end);
 }
@@ -3781,7 +3804,7 @@ async function playStep(step: Step, my: number) {
     }
     case 'turn': {
       if (!show()) return;
-      announceTurn(step.player, step.player === HUMAN && step.final ? 'Your last turn' : undefined);
+      announceTurn(step.player, step.player === HUMAN && step.final ? t('ui.game.yourLastTurn', 'Your last turn') : undefined);
       // Only the now-active home answers, with one existing heartbeat; the other stays still.
       beatHome(step.player, my);
       // My turn starts: a soft glow passes over my hand.
@@ -5362,16 +5385,17 @@ function renderHud() {
   // the turn word; offline the pill says whose turn it is, and nothing else. The count was a
   // misleading upper bound (a match can end earlier by KO, an empty deck or a timeout).
   turn.innerHTML = over
-    ? '<b>Game over</b>'
+    ? `<b>${t('ui.game.gameOver', 'Game over')}</b>`
     : isOnlineDuel()
       ? ''
-      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>${currentMatchLabel()}</small>`;
+      : `<b>${st.turnPlayer === HUMAN ? (watching ? t('ui.game.greenTurn', 'Green turn (Level {level})', { level: watching.level }) : t('online.statusYourTurn', 'Your turn')) : thinking ? `${t('ui.game.opponentTurn', '{opp} turn', { opp: OPP.label })}<span class="dots"><i></i><i></i><i></i></span>` : t('ui.game.opponentTurn', '{opp} turn', { opp: OPP.label })}</b><small>${currentMatchLabel()}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
-  if (hintEl.dataset.text !== hint.text || hintEl.dataset.arrow !== String(hint.arrow)) {
+  if (hintEl.dataset.text !== hint.text || hintEl.dataset.arrow !== String(hint.arrow) || hintEl.dataset.routine !== String(!!hint.routine)) {
     hintEl.dataset.text = hint.text;
     hintEl.dataset.arrow = String(hint.arrow);
+    hintEl.dataset.routine = String(!!hint.routine);
     // Step 3 item 11: one calm line, no floating triangle
     hintEl.innerHTML = '<span class="hint-text"></span>';
     hintEl.querySelector('.hint-text')!.textContent = hint.text;
@@ -5394,9 +5418,10 @@ function updateHintWeight() {
   if (!session) return;
   const el = $('hint');
   const text = el.dataset.text ?? '';
+  void text;
   const mine = session.state.actor === HUMAN && session.state.phase !== 'GAME_OVER';
   const idle = mine ? Date.now() - lastInputAt : 0;
-  const w = hintWeight({ myTurns: Math.ceil(session.state.turnNumber / 2), idleMs: idle, routine: isRoutineHint(text) });
+  const w = hintWeight({ myTurns: Math.ceil(session.state.turnNumber / 2), idleMs: idle, routine: el.dataset.routine === '1' });
   el.classList.toggle('quiet', w === 'quiet');
   clearTimeout(stuckTimer);
   if (w === 'quiet' && mine) stuckTimer = window.setTimeout(updateHintWeight, Math.max(50, STUCK_MS - idle + 20));
@@ -5409,10 +5434,10 @@ const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnab
 function dockHint(v: View): Hint {
   if (!session) return { text: '', arrow: null };
   const h = hintFor(hintCtx(v));
-  if (IS_FUTA04 && session.presetMove?.t === 'Bloom') return { text: 'Tap a glowing hex to bloom', arrow: 'up' };
-  if (IS_FUTA04 && session.sel.card === null && session.sel.kind === null && (session.pending?.t === 'Bloom' || session.pending?.t === 'Sprout')) return { text: 'Pick a card or Bloom', arrow: 'down' };
+  if (IS_FUTA04 && session.presetMove?.t === 'Bloom') return { text: t('ui.hint.bloomTapHex', 'Tap a glowing hex to bloom'), arrow: 'up' };
+  if (IS_FUTA04 && session.sel.card === null && session.sel.kind === null && (session.pending?.t === 'Bloom' || session.pending?.t === 'Sprout')) return { text: t('ui.hint.pickCardOrBloom', 'Pick a card or Bloom'), arrow: 'down' };
   // the test copy: no Confirm box; a second tap on the card or the hex places the move
-  if (FEATURES.tapAgain && session.pending && h.text.startsWith('Confirm,')) return { ...h, text: 'Tap again to place it' };
+  if (FEATURES.tapAgain && session.pending && h.text.startsWith(t('ui.hint.confirmPrefix', 'Confirm'))) return { ...h, text: t('ui.hint.tapAgainPlace', 'Tap again to place it') };
   return h;
 }
 
@@ -5848,8 +5873,8 @@ function renderBoard(v: View, advice: Advice | null) {
     const icon = undoSlot.querySelector<HTMLElement>('.i');
     if (icon) { icon.dataset.icon = slotMode; icon.innerHTML = ICONS[slotMode]!; }
   }
-  undoSlot.setAttribute('aria-label', replayOk ? `Replay ${OPP.theirs} last turn` : 'Undo: take back your last move');
-  undoSlot.title = replayOk ? `Replay ${OPP.theirs} last turn` : 'Take back your last move (you can until you throw)';
+  undoSlot.setAttribute('aria-label', replayOk ? t('ui.game.replayLast', 'Replay {opp} last turn', { opp: OPP.theirs }) : t('ui.game.undoAria', 'Undo: take back your last move'));
+  undoSlot.title = replayOk ? t('ui.game.replayLast', 'Replay {opp} last turn', { opp: OPP.theirs }) : t('ui.game.undoTitle', 'Take back your last move (you can until you throw)');
   // Step 4: the homes (tree, volcano): idle life, a calm worried state and the "sides blocked"
   // ring in danger (or when tapped), smothered or withered after a Strangle. Public information.
   {
@@ -5902,31 +5927,37 @@ function renderTooltip(v: View) {
     return;
   }
   const key = inspectKey;
-  const t = v.board[key];
+  const tile = v.board[key];
   const terrain = v.terrain[key];
   const name = hexName(parseKey(key), v.config.boardRadius);
   const gold = terrain === 'rich';
   let html: string;
-  if (terrain === 'rock') html = `<b>${name} · Rock</b><span>Nothing can grow here.</span>`;
-  else if (!t) {
+  if (terrain === 'rock') html = `<b>${name} · ${t('ui.tooltip.rock', 'Rock')}</b><span>${t('ui.tooltip.rockLine', 'Nothing can grow here.')}</span>`;
+  else if (!tile) {
     const scar = IS_FUTA04 ? undefined : scars.find((s) => s.key === key);
-    const cut = scar ? `<span class="muted">${scar.owner === HUMAN ? 'Your' : OPP.Label} tile here was cut off ${scar.age === 0 ? 'this turn' : scar.age === 1 ? 'a turn ago' : 'two turns ago'}.</span>` : '';
-    html = `<b>${name} · Empty${gold ? ' gold hex' : ''}</b><span>A tile here scores ${gold ? 2 : 1}.</span>${cut}`;
+    const when = scar ? (scar.age === 0 ? t('ui.tooltip.thisTurn', 'this turn') : scar.age === 1 ? t('ui.tooltip.aTurnAgo', 'a turn ago') : t('ui.tooltip.twoTurnsAgo', 'two turns ago')) : '';
+    const cut = scar ? `<span class="muted">${scar.owner === HUMAN
+      ? t('ui.tooltip.cutOffMine', 'Your tile here was cut off {when}.', { when })
+      : t('ui.tooltip.cutOffTheirs', "Opponent's tile here was cut off {when}.", { when })}</span>` : '';
+    const title = gold ? t('ui.tooltip.emptyGold', 'Empty gold hex') : t('ui.tooltip.empty', 'Empty');
+    html = `<b>${name} · ${title}</b><span>${t('ui.tooltip.scores', 'A tile here scores {n}.', { n: gold ? 2 : 1 })}</span>${cut}`;
   }
   else {
-    const mine = t.owner === HUMAN;
-    const who = mine ? 'Your' : OPP.Label;
-    if (t.root) {
-      const sides = homeSides(v, t.owner);
+    const mine = tile.owner === HUMAN;
+    const who = mine ? t('ui.common.your', 'Your') : OPP.Label;
+    if (tile.root) {
+      const sides = homeSides(v, tile.owner);
       html = mine ? `<b>${HOME.mine}</b><span>${HOME.tapMine(sides.taken, sides.openSides)}</span>` : `<b>${HOME.theirs}</b><span>${HOME.tapTheirs(sides.taken, sides.openSides)}</span>`;
     }
     else {
       const loss = cutLoss(v, key).length;
-      const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be overgrown' : '';
-      const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
-      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} home. ${lose}</span>`;
+      const top = tile.strength >= v.config.maxRank ? t('ui.tooltip.topStrength', ' · top strength, can’t be overgrown') : '';
+      const lose = loss > 1
+        ? (mine ? t('ui.tooltip.ifLostYou', 'If lost, you lose {n} tiles.', { n: loss }) : t('ui.tooltip.ifLostOpp', 'If lost, {opp} loses {n} tiles.', { opp: OPP.the, n: loss }))
+        : t('ui.tooltip.cutsNothing', 'Losing it cuts nothing else.');
+      html = `<b>${name} · ${who} ${t('ui.tooltip.tile', 'tile')}</b><span>${t('ui.tooltip.strength', 'Strength {n}', { n: tile.strength })}${top}${gold ? t('ui.tooltip.goldScores', ' · gold: scores 2') : ''}</span><span>${mine ? t('ui.tooltip.joinedYour', 'Joined to your home.') : t('ui.tooltip.joinedTheir', 'Joined to their home.')} ${lose}</span>`;
       // the test copy: the opponent's weak link (was the "their weak links" toggle), on their card only
-      if (!FEATURES.weakTools && !mine && opportunities(v, { anyReach: true, minLoss: 2 }).some((o) => o.key === key)) html += `<span class="tc-note">${OPP.Label} weak link: you can reach it now.</span>`;
+      if (!FEATURES.weakTools && !mine && opportunities(v, { anyReach: true, minLoss: 2 }).some((o) => o.key === key)) html += `<span class="tc-note">${t('ui.tooltip.weakLink', '{opp} weak link: you can reach it now.', { opp: OPP.Label })}</span>`;
     }
   }
   // v0.6: in my Grow step, an opponent tile a Fruit card can remove offers "Use Fruit card"
@@ -5938,7 +5969,7 @@ function renderTooltip(v: View) {
   const p = boardWrapPoint(key);
   const wrap = $('board-wrap').getBoundingClientRect();
   tip.setAttribute('role', cardPinned ? 'dialog' : 'tooltip');
-  tip.setAttribute('aria-label', `Tile card: ${name}`);
+  tip.setAttribute('aria-label', t('ui.game.tileCardAria', 'Tile card: {hex}', { hex: name }));
   const w = Math.min(250, wrap.width - 16);
   tip.style.width = `${w}px`;
   tip.style.left = `${Math.min(Math.max(p.x - w / 2, 8), wrap.width - w - 8)}px`;
@@ -5986,11 +6017,11 @@ function renderControls(v: View, advice: Advice | null) {
   if (!myTurn() || busy()) {
     if (session.state.phase === 'GAME_OVER' && !busy() && gameOverDismissed) {
       moves.append(
-        button('Results', 'ghost', () => {
+        button(t('ui.game.results', 'Results'), 'ghost', () => {
           gameOverDismissed = false;
           render();
         }),
-        button('Rematch', 'primary', () => startGame(randomSeed())),
+        button(ONLINE.rematch, 'primary', () => startGame(randomSeed())),
       );
     }
     return;
@@ -6011,8 +6042,9 @@ function renderControls(v: View, advice: Advice | null) {
     note.className = 'note empty-reason';
     // positioning pass: one short line in the centre column; the full reason on hover and for
     // screen readers
-    note.textContent = NOTHING_TO_PLAY;
-    note.title = `${NOTHING_TO_PLAY}. ${emptyReason(v.hand)}`;
+    const empty = nothingToPlay();
+    note.textContent = empty;
+    note.title = `${empty}. ${emptyReason(v.hand)}`;
     note.setAttribute('aria-label', note.title);
     moves.append(note, button('Continue', 'primary empty-continue', () => humanPlay(end), 'Continue to the Throw step'));
   } else if (v.phase === 'ACT') {
@@ -6096,35 +6128,35 @@ function renderControls(v: View, advice: Advice | null) {
     const end = legal.find((a) => a.t === 'EndAct');
     const bloomStill = IS_FUTA04 && legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
     const skipLabel = v.hand.length > 0
-      ? IS_FUTA04 && grow.throwButton && bloomStill ? 'skip?' : IS_FUTA04 ? 'Skip' : 'Throw a card'
-      : 'End turn';
+      ? IS_FUTA04 && grow.throwButton && bloomStill ? t('ui.game.skipQuestion', 'skip?') : IS_FUTA04 ? t('ui.game.skip', 'Skip') : t('ui.game.throwCard', 'Throw a card')
+      : t('ui.game.endTurn', 'End turn');
     // Tutorial: hide Skip during Grow teaching — show it again on EndAct steps (STAY JOINED, etc.).
     const tutLesson = coach.tutorial ? tutorialLesson(coach.tutorial.chapter, coach.tutorial.step) : null;
     const hideTutSkip = !!tutLesson && tutLesson.action !== 'EndAct' && tutLesson.action !== 'FreeTurn';
-    if (end && !pending && grow.throwButton && !hideTutSkip) moves.append(button(skipLabel, `end ${anySel ? 'ghost' : 'primary'}${IS_FUTA04 && v.hand.length > 0 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' || tutLesson?.action === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${skipLabel}: skip bloom and throw a card`));
+    if (end && !pending && grow.throwButton && !hideTutSkip) moves.append(button(skipLabel, `end ${anySel ? 'ghost' : 'primary'}${IS_FUTA04 && v.hand.length > 0 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' || tutLesson?.action === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), t('ui.game.skipAria', '{label}: skip bloom and throw a card', { label: skipLabel })));
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
-    if (end && !pending && grow.skipLink && !anySel && !hideTutSkip) moves.append(button(IS_FUTA04 ? 'Skip' : SPROUT.skip, `link end skip${IS_FUTA04 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' || tutLesson?.action === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
+    if (end && !pending && grow.skipLink && !anySel && !hideTutSkip) moves.append(button(IS_FUTA04 ? t('ui.game.skip', 'Skip') : SPROUT.skip, `link end skip${IS_FUTA04 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' || tutLesson?.action === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
   } else if (v.phase === 'DISCARD') {
     // (the hint line says "Tap a card to throw it")
   } else {
     for (const a of legal) {
       if (isBoardAction(a) || a.t === 'Discard') continue;
-      moves.append(button(a.t === 'Continue' ? 'End turn' : a.t === 'Knock' ? 'Knock' : a.t, 'primary', () => humanPlay(a)));
+      moves.append(button(a.t === 'Continue' ? t('ui.game.endTurn', 'End turn') : a.t === 'Knock' ? t('ui.game.knock', 'Knock') : a.t, 'primary', () => humanPlay(a)));
     }
   }
   if (IS_FUTA04 && sel.kind?.startsWith('bloom-') && !coach.tutorial) {
     const end = legal.find(a => a.t === 'EndAct');
-    if (end && !moves.querySelector('.end')) moves.append(button(grewThisTurn() ? 'skip?' : 'Skip', 'end futa04-skip', () => humanPlay(end), 'Skip bloom and throw a card'));
+    if (end && !moves.querySelector('.end')) moves.append(button(grewThisTurn() ? t('ui.game.skipQuestion', 'skip?') : t('ui.game.skip', 'Skip'), 'end futa04-skip', () => humanPlay(end), t('ui.game.skipAria', '{label}: skip bloom and throw a card', { label: t('ui.game.skip', 'Skip') })));
   }
   // Tutorial explanation steps: the cockpit's » doubles as Next (the cockpit mirrors #moves)
   const nextLesson = coach.tutorial ? tutorialLesson(coach.tutorial.chapter, coach.tutorial.step) : null;
-  if (nextLesson?.action === 'Next') moves.append(button('Next', 'end futa04-skip tutorial-next', () => tutorialNext(), 'Next'));
+  if (nextLesson?.action === 'Next') moves.append(button(t('ui.game.next', 'Next'), 'end futa04-skip tutorial-next', () => tutorialNext(), t('ui.game.next', 'Next')));
   const dc = drawCombo();
   if (dc && !pending) {
-    if (draw.shape.length > 0 || draw.suggested) moves.append(button('Clear', 'ghost draw-clear', () => cancelDraw(), 'Clear the shape'));
+    if (draw.shape.length > 0 || draw.suggested) moves.append(button(t('ui.game.clear', 'Clear'), 'ghost draw-clear', () => cancelDraw(), t('ui.game.clearAria', 'Clear the shape')));
     // a run: which end gets the lowest number (a set has one number: no toggle)
     if (dc.run) {
-      const b = button('Reverse', `ghost draw-reverse${draw.reverse ? ' on' : ''}`, () => toggleReverse(), 'Reverse the numbers: highest on the first hex');
+      const b = button(t('ui.game.reverse', 'Reverse'), `ghost draw-reverse${draw.reverse ? ' on' : ''}`, () => toggleReverse(), t('ui.game.reverseAria', 'Reverse the numbers: highest on the first hex'));
       b.setAttribute('aria-pressed', String(draw.reverse));
       moves.append(b);
     }
@@ -6145,7 +6177,7 @@ function renderControls(v: View, advice: Advice | null) {
     moves.append(button('◀', 'ghost list-prev', () => step(-1), 'Previous placement'));
     const lab = document.createElement('span');
     lab.className = 'list-pos';
-    lab.textContent = pending ? `Placement ${i + 1} of ${all.length}` : `${all.length} placements`;
+    lab.textContent = pending ? t('ui.game.placementOf', 'Placement {i} of {n}', { i: i + 1, n: all.length }) : t('ui.game.placements', '{n} placements', { n: all.length });
     moves.append(lab);
     moves.append(button('▶', 'ghost list-next', () => step(1), 'Next placement'));
   }
@@ -6167,8 +6199,8 @@ function renderControls(v: View, advice: Advice | null) {
   }
   if (pending) {
     const pv = previewMove(v, pending);
-    $('confirm-chip').textContent = pv ? pv.chip : pending.t === 'Discard' ? `Discard ${cardName(v.hand.find((c) => c.id === pending.card)!)}` : '';
-    $('confirm-play').textContent = pending.t === 'Discard' && discardEndsTurn(v) ? 'Discard & end turn' : pending.t === 'Discard' ? 'Discard' : 'Confirm';
+    $('confirm-chip').textContent = pv ? pv.chip : pending.t === 'Discard' ? t('ui.game.discardCard', 'Discard {card}', { card: cardName(v.hand.find((c) => c.id === pending.card)!) }) : '';
+    $('confirm-play').textContent = pending.t === 'Discard' && discardEndsTurn(v) ? t('ui.game.discardEnd', 'Discard & end turn') : pending.t === 'Discard' ? t('ui.game.discard', 'Discard') : t('ui.game.confirm', 'Confirm');
     // Overhaul item 8: the risks that made this move ask (icons + short lines); else the old note
     const risks = (() => {
       const f = forecastMove(v, pending);
@@ -6641,7 +6673,7 @@ function renderHand(v: View, advice: Advice | null) {
     b.classList.toggle('tutorial-target-card', tutorialCard === c.id);
     if (tutorialCard === c.id) b.style.zIndex = '100';
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
-    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}${IS_FUTA04 && session!.pending?.t === 'Discard' && session!.pending.card === c.id ? ', tap again to throw and finish your turn' : ''}`);
+    b.setAttribute('aria-label', `${cardName(c)}${playable ? t('ui.card.canPlay', ', can be played') : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? t('ui.card.picked', ', picked') : ''}${IS_FUTA04 && session!.pending?.t === 'Discard' && session!.pending.card === c.id ? t('ui.card.tapAgainThrow', ', tap again to throw and finish your turn') : ''}`);
     b.setAttribute('aria-pressed', String(lifted));
     const g = combos.get(c.id);
     if (g === undefined) delete b.dataset.combo;
@@ -6691,7 +6723,10 @@ function renderHand(v: View, advice: Advice | null) {
   const sortBtn = $('hand-sort');
   sortBtn.hidden = false;
   (sortBtn as HTMLButtonElement).disabled = n < 2;
-  const sortWords = `Sorted ${settings.handSort === 'suit' ? 'by suit' : 'by number'}. Tap to sort ${settings.handSort === 'suit' ? 'by number' : 'by suit'}.`;
+  const bySuit = settings.handSort === 'suit';
+  const sortWords = bySuit
+    ? t('ui.hand.sortSuit', 'Sorted by suit. Tap to sort by number.')
+    : t('ui.hand.sortNumber', 'Sorted by number. Tap to sort by suit.');
   sortBtn.setAttribute('aria-label', sortWords);
   sortBtn.title = sortWords;
   hand.style.setProperty('--n', String(n));
@@ -6718,14 +6753,14 @@ let deckFull = 1;
  */
 function paintDiscardTop() {
   const top = shownDiscard.at(-1);
-  const t = $('discard-top');
-  t.className = `pile-top${top ? ` card ${suitClass(top)}` : ' empty'}`;
+  const topEl = $('discard-top');
+  topEl.className = `pile-top${top ? ` card ${suitClass(top)}` : ' empty'}`;
   // Keep the physical top card mounted while its identity is unchanged.
   // Replacing it on every unrelated render restarted styling and DOM observers.
   const faceKey = top ? `${top.id}:${top.suit}:${top.rank}` : '';
-  if (t.dataset.faceKey !== faceKey) {
-    t.innerHTML = top ? cardFace(top) : '';
-    t.dataset.faceKey = faceKey;
+  if (topEl.dataset.faceKey !== faceKey) {
+    topEl.innerHTML = top ? cardFace(top) : '';
+    topEl.dataset.faceKey = faceKey;
   }
   if (IS_FUTA04) renderPileMeter($('discard-count'), shownDiscard.length);
   else $('discard-count').textContent = String(shownDiscard.length);
@@ -6774,8 +6809,9 @@ function renderPiles(v: View, advice: Advice | null) {
     const createsBloom = !!before && !!top && bloomGroups([...v.hand, top]).some(g => !before.has(key(g.cards)));
     $('discard').classList.toggle('futa04-bloom-draw', looks.discard.enabled && createsBloom && bloomsShown());
   }
-  $('deck').setAttribute('aria-label', `${PILES.draw}: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
-  $('discard').setAttribute('aria-label', top ? `${PILES.discard}: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : tossReady ? ' Tap to throw your card.' : ''}` : `${PILES.discard}: empty${tossReady ? '. Tap to throw your card.' : ''}`);
+  const cards = (n: number) => tPlural('ui.count.cards', { one: '{n} card', other: '{n} cards' }, n);
+  $('deck').setAttribute('aria-label', `${PILES.draw}: ${cards(v.deckCount)}.${looks.deck.enabled ? t('ui.game.tapDraw', ' Tap to draw.') : ''}`);
+  $('discard').setAttribute('aria-label', top ? `${PILES.discard}: ${cards(v.discard.length)}, ${t('ui.game.onTop', '{card} on top.', { card: cardName(top) })}${looks.discard.enabled ? t('ui.game.tapTake', ' Tap to take it.') : tossReady ? t('ui.game.tapThrow', ' Tap to throw your card.') : ''}` : `${PILES.discard}: ${t('ui.common.empty', 'empty')}${tossReady ? t('ui.game.tapThrowDot', '. Tap to throw your card.') : ''}`);
 }
 
 function renderCoach(advice: Advice | null) {
@@ -6785,7 +6821,7 @@ function renderCoach(advice: Advice | null) {
   $('coach-advice').hidden = !advice;
   $('coach-summary').hidden = !showSummary || !!advice;
   if (advice) {
-    $('coach-step').textContent = `${coach.step + 1} of ${COACH_STEPS}`;
+    $('coach-step').textContent = t('ui.game.coachStep', '{i} of {n}', { i: coach.step + 1, n: COACH_STEPS });
     $('coach-suggested').textContent = advice.suggested;
     $('coach-why').textContent = advice.why.join(' ');
     const tip = $('coach-tip');
@@ -6793,8 +6829,8 @@ function renderCoach(advice: Advice | null) {
     tip.textContent = advice.tip ? advice.tip.text : '';
     $('coach-why').hidden = !coachWhyOpen;
     $('coach-why-btn').setAttribute('aria-expanded', String(coachWhyOpen));
-    $('coach-why-btn').textContent = coachWhyOpen ? 'Less' : 'Why?';
-    $('coach-show').textContent = guideGoal ? 'Hide arrow' : 'Show me where';
+    $('coach-why-btn').textContent = coachWhyOpen ? RESULT.less : t('ui.game.why', 'Why?');
+    $('coach-show').textContent = guideGoal ? t('ui.game.hideArrow', 'Hide arrow') : t('ui.game.showMeWhere', 'Show me where');
     $('coach-show').setAttribute('aria-pressed', String(!!guideGoal));
   } else if (showSummary && session) {
     $('coach-step').textContent = '';
@@ -6989,7 +7025,7 @@ function renderGameOver() {
   // one. A loss and a plain offline game keep the retry/again words they always had. Which one leads
   // is decided in one pure place (`finishLead`), and the next level is read from the level DATA.
   const lead = finishLead({ online: false, campaign: !!campaign, won, hasNext: !!next });
-  const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel : lead === 'back-to-campaign' ? CAMPAIGN.back : won ? 'Play again' : 'Try again';
+  const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel : lead === 'back-to-campaign' ? CAMPAIGN.back : won ? t('ui.game.playAgain', 'Play again') : t('ui.game.tryAgain', 'Try again');
   $('go-rematch').textContent = leadWord;
   $('go-rematch').setAttribute('aria-label', leadWord);
   // Lessons pay no Seeds in this preview: no Seeds line at all on their finish card.
@@ -6999,7 +7035,7 @@ function renderGameOver() {
   // On the last level the primary already IS "Back to campaign": one action, not two that do the
   // same thing (the online rematch keeps its own secondary, untouched).
   other.hidden = lead === 'back-to-campaign';
-  const otherWord = campaign ? CAMPAIGN.back : 'Change difficulty';
+  const otherWord = campaign ? CAMPAIGN.back : t('ui.game.changeDifficulty', 'Change difficulty');
   other.textContent = otherWord;
   other.setAttribute('aria-label', otherWord);
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
@@ -7378,7 +7414,7 @@ function renderDrawInfo(c: Combo, g: DrawGhost | null) {
   box.textContent = text;
   box.hidden = !text;
   const n = g?.tiles.length ?? 0;
-  $('draw-live').textContent = g?.action ? `${n} of ${c.n} hexes chosen. ${previewMove(v, g.action)?.chip ?? ''}` : n ? `${n} of ${c.n} hexes chosen` : '';
+  $('draw-live').textContent = g?.action ? t('ui.game.hexesChosenWith', '{n} of {total} hexes chosen. {chip}', { n, total: c.n, chip: previewMove(v, g.action)?.chip ?? '' }) : n ? t('ui.game.hexesChosen', '{n} of {total} hexes chosen', { n, total: c.n }) : '';
 }
 
 /** A soft rising tick and a light haptic for each hex added (Sound and Vibration toggles). */
@@ -7443,7 +7479,7 @@ function drawTap(c: Combo, key: string, type: string) {
       // The desktop shape grows toward the pointer, so hovering rock can still suggest a
       // legal nearby clump. Futa04 finishes only when the chosen hex belongs to that clump.
       if (IS_FUTA04 && !r.finish.hexes.some((h) => coordKey(h) === key)) {
-        draw = { ...draw, desk: deskHover(draw.desk, key), msg: 'Choose a glowing hex' };
+        draw = { ...draw, desk: deskHover(draw.desk, key), msg: BLOOM.nextHint };
         board.shake(settings.reduceMotion);
         paintDraw();
         return;
@@ -7597,7 +7633,7 @@ const drawHandlers = {  down(p: Pt, e: PointerEvent) {
     if (!c || !ptr || ptr.id !== e.pointerId) return;
     draw.ptr = null;
     if (ptr.type === 'mouse' && draw.desk.phase === 'idle') draw.mouseLast = ptr.start;
-    if (IS_FUTA04 && !inside) return cancelDraw('Painting cancelled');
+    if (IS_FUTA04 && !inside) return cancelDraw(t('ui.game.paintingCancelled', 'Painting cancelled'));
     if (!ptr.moved) {
       // A coach/list/sole-placement preview is a complete choice. Selecting one of its
       // ghost hexes places it, while an ordinary first touch keeps choosing the shape.
@@ -7611,12 +7647,12 @@ const drawHandlers = {  down(p: Pt, e: PointerEvent) {
       return;
     }
     // lifting the finger outside the board: nothing is placed
-    if (!inside) return cancelDraw('Painting cancelled');
+    if (!inside) return cancelDraw(t('ui.game.paintingCancelled', 'Painting cancelled'));
     // a live two-click shape dragged and released: it finishes where it was released
     if (draw.desk.phase === 'live') {
       const at = hexAtPoint(p.x, p.y, new Set(board.boardKeys));
       // A release in a gap must not substitute the last legal hovered destination.
-      if (IS_FUTA04 && !at) return cancelDraw('Painting cancelled');
+      if (IS_FUTA04 && !at) return cancelDraw(t('ui.game.paintingCancelled', 'Painting cancelled'));
       const k = at ?? draw.desk.hover;
       return drawTap(c, k, ptr.type);
     }
@@ -7943,7 +7979,7 @@ bind('play-back', () => showScreen('menu'));
 $('menu-online').addEventListener('click', closePlayMenu);
 
 bind('menu-new', () => {
-  if (!$('menu-continue').hidden && !window.confirm('Start a new game? The saved game will be lost.')) return;
+  if (!$('menu-continue').hidden && !window.confirm(t('ui.game.newGameConfirm', 'Start a new game? The saved game will be lost.'))) return;
   showScreen('levels');
 });
 for (const [sel, p] of [['.hud .score.you', HUMAN], ['.hud .score.bot', BOT]] as const) {
@@ -8156,7 +8192,7 @@ bind('gm-new', () => {
     return;
   }
   // A campaign level is saved as it is played, so leaving it loses nothing and asks nothing.
-  if (!campaignLevel && session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
+  if (!campaignLevel && session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm(t('ui.game.newGameConfirmActive', 'Start a new game? This one will be lost.'))) return;
   sheet(null);
   showScreen(campaignLevel ? 'campaign' : 'levels');
 });
@@ -8581,11 +8617,11 @@ bind('test-sound', () => {
   setTimeout(() => sound.snap(), 600);
   setTimeout(() => sound.fanfare(true), 1300);
   setTimeout(() => (sound.enabled = was), 2400);
-  $('test-note').textContent = "You should hear a click, a chime, a snap and a short tune. Nothing? Check your phone's silent switch and volume.";
+  $('test-note').textContent = t('ui.settings.testSoundNote', "You should hear a click, a chime, a snap and a short tune. Nothing? Check your phone's silent switch and volume.");
 });
 bind('test-vibration', () => {
   vibrate(true, [60, 60, 120]);
-  $('test-note').textContent = canVibrate ? 'Your phone should buzz three times.' : "This phone's browser doesn't let websites vibrate (iPhones never do).";
+  $('test-note').textContent = canVibrate ? t('ui.settings.testVibrationNote', 'Your phone should buzz three times.') : t('ui.settings.testVibrationNone', "This phone's browser doesn't let websites vibrate (iPhones never do).");
 });
 bind('coach-summary-ok', () => {
   coach.summaryDone = true;
@@ -8661,7 +8697,7 @@ document.addEventListener('keydown', (e) => {
     }
     inspectKey = dc ? null : focusKey;
     render();
-    $('board').setAttribute('aria-label', `Board: ${describeHex(focusKey)}`);
+    $('board').setAttribute('aria-label', t('ui.game.boardAt', 'Board: {hex}', { hex: describeHex(focusKey) }));
   } else if ((e.key === 'Enter' || e.key === ' ') && session.presetMove && drawCombo()) {
     e.preventDefault();
     humanPlay(session.presetMove);
@@ -8680,11 +8716,11 @@ document.addEventListener('keydown', (e) => {
 
 function describeHex(key: string) {
   const v = session!.view;
-  const t = v.board[key];
+  const tile = v.board[key];
   const name = hexName(parseKey(key), v.config.boardRadius);
-  if (v.terrain[key] === 'rock') return `${name}, rock`;
-  if (!t) return `${name}, empty${v.terrain[key] === 'rich' ? ' gold hex' : ''}`;
-  return `${name}, ${t.owner === HUMAN ? 'your' : OPP.noun} ${t.root ? 'root' : `tile, strength ${t.strength}`}`;
+  if (v.terrain[key] === 'rock') return t('ui.game.describeRock', '{hex}, rock', { hex: name });
+  if (!tile) return t('ui.game.describeEmpty', '{hex}, empty', { hex: name }) + (v.terrain[key] === 'rich' ? t('ui.game.describeGold', ' gold hex') : '');
+  return t('ui.game.describeTile', '{hex}, {who} {what}', { hex: name, who: tile.owner === HUMAN ? t('ui.common.your', 'your') : OPP.noun, what: tile.root ? t('ui.game.root', 'root') : t('ui.game.tileStrength', 'tile, strength {n}', { n: tile.strength }) });
 }
 
 // In the background, finish animations at once: on return the board is simply current. The
@@ -8961,6 +8997,7 @@ if (SHOW_MENU_TAGLINE) {
 // Phase 4–5: online lobby + duel on the shared board (Draw / draft / Throw / resign).
 type OnlineLobbyCtl = {
   openHub(): Promise<void>;
+  refreshCopy?(): void;
   rematch(finishedMatchId?: string | null): Promise<void>;
   trainingSeedTicket(level: number): Promise<{ id: string; seed: number } | null>;
   syncSeedRewards(): Promise<{ key: string; reward: { awarded: number } }[]>;

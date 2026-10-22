@@ -4,6 +4,7 @@ import type { Step } from '../logic/anim.js';
 import type { LedTone } from './led-cells.js';
 import type { FlavourPool } from './led-flavour.js';
 import { FLAVOUR_POOLS } from './led-flavour.js';
+import { t } from '../../../src/i18n/index.js';
 
 export type DisplayFlavour = { kind: string; pool: FlavourPool };
 export type DisplayEvent = {
@@ -37,7 +38,7 @@ export function displayEventForPlay(before: State, after: State, steps: readonly
 
   if (after.phase === 'GAME_OVER' && after.result) {
     const winner = after.result.winner;
-    return make('result',winner===null?'DRAW GAME':winner===human?'YOU WIN':'OPP WINS',100,1700,
+    return make('result',winner===null?t('ui.led.draw','DRAW GAME'):winner===human?t('ui.led.win','YOU WIN'):t('ui.led.loss','OPP WINS'),100,1700,
       winner===null?'ivory':winner===human?'green':'red');
   }
   if (mega) {
@@ -57,8 +58,8 @@ export function displayEventForPlay(before: State, after: State, steps: readonly
     {flavour:as('bloom'),accent:'bloom'});
   if (myTiles<=-3) return make('lost-tiles',`-${-myTiles}`,75,960,'red',{flavour:as('loss')});
   if (myTiles>=3) return make('gain',`+${myTiles}`,70,900,'green');
-  if (theirTiles>=3 && before.turnPlayer!==human) return make('opponent-gain',`OPP +${theirTiles}`,68,960,'red');
-  if (nowLead && nowLead!==wasLead) return make('lead',nowLead>0?'YOU LEAD':'OPP LEADS',65,1050,nowLead>0?'green':'red',
+  if (theirTiles>=3 && before.turnPlayer!==human) return make('opponent-gain',t('ui.led.oppPlus','OPP +{n}',{n:theirTiles}),68,960,'red');
+  if (nowLead && nowLead!==wasLead) return make('lead',nowLead>0?t('ui.led.youLead','YOU LEAD'):t('ui.led.oppLeads','OPP LEADS'),65,1050,nowLead>0?'green':'red',
     {flavour:as(nowLead>0?'lead-you':'lead-them')});
   const delta = b.score-a.score;
   if (Math.abs(delta)>=3) return make('score-swing',`${delta>0?'+':''}${delta}`,60,900,delta>0?'green':'red');

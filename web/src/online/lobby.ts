@@ -3,6 +3,7 @@
 import type { MatchListEntry, MatchStatus } from '../../../server/src/protocol.js';
 import { formatRemaining } from './clock.js';
 import { publicAppOrigin } from './config.js';
+import { t } from '../../../src/i18n/index.js';
 import { ONLINE } from '../../../src/strings.js';
 
 export const FIRST_ONLINE_CARD_KEY = 'severgrow.duel.firstCard.v1';
@@ -158,7 +159,7 @@ export const yourTurnCount = (entries: readonly MatchListEntry[]): number =>
   entries.filter((e) => lobbyBucket(e) === 'your_turn').length;
 
 export const pageTitleForLobby = (yourTurns: number, base = ONLINE.pageTitleBase): string =>
-  yourTurns > 0 ? `(${yourTurns}) ${base} — your turn` : base;
+  yourTurns > 0 ? t('ui.online.pageTitleTurns', '({n}) {base} — your turn', { n: yourTurns, base }) : base;
 
 export const friendlyJoinError = (code: string): string => {
   switch (code) {

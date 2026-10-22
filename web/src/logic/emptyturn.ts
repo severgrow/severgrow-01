@@ -5,7 +5,10 @@
 import { isValidRun, isValidSet } from '../../../src/engine/index.js';
 import type { Action, Card } from '../../../src/engine/index.js';
 import { isBoardAction } from './interaction.js';
+import { t } from '../../../src/i18n/index.js';
 
+export const nothingToPlay = (): string => t('ui.empty.nothing', 'Nothing to play this turn');
+/** @deprecated Read `nothingToPlay()` so the words follow the language. */
 export const NOTHING_TO_PLAY = 'Nothing to play this turn';
 /** The opponent's whole empty turn (draw, end, throw), at Normal speed. */
 export const EMPTY_TURN_MS = 400;
@@ -19,7 +22,7 @@ export type SkipPlan = { kind: 'auto' | 'ask' | 'none'; text: string | null };
 /** What to do with an empty Grow step: skip it at once (auto), or ask (Continue). */
 export const skipPlan = (legal: readonly Action[], handSize: number, autoSkip: boolean): SkipPlan => {
   if (handSize === 0 || !growIsEmpty(legal)) return { kind: 'none', text: null };
-  return { kind: autoSkip ? 'auto' : 'ask', text: NOTHING_TO_PLAY };
+  return { kind: autoSkip ? 'auto' : 'ask', text: nothingToPlay() };
 };
 
 /** Any 3 cards of the hand that make a combo (a run or a set)? */
@@ -35,7 +38,7 @@ const hasCombo = (hand: readonly Card[]): boolean => {
 
 /** Why nothing can be played, in one short line (shown with auto-skip off). */
 export const emptyReason = (hand: readonly Card[]): string =>
-  `${hasCombo(hand) ? 'Your combos have no room' : 'No combo in your hand'}, and no card can sprout.`;
+  hasCombo(hand) ? t('ui.empty.combosNoRoom', 'Your combos have no room, and no card can sprout.') : t('ui.empty.noCombo', 'No combo in your hand, and no card can sprout.');
 
 /** A whole turn of the opponent with no board move in it. */
 export const isEmptyTurn = (actions: readonly Action[]): boolean => !actions.some(isBoardAction);

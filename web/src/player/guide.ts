@@ -3,6 +3,7 @@
 // controls as the clear hero (CSS in lab-css.ts, keyed on <html data-step data-guide>). The step
 // comes from the game's own state (main.ts passes the phase and whose turn it is); nothing here
 // keeps a separate idea of the step.
+import { t } from '../../../src/i18n/index.js';
 import { STEP_CUE } from '../../../src/strings.js';
 import { IS_FUTA04 } from '../channel.js';
 
@@ -43,17 +44,17 @@ export const mountGuide = (hooks: { reduceMotion: () => boolean }) => {
   // ---------- the setting (Settings sheet, with the phone layout rows) ----------
   const row = document.createElement('div');
   row.className = 'row';
-  row.innerHTML = '<span>Step guidance</span><div class="seg" role="radiogroup" aria-label="Step guidance" id="guide-seg"></div>';
+  row.innerHTML = `<span>${t('ui.guide.step', 'Step guidance')}</span><div class="seg" role="radiogroup" aria-label="${t('ui.guide.step', 'Step guidance')}" id="guide-seg"></div>`;
   const seg = row.querySelector('.seg')!;
   const paint = () =>
     seg.replaceChildren(
-      ...([['full', 'Full'], ['subtle', 'Subtle'], ['off', 'Off']] as const).map(([v, t]) => {
+      ...([['full', t('ui.guide.full', 'Full')], ['subtle', t('ui.guide.subtle', 'Subtle')], ['off', t('ui.guide.off', 'Off')]] as const).map(([v, label]) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = `seg-btn${mode === v ? ' on' : ''}`;
         b.setAttribute('role', 'radio');
         b.setAttribute('aria-checked', String(mode === v));
-        b.textContent = t;
+        b.textContent = label;
         b.addEventListener('click', () => {
           mode = v;
           root.dataset.guide = mode;

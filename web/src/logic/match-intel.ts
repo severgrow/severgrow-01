@@ -1,5 +1,6 @@
 import { createCards, dealOpening } from '../../../src/engine/index.js';
 import type { Card, Event, State, View } from '../../../src/engine/index.js';
+import { t } from '../../../src/i18n/index.js';
 
 /** One public beat the player may step through in the glass. Newest last. */
 export type IntelMove = {
@@ -39,7 +40,7 @@ export const openingPublicDiscard = (state: State, base: State | null): Card[] =
 
 const cardLabel = (card: Card | undefined): string => {
   if (!card) return '';
-  if (card.suit === null) return 'BOMB';
+  if (card.suit === null) return t('ui.intel.bomb', 'BOMB');
   return `${card.rank}`;
 };
 
@@ -58,38 +59,38 @@ export const publicIntelMoves = (view: View, history: readonly Event[], me = 0):
     switch (event.t) {
       case 'Draw':
         if (event.from === 'discard' && event.card !== undefined) {
-          out.push({ who, verb: 'TOOK', detail: cardLabel(byId.get(event.card)) || 'PILE' });
+          out.push({ who, verb: t('ui.intel.took', 'TOOK'), detail: cardLabel(byId.get(event.card)) || 'PILE' });
         } else if (event.from === 'deck' && event.player === me && event.card !== undefined) {
-          out.push({ who, verb: 'DREW', detail: cardLabel(byId.get(event.card)) });
+          out.push({ who, verb: t('ui.intel.drew', 'DREW'), detail: cardLabel(byId.get(event.card)) });
         } else if (event.from === 'deck' && event.player !== me) {
-          out.push({ who, verb: 'DREW', detail: null });
+          out.push({ who, verb: t('ui.intel.drew', 'DREW'), detail: null });
         }
         break;
       case 'Sprout':
-        out.push({ who, verb: 'GREW', detail: cardLabel(byId.get(event.card)) });
+        out.push({ who, verb: t('ui.intel.grew', 'GREW'), detail: cardLabel(byId.get(event.card)) });
         break;
       case 'Strengthen':
-        out.push({ who, verb: 'UP', detail: `${event.oldStrength}→${event.newStrength}` });
+        out.push({ who, verb: t('ui.intel.up', 'UP'), detail: `${event.oldStrength}→${event.newStrength}` });
         break;
       case 'Bloom':
-        out.push({ who, verb: 'BLOOM', detail: String(event.cards.length) });
+        out.push({ who, verb: t('ui.intel.bloom', 'BLOOM'), detail: String(event.cards.length) });
         break;
       case 'FruitCard':
-        out.push({ who, verb: 'BOMB', detail: cardLabel(byId.get(event.card)) || null });
+        out.push({ who, verb: t('ui.intel.bombVerb', 'BOMB'), detail: cardLabel(byId.get(event.card)) || null });
         break;
       case 'MegaBomb':
-        out.push({ who, verb: 'BLAST', detail: String(event.destroyed.length) });
+        out.push({ who, verb: t('ui.intel.blast', 'BLAST'), detail: String(event.destroyed.length) });
         break;
       case 'Discard':
-        out.push({ who, verb: 'THREW', detail: cardLabel(byId.get(event.card)) });
+        out.push({ who, verb: t('ui.intel.threw', 'THREW'), detail: cardLabel(byId.get(event.card)) });
         break;
       case 'Sever':
         // The event names the cut player; the beat belongs to whoever did the cutting.
-        out.push({ who: opposite, verb: 'CUT', detail: String(event.coords.length) });
+        out.push({ who: opposite, verb: t('ui.intel.cut', 'CUT'), detail: String(event.coords.length) });
         break;
       case 'Strangle':
         // The event names the loser. Both homes surrounded is a draw: nobody won, so no WIN beat.
-        if (view.result?.reason !== 'double_strangle') out.push({ who: opposite, verb: 'WIN', detail: 'HOME' });
+        if (view.result?.reason !== 'double_strangle') out.push({ who: opposite, verb: t('ui.intel.win', 'WIN'), detail: t('ui.intel.home', 'HOME') });
         break;
       default:
         break;
@@ -110,9 +111,9 @@ export const matchIntel = (view: View, history: readonly Event[], opening: reado
   }
   const discarded = publicDiscardHistory(view, history, opening);
   const bombsInHand = view.hand.filter((card) => card.suit === null).length;
-  const observation = bombsInHand >= 2 ? 'TWO BOMBS CAN BLOOM.'
-    : view.phase === 'ACT' && view.sproutsThisTurn === 0 ? 'GROW CAN BE SKIPPED.'
-    : view.discard.length ? 'WATCH THE DISCARD.' : null;
+  const observation = bombsInHand >= 2 ? t('ui.intel.obsTwoBombs', 'TWO BOMBS CAN BLOOM.')
+    : view.phase === 'ACT' && view.sproutsThisTurn === 0 ? t('ui.intel.obsGrowSkipped', 'GROW CAN BE SKIPPED.')
+    : view.discard.length ? t('ui.intel.obsDiscard', 'WATCH THE DISCARD.') : null;
   return {
     discarded,
     score: [view.score, view.opponentScore],

@@ -97,7 +97,7 @@
     <div id="spores" aria-hidden="true"></div>
 
     <!-- ===== Main menu ===== -->
-    <section id="menu" class="screen menu" aria-label="Main menu">
+    <section id="menu" class="screen menu" aria-label="Main menu" data-i18n-aria="ui.aria.mainMenu">
       <div class="menu-inner">
         <div id="terrarium" class="terrarium" aria-hidden="true"></div>
         <div id="logo" class="logo" aria-hidden="true"></div>
@@ -119,9 +119,9 @@
                on this screen. Revealed by main.ts, so no other channel ever shows it. Its three
                entries (LEVEL n / Play online / Practice match) are MOVED into #play-actions at boot,
                in the order PLAY_MENU_ENTRIES lists them. -->
-          <button id="menu-play" class="btn primary big" type="button" aria-label="Play" hidden>Play</button>
+          <button id="menu-play" class="btn primary big" type="button" aria-label="Play" data-i18n-aria="ui.aria.play" hidden>Play</button>
           <!-- Continue (the saved game resume) sits right under the leader, as a quiet ghost. -->
-          <button id="menu-continue" class="btn ghost big" type="button" aria-label="Continue" hidden>Continue</button>
+          <button id="menu-continue" class="btn ghost big" type="button" aria-label="Continue" hidden data-i18n="ui.common.continue">Continue</button>
           <!-- Campaign (the primary offline mode) — revealed by main.ts on the product channels only,
                so no other channel ever shows it. Its words come from src/strings.ts, and on the
                product menu it reads LEVEL <n> (the level the player is on).
@@ -129,9 +129,9 @@
                of the PLAY submenu, and main.ts moves these nodes in the order this markup (and
                PLAY_MENU_ENTRIES) lists them, so the seen order, the tab order and the screen
                reader's order are all the same. -->
-          <button id="menu-campaign" class="btn primary big" type="button" aria-label="Level" hidden>Campaign</button>
-          <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
-          <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
+          <button id="menu-campaign" class="btn primary big" type="button" aria-label="Level" hidden data-i18n="campaign.title">Campaign</button>
+          <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden data-i18n="online.playOnline">Play online</button>
+          <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline" data-i18n="online.playOffline">Play offline</button>
           <!-- DELETED (owner, 2026-10-16): the quiet "Levels" entry that opened the whole
                chapter/level list. The owner's rule is that the player does not need access to every
                level - the LEVEL <n> entry above starts the next level they have NOT completed, and
@@ -152,7 +152,7 @@
               <span id="menu-world-seeds-icon" class="menu-territory-icon" aria-hidden="true"></span>
               <span id="menu-world-seeds-value" class="menu-territory-value">0</span>
             </span>
-            <span id="menu-world-label" class="menu-territory-label">TERRITORY</span>
+            <span id="menu-world-label" class="menu-territory-label" data-i18n="menu.worldUpper">TERRITORY</span>
             <span id="menu-world-tiles" class="menu-territory-side menu-territory-tiles" hidden>
               <span id="menu-world-tiles-value" class="menu-territory-value">0</span>
               <span class="menu-territory-icon i" data-icon="tile" aria-hidden="true"></span>
@@ -165,7 +165,7 @@
                and the key starts the one Google flow; a signed-in player sees their NAME on the same
                key, and pressing it opens their profile (web/src/accounts/mount.ts). It ships hidden
                because the accounts module only reveals it once it knows Google is on. -->
-          <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
+          <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial" data-i18n="help.tutorial">Tutorial</button>
           <!-- The menu's footer (owner brief, 2026-10-21): one row, two equal keys, account left and
                Settings right. It is the LAST thing in the menu's own tab order, and it is a group so
                a screen reader reads the pair as one row. `.menu-buttons` is reused on purpose: every
@@ -180,9 +180,9 @@
                (measured 50px above it) while the keys above it sat 9px apart. As the column's last
                child it takes the column's own gap, so every key on the menu is spaced identically by
                construction — no value to keep in sync. -->
-          <div id="menu-foot" class="menu-buttons menu-footer" role="group" aria-label="Account and settings">
-            <button id="menu-login" class="btn ghost" type="button" aria-label="Log in" hidden>LOG IN</button>
-            <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
+          <div id="menu-foot" class="menu-buttons menu-footer" role="group" aria-label="Account and settings" data-i18n-aria="menu.footerLabel">
+            <button id="menu-login" class="btn ghost" type="button" aria-label="Log in" hidden data-i18n="menu.login" data-i18n-aria="menu.login">LOG IN</button>
+            <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings" data-i18n="settings.title" data-i18n-aria="settings.title">Settings</button>
           </div>
         </div>
       </div>
@@ -199,11 +199,11 @@
          second copy of the online or campaign wiring exists. LEVEL leads the column (owner,
          2026-10-20). Only ONE of them leads visually (Play online, or LEVEL <n> when this build has
          no online endpoint); the rest recede. -->
-    <section id="play-menu" class="screen play-menu" aria-label="Play" hidden>
+    <section id="play-menu" class="screen play-menu" aria-label="Play" data-i18n-aria="ui.aria.play" hidden>
       <div class="levels-inner">
         <header class="levels-head">
-          <button id="play-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
-          <h2 id="play-title">Play</h2>
+          <button id="play-back" class="icon-only" type="button" aria-label="Back to the menu" data-i18n-aria="ui.aria.backToMenu"><span class="i" data-icon="back"></span></button>
+          <h2 id="play-title" data-i18n="menu.play">Play</h2>
         </header>
         <div id="play-actions" class="menu-buttons"></div>
       </div>
@@ -213,22 +213,22 @@
     <section id="online-hub" class="screen online-hub" aria-label="Play online" hidden>
       <div class="online-inner">
         <header class="online-head">
-          <button id="online-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
-          <h2 id="online-hub-title">Play online</h2>
+          <button id="online-back" class="icon-only" type="button" aria-label="Back" data-i18n-aria="ui.aria.back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-hub-title" data-i18n="online.hubTitle">Play online</h2>
         </header>
         <div id="online-first-card" class="online-card" hidden>
           <h3 id="online-first-title"></h3>
           <ul id="online-first-list"></ul>
-          <button id="online-first-ok" class="btn primary" type="button">Got it</button>
+          <button id="online-first-ok" class="btn primary" type="button" data-i18n="online.firstCardOk">Got it</button>
         </div>
         <div class="online-actions menu-buttons">
-          <button id="online-create" class="btn primary big" type="button">Create a duel</button>
-          <button id="online-find" class="btn ghost big" type="button" hidden>Find opponent</button>
-          <button id="online-join-open" class="btn ghost big" type="button">Join with a code</button>
+          <button id="online-create" class="btn primary big" type="button" data-i18n="online.create">Create a duel</button>
+          <button id="online-find" class="btn ghost big" type="button" hidden data-i18n="online.findOpponent">Find opponent</button>
+          <button id="online-join-open" class="btn ghost big" type="button" data-i18n="online.join">Join with a code</button>
           <button id="online-world" class="btn ghost big" type="button"></button>
         </div>
-        <h3 class="online-section" id="online-matches-title">Your online matches</h3>
-        <p id="online-matches-empty" class="muted" hidden>No online matches yet.</p>
+        <h3 class="online-section" id="online-matches-title" data-i18n="online.yourMatches">Your online matches</h3>
+        <p id="online-matches-empty" class="muted" hidden data-i18n="ui.online.noMatchesYet">No online matches yet.</p>
         <ul id="online-matches" class="online-matches" aria-live="polite"></ul>
         <p id="online-hub-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>
@@ -237,7 +237,7 @@
     <section id="online-world-screen" class="screen online-world" hidden>
       <div class="online-inner">
         <header class="online-head">
-          <button id="online-world-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
+          <button id="online-world-back" class="icon-only" type="button" aria-label="Back" data-i18n-aria="ui.aria.back"><span class="i" data-icon="back"></span></button>
           <h2 id="online-world-title"></h2>
         </header>
         <!-- NO SUMMARY LINE (owner, 2026-10-16: "remove completely '5 / 183 grown · one shared
@@ -260,25 +260,25 @@
     <section id="online-waiting" class="screen online-waiting" aria-label="Waiting for a friend" hidden>
       <div class="online-inner">
         <header class="online-head">
-          <button id="online-waiting-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
-          <h2 id="online-waiting-title">Waiting for a friend</h2>
+          <button id="online-waiting-back" class="icon-only" type="button" aria-label="Back" data-i18n-aria="ui.aria.back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-waiting-title" data-i18n="online.waitingTitle">Waiting for a friend</h2>
         </header>
         <p id="online-waiting-body" class="muted"></p>
         <!-- The LINK is the primary action; the code is a smaller, tappable fallback (in-app
              browsers, mangled links, reading a code aloud). No new visual language. -->
         <div class="online-actions menu-buttons">
-          <button id="online-share" class="btn primary big" type="button">Share invite</button>
-          <button id="online-copy" class="btn ghost" type="button">Copy link</button>
-          <button id="online-cancel-match" class="btn ghost" type="button">Cancel match</button>
+          <button id="online-share" class="btn primary big" type="button" data-i18n="online.share">Share invite</button>
+          <button id="online-copy" class="btn ghost" type="button" data-i18n="online.copyLink">Copy link</button>
+          <button id="online-cancel-match" class="btn ghost" type="button" data-i18n="online.cancelMatch">Cancel match</button>
         </div>
-        <p id="online-invite-code" class="online-code" role="button" tabindex="0" aria-label="Invite code"></p>
+        <p id="online-invite-code" class="online-code" role="button" tabindex="0" aria-label="Invite code" data-i18n-aria="ui.aria.inviteCode"></p>
         <p id="online-code-hint" class="online-code-hint muted small"></p>
         <p id="online-waiting-expiry" class="muted small"></p>
         <!-- Parked-search offer (shown after a while waiting). Three separate, honest choices. -->
         <div id="online-search-options" class="online-actions menu-buttons" hidden>
-          <button id="online-search-computer" class="btn primary big" type="button">Play the computer</button>
-          <button id="online-search-invite" class="btn ghost big" type="button">Invite a friend</button>
-          <button id="online-search-keep" class="btn ghost big" type="button">Keep searching</button>
+          <button id="online-search-computer" class="btn primary big" type="button" data-i18n="online.searchPlayComputer">Play the computer</button>
+          <button id="online-search-invite" class="btn ghost big" type="button" data-i18n="online.searchInviteFriend">Invite a friend</button>
+          <button id="online-search-keep" class="btn ghost big" type="button" data-i18n="online.searchKeepWaiting">Keep searching</button>
         </div>
         <p id="online-waiting-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>
@@ -287,16 +287,16 @@
     <section id="online-join" class="screen online-join" aria-label="Join a duel" hidden>
       <div class="online-inner">
         <header class="online-head">
-          <button id="online-join-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
-          <h2 id="online-join-title">Join a duel</h2>
+          <button id="online-join-back" class="icon-only" type="button" aria-label="Back" data-i18n-aria="ui.aria.back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-join-title" data-i18n="online.joinTitle">Join a duel</h2>
         </header>
-        <label class="online-field" for="online-join-code"><span id="online-join-prompt">Enter the invite code</span>
+        <label class="online-field" for="online-join-code"><span id="online-join-prompt" data-i18n="online.joinPrompt">Enter the invite code</span>
           <input id="online-join-code" type="text" inputmode="text" autocomplete="off" maxlength="16" spellcheck="false" />
         </label>
         <p id="online-join-confirm" class="online-confirm" hidden></p>
         <div class="online-actions menu-buttons">
-          <button id="online-join-submit" class="btn primary big" type="button">Join</button>
-          <button id="online-join-cancel" class="btn ghost big" type="button" hidden>Cancel</button>
+          <button id="online-join-submit" class="btn primary big" type="button" data-i18n="online.joinSubmit">Join</button>
+          <button id="online-join-cancel" class="btn ghost big" type="button" hidden data-i18n="online.cancel">Cancel</button>
         </div>
         <p id="online-join-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>
@@ -306,11 +306,11 @@
          offline game (Continue keeps it). Reuses the online-card component, no new visual language. -->
     <div id="online-matched" class="online-matched" role="dialog" aria-modal="false" aria-labelledby="online-matched-title" hidden>
       <div class="online-card">
-        <h3 id="online-matched-title">Opponent found</h3>
+        <h3 id="online-matched-title" data-i18n="online.matchedTitle">Opponent found</h3>
         <p id="online-matched-body" class="muted"></p>
         <div class="online-actions menu-buttons">
-          <button id="online-matched-now" class="btn primary big" type="button">Play now</button>
-          <button id="online-matched-later" class="btn ghost big" type="button">Later</button>
+          <button id="online-matched-now" class="btn primary big" type="button" data-i18n="online.matchedPlayNow">Play now</button>
+          <button id="online-matched-later" class="btn ghost big" type="button" data-i18n="online.matchedLater">Later</button>
         </div>
       </div>
     </div>
@@ -321,10 +321,10 @@
     <section id="campaign" class="screen campaign" aria-label="Levels" hidden>
       <div class="campaign-inner levels-inner">
         <header class="levels-head">
-          <button id="campaign-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
-          <h2 id="campaign-heading">Levels</h2>
+          <button id="campaign-back" class="icon-only" type="button" aria-label="Back to the menu" data-i18n-aria="ui.aria.backToMenu"><span class="i" data-icon="back"></span></button>
+          <h2 id="campaign-heading" data-i18n="campaign.heading">Levels</h2>
         </header>
-        <button id="campaign-continue" class="btn primary big" type="button" aria-label="Continue">Continue</button>
+        <button id="campaign-continue" class="btn primary big" type="button" aria-label="Continue" data-i18n="ui.common.continue" data-i18n-aria="ui.common.continue">Continue</button>
         <p id="campaign-resume-hint" class="campaign-hint muted small" hidden></p>
         <p id="campaign-progress" class="campaign-progress muted small"></p>
         <div id="campaign-chapters" class="campaign-chapters"></div>
@@ -332,32 +332,32 @@
     </section>
 
     <!-- ===== Pick a level (Classic vs AI, unchanged) ===== -->
-    <section id="levels" class="screen levels" aria-label="Pick a level" hidden>
+    <section id="levels" class="screen levels" aria-label="Pick a level" data-i18n-aria="ui.aria.pickLevel" hidden>
       <div class="levels-inner">
         <header class="levels-head">
-          <button id="levels-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
-          <h2 id="levels-heading">Choose difficulty</h2>
+          <button id="levels-back" class="icon-only" type="button" aria-label="Back to the menu" data-i18n-aria="ui.aria.backToMenu"><span class="i" data-icon="back"></span></button>
+          <h2 id="levels-heading" data-i18n="ui.menu.chooseDifficulty">Choose difficulty</h2>
         </header>
         <div id="level-grid" class="level-grid"></div>
       </div>
     </section>
 
     <!-- ===== Game ===== -->
-    <section id="game" class="screen game" aria-label="Game" hidden>
+    <section id="game" class="screen game" aria-label="Game" data-i18n-aria="ui.aria.game" hidden>
       <header class="hud">
-        <button id="hud-menu" class="icon-only" type="button" aria-label="Menu"><span class="i" data-icon="menu"></span></button>
+        <button id="hud-menu" class="icon-only" type="button" aria-label="Menu" data-i18n-aria="ui.aria.menu"><span class="i" data-icon="menu"></span></button>
         <div class="score you">
-          <span class="who" id="score-you-label">You</span>
+          <span class="who" id="score-you-label" data-i18n="online.scoreYou">You</span>
           <span class="mark you" aria-hidden="true"></span>
-          <b id="score-you" class="num" aria-label="Your score">0</b>
+          <b id="score-you" class="num" aria-label="Your score" data-i18n-aria="ui.aria.yourScore">0</b>
         </div>
         <div id="turn" class="turn" aria-live="polite"></div>
         <div class="score bot" title="Opponent">
-          <b id="score-bot" class="num" aria-label="Opponent score">0</b>
+          <b id="score-bot" class="num" aria-label="Opponent score" data-i18n-aria="ui.aria.opponentScore">0</b>
           <span class="mark bot" aria-hidden="true"></span>
-          <span class="who" data-short="opp" id="score-bot-label">Opponent</span>
+          <span class="who" data-short="opp" id="score-bot-label" data-i18n="online.scoreOpponent">Opponent</span>
         </div>
-        <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
+        <button id="hud-history" class="icon-only" type="button" aria-label="History" data-i18n-aria="ui.aria.history"><span class="i" data-icon="history"></span></button>
       </header>
       <div id="duel-hud" class="duel-hud" hidden>
         <!-- Hidden state hooks only (never painted): the trimmed strip shows ONE short message, but
@@ -375,22 +375,22 @@
 
       <div class="play">
         <div class="board-wrap" id="board-wrap">
-          <svg id="board" class="board" role="group" aria-label="Board. Use the arrow keys to move, Enter to choose." tabindex="0"></svg>
+          <svg id="board" class="board" role="group" aria-label="Board. Use the arrow keys to move, Enter to choose." data-i18n-aria="ui.aria.board" tabindex="0"></svg>
           <div id="captions" class="captions" aria-live="polite"></div>
           <div id="draw-info" class="draw-info" hidden></div>
           <div id="draw-live" class="sr-only" aria-live="polite"></div>
           <div id="banner" class="banner" aria-hidden="true"></div>
-          <div id="smoother" class="smoother" role="status" hidden><span>Smoother mode: effects are lighter so the game runs smoothly.</span><button id="smoother-keep" class="btn small primary" type="button">Keep</button><button id="smoother-undo" class="btn small ghost" type="button">Undo</button></div>
-          <div id="root-warn" class="root-warn" role="status" hidden><i aria-hidden="true"></i>Home in danger</div>
+          <div id="smoother" class="smoother" role="status" hidden><span data-i18n="ui.game.smoother">Smoother mode: effects are lighter so the game runs smoothly.</span><button id="smoother-keep" class="btn small primary" type="button" data-i18n="ui.common.keep">Keep</button><button id="smoother-undo" class="btn small ghost" type="button" data-i18n="ui.common.undo">Undo</button></div>
+          <div id="root-warn" class="root-warn" role="status" hidden><i aria-hidden="true"></i data-i18n="home.danger">Home in danger</div>
           <div id="edge-wash" class="edge-wash" aria-hidden="true"></div>
           <div id="turn-pill" class="turn-pill" aria-hidden="true" hidden></div>
           <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
           <!-- Step 3: icon-only tools in the corners of the board zone (never over a tile) -->
-          <div class="corner-tools" role="toolbar" aria-label="Board tools">
-            <button id="tool-weak" class="ctool tl" type="button" aria-pressed="false" aria-label="My weak spots" data-tip="My weak spots: where your network is easy to cut"><span class="i" data-icon="shield"></span></button>
-            <button id="tool-targets" class="ctool tr" type="button" aria-pressed="false" aria-label="Their weak links" data-tip="Their weak links: where your opponent is easy to cut"><span class="i" data-icon="target"></span></button>
-            <button id="tool-replay" class="ctool bl" type="button" aria-label="Replay your opponent's last turn" data-tip="Replay your opponent's last turn"><span class="i" data-icon="replay"></span></button>
-            <button id="tool-skip" class="ctool bl" type="button" hidden aria-label="Skip the animation" data-tip="Skip the animation"><span class="i" data-icon="skip"></span></button>
+          <div class="corner-tools" role="toolbar" aria-label="Board tools" data-i18n-aria="ui.aria.boardTools">
+            <button id="tool-weak" class="ctool tl" type="button" aria-pressed="false" aria-label="My weak spots" data-i18n-aria="ui.aria.weakSpots" data-tip="My weak spots: where your network is easy to cut"><span class="i" data-icon="shield"></span></button>
+            <button id="tool-targets" class="ctool tr" type="button" aria-pressed="false" aria-label="Their weak links" data-i18n-aria="ui.aria.weakLinks" data-tip="Their weak links: where your opponent is easy to cut"><span class="i" data-icon="target"></span></button>
+            <button id="tool-replay" class="ctool bl" type="button" aria-label="Replay your opponent's last turn" data-i18n-aria="ui.aria.replayTurn" data-tip="Replay your opponent's last turn"><span class="i" data-icon="replay"></span></button>
+            <button id="tool-skip" class="ctool bl" type="button" hidden aria-label="Skip the animation" data-i18n-aria="ui.aria.skipAnimation" data-tip="Skip the animation"><span class="i" data-icon="skip"></span></button>
             <div id="ctool-tip" class="ctool-tip" role="tooltip" hidden></div>
           </div>
         </div>
@@ -408,18 +408,18 @@
                 <span class="pile-card">
                   <span class="pile-stack" aria-hidden="true"></span>
                 </span>
-                <span class="pile-meta" aria-hidden="true"><span class="pile-label">Draw pile</span><span class="pile-count num" id="deck-count">0</span></span>
+                <span class="pile-meta" aria-hidden="true"><span class="pile-label" data-i18n="piles.draw">Draw pile</span><span class="pile-count num" id="deck-count">0</span></span>
                 <span class="pile-hint" id="deck-hint" aria-hidden="true"></span>
               </button>
               <button id="discard" class="pile discard" type="button" aria-label="Throw pile">
                 <span class="pile-card">
                   <span class="pile-top" id="discard-top" aria-hidden="true"></span>
                 </span>
-                <span class="pile-meta" aria-hidden="true"><span class="pile-label">Throw pile</span><span class="pile-count num" id="discard-count">0</span></span>
+                <span class="pile-meta" aria-hidden="true"><span class="pile-label" data-i18n="piles.discard">Throw pile</span><span class="pile-count num" id="discard-count">0</span></span>
                 <span class="pile-hint" id="discard-hint" aria-hidden="true"></span>
               </button>
             </div>
-            <div id="moves" class="moves" role="group" aria-label="Moves"></div>
+            <div id="moves" class="moves" role="group" aria-label="Moves" data-i18n-aria="ui.aria.moves"></div>
             <div class="forecast-slot">
             <div id="confirm" class="confirm forecast" hidden>
             <div class="confirm-text">
@@ -428,9 +428,9 @@
               <ul id="confirm-risks" class="risks" hidden></ul>
             </div>
             <div class="confirm-buttons">
-              <button id="confirm-info" class="btn ghost small icon-info" type="button" aria-label="Open the tile card" title="Tile card" hidden>i</button>
-              <button id="confirm-cancel" class="btn ghost" type="button">Cancel</button>
-              <button id="confirm-play" class="btn primary" type="button">Confirm</button>
+              <button id="confirm-info" class="btn ghost small icon-info" type="button" aria-label="Open the tile card" data-i18n-aria="ui.aria.tileCard" title="Tile card" hidden>i</button>
+              <button id="confirm-cancel" class="btn ghost" type="button" data-i18n="online.cancel">Cancel</button>
+              <button id="confirm-play" class="btn primary" type="button" data-i18n="ui.game.confirm">Confirm</button>
             </div>
             </div>
             </div>
@@ -440,7 +440,7 @@
                without moving anything -->
           <div class="hand-row">
             <button id="tool-undo" class="hand-slot undo-slot" type="button" hidden aria-label="Undo: take back your last move" title="Take back your last move (you can until you throw)"><span class="i" data-icon="undo"></span></button>
-            <div id="hand" class="hand" role="group" aria-label="Your cards"></div>
+            <div id="hand" class="hand" role="group" aria-label="Your cards" data-i18n-aria="ui.aria.yourCards"></div>
             <button id="hand-sort" class="hand-slot hand-sort icon-sort" type="button" hidden><span class="i" data-icon="sort"></span></button>
           </div>
           <!-- floating above the dock: never changes its height -->
@@ -448,7 +448,7 @@
           <section id="coach" class="coach" aria-label="Coach" hidden>
             <div class="coach-head">
               <span class="i" data-icon="coach"></span>
-              <b>Coach</b>
+              <b data-i18n="ui.game.coach">Coach</b>
               <span id="coach-step" class="muted small"></span>
             </div>
             <div id="coach-advice">
@@ -456,14 +456,14 @@
               <p id="coach-tip" class="tip"></p>
               <p id="coach-why" class="muted" hidden></p>
               <div class="coach-actions">
-                <button id="coach-show" class="btn small" type="button" aria-pressed="false">Show me where</button>
-                <button id="coach-why-btn" class="btn link small" type="button" aria-expanded="false">Why?</button>
+                <button id="coach-show" class="btn small" type="button" aria-pressed="false" data-i18n="ui.game.showMeWhere">Show me where</button>
+                <button id="coach-why-btn" class="btn link small" type="button" aria-expanded="false" data-i18n="ui.game.why">Why?</button>
               </div>
             </div>
             <div id="coach-summary" hidden>
               <p><b id="coach-summary-title"></b></p>
               <ul id="coach-summary-list"></ul>
-              <button id="coach-summary-ok" class="btn small" type="button">Got it</button>
+              <button id="coach-summary-ok" class="btn small" type="button" data-i18n="ui.common.gotIt">Got it</button>
             </div>
           </section>
 
@@ -471,7 +471,7 @@
             <b id="first-tip-title"></b>
             <p id="first-tip-text"></p>
             <div id="first-tip-demo" class="draw-demo" aria-hidden="true" hidden><i></i><i></i><i></i><span class="finger"></span></div>
-            <button id="first-tip-ok" class="btn ghost small" type="button">Got it</button>
+            <button id="first-tip-ok" class="btn ghost small" type="button" data-i18n="ui.common.gotIt">Got it</button>
           </div>
           </div>
         </aside>
@@ -488,7 +488,7 @@
     <div id="scrim" class="scrim" hidden></div>
 
     <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
-      <header class="sheet-head"><h2 id="settings-title" data-copy="title"></h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <header class="sheet-head"><h2 id="settings-title" data-copy="title"></h2><button class="icon-only" data-close type="button" aria-label="Close" data-i18n-aria="ui.aria.close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body">
         <!-- OWNER DIRECTION (2026-10-17): "settings should hold only essentials". The surface is
              now the things a player changes while playing — colours, sound, comfort, and the two
@@ -516,8 +516,8 @@
             <div class="row"><span data-copy="materialDetail"></span><div class="seg" role="radiogroup" aria-label="Material detail" id="detail-seg"></div></div>
             <div class="row"><span data-copy="topGlow"></span><div class="seg" role="radiogroup" aria-label="Top-rank glow" id="glow-seg"></div></div>
             <label class="row"><span data-copy="eyeCandy"></span><input type="checkbox" data-setting="eyeCandy" /></label>
-            <div class="row"><span data-copy="speed"></span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
-            <div class="row"><span data-copy="effects"></span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
+            <div class="row"><span data-copy="speed"></span><div class="seg" role="radiogroup" aria-label="Animation speed" data-i18n-aria="ui.aria.speed" id="speed-seg"></div></div>
+            <div class="row"><span data-copy="effects"></span><div class="seg" role="radiogroup" aria-label="Effects intensity" data-i18n-aria="ui.aria.effects" id="effects-seg"></div></div>
             <label class="row slider"><span data-copy="sfxVolume"></span><input type="range" min="0" max="100" step="5" data-volume="sfxVolume" aria-label="Effects volume" /></label>
             <label class="row slider"><span data-copy="musicVolume"></span><input type="range" min="0" max="100" step="5" data-volume="musicVolume" aria-label="Music volume" /></label>
             <div class="test-row">
@@ -537,25 +537,25 @@
             <button id="restart-tutorial" class="btn ghost small" type="button" data-copy="restartTutorial"></button>
           </div>
         </details>
-        <h3>Online</h3>
-        <p id="online-storage-note" class="muted small">Your online matches live on this device until accounts exist.</p>
+        <h3 data-i18n="ui.settings.onlineHeading">Online</h3>
+        <p id="online-storage-note" class="muted small" data-i18n="online.storageNote">Your online matches live on this device until accounts exist.</p>
         <div id="online-link-block" class="online-link-block" hidden>
-          <p class="muted small" id="online-link-help">Creates a one-time code (10 minutes). It never moves your existing token.</p>
-          <button id="online-link-make" class="btn ghost small" type="button">Make a link code</button>
-          <label class="row" for="online-link-redeem-input"><span>Enter a link code</span>
+          <p class="muted small" id="online-link-help" data-i18n="ui.settings.linkHelp">Creates a one-time code (10 minutes). It never moves your existing token.</p>
+          <button id="online-link-make" class="btn ghost small" type="button" data-i18n="online.linkCodeMake">Make a link code</button>
+          <label class="row" for="online-link-redeem-input"><span data-i18n="online.linkCodeRedeem">Enter a link code</span>
             <input id="online-link-redeem-input" type="text" maxlength="16" autocomplete="off" spellcheck="false" />
           </label>
-          <button id="online-link-redeem" class="btn ghost small" type="button">Use code</button>
+          <button id="online-link-redeem" class="btn ghost small" type="button" data-i18n="ui.settings.useCode">Use code</button>
           <p id="online-link-status" class="muted small" role="status"></p>
         </div>
         <details id="settings-lab" class="settings-lab">
-          <summary><span class="lab-sigil" aria-hidden="true"></span><span><strong>Lab</strong><small>20 ways to tune the same game</small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
+          <summary><span class="lab-sigil" aria-hidden="true"></span><span><strong data-i18n="ui.lab.title">Lab</strong><small data-i18n="ui.lab.subtitle">20 ways to tune the same game</small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
           <div class="lab-inside">
-            <p>Small experiments made from the controls already inside Futasaku. Try one; your original setup stays ready to restore.</p>
-            <div id="lab-categories" class="lab-categories" role="group" aria-label="Lab experiments"></div>
+            <p data-i18n="ui.lab.intro">Small experiments made from the controls already inside Futasaku. Try one; your original setup stays ready to restore.</p>
+            <div id="lab-categories" class="lab-categories" role="group" aria-label="Lab experiments" data-i18n-aria="ui.lab.experiments"></div>
             <div id="lab-cards" class="lab-cards" role="group"></div>
             <p id="lab-status" class="lab-status" role="status" aria-live="polite"></p>
-            <div class="lab-actions"><button id="lab-surprise" type="button">Surprise me <span aria-hidden="true">↗</span></button><button id="lab-restore" type="button" disabled>Restore my setup</button></div>
+            <div class="lab-actions"><button id="lab-surprise" type="button"><span data-i18n="ui.lab.surprise">Surprise me</span> <span aria-hidden="true">↗</span></button><button id="lab-restore" type="button" disabled data-i18n="ui.lab.restore">Restore my setup</button></div>
           </div>
         </details>
       </div>
@@ -575,14 +575,14 @@
          and in landscape (see `#sheet-menu` in style.css). -->
     <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
       <header class="sheet-head gm-head">
-        <h2 id="gm-title">Paused</h2>
-        <button class="icon-only gm-close" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
+        <h2 id="gm-title" data-i18n="ui.game.paused">Paused</h2>
+        <button class="icon-only gm-close" data-close type="button" aria-label="Close" data-i18n-aria="ui.aria.close"><span class="i" data-icon="close"></span></button>
       </header>
       <div class="sheet-body gm-body">
         <!-- Revealed by main.ts on the product channels (the slim header moves the scores here). -->
         <div id="gm-status" class="gm-readout" hidden>
           <div class="gm-scores">
-            <span class="gm-you"><b class="num" id="gm-score-you">0</b><small>You</small></span>
+            <span class="gm-you"><b class="num" id="gm-score-you">0</b><small data-i18n="online.scoreYou">You</small></span>
             <span class="gm-bot"><b class="num" id="gm-score-bot">0</b><small></small></span>
           </div>
           <div class="gm-turn" id="gm-turn"></div>
@@ -591,20 +591,20 @@
              the extra key can never push the column into a scroll on a 320x568 phone; with one key
              the row is simply full width. -->
         <div class="gm-leads">
-          <button id="gm-exit-tutorial" class="btn primary gm-lead" type="button" aria-label="Exit tutorial" hidden>Exit tutorial</button>
-          <button id="gm-resume" class="btn primary gm-lead" type="button" aria-label="Back to the game">Back to the game</button>
+          <button id="gm-exit-tutorial" class="btn primary gm-lead" type="button" aria-label="Exit tutorial" hidden data-i18n="tutorial.exit">Exit tutorial</button>
+          <button id="gm-resume" class="btn primary gm-lead" type="button" aria-label="Back to the game" data-i18n="ui.game.backToGame">Back to the game</button>
         </div>
         <div class="gm-acts">
-          <button id="gm-new" class="btn ghost gm-act" type="button" aria-label="New game">New game</button>
-          <button id="gm-howto" class="btn ghost gm-act" type="button" aria-label="How to play">How to play</button>
+          <button id="gm-new" class="btn ghost gm-act" type="button" aria-label="New game" data-i18n="ui.game.newGame">New game</button>
+          <button id="gm-howto" class="btn ghost gm-act" type="button" aria-label="How to play" data-i18n="help.howToTitle">How to play</button>
           <!-- Product channels only (the slim header); main.ts reveals it. -->
-          <button id="gm-history" class="btn ghost gm-act" type="button" aria-label="What happened" hidden>What happened</button>
-          <button id="gm-resign" class="btn ghost gm-act" type="button" aria-label="Resign the duel" hidden>Resign</button>
-          <button id="gm-main" class="btn ghost gm-act gm-act-quiet" type="button" aria-label="Main menu">Main menu</button>
+          <button id="gm-history" class="btn ghost gm-act" type="button" aria-label="What happened" hidden data-i18n="ui.game.whatHappened">What happened</button>
+          <button id="gm-resign" class="btn ghost gm-act" type="button" aria-label="Resign the duel" hidden data-i18n="ui.game.resign">Resign</button>
+          <button id="gm-main" class="btn ghost gm-act gm-act-quiet" type="button" aria-label="Main menu" data-i18n-aria="ui.aria.mainMenu" data-i18n="ui.game.mainMenu">Main menu</button>
         </div>
         <footer class="gm-foot">
           <p class="gm-mode" id="gm-mode">Practice</p>
-          <button id="gm-settings" class="btn ghost gm-key" type="button" aria-label="Settings">Settings</button>
+          <button id="gm-settings" class="btn ghost gm-key" type="button" aria-label="Settings" data-i18n="settings.title" data-i18n-aria="settings.title">Settings</button>
         </footer>
       </div>
     </section>
@@ -619,39 +619,39 @@
     <div id="profile-scrim" class="scrim" hidden></div>
     <section id="sheet-profile" class="sheet" role="dialog" aria-labelledby="profile-title" hidden>
       <header class="sheet-head sp-head">
-        <h2 id="profile-title">Profile</h2>
-        <button class="icon-only sp-close" data-profile-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
+        <h2 id="profile-title" data-i18n="profile.title">Profile</h2>
+        <button class="icon-only sp-close" data-profile-close type="button" aria-label="Close" data-i18n-aria="ui.aria.close"><span class="i" data-icon="close"></span></button>
       </header>
       <div class="sheet-body sp-body">
         <dl class="sp-rows">
-          <div class="sp-row"><dt>Name</dt><dd id="profile-name">—</dd></div>
-          <div class="sp-row"><dt>Sign-in</dt><dd id="profile-signin">—</dd></div>
+          <div class="sp-row"><dt data-i18n="profile.name">Name</dt><dd id="profile-name">—</dd></div>
+          <div class="sp-row"><dt data-i18n="profile.signIn">Sign-in</dt><dd id="profile-signin">—</dd></div>
           <!-- The Seeds label is filled by web/src/accounts/profile.ts from the economy's own word
                (web/src/online/seed-icon.ts): this page must stay free of that word, the same rule the
                rest of the markup follows (web/tests/seed-words.test.ts is about the removed mode). -->
           <div class="sp-row"><dt></dt><dd id="profile-seeds">—</dd></div>
-          <div class="sp-row"><dt>Tiles</dt><dd id="profile-tiles">—</dd></div>
-          <div class="sp-row"><dt>Matches won</dt><dd id="profile-wins">—</dd></div>
+          <div class="sp-row"><dt data-i18n="profile.tiles">Tiles</dt><dd id="profile-tiles">—</dd></div>
+          <div class="sp-row"><dt data-i18n="profile.matchesWon">Matches won</dt><dd id="profile-wins">—</dd></div>
         </dl>
       </div>
     </section>
 
     <section id="sheet-campaign-start" class="sheet" role="dialog" aria-modal="true" aria-labelledby="csa-title" hidden>
-      <header class="sheet-head"><h2 id="csa-title">Your campaign match is unfinished.</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <header class="sheet-head"><h2 id="csa-title" data-i18n="campaign.askTitle">Your campaign match is unfinished.</h2><button class="icon-only" data-close type="button" aria-label="Close" data-i18n-aria="ui.aria.close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body stack">
         <p id="csa-body" class="muted"></p>
-        <button id="csa-resume" class="btn primary" type="button">Resume</button>
-        <button id="csa-start" class="btn ghost" type="button">Start</button>
+        <button id="csa-resume" class="btn primary" type="button" data-i18n="campaign.resume">Resume</button>
+        <button id="csa-start" class="btn ghost" type="button" data-i18n="ui.game.start">Start</button>
       </div>
     </section>
 
     <section id="sheet-howto" class="sheet" role="dialog" aria-modal="true" aria-labelledby="howto-title" hidden>
-      <header class="sheet-head"><h2 id="howto-title">How to play</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <header class="sheet-head"><h2 id="howto-title" data-i18n="help.howToTitle">How to play</h2><button class="icon-only" data-close type="button" aria-label="Close" data-i18n-aria="ui.aria.close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body prose" id="howto-body"></div>
     </section>
 
     <section id="sheet-history" class="sheet" role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
-      <header class="sheet-head"><h2 id="history-title">What happened</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <header class="sheet-head"><h2 id="history-title" data-i18n="ui.game.whatHappened">What happened</h2><button class="icon-only" data-close type="button" aria-label="Close" data-i18n-aria="ui.aria.close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body"><ol id="history" class="history"></ol></div>
     </section>
 
@@ -662,7 +662,7 @@
     <section id="starter-lottery" class="starter-lottery starter-ritual" role="dialog" aria-modal="true" aria-labelledby="lottery-title" aria-describedby="lottery-result" hidden>
       <div class="ritual-veil" aria-hidden="true"></div>
       <div class="ritual-stage">
-        <p class="ritual-kicker" aria-hidden="true">Who starts</p>
+        <p class="ritual-kicker" aria-hidden="true" data-i18n="ui.game.whoStarts">Who starts</p>
         <div id="lottery-deck" class="ritual-deck" aria-hidden="true">
           <span class="ritual-deck-layer" data-i="0"><span class="card back"></span></span>
           <span class="ritual-deck-layer" data-i="1"><span class="card back"></span></span>
@@ -675,7 +675,7 @@
           <span class="ritual-deck-layer" data-i="8"><span class="card back"></span></span>
         </div>
         <div id="lottery-lane-you" class="ritual-lane you">
-          <span id="lottery-you-label" class="ritual-lane-label">You</span>
+          <span id="lottery-you-label" class="ritual-lane-label" data-i18n="online.scoreYou">You</span>
           <div class="ritual-slot">
             <div id="lottery-card-you" class="ritual-card" aria-hidden="true">
               <div id="lottery-inner-you" class="ritual-card-inner">
@@ -686,7 +686,7 @@
           </div>
         </div>
         <div id="lottery-lane-opponent" class="ritual-lane opponent">
-          <span id="lottery-opponent-label" class="ritual-lane-label">Opponent</span>
+          <span id="lottery-opponent-label" class="ritual-lane-label" data-i18n="online.scoreOpponent">Opponent</span>
           <div class="ritual-slot">
             <div id="lottery-card-opponent" class="ritual-card" aria-hidden="true">
               <div id="lottery-inner-opponent" class="ritual-card-inner">
@@ -722,15 +722,15 @@
         <p id="go-moves" class="muted small" data-go-extra hidden></p>
         <ul id="go-highlights" class="highlights" data-go-extra hidden></ul>
         <div class="go-buttons">
-          <button id="go-rematch" class="btn primary big" type="button">Play again</button>
+          <button id="go-rematch" class="btn primary big" type="button" data-i18n="ui.game.playAgain">Play again</button>
           <button id="go-other" class="btn ghost" type="button"></button>
           <!-- "See the board" stays on the card (not behind the disclosure): it is how a player looks
                at the final position, and it is also the documented way to put the card away. -->
-          <button id="go-board" class="btn ghost" type="button">See the board</button>
-          <button id="go-more" class="btn link" type="button" aria-expanded="false">More</button>
-          <button id="go-share" class="btn ghost" type="button" data-go-extra hidden>Share</button>
-          <button id="go-cut" class="btn ghost" type="button" data-go-extra hidden>Replay the biggest cut</button>
-          <button id="go-menu" class="btn link" type="button">Back to menu</button>
+          <button id="go-board" class="btn ghost" type="button" data-i18n="ui.game.seeBoard">See the board</button>
+          <button id="go-more" class="btn link" type="button" aria-expanded="false" data-i18n="result.more">More</button>
+          <button id="go-share" class="btn ghost" type="button" data-go-extra hidden data-i18n="result.share">Share</button>
+          <button id="go-cut" class="btn ghost" type="button" data-go-extra hidden data-i18n="ui.game.replayBiggestCut">Replay the biggest cut</button>
+          <button id="go-menu" class="btn link" type="button" data-i18n="ui.common.backToMenu">Back to menu</button>
           <p id="go-stats" class="muted small stats-line" data-go-extra hidden></p>
         </div>
       </div>
@@ -742,7 +742,7 @@
     <div id="install-prompt" class="install-prompt" hidden>
       <div class="install-prompt-scrim" aria-hidden="true"></div>
       <section class="sheet install-sheet" role="dialog" aria-modal="true" aria-labelledby="install-title" tabindex="-1">
-        <header class="sheet-head"><h2 id="install-title"></h2><button id="install-close" class="icon-only" type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+        <header class="sheet-head"><h2 id="install-title"></h2><button id="install-close" class="icon-only" type="button" aria-label="Close" data-i18n-aria="ui.aria.close"><span class="i" data-icon="close"></span></button></header>
         <div class="sheet-body stack">
           <ul id="install-why" class="install-why"></ul>
           <ol id="install-steps" class="install-steps" hidden></ol>

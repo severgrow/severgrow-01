@@ -1,3 +1,4 @@
+import { t } from '../../../src/i18n/index.js';
 // Approved player phone extras (Test and Futa04): the "thumb layout" settings
 // (Thumb layout, Hand side) and the idle tip shown faintly over the board. The layout itself is
 // computed by the one layout engine (logic/layout.ts, computeLayout's `thumb` variant).
@@ -65,11 +66,11 @@ export const mountThumb = (hooks: { relayout: () => void; reduceMotion: () => bo
   const painters: (() => void)[] = [];
   const paintAll = () => painters.forEach((p) => p());
   const h3 = document.createElement('h3');
-  h3.textContent = 'Phone layout';
+  h3.textContent = t('ui.thumb.title', 'Phone layout');
   box.append(
     h3,
-    seg('Thumb layout', 'thumb-seg', [['on', 'On'], ['off', 'Off']], () => (prefs.thumb ? 'on' : 'off'), (v) => (prefs = { ...prefs, thumb: v === 'on' })),
-    seg('Hand side', 'hand-side-seg', [['right', 'Right'], ['left', 'Left']], () => prefs.side, (v) => (prefs = { ...prefs, side: v === 'left' ? 'left' : 'right' })),
+    seg(t('ui.thumb.layout', 'Thumb layout'), 'thumb-seg', [['on', 'On'], ['off', 'Off']], () => (prefs.thumb ? 'on' : 'off'), (v) => (prefs = { ...prefs, thumb: v === 'on' })),
+    seg(t('ui.thumb.side', 'Hand side'), 'hand-side-seg', [['right', 'Right'], ['left', 'Left']], () => prefs.side, (v) => (prefs = { ...prefs, side: v === 'left' ? 'left' : 'right' })),
   );
   body?.prepend(box);
   paintAll();

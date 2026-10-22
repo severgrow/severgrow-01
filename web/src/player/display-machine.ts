@@ -1,3 +1,5 @@
+import { LESSON as L_LESSON } from '../../../src/strings.js';
+import { t } from '../../../src/i18n/index.js';
 import type { DisplayEvent } from './display-readout.js';
 import { PINNED } from '../logic/motion.js';
 import { FlavourDeck } from './led-flavour.js';
@@ -20,6 +22,15 @@ export const DISPLAY_MIN_DWELL_MS = PINNED.displayDwell;
 export const LESSON_MIN_DWELL_MS = PINNED.lessonDwell;
 
 const STEP_WORDS = new Set(['DRAW', 'DRAW!', 'GROW', 'GROW!', 'THROW', 'THROW!', 'BLOOM', 'BLOOM!', 'SKIP?']);
+
+/**
+ * The step words a locale actually shows. English is the canonical set; another language's tokens
+ * come from the one place they are written (`ui.led.*`), so a translated action line still wakes
+ * the sign into the right step.
+ */
+const stepWords = (): Set<string> => new Set([...STEP_WORDS,
+  t('ui.led.drawStep', 'DRAW!'), t('ui.led.growStep', 'GROW!'), t('ui.led.throwStep', 'THROW!'),
+  t('ui.led.bloomStep', 'BLOOM!'), t('ui.led.skipQuestion', 'SKIP?')]);
 
 /** Step / skip cues that must never linger after the turn moves on (incl. hint "SKIP"). */
 const STEP_CUE = /^(DRAW|GROW|THROW|BLOOM|SKIP)\??!?$/;
@@ -195,7 +206,7 @@ export class DisplayMachine {
       return;
     }
     this.instruction = text;
-    if (STEP_WORDS.has(text) && text !== 'WAIT') this.supersedeStep(text);
+    if (stepWords().has(text) && text !== t('ui.led.wait', 'WAIT')) this.supersedeStep(text);
     else this.interact();
   }
 
@@ -375,7 +386,7 @@ export class DisplayMachine {
       return;
     }
     // Prefer the next step word soon; otherwise a short blank beat, then score.
-    if (STEP_WORDS.has(this.instruction)) {
+    if (stepWords().has(this.instruction)) {
       this.rest();
       this.scheduleIdle(2200);
       return;
@@ -394,14 +405,14 @@ export class DisplayMachine {
     // to life when the player goes idle — otherwise it sits dark for the whole level, which reads as
     // broken (owner, 2026-10-21). So `quiet` no longer suppresses the idle prompt; it only changes
     // which word is re-prompted and how long a message holds.
-    if (this.instruction === 'WAIT' || this.instruction === 'OPPONENT TURN' || this.instruction === 'FUTASAKU') return;
+    if (this.instruction === t('ui.led.wait', 'WAIT') || this.instruction === 'OPPONENT TURN' || this.instruction === 'FUTASAKU') return;
     this.idleTimer = window.setTimeout(() => {
       if (this.active || this.held || this.urgency) return;
       this.idleCycles++;
       // Re-prompt the step word only — no idle motif chatter. In a lesson the instruction is an
       // action line ("TAP DRAW PILE"), so it is reduced to its step word first.
       const word = this.idleWord(this.instruction);
-      if (!STEP_WORDS.has(word)) {
+      if (!stepWords().has(word)) {
         // Blank beat — never touch sticky urgency (already guarded above).
         this.emit({ text: '', mode: 'score' });
         this.idleReturn = window.setTimeout(() => {
@@ -424,12 +435,24 @@ export class DisplayMachine {
    * that is what makes the display come back to life instead of staying dark.
    */
   idleWord(word: string): string {
-    if (STEP_WORDS.has(word)) return word;
+    if (stepWords().has(word)) return word;
     if (!this.quiet) return word;
-    if (word === 'TAP DRAW PILE' || word === 'DRAW') return 'DRAW';
-    if (word.startsWith('TAP LIT') || word.startsWith('PICK') || word.startsWith('CHOOSE') || word.startsWith('TAP THEIR')) return 'GROW';
-    if (word.startsWith('THROW') || word.startsWith('TAP THROW')) return 'THROW';
-    if (word.startsWith('TAP BLOOM') || word.startsWith('TAP »')) return 'GROW';
+    const drawStep = t('ui.led.drawStep', 'DRAW!');
+    const growStep = t('ui.led.growStep', 'GROW!');
+    const throwStep = t('ui.led.throwStep', 'THROW!');
+    // The lesson's own action lines, in the ACTIVE language: the same mapping as English below,
+    // without depending on English words that a translation legitimately replaced.
+    if (word === L_LESSON.tapDraw) return drawStep;
+    if (word === L_LESSON.tapThrowPile || word === L_LESSON.throwCard) return throwStep;
+    if (word === L_LESSON.tapTile || word === L_LESSON.tapTiles || word === L_LESSON.chooseCard
+      || word === L_LESSON.tapTheirTile || word === L_LESSON.tapBloom || word === L_LESSON.tapBlast
+      || word === L_LESSON.tapThrow || word === L_LESSON.bloomHello || word === L_LESSON.bombHello
+      || word === L_LESSON.chooseBomb || word === L_LESSON.bombTile) return growStep;
+    // English action lines keep their historical mapping.
+    if (word === 'TAP DRAW PILE' || word === 'DRAW') return drawStep;
+    if (word.startsWith('TAP LIT') || word.startsWith('PICK') || word.startsWith('CHOOSE') || word.startsWith('TAP THEIR')) return growStep;
+    if (word.startsWith('THROW') || word.startsWith('TAP THROW')) return throwStep;
+    if (word.startsWith('TAP BLOOM') || word.startsWith('TAP »')) return growStep;
     return word;
   }
   interact() {
@@ -459,7 +482,7 @@ export class DisplayMachine {
     this.scoreText = `${you}:${opp}`;
     this.shownAt = 0;
     this.frame = { text: '', mode: 'score' };
-    if (STEP_WORDS.has(text)) {
+    if (stepWords().has(text)) {
       // Opening face is the step word (same as before — no 1s score flash first).
       this.announceStep(text);
     } else {

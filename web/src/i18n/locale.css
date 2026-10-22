@@ -1,0 +1,106 @@
+/* Localisation presentation: the quiet corner language control and script-aware typography.
+   No language may look like a fallback: Japanese gets a native-first font stack and its own
+   line-breaking and letter-spacing conventions instead of Latin display type. */
+
+/* The corner control: plain type, no frame, no fill. It should read as a small fact about the
+   page, not as another menu button. */
+#menu .lang-corner {
+  position: fixed;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 8;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 6px;
+}
+.lang-corner-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 6px 2px;
+  color: var(--fu-cream, #e8ddc5);
+  opacity: 0.42;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: opacity 140ms ease;
+}
+.lang-corner-btn:hover,
+.lang-corner-btn:focus-visible { opacity: 0.9; }
+.lang-corner-btn:focus-visible { outline: 1px solid var(--fu-cream-55, rgba(232, 221, 197, 0.55)); outline-offset: 3px; }
+.lang-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 128px;
+  padding: 6px;
+  border: 1px solid var(--fu-cream-22, rgba(232, 221, 197, 0.22));
+  border-radius: 6px;
+  background: color-mix(in srgb, #17181a 92%, transparent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.lang-option {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  min-height: 36px;
+  padding: 8px 12px;
+  color: var(--fu-cream, #e8ddc5);
+  opacity: 0.62;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-align: right;
+  cursor: pointer;
+}
+.lang-option:hover,
+.lang-option:focus-visible { opacity: 1; background: var(--fu-cream-14, rgba(232, 221, 197, 0.14)); outline: none; }
+.lang-option.is-on { opacity: 1; }
+.lang-option.is-on::before { content: '· '; opacity: 0.7; }
+
+/* Japanese typography. Native system faces first: no missing-glyph fallback, no huge download.
+   Hiragino on Apple, Yu Gothic on Windows, Noto Sans JP on Android and Linux. */
+html[data-script='japanese'] {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
+    'Yu Gothic UI', 'Yu Gothic', 'Noto Sans JP', 'Noto Sans CJK JP', sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'Hiragino Mincho ProN', 'Yu Mincho',
+    'Noto Serif JP', 'Noto Serif CJK JP', serif;
+  --font: var(--font-ui);
+  --w-ui-medium: 600;
+}
+html[data-script='japanese'] body {
+  font-feature-settings: 'palt' 1;
+  line-break: strict;
+  overflow-wrap: anywhere;
+  letter-spacing: 0;
+}
+/* Japanese does not use Western tracking on short labels: keep the words close and calm. */
+html[data-script='japanese'] .menu-buttons .btn,
+html[data-script='japanese'] .lang-corner-btn,
+html[data-script='japanese'] .lang-option { letter-spacing: 0.02em; }
+html[data-script='japanese'] .title { letter-spacing: 0.01em; }
+/* The LED is an instrument face; Japanese wants slightly larger glyphs at the same cell height. */
+html[data-script='japanese'] .led-cell,
+html[data-script='japanese'] .display-cell { letter-spacing: 0.02em; }
+html[data-script='japanese'] .btn { line-height: 1.35; }
+html[data-script='japanese'] .small { font-size: 0.82rem; }
+
+/* The player skin re-declares the font tokens on <body>; script overrides must reach that scope
+   too, otherwise Japanese keeps the Latin monospace face for inherited copy. */
+html[data-script='japanese'] body {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
+    'Yu Gothic UI', 'Yu Gothic', 'Noto Sans JP', 'Noto Sans CJK JP', sans-serif !important;
+  --font-display: -apple-system, BlinkMacSystemFont, 'Hiragino Mincho ProN', 'Yu Mincho',
+    'Noto Serif JP', 'Noto Serif CJK JP', serif !important;
+  --font-num: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI',
+    'Noto Sans JP', sans-serif !important;
+  --font: var(--font-ui) !important;
+  font-family: var(--font-ui);
+}

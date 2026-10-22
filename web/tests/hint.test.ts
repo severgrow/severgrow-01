@@ -130,9 +130,9 @@ describe('the hint weight', () => {
   });
   it('the routine hints are the everyday ones: draw, grow, throw', async () => {
     const { isRoutineHint } = await import('../src/logic/hint.js');
-    expect(isRoutineHint(hintFor({ ...base, phase: 'DRAW' }).text)).toBe(true);
-    expect(isRoutineHint(hintFor(base).text)).toBe(true);
-    expect(isRoutineHint(hintFor({ ...base, phase: 'DISCARD' }).text)).toBe(true);
-    expect(isRoutineHint(hintFor({ ...base, hexWithNoMove: true }).text)).toBe(false);
+    expect(isRoutineHint(hintFor({ ...base, phase: 'DRAW' }))).toBe(true);
+    expect(isRoutineHint(hintFor(base))).toBe(true);
+    expect(isRoutineHint(hintFor({ ...base, phase: 'DISCARD' }))).toBe(true);
+    expect(isRoutineHint(hintFor({ ...base, hexWithNoMove: true }))).toBe(false);
   });
 });

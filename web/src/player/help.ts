@@ -1,3 +1,6 @@
+import { t } from '../../../src/i18n/index.js';
+import { BLOOM } from '../../../src/strings.js';
+
 /** Futa04 teaching lives behind one readable disclosure, never over playable hexes.
  * Move the original nodes so their game-owned content, dismissal and coach actions stay intact.
  */
@@ -103,13 +106,13 @@ export const mountHelp = (hooks: HelpHooks) => {
   trigger.setAttribute('aria-haspopup', 'dialog');
   trigger.setAttribute('aria-controls', HELP_SHEET_ID);
   trigger.setAttribute('aria-expanded', 'false');
-  trigger.setAttribute('aria-label', 'Tips');
-  trigger.title = 'Tips';
+  trigger.setAttribute('aria-label', t('ui.help.tips', 'Tips'));
+  trigger.title = t('ui.help.tips', 'Tips');
   // Keep the existing controls and handlers; only their Futa04 presentation moves.
   const actions = document.createElement('div');
   actions.id = 'futa04-actions';
   actions.setAttribute('role', 'group');
-  actions.setAttribute('aria-label', 'Undo, hint and arrange cards');
+  actions.setAttribute('aria-label', t('ui.help.actions', 'Undo, hint and arrange cards'));
   const undo = document.getElementById('tool-undo');
   const sort = document.getElementById('hand-sort');
   const table = document.querySelector('.dock > .table-row');
@@ -129,12 +132,12 @@ export const mountHelp = (hooks: HelpHooks) => {
   header.className = 'sheet-head';
   const title = document.createElement('h2');
   title.id = 'futa04-help-title';
-  title.textContent = 'Game help';
+  title.textContent = t('ui.help.title', 'Game help');
   const close = document.createElement('button');
   close.className = 'icon-only';
   close.type = 'button';
   close.dataset.close = '';
-  close.setAttribute('aria-label', 'Close help');
+  close.setAttribute('aria-label', t('ui.help.close', 'Close help'));
   close.textContent = '×';
   header.append(title, close);
   const body = document.createElement('div');
@@ -169,7 +172,7 @@ export const mountHelp = (hooks: HelpHooks) => {
   const showKind = () => {
     tipPanel.hidden = kind !== 'tip';
     coachPanel.hidden = kind !== 'coach';
-    title.textContent = kind === 'tip' ? 'Learn to play' : 'Your hint';
+    title.textContent = kind === 'tip' ? t('ui.help.learnToPlay', 'Learn to play') : t('ui.help.yourHint', 'Your hint');
     dialog.dataset.help = kind;
   };
   const restoreFocus = () => {
@@ -252,20 +255,20 @@ export const mountHelp = (hooks: HelpHooks) => {
       trigger.disabled = blocked || (!hooks.onBulb && !hasTip && !hasCoach);
       slot.closest<HTMLElement>('#futa04-information-rail')?.setAttribute('data-help', trigger.hidden ? 'off' : 'on');
       if (dialog.hidden) kind = hasCoach ? 'coach' : 'tip';
-      const tipTitle = document.getElementById('first-tip-title')?.textContent?.trim() || 'Game help';
+      const tipTitle = document.getElementById('first-tip-title')?.textContent?.trim() || t('ui.help.title', 'Game help');
       const progress = document.getElementById('coach-step');
       const step = progress?.textContent?.trim().replace(/^Tip\s+/i, '') || '';
       if (step && progress) progress.textContent = `Tip ${step}`;
       if (hooks.onBulb) {
-        trigger.title = 'Match Intel';
-        trigger.setAttribute('aria-label','Match Intel: what went on the Throw pile, and match facts');
+        trigger.title = t('ui.help.matchIntel', 'Match Intel');
+        trigger.setAttribute('aria-label', t('ui.help.matchIntelAria', 'Match Intel: what went on the Throw pile, and match facts'));
       } else if (hasTip && !hasCoach) {
-        const topic = /bloom/i.test(tipTitle) ? 'Bloom' : tipTitle;
-        trigger.title = `Learn: ${topic}`;
-        trigger.setAttribute('aria-label', `Learn: ${tipTitle}. Open the full explanation.`);
+        const topic = /bloom|rozkwit|floraci|開花/i.test(tipTitle) ? BLOOM.Name : tipTitle;
+        trigger.title = t('ui.help.learnTopic', 'Learn: {topic}', { topic });
+        trigger.setAttribute('aria-label', t('ui.help.learnAria', 'Learn: {topic}. Open the full explanation.', { topic: tipTitle }));
       } else {
-        trigger.title = 'Hint';
-        trigger.setAttribute('aria-label', step ? `Hint. Tip ${step}. Open the suggestion and explanation.` : 'Hint. Open your coach summary.');
+        trigger.title = t('ui.help.hint', 'Hint');
+        trigger.setAttribute('aria-label', step ? t('ui.help.hintAriaStep', 'Hint. Tip {n}. Open the suggestion and explanation.', { n: step }) : t('ui.help.hintAria', 'Hint. Open your coach summary.'));
       }
       if (!dialog.hidden) {
         // An opponent action or game ending may invalidate advice while a sheet is open.

@@ -2,6 +2,7 @@
 // remembered in the browser. They can be opened again from the "How to play" sheet.
 // `fruitAny` only remembers that the "any strength" hint was shown once.
 import { FRUIT, OPP } from '../../../src/strings.js';
+import { localized } from '../../../src/i18n/index.js';
 import type { Action, View } from '../../../src/engine/index.js';
 export const TIPS_KEY = 'severgrow.tips.v1';
 export type TipId = 'fruit' | 'strengthen' | 'draw';
@@ -19,7 +20,7 @@ export const bloomHintGroups = (_view: View, legal: readonly Action[]): number[]
   return groups;
 };
 
-export const TIPS: Record<TipId, { title: string; text: string }> = {
+const EN_TIPS: Record<TipId, { title: string; text: string }> = {
   strengthen: {
     title: 'Strengthen',
     text: `A higher card can strengthen your own tile. It doesn’t score points, but it’s harder for ${OPP.the} to overgrow. It uses your Grow for the turn, and it doesn’t stop a cut or a Bomb.`,
@@ -36,6 +37,7 @@ export const TIPS: Record<TipId, { title: string; text: string }> = {
   },
 };
 
+export const TIPS = localized('uiTip', EN_TIPS);
 
 /** What the browser remembers; anything unreadable counts as "nothing seen yet". */
 export const parseTips = (raw: string | null): TipsSeen => {

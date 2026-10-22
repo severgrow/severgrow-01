@@ -14,6 +14,7 @@
 // map read, cached by web/src/online/territory-cache.ts); matches won has no player-facing source
 // in this build, so its fact is honestly null.
 import { PROFILE } from '../../../src/strings.js';
+import { onLocaleChange } from '../../../src/i18n/index.js';
 import { SEEDS_WORD } from '../online/seed-icon.js';
 
 export type ProfileFacts = {
@@ -76,13 +77,18 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
 
   // The words come from the one strings module (the currency's noun comes from the economy module,
   // exactly as the Territory wallet takes it), and the markup carries them as a no-JS fallback.
-  const title = doc.getElementById('profile-title');
-  if (title) title.textContent = PROFILE.title;
-  const labels = [PROFILE.name, PROFILE.signIn, SEEDS_WORD, PROFILE.tiles, PROFILE.matchesWon];
-  sheet.querySelectorAll('.sp-row dt').forEach((dt, index) => {
-    const label = labels[index];
-    if (label) dt.textContent = label;
-  });
+  const paintWords = () => {
+    const title = doc.getElementById('profile-title');
+    if (title) title.textContent = PROFILE.title;
+    sheet.setAttribute('aria-label', PROFILE.title);
+    const labels = [PROFILE.name, PROFILE.signIn, SEEDS_WORD, PROFILE.tiles, PROFILE.matchesWon];
+    sheet.querySelectorAll('.sp-row dt').forEach((dt, index) => {
+      const label = labels[index];
+      if (label) dt.textContent = label;
+    });
+  };
+  paintWords();
+  onLocaleChange(paintWords);
 
   const fill = (facts: ProfileFacts) => {
     const rows = profileRows(facts);

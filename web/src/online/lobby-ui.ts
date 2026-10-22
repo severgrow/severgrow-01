@@ -3,6 +3,7 @@
 import { DuelClient, DuelError, browserStorage } from '../../../server/src/client.js';
 import type { MatchListEntry, MatchSummary, MatchViewPayload, WorldMapPayload } from '../../../server/src/protocol.js';
 import { ONLINE } from '../../../src/strings.js';
+import { t } from '../../../src/i18n/index.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
 import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
@@ -910,18 +911,18 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     sheet.className = 'world-invitation';
     sheet.setAttribute('role', 'dialog');
     sheet.setAttribute('aria-modal', 'true');
-    sheet.setAttribute('aria-label', '100 Seeds');
+    sheet.setAttribute('aria-label', t('ui.online.seeds100', '100 Seeds'));
     const card = document.createElement('div');
     card.className = 'world-invitation-card';
     const title = document.createElement('strong');
-    title.textContent = '100 SEEDS';
+    title.textContent = t('ui.online.seeds100Upper', '100 SEEDS');
     const line = document.createElement('p');
-    line.textContent = 'Your place in the world is waiting.';
+    line.textContent = t('ui.online.seedsInviteLine', 'Your place in the world is waiting.');
     const actions = document.createElement('div');
     const open = document.createElement('button');
     open.textContent = ONLINE.worldInviteOpen;
     const later = document.createElement('button');
-    later.textContent = 'LATER';
+    later.textContent = t('ui.online.laterUpper', 'LATER');
     const finish = (go: boolean) => {
       sheet.remove(); invitationOpen = false; invitationDismissedThisSession = true;
       void client.acknowledgeWorldInvitation(id.token).catch(() => { /* Retry on a later session. */ });

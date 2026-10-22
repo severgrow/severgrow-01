@@ -6,6 +6,7 @@
 //   2. It never repeats: a line cannot come back until its whole pool has been seen, a kind
 //      never speaks twice in a row, and a refilled pool keeps its last line out of the first slot.
 import type { LedMotif, LedTone } from './led-cells.js';
+import { localized } from '../../../src/i18n/index.js';
 
 export type FlavourPool = { lines: readonly string[]; tone: LedTone; motif?: LedMotif };
 
@@ -13,7 +14,7 @@ export type FlavourPool = { lines: readonly string[]; tone: LedTone; motif?: Led
 export const FLAVOUR_RATE = 14;
 
 /** Short pools (1-6 characters) for every kind of moment that can earn an aside. */
-export const FLAVOUR_POOLS = {
+const EN_FLAVOUR_POOLS = {
   'cut-theirs': { tone: 'green', motif: 'stars', lines: ['NICE', 'CLEAN', 'SNAP', 'CLIP', 'ZAP', 'NIP', 'SWISH', 'GOOD', 'YES', 'HA.'] },
   'cut-mine': { tone: 'red', motif: 'scatter', lines: ['OUCH', 'RIP', 'RUDE.', 'OOF', 'YIKES', 'HURT', 'UGH', 'NOPE', 'CREAK', 'OW.'] },
   'loss': { tone: 'red', motif: 'scatter', lines: ['OUCH', 'RIP', 'OOF', 'UGH', 'NOPE', 'YIKES', 'HURT', 'OW.'] },
@@ -25,7 +26,9 @@ export const FLAVOUR_POOLS = {
   'lead-them': { tone: 'red', lines: ['UH OH', 'TRAIL', 'DOWN', 'NO.', 'OOF', 'WATCH', 'FALL', 'HMM', 'LOST', 'HOLD'] },
 } as const satisfies Record<string, FlavourPool>;
 
-export type FlavourKind = keyof typeof FLAVOUR_POOLS;
+export const FLAVOUR_POOLS = localized('uiFlavour', EN_FLAVOUR_POOLS);
+
+export type FlavourKind = keyof typeof EN_FLAVOUR_POOLS;
 
 const fnv = (text: string) => {
   let hash = 2166136261;

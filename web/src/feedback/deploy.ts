@@ -2,6 +2,8 @@
 // "last deploy: <time>"). The time is stamped by the build itself (web/vite.config.ts), and the
 // deploy workflow builds the site immediately before it publishes, so every push to the live
 // branch carries its own time without anyone having to remember to update it.
+import { LOCALE_META, getLocale } from '../../../src/i18n/index.js';
+
 declare const __DEPLOYED_AT__: string;
 
 /** The stamped ISO time, or '' in a dev server or a test run. */
@@ -12,10 +14,13 @@ export const deployLabel = (iso: string | null | undefined, timeZone?: string): 
   if (!iso) return null;
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return null;
-  const parts = new Intl.DateTimeFormat('en-GB', {
+  const lang = LOCALE_META[getLocale()].htmlLang;
+  const parts = new Intl.DateTimeFormat(lang, {
     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
     ...(timeZone ? { timeZone } : {}),
   }).formatToParts(at);
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
-  return `${part('day')} ${part('month')}, ${part('hour')}:${part('minute')}`;
+  const join = lang.startsWith('ja') ? `${part('month')}月${part('day')}日 ${part('hour')}:${part('minute')}`
+    : `${part('day')} ${part('month')}, ${part('hour')}:${part('minute')}`;
+  return join;
 };

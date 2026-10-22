@@ -89,7 +89,23 @@ export const LED_ADVANCE = 14.5;
 const ADVANCE = LED_ADVANCE;
 const DOT_X = 2.3;
 const SEPARATOR = ' • ';
-export const ledMessageWidth = (message: string) => Math.max(1, message.length * ADVANCE - 1);
+
+/**
+ * Japanese is not a Latin alphabet: it cannot be drawn through the 5×7 dot matrix without
+ * turning kanji into `?`. The sign therefore renders its real type on the same canvas, at the
+ * same height and with the same warm glow, while the LIGHT is still built from the glyphs'
+ * actual ink (sampled below), so the bloom behind the strip keeps working in every language.
+ */
+const isJapanese = (): boolean =>
+  typeof document !== 'undefined' && document.documentElement.dataset.script === 'japanese';
+
+/** Full-width characters advance like their own em; Latin and digits keep a half-width step. */
+const japaneseAdvance = (ch: string): number => (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 17.5 : 8.8);
+
+export const ledMessageWidth = (message: string) =>
+  isJapanese()
+    ? Math.max(1, [...message].reduce((sum, ch) => sum + japaneseAdvance(ch), 0) - 1)
+    : Math.max(1, message.length * ADVANCE - 1);
 export const ledMarqueeTravel = (message: string) => ledMessageWidth(`${message}${SEPARATOR}`);
 
 /** Readable static shorthand for the physical window when motion is reduced. The full copy stays in the live region. */
@@ -173,6 +189,7 @@ export type LedLayout = { width: number; height: number; scale: number; dots: Le
 /** The lit dots of a message, in CSS px. The ONE source for the cells and their light. */
 export function ledLayout(message: string, repeat = false, mode: LedTone = 'amber', scale = 1): LedLayout {
   const s = Math.max(0.5, scale);
+  if (isJapanese()) return japaneseLayout(message, repeat, mode, s);
   const advance = ADVANCE * s;
   const dotX = DOT_X * s;
   const rowStep = 3.1 * s;
@@ -204,6 +221,52 @@ export function ledLayout(message: string, repeat = false, mode: LedTone = 'ambe
   return { width, height: cellH, scale: s, dots };
 }
 
+/** The font the Japanese sign is set in: native faces first, never a Latin fallback. */
+const JA_FONT = (s: number) =>
+  `700 ${17 * s}px -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', sans-serif`;
+
+const sampled = new Map<string, LedLayout>();
+
+/**
+ * The Japanese layout: real type for the cells, and a dot cloud sampled from that type for the
+ * light. Sampling runs once per message (cached) — the strip changes on a beat, not per frame.
+ */
+function japaneseLayout(message: string, repeat: boolean, mode: LedTone, s: number): LedLayout {
+  const shown = repeat ? `${message}${SEPARATOR}${message}${SEPARATOR}${message}` : message;
+  const width = Math.max(1, [...shown].reduce((sum, ch) => sum + japaneseAdvance(ch) * s, 0) - s);
+  const cellH = 26 * s;
+  const key = `ja:${s}:${mode}:${repeat}:${shown}`;
+  const hit = sampled.get(key);
+  if (hit) return hit;
+  const dots: LedDot[] = [];
+  // The ink is sampled from the same glyphs the canvas shows, in 2.4px steps: enough for a soft,
+  // correctly-placed halo without a per-pixel dot list.
+  if (typeof document !== 'undefined') {
+    const off = document.createElement('canvas');
+    off.width = Math.max(1, Math.ceil(width));
+    off.height = Math.max(1, Math.ceil(cellH));
+    const ctx = off.getContext('2d');
+    if (ctx) {
+      ctx.font = JA_FONT(s);
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(shown, 1 * s, cellH * 0.54);
+      const data = ctx.getImageData(0, 0, off.width, off.height).data;
+      const step = Math.max(1.5, 2.4 * s);
+      for (let y = 1; y < off.height; y += step) {
+        for (let x = 1; x < off.width; x += step) {
+          if (data[(Math.floor(y) * off.width + Math.floor(x)) * 4 + 3]! < 40) continue;
+          dots.push({ x, y, r: 1.05 * s, tone: (mode === 'score' ? 'ivory' : mode) as LightTone });
+        }
+      }
+    }
+  }
+  const layout: LedLayout = { width, height: cellH, scale: s, dots };
+  if (sampled.size > 48) sampled.clear();
+  sampled.set(key, layout);
+  return layout;
+}
+
 /** Full-size square LED cells. Longer copy repeats as one seamless marquee strip.
  *  `scale` grows the dots (tutorial titles use ~1.15 so they match the old 20px heading). */
 export function drawLedCells(
@@ -223,6 +286,18 @@ export function drawLedCells(
   const ctx = canvas.getContext('2d');
   if (!ctx) return layout.width;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (isJapanese()) {
+    const tone: Exclude<LedTone, 'score'> = mode === 'score' ? 'ivory' : mode;
+    const ink = INK[tone];
+    ctx.font = JA_FONT(s);
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = ink.fill;
+    ctx.shadowColor = ink.glow;
+    ctx.shadowBlur = 4.2 * s;
+    ctx.fillText(`${message}${repeat ? SEPARATOR : ''}`, 1 * s, layout.height * 0.54);
+    ctx.shadowBlur = 0;
+    return layout.width;
+  }
   for (const dot of layout.dots) {
     const ink = INK[dot.tone];
     ctx.beginPath();

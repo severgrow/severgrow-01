@@ -21,6 +21,12 @@ export const paintBetaLine = (beta: HTMLElement | null): HTMLButtonElement | nul
     });
     beta.append(link);
   }
+  // A language switch repaints the sentence but keeps the SAME link node and its handlers.
+  beta.replaceChildren(
+    document.createTextNode(`${FEEDBACK.betaNote(FEEDBACK.betaVersion, deployLabel(DEPLOYED_AT))} `),
+    link,
+  );
+  link.textContent = FEEDBACK.betaLink;
   beta.hidden = false;
   return link;
 };

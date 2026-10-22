@@ -4,6 +4,7 @@ import { coordKey, viewFor } from '../../../src/engine/index.js';
 import type { Action, Coord, EndReason, Event, GameResult, Player, State } from '../../../src/engine/index.js';
 import { cardName, hexName, moveSentence } from '../../../src/playtest/names.js';
 import { BLAST, BLOOM, FRUIT, OPP, RESULT, SPROUT } from '../../../src/strings.js';
+import { t, tPlural } from '../../../src/i18n/index.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -49,8 +50,8 @@ const resolution = (s: State, me: Player): string => {
   const r = s.lastResolution;
   if (!r) return '';
   const parts: string[] = [];
-  if (r.overgrown.length) parts.push(`overgrew ${r.overgrown.length} spot${r.overgrown.length > 1 ? 's' : ''}`);
-  for (const cut of r.severed) parts.push(`${cut.coords.length} of ${cut.player === me ? 'your' : OPP.theirs} tiles were cut off`);
+  if (r.overgrown.length) parts.push(tPlural('ui.log.overgrew', { one: 'overgrew {n} spot', other: 'overgrew {n} spots' }, r.overgrown.length));
+  for (const cut of r.severed) parts.push(cut.player === me ? t('ui.log.cutMine', '{n} of your tiles were cut off', { n: cut.coords.length }) : t('ui.log.cutTheirs', '{n} of your opponent’s tiles were cut off', { n: cut.coords.length }));
   return parts.length ? ` — ${parts.join(', ')}` : '';
 };
 
@@ -63,13 +64,13 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
   if (before.actor === me) {
     if (a.t === 'Bloom') return `${BLOOM.youDid(a.cards.length)}${tail}`;
     if (a.t === 'Sprout') return `${SPROUT.youDid(hn(a.coord))}${tail}`;
-    return `You: ${moveSentence(viewFor(before, me), a)}`;
+    return t('ui.log.youDid', 'You: {move}', { move: moveSentence(viewFor(before, me), a) });
   }
   const hand = before.hands[before.actor];
   const name = (id: number) => cardName(hand.find((c) => c.id === id)!);
   switch (a.t) {
     case 'Draw':
-      return a.from === 'deck' ? `${OPP.The} drew a card` : `${OPP.The} took the ${cardName(before.discard.at(-1)!)}`;
+      return a.from === 'deck' ? t('ui.log.oppDrew', '{opp} drew a card', { opp: OPP.The }) : t('ui.log.oppTook', '{opp} took the {card}', { opp: OPP.The, card: cardName(before.discard.at(-1)!) });
     case 'Bloom':
       return `${BLOOM.oppDid(a.cards.length)} (${a.cards.map(name).join(', ')})${tail}`;
     case 'MegaBomb':
@@ -77,28 +78,28 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
     case 'Sprout':
       return `${SPROUT.oppDid(name(a.card), hn(a.coord))}${tail}`;
     case 'EndAct':
-      return `${OPP.The} finished playing cards`;
+      return t('ui.log.oppFinished', '{opp} finished playing cards', { opp: OPP.The });
     case 'Discard':
-      return `${OPP.The} threw away ${name(a.card)}`;
+      return t('ui.log.oppThrew', '{opp} threw away {card}', { opp: OPP.The, card: name(a.card) });
     case 'Knock':
-      return `${OPP.The} knocked: you get one last turn`;
+      return t('ui.log.oppKnocked', '{opp} knocked: you get one last turn', { opp: OPP.The });
     case 'Continue':
-      return `${OPP.The} ended their turn`;
+      return t('ui.log.oppEnded', '{opp} ended their turn', { opp: OPP.The });
     case 'PlayFruit':
-      return `${FRUIT.oppDid(before.board[coordKey(a.target)]?.strength ?? 0)} at ${hn(a.target)}${tail}`;
+      return `${FRUIT.oppDid(before.board[coordKey(a.target)]?.strength ?? 0)} ${t('ui.log.atHex', 'at {hex}', { hex: hn(a.target) })}${tail}`;
     case 'RotPick':
-      return `${OPP.The} chose your tile at ${hn(a.coord)} to rot`;
+      return t('ui.log.oppRot', '{opp} chose your tile at {hex} to rot', { opp: OPP.The, hex: hn(a.coord) });
   }
 };
 
-const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const count = (n: number) => tPlural('ui.count.tiles', { one: '{n} tile', other: '{n} tiles' }, n);
 
 /** UX pass (result screen): what I did with the one-card move this game, or null if nothing. */
 export const moveSummary = (history: readonly Event[], me: Player): string | null => {
   const grown = history.filter((e) => e.t === 'Sprout' && e.player === me).length;
   const strong = history.filter((e) => e.t === 'Strengthen' && e.player === me).length;
   const parts: string[] = [];
-  if (grown) parts.push(`sprouted ${count(grown, 'tile', 'tiles')}`);
-  if (strong) parts.push(`strengthened ${count(strong, 'tile', 'tiles')}`);
-  return parts.length ? `You ${parts.join(' and ')}.` : null;
+  if (grown) parts.push(t('ui.log.sprouted', 'sprouted {count}', { count: count(grown) }));
+  if (strong) parts.push(t('ui.log.strengthened', 'strengthened {count}', { count: count(strong) }));
+  return parts.length ? t('ui.log.youSummary', 'You {parts}.', { parts: parts.join(t('ui.common.and', ' and ')) }) : null;
 };

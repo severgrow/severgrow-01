@@ -5,6 +5,7 @@ import type { Player } from '../../../src/engine/index.js';
 import { speedFactor } from './settings.js';
 import type { Effects, Settings } from './settings.js';
 import { OPP } from '../../../src/strings.js';
+import { t } from '../../../src/i18n/index.js';
 
 export const BANNER_MS = Object.freeze({ in: 250, hold: 700, out: 250 });
 /** Reduce motion: a plain quick fade. */
@@ -92,7 +93,7 @@ export const bannerView = (s: BannerState): BannerView => {
   const plain = rm || s.opts.effects === 'low';
   return {
     visible: s.phase !== 'hidden',
-    label: s.player === 1 ? `${OPP.Label} turn` : 'Your turn',
+    label: s.player === 1 ? t('ui.game.opponentTurn', '{opp} turn', { opp: OPP.Label }) : t('online.statusYourTurn', 'Your turn'),
     marker: s.player === 1 ? 'diamond' : 'circle',
     phase: s.phase,
     opacity,

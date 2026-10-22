@@ -2,7 +2,8 @@
 // what that means on the board. Pure functions of the player's View and legal moves.
 import { coordKey } from '../../../src/engine/index.js';
 import type { Action, Card, View } from '../../../src/engine/index.js';
-import { BLOOM, FRUIT, SPROUT } from '../../../src/strings.js';
+import { BLAST, BLOOM, FRUIT, SPROUT } from '../../../src/strings.js';
+import { t } from '../../../src/i18n/index.js';
 import { simulate } from '../../../src/bots/evaluate.js';
 import { moveCards, moveHexes, touchesHex } from '../../../src/playtest/names.js';
 
@@ -35,10 +36,10 @@ export const kindOf = (a: Action): string | null => {
 
 export const kindLabel = (kind: string): string => {
   const [k, n] = kind.split('-');
-  if (k === 'bloom') return n === 'mega' ? 'Blast' : BLOOM.button(Number(n));
-  if (k === 'sprout') return `${SPROUT.Name} one tile`;
-  if (k === 'fruit') return `Use a ${FRUIT.card}`;
-  return 'Pick a tile to rot';
+  if (k === 'bloom') return n === 'mega' ? BLAST.Name : BLOOM.button(Number(n));
+  if (k === 'sprout') return t('ui.move.growOne', '{grow} one tile', { grow: SPROUT.Name });
+  if (k === 'fruit') return t('ui.move.useBomb', 'Use a {card}', { card: FRUIT.card });
+  return t('ui.move.pickRot', 'Pick a tile to rot');
 };
 
 /** The short label for a move button when several share the row (the full words stay its accessible name). */
@@ -182,7 +183,7 @@ export const moveButtons = (v: View, legal: readonly Action[], sel: Sel, showEve
     const cards = kindCards(k.kind).map((id) => byId.get(id)!).filter(Boolean);
     if (cards.length !== kindCards(k.kind).length) continue;
     if (k.kind.startsWith('bloom-mega-')) {
-      fam.set('mega', { kind:k.kind,label:'Blast',count:k.count,score:Infinity,kinds:[k.kind] });
+      fam.set('mega', { kind:k.kind,label:BLAST.Name,count:k.count,score:Infinity,kinds:[k.kind] });
       continue;
     }
     const family = familyOf(cards);
