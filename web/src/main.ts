@@ -1495,8 +1495,8 @@ function fillMenuStatus() {
   // changes them in one file (the markup carries the no-JS fallback, as every other key does).
   const howto = document.getElementById('gm-howto');
   if (howto) {
-    howto.textContent = PAUSE.howTo;
-    howto.setAttribute('aria-label', PAUSE.howTo);
+    howto.textContent = HELP.howToTitle;
+    howto.setAttribute('aria-label', HELP.howToTitle);
   }
   const history = document.getElementById('gm-history');
   if (history) {

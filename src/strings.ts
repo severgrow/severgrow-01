@@ -263,8 +263,7 @@ export const PAUSE = Object.freeze({
   restartMatchBody: 'The match starts again with a fresh deal at the same difficulty. This game is lost.',
   keepPlaying: 'Keep playing',
   mainMenu: 'Main menu',
-  /** The two compact helpers on the pause face. */
-  howTo: 'How to play',
+  /** The compact turn-history helper (the reference's own title is HELP.howToTitle). */
   history: 'What happened',
   practiceMode: 'Practice',
   campaignMode: 'Campaign',
