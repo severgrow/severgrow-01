@@ -871,7 +871,9 @@ try {
     for (let i = 0; i < 5; i++) {
       const b = (await hook<any>(page, 'lesson'))?.beat;
       if (!b?.explain) break;
-      await dismissExplanation(page);
+      await page.waitForTimeout(700);
+      await tapAnywhere(page);
+      await page.waitForTimeout(260);
     }
     await page.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === 'draw', undefined, { timeout: 15000 });
     await page.waitForTimeout(300);
@@ -947,7 +949,9 @@ try {
     for (let i = 0; i < 3; i++) {
       const b = (await hook<any>(guardPage, 'lesson'))?.beat;
       if (b?.explain && b.lit.t === 'deck') break;
-      await dismissExplanation(guardPage);
+      await guardPage.waitForTimeout(700);
+      await tapAnywhere(guardPage);
+      await guardPage.waitForTimeout(280);
     }
     await guardPage.evaluate(`(() => {
       window.__guard = new Promise((resolve) => {
@@ -990,7 +994,9 @@ try {
     for (let i = 0; i < 5; i++) {
       const b = (await hook<any>(rm, 'lesson'))?.beat;
       if (!b?.explain) break;
-      await dismissExplanation(rm);
+      await rm.waitForTimeout(700);
+      await tapAnywhere(rm);
+      await rm.waitForTimeout(260);
     }
     await rm.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === 'draw', undefined, { timeout: 15000 });
     const rmAnims = await animationsOf(rm, '#deck');
@@ -1080,7 +1086,9 @@ try {
       for (let i = 0; i < 4; i++) {
         const b = (await hook<any>(page, 'lesson'))?.beat;
         if (!b?.explain) break;
-        await dismissExplanation(page);
+        await page.waitForTimeout(700);
+        await tapAnywhere(page);
+        await page.waitForTimeout(220);
       }
       await page.waitForTimeout(350);
       const info = await page.evaluate(() => {
