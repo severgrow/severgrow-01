@@ -2571,83 +2571,223 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   border-bottom: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
 }
 
-/* ---------- who-starts lottery ---------- */
-.starter-lottery {
+/* ---------- the pre-game card ritual ---------- */
+/* A static overlay, deliberately cheap: a radial veil (no animated backdrop-filter), one small
+   stack of card backs, two faces and the result. Every moving property is transform or opacity. */
+.starter-ritual {
+  --ritual-cream: #e8ddc5;
+  --ritual-card-w: clamp(72px, min(28vmin, 19vh), 140px);
+  --ritual-card-h: calc(var(--ritual-card-w) * 1.42);
+  --ritual-gap: clamp(16px, 4.4vmin, 44px);
+  --cw: var(--ritual-card-w);
+  --ch: var(--ritual-card-h);
   position: fixed;
   inset: 0;
   z-index: 14;
   display: grid;
   place-items: center;
-  padding: 16px;
-  background: color-mix(in srgb, var(--c-bg) 88%, transparent);
-  backdrop-filter: blur(10px);
-  animation: fade-in 0.35s ease-out;
+  padding:
+    max(14px, env(safe-area-inset-top))
+    max(14px, env(safe-area-inset-right))
+    max(14px, env(safe-area-inset-bottom))
+    max(14px, env(safe-area-inset-left));
+  overflow: hidden;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
 }
-.starter-lottery[hidden] { display: none; }
-.lottery-card {
-  width: min(360px, 100%);
-  text-align: center;
-  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
-  border: 1px solid var(--fu-cream-22);
-  border-radius: 18px;
-  padding: 22px 18px 18px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+.starter-ritual[hidden] { display: none !important; }
+.ritual-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 58% 48% at 50% 44%, rgba(232, 221, 197, .055), transparent 68%),
+    radial-gradient(ellipse 120% 100% at 50% 42%, rgba(10, 11, 12, .5) 0%, rgba(10, 11, 12, .78) 62%, rgba(8, 9, 10, .92) 100%);
 }
-.lottery-kicker {
-  margin: 0 0 6px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  font: 650 0.72rem/1 monospace;
-  color: var(--fu-cream-70);
-}
-.lottery-title {
-  margin: 0 0 16px;
-  color: var(--fu-cream);
-  font-size: clamp(1.6rem, 7vw, 2.1rem);
-  line-height: 1.05;
-}
-.lottery-lanes {
+.ritual-stage {
+  position: relative;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 14px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas:
+    "kicker kicker kicker"
+    "you deck opponent"
+    "outcome outcome outcome";
+  align-items: center;
+  justify-items: center;
+  column-gap: var(--ritual-gap);
+  row-gap: clamp(10px, 2.4vh, 22px);
+  width: min(720px, 100%);
+  max-height: 100%;
+  contain: layout style paint;
 }
-.lottery-lane {
-  border-radius: 12px;
-  padding: 18px 10px;
-  border: 1px solid transparent;
-  opacity: 0.55;
-  transition: opacity 0.25s ease, transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
-}
-.lottery-lane span {
-  letter-spacing: 0.12em;
+.ritual-kicker {
+  grid-area: kicker;
+  margin: 0 0 2px;
+  font: 400 .66rem/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  letter-spacing: .24em;
   text-transform: uppercase;
-  font: 700 0.85rem/1 monospace;
+  color: color-mix(in srgb, var(--ritual-cream) 46%, transparent);
 }
-.lottery-lane.you { background: color-mix(in srgb, #3d7a4a 35%, transparent); color: #b7e0c0; }
-.lottery-lane.bot { background: color-mix(in srgb, #b86a2c 30%, transparent); color: #f0c49a; }
-.starter-lottery[data-winner='you'] .lottery-lane.you,
-.starter-lottery[data-winner='bot'] .lottery-lane.bot {
-  opacity: 1;
-  transform: scale(1.04);
-  border-color: currentColor;
+.ritual-deck {
+  grid-area: deck;
+  position: relative;
+  width: var(--ritual-card-w);
+  height: var(--ritual-card-h);
+  justify-self: center;
+  align-self: center;
+  perspective: 900px;
+  border-radius: calc(var(--ritual-card-w) * .075);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .45), 0 2px 0 rgba(255, 255, 255, .035) inset;
+  will-change: transform, opacity;
 }
-.starter-lottery[data-spinning='1'] .lottery-lane {
-  animation: lottery-pulse 0.45s ease-in-out infinite alternate;
+.ritual-deck-layer {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: inherit;
 }
-.starter-lottery[data-spinning='1'] .lottery-lane.bot { animation-delay: 0.22s; }
-@keyframes lottery-pulse {
-  from { opacity: 0.35; transform: scale(0.98); }
-  to { opacity: 0.95; transform: scale(1.02); }
+.ritual-deck-layer .card,
+.ritual-face .card {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--ritual-card-w) * .075);
 }
-.lottery-result {
+.ritual-deck-layer .card,
+.ritual-face.back .card {
+  display: block;
+  padding: 0;
+  box-shadow: none;
+}
+.ritual-deck-layer .card::after,
+.ritual-face.back .card::after {
+  display: none;
+}
+.ritual-lane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.ritual-lane.you { grid-area: you; }
+.ritual-lane.opponent { grid-area: opponent; }
+.ritual-lane-label {
+  font: 400 .68rem/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ritual-cream) 52%, transparent);
+  transition: color .22s ease, opacity .22s ease;
+}
+.ritual-lane.is-winner .ritual-lane-label { color: var(--ritual-cream); }
+.ritual-lane.is-losing .ritual-lane-label { color: color-mix(in srgb, var(--ritual-cream) 34%, transparent); }
+.ritual-slot {
+  position: relative;
+  width: var(--ritual-card-w);
+  height: var(--ritual-card-h);
+  perspective: 900px;
+}
+.ritual-slot::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: calc(var(--ritual-card-w) * .095);
+  border: 1px solid color-mix(in srgb, var(--ritual-cream) 58%, transparent);
+  box-shadow: 0 0 22px rgba(232, 221, 197, .1);
+  opacity: 0;
+  transition: opacity .26s ease;
+  pointer-events: none;
+}
+.ritual-lane.is-winner .ritual-slot::after { opacity: 1; }
+.ritual-card {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
+}
+.ritual-card-inner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.ritual-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.ritual-face.back { transform: rotateY(0deg); }
+.ritual-face.front { transform: rotateY(180deg); }
+.ritual-lane.is-winner .ritual-face.front .card {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ritual-cream) 46%, transparent),
+    0 20px 40px rgba(0, 0, 0, .52);
+}
+.ritual-outcome {
+  grid-area: outcome;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-height: clamp(56px, 9vh, 76px);
+  text-align: center;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity .24s ease, transform .24s ease;
+  pointer-events: none;
+}
+.ritual-outcome.is-shown { opacity: 1; transform: none; }
+.ritual-title {
   margin: 0;
-  min-height: 1.2em;
-  color: var(--fu-cream);
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  font-family: var(--font-display, 'Besley', Georgia, serif);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -.02em;
+  line-height: 1;
+  font-size: clamp(1.55rem, 5.6vmin, 2.5rem);
+  color: var(--ritual-cream);
+  text-wrap: balance;
 }
-.reduce-motion .starter-lottery[data-spinning='1'] .lottery-lane { animation: none; }
+.ritual-result {
+  margin: 0;
+  font: 400 .78rem/1.35 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  letter-spacing: .045em;
+  color: color-mix(in srgb, var(--ritual-cream) 62%, transparent);
+}
+.starter-ritual.is-reduced .ritual-outcome,
+.starter-ritual.is-reduced .ritual-lane-label,
+.starter-ritual.is-reduced .ritual-slot::after { transition: none; }
+
+/* Portrait and tall tablets: the deck sits above the two lanes. */
+@media (max-aspect-ratio: 4/5) {
+  .ritual-stage {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "kicker kicker"
+      "deck deck"
+      "you opponent"
+      "outcome outcome";
+    row-gap: clamp(9px, 2vh, 16px);
+  }
+}
+/* Short landscape: keep the whole composition inside the viewport height. */
+@media (max-height: 480px) {
+  .starter-ritual { --ritual-card-w: clamp(58px, min(24vmin, 26vh), 96px); }
+  .ritual-stage { row-gap: 6px; }
+  .ritual-lane { gap: 5px; }
+  .ritual-outcome { min-height: 48px; }
+  .ritual-title { font-size: clamp(1.25rem, 5vmin, 1.8rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ritual-lane-label,
+  .ritual-slot::after,
+  .ritual-outcome { transition: none; }
+}
+.reduce-motion .ritual-lane-label,
+.reduce-motion .ritual-slot::after,
+.reduce-motion .ritual-outcome { transition: none; }
 
 /* ---------- game over ---------- */
 .gameover {

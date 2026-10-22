@@ -655,15 +655,51 @@
       <div class="sheet-body"><ol id="history" class="history"></ol></div>
     </section>
 
-    <section id="starter-lottery" class="starter-lottery" role="dialog" aria-modal="true" aria-labelledby="lottery-title" hidden>
-      <div class="lottery-card">
-        <p class="lottery-kicker">Who starts?</p>
-        <h2 id="lottery-title" class="lottery-title">Drawing lots…</h2>
-        <div class="lottery-lanes" aria-hidden="true">
-          <div class="lottery-lane you"><span>You</span></div>
-          <div class="lottery-lane bot"><span>Opponent</span></div>
+    <!-- ===== The pre-game card ritual =====
+         One static overlay for every match entry (offline and online): a deck arrives, shuffles,
+         deals one card to each seat, both reveal at once, and the higher card starts. The engine
+         (or the server) has already decided who starts; this only presents it. -->
+    <section id="starter-lottery" class="starter-lottery starter-ritual" role="dialog" aria-modal="true" aria-labelledby="lottery-title" aria-describedby="lottery-result" hidden>
+      <div class="ritual-veil" aria-hidden="true"></div>
+      <div class="ritual-stage">
+        <p class="ritual-kicker" aria-hidden="true">Who starts</p>
+        <div id="lottery-deck" class="ritual-deck" aria-hidden="true">
+          <span class="ritual-deck-layer" data-i="0"><span class="card back"></span></span>
+          <span class="ritual-deck-layer" data-i="1"><span class="card back"></span></span>
+          <span class="ritual-deck-layer" data-i="2"><span class="card back"></span></span>
+          <span class="ritual-deck-layer" data-i="3"><span class="card back"></span></span>
+          <span class="ritual-deck-layer" data-i="4"><span class="card back"></span></span>
+          <span class="ritual-deck-layer" data-i="5"><span class="card back"></span></span>
+          <span class="ritual-deck-layer" data-i="6"><span class="card back"></span></span>
+          <span class="ritual-deck-layer" data-i="7"><span class="card back"></span></span>
+          <span class="ritual-deck-layer" data-i="8"><span class="card back"></span></span>
         </div>
-        <p id="lottery-result" class="lottery-result"></p>
+        <div id="lottery-lane-you" class="ritual-lane you">
+          <span id="lottery-you-label" class="ritual-lane-label">You</span>
+          <div class="ritual-slot">
+            <div id="lottery-card-you" class="ritual-card" aria-hidden="true">
+              <div id="lottery-inner-you" class="ritual-card-inner">
+                <div class="ritual-face back"><span class="card back"></span></div>
+                <div id="lottery-face-you" class="ritual-face front"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="lottery-lane-opponent" class="ritual-lane opponent">
+          <span id="lottery-opponent-label" class="ritual-lane-label">Opponent</span>
+          <div class="ritual-slot">
+            <div id="lottery-card-opponent" class="ritual-card" aria-hidden="true">
+              <div id="lottery-inner-opponent" class="ritual-card-inner">
+                <div class="ritual-face back"><span class="card back"></span></div>
+                <div id="lottery-face-opponent" class="ritual-face front"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="lottery-outcome" class="ritual-outcome">
+          <h2 id="lottery-title" class="ritual-title" aria-live="polite"></h2>
+          <p id="lottery-result" class="ritual-result"></p>
+        </div>
       </div>
     </section>
 
