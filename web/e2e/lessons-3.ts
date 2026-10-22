@@ -643,7 +643,9 @@ try {
           if (e.closest('#hand [data-card]')) return 'card'; if (e.closest('#deck')) return 'deck'; if (e.closest('#discard')) return 'discard';
           if (e.closest('#board [data-key]')) return 'hex'; return 'other'; })()`) as string;
         if (kind === 'chrome') continue;
-        const before = JSON.stringify([s.history.length, s.phase, await hook(page, 'sel'), (await hook<any>(page, 'lesson'))?.seen?.length]);
+        const l1 = await hook<any>(page, 'lesson');
+        const before = JSON.stringify([s.history.length, s.phase, await hook(page, 'sel'), l1?.seen?.length]);
+        const acksBefore = l1?.floorAcks ?? 0;
         await page.mouse.click(x, y);
         await page.waitForTimeout(160);
         const s2 = await hook<any>(page, 'state');
@@ -651,7 +653,12 @@ try {
         const after = JSON.stringify([s2.history.length, s2.phase, await hook(page, 'sel'), l2?.seen?.length]);
         if (kind !== 'other') {
           tries++;
-          if (before === after && !l2?.answer) { silent++; console.log(`     silent ${kind} tap at ${x.toFixed(0)},${y.toFixed(0)} (${l2?.beat?.id})`); }
+          // A tap inside the explanation's reading floor is refused on purpose (owner, 2026-10-21),
+          // and it is ACKNOWLEDGED with a pulse of the caption - counted as `floorAcks`. So a refusal
+          // is an answer here; only a tap that changed nothing AND was acknowledged by nothing is
+          // silent. The guarantee is unchanged, it now names the third way a tap can be answered.
+          const acked = (l2?.floorAcks ?? 0) > acksBefore;
+          if (before === after && !l2?.answer && !acked) { silent++; console.log(`     silent ${kind} tap at ${x.toFixed(0)},${y.toFixed(0)} (${l2?.beat?.id})`); }
         }
       }
       check(silent === 0, `random taps: ${tries} taps on game things, every one did something or was answered`);
