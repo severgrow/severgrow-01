@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { CAMPAIGN, PAUSE } from '../../src/strings.js';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const html = read('../index.html');
@@ -43,12 +44,23 @@ const buttonIds = [...panel.matchAll(/<button[^>]*id="([^"]+)"/g)].map((m) => m[
 
 describe('the pause panel is one machine face', () => {
   it('keeps the familiar actions, in a sensible order', () => {
-    // Nothing was renamed or dropped: Back to the game still leads, then the quiet rows, then the
-    // corner key. Exit tutorial stays ABOVE the resume so a lesson can leave the lock first.
+    // Owner direction (2026-10-22): Resume leads; Restart and Main menu are the secondary keys;
+    // How to play and What happened are compact utilities BELOW them, never peers of Resume;
+    // Settings stays the corner key. In a lesson, Exit tutorial still sits above Resume so a lock
+    // can be left first. Resign (a duel only) keeps its own row.
     expect(buttonIds).toEqual([
-      'gm-exit-tutorial', 'gm-resume', 'gm-new', 'gm-howto', 'gm-history',
-      'gm-resign', 'gm-main', 'gm-settings',
+      'gm-exit-tutorial', 'gm-resume', 'gm-new', 'gm-resign', 'gm-main',
+      'gm-howto', 'gm-history', 'gm-settings',
     ]);
+    // There is exactly ONE cream fill on a normal pause and it is Resume: no second primary competes
+    // with it. (Exit tutorial is a primary in markup, but it exists only inside a lesson, hidden.)
+    const primary = [...panel.matchAll(/<button[^>]*class="([^"]*\bprimary\b[^"]*)"[^>]*>/g)]
+      .filter((m) => !/\bhidden\b/.test(m[0]))
+      .map((m) => m[0]);
+    expect(primary).toHaveLength(1);
+    expect(primary[0]).toContain('id="gm-resume"');
+    // Restart is a secondary key, not a filled one.
+    expect(panel).toMatch(/<button id="gm-new" class="btn ghost gm-act"/);
   });
 
   it('has ONE content axis: a mirrored nameplate, a mirrored read-out, one column', () => {
@@ -68,18 +80,22 @@ describe('the pause panel is one machine face', () => {
     expect(bodyFor('--gm-row')).toBe('');
     expect(panelCss).toContain('--gm-row: 46px');
     expect(bodyFor('.gm-act')).toContain('min-height: var(--gm-row)');
-    expect(bodyFor('.gm-lead')).toContain('min-height: 48px');
+    expect(bodyFor('.gm-lead')).toMatch(/min-height: (48|50)px/);
     expect(bodyFor('.gm-key')).toContain('min-height: 44px');
-    // A row only ever states a MINIMUM: a fixed height would clip Large text.
+    // A row only ever states a MINIMUM: a fixed height would clip Large text or a longer language.
     expect(declsFor('.gm-act')).toContain('height: auto');
     expect(declsFor('.gm-act')).not.toMatch(/(?:^|;)\s*height:\s*(?:\d|var\()/m);
   });
 
-  it('separates the rows with hairlines only, never a second border', () => {
-    // The lines between rows must come from ONE rule that draws the line ABOVE each following row.
-    expect(bodyFor('.gm-act + .gm-act::before')).toContain('height: 1px');
+  it('separates the secondary keys by their frames, never by a second border', () => {
+    // Owner direction (2026-10-22): Restart and Main menu are two framed secondary keys, so each
+    // owns its edge; the old inter-row hairline is explicitly switched off rather than stacked on.
+    expect(bodyFor('.gm-act')).toContain('border: 1px solid');
+    expect(bodyFor('.gm-act + .gm-act::before')).toContain('display: none');
     expect(bodyFor('.gm-act')).not.toContain('border-bottom');
     expect(bodyFor('.gm-act')).not.toContain('border-top');
+    // Utilities are compact, but still a real 44px target.
+    expect(bodyFor('.gm-tool')).toContain('min-height: 44px');
   });
 });
 
@@ -160,19 +176,42 @@ describe('the face reads as 1970s hardware, not a second app', () => {
 });
 
 describe('the panel keeps the pause behaviour it borrowed', () => {
-  it('keeps the level label and the tutorial exit words on their existing elements', () => {
-    // The title still names the campaign level (`onboarding` reads it); the exit still says what it
-    // does. Neither moved into the new read-out.
+  it('anchors the state in the heading and leaves the level to the corner read-out', () => {
+    // Owner direction (2026-10-22): a pause is a state, so the heading says PAUSED offline and
+    // MATCH MENU online; a campaign level is named in the corner plate instead of the title.
     expect(panel).toContain('<h2 id="gm-title">Paused</h2>');
-    expect(mainSource).toMatch(/title\.textContent = campaignLevel \? CAMPAIGN\.levelLabel\(campaignLevel\.number\) : 'Paused'/);
+    expect(PAUSE.title).toBe('Paused');
+    expect(PAUSE.matchTitle).toBe('Match menu');
+    expect(mainSource).toMatch(/title\.textContent = isOnlineDuel\(\) \? PAUSE\.matchTitle : PAUSE\.title/);
+    // The tutorial exit keeps its own words and its own place above the lead key.
     expect(mainSource).toMatch(/exitBtn\.textContent = TUTORIAL\.exit/);
   });
 
-  it('names the mode in the corner plate, and never as a control', () => {
+  it('names the mode and the campaign level in the corner plate, never as a control', () => {
     expect(mainSource).toMatch(/function syncMenuMode\(\)/);
-    expect(mainSource).toMatch(/el\.textContent = campaignLevel \? 'Campaign' : isOnlineDuel\(\) \? 'Duel' : 'Practice'/);
+    expect(mainSource).toMatch(/el\.textContent = campaignLevel\s*\n?\s*\? CAMPAIGN\.levelLabel\(campaignLevel\.number\)/);
+    expect(mainSource).toMatch(/isOnlineDuel\(\) \? PAUSE\.duelMode : PAUSE\.practiceMode/);
+    // The corner reads the campaign's own label, not a second "Campaign" word that would compete
+    // with the level number the player actually needs.
+    expect(CAMPAIGN.levelLabel(12)).toBe('Level 12');
     // A <p>, not a button: it is a read-out.
     expect(panel).toMatch(/<p class="gm-mode" id="gm-mode">/);
+  });
+
+  it('makes Restart honest: the current match, never a silent trip to a level list', () => {
+    // The old key left for the level list under two different names ("New game"/"Back to levels").
+    // Owner brief 2026-10-22: Restart resets the match in place, with a confirmation only when
+    // there is real progress; a campaign keeps its deterministic seed, practice a fresh deal.
+    expect(mainSource).not.toMatch(/Start a new game\? This one will be lost/);
+    expect(mainSource).toMatch(/function requestRestart\(\)/);
+    expect(mainSource).toMatch(/function restartHasConsequence\(\)/);
+    expect(mainSource).toMatch(/campaign\.seed, campaign\.botLevel, null, campaign/);
+    expect(mainSource).toMatch(/startGame\(randomSeed\(\), level, null, null, difficulty\)/);
+    // Rapid taps are stopped by a state guard released by the new session, not by a timer.
+    expect(mainSource).toMatch(/if \(!session \|\| restarting \|\| isOnlineDuel\(\)\) return/);
+    expect(mainSource).toMatch(/restarting = false;/);
+    // A duel never offers Restart: it is hidden by the same paint that names the mode.
+    expect(mainSource).toMatch(/restart\.hidden = isOnlineDuel\(\) \|\| !!coach\.tutorial/);
   });
 
   it('fills the read-out from the elements the slim header already updates', () => {

@@ -15,6 +15,7 @@
 // in this build, so its fact is honestly null.
 import { PROFILE } from '../../../src/strings.js';
 import { SEEDS_WORD } from '../online/seed-icon.js';
+import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 
 export type ProfileFacts = {
   /** The player's display name with its #TAG, or null when the device has none. */
@@ -58,7 +59,6 @@ export type ProfileUI = {
 };
 
 const VALUE_IDS = ['profile-name', 'profile-signin', 'profile-seeds', 'profile-tiles', 'profile-wins'] as const;
-
 /**
  * Wire the markup once. The panel traps no focus: Tab moves through the page as it always does, a
  * scrim tap or Escape closes it, and closing returns focus to the account key. Nothing here fetches.
@@ -95,11 +95,15 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
   const close = () => {
     if (!opened) return;
     opened = false;
-    sheet.hidden = true;
-    scrim.hidden = true;
     const back = trigger;
     trigger = null;
-    back?.focus({ preventScroll: true });
+    const done = () => {
+      if (opened) return; // a rapid reopen interrupts the exit and keeps the panel painted
+      sheet!.hidden = true;
+      scrim!.hidden = true;
+      back?.focus({ preventScroll: true });
+    };
+    if (!exitSurface(sheet, { onDone: done })) done();
   };
 
   scrim.addEventListener('click', close);
@@ -125,6 +129,7 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
       sheet.hidden = false;
       scrim.hidden = false;
       opened = true;
+      enterSurface(sheet);
       (sheet.querySelector('[data-profile-close]') as HTMLElement | null)?.focus({ preventScroll: true });
     },
     show(facts) {

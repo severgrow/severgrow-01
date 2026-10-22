@@ -16,6 +16,7 @@
 
 import { INSTALL_PROMPT_KEY, InstallInvitation, installCopyFor, installVariant } from './install-prompt.js';
 import type { GameOutcome, InstallDesktopCopy, InstallVariant } from './install-prompt.js';
+import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 
 type InstallPromptEvent = Event & {
   readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
@@ -111,6 +112,7 @@ export const mountInstallPrompt = (options: {
   storage: InstallStorage;
 }): InstallPromptHandle => {
   const root = element('install-prompt');
+  const sheet = root?.querySelector<HTMLElement>('.install-sheet') ?? null;
   const title = element('install-title');
   const why = element('install-why');
   const steps = element('install-steps');
@@ -172,8 +174,14 @@ export const mountInstallPrompt = (options: {
   const hide = (): void => {
     if (!root || !open) return;
     open = false;
-    root.hidden = true;
     document.removeEventListener('keydown', onKey, true);
+    // The invitation leaves on the same quiet beat as every other surface. The root stays painted
+    // for those 150ms (its scrim cannot flash away first) and is hidden by the motion layer, so a
+    // rapid re-open simply interrupts the exit and nothing is left behind.
+    const done = () => {
+      if (!open) root.hidden = true;
+    };
+    if (!exitSurface(sheet ?? root, { onDone: done })) done();
   };
 
   const show = (): void => {
@@ -181,6 +189,7 @@ export const mountInstallPrompt = (options: {
     paint();
     open = true;
     root.hidden = false;
+    enterSurface(sheet ?? root);
     document.addEventListener('keydown', onKey, true);
     // Match the sheets: focus the first real control (a keyboard player lands inside the dialog).
     (accept && !accept.hidden ? accept : focusables()[0] ?? root)?.focus();

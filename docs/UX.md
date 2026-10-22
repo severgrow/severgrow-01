@@ -373,6 +373,14 @@ short tip. **Show me where** puts a bouncing arrow on the one thing to tap next:
 first the card, then the hex, then Confirm (or the deck, or "End turn"). **Why?**
 explains the move. It never plays for you.
 
+## Interface motion (2026-10-22)
+
+The surfaces around the game — pause, results, sheets, confirmations, online menus — share one
+quiet motion vocabulary: a panel *becomes present* with 8px of travel at 99% scale over 200ms and
+leaves in 150ms, while a press answers in 90ms. It is deliberately separate from the board's own
+choreography and switches off with Reduce motion or the OS preference. Tokens, adoption and the
+rules for when **not** to animate are in [`docs/INTERFACE-MOTION.md`](INTERFACE-MOTION.md).
+
 ## Animations and satisfying feel
 
 Animations are driven by the engine's own event list, through one animation queue.

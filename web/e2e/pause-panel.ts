@@ -219,7 +219,10 @@ for (const c of CASES) {
   } else {
     // The wide faceplate splits the actions into two equal halves about the panel's axis.
     const halves = [...new Set(column.filter((i) => i.kind === 'row' && i.w < edge.right - edge.left - 2).map((i) => +((i.left + i.right) / 2).toFixed(1)))].sort((a, b) => a - b);
-    check(halves.length === 2 || halves.length === 3, `${tag}: the action keypad has 2 or 3 columns (${halves.join(', ')})`);
+    // The wide faceplate lays the secondary keys on ONE line (owner brief 2026-10-22: height is the
+    // scarce axis in landscape). Their count follows what the mode offers (3-5), so accept any
+    // 2-5 equal columns; the real invariant is that the outermost pair mirrors the axis below.
+    check(halves.length >= 2 && halves.length <= 5, `${tag}: the action keypad has 2-5 columns (${halves.join(', ')})`);
     // However many columns, the outermost two are the same distance from the axis.
     check(Math.abs((p.axis - halves[0]!) - (halves[halves.length - 1]! - p.axis)) <= 1,
       `${tag}: the action columns mirror the axis (${p.axis - halves[0]!} / ${halves[halves.length - 1]! - p.axis})`);

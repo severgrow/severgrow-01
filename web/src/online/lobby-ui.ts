@@ -9,6 +9,7 @@ import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parked
 import { createLobbyActionGuard } from './lobby-action.js';
 import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
+import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { WorldView } from './world-view.js';
 import { installTerritoryCountUI, territoryCounts } from './menu-territory.js';
 import type { TerritoryCounts } from './menu-territory.js';
@@ -263,6 +264,12 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     waitingEl.hidden = next !== 'waiting';
     joinEl.hidden = next !== 'join';
     worldEl.hidden = next !== 'world';
+    // Each online screen arrives on the shared interface beat; the screens we leave are reset so a
+    // half-finished entrance can never surface later. No transform on the game: these are menus.
+    for (const [key, el] of Object.entries(screens) as [keyof typeof screens, HTMLElement][]) {
+      if (key === next) enterSurface(el, { travel: 6 });
+      else resetSurface(el);
+    }
     // The online screens are their own full-screen view: keep the main menu fully out of the
     // way (hidden, not merely behind) so its title/buttons can never bleed through the panel.
     // Every path back to the menu goes through hooks.showMenu() → showScreen('menu').
@@ -567,12 +574,19 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (nowBtn) nowBtn.textContent = ONLINE.matchedPlayNow;
     if (laterBtn) laterBtn.textContent = ONLINE.matchedLater;
     el.hidden = false;
+    const card = el.querySelector<HTMLElement>('.online-card');
+    if (card) enterSurface(card);
   };
 
   const closeMatchedPrompt = () => {
     pendingMatched = null;
     const el = document.getElementById('online-matched');
-    if (el) el.hidden = true;
+    if (!el) return;
+    const card = el.querySelector<HTMLElement>('.online-card');
+    const done = () => {
+      if (!pendingMatched) el.hidden = true;
+    };
+    if (!exitSurface(card ?? el, { onDone: done })) done();
   };
 
   const pollSearch = async () => {

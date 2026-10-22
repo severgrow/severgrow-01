@@ -3352,6 +3352,19 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   --h-btn: 44px;
   --h-compact: 36px;
   --h-tag: 32px;
+  /* INTERFACE MOTION (2026-10-22): the quiet half of the motion language, for the surfaces around
+     the game (sheets, pause face, finish plate, confirmations, overlays). These are deliberately
+     NOT `--dur-*` tokens: `web/src/logic/motion.ts` owns the board's two tempo tokens and a test
+     closes that vocabulary. `web/src/ui/interface-motion.ts` is the source of these numbers and a
+     test keeps this block in sync. A surface becomes present in 200ms with 8px of travel at 99%
+     scale; it leaves in 150ms; a press answers in 90ms. */
+  --ix-open: 200ms;
+  --ix-close: 150ms;
+  --ix-press: 90ms;
+  --ix-travel: 8px;
+  --ix-scale: 0.99;
+  --ix-ease-open: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ix-ease-close: cubic-bezier(0.4, 0, 1, 1);
 }
 .btn,
 .btn.primary,
@@ -6780,3 +6793,748 @@ html.futa04-branding[data-layout='side'] .dock {
 @keyframes lesson-pile-low { 50% { text-shadow: 0 0 3px rgba(255, 200, 90, .4); } }
 .reduce-motion #deck.lesson-pile-low .pile-count { animation: none; }
 @media (prefers-reduced-motion: reduce) { #deck.lesson-pile-low .pile-count { animation: none; } }
+
+/* =================================================================
+   INTERFACE REFINEMENT (owner direction, 2026-10-22)
+   "The game never leaves the table."
+
+   The board, the cockpit and the cards are the physical object; the surfaces that open over
+   them are parts of the same machine, not pages from another product. This block is the last
+   word on those surfaces, so it can refine the long history above without rewriting it:
+   - one quiet motion vocabulary (web/src/ui/interface-motion.ts), decided in one place;
+   - the pause faceplate, which keeps the board visible behind it;
+   - the finish plate, which sits under the settled board instead of covering it;
+   - one button language: a cream primary, a hairline secondary, a compact utility.
+   ================================================================= */
+
+/* ---------- the shared interface motion ---------- */
+/* A surface that adopted the JS layer (enterSurface/exitSurface) is driven by the Web Animations
+   API with the --ix-* tokens. It must not also inherit an older CSS entrance: two choreographies
+   on one element is exactly the drift this layer exists to stop. */
+.sheet,
+#sheet-menu,
+#sheet-profile,
+#gameover,
+.starter-lottery,
+.install-prompt {
+  animation: none;
+}
+/* Markup-only adoption: a future surface can use this class and get the arrival with no JS. */
+.ix-arrive {
+  animation: ix-arrive var(--ix-open) var(--ix-ease-open) both;
+}
+@keyframes ix-arrive {
+  from {
+    opacity: 0;
+    translate: 0 var(--ix-travel);
+    scale: var(--ix-scale);
+  }
+}
+[data-ix-surface] {
+  will-change: opacity, translate, scale;
+}
+[data-ix-surface][data-ix-state='closed'] {
+  will-change: auto; /* a hidden/closed surface must not hold a compositor layer */
+}
+[data-ix-surface][data-ix-state='closing'],
+.ix-closing {
+  pointer-events: none !important;
+}
+.reduce-motion .ix-arrive,
+.reduce-motion [data-ix-surface] {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ix-arrive,
+  [data-ix-surface] {
+    animation: none;
+  }
+}
+
+/* One press language: the machine answers, then returns. 90ms, a 1.5% compress and a whisper of
+   light change — never a bounce and never a delay. `:active` covers pointer and keyboard alike for
+   native buttons, so the JavaScript `press()` primitive is only for custom controls. */
+.btn,
+.chip,
+.icon-only,
+.gm-lead,
+.gm-act,
+.gm-key,
+.gm-tool,
+.ctool,
+.seg-btn,
+.moves .btn,
+[data-ix-press] {
+  transition:
+    transform var(--ix-press) var(--ix-ease-open),
+    background-color 140ms var(--ix-ease-open),
+    border-color 140ms var(--ix-ease-open),
+    color 140ms var(--ix-ease-open),
+    box-shadow var(--ix-press) var(--ix-ease-open),
+    filter var(--ix-press) var(--ix-ease-open);
+}
+.btn:active:not(:disabled),
+.chip:active:not(:disabled),
+.icon-only:active:not(:disabled),
+.gm-lead:active:not(:disabled),
+.gm-act:active:not(:disabled),
+.gm-key:active:not(:disabled),
+.gm-tool:active:not(:disabled),
+.ctool:active:not(:disabled),
+.seg-btn:active:not(:disabled),
+.moves .btn:active:not(:disabled),
+[data-ix-press]:active:not(:disabled) {
+  transform: scale(0.985);
+}
+/* Reduce motion keeps the control's answer (colour/light) but never the movement. */
+.reduce-motion :is(.btn, .chip, .icon-only, .gm-lead, .gm-act, .gm-key, .gm-tool, .ctool, .seg-btn, [data-ix-press]):active {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.btn, .chip, .icon-only, .gm-lead, .gm-act, .gm-key, .gm-tool, .ctool, .seg-btn, [data-ix-press]):active {
+    transform: none;
+  }
+}
+.btn.primary:active:not(:disabled),
+.gm-lead.primary:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn.ghost:hover:not(:disabled),
+  .gm-act:hover:not(:disabled),
+  .gm-key:hover:not(:disabled),
+  .gm-tool:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--c-text) 5%, transparent);
+    border-color: color-mix(in srgb, var(--c-line) 90%, var(--c-text));
+  }
+  .btn.primary:hover:not(:disabled) {
+    filter: brightness(1.03);
+  }
+}
+
+/* Menus are machine keys, not pills: a precise 10px corner, the same top-left light the board
+   uses, and no glow. Icon-only controls stay circular (the cockpit's own shape). */
+.btn,
+.btn.primary,
+.btn.ghost,
+.btn.link,
+.moves .btn {
+  border-radius: 10px;
+}
+.btn.primary {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent),
+    0 1px 0 color-mix(in srgb, #000 45%, transparent);
+}
+.btn.ghost {
+  background: color-mix(in srgb, var(--c-text) 2.5%, transparent);
+  border-color: color-mix(in srgb, var(--c-line) 88%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-text) 7%, transparent);
+}
+
+/* ---------- the pause faceplate ---------- */
+/* The board must stay recognisable: the scrim is a dim lens, never an opaque wall or a heavy blur.
+   The board itself loses saturation and brightness, and the cockpit recedes, so the match reads as
+   suspended rather than replaced. */
+body.paused #scrim {
+  background: color-mix(in srgb, var(--c-bg) 46%, transparent);
+}
+body.paused .board-wrap {
+  filter: saturate(0.74) brightness(0.76);
+  /* No filter transition: the scrim's own fade covers the change, and animating a filter over the
+     whole board SVG is the one thing a modest phone cannot afford. */
+}
+body.paused .hud,
+body.paused .dock {
+  opacity: 0.42;
+  transition: opacity var(--ix-open) var(--ix-ease-open);
+}
+body.paused .edge-wash,
+body.paused #turn-pill,
+body.paused .corner-tools {
+  opacity: 0;
+  transition: opacity var(--ix-close) var(--ix-ease-open);
+}
+
+/* The panel is a plate resting on the table, not a bottom sheet welded to the viewport: it floats
+   clear of the edges, wide enough for the controls and short enough to leave the board in view. */
+#sheet-menu {
+  --gm-pad: 16px;
+  --gm-row: 46px;
+  --gm-hair: color-mix(in srgb, var(--c-line) 54%, transparent);
+  --gm-hair-strong: color-mix(in srgb, var(--c-line) 92%, transparent);
+  left: 50%;
+  right: auto;
+  top: auto; /* the wide-screen .sheet rule centres with top:50%; a plate on the table sits low */
+  bottom: max(10px, env(safe-area-inset-bottom));
+  width: min(440px, calc(100vw - 20px));
+  transform: translateX(-50%);
+  max-height: calc(100dvh - 20px);
+  overflow: hidden; /* a pause is brief: it fits, so it never scrolls */
+  padding: 6px var(--gm-pad) max(12px, env(safe-area-inset-bottom));
+  border: 1px solid var(--gm-hair-strong);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--c-text) 4%, transparent), transparent 30%),
+    color-mix(in srgb, var(--c-surface) 95%, var(--c-bg));
+  box-shadow:
+    0 30px 70px -42px #000,
+    inset 0 1px 0 color-mix(in srgb, var(--c-text) 9%, transparent);
+}
+@media (min-width: 760px) {
+  #sheet-menu {
+    bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
+/* The nameplate: lamp, title, close. The lamp is the only warm note on the face. */
+#sheet-menu .gm-head {
+  min-height: 44px;
+  padding: 0;
+  border-bottom: 1px solid var(--gm-hair);
+  background: transparent;
+}
+/* The plate is not a bottom sheet: no grab handle, no drag affordance. */
+#sheet-menu::before,
+.sheet.confirm-sheet::before {
+  display: none;
+}
+#sheet-menu .gm-head h2 {
+  font-size: 1.28rem;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+#sheet-menu .gm-head h2::before {
+  width: 4px;
+  height: 4px;
+  opacity: 0.95;
+}
+
+/* The read-out: two neutral scores either side of one hairline, the turn under them. */
+#sheet-menu .gm-readout {
+  padding: 10px 0 12px;
+  gap: 5px;
+}
+#sheet-menu .gm-scores b {
+  font-size: 1.55rem;
+}
+#sheet-menu .gm-scores small {
+  font-size: 0.56rem;
+  letter-spacing: 0.22em;
+}
+#sheet-menu .gm-turn {
+  font-size: 0.58rem;
+  letter-spacing: 0.2em;
+  color: var(--c-muted);
+}
+#sheet-menu .gm-turn b {
+  color: var(--c-text);
+}
+#sheet-menu .gm-clock-note {
+  margin: 2px 0 0;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 0.54rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+/* The lead: the one cream key. Resume is the only thing this face asks the player to do. */
+#sheet-menu .gm-leads {
+  margin: 6px 0 4px;
+  gap: 8px;
+}
+#sheet-menu .gm-lead {
+  min-height: 50px;
+  border-radius: 9px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 30%, transparent);
+}
+#sheet-menu .gm-lead.ghost {
+  box-shadow: none;
+}
+
+/* Utilities: How to play and What happened are quiet keys, not peers of Resume or Restart. */
+#sheet-menu .gm-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 8px 0 2px;
+  border-bottom: 1px solid var(--gm-hair);
+}
+#sheet-menu .gm-tool {
+  min-height: 44px;
+  height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--c-muted);
+  font-family: var(--font-ui);
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+#sheet-menu .gm-tool + .gm-tool {
+  border-left: 1px solid var(--gm-hair);
+}
+/* With only one helper (legacy channels have no turn history) it takes the whole line. */
+#sheet-menu .gm-tools:has(> .gm-tool[hidden]) {
+  grid-template-columns: 1fr;
+}
+
+/* Secondary actions: two framed keys on one line. Resign stays text-only but muted coral: a state,
+   not a loud alarm. Main menu recedes one step further. */
+#sheet-menu .gm-acts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+#sheet-menu .gm-act {
+  width: 100%;
+  min-height: var(--gm-row);
+  padding: 6px 8px;
+  border: 1px solid var(--gm-hair);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--c-text) 2%, transparent);
+  color: var(--c-text);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+#sheet-menu .gm-act + .gm-act::before {
+  display: none; /* framed keys own their edge; a second hairline would double it */
+}
+#sheet-menu .gm-act-quiet {
+  color: var(--c-muted);
+  background: transparent;
+}
+#sheet-menu #gm-resign:not([hidden]) {
+  color: color-mix(in srgb, var(--c-bot) 72%, var(--c-muted));
+}
+/* A live duel adds Leave live and Report on top of Resign and Main menu: four visible keys fill
+   two clean rows (secondary actions, then the quiet utilities), never a hole. */
+#sheet-menu .gm-acts > .gm-act {
+  grid-column: auto;
+}
+
+/* The corner plate: the mode + level read-out on the left, Settings last on the right. */
+#sheet-menu .gm-foot {
+  margin-top: 10px;
+  padding-top: 9px;
+}
+#sheet-menu .gm-mode {
+  font-size: 0.56rem;
+  letter-spacing: 0.2em;
+  color: var(--c-muted);
+}
+#sheet-menu .gm-key {
+  min-height: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--c-muted);
+  letter-spacing: 0.16em;
+}
+#sheet-menu .gm-key:hover:not(:disabled) {
+  border: 0;
+}
+
+/* Short screens: take the air, never a target. The plate keeps the same parts. */
+@media (max-height: 700px) {
+  #sheet-menu {
+    --gm-pad: 13px;
+  }
+  #sheet-menu .gm-readout {
+    padding: 6px 0 8px;
+  }
+  #sheet-menu .gm-scores b {
+    font-size: 1.34rem;
+  }
+  #sheet-menu .gm-leads {
+    margin: 4px 0 2px;
+  }
+  #sheet-menu .gm-lead {
+    min-height: 46px;
+  }
+  #sheet-menu .gm-tools {
+    margin-bottom: 0;
+  }
+  #sheet-menu .gm-act {
+    font-size: 0.6rem;
+  }
+  #sheet-menu .gm-acts {
+    margin-top: 6px;
+  }
+  #sheet-menu .gm-foot {
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+}
+/* Landscape: the same faceplate lies wider, controls in one row. */
+@media (max-height: 520px) and (min-width: 560px) {
+  #sheet-menu {
+    width: min(620px, calc(100vw - 24px));
+    max-height: calc(100dvh - 16px);
+    bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  #sheet-menu .gm-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 22px;
+    align-items: start;
+  }
+  #sheet-menu .gm-readout,
+  #sheet-menu .gm-leads,
+  #sheet-menu .gm-tools {
+    grid-column: 1 / -1;
+  }
+  #sheet-menu .gm-acts {
+    grid-column: 1 / -1;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    margin-top: 4px;
+  }
+  /* In landscape every secondary key sits on ONE line: no full-width Report row and no quiet row
+     spanning the plate, because height is the scarce axis here. */
+  #sheet-menu #gm-report,
+  #sheet-menu .gm-act-quiet {
+    grid-column: auto;
+  }  #sheet-menu .gm-foot {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+  }
+}
+
+/* The pause confirmation (Restart / Keep playing) is a small plate, not a second app. */
+.sheet.confirm-sheet {
+  left: 50%;
+  right: auto;
+  top: auto;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  width: min(400px, calc(100vw - 20px));
+  transform: translateX(-50%);
+  max-height: calc(100dvh - 20px);
+  border: 1px solid color-mix(in srgb, var(--c-line) 90%, transparent);
+  border-radius: 14px;
+  padding: 4px 16px max(14px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--c-surface) 96%, var(--c-bg));
+  box-shadow: 0 26px 60px -40px #000;
+}
+.sheet.confirm-sheet .sheet-body.stack {
+  gap: 10px;
+}
+.sheet.confirm-sheet .btn {
+  min-height: 46px;
+  border-radius: 9px;
+}
+
+/* ---------- the finish plate ---------- */
+/* The final board is the result. It stays visible, loses its colour and its cockpit, and the
+   plate rises under it. One hairline, one timed heading reveal, no confetti and no trophy. */
+#gameover {
+  display: grid;
+  place-items: end center;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--c-bg) 46%, transparent);
+}
+#gameover::before {
+  display: none; /* the old radial flourish: a glow is not a result */
+}
+body.result .board-wrap {
+  filter: saturate(0.7) brightness(0.72) contrast(0.98);
+  /* Static, for the same reason as the pause filter: the plate's entrance is the transition. */
+}
+body.result .hud,
+body.result .dock,
+body.result .corner-tools {
+  opacity: 0.34;
+  transition: opacity var(--ix-open) var(--ix-ease-open);
+}
+#gameover .go-card {
+  position: relative;
+  width: min(440px, 100%);
+  max-height: calc(100dvh - 24px);
+  padding: 20px 18px calc(12px + env(safe-area-inset-bottom));
+  text-align: left;
+  background: color-mix(in srgb, var(--c-surface) 94%, transparent);
+  border: 1px solid var(--fu-cream-22);
+  border-radius: 16px;
+  box-shadow:
+    0 30px 70px -46px #000,
+    inset 0 1px 0 color-mix(in srgb, var(--fu-cream) 8%, transparent);
+}
+/* The one entering line: a hairline draws itself across the top edge as the plate arrives. */
+#gameover .go-card::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 0;
+  height: 1px;
+  background: var(--fu-cream-28);
+  transform-origin: center;
+}
+#gameover[data-fresh='1'] .go-card::before {
+  animation: go-hairline var(--ix-open) var(--ix-ease-open) both;
+}
+@keyframes go-hairline {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+}
+#gameover[data-fresh='1'] .go-title {
+  animation: go-title-in var(--ix-open) var(--ix-ease-open) 60ms both;
+}
+@keyframes go-title-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+.reduce-motion #gameover[data-fresh='1'] .go-card::before,
+.reduce-motion #gameover[data-fresh='1'] .go-title {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #gameover[data-fresh='1'] .go-card::before,
+  #gameover[data-fresh='1'] .go-title {
+    animation: none;
+  }
+}
+
+#gameover .go-title {
+  color: var(--fu-cream);
+  text-align: left;
+  text-transform: uppercase;
+  font-size: clamp(2rem, 9vw, 2.7rem);
+  line-height: 1;
+  letter-spacing: -0.008em;
+}
+/* A campaign win is the level's name over its outcome: LEVEL 12 / COMPLETE. The DOM keeps the
+   pinned sentence ("Level 12 complete") for tests and screen readers; only its shape changes. */
+#gameover .go-title .go-kicker {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--fu-cream-55);
+}
+#gameover .go-title .go-outcome {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+/* A win takes the warmer cream; a loss stays the same face, one step quieter. Never red. */
+#gameover.won .go-title {
+  color: #f1ddbb;
+}
+#gameover.lost .go-title {
+  color: var(--fu-cream-70);
+}
+#gameover .go-context {
+  margin: 0 0 8px;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--fu-cream-55);
+}
+#gameover .go-sub {
+  margin: 10px 0 0;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fu-cream-55);
+}
+#gameover .go-score {
+  justify-content: flex-start;
+  gap: 9px;
+  margin: 12px 0 2px;
+  font-size: clamp(2.2rem, 9vw, 2.9rem);
+  line-height: 1;
+}
+#gameover .go-score .dash {
+  color: var(--fu-cream-28);
+  font-weight: 400;
+}
+#gameover .go-score .bot {
+  color: var(--fu-cream-55);
+}
+#gameover .go-reason {
+  margin: 6px 0 0;
+  max-width: 34ch;
+  color: var(--fu-cream-70);
+  font-size: 0.88rem;
+  line-height: 1.3;
+}
+#gameover .go-buttons {
+  gap: 7px;
+  margin-top: 16px;
+}
+#gameover .go-buttons .btn {
+  min-height: 46px;
+  border-radius: 9px;
+  justify-content: flex-start;
+  padding: 0 16px;
+  letter-spacing: 0.06em;
+}
+#gameover .go-buttons .btn.primary {
+  min-height: 50px;
+  justify-content: center;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.92rem;
+}
+#gameover .go-buttons .btn.link {
+  min-height: 44px;
+  padding: 0 2px;
+  text-decoration: none;
+  color: var(--fu-cream-55);
+}
+#gameover .go-buttons .btn.link:hover {
+  color: var(--fu-cream);
+}
+#gameover .go-buttons .btn.ghost {
+  background: transparent;
+  border-color: var(--fu-cream-22);
+}
+
+/* Landscape phones and short desktop windows: the result becomes a two-page spread on one plate —
+   the outcome on the left, the ways forward on the right. The board keeps the top band. */
+@media (max-height: 560px) and (min-width: 560px) {
+  #gameover {
+    place-items: end center;
+    padding: 8px 10px;
+  }
+  #gameover .go-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    column-gap: 20px;
+    align-items: start;
+    width: min(720px, 100%);
+    max-height: calc(100dvh - 16px);
+    padding: 14px 16px 12px;
+  }
+  #gameover .go-summary {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  #gameover .go-buttons {
+    grid-column: 2;
+    grid-row: 1;
+    margin-top: 0;
+  }
+  #gameover .go-break,
+  #gameover .go-moves,
+  #gameover .go-highlights {
+    grid-column: 1 / -1;
+  }
+  #gameover .go-highlights {
+    margin-top: 8px;
+  }
+  #gameover .go-title {
+    font-size: clamp(1.7rem, 4.2vw, 2.2rem);
+  }
+  #gameover .go-score {
+    margin: 6px 0 0;
+    font-size: clamp(1.9rem, 4.6vw, 2.3rem);
+  }
+  #gameover .go-buttons .btn {
+    min-height: 44px;
+  }
+  #gameover .go-buttons .btn.primary {
+    min-height: 48px;
+  }
+  #gameover .go-buttons .btn.link {
+    min-height: 44px;
+  }
+}
+
+/* Short phones (320x568, 360x640): the plate takes less air, never a smaller target. The board
+   keeps a real band of itself above the result. */
+@media (max-height: 660px) {
+  #gameover {
+    padding: 8px 10px 8px;
+  }
+  #gameover .go-card {
+    padding: 14px 14px calc(10px + env(safe-area-inset-bottom));
+  }
+  #gameover .go-title {
+    font-size: clamp(1.75rem, 8.4vw, 2.1rem);
+  }
+  #gameover .go-title .go-kicker {
+    margin-bottom: 4px;
+  }
+  #gameover .go-sub {
+    margin-top: 7px;
+  }
+  #gameover .go-score {
+    margin: 8px 0 0;
+    font-size: clamp(2rem, 8.4vw, 2.4rem);
+  }
+  #gameover .go-reason {
+    margin-top: 4px;
+  }
+  #gameover .go-buttons {
+    margin-top: 10px;
+    gap: 5px;
+  }
+  #gameover .go-buttons .btn {
+    min-height: 44px;
+  }
+  #gameover .go-buttons .btn.primary {
+    min-height: 48px;
+  }
+  #gameover .go-buttons .btn.link {
+    min-height: 44px;
+  }
+}
+
+/* ---------- the main menu reads the campaign ---------- */
+/* A quiet instrument readout, not a second heading: one hairline tick, the mode, the level.
+   It sits under the beta line so the wordmark → version → level reading order is preserved. */
+.menu-readout {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin: 0;
+  padding: 0 2px;
+  color: var(--c-muted);
+  font-family: var(--font-ui);
+}
+.menu-readout::before {
+  content: '';
+  width: 16px;
+  height: 1px;
+  background: color-mix(in srgb, var(--c-line) 90%, transparent);
+}
+.menu-readout-label {
+  font-size: 0.54rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+.menu-readout b {
+  margin-left: auto;
+  color: var(--c-text);
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-height: 560px) {
+  .menu-readout {
+    display: none; /* the shortest phones give the space back to the keys, not to a read-out */
+  }
+}

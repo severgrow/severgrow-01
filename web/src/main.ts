@@ -68,6 +68,7 @@ import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { EASE, BREATH, MOTION, PINNED, breathAmpOf, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
 import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
+import { enterSurface, exitSurface, resetSurface } from './ui/interface-motion.js';
 import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
@@ -200,7 +201,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PILES, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -635,7 +636,11 @@ function closePlayMenu() {
 function openPlayMenu() {
   $('play-menu').hidden = false;
   $('menu').hidden = true;
-  shownScreen = null; // the menu is no longer the screen on show, so it re-renders on return
+  resetSurface($('menu'));
+  enterSurface($('play-menu'), { travel: 6 });
+  // The menu is still the screen underneath the submenu. Keeping that fact (rather than nulling
+  // it) lets a redundant late boot `showScreen('menu')` leave the player's open submenu alone.
+  shownScreen = 'menu';
 }
 /**
  * One leader per screen (owner direction, 2026-10-15): the ONE action that carries the cream fill,
@@ -719,6 +724,20 @@ function layoutMenu(canContinue: boolean) {
     // disagree with what opens. With every built level complete there is no next level to name, so
     // the entry opens the chapter list instead of claiming LEVEL <n>.
     const entry = campaignEntry(campaignProgress, campaignResume()?.level ?? null);
+    // The quiet campaign readout under the beta line (owner brief, 2026-10-22): it names the level
+    // the LEVEL <n> key will open, from the SAME decision, so the two can never disagree. Read-only,
+    // out of the tab order, and absent once every built level is complete (there is no level to name).
+    const readout = $('menu-readout');
+    const readoutValue = $('menu-readout-value');
+    $('menu-readout-label').textContent = PAUSE.campaignMode;
+    if (entry.kind === 'list') {
+      readout.hidden = true;
+    } else {
+      const current = entry.kind === 'ask' ? entry.next.number : entry.level.number;
+      readout.hidden = false;
+      readoutValue.textContent = MENU.level(current);
+      readout.setAttribute('aria-label', CAMPAIGN.levelLabel(current));
+    }
     if (entry.kind === 'list') {
       cmp.textContent = MENU.levels;
       cmp.setAttribute('aria-label', MENU.levelsAria);
@@ -744,6 +763,7 @@ function layoutMenu(canContinue: boolean) {
     // Every other channel keeps the flat menu it is used to: one "Play offline" that opens the
     // picker, and no submenu at all. Untouched, so their own suites need no change.
     $('menu-campaign').hidden = true;
+    $('menu-readout').hidden = true;
     $('menu-new').hidden = false;
     $('menu-new').textContent = 'Play offline';
     $('menu-new').setAttribute('aria-label', 'Play offline');
@@ -771,12 +791,23 @@ function layoutMenu(canContinue: boolean) {
 }
 function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   const same = shownScreen === name;
+  // A redundant call to show the menu must not tear down the submenu the player has just opened.
+  // (Boot finishes after async mounts and used to reset the screen here; the back key closes it.)
+  if (same && name === 'menu' && !$('play-menu').hidden) return;
   shownScreen = name;
   closePlayMenu();
   $('menu').hidden = name !== 'menu';
   $('levels').hidden = name !== 'levels';
   $('campaign').hidden = name !== 'campaign';
   $('game').hidden = name !== 'game';
+  // A full-screen change gets the same quiet arrival as a surface, EXCEPT the game: the board is
+  // the live object and must never slide or fade under the player's finger. Hiding a screen resets
+  // its surface animation, so nothing can finish on a screen the player has already left.
+  for (const [id, key] of [['menu', 'menu'], ['levels', 'levels'], ['campaign', 'campaign']] as const) {
+    const el = $(id);
+    if (name === key) enterSurface(el, { travel: 6 });
+    else resetSurface(el);
+  }
   // The plate is fixed to the viewport (not inside #game), so leaving the board must take it too.
   if (name !== 'game') hideLessonPlate();
   for (const id of ['online-hub', 'online-waiting', 'online-join']) {
@@ -799,7 +830,7 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
       layoutMenu(canContinue);
     }
   }
-  $('gameover').hidden = true;
+  hideGameOver();
   render();
   // The seat anchor is placed whenever the map band becomes visible; from then on only a layout
   // or resize moves it (`applyLayout` schedules it when its key changes).
@@ -834,7 +865,17 @@ function syncResignMenu() {
 function syncMenuMode() {
   const el = document.getElementById('gm-mode');
   if (!el) return;
-  el.textContent = campaignLevel ? 'Campaign' : isOnlineDuel() ? 'Duel' : 'Practice';
+  // In a campaign the corner names the level itself (the heading no longer does): the player still
+  // knows exactly where they are, without a second level title competing with "Paused".
+  el.textContent = campaignLevel
+    ? CAMPAIGN.levelLabel(campaignLevel.number)
+    : isOnlineDuel() ? PAUSE.duelMode : PAUSE.practiceMode;
+  // A duel's clock does not stop because this plate is open. Say so, in one quiet line.
+  const clock = document.getElementById('gm-clock-note');
+  if (clock) {
+    clock.textContent = PAUSE.clockRuns;
+    clock.hidden = !isOnlineDuel();
+  }
 }
 
 let lessonChromeOn = false;
@@ -887,6 +928,8 @@ function restoreSheetFocus() {
 const sheetReturns: { to: string; focus: HTMLElement | null }[] = [];
 
 /** The one opener/closer of a sheet. `sheet()` decides where a close RETURNS before calling this. */
+let sheetExit = 0;
+let closingSheet: HTMLElement | null = null;
 function openSheetNow(id: string | null, wasOpen: boolean) {
   if (id && glassSurface?.isOpen()) {
     glassSurface.hide();
@@ -897,8 +940,15 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
   if (id && !wasOpen && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
     sheetOpener = document.activeElement;
   }
-  if (openSheet) openSheet.hidden = true;
-  openSheet = id ? $(id) : null;
+  const previous = openSheet;
+  const next = id ? $(id) : null;
+  openSheet = next;
+  // A DIFFERENT sheet replaces the old one: hide it at once (a fading ghost over the new surface
+  // would be a second, false surface). Only a real close gets the exit choreography.
+  if (next && previous && previous !== next) {
+    resetSurface(previous);
+    previous.hidden = true;
+  }
   // the in-game menu pauses the game; How to play and Settings opened from it keep it paused
   if (id === 'sheet-menu') {
     setPaused(true);
@@ -908,13 +958,48 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
     if (FEATURES.slimHeader) fillMenuStatus();
   }
   else if (id === null) setPaused(false);
-  $('scrim').hidden = !openSheet;
-  if (openSheet) {
-    openSheet.hidden = false;
+  if (next) {
+    sheetExit++; // any pending close is now stale
+    if (closingSheet && closingSheet !== next) {
+      resetSurface(closingSheet);
+      closingSheet.hidden = true;
+      closingSheet = null;
+    }
+    closingSheet = null;
+    $('scrim').hidden = false;
+    next.hidden = false;
     if (id === 'sheet-settings') syncSettingsForm();
     if (id === 'sheet-history') renderHistory();
     if (id === 'sheet-howto') renderHowTo();
-    openSheet.querySelector<HTMLElement>('[data-close], button:not([hidden])')?.focus();
+    // The backdrop only changes density; it never travels. The surface becomes present.
+    enterSurface($('scrim'), { travel: 0, scale: 1, duration: 150 });
+    enterSurface(next);
+    next.querySelector<HTMLElement>('[data-close], button:not([hidden])')?.focus();
+  } else if (wasOpen) {
+    // CLOSING. Pause is released NOW (the game resumes and an online clock is never "frozen" by a
+    // fading panel); the plate simply takes 150ms to leave. The node stays inert and untappable
+    // while it fades, then hidden, and focus returns to the control that opened the chain.
+    const token = ++sheetExit;
+    const closing = previous;
+    closingSheet = closing;
+    const scrim = $('scrim');
+    const finishClose = () => {
+      // A stale close must not touch a surface the player has already reopened. (A different
+      // surface replacing it is handled at the OPEN path, which resets and hides the old node.)
+      if (token !== sheetExit) return;
+      if (closing) closing.hidden = true;
+      if (closingSheet === closing) closingSheet = null;
+      scrim.hidden = true;
+      restoreSheetFocus();
+    };
+    const leave = closing ? exitSurface(closing, { onDone: finishClose }) : null;
+    const leaveScrim = exitSurface(scrim, { travel: 0, scale: 1, onDone: () => undefined });
+    // With motion off the surface calls back at once. A scrim that cannot animate only loses its
+    // own fade; it must never shorten the surface's exit.
+    if (!leave) finishClose();
+    else if (!leaveScrim) scrim.hidden = true;
+  } else {
+    $('scrim').hidden = true;
   }
   if (IS_FUTA04) {
     document.documentElement.classList.toggle('futa04-information-blocked', !!openSheet);
@@ -928,7 +1013,6 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
       render();
     }
   }
-  if (!openSheet && wasOpen) restoreSheetFocus();
 }
 
 /**
@@ -952,6 +1036,14 @@ function sheet(id: string | null) {
     });
   }
   openSheetNow(id, !!openSheet);
+}
+
+/** Close the WHOLE chain (a chained confirmation must not hand back to the pause plate when the
+ *  action it confirmed is about to replace the screen). Focus is left to the new screen. */
+function closeAllSheets(): void {
+  sheetReturns.length = 0;
+  sheetOpener = null;
+  openSheetNow(null, !!openSheet);
 }
 
 /** Legacy channels (no glass surface) still show the reference in the old sheet. */
@@ -1372,16 +1464,44 @@ function fillMenuStatus() {
   const turn = $('gm-turn');
   turn.className = `gm-turn ${$('turn').className}`;
   turn.innerHTML = $('turn').innerHTML;
-  // Which level this is, where a paused player looks for it. A normal offline game keeps "Paused".
+  // Which level this is lives in the corner read-out, not in the heading: the heading anchors the
+  // state (Paused / Match menu), and a campaign level names itself in the mode line. Owner brief,
+  // 2026-10-22: a pause should read as one state, not as a page with a level title.
   const title = document.getElementById('gm-title');
-  if (title) title.textContent = campaignLevel ? CAMPAIGN.levelLabel(campaignLevel.number) : 'Paused';
-  // In a campaign level this button leaves for the level list, and the match is SAVED (Resume brings
-  // it back), so it is not a "New game" and nothing is lost.
-  const leave = document.getElementById('gm-new');
-  if (leave) {
-    const words = campaignLevel ? CAMPAIGN.back : 'New game';
-    leave.textContent = words;
-    leave.setAttribute('aria-label', words);
+  if (title) title.textContent = isOnlineDuel() ? PAUSE.matchTitle : PAUSE.title;
+  const resume = document.getElementById('gm-resume');
+  if (resume) {
+    const words = isOnlineDuel() ? PAUSE.returnToMatch : PAUSE.resume;
+    resume.textContent = words;
+    resume.setAttribute('aria-label', words);
+  }
+  // Restart is the current match's own key offline. A server duel cannot be restarted from one
+  // side, so the key is simply absent there; Resign is the honest way out (with its confirm).
+  const restart = document.getElementById('gm-new');
+  if (restart) {
+    const words = campaignLevel ? PAUSE.restartLevel : PAUSE.restartMatch;
+    restart.textContent = words;
+    restart.setAttribute('aria-label', words);
+    restart.hidden = isOnlineDuel() || !!coach.tutorial;
+  }
+  const main = document.getElementById('gm-main');
+  if (main) {
+    main.textContent = PAUSE.mainMenu;
+    // In a real-time duel "Main menu" would be a second, unexplained way to forfeit; the live
+    // module's own "Leave real time" carries that confirm. So the quiet key steps aside there.
+    main.hidden = document.documentElement.classList.contains('live-on');
+  }
+  // The two compact helpers and the lead are painted from the one strings module, so the i18n pass
+  // changes them in one file (the markup carries the no-JS fallback, as every other key does).
+  const howto = document.getElementById('gm-howto');
+  if (howto) {
+    howto.textContent = PAUSE.howTo;
+    howto.setAttribute('aria-label', PAUSE.howTo);
+  }
+  const history = document.getElementById('gm-history');
+  if (history) {
+    history.textContent = PAUSE.history;
+    history.setAttribute('aria-label', PAUSE.history);
   }
 }
 /** The thumb layout in use (test copy, phones in portrait), or null. */
@@ -1610,6 +1730,9 @@ async function runStarterLottery(opponentStarts: boolean): Promise<void> {
   title.textContent = 'Drawing lots…';
   result.textContent = '';
   panel.hidden = false;
+  enterSurface(panel, { travel: 0, scale: 1, duration: 150 });
+  const card = panel.querySelector<HTMLElement>('.lottery-card');
+  if (card) enterSurface(card);
   panel.dataset.spinning = settings.reduceMotion ? '0' : '1';
   delete panel.dataset.winner;
   const spinMs = settings.reduceMotion || timeScale() === 0 ? 0 : 900;
@@ -1620,6 +1743,12 @@ async function runStarterLottery(opponentStarts: boolean): Promise<void> {
   result.textContent = opponentStarts ? 'Opponent won the draw.' : 'You won the draw.';
   const holdMs = settings.reduceMotion || timeScale() === 0 ? 200 : 700;
   await new Promise((r) => setTimeout(r, holdMs));
+  // The lottery is expressive, but it still leaves on the shared beat so the board is handed over
+  // rather than uncovered. With motion off this resolves immediately.
+  await new Promise<void>((resolve) => {
+    const a = exitSurface(panel, { travel: 0, scale: 1, onDone: resolve });
+    if (!a) resolve();
+  });
   panel.hidden = true;
   delete panel.dataset.winner;
 }
@@ -1749,6 +1878,10 @@ async function startGame(
   firstToolTips();
   save();
   announceTurn(state.turnPlayer);
+  // The restart guard is released by the new session, not by a timer: a press can never race a
+  // second start, and a start that never lands cannot leave the key dead.
+  restarting = false;
+  resultAdvance = false;
 }
 
 /** Opens a campaign level as a fresh, reproducible match. The fixed seed makes the start identical. */
@@ -2840,6 +2973,10 @@ const wait = (ms: number, my = epoch) =>
 // Step 7: the pause menu. While it is open the opponent's moves and the animations wait
 // (the step in progress finishes; the next one starts after "Back to the game").
 let paused = false;
+/** True while a Restart is being handed to startGame, so a double tap cannot start two matches. */
+let restarting = false;
+/** True while a result's leading action is opening the next match, so it cannot advance twice. */
+let resultAdvance = false;
 /** v0.7: the list of Bloom choices is open (when there are two or more) */
 let bloomMenu = false;
 let unpauseWaiters: (() => void)[] = [];
@@ -6813,6 +6950,52 @@ function paintGoSeeds(): void {
   });
 }
 
+/**
+ * The finish plate's arrival (owner brief, 2026-10-22): the board settles and goes quiet, then the
+ * plate becomes present. `wasHidden` is the state transition (not a timer): a re-render of a card
+ * already on screen must not replay the entrance, while a genuinely new result always does.
+ */
+function presentResult(go: HTMLElement, wasHidden: boolean): void {
+  document.body.classList.add('result');
+  if (!wasHidden) return;
+  go.dataset.fresh = '1';
+  enterSurface(go, { travel: 0, scale: 1, duration: 150 });
+  const card = go.querySelector<HTMLElement>('.go-card');
+  if (card) enterSurface(card);
+}
+/** One exit for every path that puts the result away, so the board always comes back to life. */
+function hideGameOver(): void {
+  const go = $('gameover');
+  if (!go.hidden) {
+    go.hidden = true;
+    resetSurface(go);
+    const card = go.querySelector<HTMLElement>('.go-card');
+    if (card) resetSurface(card);
+  }
+  document.body.classList.remove('result');
+}
+
+/**
+ * Paint the outcome without changing its words. A campaign win reads `Level 12 complete` exactly
+ * as before (finish-fit and the screen reader see the same sentence); the two halves are only
+ * wrapped so the eye sees LEVEL 12 over COMPLETE. The space between them is a real text node.
+ */
+function paintGoTitle(text: string, split: boolean): void {
+  const el = $('go-title');
+  const at = split ? text.lastIndexOf(' ') : -1;
+  if (at <= 0) {
+    el.textContent = text;
+    return;
+  }
+  const kicker = document.createElement('span');
+  kicker.className = 'go-kicker';
+  kicker.textContent = text.slice(0, at);
+  const outcome = document.createElement('span');
+  outcome.className = 'go-outcome';
+  outcome.textContent = text.slice(at + 1);
+  el.replaceChildren(kicker, document.createTextNode(' '), outcome);
+}
+
 function renderGameOver() {
   const go = $('gameover');
   if (isOnlineDuel()) {
@@ -6821,10 +7004,16 @@ function renderGameOver() {
     // A decided match never waits on an animation. This is the symmetry rule the owner asked for:
     // both devices get the end screen as soon as the finished view lands, one as winner and one as
     // loser. (The last move's steps may still finish behind the overlay; the board is correct.)
-    const wasHidden = go.hidden;
+    const wasHidden = !!go.hidden;
     const show = !!info && !gameOverDismissed && !$('game').hidden;
-    go.hidden = !show;
-    if (!show || !info || !os) return;
+    if (!show) {
+      go.hidden = true;
+      document.body.classList.remove('result');
+      return;
+    }
+    if (!info || !os) return;
+    go.hidden = false;
+    presentResult(go, wasHidden);
     // A duel settles its own wallet server-side and this card has never carried a seed line; clear
     // the paragraph the three modes SHARE, so an offline award cannot leak onto a duel's result.
     clearGoSeeds();
@@ -6847,6 +7036,9 @@ function renderGameOver() {
       installPrompt.noteFinished(won ? 'won' : draw ? 'draw' : 'lost');
     }
     $('go-title').textContent = info.title;
+    // A duel has no campaign level: its context is the opponent line in #go-sub, never a kicker.
+    $('go-context').textContent = '';
+    $('go-context').hidden = true;
     // Context only — never a repeat of the reason (offline shows the level line here).
     $('go-sub').textContent = info.sub;
     $('go-reason').textContent = info.reason;
@@ -6876,6 +7068,8 @@ function renderGameOver() {
     other.hidden = false;
     other.textContent = ONLINE.backToMatches;
     other.setAttribute('aria-label', ONLINE.backToMatches);
+    $('go-menu').textContent = ONLINE.menuButton;
+    $('go-menu').setAttribute('aria-label', ONLINE.menuButton);
     $('go-share').textContent = RESULT.share;
     go.className = `gameover ${won ? 'won' : draw ? 'draw' : 'lost'}`;
     // A fresh finish starts folded: the card shows the result and the ways forward, nothing else.
@@ -6886,11 +7080,18 @@ function renderGameOver() {
     return;
   }
   const st = session?.state;
-  const wasHidden = go.hidden;
+  const wasHidden = !!go.hidden;
   const show = !!st && st.phase === 'GAME_OVER' && !!st.result && !busy() && !gameOverDismissed && !$('game').hidden;
-  if (go.hidden === !show) return;
+  if (go.hidden === !show) {
+    if (!show) document.body.classList.remove('result');
+    return;
+  }
   go.hidden = !show;
-  if (!show || !st?.result) return;
+  if (!show || !st?.result) {
+    document.body.classList.remove('result');
+    return;
+  }
+  presentResult(go, wasHidden);
   const r = st.result;
   const won = r.winner === HUMAN;
   const campaign = campaignLevel;
@@ -6900,6 +7101,18 @@ function renderGameOver() {
   $('go-title').textContent = won
     ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.won
     : resultTitle(r, HUMAN);
+  // The campaign's own lockup: LEVEL 12 over COMPLETE (same sentence, different shape).
+  if (campaign && won && $('go-title').textContent === CAMPAIGN.levelWon(campaign.number)) {
+    paintGoTitle(CAMPAIGN.levelWon(campaign.number), true);
+  }
+  // A loss keeps the honest outcome words; the level rides above them as context, never as a
+  // second title. A win already names the level, so the context line stays away.
+  const context = document.getElementById('go-context');
+  if (context) {
+    const label = campaign && !won ? CAMPAIGN.levelLabel(campaign.number) : '';
+    context.textContent = label;
+    context.hidden = label === '';
+  }
   // The subtitle used to name the level ("Level 6 · Branching Out"). The owner removed level and
   // chapter NAMES everywhere (2026-10-16): the title already says which level it was, so naming it
   // again below was repetition, and "Branching Out" tells a player nothing they can use. What is
@@ -6920,7 +7133,7 @@ function renderGameOver() {
   // a stale cached shell without the line must not break the finish card.
   // A lesson's finish card says how it was won, in one line (and its title is the lesson's own).
   const taught = lessonActive();
-  if (taught && won) $('go-title').textContent = taught.finish.title;
+  if (taught && won) paintGoTitle(taught.finish.title, false);
   const learned = taught
     ? (won ? `${LESSON.learned}: ${taught.finish.learned}` : '')
     : campaign && won ? ONBOARD.recap(campaign.number) : '';
@@ -6949,6 +7162,8 @@ function renderGameOver() {
   const otherWord = campaign ? CAMPAIGN.back : 'Change difficulty';
   other.textContent = otherWord;
   other.setAttribute('aria-label', otherWord);
+  $('go-menu').textContent = RESULT.backToMenu;
+  $('go-menu').setAttribute('aria-label', RESULT.backToMenu);
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
   // overhaul item 20: the final score counts up once, calmly (not with Reduce motion or Speed Off)
@@ -7885,7 +8100,13 @@ if (FEATURES.campaign) {
 }
 
 bind('menu-play', openPlayMenu);
-bind('play-back', () => showScreen('menu'));
+bind('play-back', () => {
+  closePlayMenu();
+  // The submenu keeps the menu underneath (see openPlayMenu), so returning repaints its own state
+  // explicitly rather than relying on showScreen's "the screen changed" branch.
+  layoutMenu(syncMenuResume());
+  showScreen('menu');
+});
 // The hub takes over the whole screen; the submenu must not stay behind it.
 $('menu-online').addEventListener('click', closePlayMenu);
 
@@ -8053,7 +8274,7 @@ function tearDownOnlineDuel(): void {
 
 bind('go-other', () => {
   flushInstallInvite();
-  $('gameover').hidden = true;
+  hideGameOver();
   if (isOnlineDuel()) {
     // "Back to matches": the same one teardown, then the hub. Hiding #game is the same guard the
     // rematch uses — a stray resize render must never paint the finished board's overlay here.
@@ -8093,19 +8314,60 @@ bind('gm-exit-tutorial', () => {
   exitTutorial();
 });
 bind('gm-resume', () => sheet(null));
-bind('gm-new', () => {
-  // Leaving a duel never loses it (the server keeps it and it resumes), so no warning is needed.
-  if (isOnlineDuel()) {
-    sheet(null);
-    tearDownOnlineDuel();
-    showScreen('levels');
+/**
+ * Restart (owner brief, 2026-10-22). It resets the match the player is IN, instead of walking them
+ * out to a level list:
+ *   - a campaign level reopens from its own deterministic seed (the authored opening is identical);
+ *   - a practice match restarts its same tier with a fresh deal;
+ *   - a finished match is not pausable, so this only ever runs while a match is in progress.
+ * A confirmation appears only when there is real progress to lose; a fresh turn restarts at once.
+ * The restarting flag is released by `startGame` itself, so two quick taps cannot start two games.
+ */
+function restartHasConsequence(): boolean {
+  if (!session) return false;
+  const st = session.state;
+  return st.turnNumber > 1 || (st.history?.length ?? 0) > 0;
+}
+
+function requestRestart(): void {
+  if (!session || restarting || isOnlineDuel() || $('game').hidden) return;
+  if (!restartHasConsequence()) {
+    void restartCurrentMatch();
     return;
   }
-  // A campaign level is saved as it is played, so leaving it loses nothing and asks nothing.
-  if (!campaignLevel && session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
-  sheet(null);
-  showScreen(campaignLevel ? 'campaign' : 'levels');
-});
+  const campaign = !!campaignLevel;
+  $('restart-title').textContent = campaign ? PAUSE.restartLevelTitle : PAUSE.restartMatchTitle;
+  $('restart-body').textContent = campaign ? PAUSE.restartLevelBody : PAUSE.restartMatchBody;
+  $('restart-confirm').textContent = campaign ? PAUSE.restartLevel : PAUSE.restartMatch;
+  $('restart-cancel').textContent = PAUSE.keepPlaying;
+  sheet('sheet-restart');
+}
+
+async function restartCurrentMatch(): Promise<void> {
+  if (!session || restarting || isOnlineDuel()) return;
+  restarting = true;
+  // Close the plate first (the pause state is released), then take the board back to its opening.
+  closeAllSheets();
+  fastForward();
+  const campaign = campaignLevel;
+  const level = gameLevel;
+  const difficulty = gameDifficulty;
+  if (campaign) {
+    // The same order rule as the campaign's one entry point: a stale/edited save cannot skip ahead.
+    if (!isUnlocked(campaignProgress, campaign)) {
+      restarting = false;
+      showScreen('campaign');
+      return;
+    }
+    gameOverDismissed = true;
+    await startGame(campaign.seed, campaign.botLevel, null, campaign);
+    return;
+  }
+  await startGame(randomSeed(), level, null, null, difficulty);
+}
+bind('gm-new', () => requestRestart());
+bind('restart-confirm', () => void restartCurrentMatch());
+bind('restart-cancel', () => sheet(null));
 bind('gm-howto', () => openHowToReference());
 bind('gm-settings', () => sheet('sheet-settings'));
 bind('gm-resign', () => {
@@ -8402,12 +8664,17 @@ bind('tool-undo', () => {
   else if (!isOnlineDuel() && session.canReplayOpponent) replayBotTurn();
 });
 bind('go-rematch', () => {
+  // One advance per finish card (owner brief, 2026-10-22): the leading key is the largest target on
+  // the screen and is tappable twice in a fast hand. `resultAdvance` is released by the new session
+  // (startGame) or by the rematch promise, never by a guessed timer.
+  if (resultAdvance) return;
+  resultAdvance = true;
   flushInstallInvite();
   if (isOnlineDuel()) {
     // Rematch: the finished session is torn down FIRST (nothing leaks into the new match), then a
     // fresh match is created and the existing invite/share screen is shown. Hiding #game keeps a
     // stray resize render from painting the finished board's overlay over the opaque invite screen.
-    $('gameover').hidden = true;
+    hideGameOver();
     $('game').hidden = true;
     // The finished duel's id, read BEFORE the teardown clears the session: the server pairs both
     // players' presses on it (a mutual rematch, 2026-10-22).
@@ -8415,6 +8682,8 @@ bind('go-rematch', () => {
     void runRematch({
       tearDown: tearDownOnlineDuel,
       createMatch: () => onlineLobbyCtl?.rematch(finishedMatchId) ?? Promise.resolve(),
+    }).finally(() => {
+      resultAdvance = false;
     });
     return;
   }
@@ -8426,7 +8695,8 @@ bind('go-rematch', () => {
   if (campaignLevel && wonNow) {
     const next = nextCampaignLevel(campaignLevel.number);
     if (next) return startCampaignLevel(next);
-    $('gameover').hidden = true;
+    hideGameOver();
+    resultAdvance = false;
     return showScreen('campaign');
   }
   // A campaign retry restarts the SAME level from its fixed seed (never a random one).
@@ -8437,10 +8707,11 @@ bind('go-rematch', () => {
 bind('go-more', () => setGoExtrasOpen(!goExtrasOpen));
 bind('go-board', () => {
   gameOverDismissed = true;
+  hideGameOver();
   render();
 });
 bind('go-menu', () => {
-  $('gameover').hidden = true;
+  hideGameOver();
   // Leaving a duel must tear the session down, exactly like Back to matches (the match stays
   // resumable on the server).
   if (isOnlineDuel()) tearDownOnlineDuel();

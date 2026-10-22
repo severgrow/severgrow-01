@@ -242,6 +242,37 @@ export const ONLINE = Object.freeze({
   errResignFailed: 'Resign failed.',
 });
 
+/** The pause faceplate (owner direction, 2026-10-22). One set of words for both the offline pause
+ *  and the online match menu: a pause SUSPENDS a match; a match menu is still a live duel. The words
+ *  here are deliberately small and literal — no "quit", no "exit", no implied frozen clock. */
+export const PAUSE = Object.freeze({
+  /** Offline heading: the game quietly suspended itself. */
+  title: 'Paused',
+  /** Online heading: a menu over a match that is still running. */
+  matchTitle: 'Match menu',
+  /** The one dominant offline action. */
+  resume: 'Resume',
+  /** The one dominant online action: the match has not gone anywhere. */
+  returnToMatch: 'Return to match',
+  /** The secondary key's specific words; main.ts picks one by mode. */
+  restartLevel: 'Restart level',
+  restartMatch: 'Restart match',
+  restartLevelTitle: 'Restart this level?',
+  restartMatchTitle: 'Restart this match?',
+  restartLevelBody: 'The level starts again from its opening. Your progress in this level is lost.',
+  restartMatchBody: 'The match starts again with a fresh deal at the same difficulty. This game is lost.',
+  keepPlaying: 'Keep playing',
+  mainMenu: 'Main menu',
+  /** The two compact helpers on the pause face. */
+  howTo: 'How to play',
+  history: 'What happened',
+  practiceMode: 'Practice',
+  campaignMode: 'Campaign',
+  duelMode: 'Duel',
+  /** Online only: a truthful note over a match that is still live while the menu is open. */
+  clockRuns: 'The match clock keeps running.',
+});
+
 /**
  * The online duel header lane — the ONE place the strip's short words live (owner's cleanup,
  * 2026-10-14). The lane is a single fixed-height row that must never wrap or reach the board, so
@@ -336,6 +367,8 @@ export const RESULT = Object.freeze({
   more: 'More',
   /** The same disclosure once it is open. */
   less: 'Less',
+  /** The quiet way out of an offline result. (An online result uses `ONLINE.menuButton`.) */
+  backToMenu: 'Back to menu',
 });
 
 /** The words for the one-card Grow. Code still uses action `Sprout`; players read Grow. */

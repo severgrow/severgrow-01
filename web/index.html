@@ -108,6 +108,14 @@
              fourth button, and its "let us know here." link opens Report a problem. The old main-menu
              tagline stays removed (2026-10-14): this slot belongs to the beta line now. -->
         <p id="menu-beta" class="tagline" hidden></p>
+        <!-- The campaign read-out (owner brief, 2026-10-22): a quiet instrument note under the
+             version line, e.g. "CAMPAIGN — LEVEL 12". It is painted from the SAME campaign entry
+             decision as the LEVEL <n> key, is never a control, and stays out of the tab order. On
+             screens shorter than 640px it stands down so the keys keep the space. -->
+        <p id="menu-readout" class="menu-readout" hidden aria-live="off">
+          <span id="menu-readout-label" class="menu-readout-label">Campaign</span>
+          <b id="menu-readout-value" class="num">LEVEL 1</b>
+        </p>
         <!-- The entries are in SEEN order, which is also DOM and tab order. The column holds the
              game's own destinations: PLAY, then TERRITORY (and the legacy Tutorial). The account key
              and Settings live in the footer row BELOW this column (owner brief, 2026-10-21), so the
@@ -304,7 +312,7 @@
 
     <!-- Opponent found while playing the computer: gentle, dismissible, and it never loses the
          offline game (Continue keeps it). Reuses the online-card component, no new visual language. -->
-    <div id="online-matched" class="online-matched" role="dialog" aria-modal="false" aria-labelledby="online-matched-title" hidden>
+    <div id="online-matched" class="online-matched" data-ix-surface role="dialog" aria-modal="false" aria-labelledby="online-matched-title" hidden>
       <div class="online-card">
         <h3 id="online-matched-title">Opponent found</h3>
         <p id="online-matched-body" class="muted"></p>
@@ -487,7 +495,7 @@
     <!-- ===== Sheets and overlays ===== -->
     <div id="scrim" class="scrim" hidden></div>
 
-    <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+    <section id="sheet-settings" class="sheet" data-ix-surface role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
       <header class="sheet-head"><h2 id="settings-title" data-copy="title"></h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body">
         <!-- OWNER DIRECTION (2026-10-17): "settings should hold only essentials". The surface is
@@ -561,19 +569,18 @@
       </div>
     </section>
 
-    <!-- The pause panel, as ONE machine face (owner direction, 2026-10-20: between the old menu,
-         the Instrument and the Bare Rail). The parts, top to bottom:
-           - an engraved nameplate: the amber power lamp, the title (Paused / LEVEL n), and Close;
-           - the instrument read-out: both scores on either side of a centre hairline, the turn
-             under them — it is a read-out, never a control;
-           - the lead key: Back to the game (Exit tutorial in a lesson, above it);
-           - the quiet action column, one hairline between rows;
-           - the corner plate: the mode word on the left, SETTINGS as the small utility key on the
-             right. Settings is LAST in the DOM so it is last in tab order, and it is a full 44px
-             target under its small label.
-         Nothing here scrolls; the layout is height-aware so every entry stays visible at 320x568
-         and in landscape (see `#sheet-menu` in style.css). -->
-    <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
+    <!-- The pause faceplate (owner direction 2026-10-20; refined 2026-10-22). It is a plate on the
+         table, not a page: the board stays visible and dimmed behind it. The parts, top to bottom:
+           - an engraved nameplate: the amber power lamp, the title (Paused / Match menu), and Close;
+           - the instrument read-out: both scores either side of a centre hairline, the turn under
+             them, the match kind and level in the corner plate — a read-out, never a control;
+           - the lead key: Resume (Return to match online); in a lesson, Exit tutorial sits above it;
+           - two compact utilities: How to play, What happened;
+           - two framed secondary keys: Restart, Main menu (online: Resign, Leave live, Report);
+           - the corner plate: the mode/level read-out on the left, SETTINGS last on the right.
+         Nothing here scrolls; the plate is sized so every entry fits 320x568 and landscape, and
+         Settings is the LAST control in the DOM so it is last in tab order. -->
+    <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden data-ix-surface>
       <header class="sheet-head gm-head">
         <h2 id="gm-title">Paused</h2>
         <button class="icon-only gm-close" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
@@ -586,26 +593,47 @@
             <span class="gm-bot"><b class="num" id="gm-score-bot">0</b><small></small></span>
           </div>
           <div class="gm-turn" id="gm-turn"></div>
+          <p id="gm-clock-note" class="gm-clock-note" hidden></p>
         </div>
         <!-- A lesson has TWO ways back (leave the tutorial, or return to it). They share one row, so
-             the extra key can never push the column into a scroll on a 320x568 phone; with one key
+             the extra key can never push the plate into a scroll on a 320x568 phone; with one key
              the row is simply full width. -->
         <div class="gm-leads">
           <button id="gm-exit-tutorial" class="btn primary gm-lead" type="button" aria-label="Exit tutorial" hidden>Exit tutorial</button>
-          <button id="gm-resume" class="btn primary gm-lead" type="button" aria-label="Back to the game">Back to the game</button>
+          <button id="gm-resume" class="btn primary gm-lead" type="button" aria-label="Resume">Resume</button>
         </div>
+        <!-- Secondary keys. Restart resets THIS match; Main menu leaves and respects the save.
+             In a duel Restart is hidden (a server match cannot be restarted by one side) and
+             Resign is the honest way out; the live module adds "Leave real time" beside it. -->
         <div class="gm-acts">
-          <button id="gm-new" class="btn ghost gm-act" type="button" aria-label="New game">New game</button>
-          <button id="gm-howto" class="btn ghost gm-act" type="button" aria-label="How to play">How to play</button>
-          <!-- Product channels only (the slim header); main.ts reveals it. -->
-          <button id="gm-history" class="btn ghost gm-act" type="button" aria-label="What happened" hidden>What happened</button>
+          <button id="gm-new" class="btn ghost gm-act" type="button" aria-label="Restart">Restart</button>
           <button id="gm-resign" class="btn ghost gm-act" type="button" aria-label="Resign the duel" hidden>Resign</button>
           <button id="gm-main" class="btn ghost gm-act gm-act-quiet" type="button" aria-label="Main menu">Main menu</button>
+        </div>
+        <!-- Utilities, not peers: How to play and What happened are read-only helpers, so they sit
+             BELOW the secondary keys and above the corner plate. -->
+        <div class="gm-tools">
+          <button id="gm-howto" class="btn gm-tool" type="button" aria-label="How to play">How to play</button>
+          <!-- Product channels only (the slim header); main.ts reveals it. -->
+          <button id="gm-history" class="btn gm-tool" type="button" aria-label="What happened" hidden>What happened</button>
         </div>
         <footer class="gm-foot">
           <p class="gm-mode" id="gm-mode">Practice</p>
           <button id="gm-settings" class="btn ghost gm-key" type="button" aria-label="Settings">Settings</button>
         </footer>
+      </div>
+    </section>
+
+    <!-- Restart confirmation (owner direction, 2026-10-22). It is chained above the pause plate by
+         `sheet('sheet-restart')`, so Escape/Close/Keep playing return to the pause face and the
+         keyboard comes back to the key that asked. It only appears when there is real progress to
+         lose; a restart on a fresh turn happens at once. -->
+    <section id="sheet-restart" class="sheet confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="restart-title" hidden data-ix-surface>
+      <header class="sheet-head"><h2 id="restart-title">Restart this level?</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body stack">
+        <p id="restart-body" class="muted small"></p>
+        <button id="restart-confirm" class="btn primary" type="button">Restart</button>
+        <button id="restart-cancel" class="btn ghost" type="button">Keep playing</button>
       </div>
     </section>
 
@@ -636,7 +664,7 @@
       </div>
     </section>
 
-    <section id="sheet-campaign-start" class="sheet" role="dialog" aria-modal="true" aria-labelledby="csa-title" hidden>
+    <section id="sheet-campaign-start" class="sheet" data-ix-surface role="dialog" aria-modal="true" aria-labelledby="csa-title" hidden>
       <header class="sheet-head"><h2 id="csa-title">Your campaign match is unfinished.</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body stack">
         <p id="csa-body" class="muted"></p>
@@ -645,12 +673,12 @@
       </div>
     </section>
 
-    <section id="sheet-howto" class="sheet" role="dialog" aria-modal="true" aria-labelledby="howto-title" hidden>
+    <section id="sheet-howto" class="sheet" data-ix-surface role="dialog" aria-modal="true" aria-labelledby="howto-title" hidden>
       <header class="sheet-head"><h2 id="howto-title">How to play</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body prose" id="howto-body"></div>
     </section>
 
-    <section id="sheet-history" class="sheet" role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
+    <section id="sheet-history" class="sheet" data-ix-surface role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
       <header class="sheet-head"><h2 id="history-title">What happened</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body"><ol id="history" class="history"></ol></div>
     </section>
@@ -674,14 +702,19 @@
          and lives behind the single "More" disclosure below (main.ts drives it). A mode marks an
          extra as unavailable with `data-go-available="0"` (e.g. no big cut to replay), so the
          disclosure hides itself when there is nothing behind it. -->
-    <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden>
+    <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden data-ix-surface>
       <div class="go-card">
+        <div class="go-summary">
+        <!-- The context kicker (owner brief, 2026-10-22): LEVEL 12 above a loss. A campaign win
+             keeps its pinned sentence in #go-title and splits it visually; this line is empty then. -->
+        <p id="go-context" class="go-context" hidden></p>
         <h2 id="go-title" class="go-title"></h2>
         <p id="go-sub" class="go-sub"></p>
         <p id="go-learned" class="go-learned" hidden></p>
         <p id="go-seeds" class="muted small" hidden></p>
         <p id="go-score" class="go-score num"></p>
         <p id="go-reason" class="muted"></p>
+        </div>
         <p id="go-break" class="muted small" data-go-extra hidden></p>
         <p id="go-moves" class="muted small" data-go-extra hidden></p>
         <ul id="go-highlights" class="highlights" data-go-extra hidden></ul>
@@ -703,7 +736,7 @@
     <!-- Install invitation. Shown once the player has actually played (never in the menu, never
          during a match). It is a calm sheet that may open over the finish screen, so it carries
          its own dimmer and sits above it; the words come from src/strings.ts (INSTALL). -->
-    <div id="install-prompt" class="install-prompt" hidden>
+    <div id="install-prompt" class="install-prompt" hidden data-ix-surface>
       <div class="install-prompt-scrim" aria-hidden="true"></div>
       <section class="sheet install-sheet" role="dialog" aria-modal="true" aria-labelledby="install-title" tabindex="-1">
         <header class="sheet-head"><h2 id="install-title"></h2><button id="install-close" class="icon-only" type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>

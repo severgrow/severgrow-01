@@ -893,11 +893,12 @@ async function leaveVia(s: SeatSession, route: string): Promise<void> {
     await sleep(150);
     await clickVisible(s, '#gm-main');
   } else if (route === 'pause-new') {
+    // Owner direction (2026-10-22): Restart is hidden in a duel (a server match cannot be
+    // restarted by one side), so this route leaves through the same quiet Main menu key. The
+    // teardown it exercises is identical; the route name stays for the soak's matrix.
     await clickVisible(s, '#hud-menu');
     await sleep(150);
-    await clickVisible(s, '#gm-new');
-    await sleep(200);
-    await clickVisible(s, '#levels-back');
+    await clickVisible(s, '#gm-main');
   } else if (route.startsWith('finish')) {
     // A real finish through the pause-menu Resign (one confirm, auto-accepted here).
     await s.page.evaluate('window.confirm = function () { return true; };');

@@ -86,7 +86,10 @@ describe('PLAY is a real screen, not a layer on the menu', () => {
 
   it('hides the menu while it is open, and its back button returns to the menu', () => {
     expect(mainSource).toMatch(/function openPlayMenu\(\)[\s\S]*?\$\('menu'\)\.hidden = true/);
-    expect(mainSource).toContain("bind('play-back', () => showScreen('menu'))");
+    // The back key closes the submenu EXPLICITLY before showing the menu: a redundant late
+    // `showScreen('menu')` (boot finishing after async mounts) must never tear down a submenu the
+    // player has just opened, so the two calls are no longer one expression.
+    expect(mainSource).toMatch(/bind\('play-back', \(\) => \{[\s\S]{0,240}?closePlayMenu\(\);[\s\S]{0,240}?showScreen\('menu'\);/);
     expect(mainSource).toMatch(/function showScreen[\s\S]*?closePlayMenu\(\)/);
   });
 });
