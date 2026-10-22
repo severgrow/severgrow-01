@@ -1,0 +1,403 @@
+// The pre-game card ritual, in the real page.
+//
+// It builds the futa05 preview and drives a real match start at several viewports. The checks that
+// matter are behavioural: the displayed winner agrees with the engine, the higher card belongs to
+// that winner, both faces are on screen, skip/cancel/resize cannot wedge the game, and no ritual
+// animation is still running afterwards.
+//
+//   PW_CHROMIUM=/path/to/chrome npx tsx web/e2e/starter-ritual.ts
+//   SHOTS=1 ... also writes docs/screens/ritual/e2e-*.png
+import { spawn } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+import { chromium } from 'playwright-core';
+import type { Browser, Page } from 'playwright-core';
+import { preview } from 'vite';
+
+const CHROME =
+  process.env.PW_CHROMIUM ??
+  '/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+const PORT = 4253;
+const SHOTS = process.env.SHOTS === '1';
+const SHOT_DIR = 'docs/screens/ritual';
+
+let failed = 0;
+const check = (name: string, ok: boolean, note = ''): void => {
+  if (!ok) failed++;
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
+};
+
+const build = (): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ['./node_modules/vite/bin/vite.js', 'build', '--config', 'web/vite.config.ts'],
+      {
+        env: {
+          ...process.env,
+          CHANNEL: 'futa05',
+          VITE_DUEL_API_URL: 'http://127.0.0.1:65534',
+          VITE_SUPABASE_URL: 'http://127.0.0.1:65534',
+          VITE_SUPABASE_ANON_KEY: 'k',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    let err = '';
+    child.stderr?.on('data', (b) => (err += String(b)));
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`web:build failed: ${err}`))));
+  });
+
+type StarterState = { startingPlayer?: number; turnPlayer: number; actor: number; turnNumber: number };
+
+const settings = (over: Record<string, unknown> = {}): string =>
+  JSON.stringify({
+    sound: false,
+    music: false,
+    coach: false,
+    speed: 'normal',
+    reduceMotion: false,
+    eyeCandy: false,
+    vibration: false,
+    largeText: false,
+    weakSpots: false,
+    weakPulse: false,
+    placementList: false,
+    autoSkip: false,
+    bloomHints: false,
+    ...over,
+  });
+
+const open = async (
+  browser: Browser,
+  seed: number,
+  viewport: { width: number; height: number },
+  over: Record<string, unknown> = {},
+): Promise<{ page: Page; errors: string[] }> => {
+  const touch = viewport.width < 700;
+  const context = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch, deviceScaleFactor: 1 });
+  await context.addInitScript((s) => {
+    localStorage.setItem('futa05:severgrow.settings.v1', s);
+    localStorage.setItem('futa05:severgrow.seen', '1');
+    const win = window as unknown as {
+      __name?: (f: unknown) => unknown;
+      __ritualPhases: { phase: string; t: number }[];
+      __longTasks: number[];
+    };
+    // Vite's bundle helper is referenced by class fields; the app itself does not need this shim,
+    // but an init-script-evaluated page must define it (the same shim other suites use).
+    win.__name = (f) => f;
+    win.__ritualPhases = [];
+    win.__longTasks = [];
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) win.__longTasks.push(entry.duration);
+      }).observe({ entryTypes: ['longtask'] });
+    } catch {
+      /* long-task timing is optional */
+    }
+    // Module boot can start a URL-seed match BEFORE DOMContentLoaded, so sample from the first
+    // frame rather than installing the observer too late.
+    let last = '';
+    setInterval(() => {
+      const el = document.getElementById('starter-lottery');
+      const phase = el?.dataset.phase ?? '';
+      if (phase && phase !== last) {
+        last = phase;
+        win.__ritualPhases.push({ phase, t: performance.now() });
+      }
+      if (!phase) last = '';
+    }, 8);
+  }, settings(over));
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
+    const text = m.text();
+    // The dummy online endpoint is deliberately unreachable in this offline suite.
+    if (/Failed to load resource/i.test(text)) return;
+    errors.push(text);
+  });
+  await page.goto(`http://127.0.0.1:${PORT}/?seed=${seed}`, { waitUntil: 'domcontentloaded' });
+  return { page, errors };
+};
+
+const state = (page: Page): Promise<StarterState> =>
+  page.evaluate(() => {
+    const hook = (window as unknown as { __severgrow: { state: () => StarterState } }).__severgrow;
+    return hook.state();
+  });
+
+const phases = (page: Page): Promise<{ phase: string; t: number }[]> =>
+  page.evaluate(() => (window as unknown as { __ritualPhases: { phase: string; t: number }[] }).__ritualPhases);
+
+const longTasks = (page: Page): Promise<number[]> =>
+  page.evaluate(() => (window as unknown as { __longTasks: number[] }).__longTasks);
+
+const startFrameProbe = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const win = window as unknown as {
+      __frameGaps: number[];
+      __frameProbe: boolean;
+      __frameLast: number;
+    };
+    win.__frameGaps = [];
+    win.__frameProbe = true;
+    win.__frameLast = performance.now();
+    const tick = (t: number): void => {
+      if (!win.__frameProbe) return;
+      const gap = t - win.__frameLast;
+      win.__frameLast = t;
+      if (gap > 0) win.__frameGaps.push(gap);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
+const stopFrameProbe = (page: Page): Promise<number[]> =>
+  page.evaluate(() => {
+    const win = window as unknown as { __frameGaps: number[]; __frameProbe: boolean };
+    win.__frameProbe = false;
+    const gaps = [...win.__frameGaps];
+    win.__frameGaps = [];
+    return gaps;
+  });
+
+const waitPhase = (page: Page, phase: string, timeout = 12_000): Promise<unknown> =>
+  page.waitForFunction(
+    (p) => document.getElementById('starter-lottery')?.dataset.phase === p,
+    phase,
+    { timeout },
+  );
+
+const readResult = (page: Page): Promise<{
+  hidden: boolean;
+  phase: string | undefined;
+  starter: string | undefined;
+  youRank: string | undefined;
+  opponentRank: string | undefined;
+  title: string;
+  result: string;
+  reduced: boolean;
+}> =>
+  page.evaluate(() => {
+    const el = document.getElementById('starter-lottery');
+    return {
+      hidden: !!el?.hidden,
+      phase: el?.dataset.phase,
+      starter: el?.dataset.starter,
+      youRank: el?.dataset.youRank,
+      opponentRank: el?.dataset.opponentRank,
+      title: document.getElementById('lottery-title')?.textContent ?? '',
+      result: document.getElementById('lottery-result')?.textContent ?? '',
+      reduced: !!el?.classList.contains('is-reduced'),
+    };
+  });
+
+const waitHidden = (page: Page, timeout = 8_000): Promise<unknown> =>
+  page.waitForSelector('#starter-lottery', { state: 'hidden', timeout });
+
+const checkResultAgainstEngine = async (page: Page, label: string): Promise<void> => {
+  const actual = await state(page);
+  const result = await readResult(page);
+  const starter = actual.startingPlayer ?? actual.turnPlayer;
+  const you = Number(result.youRank);
+  const opponent = Number(result.opponentRank);
+  const expectedTitle = starter === 0 ? /you start/i : /opponent starts/i;
+  check(`${label}: the result names the real starting seat`, expectedTitle.test(result.title), result.title);
+  check(`${label}: two distinct ranks 1..9`, Number.isInteger(you) && Number.isInteger(opponent) && you !== opponent && you >= 1 && you <= 9 && opponent >= 1 && opponent <= 9, `${result.youRank}/${result.opponentRank}`);
+  check(`${label}: the higher card belongs to the starter`, starter === 0 ? you > opponent : opponent > you, `starter=${starter} ${you}/${opponent}`);
+  check(`${label}: the two sides are labelled`, /drew the higher card/i.test(result.result), result.result);
+};
+
+const screenshot = async (page: Page, name: string): Promise<void> => {
+  if (!SHOTS) return;
+  mkdirSync(SHOT_DIR, { recursive: true });
+  await page.screenshot({ path: `${SHOT_DIR}/e2e-${name}.png` });
+};
+
+const main = async (): Promise<void> => {
+  await build();
+  const server = await preview({
+    configFile: 'web/vite.config.ts',
+    preview: { host: '127.0.0.1', port: PORT, strictPort: true },
+    logLevel: 'error',
+  });
+  const browser = await chromium.launch({ executablePath: CHROME });
+  try {
+    // ------------------------------------------------------------------ normal, full playback
+    {
+      const { page, errors } = await open(browser, 4242, { width: 390, height: 844 });
+      await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 20_000 });
+      await page.evaluate(() => {
+        (window as unknown as { __longTasks: number[] }).__longTasks.length = 0;
+      });
+      await startFrameProbe(page);
+      await waitPhase(page, 'shuffle');
+      await waitPhase(page, 'deal');
+      await waitPhase(page, 'reveal');
+      await waitPhase(page, 'result');
+      await screenshot(page, 'result-390x844');
+      await checkResultAgainstEngine(page, 'normal');
+      await waitHidden(page);
+      const trace = await phases(page);
+      const order = ['arrive', 'shuffle', 'deal', 'reveal', 'result', 'exit'];
+      const got = trace.map((p) => p.phase);
+      check('normal: every phase plays in order', order.every((p) => got.includes(p)), got.join('>'));
+      const first = trace.find((p) => p.phase === 'arrive')?.t;
+      const last = trace[trace.length - 1]?.t;
+      const duration = first !== undefined && last !== undefined ? last - first : 0;
+      check('normal: the whole ritual is 1.8–3.6s', duration >= 1_800 && duration <= 3_600, `${Math.round(duration)}ms`);
+      const animations = await page.evaluate(() =>
+        document.getElementById('starter-lottery')?.getAnimations({ subtree: true }).length ?? 0,
+      );
+      check('normal: no ritual animation is left running', animations === 0, `animations=${animations}`);
+      const gaps = await stopFrameProbe(page);
+      const sorted = [...gaps].sort((a, b) => a - b);
+      const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))] ?? 0 : 0;
+      const maxGap = sorted.length ? sorted[sorted.length - 1] ?? 0 : 0;
+      check('normal: no frame gap over 120ms during the ritual', maxGap <= 120, `frames=${gaps.length} p95=${p95.toFixed(1)}ms max=${maxGap.toFixed(1)}ms`);
+      await page.waitForFunction('!window.__severgrow.busy()', undefined, { timeout: 10_000 });
+      const after = await state(page);
+      const actualStarter = after.startingPlayer ?? after.turnPlayer;
+      const legalCount = await page.evaluate(() =>
+        (window as unknown as { __severgrow: { legal: () => unknown[] } }).__severgrow.legal().length,
+      );
+      if (actualStarter === 0) {
+        check(
+          'normal: my first legal action is available at once',
+          after.actor === 0 && after.turnNumber === 1 && legalCount > 0,
+          `actor=${after.actor} turn=${after.turnNumber} legal=${legalCount}`,
+        );
+      }
+      check('normal: the page threw no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+      const tasks = await longTasks(page);
+      const worst = tasks.length ? Math.max(...tasks) : 0;
+      check('normal: no long task over 200ms during play', worst <= 200, `worst=${Math.round(worst)}ms n=${tasks.length}`);
+      await page.context().close();
+    }
+
+    // ------------------------------------------------------------------ skip during the deal
+    {
+      const { page, errors } = await open(browser, 77, { width: 390, height: 844 });
+      await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 20_000 });
+      await waitPhase(page, 'deal');
+      const t0 = Date.now();
+      await page.touchscreen.tap(24, 24);
+      await page.waitForFunction(() => /start/i.test(document.getElementById('lottery-title')?.textContent ?? ''), undefined, { timeout: 3_000 });
+      await checkResultAgainstEngine(page, 'skip');
+      await waitHidden(page, 3_000);
+      check('skip: a tap resolves the ritual promptly', Date.now() - t0 < 1_500, `${Date.now() - t0}ms`);
+      check('skip: the page threw no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+      await page.context().close();
+    }
+
+    // ------------------------------------------------------------------ rapid repeated tapping
+    {
+      const { page, errors } = await open(browser, 78, { width: 390, height: 844 });
+      await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 20_000 });
+      await waitPhase(page, 'shuffle');
+      for (let i = 0; i < 8; i++) {
+        await page.touchscreen.tap(20 + i, 24 + i);
+        await page.waitForTimeout(12);
+      }
+      await waitHidden(page, 3_000);
+      check('rapid taps: the ritual closes once and the game survives', (await state(page)) !== null);
+      check('rapid taps: the page threw no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+      await page.context().close();
+    }
+
+    // ------------------------------------------------------------------ keyboard skip
+    {
+      const { page, errors } = await open(browser, 79, { width: 390, height: 844 });
+      await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 20_000 });
+      await waitPhase(page, 'deal');
+      await page.keyboard.press('Escape');
+      await waitHidden(page, 3_000);
+      check('keyboard: a key resolves the ritual and cannot reach the board', (await state(page)) !== null);
+      check('keyboard: the page threw no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+      await page.context().close();
+    }
+
+    // ------------------------------------------------------------------ reduced motion
+    {
+      const { page, errors } = await open(browser, 12, { width: 390, height: 844 }, { reduceMotion: true });
+      const t0 = Date.now();
+      await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 20_000 });
+      await page.waitForFunction(() => /start/i.test(document.getElementById('lottery-title')?.textContent ?? ''), undefined, { timeout: 2_000 });
+      const result = await readResult(page);
+      check('reduced motion: the result is immediate and both faces are shown', result.reduced && /start/i.test(result.title), `reduced=${result.reduced} ${result.title}`);
+      await checkResultAgainstEngine(page, 'reduced');
+      await waitHidden(page, 3_000);
+      check('reduced motion: the short version stays under 1.2s', Date.now() - t0 < 1_200, `${Date.now() - t0}ms`);
+      check('reduced motion: the page threw no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+      await page.context().close();
+    }
+
+    // ------------------------------------------------------------------ resize / rotation mid-play
+    {
+      const { page, errors } = await open(browser, 81, { width: 390, height: 844 });
+      await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 20_000 });
+      await waitPhase(page, 'shuffle');
+      await page.setViewportSize({ width: 844, height: 390 });
+      await waitPhase(page, 'result');
+      const fit = await page.evaluate(() => {
+        const rects = ['lottery-deck', 'lottery-card-you', 'lottery-card-opponent', 'lottery-title']
+          .map((id) => document.getElementById(id)?.getBoundingClientRect())
+          .filter((r): r is DOMRect => !!r);
+        return {
+          vw: innerWidth,
+          vh: innerHeight,
+          bad: rects.filter((r) => r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1).length,
+        };
+      });
+      check('rotation: the composition stays inside the viewport', fit.bad === 0, JSON.stringify(fit));
+      await waitHidden(page);
+      check('rotation: the game still starts', (await state(page)) !== null);
+      check('rotation: the page threw no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+      await page.context().close();
+    }
+
+    // ------------------------------------------------------------------ another match supersedes it
+    {
+      const { page, errors } = await open(browser, 82, { width: 390, height: 844 });
+      await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 20_000 });
+      await waitPhase(page, 'shuffle');
+      // A programmatic entry point, exactly as a fast player's next tap would reach it.
+      await page.evaluate(() => {
+        const overlay = document.getElementById('starter-lottery');
+        if (overlay) overlay.style.pointerEvents = 'none';
+        (document.getElementById('menu-new') as HTMLButtonElement | null)?.click();
+      });
+      await page.waitForSelector('#levels:not([hidden])', { timeout: 5_000 });
+      await page.locator('.level-tile').first().click();
+      await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 5_000 });
+      await waitHidden(page, 8_000);
+      check('supersede: a new match cancels the old ritual and starts its own', (await state(page)) !== null);
+      check('supersede: the page threw no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+      await page.context().close();
+    }
+
+    // ------------------------------------------------------------------ pagehide cleanup
+    {
+      const { page, errors } = await open(browser, 83, { width: 390, height: 844 });
+      await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 20_000 });
+      await waitPhase(page, 'shuffle');
+      await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+      await waitHidden(page, 2_000);
+      const animations = await page.evaluate(() =>
+        document.getElementById('starter-lottery')?.getAnimations({ subtree: true }).length ?? 0,
+      );
+      check('pagehide: the overlay closes and leaves no animation behind', animations === 0, `animations=${animations}`);
+      check('pagehide: the page threw no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+      await page.context().close();
+    }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+};
+
+await main();
+console.log(`\n${failed === 0 ? 'ALL PASS' : `${failed} FAILED`}`);
+process.exit(failed === 0 ? 0 : 1);

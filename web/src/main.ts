@@ -134,6 +134,9 @@ import {
 import type { TutorialGate } from './logic/tutorial-gate.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
 import type { GlassSurface } from './player/glass-surface.js';
+import { cancelStarterRitual, isStarterRitualPlaying, playStarterRitual } from './player/starter-ritual.js';
+import { offlineRitualKey, onlineRitualKey, starterRitualView } from './logic/starter-ritual.js';
+import type { StarterRitualView } from './logic/starter-ritual.js';
 import { previewMove } from './logic/preview.js';
 import { STUCK_MS, hintFor, hintWeight, isRoutineHint } from './logic/hint.js';
 import type { Hint, HintCtx } from './logic/hint.js';
@@ -722,6 +725,14 @@ function layoutMenu(canContinue: boolean) {
   $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
 }
 function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
+  // Any screen that is not the match itself means the ritual's moment is over. This is the last
+  // safety net for a navigation route that bypasses teardown or beginSession.
+  if (name !== 'game') {
+    cancelStarterRitual();
+    // Invalidate a startGame still waiting on the ritual, so it cannot paint into the next screen.
+    startGameGeneration++;
+    pregameHold = false;
+  }
   const same = shownScreen === name;
   shownScreen = name;
   closePlayMenu();
@@ -1123,7 +1134,19 @@ function segmented<T extends string>(id: string, values: readonly T[], current: 
 
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000_000;
 
-function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null) {
+/**
+ * True while the pre-game ritual owns the screen. The game is already prepared underneath, but its
+ * input and the bot stay shut until the ritual resolves — and the flag is cleared on every exit path.
+ */
+let pregameHold = false;
+/** A new match supersedes an older `startGame` that may still be waiting on the ritual. */
+let startGameGeneration = 0;
+
+function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null, holdForRitual = false) {
+  // A match started from anywhere supersedes a ritual belonging to an older one.
+  cancelStarterRitual();
+  startGameGeneration++;
+  pregameHold = holdForRitual;
   epoch++;
   tutorialTransitionPending = false;
   tutorialDisplayKey = '';
@@ -1443,25 +1466,23 @@ function checkOverlap(v: View) {
   }
 }
 
-async function runStarterLottery(opponentStarts: boolean): Promise<void> {
-  const panel = $('starter-lottery');
-  const title = $('lottery-title');
-  const result = $('lottery-result');
-  title.textContent = 'Drawing lots…';
-  result.textContent = '';
-  panel.hidden = false;
-  panel.dataset.spinning = settings.reduceMotion ? '0' : '1';
-  delete panel.dataset.winner;
-  const spinMs = settings.reduceMotion || timeScale() === 0 ? 0 : 900;
-  if (spinMs) await new Promise((r) => setTimeout(r, spinMs));
-  panel.dataset.spinning = '0';
-  panel.dataset.winner = opponentStarts ? 'bot' : 'you';
-  title.textContent = opponentStarts ? `${OPP.label} starts` : 'You start';
-  result.textContent = opponentStarts ? 'Opponent won the draw.' : 'You won the draw.';
-  const holdMs = settings.reduceMotion || timeScale() === 0 ? 200 : 700;
-  await new Promise((r) => setTimeout(r, holdMs));
-  panel.hidden = true;
-  delete panel.dataset.winner;
+/** The real draw pile, measured at the moment of exit, so the deck lands on it rather than on a guess. */
+const drawPileRect = (): DOMRect | null => {
+  const pile = document.querySelector<HTMLElement>('#deck .pile-card') ?? document.getElementById('deck');
+  const rect = pile?.getBoundingClientRect();
+  return rect && rect.width > 1 && rect.height > 1 ? rect : null;
+};
+
+/** One entry point for the ritual's presentation everywhere a match begins. */
+async function runStarterRitual(view: StarterRitualView): Promise<void> {
+  await playStarterRitual({
+    view,
+    reduceMotion: settings.reduceMotion,
+    tempo: settings.speed,
+    youLabel: 'You',
+    opponentLabel: OPP.label,
+    deckTarget: drawPileRect,
+  });
 }
 
 async function startGame(
@@ -1481,6 +1502,7 @@ async function startGame(
    */
   difficulty: DifficultyId | null = null,
 ) {
+  let generation = ++startGameGeneration;
   // A server-issued ticket makes a new Training result verifiable. An offline start stays playable
   // with its local seed, but cannot claim spendable Seeds without a prior ticket.
   let ticketId: string | null = null;
@@ -1489,6 +1511,7 @@ async function startGame(
       onlineLobbyCtl?.trainingSeedTicket(level) ?? Promise.resolve(null),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
     ]);
+    if (generation !== startGameGeneration) return;
     if (ticket) { seed = ticket.seed; ticketId = ticket.id; }
   }
   trainingRewardTicketId = ticketId;
@@ -1521,25 +1544,44 @@ async function startGame(
   // Levels 1-10 open from their lesson's authored position (the engine's own cards and board).
   const opening = lessonNow ? lessonOpening(lessonNow) : IS_FUTA04 ? newMatch(seed, overrides) : newGame(seed, overrides);
   const opponentStarts = opening.startingPlayer === BOT;
-  if (IS_FUTA04) {
-    showScreen('game');
-    // A campaign level's opening is fixed by its seed, so there is no draw to watch. The guided
-    // levels get straight into the game; every other offline match keeps the lottery courtesy.
-    if (!campaign) await runStarterLottery(opponentStarts);
-  }
   const state: State = opening;
   log = [
     campaign
       ? `${CAMPAIGN.started(campaign.number)}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`
       : `New game against Level ${level}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
   ];
+  // A campaign level's opening is authored and deliberately skips the draw, exactly as before; a
+  // normal offline match keeps the ritual. The board/session is prepared BEFORE the ritual so the
+  // player sees the real match behind it and the first legal tap is available the instant it leaves.
+  const playRitual = IS_FUTA04 && !campaign;
   // A campaign match always keeps its opening as the replay base: the save must replay under the
   // LEVEL's config (its authored board), never under the default config.
-  beginSession(state, null, [], campaign || opponentStarts ? state : null);
+  beginSession(state, null, [], campaign || opponentStarts ? state : null, playRitual);
+  // beginSession freshens the generation token for THIS match; another entry starting a match now
+  // would supersede it and the checks below would stop this older start from touching that one.
+  generation = startGameGeneration;
+  save();
+  if (playRitual) {
+    const view = starterRitualView(
+      offlineRitualKey(seed),
+      opening.startingPlayer ?? opening.turnPlayer,
+      HUMAN,
+    );
+    try {
+      await runStarterRitual(view);
+    } catch {
+      /* presentation can never hold the match */
+    } finally {
+      if (generation === startGameGeneration) pregameHold = false;
+    }
+    if (generation !== startGameGeneration) return;
+    render(); // lift the ritual gate and draw the controls in their real, playable state
+  }
   dealIn();
   firstToolTips();
-  save();
   announceTurn(state.turnPlayer);
+  // The bot was held while the cards were on screen; start its clock only now.
+  if (playRitual) scheduleBot();
 }
 
 /** Opens a campaign level as a fresh, reproducible match. The fixed seed makes the start identical. */
@@ -2419,6 +2461,7 @@ async function planBotTurn(from: State): Promise<BotPlan> {
 
 function scheduleBot() {
   if (isOnlineDuel()) return; // online: no computer opponent
+  if (pregameHold || isStarterRitualPlaying()) return; // the ritual is still the only thing on screen
   if (!session || botBusy || tutorialTransitionPending) return;
   const st = session.state;
   if (st.phase === 'GAME_OVER') return;
@@ -3592,6 +3635,7 @@ function countScores(to: [number, number]) {
 
 const busy = () => queue.pending > 0 || pumping;
 const myTurn = () => {
+  if (pregameHold || isStarterRitualPlaying()) return false;
   if (isOnlineDuel()) return !!getOnlineSession()?.myTurn && !getOnlineSession()?.finished;
   return !!session && session.state.actor === HUMAN && session.state.phase !== 'GAME_OVER';
 };
@@ -6889,6 +6933,7 @@ $('hand').addEventListener('pointerout', (e) => {
  * The match itself stays on the server: leaving and returning is a resume, never a cancel.
  */
 function tearDownOnlineDuel(): void {
+  cancelStarterRitual();
   getOnlineSession()?.driver.stop();
   setOnlineSession(null);
   onlineResign = null;
@@ -7906,12 +7951,24 @@ void import('./online/lobby-ui.js').then(async (m) => {
       const revealed = hasStarterRevealed(store, matchId);
       if (shouldPlayStarterLottery({ status: player.status, liveJoin, alreadyRevealed: revealed })) {
         markStarterRevealed(store, matchId);
-        const meFirst = (player.startingPlayer ?? player.view.turnPlayer) === player.seat;
+        // The server owns who starts. Both seats key the presentation by the same match id, so they
+        // see the same two cards; each maps them to You / Opponent locally.
+        const starterSeat = player.startingPlayer ?? player.view.turnPlayer;
+        const meFirst = starterSeat === player.seat;
+        const ritual = starterRitualView(onlineRitualKey(matchId), starterSeat, player.seat);
         announceTurn(meFirst ? HUMAN : BOT);
         const play = () => {
           const cur = getOnlineSession();
           if (!cur || cur.driver !== driver || $('game').hidden) return;
-          void runStarterLottery(!meFirst);
+          void runStarterRitual(ritual)
+            .then(() => {
+              const still = getOnlineSession();
+              if (!still || still.driver !== driver || $('game').hidden) return;
+              // The match was prepared underneath; this is the one repaint that unlocks its input.
+              render();
+              paintOnlineHudFromSession();
+            })
+            .catch(() => undefined);
         };
         // "Actually on the screen": if this tab is hidden at the live-join moment, wait for it to
         // come back rather than animating off-screen (the marker is already written, so it plays
