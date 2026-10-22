@@ -380,6 +380,29 @@ const tapAnywhere = async (p: Page) => {
 };
 
 /**
+ * Dismiss an explanation the way a player now must — after its reading floor (owner, 2026-10-21:
+ * "make sure the window can't be skipped for 3s"). DELIBERATE UPDATE: this used to tap straight away
+ * because the old floor was 650 ms; a dismissing tap inside the new 3 s floor is swallowed on
+ * purpose, so tapping early here would test nothing but the floor. The helper does not hard-code a
+ * sleep: it reads the box's own clock from the test hook and waits exactly the remaining floor, so
+ * it stays quick when the sentence has already been up a while.
+ */
+const READ_FLOOR_MS = 3000;
+/** Wait out what is left of the open explanation's reading floor (nothing if it has passed). */
+const waitReadFloor = async (p: Page) => {
+  const left = await p.evaluate(`(() => {
+    const l = window.__severgrow?.lesson?.();
+    return l && l.explainAt ? Math.max(0, ${READ_FLOOR_MS} - (performance.now() - l.explainAt)) : 0;
+  })()`) as number;
+  if (left > 0) await p.waitForTimeout(left + 120);
+};
+const dismissExplanation = async (p: Page) => {
+  await waitReadFloor(p);
+  await tapAnywhere(p);
+  await p.waitForTimeout(320);
+};
+
+/**
  * What an element is animating right now: every animation on it, the lesson's own breath, and the
  * CSS properties those keyframes touch (so a filter or a shadow can be ruled out by name).
  */
@@ -468,7 +491,7 @@ const tapOnlyTheLight = async (p: Page, level: number) => {
       await p.waitForTimeout(220);
       await checkPlateClear(p, beat.lit, `L${level} ${beat.id}`);
     }
-    if (beat.explain) { await tapAnywhere(p); taps++; await p.waitForTimeout(250); continue; }
+    if (beat.explain) { await dismissExplanation(p); taps++; continue; }
     // A power hello is information, not a target. It fades by itself; then the ordinary move.
     if ((beat as { hello?: string }).hello) { await p.waitForTimeout(2800); continue; }
     const points = (await litPoints(p, beat.lit)).filter((x): x is { x: number; y: number } => !!x);
@@ -603,7 +626,7 @@ try {
       const st0 = await hook<any>(page, 'state');
       // (the two explanations first: a tap anywhere, at a person's pace: a tap in an
       // explanation's first moments is deliberately ignored)
-      for (let i = 0; i < 6 && (await hook<any>(page, 'lesson'))?.beat?.explain; i++) { await page.waitForTimeout(700); await tapAnywhere(page); await page.waitForTimeout(300); }
+      for (let i = 0; i < 8 && (await hook<any>(page, 'lesson'))?.beat?.explain; i++) { await dismissExplanation(page); }
       const cardPt = await page.evaluate(`(() => { const r = document.querySelector('#hand .card').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`) as { x: number; y: number };
       await page.mouse.click(cardPt.x, cardPt.y);
       await page.waitForTimeout(150);
@@ -624,7 +647,9 @@ try {
           if (e.closest('#hand [data-card]')) return 'card'; if (e.closest('#deck')) return 'deck'; if (e.closest('#discard')) return 'discard';
           if (e.closest('#board [data-key]')) return 'hex'; return 'other'; })()`) as string;
         if (kind === 'chrome') continue;
-        const before = JSON.stringify([s.history.length, s.phase, await hook(page, 'sel'), (await hook<any>(page, 'lesson'))?.seen?.length]);
+        const l1 = await hook<any>(page, 'lesson');
+        const before = JSON.stringify([s.history.length, s.phase, await hook(page, 'sel'), l1?.seen?.length]);
+        const acksBefore = l1?.floorAcks ?? 0;
         await page.mouse.click(x, y);
         await page.waitForTimeout(160);
         const s2 = await hook<any>(page, 'state');
@@ -632,7 +657,12 @@ try {
         const after = JSON.stringify([s2.history.length, s2.phase, await hook(page, 'sel'), l2?.seen?.length]);
         if (kind !== 'other') {
           tries++;
-          if (before === after && !l2?.answer) { silent++; console.log(`     silent ${kind} tap at ${x.toFixed(0)},${y.toFixed(0)} (${l2?.beat?.id})`); }
+          // A tap inside the explanation's reading floor is refused on purpose (owner, 2026-10-21),
+          // and it is ACKNOWLEDGED with a pulse of the caption - counted as `floorAcks`. So a refusal
+          // is an answer here; only a tap that changed nothing AND was acknowledged by nothing is
+          // silent. The guarantee is unchanged, it now names the third way a tap can be answered.
+          const acked = (l2?.floorAcks ?? 0) > acksBefore;
+          if (before === after && !l2?.answer && !acked) { silent++; console.log(`     silent ${kind} tap at ${x.toFixed(0)},${y.toFixed(0)} (${l2?.beat?.id})`); }
         }
       }
       check(silent === 0, `random taps: ${tries} taps on game things, every one did something or was answered`);
@@ -677,7 +707,7 @@ try {
       if (lv !== 3) console.log(`     (progress format differs: opened level ${lv}; robustness continues there)`);
       // Through the intro, draw, then tap the rock five times.
       const level = lv ?? 1;
-      for (let i = 0; i < 6 && (await hook<any>(page, 'lesson'))?.beat?.explain; i++) { await page.waitForTimeout(700); await tapAnywhere(page); await page.waitForTimeout(300); }
+      for (let i = 0; i < 8 && (await hook<any>(page, 'lesson'))?.beat?.explain; i++) { await dismissExplanation(page); }
       const deck = (await litPoints(page, { t: 'deck' }))[0]!;
       await page.mouse.click(deck.x, deck.y); await idle(page); await page.waitForTimeout(300);
       if (level === 3) {
@@ -845,9 +875,7 @@ try {
     for (let i = 0; i < 5; i++) {
       const b = (await hook<any>(page, 'lesson'))?.beat;
       if (!b?.explain) break;
-      await page.waitForTimeout(700);
-      await tapAnywhere(page);
-      await page.waitForTimeout(260);
+      await dismissExplanation(page);
     }
     await page.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === 'draw', undefined, { timeout: 15000 });
     await page.waitForTimeout(300);
@@ -923,9 +951,7 @@ try {
     for (let i = 0; i < 3; i++) {
       const b = (await hook<any>(guardPage, 'lesson'))?.beat;
       if (b?.explain && b.lit.t === 'deck') break;
-      await guardPage.waitForTimeout(700);
-      await tapAnywhere(guardPage);
-      await guardPage.waitForTimeout(280);
+      await dismissExplanation(guardPage);
     }
     await guardPage.evaluate(`(() => {
       window.__guard = new Promise((resolve) => {
@@ -968,9 +994,7 @@ try {
     for (let i = 0; i < 5; i++) {
       const b = (await hook<any>(rm, 'lesson'))?.beat;
       if (!b?.explain) break;
-      await rm.waitForTimeout(700);
-      await tapAnywhere(rm);
-      await rm.waitForTimeout(260);
+      await dismissExplanation(rm);
     }
     await rm.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === 'draw', undefined, { timeout: 15000 });
     const rmAnims = await animationsOf(rm, '#deck');
@@ -995,7 +1019,9 @@ try {
       checkCockpit(g, `${w}x${h}`, w < 600);
       check(!!g.union && g.union.w > 200, `${w}x${h}: the map is drawn (${g.union?.w}x${g.union?.h})`);
       await checkPointerOnHex(page, '-2,2', `${w}x${h} (L1 home)`);
-      // The box is information only: no button. Tapping the lit thing itself advances.
+      // The box is information only: no button. Tapping the lit thing itself advances. The lit
+      // home is not a move, so that tap is a dismissal and waits out the 3 s reading floor.
+      await waitReadFloor(page);
       const before = await hook<any>(page, 'lesson');
       const pts = await litPoints(page, before.beat.lit);
       check(!!pts[0], `${w}x${h}: the explanation lights a thing to tap`);
@@ -1008,9 +1034,9 @@ try {
       // And a tap over the box itself passes through (pointer-events:none) to the board.
       const nextBeat = (await hook<any>(page, 'lesson')).beat;
       if (nextBeat?.explain) {
-        // A tap in an explanation's first 0.65 s is deliberately ignored (it belonged to the move
-        // that opened it); wait past that, as a person would.
-        await page.waitForTimeout(800);
+        // A dismissing tap inside an explanation's 3 s reading floor is deliberately refused; wait
+        // past it, as a person would.
+        await waitReadFloor(page);
         const boxPt = await page.evaluate(() => { const p = document.getElementById('lesson-plate'); const r = p!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }) as { x: number; y: number };
         const under = await page.evaluate(`(() => { const e = document.elementFromPoint(${boxPt.x}, ${boxPt.y}); return e ? e.id || e.className || e.tagName : 'none'; })()`);
         check(under !== 'lesson-plate', `${w}x${h}: a tap over the box reaches the board (${under})`);
@@ -1060,9 +1086,7 @@ try {
       for (let i = 0; i < 4; i++) {
         const b = (await hook<any>(page, 'lesson'))?.beat;
         if (!b?.explain) break;
-        await page.waitForTimeout(700);
-        await tapAnywhere(page);
-        await page.waitForTimeout(220);
+        await dismissExplanation(page);
       }
       await page.waitForTimeout(350);
       const info = await page.evaluate(() => {
@@ -1165,15 +1189,24 @@ try {
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-box-${w}x${h}.png` });
 
         // 2. Tapping the highlighted thing advances; the win condition is a sentence, not a label.
+        // The lit home is not a move, so a tap on it is a dismissal: inside the 3 s reading floor it
+        // is refused and acknowledged (owner, 2026-10-21), and once the floor has passed it advances.
         const p1 = (await litPoints(page, b1.lit))[0]!;
+        const acks0 = (await hook<any>(page, 'lesson')).floorAcks ?? 0;
+        await tap(page, p1);
+        const held = await hook<any>(page, 'lesson');
+        check(held.beat?.id === b1.id && (held.floorAcks ?? 0) > acks0,
+          `${tag}: inside the reading floor a tap on the lit home is refused and acknowledged (${held.beat?.id})`);
+        await waitReadFloor(page);
         await tap(page, p1);
         const b2 = (await hook<any>(page, 'lesson')).beat;
         check(!!b2 && b2.lit.t === 'home' && b2.lit.player === 1, `${tag}: tapping the lit home advances (${b2?.id})`);
         check((await boxText(page)) === LESSON.theirHomeLine, `${tag}: the win sentence is in the box`);
         copy.push(await boxText(page));
 
-        // 3. Tapping anywhere (over the box itself) advances; then the first-draw sentence.
-        await page.waitForTimeout(750);
+        // 3. Tapping anywhere (over the box itself) advances once its reading floor has passed;
+        // then the first-draw sentence.
+        await waitReadFloor(page);
         const boxPt = await page.evaluate(() => { const r = document.getElementById('lesson-plate')!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }) as { x: number; y: number };
         await tap(page, boxPt);
         const b3 = (await hook<any>(page, 'lesson')).beat;
@@ -1281,7 +1314,7 @@ try {
         // 9. Tap anywhere: nothing is left to do but end the Grow, so the game goes on to the Throw
         // by itself, as in a real game. » is never lit on the way, not even for a frame (owner,
         // 2026-10-20: lighting » here was redundant, and it used to flash for a second).
-        await page.waitForTimeout(750);
+        await waitReadFloor(page);
         await page.evaluate(`(() => { window.__endLit = 0; const tick = () => {
           const b = window.__severgrow.lesson()?.beat; if (b && b.id === 'end') window.__endLit++;
           if (window.__severgrow.state().phase === 'ACT') requestAnimationFrame(tick); }; requestAnimationFrame(tick); })()`);
