@@ -199,6 +199,12 @@ try {
   await d1.page.click('[data-acct="hub-google"]');
   check('after Google, the hub is back and says signed in', await waitFor(async () => (await d1.page.locator('.acct-toast').innerText().catch(() => '')).includes('Signed in'), 25_000));
   check('it returns to Play online', await hubOpen(d1.page));
+  // The sign-in that FORMS an account asks once for a nickname (aeb0064, 2026-10-15). This suite
+  // predates that step and stalled behind its sheet; it now proves the step appears, then skips it
+  // like a player would, keeping the generated name the checks below expect.
+  check('the first sign-in asks for a nickname, once', await waitFor(() => d1.page.locator('[data-acct="nickname-skip"]').isVisible(), 10_000));
+  await d1.page.locator('[data-acct="nickname-skip"]').click();
+  check('skipping closes the nickname step', await waitFor(async () => !(await d1.page.locator('[data-acct="nickname-skip"]').isVisible()), 5_000));
   const acct1 = (await identity(d1.page))!;
   check('SAME player id after signing in (upgraded in place)', acct1.playerId === guest1.playerId && acct1.kind === 'account');
   check('the match is still there', await waitFor(async () => (await listText(d1.page)).includes(friendShown)));
