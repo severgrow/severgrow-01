@@ -26,6 +26,7 @@ import {
   isCallbackHash,
   newVerifier,
   readAccount,
+  signInMessage,
   readCallback,
   redirectTarget,
   savePending,
@@ -194,6 +195,19 @@ const apiRequest = async (method: 'POST' | 'PATCH', path: string, body: unknown,
   return { ok: res.ok, status: res.status, json };
 };
 const apiPost = (path: string, body: unknown, token: string | null) => apiRequest('POST', path, body, token);
+/** Does this identity have any online match at all? null when it cannot be told (offline, error). */
+const hasMatches = async (token: string): Promise<boolean | null> => {
+  const url = apiUrl('/v1/players/me/matches');
+  if (!url) return null;
+  try {
+    const res = await fetch(url, { headers: { accept: 'application/json', authorization: `Bearer ${token}`, 'x-futasaku-client-version': DUEL_CLIENT_VERSION, 'x-futasaku-rules-version': CURRENT_RULES_VERSION } });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { matches?: unknown };
+    return Array.isArray(body.matches) ? body.matches.length > 0 : null;
+  } catch {
+    return null;
+  }
+};
 /** PATCH /v1/players/me chooses a display name (server/src/fetch-app.ts). */
 const apiPatch = (path: string, body: unknown, token: string | null) => apiRequest('PATCH', path, body, token);
 
@@ -370,6 +384,9 @@ export const mountAccounts = async (): Promise<void> => {
             fail(ACCOUNT.failed, { stage: 'token-exchange', status: ex.status, body: body?.slice(0, 300) });
           } else {
             const before = readIdentity(kv);
+            // Asked BEFORE the token is handed over (a switch retires the guest's token): did this
+            // device's earlier identity actually play? It decides the toast (signInMessage).
+            const guestHadMatches = before ? await hasMatches(before.token) : null;
             const res = await apiPost('/v1/auth/google', { accessToken: access }, before?.token ?? null);
             // Our server has its own token now; the Supabase session is not needed any more.
             void fetch(`${supa.url}/auth/v1/logout`, { method: 'POST', headers: { apikey: supa.key, authorization: `Bearer ${access}` } }).catch(() => undefined);
@@ -393,7 +410,7 @@ export const mountAccounts = async (): Promise<void> => {
               // invites the player to choose a name. The step is shown once, right after the reload
               // below; skipping consumes the invitation. A later sign-in is 'signed-in'/'same'.
               if (outcome === 'created' || outcome === 'linked') setNicknamePrompt(kv, identity.playerId);
-              const text = outcome === 'linked' ? ACCOUNT.linked(name) : outcome === 'signed-in' && before && before.playerId !== identity.playerId ? ACCOUNT.switched(name) : ACCOUNT.welcomeBack(name);
+              const text = signInMessage({ outcome, name, beforePlayerId: before?.playerId ?? null, afterPlayerId: identity.playerId, guestHadMatches });
               setFlash(kv, { kind: 'signed-in', text, returnTo: pending.returnTo });
               // Start clean on the new identity: every online screen re-reads it from storage.
               location.reload();
