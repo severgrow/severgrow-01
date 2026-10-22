@@ -27,6 +27,7 @@ import { hashToken, newId, newToken } from '../../server/src/ids.js';
 import { playerTag } from '../../src/player-tag.js';
 import { serveStaticDist } from './helpers/preview-port.js';
 import type { PlayerRecord } from '../../server/src/storage/types.js';
+import { WORLD_CELLS } from '../../server/src/world.js';
 import type { Action } from '../../src/engine/index.js';
 
 const ADMIN_ID = '37e3d4d0-a34c-45b3-bc61-992fcf392912';
@@ -51,6 +52,8 @@ type Seeded = {
   playerId: string;
   /** The duel that really has a committed move, so the timeline check is not the empty state. */
   duelMatchId: string;
+  /** The API's own Seeds/world store, so an edit made by clicking is checked on the server side. */
+  economyStore: MemoryWorldEconomyStore;
   counts: { reports: number; claims: number; matches: number; logs: string[] };
 };
 
@@ -152,6 +155,7 @@ const startApi = async (): Promise<Seeded> => {
   const logs: string[] = [];
   const admin = createAdminRouter({
     store: memoryAdminStore({ storage, feedback, economy: economyStore, links }),
+    economy: economyStore,
     authenticate: (t) => service.authenticate(t),
     config,
     now: () => Date.now(),
@@ -200,6 +204,7 @@ const startApi = async (): Promise<Seeded> => {
     playerToken: rival.token,
     playerId: owner.player.id,
     duelMatchId: created.match.matchId,
+    economyStore,
     counts: { reports: feedback.rows.length, claims: economyStore.claims.size, matches: storage.allMatches().length, logs },
   };
 };
@@ -399,7 +404,7 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
 
   const hexes = await page.locator('.world-grid polygon').count();
   const latestClaims = await page.locator('.world-grid polygon[fill]:not([fill="var(--c-surface)"])').count();
-  check('the map draws the whole landmass', hexes === 183, `${hexes} hexes`);
+  check('the map draws the whole landmass', hexes === WORLD_CELLS.length, `${hexes} of ${WORLD_CELLS.length} hexes`);
   check('the map draws the claimed tiles', latestClaims === 2, `${latestClaims} claimed`);
 
   const slider = page.locator('input[type="range"][aria-label="Replay day"]');
@@ -420,6 +425,45 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
     check('the replay names the day it is showing', /\d{2} \w{3}/.test(dayZero), dayZero);
   }
   await page.screenshot({ path: `${OUT}seeds-desktop.png`, fullPage: true });
+
+  // The owner's test edits (docs/ADMIN.md §3a): give Seeds, then place and clear a tile, by clicking.
+  const before = (await seeded.economyStore.wallet(seeded.playerId)).balance;
+  const giveForm = page.getByRole('group', { name: 'Give or take Seeds' });
+  check('the Seeds editor is on the screen', (await giveForm.count()) === 1);
+  await giveForm.locator('select').selectOption(seeded.playerId);
+  await giveForm.locator('input[type="number"]').fill('500');
+  await giveForm.locator('input[type="text"]').fill('e2e grant');
+  await giveForm.getByRole('button', { name: 'Give' }).click();
+  check('giving Seeds reports the new balance', await settle(page, `Balance now ${(before + 500).toLocaleString('en-GB')}`));
+  check('the server balance really moved by +500', (await seeded.economyStore.wallet(seeded.playerId)).balance === before + 500);
+  check('it is one admin_adjust ledger row', seeded.economyStore.ledger.filter((e) => e.category === 'admin_adjust').length === 1);
+  await giveForm.locator('input[type="number"]').fill(String(before + 501));
+  const errorsBeforeRefusal = errors.length;
+  await giveForm.getByRole('button', { name: 'Take' }).click();
+  check('taking more than the balance is refused in words', await settle(page, 'below zero'));
+  await tick(500); // the console line for the 400 can land a beat after the words do
+  // The refusal IS a 400, which Chromium logs as a failed resource. That one line is expected here;
+  // anything else logged in this window still counts against the page.
+  errors.push(...errors.splice(errorsBeforeRefusal).filter((line) => !/400 \(Bad Request\)/.test(line)));
+  check('and the balance did not move', (await seeded.economyStore.wallet(seeded.playerId)).balance === before + 500);
+
+  const free = page.locator('.world-grid polygon[aria-label$=", unclaimed"]').first();
+  const freeCell = ((await free.getAttribute('aria-label')) ?? '').split(',').slice(0, 2).join(',');
+  await free.click();
+  const ownerForm = page.getByRole('group', { name: `Owner of ${freeCell}` });
+  check('selecting a tile offers the owner editor', (await ownerForm.count()) === 1, freeCell);
+  await ownerForm.locator('select').selectOption(seeded.playerId);
+  await ownerForm.getByRole('button', { name: 'Set owner' }).click();
+  await tick(800);
+  check('the tile is really owned on the server', seeded.economyStore.claims.get(freeCell)?.ownerId === seeded.playerId, freeCell);
+  check('the map redraws with the new tile', await page.locator('.world-grid polygon[fill]:not([fill="var(--c-surface)"])').count() === 3);
+  await page.locator(`.world-grid polygon[aria-label^="${freeCell}, owned"]`).click();
+  await page.getByRole('group', { name: `Owner of ${freeCell}` }).locator('select').selectOption('');
+  await page.getByRole('group', { name: `Owner of ${freeCell}` }).getByRole('button', { name: 'Set owner' }).click();
+  await tick(800);
+  check('clearing the tile frees it on the server', !seeded.economyStore.claims.has(freeCell));
+  check('and on the map', await page.locator('.world-grid polygon[fill]:not([fill="var(--c-surface)"])').count() === 2);
+  await page.screenshot({ path: `${OUT}seeds-edit-desktop.png`, fullPage: true });
 
   // Campaign.
   await goto(page, '/campaign');

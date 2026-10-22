@@ -215,7 +215,7 @@ describe('the allow-list is configuration, not code', () => {
   });
 });
 
-describe('report triage is the only mutation, and it is audited', () => {
+describe('report triage is audited (the Seeds and tile edits are covered in admin-edit.test.ts)', () => {
   it('records the status and note and writes one audit row per change', async () => {
     const t = setup();
     const admin = await t.makePlayer(ADMIN_ID, 'account', 'RYK');

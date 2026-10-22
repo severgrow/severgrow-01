@@ -8,12 +8,14 @@
 //     and BOTH are refused before the store is touched, so no data can leak through an error shape;
 //   * the response shapes live in `./types.ts`; this router never widens them, and the CSV export
 //     uses the SAME field list as the JSON path (never "because CSV makes it easy");
-//   * the only writes are report triage, the admin's own "last looked" cursor, and the audit row
-//     that records them.
+//   * the only writes are report triage, the admin's own "last looked" cursor, the owner's two test
+//     edits (Seeds and tiles, docs/ADMIN.md §3a), and the audit row that records each of them.
 import { ApiError } from '../errors.js';
 import { newId } from '../ids.js';
 import type { ServerConfig } from '../config.js';
 import type { PlayerRecord, Storage } from '../storage/types.js';
+import type { WorldEconomyStore } from '../seeds/types.js';
+import { ADMIN_SEED_ADJUST_MAX } from '../seeds/types.js';
 import { PLAYER_TAG_PATTERN, playerTag } from '../../../src/player-tag.js';
 import type {
   AdminLedgerFilter,
@@ -128,6 +130,8 @@ export type AdminRouterDeps = {
   log?: (line: string) => void;
   /** Admin reads per hour, per admin. A runaway client can never turn into a database flood. */
   readsPerHour?: number;
+  /** The Seeds/world store, for the owner's edits. Absent → those two routes answer 404. */
+  economy?: WorldEconomyStore | null;
 };
 
 /** True when `playerId` is on the allow-list. Compared case-insensitively as a uuid. */
@@ -387,6 +391,50 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
 
     if (req.method === 'GET' && path === '/v1/admin/campaign') {
       return { status: 200, body: { ok: true, campaign: await deps.store.campaign(), serverNow: now } };
+    }
+
+    // ---------------------------------------------------------------- owner edits (§3a)
+    if (req.method === 'POST' && (path === '/v1/admin/seeds/adjust' || path === '/v1/admin/world/cell')) {
+      if (!deps.economy) throw new ApiError('NOT_FOUND', 'Editing is not available on this server.');
+      const body = asRecord(await req.json().catch(() => ({})));
+      const knownPlayer = async (id: unknown): Promise<string> => {
+        if (typeof id !== 'string' || !UUID_PATTERN.test(id)) throw new ApiError('INVALID_REQUEST', 'Choose a player.');
+        const found = await deps.store.playerLookup({ id: id.toLowerCase() });
+        if (!found) throw new ApiError('NOT_FOUND', 'That player does not exist.');
+        return found.player.id;
+      };
+
+      if (path === '/v1/admin/seeds/adjust') {
+        const delta = body.delta;
+        if (typeof delta !== 'number' || !Number.isInteger(delta) || delta === 0 || Math.abs(delta) > ADMIN_SEED_ADJUST_MAX) {
+          throw new ApiError('INVALID_REQUEST', `The amount must be a whole number between -${ADMIN_SEED_ADJUST_MAX} and ${ADMIN_SEED_ADJUST_MAX}, and not 0.`);
+        }
+        const requestId = body.requestId;
+        if (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{8,100}$/.test(requestId)) throw new ApiError('INVALID_REQUEST', 'A request id is required.');
+        const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 200) : '';
+        const playerId = await knownPlayer(body.playerId);
+        const result = await deps.economy.adminAdjustSeeds({ playerId, delta, requestId, actorId: player.id, reason, now });
+        if (!result.ok) {
+          throw new ApiError('INVALID_REQUEST', `That would take the balance below zero (it is ${result.wallet.balance}).`);
+        }
+        if (!result.replayed) {
+          await audit({ actorId: player.id, action: 'seeds.adjust', targetType: 'player', targetId: playerId, detail: { delta, balanceAfter: result.wallet.balance, reason, requestId }, now });
+        }
+        return { status: 200, body: { ok: true, playerId, delta: result.delta, balance: result.wallet.balance, replayed: result.replayed, serverNow: now } };
+      }
+
+      const cellId = typeof body.cellId === 'string' ? body.cellId.slice(0, 20) : '';
+      const ownerId = body.ownerId === null ? null : await knownPlayer(body.ownerId);
+      const result = await deps.economy.adminSetCell({ cellId, ownerId, now });
+      if (!result.ok) throw new ApiError('INVALID_REQUEST', 'That is not a cell on the map.');
+      if (result.changed) {
+        await audit({
+          actorId: player.id, action: 'world.cell', targetType: 'world_cell', targetId: cellId,
+          detail: { from: result.previousOwnerId, to: result.ownerId, challengesClosed: result.challengesClosed, revision: result.revision }, now,
+        });
+      }
+      const { cellId: edited, previousOwnerId, ownerId: newOwner, changed, revision, challengesClosed } = result;
+      return { status: 200, body: { ok: true, cellId: edited, previousOwnerId, ownerId: newOwner, changed, revision, challengesClosed, serverNow: now } };
     }
 
     if (req.method === 'GET' && path === '/v1/admin/players') {

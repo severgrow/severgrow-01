@@ -1,8 +1,9 @@
 # FUTASAKU Admin dashboard (v1)
 
 A read-only operations dashboard for the owner, served at **`/admin/`** on the site. It reads the
-same database the game writes, through its own narrowly scoped API, and it can change exactly one
-thing: **report triage**.
+same database the game writes, through its own narrowly scoped API, and it can change three
+things: **report triage**, and — for testing, at the owner's request (2026-10-22) — **a player's
+Seeds** and **who owns a map tile** (§3a).
 
 - **Status: built, not published.** The migration is written and **unapplied**; the `/admin/` route is
   **not** wired into the Pages deploy and is **not** linked from the game. Publishing is the owner's
@@ -119,6 +120,8 @@ All routes require an allow-listed bearer token. `X` marks a mutation.
 | `GET /v1/admin/economy` | minted vs spent, per category, receipts and denials, caps in force |
 | `GET /v1/admin/world` | the map, recent claims and the day index the replay steps through |
 | `GET /v1/admin/campaign` | verified campaign clears, per opaque level id and per chapter |
+| `POST /v1/admin/seeds/adjust` **X** | give or take Seeds for one player (§3a); audited |
+| `POST /v1/admin/world/cell` **X** | set or clear the owner of one map cell (§3a); audited |
 | `GET /v1/admin/players` | every visible player: kind, Google, joined, last recorded activity and what it was, online matches, highest verified campaign level, Seeds; plus the journey / where-they-left-off / highest-level summaries (`server/src/admin/players.ts`). **Needs the `duel` function redeployed**; until then the screen says so |
 
 Every list is `order by … limit …` with a hard page cap (`MAX_PAGE`, 200) and, where the table grows,
@@ -131,11 +134,29 @@ returns *how many* events a move produced, never the event payloads (they are th
 server-side record and can contain the opponent's hidden draw). This is asserted by tests, not just
 intended.
 
-**The one mutation** is report triage. Each change appends a row to `admin_audit` (who, what, when,
+**The content mutations** are report triage and the two owner edits in §3a. Triage Each change appends a row to `admin_audit` (who, what, when,
 old→new status, the note *length*). The note text itself is **not** copied into the audit row: it
 already lives on the report, and duplicating player-adjacent text into a second table is how private
-text ends up somewhere nobody expected. No wallet adjustments, no tile transfers, no bans, no map
-publishing, no gameplay change.
+text ends up somewhere nobody expected. There are still no bans, no map publishing and no gameplay
+change.
+
+### 3a. The owner's test edits — Seeds and tiles (2026-10-22)
+
+Asked for by the owner so Territory challenges can be simulated by hand while there are no real
+players: *"allow me to allocate seeds to any accounts, and also edit the world map."* Both live on
+the **Seeds and world** screen and both go through the same server-side allow-list as everything else.
+
+| edit | what it does | what it never does |
+|---|---|---|
+| **Give or take Seeds** (`POST /v1/admin/seeds/adjust` `{playerId, delta, reason?, requestId}`) | one `seed_ledger` row in category **`admin_adjust`** (reason and admin id in its `metadata`), the wallet moved by the same amount in the same transaction, one `admin_audit` row (`seeds.adjust`) | take a balance below zero (refused, with the real balance); apply twice (the request id is the ledger's idempotency key); move more than 1,000,000 at once; touch `lifetime_earned`/`lifetime_spent` (they describe play — the grant shows up under its own category instead) |
+| **Set a tile's owner** (`POST /v1/admin/world/cell` `{cellId, ownerId \| null}`) | gives any cell to any player (`world_claims.source = 'admin'`) or clears it; free; ignores the next-to-your-land rule; bumps the world revision so every client redraws; one `admin_audit` row (`world.cell`) | strand escrowed Seeds — an open Territory challenge on that cell is first closed as `stale` and its stake refunded, exactly like the 7-day close; act on rock or a cell that is not on the map |
+
+Clearing a tile deletes its `world_claims` row, and the database cascades that to the cell's
+(already closed) `world_challenges` history. The Seeds those challenges moved stay in `seed_ledger`,
+which is never touched. Reassigning a tile keeps its history.
+
+Needs: migration `0014_world_challenges.sql` (it adds the `'admin'` tile source) and the `duel` Edge
+Function redeployed. Until then the two forms answer "This needs the updated server" and change nothing.
 
 ---
 
@@ -211,7 +232,8 @@ by that rule (a test asserts the literal message still appears in JSON).
 | Economy balance | Seeds & world | `seed_wallets` lifetime totals, `seed_ledger` by category, receipts/denials, and **minted-per-Seed-spent** (with the caps in force read from the economy's own constants) |
 | Worst-build view | Overview + Health & ops | `feedback_reports` grouped on the normalised build, crashes vs reports |
 | CSV export | Reports | the same authorized endpoint and field list, capped at 5,000 |
-| Report triage | Reports | the single mutation, with `admin_audit` |
+| Report triage | Reports | a mutation, with `admin_audit` |
+| Seeds and tile edits | Seeds and world | the owner's test edits (§3a), each with `admin_audit` |
 | Campaign reset (this browser) | Player | the game's own local campaign record — see §5a |
 
 ### 5a. Campaign reset — the one thing no server can reset
@@ -315,7 +337,7 @@ and the report list will read as if every report were `new` — the read screens
 |---|---|
 | `server/tests/admin.test.ts` | authorization on **every** endpoint (no token → 401, player → 403, admin → 200); the empty allow-list locking everything; a second id in the list; the allow-list parser (and that junk can never become an admin); triage + audit; filters, keyset pagination, the limit clamp; the CSV header/cap/formula hardening; `normalizeBuild`; the economy ratio with no denominator; **the ledger reconciled entry by entry against the authoritative wallet** (including a replayed repeat clear and a zero-award denial); **the world replay bucketed against the stored claims**; the campaign shaper (recorded rows, opaque ids, incomplete list); and that no secret or hidden-state column can reach a payload |
 | `admin/tests/format.test.ts` | the pure formatting/replay logic; **no game source imports `admin/`**; the dashboard carries no key or connection string; its own Vite root and output; and a stylesheet check that it introduces no colour, radius or shadow outside the app's own tokens |
-| `web/e2e/admin-dashboard.ts` | the built page in Chromium against a real local API: the access-denied screen for a normal player, all six screens plus Health & ops, "since you last looked", triage + the note really stored, CSV 200/403, the 183-hex map and a cumulative replay, keyboard navigation, and no horizontal overflow at 390 px |
+| `web/e2e/admin-dashboard.ts` | the built page in Chromium against a real local API: the access-denied screen for a normal player, all six screens plus Health & ops, "since you last looked", triage + the note really stored, CSV 200/403, the whole map (every cell in `server/src/world.ts`) and a cumulative replay, the Seeds and tile edits made by clicking, keyboard navigation, and no horizontal overflow at 390 px |
 | `tests/compose-futa05-preview.test.ts` | the composer publishes `/admin/` **only** when handed a build, puts it at the site root (never inside `/firststep/`), teaches the root worker to ignore it, and refuses a build that could not work from a subdirectory |
 
 ```sh

@@ -55,6 +55,7 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
     config,
     databaseUrl: databaseUrlFromEnv(),
     memory: { feedback: memoryFeedback, economy: economyStore instanceof MemoryWorldEconomyStore ? economyStore : null, links: memoryLinks },
+    economyStore,
     note: description,
   });
   const server = createHttpServer({

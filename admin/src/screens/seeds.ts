@@ -1,15 +1,18 @@
-// Seeds and world — the read-only economy, the shared map, and the world-growth replay.
+// Seeds and world — the economy, the shared map, the world-growth replay, and the owner's two test
+// edits (give/take Seeds, set a tile's owner; docs/ADMIN.md §3a, in ./edit.ts).
 //
 // The map is this dashboard's OWN lightweight drawing (the game's world-map view is not reused or
 // restyled — another worker owns that file). It draws the frozen v1 landmass from the cell ids the
 // API returns, and colours each owner with the game's OWN `territoryColour`, so an owner is the same
 // colour here as on the player-facing map. Replaying by day shows claims cumulatively, because a
-// claimed tile is never released: a later day can never show fewer tiles.
+// claimed tile is never released by play. (An owner edit can clear one; the replay then shows only
+// the claims that still exist, each at the time it was last placed.)
 import type { AdminEconomy, AdminLedgerRow, AdminWorld } from '../../../server/src/admin/types.js';
 import { territoryColour } from '../../../server/src/world.js';
 import type { Page } from '../api.js';
 import { claimsUpToDay, formatAgo, formatDateTime, formatDay, formatDelta, formatNumber, formatRatio, shortId } from '../format.js';
 import { bars, button, card, controls, el, emptyBox, errorBox, honesty, kv, loading, pager, screenTitle, stat, table, type Ctx } from '../ui.js';
+import { cellEditor, loadEditPlayers, seedsEditor, type EditPlayer } from './edit.js';
 
 const HEX_SIZE = 14;
 
@@ -31,14 +34,23 @@ const hexPath = (cx: number, cy: number): string =>
 export const renderSeeds = async (host: HTMLElement, ctx: Ctx, params: URLSearchParams): Promise<void> => {
   host.replaceChildren(screenTitle('Seeds and world', 'The ledger, the economy as a whole, the shared map, and the world at any recorded day.'));
 
+  const editHost = el('div', {});
   const economyHost = el('div', {});
   const worldHost = el('div', {});
   const ledgerHost = el('div', {});
-  host.append(economyHost, worldHost, ledgerHost);
+  host.append(editHost, economyHost, worldHost, ledgerHost);
 
+  const players = loadEditPlayers(ctx);
+  // After an edit, the numbers it touched are re-read from the server rather than patched locally.
+  const refresh = (): void => {
+    void renderEconomy(economyHost, ctx);
+    void renderWorld(worldHost, ctx, params, players, refresh);
+    void renderLedger(ledgerHost, ctx, params);
+  };
   void renderEconomy(economyHost, ctx);
-  void renderWorld(worldHost, ctx, params);
+  void renderWorld(worldHost, ctx, params, players, refresh);
   void renderLedger(ledgerHost, ctx, params);
+  void players.then((list) => { if (list) editHost.replaceChildren(seedsEditor(ctx, list, refresh)); });
 };
 
 const renderEconomy = async (host: HTMLElement, ctx: Ctx): Promise<void> => {
@@ -95,15 +107,24 @@ const renderEconomy = async (host: HTMLElement, ctx: Ctx): Promise<void> => {
   );
 };
 
-const renderWorld = async (host: HTMLElement, ctx: Ctx, params: URLSearchParams): Promise<void> => {
+const renderWorld = async (
+  host: HTMLElement,
+  ctx: Ctx,
+  params: URLSearchParams,
+  playersReady: Promise<EditPlayer[] | null> = Promise.resolve(null),
+  onEdited: () => void = () => undefined,
+): Promise<void> => {
   host.replaceChildren(loading('the world'));
   const result = await ctx.api.get<{ ok: true; world: AdminWorld }>('/v1/admin/world');
   if (!result.ok) {
     if (result.status === 401 || result.status === 403) return ctx.denied();
-    host.replaceChildren(errorBox(result.message, () => void renderWorld(host, ctx, params)));
+    host.replaceChildren(errorBox(result.message, () => void renderWorld(host, ctx, params, playersReady, onEdited)));
     return;
   }
   const world = result.data.world;
+  const players = await playersReady;
+  const nameOf = (id: string): string | null => players?.find((p) => p.id === id)?.displayName ?? null;
+  const cellEditHost = el('div', {});
   const allClaims = world.claimsByDayIndex.flatMap((day) => day.claims);
   const latestDay = world.replayDays[world.replayDays.length - 1] ?? null;
   const requested = params.get('day');
@@ -134,7 +155,7 @@ const renderWorld = async (host: HTMLElement, ctx: Ctx, params: URLSearchParams)
     svg.setAttribute('aria-label', `World map, ${formatNumber(claims.length)} of ${formatNumber(world.cellsTotal)} tiles claimed`);
     for (const { id, point } of points) {
       const claim = byCell.get(id);
-      const ownerName = claim ? (world.recentClaims.find((row) => row.cellId === id)?.ownerName ?? null) : null;
+      const ownerName = claim ? (world.recentClaims.find((row) => row.cellId === id)?.ownerName ?? nameOf(claim.ownerId)) : null;
       const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
       polygon.setAttribute('points', hexPath(point.x, point.y));
       polygon.setAttribute('class', `world-hex world-cell-btn${claim ? ' claimed' : ''}`);
@@ -146,6 +167,8 @@ const renderWorld = async (host: HTMLElement, ctx: Ctx, params: URLSearchParams)
         inspection.textContent = claim
           ? `${id} — ${ownerName ?? 'owner ' + shortId(claim.ownerId)} (${claim.ownerId}) · claimed ${formatDateTime(claim.claimedAt)} · ${formatAgo(claim.claimedAt, Date.now())}`
           : `${id} — unclaimed`;
+        // Editing acts on today's map, never on a replayed day.
+        cellEditHost.replaceChildren(players && !replaying ? cellEditor(ctx, players, id, claim?.ownerId ?? null, onEdited) : '');
       };
       polygon.addEventListener('click', describe);
       polygon.addEventListener('focus', describe);
@@ -157,7 +180,7 @@ const renderWorld = async (host: HTMLElement, ctx: Ctx, params: URLSearchParams)
       });
       svg.append(polygon);
     }
-    mapHost.replaceChildren(el('div', { class: 'world' }, svg), inspection);
+    mapHost.replaceChildren(el('div', { class: 'world' }, svg), inspection, cellEditHost);
     const slider = el('input', {
       type: 'range',
       min: 0,
@@ -206,7 +229,7 @@ const renderWorld = async (host: HTMLElement, ctx: Ctx, params: URLSearchParams)
             { caption: 'Newest 20 claims. "legacy" is a tile carried over from the earlier map during the migration.' },
           )),
       honesty('Reading the map', [
-        `Exact: ${formatNumber(world.totalClaims)} claims out of ${formatNumber(world.cellsTotal)} tiles, from world_claims. The replay is those claims ordered by their recorded claimed_at — a tile is never released, so the total only grows.`,
+        `Exact: ${formatNumber(world.totalClaims)} claims out of ${formatNumber(world.cellsTotal)} tiles, from world_claims. The replay is those claims ordered by their recorded claimed_at. Play never releases a tile; a tile cleared or moved with the editor here replays from the moment of that edit.`,
         replayHost.textContent === '' ? 'No claim has ever been recorded, so there is nothing to replay.' : 'A claim date comes from the server clock at the moment the purchase committed.',
       ]),
     ]),

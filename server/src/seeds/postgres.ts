@@ -10,6 +10,8 @@ import {
 } from './config.js';
 import { planSeedReward } from './rewards.js';
 import type {
+  AdminCellResult,
+  AdminSeedAdjustResult,
   ChallengeRespondResult,
   ChallengeSendResult,
   ChallengeSettleResult,
@@ -420,6 +422,69 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
         changed += 1;
       }
       return changed;
+    });
+  },
+
+  // ---- Owner edits from the admin dashboard ---------------------------------
+
+  async adminAdjustSeeds(input): Promise<AdminSeedAdjustResult> {
+    return transaction(pool, async (client) => {
+      const wallet = await lockedWallet(client, input.playerId);
+      const sourceKey = `admin:${input.requestId}`;
+      // unique(player_id, source_key) makes the request id the idempotency key, under the wallet lock.
+      const prior = await client.query('select delta from seed_ledger where player_id=$1 and source_key=$2', [input.playerId, sourceKey]);
+      if (prior.rows[0]) return { ok: true, wallet, delta: number(prior.rows[0].delta), replayed: true };
+      if (wallet.balance + input.delta < 0) return { ok: false, code: 'BELOW_ZERO', wallet };
+      // Lifetime counters are untouched: an owner's test grant is neither earned nor spent by play.
+      const changed = await client.query('update seed_wallets set balance=balance+$2 where player_id=$1 returning *', [input.playerId, input.delta]);
+      const next = walletFromRow(changed.rows[0]!);
+      await client.query(
+        `insert into seed_ledger(id,player_id,delta,balance_after,category,source_key,economy_version,created_at,metadata)
+         values($1,$2,$3,$4,'admin_adjust',$5,$6,$7,$8)`,
+        [newId(), input.playerId, input.delta, next.balance, sourceKey, SEED_ECONOMY.version, input.now,
+          JSON.stringify({ actorId: input.actorId, reason: input.reason })],
+      );
+      return { ok: true, wallet: next, delta: input.delta, replayed: false };
+    });
+  },
+
+  async adminSetCell(input): Promise<AdminCellResult> {
+    if (!WORLD_CELL_IDS.has(input.cellId)) return { ok: false, code: 'INVALID_CELL' };
+    return transaction(pool, async (client) => {
+      // The same serialization point every claim takes, so an edit never interleaves with a purchase.
+      const meta = await client.query('select revision from world_meta where version=1 for update');
+      const revision = number(meta.rows[0]?.revision);
+      const held = await client.query('select owner_id from world_claims where cell_id=$1 for update', [input.cellId]);
+      const previousOwnerId = held.rows[0] ? String(held.rows[0].owner_id) : null;
+      if (previousOwnerId === input.ownerId) {
+        return { ok: true, cellId: input.cellId, previousOwnerId, ownerId: input.ownerId, changed: false, revision, challengesClosed: 0 };
+      }
+      // An open challenge would otherwise settle against a tile that moved under it: close it as
+      // stale and refund the escrow first, exactly as the 7-day close does.
+      const open = await client.query(
+        "select * from world_challenges where cell_id=$1 and status in ('pending','accepted') for update",
+        [input.cellId],
+      );
+      for (const row of open.rows) {
+        const c = challengeFromRow(row);
+        await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:refund`, input.now);
+        await client.query("update world_challenges set status='stale', resolved_at=$2 where id=$1", [c.id, input.now]);
+      }
+      if (input.ownerId === null) {
+        // Cascades to this cell's (now all closed) challenge rows; their Seeds are already settled
+        // in seed_ledger, which is never touched.
+        await client.query('delete from world_claims where cell_id=$1', [input.cellId]);
+      } else {
+        await client.query(
+          `insert into world_claims(cell_id, owner_id, claimed_at, purchase_request_key, source)
+           values($1,$2,$3,null,'admin')
+           on conflict (cell_id) do update set owner_id=excluded.owner_id, claimed_at=excluded.claimed_at,
+             purchase_request_key=null, source='admin'`,
+          [input.cellId, input.ownerId, input.now],
+        );
+      }
+      await client.query('update world_meta set revision=revision+1 where version=1', []);
+      return { ok: true, cellId: input.cellId, previousOwnerId, ownerId: input.ownerId, changed: true, revision: revision + 1, challengesClosed: open.rows.length };
     });
   },
 });

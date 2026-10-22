@@ -128,7 +128,8 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
   });
   const pool = withEdgeConnectionRetry(poolFromPostgresJs(sql));
   const live = wireLiveEdge({ storage: postgresStorage(pool), pool, server: edgeConfig, env: (n) => Deno.env.get(n), ...(broadcaster ? { broadcaster } : {}) });
-  const economy = new WorldEconomyService(postgresWorldEconomyStore(pool), live.storage);
+  const economyStore = postgresWorldEconomyStore(pool);
+  const economy = new WorldEconomyService(economyStore, live.storage);
   const service = new MatchService({
     storage: live.storage,
     config: edgeConfig,
@@ -147,7 +148,7 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
     authenticate: (t) => service.authenticate(t),
     now: () => service.serverNow(),
   });
-  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts, createAdminRouter({ store: postgresAdminStore(pool), authenticate: (t) => service.authenticate(t), config: edgeConfig, now: () => service.serverNow(), rulesVersion: service.rulesVersion, storage: live.storage, pingDb: () => service.pingStorage(), log })) });
+  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts, createAdminRouter({ store: postgresAdminStore(pool), economy: economyStore, authenticate: (t) => service.authenticate(t), config: edgeConfig, now: () => service.serverNow(), rulesVersion: service.rulesVersion, storage: live.storage, pingDb: () => service.pingStorage(), log })) });
   return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };
 };
 

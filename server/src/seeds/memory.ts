@@ -9,6 +9,8 @@ import {
 import { newId } from '../ids.js';
 import { planSeedReward } from './rewards.js';
 import type {
+  AdminCellResult,
+  AdminSeedAdjustResult,
   ChallengeRespondResult,
   ChallengeSendResult,
   ChallengeSettleResult,
@@ -278,5 +280,45 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
       }
     }
     return changed;
+  }
+
+  // ---- Owner edits from the admin dashboard ---------------------------------
+
+  async adminAdjustSeeds(input: { playerId: string; delta: number; requestId: string; actorId: string; reason: string; now: number }): Promise<AdminSeedAdjustResult> {
+    const wallet = this.current(input.playerId);
+    const sourceKey = `admin:${input.requestId}`;
+    if (this.ledger.some((e) => e.playerId === input.playerId && e.sourceKey === sourceKey)) {
+      const prior = this.ledger.find((e) => e.playerId === input.playerId && e.sourceKey === sourceKey)!;
+      return { ok: true, wallet: { ...wallet }, delta: prior.delta, replayed: true };
+    }
+    if (wallet.balance + input.delta < 0) return { ok: false, code: 'BELOW_ZERO', wallet: { ...wallet } };
+    // Lifetime counters are untouched: they describe what play earned and spent, and an owner's
+    // test grant is neither. The ledger category is what makes the grant visible on its own.
+    wallet.balance += input.delta;
+    this.ledger.push({ id: newId(), playerId: input.playerId, delta: input.delta, category: 'admin_adjust', sourceKey, balanceAfter: wallet.balance, createdAt: input.now });
+    return { ok: true, wallet: { ...wallet }, delta: input.delta, replayed: false };
+  }
+
+  async adminSetCell(input: { cellId: string; ownerId: string | null; now: number }): Promise<AdminCellResult> {
+    if (!WORLD_CELL_IDS.has(input.cellId)) return { ok: false, code: 'INVALID_CELL' };
+    const previousOwnerId = this.claims.get(input.cellId)?.ownerId ?? null;
+    if (previousOwnerId === input.ownerId) {
+      return { ok: true, cellId: input.cellId, previousOwnerId, ownerId: input.ownerId, changed: false, revision: this.revision, challengesClosed: 0 };
+    }
+    // An open challenge on this cell would otherwise settle against a tile that moved under it.
+    // Close it as stale and hand the escrow back, exactly as the 7-day close does.
+    let challengesClosed = 0;
+    for (const challenge of this.openChallenges()) {
+      if (challenge.cellId !== input.cellId) continue;
+      challenge.status = 'stale';
+      challenge.resolvedAt = input.now;
+      this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:refund`, input.now);
+      challengesClosed += 1;
+    }
+    for (const [key, id] of this.purchases) if (id === input.cellId) this.purchases.delete(key);
+    if (input.ownerId === null) this.claims.delete(input.cellId);
+    else this.claims.set(input.cellId, { cellId: input.cellId, ownerId: input.ownerId, ownerName: null, ownerLevel: null, claimedAt: input.now });
+    this.revision += 1;
+    return { ok: true, cellId: input.cellId, previousOwnerId, ownerId: input.ownerId, changed: true, revision: this.revision, challengesClosed };
   }
 }

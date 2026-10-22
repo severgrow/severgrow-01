@@ -426,7 +426,7 @@ describe('migration 0014', () => {
   it('marks territory matches and lets a claim be taken, without weakening security', () => {
     expect(squashed).toContain("alter table matches add column if not exists kind text not null default 'duel'");
     expect(squashed).toContain("check (kind in ('duel', 'territory'))");
-    expect(squashed).toContain("check (source in ('legacy', 'purchase', 'challenge'))");
+    expect(squashed).toContain("check (source in ('legacy', 'purchase', 'challenge', 'admin'))");
     expect(squashed).toContain('alter table world_challenges enable row level security');
     expect(squashed).toContain('revoke all on world_challenges from');
     expect(squashed).not.toContain('create policy');

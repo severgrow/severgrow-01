@@ -153,6 +153,23 @@ export interface WorldEconomyStore {
   challengesInvolving(playerId: string, since: number): Promise<WorldChallenge[]>;
   /** Apply due forfeits (24 h) and stale closes (7 d). Returns how many rows changed. */
   expireChallenges(now: number): Promise<number>;
+
+  // ---- Owner edits from the admin dashboard (docs/ADMIN.md §3a) -------------
+  /** Add or remove Seeds as ONE `admin_adjust` ledger row. Never below zero; a repeated request id replays. */
+  adminAdjustSeeds(input: { playerId: string; delta: number; requestId: string; actorId: string; reason: string; now: number }): Promise<AdminSeedAdjustResult>;
+  /** Give a cell to a player, or clear it (`ownerId: null`). Open challenges on it are closed and refunded first. */
+  adminSetCell(input: { cellId: string; ownerId: string | null; now: number }): Promise<AdminCellResult>;
 }
+
+export type AdminSeedAdjustResult =
+  | { ok: true; wallet: SeedWallet; delta: number; replayed: boolean }
+  | { ok: false; code: 'BELOW_ZERO'; wallet: SeedWallet };
+
+export type AdminCellResult =
+  | { ok: true; cellId: string; previousOwnerId: string | null; ownerId: string | null; changed: boolean; revision: number; challengesClosed: number }
+  | { ok: false; code: 'INVALID_CELL' };
+
+/** The largest single adjustment the dashboard accepts, either way. A typo is not a million Seeds. */
+export const ADMIN_SEED_ADJUST_MAX = 1_000_000;
 
 export const emptyWallet = (): SeedWallet => ({ balance: 0, lifetimeEarned: 0, lifetimeSpent: 0, worldInvitationSeen: false });

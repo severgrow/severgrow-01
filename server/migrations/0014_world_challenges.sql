@@ -6,7 +6,9 @@
 --   * `matches.kind` marks a territory duel apart from an ordinary duel. Existing rows default to
 --     'duel', so no historical match changes meaning.
 --   * `world_claims.source` gains 'challenge': a tile that moved because a duel settled was TAKEN,
---     not bought. A claim is never deleted, only re-owned, so no purchase is orphaned.
+--     not bought. Play never deletes a claim, only re-owns it, so no purchase is orphaned.
+--   * ...and 'admin': a tile the owner placed or moved from the dashboard (docs/ADMIN.md §3a). Only
+--     that edit may also clear a claim outright.
 --
 -- Security is the same lock-down as 0006: row level security with no policies, every right revoked
 -- from anon/authenticated, default privileges stay revoked, and nothing enters the realtime
@@ -62,7 +64,7 @@ create index if not exists world_challenges_expiry_idx on world_challenges (stat
 -- The 0011 check only knew legacy/purchase. Guarded so a re-run is a no-op.
 alter table world_claims drop constraint if exists world_claims_source_check;
 alter table world_claims add constraint world_claims_source_check
-  check (source in ('legacy', 'purchase', 'challenge'));
+  check (source in ('legacy', 'purchase', 'challenge', 'admin'));
 
 -- ---------------------------------------------------------------- security (P-21)
 

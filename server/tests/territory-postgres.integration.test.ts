@@ -170,4 +170,42 @@ describe.skipIf(!enabled)('Territory challenges on real Postgres', () => {
     expect(results.find((r) => !r.ok)).toMatchObject({ ok: false, code: 'CELL_BUSY' });
     expect([bx - (await balance(x)), by - (await balance(y))].sort()).toEqual([0, STAKE]);
   });
+
+  // ---- the owner's dashboard edits (docs/ADMIN.md §3a), on the same SQL ------
+
+  it('admin Seeds: one admin_adjust ledger row each way, never below zero, a repeated request applies once', async () => {
+    const p = await newPlayer('Grant');
+    const add = await store.adminAdjustSeeds({ playerId: p.id, delta: 500, requestId: 'grant-0001', actorId: p.id, reason: 'test', now: clock });
+    expect(add).toMatchObject({ ok: true, replayed: false, wallet: { balance: 500 } });
+    expect(await store.adminAdjustSeeds({ playerId: p.id, delta: 500, requestId: 'grant-0001', actorId: p.id, reason: 'test', now: clock })).toMatchObject({ ok: true, replayed: true });
+    expect(await store.adminAdjustSeeds({ playerId: p.id, delta: -200, requestId: 'take-0001', actorId: p.id, reason: '', now: clock })).toMatchObject({ ok: true, wallet: { balance: 300 } });
+    expect(await store.adminAdjustSeeds({ playerId: p.id, delta: -301, requestId: 'take-0002', actorId: p.id, reason: '', now: clock })).toMatchObject({ ok: false, code: 'BELOW_ZERO' });
+    expect(await balance(p)).toBe(300);
+    const { rows } = await pool.query("select delta, balance_after, metadata from seed_ledger where player_id=$1 and category='admin_adjust' order by created_at, delta desc", [p.id]);
+    expect(rows.map((r) => [Number(r.delta), Number(r.balance_after)])).toEqual([[500, 500], [-200, 300]]);
+    expect(rows[0]!.metadata).toMatchObject({ reason: 'test' });
+  });
+
+  it('admin tiles: place, move and clear any cell; an open challenge on it is refunded first', async () => {
+    const { target, challenger, defender } = await setup();
+    const newcomer = await newPlayer('Newcomer');
+    const sent = await service.sendChallenge(challenger, target, `req-${crypto.randomUUID()}`);
+    if (!sent.ok) throw new Error(sent.code);
+    const escrowed = await balance(challenger);
+    const revision = (await store.world()).revision;
+
+    const moved = await store.adminSetCell({ cellId: target, ownerId: newcomer.id, now: clock });
+    expect(moved).toMatchObject({ ok: true, previousOwnerId: defender.id, ownerId: newcomer.id, changed: true, challengesClosed: 1 });
+    expect(await owner(target)).toBe(newcomer.id);
+    expect(await balance(challenger)).toBe(escrowed + STAKE);
+    expect(await store.challenge(sent.challenge.id)).toMatchObject({ status: 'stale' });
+    const src = await pool.query('select source from world_claims where cell_id=$1', [target]);
+    expect(src.rows[0]?.source).toBe('admin');
+
+    expect(await store.adminSetCell({ cellId: target, ownerId: newcomer.id, now: clock })).toMatchObject({ changed: false });
+    expect(await store.adminSetCell({ cellId: target, ownerId: null, now: clock })).toMatchObject({ ok: true, previousOwnerId: newcomer.id, ownerId: null, changed: true });
+    expect(await owner(target)).toBeNull();
+    expect((await store.world()).revision).toBe(revision + 2);
+    expect(await store.adminSetCell({ cellId: '999,999', ownerId: null, now: clock })).toMatchObject({ ok: false, code: 'INVALID_CELL' });
+  });
 });
