@@ -31,3 +31,31 @@ CHANNEL=futa04 node scripts/check-channel-assets.mjs
 ```
 
 For UI changes also run the relevant `web/e2e/futa04-*.ts` suite with Chromium. Commit coherent green milestones on `futa0.4`.
+
+## Localisation (read before touching player-facing text)
+
+Futasaku ships English, Polish, Spanish and Japanese. Read `docs/LOCALISATION.md`; the terminology
+source of truth is `docs/LOCALISATION-GLOSSARY.md`.
+
+- **Never change English copy as part of a translation task.** English is canonical; dictionaries
+  follow it. Propose copy changes separately.
+- **New player-facing text:** use `t('ui.area.key', 'English copy')` (or `tPlural` for counts) and add
+  the same key to `src/i18n/pl.ts`, `es.ts` and `ja.ts`. Do not concatenate translated fragments.
+- **Static markup:** add `data-i18n="key"` (or `data-i18n-aria`, `data-i18n-title`,
+  `data-i18n-placeholder`, `data-i18n-html`) to `web/index.html`.
+- **`src/strings.ts`:** keep the English object unchanged; export it through
+  `localized('group', EN_GROUP)`. Existing groups already are. New groups follow the same pattern.
+- **No language branches in UI code.** Use semantic keys, never `if (locale === 'ja')` for copy.
+  Typography/layout branches are allowed in CSS, keyed off `html[data-script]` and `html[lang]`.
+- **Locale dictionaries are lazy.** `src/i18n/index.ts` loads only the chosen language. Do not import
+  `pl.ts` / `es.ts` / `ja.ts` into the main bundle.
+- **Incomplete languages stay hidden.** Only `READY_LOCALES` appears in the picker.
+- **Required check for any text change:** `npm test -- tests/i18n`. It fails on missing keys, empty
+  values, placeholder drift, stale keys and untranslated English sentences.
+
+## Localisation conventions for reviews
+
+- Draw → Grow → Throw is the current turn. Never reintroduce old terminology; “Fruit” in player copy
+  is the Bomb.
+- Preserve `{placeholders}`, `<b>`/`<i>` markup and brand names (`FUTASAKU`, `双サク`).
+- Japanese LED text is drawn as real type on the canvas; do not force it through the 5×7 Latin matrix.
