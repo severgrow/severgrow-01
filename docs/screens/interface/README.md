@@ -6,8 +6,8 @@ is the same moments after this pass.
 
 | File | Moment |
 | --- | --- |
-| `*-menu` | main menu, with the quiet campaign read-out under the version line |
-| `*-play-menu` | the PLAY submenu |
+| `*-menu` | main menu (no campaign read-out — owner review, 2026-10-23) |
+| `*-play-menu` | the PLAY submenu, with the chapter progress caption under `LEVEL <n>` |
 | `*-game` | a live campaign board |
 | `*-pause` | the offline pause faceplate over the dimmed board |
 | `*-match-menu` | the online match menu (duel rows, clock note) |

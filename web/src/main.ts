@@ -130,6 +130,7 @@ import {
   CAMPAIGN_SAVE_KEY,
   LAST_MODE_KEY,
   campaignEntry,
+  chapterProgressFor,
   decodeCampaignSave,
   encodeCampaignSave,
   offlineSaveKey,
@@ -724,20 +725,18 @@ function layoutMenu(canContinue: boolean) {
     // disagree with what opens. With every built level complete there is no next level to name, so
     // the entry opens the chapter list instead of claiming LEVEL <n>.
     const entry = campaignEntry(campaignProgress, campaignResume()?.level ?? null);
-    // The quiet campaign readout under the beta line (owner brief, 2026-10-22): it names the level
-    // the LEVEL <n> key will open, from the SAME decision, so the two can never disagree. Read-only,
-    // out of the tab order, and absent once every built level is complete (there is no level to name).
-    const readout = $('menu-readout');
-    const readoutValue = $('menu-readout-value');
-    $('menu-readout-label').textContent = PAUSE.campaignMode;
-    if (entry.kind === 'list') {
-      readout.hidden = true;
-    } else {
-      const current = entry.kind === 'ask' ? entry.next.number : entry.level.number;
-      readout.hidden = false;
-      readoutValue.textContent = MENU.level(current);
-      readout.setAttribute('aria-label', CAMPAIGN.levelLabel(current));
-    }
+    // The caption UNDER the LEVEL <n> entry in the PLAY submenu (owner review, 2026-10-23). It used
+    // to sit on the main menu as "CAMPAIGN — LEVEL 1", which read as a mode of its own competing with
+    // PLAY. The entry already says the level number, so this line says what the entry cannot: how far
+    // through that level's chapter the player is. It is painted from the SAME `entry` decision, so it
+    // can never describe a different level from the one the entry opens; when the entry opens the
+    // chapter list instead there is no level to describe, so the line stands down rather than being
+    // invented. Read-only, out of the tab order, and silent (aria-live=off in the markup).
+    const target = entry.kind === 'list' ? null : entry.kind === 'ask' ? entry.next : entry.level;
+    const chapter = chapterProgressFor(target, campaignProgress);
+    const readout = $('play-readout');
+    readout.textContent = chapter ? CAMPAIGN.progress(chapter.done, chapter.total) : '';
+    readout.hidden = !chapter;
     if (entry.kind === 'list') {
       cmp.textContent = MENU.levels;
       cmp.setAttribute('aria-label', MENU.levelsAria);
@@ -763,7 +762,7 @@ function layoutMenu(canContinue: boolean) {
     // Every other channel keeps the flat menu it is used to: one "Play offline" that opens the
     // picker, and no submenu at all. Untouched, so their own suites need no change.
     $('menu-campaign').hidden = true;
-    $('menu-readout').hidden = true;
+    $('play-readout').hidden = true;
     $('menu-new').hidden = false;
     $('menu-new').textContent = 'Play offline';
     $('menu-new').setAttribute('aria-label', 'Play offline');
@@ -8097,6 +8096,10 @@ const PLAY_MENU_ENTRIES = ['menu-campaign', 'menu-online', 'menu-new'] as const;
 if (FEATURES.campaign) {
   const actions = document.getElementById('play-actions');
   if (actions) for (const id of PLAY_MENU_ENTRIES) actions.append($(id));
+  // The chapter caption is a DETAIL of the LEVEL entry, so it is placed directly under it in the
+  // column (moved, not copied). It has no id of its own in the entry list and no handler: it can
+  // never become a fourth destination or enter the tab order.
+  $('menu-campaign').after($('play-readout'));
 }
 
 bind('menu-play', openPlayMenu);

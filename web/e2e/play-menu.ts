@@ -124,7 +124,9 @@ const readPlayMenu = (page: Page) => page.evaluate(() => {
     screenOverflow: Math.max(0, el.scrollHeight - el.clientHeight),
     pageWide: document.documentElement.scrollWidth > window.innerWidth,
     title: (document.getElementById('play-title')?.textContent ?? '').trim(),
-    entries: [...document.querySelectorAll('#play-actions > *')].map((node) => {
+    // Entries are the keys, not every node: since 2026-10-23 the LEVEL entry also carries a
+    // chapter caption (`#play-readout`, a read-out, not a destination) directly beneath it.
+    entries: [...document.querySelectorAll('#play-actions > .btn')].map((node) => {
       const b = node as HTMLButtonElement;
       const br = b.getBoundingClientRect();
       return {

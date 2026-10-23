@@ -7501,40 +7501,23 @@ body.result .corner-tools {
   }
 }
 
-/* ---------- the main menu reads the campaign ---------- */
-/* A quiet instrument readout, not a second heading: one hairline tick, the mode, the level.
-   It sits under the beta line so the wordmark → version → level reading order is preserved. */
-.menu-readout {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  margin: 0;
-  padding: 0 2px;
+/* ---------- the PLAY submenu's campaign caption ---------- */
+/* The progression is a caption UNDER the LEVEL <n> entry, never a heading and never a key of its
+   own (owner review, 2026-10-23: on the main menu it read as a separate "CAMPAIGN ... LEVEL 1"
+   mode competing with PLAY). The entry already says the level number, so this line says what the
+   entry cannot: how far through that level's chapter the player is. It is a machine read-out —
+   no frame, no fill, no tab stop — and it takes no motion of its own; only the submenu's surface
+   transition moves it into view. */
+#play-menu .play-readout {
+  /* The column's gap separates entries; the negative step tucks the caption to the key above, so
+     the pair reads as ONE entry while the next entry keeps the column's full rhythm. */
+  margin: -3px 0 0;
+  padding: 0 20px; /* aligns with the key's own label, not its frame */
   color: var(--c-muted);
   font-family: var(--font-ui);
-}
-.menu-readout::before {
-  content: '';
-  width: 16px;
-  height: 1px;
-  background: color-mix(in srgb, var(--c-line) 90%, transparent);
-}
-.menu-readout-label {
-  font-size: 0.54rem;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-}
-.menu-readout b {
-  margin-left: auto;
-  color: var(--c-text);
-  font-size: 0.66rem;
-  font-weight: 500;
+  font-size: 0.56rem;
+  line-height: 1.35;
   letter-spacing: 0.2em;
+  text-transform: uppercase;
   font-variant-numeric: tabular-nums;
-}
-@media (max-height: 560px) {
-  .menu-readout {
-    display: none; /* the shortest phones give the space back to the keys, not to a read-out */
-  }
 }

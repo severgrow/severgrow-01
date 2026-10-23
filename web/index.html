@@ -108,14 +108,6 @@
              fourth button, and its "let us know here." link opens Report a problem. The old main-menu
              tagline stays removed (2026-10-14): this slot belongs to the beta line now. -->
         <p id="menu-beta" class="tagline" hidden></p>
-        <!-- The campaign read-out (owner brief, 2026-10-22): a quiet instrument note under the
-             version line, e.g. "CAMPAIGN — LEVEL 12". It is painted from the SAME campaign entry
-             decision as the LEVEL <n> key, is never a control, and stays out of the tab order. On
-             screens shorter than 640px it stands down so the keys keep the space. -->
-        <p id="menu-readout" class="menu-readout" hidden aria-live="off">
-          <span id="menu-readout-label" class="menu-readout-label">Campaign</span>
-          <b id="menu-readout-value" class="num">LEVEL 1</b>
-        </p>
         <!-- The entries are in SEEN order, which is also DOM and tab order. The column holds the
              game's own destinations: PLAY, then TERRITORY (and the legacy Tutorial). The account key
              and Settings live in the footer row BELOW this column (owner brief, 2026-10-21), so the
@@ -213,7 +205,15 @@
           <button id="play-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
           <h2 id="play-title">Play</h2>
         </header>
-        <div id="play-actions" class="menu-buttons"></div>
+        <div id="play-actions" class="menu-buttons">
+          <!-- The LEVEL <n> entry's own caption (owner review, 2026-10-23): how far through that
+               level's chapter the player is, e.g. "5 of 10 complete". main.ts moves it directly
+               under #menu-campaign at boot, so it reads as a detail OF that entry and never as a
+               fourth destination. It is a read-out, not a control: no frame, no tab stop, and
+               aria-live="off" so a menu visit is not announced. Empty until main.ts paints it from
+               real progress; hidden when there is no level to describe. -->
+          <p id="play-readout" class="play-readout" hidden aria-live="off"></p>
+        </div>
       </div>
     </section>
 

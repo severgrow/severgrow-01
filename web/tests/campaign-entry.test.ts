@@ -2,8 +2,8 @@
 // label came from progress, the press preferred a saved match, so an old replay could make the entry
 // say LEVEL 70 and open level 31. These cases pin the decision, not the DOM.
 import { describe, expect, it } from 'vitest';
-import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
-import { campaignEntry } from '../src/logic/campaign.js';
+import { CAMPAIGN_CHAPTERS, CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
+import { campaignEntry, chapterProgressFor } from '../src/logic/campaign.js';
 import type { CampaignProgress } from '../src/logic/campaign.js';
 
 const progress = (unlocked: number, completed: number[]): CampaignProgress => ({
@@ -50,6 +50,29 @@ describe('campaignEntry decides what the entry does', () => {
 
   it('never asks on a fresh save: level 1 is a start', () => {
     expect(campaignEntry(progress(1, []), null)).toEqual({ kind: 'start', level: lvl(1) });
+  });
+});
+
+describe('the chapter caption under LEVEL <n>', () => {
+  // Owner review (2026-10-23): the main menu must not show a campaign read-out, and the PLAY
+  // submenu must not say LEVEL n twice. The caption therefore counts the player's progress through
+  // the CHAPTER the entry opens, from the same progress record the level list reads.
+  const chapterOf = (n: number) => CAMPAIGN_CHAPTERS.find((c) => c.number === n)!;
+
+  it('counts the completed levels of the chapter the entry opens', () => {
+    expect(chapterProgressFor(lvl(1), progress(1, []))).toEqual({ done: 0, total: chapterOf(1).levels.length });
+    expect(chapterProgressFor(lvl(6), progress(6, range(5)))).toEqual({ done: 5, total: chapterOf(1).levels.length });
+  });
+
+  it('starts over at the next chapter, never carrying the previous one forward', () => {
+    expect(chapterProgressFor(lvl(11), progress(11, range(10)))).toEqual({ done: 0, total: chapterOf(2).levels.length });
+    expect(chapterProgressFor(lvl(16), progress(16, range(15)))).toEqual({ done: 5, total: chapterOf(2).levels.length });
+  });
+
+  it('returns nothing when there is no level to describe, so no line can be invented', () => {
+    // Every built level is complete: the entry opens the chapter list and claims no level number,
+    // so there is nothing for a chapter caption to sit under.
+    expect(chapterProgressFor(null, progress(70, range(70)))).toBeNull();
   });
 });
 

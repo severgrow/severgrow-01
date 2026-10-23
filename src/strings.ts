@@ -266,7 +266,6 @@ export const PAUSE = Object.freeze({
   /** The compact turn-history helper (the reference's own title is HELP.howToTitle). */
   history: 'What happened',
   practiceMode: 'Practice',
-  campaignMode: 'Campaign',
   duelMode: 'Duel',
   /** Online only: a truthful note over a match that is still live while the menu is open. */
   clockRuns: 'The match clock keeps running.',

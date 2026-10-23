@@ -113,6 +113,35 @@ describe('PLAY holds exactly the three product entries, moved not copied', () =>
   });
 });
 
+describe('the campaign read-out lives in PLAY, under LEVEL <n>, and nowhere else', () => {
+  it('is gone from the main menu entirely', () => {
+    // Owner review (2026-10-23): the boxed "CAMPAIGN — LEVEL 1" strip read as a separate mode
+    // competing with PLAY. It is not hidden there — it does not exist there.
+    expect(menuSection).not.toMatch(/readout/);
+    expect(html).not.toContain('menu-readout');
+  });
+
+  it('is a read-out in the submenu, not a fourth control', () => {
+    expect(playSection).toContain('id="play-readout"');
+    expect(playSection).toMatch(/<p id="play-readout"[^>]*aria-live="off"/);
+    expect(playSection).not.toMatch(/<button[^>]*id="play-readout"/);
+    // No heading role: it is a machine read-out, not a section title.
+    expect(playSection).not.toMatch(/id="play-readout"[^>]*role=/);
+  });
+
+  it('is placed directly under the LEVEL entry at boot, not appended as a sibling entry', () => {
+    expect(mainSource).toMatch(/\$\('menu-campaign'\)\.after\(\$\('play-readout'\)\)/);
+  });
+
+  it('says the chapter progress, never the level number a second time', () => {
+    // The entry already says LEVEL <n>; the caption's words come from the one strings module
+    // (CAMPAIGN.progress) and from real chapter data, never from a duplicate number.
+    expect(mainSource).toMatch(/chapterProgressFor\(target, campaignProgress\)/);
+    expect(mainSource).toMatch(/readout\.textContent = chapter \? CAMPAIGN\.progress\(chapter\.done, chapter\.total\) : ''/);
+    expect(mainSource).not.toMatch(/readoutValue\.textContent = MENU\.level/);
+  });
+});
+
 describe('the campaign entry reads LEVEL <n> from the player progress', () => {
   it('formats exactly LEVEL 1 / LEVEL 25', () => {
     expect(MENU.level(1)).toBe('LEVEL 1');
