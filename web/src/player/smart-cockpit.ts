@@ -481,7 +481,12 @@ html.futa04-information #board .l-over .receptive-well {
   fill:rgba(225,216,190,.045); stroke:rgba(5,6,5,.66); stroke-width:2.5;
   pointer-events:none;
 }
-html.futa04-information #board .l-over .receptive-well:is(.kind-strengthen,.kind-bloom) { fill:rgba(99,171,96,.11); }
+html.futa04-information #board .l-over .receptive-well.kind-strengthen { fill:rgba(99,171,96,.11); }
+/* BLOOM HAS ITS OWN COLOUR (owner, 2026-10-23: "blooming highlighted on the board a different colour
+   than grow 1 tile, so it's intuitive"). Cream is a one-tile Grow, green your tiles and Strengthen,
+   coral a take or a cut, gold a rich tile; a Bloom is aqua everywhere: the tiles it may reach, their
+   breath, the shape being painted, the preview and the cards picked for it in the hand. */
+html.futa04-information #board .l-over .receptive-well.kind-bloom { fill:rgba(120,204,194,.12); }
 html.futa04-information #board .l-over .receptive-well:is(.kind-replace,.kind-fruit) { fill:rgba(192,83,65,.11); }
 /* Legal tiles invite the tap (owner, 2026-10-22: "slight movement inviting for tapping ... CLICK
    HERE but subtly"). A glow in the tile's own ink breathes in and out, rolling outward from home
@@ -491,7 +496,8 @@ html.futa04-information #board .l-over .target-invite {
   fill:#ded6bd; stroke:none; opacity:0; pointer-events:none;
   animation:target-invite 2400ms cubic-bezier(.45,0,.55,1) infinite both; /* delay: board.ts (its clock) */
 }
-html.futa04-information #board .l-over .target-invite:is(.kind-strengthen,.kind-bloom) { fill:#a6d49b; }
+html.futa04-information #board .l-over .target-invite.kind-strengthen { fill:#a6d49b; }
+html.futa04-information #board .l-over .target-invite.kind-bloom { fill:#9adbd2; }
 html.futa04-information #board .l-over .target-invite:is(.kind-replace,.kind-fruit) { fill:#e5a18b; }
 @keyframes target-invite {
   0%, 100% { opacity:0; }
@@ -514,7 +520,8 @@ html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom,.
   animation:target-in .2s ease-out both;
   transition:fill-opacity .14s ease,stroke-opacity .14s ease;
 }
-html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom) { fill:#a6d49b; stroke:color-mix(in srgb,#a5d294 76%,var(--light-core,#f5d8a4) 24%); }
+html.futa04-information #board .l-over .target.kind-strengthen { fill:#a6d49b; stroke:color-mix(in srgb,#a5d294 76%,var(--light-core,#f5d8a4) 24%); }
+html.futa04-information #board .l-over .target.kind-bloom { fill:#9adbd2; stroke:color-mix(in srgb,#8fd3c9 80%,var(--light-core,#f5d8a4) 20%); }
 html.futa04-information #board .l-over .target:is(.kind-replace,.kind-fruit) { fill:#e5a18b; stroke:color-mix(in srgb,#db917a 76%,var(--light-core,#f5d8a4) 24%); }
 html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom,.kind-replace,.kind-fruit):hover { fill-opacity:.23; stroke-opacity:.74; }
 html.futa04-information #board .l-over .will-cut,
@@ -522,8 +529,10 @@ html.futa04-information #board .l-over .blast-affected {
   fill:#db806e; fill-opacity:.12; stroke:#d99179; stroke-width:1.15; stroke-opacity:.58;
   stroke-dasharray:none; pointer-events:none;
 }
-html.futa04-information #board .l-over .blast-affected { fill-opacity:.18; stroke-opacity:.76; }
-html.futa04-information #board .l-over .selected.blast-selected { fill:#e5a18b; fill-opacity:.25; stroke:#e5aa90; stroke-width:1.5; stroke-opacity:.88; pointer-events:none; }
+/* A Blast reads as its target first (owner, 2026-10-23): the tile it lands on is the strongest
+   mark, the neighbours it also destroys clearly fainter, so the eye finds the middle at once. */
+html.futa04-information #board .l-over .blast-affected { fill-opacity:.09; stroke-opacity:.46; }
+html.futa04-information #board .l-over .selected.blast-selected { fill:#e5a18b; fill-opacity:.30; stroke:#e5aa90; stroke-width:1.6; stroke-opacity:.95; pointer-events:none; }
 html.futa04-information #board .l-over .target.kind-grow:hover {
   fill-opacity:.24; stroke-opacity:.72;
 }
@@ -535,8 +544,11 @@ html.futa04-information #board .l-over .selected.receptive-active {
 html.futa04-information #board .l-over :is(.selected,.ghost-tile) {
   stroke-dasharray:none; stroke-width:1.2; fill-opacity:.19; stroke-opacity:.74; pointer-events:none;
 }
-html.futa04-information #board .l-over :is(.selected,.ghost-tile):is(.kind-strengthen,.kind-bloom,.kind-grow) {
+html.futa04-information #board .l-over :is(.selected,.ghost-tile):is(.kind-strengthen,.kind-grow) {
   fill:#a6d49b; stroke:#a5d294;
+}
+html.futa04-information #board .l-over :is(.selected,.ghost-tile).kind-bloom {
+  fill:#9adbd2; stroke:#8fd3c9;
 }
 html.futa04-information #board .l-over :is(.selected,.ghost-tile).kind-replace {
   fill:#e5a18b; stroke:#db917a;
@@ -548,8 +560,8 @@ html.futa04-information #board .l-over :is(.selected,.ghost-tile).kind-replace {
    well it grew out of. Each hex pops softly as it joins the shape (the group holds the ink and
    its stone, so both arrive together). */
 html.futa04-information #board .l-draw .ghost-tile {
-  fill:#a6d49b; fill-opacity:.19;
-  stroke:color-mix(in srgb,#a5d294 76%,var(--light-core,#f5d8a4) 24%); stroke-width:1.45; stroke-opacity:.74;
+  fill:#9adbd2; fill-opacity:.19;
+  stroke:color-mix(in srgb,#8fd3c9 80%,var(--light-core,#f5d8a4) 20%); stroke-width:1.45; stroke-opacity:.74;
   stroke-dasharray:none; animation:none;
   transition:fill-opacity .18s ease-out, stroke-opacity .18s ease-out, stroke .18s ease-out;
 }

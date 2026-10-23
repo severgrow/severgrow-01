@@ -1433,6 +1433,7 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   for (const id of ['score-you', 'score-bot']) $(id).getAnimations().forEach(animation => animation.cancel());
   pumping = false;
   session = new Session(state, HUMAN, log, base);
+  bloomPick = [];
   // A lesson never offers a power before the level that teaches it (Bloom from level 5).
   { const l = lessonNow && campaignLevel?.number === lessonNow.level ? lessonNow : null; session.allow = l ? (a) => lessonAllows(l, a) : null; }
   finalShown = false;
@@ -2701,6 +2702,7 @@ function flushInstallInvite() {
 }
 
 function humanPlay(a: Action) {
+  bloomPick = []; // a move is made: nothing stays held toward a Bloom
   // The » step, taken once in a lesson, is taught: from then on the game moves on by itself.
   if (isOnlineDuel()) {
     void humanPlayOnline(a);
@@ -6739,6 +6741,8 @@ function installHandBreath(hand: HTMLElement) {
 
 function renderHand(v: View, advice: Advice | null) {
   if (!session) return;
+  // A pick toward a Bloom only lives in my own Grow step, and only while it can still bloom.
+  if (bloomPick.length && !(IS_FUTA04 && myTurn() && !busy() && v.phase === 'ACT' && bloomKindsWith(bloomPick).length)) bloomPick = [];
   const hand = $('hand');
   const sel = session.sel;
   const legal = myTurn() && !busy() ? session.legal : [];
@@ -6797,7 +6801,7 @@ function renderHand(v: View, advice: Advice | null) {
       b.style.setProperty('--breath-scale', (1 + breathAmpOf(weight)).toFixed(4));
     }
     const off = i - (n - 1) / 2;
-    const lifted = sel.card === c.id || picked.has(c.id);
+    const lifted = sel.card === c.id || picked.has(c.id) || bloomPick.includes(c.id);
     const playable = legal.length > 0 && usable.has(c.id);
     // v0.6: a Fruit card glows softly when it has a target now; dimmed, it says why (one line)
     const fs = c.suit === null ? fruitCardState(v, legal, c.id) : null;
@@ -6805,7 +6809,10 @@ function renderHand(v: View, advice: Advice | null) {
     b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
     if (i >= BREATH.maxCards) b.classList.add('breath-off');
     if (IS_FUTA04) {
-      b.classList.toggle('futa04-bloom-card', bloomCards.has(c.id));
+      // Picked toward a Bloom, or in the Bloom being painted: the Bloom's own aqua, as on the board.
+      const inBloom = bloomPick.includes(c.id) || (!!sel.kind?.startsWith('bloom-') && !sel.kind.startsWith('bloom-mega-') && kindCards(sel.kind).includes(c.id));
+      b.classList.toggle('futa04-bloom-pick', IS_FUTA04 && inBloom);
+      b.classList.toggle('futa04-bloom-card', bloomCards.has(c.id) && !inBloom);
       b.classList.toggle('futa04-throw-picked', session!.pending?.t === 'Discard' && session!.pending.card === c.id);
     }
     if (fs?.reason && myTurn()) b.title = fs.reason;
@@ -7530,7 +7537,11 @@ function undoMove() {
   smartCockpit?.hint('UNDONE');
 }
 
+/** Cards picked toward a Bloom by hand (BLOOM BY HAND in onCardTap); empty when nothing is held. */
+let bloomPick: number[] = [];
+
 function cancelSel() {
+  bloomPick = [];
   clearBloomPaintUi();
   session?.cancel();
   inspectKey = null;
@@ -7581,7 +7592,7 @@ function onCardTap(id: number) {
     const hasCombo = session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
     const matchingBlooms = bloomKindsForCard(id);
     const inBloomCard = matchingBlooms.length > 0;
-    const sameAgain = session.sel.card === id;
+    const sameAgain = session.sel.card === id || (bloomPick.length === 1 && bloomPick[0] === id);
     if (grewThisTurn() && hasCombo) {
       // Bloom-related card: first tap stays on Bloom; tapping the same card again
       // (or any non-Bloom card) moves to Throw select → next tap confirms.
@@ -7595,36 +7606,66 @@ function onCardTap(id: number) {
         }
       }
     }
-    // Bloom available: tapping a bloom card (before or after the first grow) opens the map
-    // like the bloom icon — that card is the first painted tile when it is the high end.
-    // One-tile grow of the same card stays available via drag onto a hex.
-    const wantBloom = matchingBlooms.length > 0 || !!session.sel.kind?.startsWith('bloom-');
-    if (wantBloom && matchingBlooms.length === 1) {
-      if (sameAgain && session.sel.kind === matchingBlooms[0]!.kind) {
-        session.cancel();
-        draw = { ...DRAW0 };
-        board.ghost(null);
+    // BLOOM BY HAND (owner, 2026-10-23). A card that can bloom is first only PICKED (lifted, aqua):
+    //   - the same card again: it is played as a plain one-tile Grow;
+    //   - another card that blooms with it: both are held, and the player picks the rest from the
+    //     hand; the moment the picked cards ARE a Bloom, it is time to paint it on the board;
+    //   - while a Bloom is being painted, a card that makes it one longer extends it, a card of
+    //     the Bloom puts it down, and any other card is chosen as usual.
+    const painting = !!session.sel.kind?.startsWith('bloom-') && !session.sel.kind.startsWith('bloom-mega-');
+    const clearPaint = () => { session!.cancel(); draw = { ...DRAW0 }; board.ghost(null); bloomMenu = false; };
+    if (painting) {
+      const group = kindCards(session.sel.kind!);
+      if (group.includes(id)) {
+        clearPaint();
+        bloomPick = [];
         render();
         return;
       }
-      sound.click();
-      beginBloomKind(matchingBlooms[0]!.kind, id);
-      inspectKey = null;
-      smartCockpit?.hint('BLOOM');
-      render();
-      return;
+      const longer = bloomKindsWith([...group, id]).find((k) => kindCards(k.kind).length === group.length + 1);
+      if (longer) {
+        sound.click();
+        beginBloomKind(longer.kind, group[0] ?? id);
+        smartCockpit?.hint('BLOOM');
+        render();
+        return;
+      }
+      if (inBloomCard) {
+        clearPaint();
+        bloomPick = [id];
+        sound.click();
+        hintBloomPick();
+        render();
+        return;
+      }
     }
-    // Several Blooms share this card under Bloom intent: open the recipe menu.
-    if (wantBloom && matchingBlooms.length > 1) {
-      sound.click();
-      pickFruit(id);
-      session.sel = { ...session.sel, kind: null, hex: null };
-      draw = { ...DRAW0 };
-      board.ghost(null);
-      bloomMenu = true;
-      inspectKey = null;
+    if (bloomPick.length === 1 && bloomPick[0] === id) {
+      // The second tap on the same card: a plain one-tile Grow (chosen below, as any card is).
+      bloomPick = [];
+    } else if (bloomPick.includes(id)) {
+      bloomPick = bloomPick.filter((x) => x !== id);
+      hintBloomPick();
       render();
       return;
+    } else if (inBloomCard) {
+      const next = [...bloomPick, id];
+      const fits = bloomKindsWith(next);
+      // A card that does not bloom with the ones held starts a fresh pick of its own.
+      bloomPick = fits.length ? next : [id];
+      const exact = fits.length && next.length >= 3 ? fits.find((k) => kindCards(k.kind).length === next.length) : undefined;
+      sound.click();
+      clearPaint();
+      inspectKey = null;
+      if (exact) {
+        beginBloomKind(exact.kind, sameFaceIn(exact.kind, next[0]!));
+        bloomPick = [];
+        smartCockpit?.hint('BLOOM');
+      } else hintBloomPick();
+      render();
+      return;
+    } else if (bloomPick.length) {
+      // a card that cannot bloom ends the pick and is chosen as usual
+      bloomPick = [];
     }
     // The double-Bomb recipe is entered only through its cockpit control.
     // Picking a Bomb from the hand remains the existing single-card action.
@@ -7692,6 +7733,7 @@ function bloomReverseForCard(combo: Combo, cardId: number | null): boolean {
 function beginBloomKind(kind: string, cardId: number | null = null): boolean {
   if (!session || !kind.startsWith('bloom-') || kind.startsWith('bloom-mega-')) return false;
   bloomMenu = false;
+  bloomPick = [];
   session.preset(null);
   const card = cardId ?? kindCards(kind)[0] ?? null;
   session.sel = { card, hex: null, kind, option: 0 };
@@ -7725,6 +7767,43 @@ function bloomKindsForCard(id: number) {
         return !!other && other.suit === card.suit && other.rank === card.rank;
       }),
   );
+}
+
+/** A card's face (suit and number): copies of the same face are interchangeable in a Bloom. */
+const faceOf = (id: number): string => {
+  const c = session?.view.hand.find((x) => x.id === id);
+  return c ? `${c.suit}:${c.rank}` : '';
+};
+
+/** The Bloom recipes that hold every one of these cards (by face, so copies are interchangeable). */
+function bloomKindsWith(ids: readonly number[]) {
+  if (!session) return [];
+  const want = ids.map(faceOf);
+  return moveButtons(session.view, session.legal, EMPTY_SEL, true).filter((k) => {
+    if (!k.kind.startsWith('bloom-') || k.kind.startsWith('bloom-mega-')) return false;
+    const have = kindCards(k.kind).map(faceOf);
+    for (const w of want) {
+      const at = have.indexOf(w);
+      if (at < 0) return false;
+      have.splice(at, 1);
+    }
+    return true;
+  });
+}
+
+/** The card of `kind` with the same face as `id` (the recipe may name another copy of it). */
+function sameFaceIn(kind: string, id: number): number {
+  const cards = kindCards(kind);
+  return cards.includes(id) ? id : cards.find((c) => faceOf(c) === faceOf(id)) ?? cards[0] ?? id;
+}
+
+/** The display counts what is left to pick: "PICK 2 MORE", "PICK 1 MORE" (the shortest Bloom). */
+function hintBloomPick() {
+  if (!bloomPick.length) return;
+  const fits = bloomKindsWith(bloomPick);
+  const shortest = fits.reduce((n, k) => Math.min(n, kindCards(k.kind).length), Infinity);
+  const left = Number.isFinite(shortest) ? shortest - bloomPick.length : 0;
+  if (left > 0) smartCockpit?.hint(`PICK ${left} MORE`);
 }
 
 /** The ghost of the shape being painted right now (null when nothing is painted). */

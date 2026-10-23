@@ -35,6 +35,11 @@ export const INFORMATION_CSS = `
   border-color: var(--c-accent);
   box-shadow: 0 0 10px color-mix(in srgb, var(--c-accent) 28%, transparent), inset 0 0 7px color-mix(in srgb, var(--c-accent) 8%, transparent);
 }
+/* Picked toward a Bloom (or in the Bloom being painted): the Bloom's own aqua, as on the board. */
+.futa04-information .dock .hand .card.futa04-bloom-pick {
+  border-color: #8fd3c9;
+  box-shadow: 0 0 12px rgba(143, 211, 201, 0.38), inset 0 0 8px rgba(143, 211, 201, 0.10);
+}
 .futa04-information .dock .hand.waiting .card {
   opacity: .38 !important;
   filter: grayscale(.85) brightness(.72) !important;
