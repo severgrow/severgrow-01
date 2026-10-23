@@ -1,4 +1,4 @@
-import { t } from '../../../src/i18n/index.js';
+import { onLocaleChange, t } from '../../../src/i18n/index.js';
 import { BLOOM } from '../../../src/strings.js';
 
 /** Futa04 teaching lives behind one readable disclosure, never over playable hexes.
@@ -140,6 +140,15 @@ export const mountHelp = (hooks: HelpHooks) => {
   close.setAttribute('aria-label', t('ui.help.close', 'Close help'));
   close.textContent = '×';
   header.append(title, close);
+  // A language switch repaints the sheet's own words; the panels it hosts are painted by their
+  // owners (the coach and the first-time tip keep their own copy).
+  onLocaleChange(() => {
+    title.textContent = t('ui.help.title', 'Game help');
+    close.setAttribute('aria-label', t('ui.help.close', 'Close help'));
+    trigger.setAttribute('aria-label', t('ui.help.tips', 'Tips'));
+    trigger.title = t('ui.help.tips', 'Tips');
+    actions.setAttribute('aria-label', t('ui.help.actions', 'Undo, hint and arrange cards'));
+  });
   const body = document.createElement('div');
   body.className = 'sheet-body futa04-help-body';
   const tipPanel = document.createElement('div');

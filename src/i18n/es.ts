@@ -1374,4 +1374,8 @@ export const ES: Dictionary = {
   "ui.game.modeDuel": "Duelo",
   "ui.game.modePractice": "Práctica",
   "ui.game.yourTurnUpper": "TU TURNO",
+  "ui.common.on": "Sí",
+  "ui.common.off": "No",
+  "ui.thumb.right": "Derecha",
+  "ui.thumb.left": "Izquierda",
 };

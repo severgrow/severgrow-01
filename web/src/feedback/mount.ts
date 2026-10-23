@@ -3,6 +3,7 @@
 // It only reads the page (the existing read-only `window.__severgrow` hooks); it never changes the
 // game, and a failure here can never break play (every path is caught).
 import { BETA_GUIDE, FEEDBACK } from '../../../src/strings.js';
+import { onLocaleChange } from '../../../src/i18n/index.js';
 import { DUEL_CLIENT_VERSION, browserStorage } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
@@ -302,7 +303,16 @@ export const mountFeedback = (): void => {
   sendBtn.dataset.fb = 'send';
   const actions = el('div', 'fb-actions');
   actions.append(guideBtn, cancelBtn, sendBtn);
-  report.panel.append(el('h2', '', FEEDBACK.title), el('p', '', FEEDBACK.prompt), area, el('p', 'fb-small', FEEDBACK.attached), status, actions);
+  const paintReport = () => {
+    report.panel.replaceChildren(el('h2', '', FEEDBACK.title), el('p', '', FEEDBACK.prompt), area, el('p', 'fb-small', FEEDBACK.attached), status, actions);
+    report.panel.setAttribute('aria-label', FEEDBACK.title);
+    area.placeholder = FEEDBACK.placeholder;
+    area.setAttribute('aria-label', FEEDBACK.prompt);
+    sendBtn.textContent = FEEDBACK.send;
+    cancelBtn.textContent = FEEDBACK.cancel;
+    guideBtn.textContent = FEEDBACK.guideLink;
+  };
+  paintReport();
   cancelBtn.addEventListener('click', () => report.close());
   area.addEventListener('input', () => {
     if (status.dataset.tone === 'bad') {
@@ -352,15 +362,18 @@ export const mountFeedback = (): void => {
   };
 
   // Entry points: the main-menu beta line, the pause menu (in a game) and Settings (anywhere).
+  const reportButtons: HTMLButtonElement[] = [];
   if (betaLink) {
     const fresh = betaLink.cloneNode(true) as HTMLButtonElement;
     fresh.addEventListener('click', openReport);
     betaLink.replaceWith(fresh);
     betaLink = fresh;
+    reportButtons.push(fresh);
   }
   replayEarlyTap(betaLink);
   const button = (id: string, cls: string) => {
     const b = el('button', cls, FEEDBACK.open);
+    reportButtons.push(b);
     b.type = 'button';
     b.id = id;
     b.dataset.fb = 'open';
@@ -374,4 +387,10 @@ export const mountFeedback = (): void => {
   if (acts) acts.insertBefore(reportRow, document.getElementById('gm-main'));
   const settingsBody = document.querySelector('#sheet-settings .sheet-body');
   settingsBody?.append(button('settings-report', 'btn ghost'));
+
+  // A language switch repaints every report entry and the sheet itself; the guide rebuilds on open.
+  onLocaleChange(() => {
+    paintReport();
+    for (const entry of reportButtons) entry.textContent = FEEDBACK.open;
+  });
 };

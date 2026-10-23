@@ -1,4 +1,4 @@
-import { t } from '../../../src/i18n/index.js';
+import { onLocaleChange, t } from '../../../src/i18n/index.js';
 // Approved player phone extras (Test and Futa04): the "thumb layout" settings
 // (Thumb layout, Hand side) and the idle tip shown faintly over the board. The layout itself is
 // computed by the one layout engine (logic/layout.ts, computeLayout's `thumb` variant).
@@ -63,17 +63,27 @@ export const mountThumb = (hooks: { relayout: () => void; reduceMotion: () => bo
     painters.push(paint);
     return row;
   };
-  const painters: (() => void)[] = [];
+  let painters: (() => void)[] = [];
   const paintAll = () => painters.forEach((p) => p());
-  const h3 = document.createElement('h3');
-  h3.textContent = t('ui.thumb.title', 'Phone layout');
-  box.append(
-    h3,
-    seg(t('ui.thumb.layout', 'Thumb layout'), 'thumb-seg', [['on', 'On'], ['off', 'Off']], () => (prefs.thumb ? 'on' : 'off'), (v) => (prefs = { ...prefs, thumb: v === 'on' })),
-    seg(t('ui.thumb.side', 'Hand side'), 'hand-side-seg', [['right', 'Right'], ['left', 'Left']], () => prefs.side, (v) => (prefs = { ...prefs, side: v === 'left' ? 'left' : 'right' })),
-  );
+  /** Built once per language: a switch rebuilds the same rows in place, same ids and handlers. */
+  const buildRows = () => {
+    painters = [];
+    const h3 = document.createElement('h3');
+    h3.textContent = t('ui.thumb.title', 'Phone layout');
+    box.replaceChildren(
+      h3,
+      seg(t('ui.thumb.layout', 'Thumb layout'), 'thumb-seg',
+        [['on', t('ui.common.on', 'On')], ['off', t('ui.common.off', 'Off')]],
+        () => (prefs.thumb ? 'on' : 'off'), (v) => (prefs = { ...prefs, thumb: v === 'on' })),
+      seg(t('ui.thumb.side', 'Hand side'), 'hand-side-seg',
+        [['right', t('ui.thumb.right', 'Right')], ['left', t('ui.thumb.left', 'Left')]],
+        () => prefs.side, (v) => (prefs = { ...prefs, side: v === 'left' ? 'left' : 'right' })),
+    );
+    paintAll();
+  };
+  buildRows();
   body?.prepend(box);
-  paintAll();
+  onLocaleChange(() => { buildRows(); hooks.relayout(); });
 
   // ---------- the idle tip: large faint words over the board's emptiest part ----------
   const wrap = document.getElementById('board-wrap');

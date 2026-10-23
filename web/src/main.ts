@@ -248,6 +248,8 @@ window.addEventListener('futasaku:locale', () => {
   if (shownScreen === 'campaign') renderCampaignScreen();
   applySettingsCopy();
   syncSettingsForm();
+  syncMenuMode();
+  if (FEATURES.slimHeader) fillMenuStatus();
   if (openSheet?.id === 'sheet-howto') renderHowTo();
   if (openSheet?.id === 'sheet-history') renderHistory();
   if (shownScreen === 'game') {

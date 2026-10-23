@@ -1376,4 +1376,8 @@ export const PL: Dictionary = {
   "ui.game.modeDuel": "Pojedynek",
   "ui.game.modePractice": "Trening",
   "ui.game.yourTurnUpper": "TWOJA TURA",
+  "ui.common.on": "Wł.",
+  "ui.common.off": "Wył.",
+  "ui.thumb.right": "Prawa",
+  "ui.thumb.left": "Lewa",
 };

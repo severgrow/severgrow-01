@@ -1372,4 +1372,8 @@ export const JA: Dictionary = {
   "ui.game.modeDuel": "対戦",
   "ui.game.modePractice": "練習",
   "ui.game.yourTurnUpper": "あなたの手番",
+  "ui.common.on": "オン",
+  "ui.common.off": "オフ",
+  "ui.thumb.right": "右",
+  "ui.thumb.left": "左",
 };

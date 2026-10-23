@@ -13,6 +13,7 @@ import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
 import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
 import { glassBaseCss } from '../player/glass-surface.js';
 import { installProfileUI } from './profile.js';
+import { onLocaleChange } from '../../../src/i18n/index.js';
 import { GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
 import type { ProfileFacts } from './profile.js';
 import {
@@ -265,27 +266,31 @@ export const mountAccounts = async (): Promise<void> => {
 
   // ---- 0. the privacy policy at futasaku.com/#privacy (every build, even offline-only ones) ----
   const privacy = sheet('acct-privacy', PRIVACY.title);
-  privacy.panel.append(el('h2', '', PRIVACY.title), el('p', 'acct-small', PRIVACY.updated), el('p', '', PRIVACY.intro));
-  // The same document at its canonical, crawlable address (real HTML, no JavaScript needed). The
-  // panel stays the offline-friendly view; this normal anchor just makes the two visibly one page.
-  const canonicalPolicy = el('a', 'acct-linkbtn', 'futasaku.com/privacy');
-  canonicalPolicy.href = './privacy/';
-  canonicalPolicy.style.alignSelf = 'flex-start';
-  canonicalPolicy.style.paddingLeft = '0';
-  privacy.panel.append(canonicalPolicy);
-  for (const s of PRIVACY.sections) {
-    privacy.panel.append(el('h3', '', s.heading));
-    const ul = el('ul');
-    for (const line of s.lines) ul.append(el('li', '', line));
-    privacy.panel.append(ul);
-  }
-  {
+  /** Built once per language: a switch repaints the same policy in place. */
+  const paintPrivacy = () => {
+    privacy.panel.replaceChildren(el('h2', '', PRIVACY.title), el('p', 'acct-small', PRIVACY.updated), el('p', '', PRIVACY.intro));
+    privacy.panel.setAttribute('aria-label', PRIVACY.title);
+    // The same document at its canonical, crawlable address (real HTML, no JavaScript needed). The
+    // panel stays the offline-friendly view; this normal anchor just makes the two visibly one page.
+    const canonicalPolicy = el('a', 'acct-linkbtn', 'futasaku.com/privacy');
+    canonicalPolicy.href = './privacy/';
+    canonicalPolicy.style.alignSelf = 'flex-start';
+    canonicalPolicy.style.paddingLeft = '0';
+    privacy.panel.append(canonicalPolicy);
+    for (const section of PRIVACY.sections) {
+      privacy.panel.append(el('h3', '', section.heading));
+      const ul = el('ul');
+      for (const line of section.lines) ul.append(el('li', '', line));
+      privacy.panel.append(ul);
+    }
     const close = button('acct-btn', PRIVACY.close, 'privacy-close');
     const row = el('div', 'acct-actions row');
     row.append(close);
     privacy.panel.append(row);
     close.addEventListener('click', () => privacy.close());
-  }
+  };
+  paintPrivacy();
+  onLocaleChange(paintPrivacy);
   const openPrivacy = () => {
     privacy.open(() => {
       if (location.hash === '#privacy') history.replaceState(history.state, '', location.pathname + location.search);
