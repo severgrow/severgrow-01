@@ -133,11 +133,17 @@ describe('the campaign read-out lives in PLAY, under LEVEL <n>, and nowhere else
     expect(mainSource).toMatch(/\$\('menu-campaign'\)\.after\(\$\('play-readout'\)\)/);
   });
 
-  it('says the chapter progress, never the level number a second time', () => {
-    // The entry already says LEVEL <n>; the caption's words come from the one strings module
-    // (CAMPAIGN.progress) and from real chapter data, never from a duplicate number.
-    expect(mainSource).toMatch(/chapterProgressFor\(target, campaignProgress\)/);
-    expect(mainSource).toMatch(/readout\.textContent = chapter \? CAMPAIGN\.progress\(chapter\.done, chapter\.total\) : ''/);
+  it('counts the ten lessons, never the level number a second time', () => {
+    // The entry already says LEVEL <n>; the caption's words come from the one strings module and
+    // from real campaign progress, never from a duplicate number.
+    // Owner direction (2026-10-23): it reads "n of 10 lessons completed" and RETIRES once the ten
+    // lessons are won. "Lessons" is only true of levels 1-10, so the line is gated on the entry
+    // still opening a lesson (lessonFor) rather than on a campaign chapter - chapter II would
+    // otherwise advertise "0 of 10 lessons" for levels that are not lessons.
+    expect(mainSource).toMatch(/const lessonsDone = LESSONS\.filter/);
+    expect(mainSource).toMatch(/const stillTeaching = !!target && lessonsDone < lessonsTotal && lessonFor\(target\.number\) !== null/);
+    expect(mainSource).toMatch(/readout\.textContent = stillTeaching \? CAMPAIGN\.lessonsCompleted\(lessonsDone, lessonsTotal\) : ''/);
+    expect(mainSource).toMatch(/readout\.hidden = !stillTeaching/);
     expect(mainSource).not.toMatch(/readoutValue\.textContent = MENU\.level/);
   });
 });

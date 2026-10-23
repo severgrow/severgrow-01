@@ -92,7 +92,7 @@ import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { throwPileAction } from './logic/throw-pile.js';
 import {
   goalReachable, lessonBeat, lessonFor, lessonLocked, lessonOpening,
-  presentedLessonBeat, suggestMove,
+  presentedLessonBeat, suggestMove, LESSONS,
 } from './lessons/lessons.js';
 import type { Beat, Lesson } from './lessons/lessons.js';
 import { scriptedOpponentAction } from './lessons/opponent.js';
@@ -130,7 +130,6 @@ import {
   CAMPAIGN_SAVE_KEY,
   LAST_MODE_KEY,
   campaignEntry,
-  chapterProgressFor,
   decodeCampaignSave,
   encodeCampaignSave,
   offlineSaveKey,
@@ -733,10 +732,17 @@ function layoutMenu(canContinue: boolean) {
     // chapter list instead there is no level to describe, so the line stands down rather than being
     // invented. Read-only, out of the tab order, and silent (aria-live=off in the markup).
     const target = entry.kind === 'list' ? null : entry.kind === 'ask' ? entry.next : entry.level;
-    const chapter = chapterProgressFor(target, campaignProgress);
+    // Owner direction (2026-10-23): the caption counts the ten LESSON levels (1-10 are the
+    // tutorial), not the campaign chapter - "lessons" is only true of those. It is shown only while
+    // the entry still opens a lesson; once all ten are won the entry opens level 11, which is not a
+    // lesson, so the line retires itself rather than sitting there as permanent "10 of 10"
+    // furniture describing a word that no longer applies.
     const readout = $('play-readout');
-    readout.textContent = chapter ? CAMPAIGN.progress(chapter.done, chapter.total) : '';
-    readout.hidden = !chapter;
+    const lessonsDone = LESSONS.filter((l) => campaignProgress.completed.includes(`c1-${String(l.level).padStart(2, '0')}`)).length;
+    const lessonsTotal = LESSONS.length;
+    const stillTeaching = !!target && lessonsDone < lessonsTotal && lessonFor(target.number) !== null;
+    readout.textContent = stillTeaching ? CAMPAIGN.lessonsCompleted(lessonsDone, lessonsTotal) : '';
+    readout.hidden = !stillTeaching;
     if (entry.kind === 'list') {
       cmp.textContent = MENU.levels;
       cmp.setAttribute('aria-label', MENU.levelsAria);

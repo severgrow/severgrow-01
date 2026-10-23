@@ -1174,6 +1174,13 @@ export const CAMPAIGN = Object.freeze({
   locked: 'Locked',
   /** small progress line under the heading, e.g. "3 of 10 complete" */
   progress: (done: number, total: number): string => `${done} of ${total} complete`,
+  /**
+   * The caption under the PLAY submenu's LEVEL <n> key (owner direction, 2026-10-23): "3 of 10
+   * lessons completed". It is deliberately its own key rather than `progress`, because this line
+   * counts LESSONS in the level's own chapter (levels 1-10 are the tutorial), while the campaign
+   * screen's `progress` counts every level built. The line retires once the chapter is finished.
+   */
+  lessonsCompleted: (done: number, total: number): string => `${done} of ${total} lessons completed`,
   /** the chapter label, e.g. "Chapter I" (Roman numeral from the chapter number) */
   chapterName: (chapter: number): string =>
     `Chapter ${['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][chapter - 1] ?? chapter}`,
