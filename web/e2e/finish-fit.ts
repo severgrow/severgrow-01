@@ -102,7 +102,21 @@ const measure = (page: Page) => page.evaluate(MEASURE) as Promise<{
  * computer plays its own turns exactly as it does in the product (the loop only waits for them).
  * Returns why it stopped, so a failure says what actually happened.
  */
+/**
+ * The pre-game starter ritual (2026-10-23) is an `aria-modal` surface that owns the opening of a
+ * match and deliberately swallows taps. The board is not wrong when the driver is refused during
+ * it; the ritual simply has the floor. Wait for it to hand over before driving real moves.
+ */
+const waitStarterRitual = async (page: Page): Promise<void> => {
+  await page.waitForFunction(() => {
+    const r = document.getElementById('starter-lottery');
+    return !r || r.hidden || !r.getClientRects().length;
+  }, undefined, { timeout: 15_000 }).catch(() => undefined);
+};
+
 const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
+  await waitStarterRitual(page);
+  let refused = 0;
   const read = () => page.evaluate('(() => { const h = window.__severgrow; return h.state(); })()') as Promise<State | null>;
   const idle = () => page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
   let waiting = 0;
@@ -123,15 +137,33 @@ const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
     const legal = legalActions(viewFor(now, 0));
     if (!legal.length) return `no legal move for the human (${now.phase})`;
     const pick = (t: Action['t']) => legal.find((a) => a.t === t) ?? null;
-    const action =
-      now.phase === 'DRAW'
-        ? (pick('Draw') ?? legal[0]!)
-        : (pick('Bloom') ?? pick('Sprout') ?? pick('EndAct') ?? pick('Discard') ?? legal[0]!);
-    const applied = await page.evaluate(
-      ([a, who]) => Boolean((window as unknown as { __severgrow: { playFor: (x: unknown, p: number) => boolean } }).__severgrow.playFor(a, who)),
-      [action, 0] as const,
-    );
-    if (!applied) return `the app refused a legal ${action.t}`;
+    // The app has the final say on WHICH legal action it accepts. A guided lesson (levels 1-10) only
+    // lets the player take the step it is teaching, so an action the ENGINE calls legal can still be
+    // refused at the app's own door (the 2026-10-23 lesson gate). Try the natural order first, then
+    // the rest of the engine's list; fail only if the app refuses EVERY legal action, persistently.
+    const natural = (now.phase === 'DRAW'
+      ? [pick('Draw'), pick('EndAct'), pick('Discard')]
+      : [pick('Bloom'), pick('Sprout'), pick('EndAct'), pick('Discard')])
+      .filter((a): a is Action => !!a);
+    const candidates: Action[] = [...natural, ...legal.filter((a) => !natural.includes(a))];
+    let action: Action = candidates[0]!;
+    let applied = false;
+    for (const candidate of candidates) {
+      action = candidate;
+      const ok = await page.evaluate(
+        ([a, who]) => Boolean((window as unknown as { __severgrow: { playFor: (x: unknown, p: number) => boolean } }).__severgrow.playFor(a, who)),
+        [candidate, 0] as const,
+      );
+      if (ok) { applied = true; break; }
+    }
+    if (!applied) {
+      // A transient refusal (a surface still handing over) is not a product failure; a PERSISTENT
+      // refusal of every legal action is. Give it a few beats, then fail loudly.
+      if (++refused > 6) return `the app refused every legal action (last ${action.t}, ${now.phase})`;
+      await page.waitForTimeout(150);
+      continue;
+    }
+    refused = 0;
   }
   return `still playing after ${maxSteps} steps`;
 };

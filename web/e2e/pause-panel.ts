@@ -170,6 +170,13 @@ const openPanel = async (page: Page, largeText: boolean, palette: string) => {
   await page.waitForTimeout(300);
   await page.locator('#levels .level-tile, #levels .difficulty-tile').nth(1).click({ force: true });
   await page.waitForSelector('#game:not([hidden])', { timeout: 25_000 });
+  // The pre-game starter ritual (2026-10-23) is an `aria-modal` surface that owns the first
+  // 1.8-3.6s of a match and deliberately swallows taps on `#hud-menu`. Wait for it to hand the
+  // board over before opening the pause panel: this suite measures the pause face, not the ritual.
+  await page.waitForFunction(() => {
+    const r = document.getElementById('starter-lottery');
+    return !r || r.hidden || !r.getClientRects().length;
+  }, undefined, { timeout: 12_000 }).catch(() => undefined);
   await page.waitForTimeout(2200);
   await page.click('#hud-menu', { force: true });
   await page.waitForSelector('#sheet-menu:not([hidden])', { timeout: 6_000 });
