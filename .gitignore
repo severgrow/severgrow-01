@@ -21,3 +21,6 @@ web/e2e/out-design/
 !.env.example
 .tmp*
 supabase/.temp/
+
+# Local preview build (scratch, never committed)
+web/dist-preview/
