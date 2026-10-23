@@ -50,7 +50,11 @@ export type Lesson = {
   locked: boolean;
   /** The ideas this lesson is for, in order. */
   goals: readonly Goal[];
-  /** Explanations shown once before the first draw (tap anywhere to move on). */
+  /**
+   * Explanations shown once, tap anywhere to move on. Board facts and the first draw come before the
+   * first draw; a move (gold, Bloom, surround, Bomb, Blast) is explained after the draw, the moment it
+   * can be played (ACT_INTROS — owner, 2026-10-22: "every step has a playable example straight away").
+   */
   intro: readonly IntroKind[];
   /** Level 10 keeps its hints for an idle moment; every other level guides every step (the fade decides how much). */
   guide: 'always' | 'idle';
@@ -68,13 +72,19 @@ export type IntroKind =
   | 'tree' | 'their-home' | 'first-draw' | 'rock' | 'gold'
   | 'bloom-cards' | 'surround' | 'bomb' | 'blast' | 'pile-gold';
 
+/**
+ * The level that first teaches each power. Before it the lesson never offers that move; a hello
+ * only fires after it, never in its own lesson.
+ */
+const POWER_TAUGHT_AT: Readonly<Record<PowerKind, number>> = Object.freeze({ bloom: 5, bomb: 7, blast: 8 });
+
 // ---------- the lessons ----------
 
 const SET3: readonly (readonly [0 | 1 | 2 | 3, number])[] = [[0, 3], [1, 3], [2, 3]];
 
 export const LESSONS: readonly Lesson[] = Object.freeze([
   {
-    level: 1, version: 2, locked: true, guide: 'always',
+    level: 1, version: 3, locked: true, guide: 'always',
     intro: ['tree', 'their-home', 'first-draw'],
     goals: [{ t: 'grow' }],
     newActions: ['draw', 'grow', 'throw'],
@@ -82,14 +92,14 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       seed: 96001,
       hand: [[0, 8], [1, 2], [1, 5], [2, 4], [1, 3], [2, 6], [3, 5]],
       opponent: [[1, 2], [2, 2], [3, 3], [0, 2], [3, 2], [2, 3], [3, 4]],
-      deck: [[2, 7], [0, 4], [0, 5], [0, 6], [1, 7], [3, 6], [3, 7], [3, 2], [0, 7], [1, 6], [2, 8], [1, 4]],
+      deck: [[2, 7], [0, 4], [0, 5], [0, 6], [1, 7], [3, 6], [3, 7], [3, 2], [0, 7], [1, 6], [2, 8], [1, 4], [2, 9]],
       discard: [[3, 1]],
     },
-    opponent: { script: { growOn: [2] } },
+    opponent: { script: {} },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'DRAW, GROW, THROW', icon: '✦' },
   },
   {
-    level: 2, version: 2, locked: true, guide: 'always',
+    level: 2, version: 3, locked: true, guide: 'always',
     intro: [],
     goals: [{ t: 'strengthen', key: '-1,1', card: 8 }, { t: 'take', key: '0,0' }],
     newActions: ['strengthen', 'take'],
@@ -101,11 +111,11 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[3, 5], [2, 7], [2, 6], [0, 6], [0, 3], [1, 5], [0, 7], [1, 7], [3, 7], [2, 4], [1, 4], [3, 6]],
       discard: [[3, 1]],
     },
-    opponent: { script: { growOn: [3], avoid: ['0,0'] } },
+    opponent: { script: { avoid: ['0,0'] } },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'STRONGER TILES WIN', icon: '↑' },
   },
   {
-    level: 3, version: 2, locked: true, guide: 'always',
+    level: 3, version: 3, locked: true, guide: 'always',
     intro: ['rock', 'gold'],
     goals: [{ t: 'gold', key: '0,0' }],
     newActions: [],
@@ -120,11 +130,11 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       discard: [[3, 1]],
     },
     // It heads for the gold first: if you leave it, it takes it (and the lesson shows why).
-    opponent: { script: { growOn: [1, 3], prefer: ['0,0'] } },
+    opponent: { script: { prefer: ['0,0'] } },
     finish: { title: W.youWin, line: W.goldDecided, learned: 'GOLD COUNTS DOUBLE', icon: '◆' },
   },
   {
-    level: 4, version: 2, locked: false, guide: 'always',
+    level: 4, version: 3, locked: false, guide: 'always',
     intro: [],
     goals: [{ t: 'cut', key: '1,-1' }],
     newActions: ['cut'],
@@ -136,11 +146,11 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[3, 5], [1, 7], [1, 5], [2, 6], [1, 4], [0, 6], [3, 6], [2, 4], [0, 7], [0, 3]],
       discard: [[3, 1]],
     },
-    opponent: { script: { growOn: [2] } },
+    opponent: { script: {} },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'CUT THEIR ROOT', icon: '✂' },
   },
   {
-    level: 5, version: 2, locked: false, guide: 'always',
+    level: 5, version: 3, locked: false, guide: 'always',
     intro: ['bloom-cards'],
     goals: [{ t: 'bloom' }],
     newActions: ['bloom'],
@@ -152,11 +162,11 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[0, 4], [1, 4], [3, 5], [0, 6], [1, 5], [2, 4], [3, 6], [0, 7], [1, 7], [2, 7], [3, 8], [2, 8]],
       discard: [[3, 1]],
     },
-    opponent: { script: { growOn: [2] } },
+    opponent: { script: {} },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLOOM THREE AT ONCE', icon: '✿' },
   },
   {
-    level: 6, version: 2, locked: false, guide: 'always',
+    level: 6, version: 3, locked: false, guide: 'always',
     intro: ['surround'],
     goals: [{ t: 'strangle' }],
     newActions: ['surround'],
@@ -168,12 +178,13 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[0, 6], [1, 4], [3, 5], [0, 4], [1, 5], [2, 4], [3, 6], [0, 7], [1, 7], [2, 6], [3, 7], [2, 8]],
       discard: [[3, 1]],
     },
-    // It leaves its own home's sides to you: the lesson is the surround.
-    opponent: { script: { growOn: [1, 2, 3], avoid: ['1,-1', '1,-2', '2,-1'] } },
+    // It grows like any player, onto a side of its own home when that is all it has; the
+    // surround then takes that tile back (owner, 2026-10-22: a level that never moves feels broken).
+    opponent: { script: {} },
     finish: { title: W.youWin, line: W.wonByKo, learned: 'SURROUND THEIR HOME', icon: '◎' },
   },
   {
-    level: 7, version: 2, locked: false, guide: 'always',
+    level: 7, version: 3, locked: false, guide: 'always',
     intro: ['bomb'],
     goals: [{ t: 'bomb', key: '0,0' }],
     newActions: ['bomb'],
@@ -182,15 +193,14 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       tiles: [['-1,1', YOU, 3], ['0,0', THEM, 9], ['1,-1', THEM, 9]],
       hand: [[null, 0], [0, 3], [1, 4], [2, 5], [3, 6], [0, 7], [1, 8]],
       opponent: [[1, 1], [2, 2], [3, 3], [0, 2], [3, 2], [2, 1], [3, 4]],
-      deck: [[0, 4], [1, 5], [3, 5], [0, 6], [1, 6], [2, 4], [3, 7], [0, 8], [2, 7]],
+      deck: [[0, 4], [1, 5], [3, 5], [0, 6], [1, 6], [2, 4], [3, 7], [0, 8], [2, 7], [1, 7], [3, 8]],
       discard: [[3, 1]],
     },
-    // The Bomb is the whole margin here, so it holds its ground and does not grow.
-    opponent: { script: { growOn: [] } },
+    opponent: { script: {} },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BOMB ONE TILE', icon: '●' },
   },
   {
-    level: 8, version: 2, locked: false, guide: 'always',
+    level: 8, version: 3, locked: false, guide: 'always',
     intro: ['blast'],
     goals: [{ t: 'blast', key: '0,-1' }, { t: 'blastGrow' }],
     newActions: ['blast'],
@@ -205,11 +215,11 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[0, 4], [1, 5], [3, 5], [0, 6], [1, 6], [2, 4], [3, 7], [0, 8], [2, 7], [1, 7]],
       discard: [[3, 1]],
     },
-    opponent: { script: { growOn: [2] } },
+    opponent: { script: {} },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLAST A HOLE', icon: '✹' },
   },
   {
-    level: 9, version: 2, locked: false, guide: 'always',
+    level: 9, version: 3, locked: false, guide: 'always',
     intro: ['pile-gold'],
     goals: [{ t: 'pileBloom' }],
     newActions: [],
@@ -221,11 +231,11 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[3, 2], [1, 4], [3, 5], [0, 6], [1, 5], [2, 4], [3, 6], [0, 7], [1, 7], [2, 7], [3, 8], [2, 8]],
       discard: [[3, 1], [0, 5]],
     },
-    opponent: { script: { growOn: [2] } },
+    opponent: { script: {} },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLOOM FROM THE THROW PILE', icon: '↦' },
   },
   {
-    level: 10, version: 2, locked: false, guide: 'idle',
+    level: 10, version: 3, locked: false, guide: 'idle',
     intro: [],
     goals: [],
     newActions: [],
@@ -340,14 +350,20 @@ const bloomCardsFor = (hand: readonly Card[]): Card[] => {
   return [];
 };
 
-/** The plain Grow a careful beginner makes: gold first, then forward, with the lowest card that does it. */
+/**
+ * The plain Grow a careful beginner makes: gold first, then one of their tiles it can take (a
+ * two-point swing, and the opponent grows every turn — owner, 2026-10-22), then forward, with the
+ * lowest card that does it.
+ */
 const plainGrow = (s: State, legal: readonly Action[]): Sprout | null => {
   const theirs = homeCoord(THEM, s.config);
-  const sprouts = legal.filter((a): a is Sprout => a.t === 'Sprout' && !s.board[coordKey(a.coord)]);
+  const sprouts = legal.filter((a): a is Sprout => a.t === 'Sprout' && s.board[coordKey(a.coord)]?.owner !== YOU);
   if (!sprouts.length) return null;
   const gold = (a: Sprout) => (s.terrain[coordKey(a.coord)] === 'rich' ? 0 : 1);
+  const take = (a: Sprout) => (s.board[coordKey(a.coord)]?.owner === THEM ? 0 : 1);
   return [...sprouts].sort((a, b) =>
     gold(a) - gold(b)
+    || take(a) - take(b)
     || hexDistance(a.coord, theirs) - hexDistance(b.coord, theirs)
     || rankOf(s, b.card) - rankOf(s, a.card)
     || coordKey(a.coord).localeCompare(coordKey(b.coord)))[0]!;
@@ -490,9 +506,34 @@ const asTappableGrow = (s: State, legal: readonly Action[], a: Action | null, no
 
 // Your legal moves in a position, worked out once (read-only: nothing here changes the list).
 const legalCache = new WeakMap<State, readonly Action[]>();
-const yourLegal = (s: State): readonly Action[] => {
+const engineLegal = (s: State): readonly Action[] => {
   let legal = legalCache.get(s);
   if (!legal) legalCache.set(s, legal = legalActions(viewFor(s, YOU)));
+  return legal;
+};
+
+/**
+ * A power is not offered before the lesson that teaches it (owner, 2026-10-22: "make it impossible
+ * to have bloom in hand before the bloom lesson — things shouldn't confuse a first-time player").
+ * The cards stay the engine's; the lesson simply never offers the move, so its button, its glow and
+ * its hints never appear. Every move it does offer is still a legal engine move.
+ */
+export const lessonAllows = (lesson: Pick<Lesson, 'level'>, a: Action): boolean =>
+  a.t === 'Bloom' ? lesson.level >= POWER_TAUGHT_AT.bloom
+  : a.t === 'PlayFruit' ? lesson.level >= POWER_TAUGHT_AT.bomb
+  : a.t === 'MegaBomb' ? lesson.level >= POWER_TAUGHT_AT.blast
+  : true;
+
+/** Is a Bloom part of this lesson's game yet? (The UI asks before it shows any Bloom hint.) */
+export const lessonOffersBloom = (lesson: Pick<Lesson, 'level'>): boolean => lesson.level >= POWER_TAUGHT_AT.bloom;
+
+const allowedCache = new WeakMap<State, Map<number, readonly Action[]>>();
+/** Your legal moves in this lesson: the engine's, less any power the lesson has not taught yet. */
+export const lessonLegal = (lesson: Pick<Lesson, 'level'>, s: State): readonly Action[] => {
+  let byLevel = allowedCache.get(s);
+  if (!byLevel) allowedCache.set(s, byLevel = new Map());
+  let legal = byLevel.get(lesson.level);
+  if (!legal) byLevel.set(lesson.level, legal = engineLegal(s).filter((a) => lessonAllows(lesson, a)));
   return legal;
 };
 
@@ -510,7 +551,7 @@ export const suggestMove = (lesson: Lesson, s: State): Action | null => {
 };
 
 const suggestFresh = (lesson: Lesson, s: State): Action | null => {
-  const legal = s.phase === 'ACT' && s.actor === YOU ? yourLegal(s) : [];
+  const legal = s.phase === 'ACT' && s.actor === YOU ? lessonLegal(lesson, s) : [];
   const a = suggestRaw(lesson, s);
   if (!a || a.t !== 'Sprout') return a;
   const koAllowed = currentGoal(lesson, s)?.t === 'strangle' || lesson.level === 10;
@@ -523,7 +564,7 @@ const suggestFresh = (lesson: Lesson, s: State): Action | null => {
 
 const suggestRaw = (lesson: Lesson, s: State): Action | null => {
   if (s.phase === 'GAME_OVER' || s.actor !== YOU) return null;
-  const legal = yourLegal(s);
+  const legal = lessonLegal(lesson, s);
   if (!legal.length) return null;
   const goal = currentGoal(lesson, s);
   if (s.phase === 'DRAW') {
@@ -592,7 +633,9 @@ export type Lit =
   /** The cockpit's score display (taught once, level 1). */
   | { t: 'score' }
   /** The Draw pile together with its count (taught once, level 1). */
-  | { t: 'deckCount' };
+  | { t: 'deckCount' }
+  /** The Undo key (taught once, level 9). */
+  | { t: 'undo' };
 
 export type Beat = {
   /** Stable id (an explanation is shown once; seen ids are kept with the lesson's save). */
@@ -633,8 +676,6 @@ export type BeatCtx = {
   powerSeen?: ReadonlySet<PowerKind>;
 };
 
-/** The level that first teaches each power. A hello only fires after it, never in its own lesson. */
-const POWER_TAUGHT_AT: Readonly<Record<PowerKind, number>> = Object.freeze({ bloom: 5, bomb: 7, blast: 8 });
 const GOAL_POWER: Readonly<Record<string, PowerKind | undefined>> = Object.freeze({
   bloom: 'bloom', pileBloom: 'bloom', bomb: 'bomb', blast: 'blast', blastGrow: 'blast',
 });
@@ -689,41 +730,57 @@ const helloBeat = (lesson: Lesson, s: State, ctx: BeatCtx, goal: Goal | null, le
 /** An explanation: one sentence in the info box, dismissed by a tap anywhere (never faded). */
 const explain = (id: string, line: string, lit: Lit): Beat => ({ id, line, lit, explain: true });
 
-const introBeat = (lesson: Lesson, s: State, seen: ReadonlySet<string>): Beat | null => {
-  if (s.phase !== 'DRAW' || myTurns(s).length > 0) return null;
+/** The intros that explain a MOVE: shown after the draw, the first time that move can be played. */
+const ACT_INTROS: ReadonlySet<IntroKind> = new Set<IntroKind>(['gold', 'bloom-cards', 'surround', 'bomb', 'blast']);
+
+/** The explanation for one intro, or null while it has nothing to point at yet. */
+const introFor = (s: State, which: IntroKind, id: string, legal: readonly Action[]): Beat | null => {
+  switch (which) {
+    // Level 1's opening: while the box is read, the display scrolls a welcome, not an action.
+    case 'tree': return { ...explain(id, W.yourHomeLine, { t: 'home', player: YOU }), say: W.welcome };
+    case 'their-home': return { ...explain(id, W.theirHomeLine, { t: 'home', player: THEM }), say: W.welcome };
+    case 'first-draw': return { ...explain(id, W.tapDrawLine, { t: 'deck' }), say: W.welcome };
+    case 'rock': {
+      const rock = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rock');
+      return rock ? explain(id, W.rocksBlockLine, { t: 'rock', key: rock }) : null;
+    }
+    case 'pile-gold': return explain(id, W.pileGoldLine, { t: 'discard' });
+    case 'gold': {
+      const gold = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rich' && legal.some((a) => a.t === 'Sprout' && keyOf(a.coord) === k));
+      return gold ? explain(id, W.goldDoubleLine, { t: 'hex', key: gold }) : null;
+    }
+    case 'bloom-cards': {
+      const bloom = bestBloom(s, legal, true);
+      return bloom ? explain(id, W.cardsThatBloomLine, { t: 'cards', ids: [...bloom.cards] }) : null;
+    }
+    case 'surround': {
+      const around = new Set(neighbors(homeCoord(THEM, s.config), s.config.boardRadius).map(keyOf));
+      return legal.some((a) => a.t === 'Sprout' && around.has(keyOf(a.coord)))
+        ? explain(id, W.surroundLine, { t: 'home', player: THEM }) : null;
+    }
+    case 'bomb': {
+      const bomb = legal.find((a) => a.t === 'PlayFruit');
+      return bomb && bomb.t === 'PlayFruit' ? explain(id, W.bombLine, { t: 'card', id: bomb.card }) : null;
+    }
+    case 'blast': {
+      const blast = legal.find((a) => a.t === 'MegaBomb');
+      return blast && blast.t === 'MegaBomb' ? explain(id, W.blastLine, { t: 'cards', ids: [...blast.cards] }) : null;
+    }
+  }
+};
+
+const introBeat = (lesson: Lesson, s: State, ctx: BeatCtx): Beat | null => {
+  const beforeFirstDraw = s.phase === 'DRAW' && myTurns(s).length === 0;
+  // A move's explanation waits for the draw and for a free hand: nothing picked, nothing placing.
+  const canExplainMove = s.phase === 'ACT' && ctx.card === null && ctx.placing === null && !!currentGoal(lesson, s);
+  if (!beforeFirstDraw && !canExplainMove) return null;
+  const legal = canExplainMove ? lessonLegal(lesson, s) : [];
   for (const which of lesson.intro) {
     const id = `${lesson.level}:intro:${which}`;
-    if (seen.has(id)) continue;
-    if (which === 'tree') return explain(id, W.yourHomeLine, { t: 'home', player: YOU });
-    if (which === 'their-home') return explain(id, W.theirHomeLine, { t: 'home', player: THEM });
-    if (which === 'first-draw') return explain(id, W.tapDrawLine, { t: 'deck' });
-    if (which === 'rock') {
-      const rock = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rock');
-      if (rock) return explain(id, W.rocksBlockLine, { t: 'rock', key: rock });
-      continue;
-    }
-    if (which === 'gold') {
-      const gold = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rich');
-      if (gold) return explain(id, W.goldDoubleLine, { t: 'hex', key: gold });
-      continue;
-    }
-    if (which === 'bloom-cards') {
-      const ids = bloomCardsFor(s.hands[YOU]).map((c) => c.id);
-      if (ids.length) return explain(id, W.cardsThatBloomLine, { t: 'cards', ids });
-      continue;
-    }
-    if (which === 'surround') return explain(id, W.surroundLine, { t: 'home', player: THEM });
-    if (which === 'bomb') {
-      const bomb = s.hands[YOU].find((c) => c.suit === null);
-      if (bomb) return explain(id, W.bombLine, { t: 'card', id: bomb.id });
-      continue;
-    }
-    if (which === 'blast') {
-      const ids = s.hands[YOU].filter((c) => c.suit === null).map((c) => c.id);
-      if (ids.length >= 2) return explain(id, W.blastLine, { t: 'cards', ids });
-      continue;
-    }
-    if (which === 'pile-gold') return explain(id, W.pileGoldLine, { t: 'discard' });
+    if (ctx.seen.has(id)) continue;
+    if (ACT_INTROS.has(which) !== canExplainMove) continue;
+    const beat = introFor(s, which, id, legal);
+    if (beat) return beat;
   }
   return null;
 };
@@ -751,7 +808,11 @@ const momentBeat = (lesson: Lesson, s: State, seen: ReadonlySet<string>): Beat |
   // (» is lit only when no power is playable: the light never points at » past a power.)
   if (lesson.level === 9 && s.phase === 'ACT' && goalDone({ t: 'pileBloom' }, s) && once('optional'))
     return explain(`${lesson.level}:optional`, W.optionalLine,
-      legalPowers(legalActions(viewFor(s, YOU))).length ? { t: 'none' } : { t: 'end' });
+      legalPowers(lessonLegal(lesson, s)).length ? { t: 'none' } : { t: 'end' });
+  // Straight after the skip: everything since the draw can still be taken back, until the Throw
+  // (owner, 2026-10-22). The Undo key is lit.
+  if (lesson.level === 9 && s.phase === 'ACT' && goalDone({ t: 'pileBloom' }, s) && !once('optional') && once('undo'))
+    return explain(`${lesson.level}:undo`, W.undoLine, { t: 'undo' });
   // The clock: the Draw pile is nearly gone. The warning belongs on the display, not in the box.
   if (lesson.level === 1 && s.phase === 'DRAW' && s.deck.length > 0 && s.deck.length <= 3 && once('pile-low'))
     return { id: `${lesson.level}:pile-low`, say: W.lastCards, lit: { t: 'deckCount' }, explain: true };
@@ -778,9 +839,12 @@ const ideaBeat = (
     return explain(`${lesson.level}:idea:first-throw`, W.throwLine, { t: 'card', id: move.card });
   if (lesson.level === 2 && goal?.t === 'strengthen' && once('strengthen') && move.t === 'Sprout')
     return explain(`${lesson.level}:idea:strengthen`, W.biggerWinsLine, { t: 'card', id: move.card });
-  if (lesson.level === 2 && goal?.t === 'take' && once('take'))
+  // A take or a cut is explained the turn it can be played, right before the tap (owner,
+  // 2026-10-22: level 2's cut sentence came straight after the strengthen, a turn too early).
+  const playsGoal = s.phase === 'ACT' && move.t === 'Sprout' && !!goal && 'key' in goal && keyOf(move.coord) === goal.key;
+  if (lesson.level === 2 && goal?.t === 'take' && playsGoal && once('take'))
     return explain(`${lesson.level}:idea:take`, W.takeTileLine, { t: 'hex', key: goal.key });
-  if (lesson.level === 4 && goal?.t === 'cut' && once('cut'))
+  if (lesson.level === 4 && goal?.t === 'cut' && playsGoal && once('cut'))
     return explain(`${lesson.level}:idea:cut`, W.cutLinkLine, { t: 'hex', key: goal.key });
   if (lesson.level === 8 && goal?.t === 'blastGrow' && once('free-grow') && move.t === 'Sprout')
     return explain(`${lesson.level}:idea:free-grow`, W.freeGrowLine, { t: 'card', id: move.card });
@@ -823,7 +887,8 @@ const lightFor = (lesson: Lesson, s: State, ctx: BeatCtx, move: Action, legal: r
       if (ctx.card !== move.card) return beat(`pick:${move.card}`, W.chooseCard, { t: 'card', id: move.card });
       const others = legal.filter((a): a is Sprout => a.t === 'Sprout' && a.card === move.card).map((a) => keyOf(a.coord)).filter((k) => k !== key);
       if (goal?.t === 'strangle' && strangleMove(s, legal)) return beat('can-win', W.tapLastSide, { t: 'hex', key });
-      const say = goal?.t === 'take' || goal?.t === 'cut' ? W.tapTheirTile : W.tapTile;
+      // Their tile (a lesson's cut, or the light taking one of theirs) is named as theirs.
+      const say = goal?.t === 'take' || goal?.t === 'cut' || s.board[key]?.owner === THEM ? W.tapTheirTile : W.tapTile;
       return beat(`tile:${key}`, say, { t: 'hex', key, ...(goal ? {} : { quiet: others }) });
     }
     case 'Bloom': {
@@ -861,11 +926,11 @@ export const lessonBeat = (lesson: Lesson, s: State, ctx: BeatCtx): Beat | null 
       ...(lesson.guide === 'idle' ? { idleOnly: true } : {}),
     };
   }
-  const intro = introBeat(lesson, s, ctx.seen);
+  const intro = introBeat(lesson, s, ctx);
   if (intro) return intro;
   const moment = momentBeat(lesson, s, ctx.seen);
   if (moment) return moment;
-  const legal = yourLegal(s);
+  const legal = lessonLegal(lesson, s);
   const goal = currentGoal(lesson, s);
   const hello = helloBeat(lesson, s, ctx, goal, legal);
   if (hello) return hello;

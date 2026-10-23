@@ -3,8 +3,10 @@
 // It plays by the same rules as everyone (every move it makes comes from `legalActions`), it looks
 // like a calm human, and it is never the reason a lesson fails:
 //   * it always draws from the Draw pile, so the Throw pile stays exactly as the lesson set it;
-//   * it grows only on the turns its script allows (a beginner who does the lesson always ends ahead),
-//     one tile at a time, on its own side of the board, never on your tiles unless told to;
+//   * it grows on every turn (owner, 2026-10-22: a level that does not move feels like a bug), one
+//     tile at a time, on its own side of the board. With no room to spread it strengthens its
+//     weakest tile, and only then takes your weakest one, so every turn is a real move. A
+//     beginner who does the lesson still ends well ahead; one who plays very badly may lose;
 //   * it never takes the last open side of your home, so a lesson can never be lost to a surprise KO;
 //   * it throws its lowest card (a Bomb never), the move a careful player makes.
 // No randomness: the same position always gives the same move.
@@ -12,8 +14,6 @@ import { apply, coordKey, hexDistance, homeCoord, isStrangled, legalActions, par
 import type { Action, Card, State } from '../../../src/engine/index.js';
 
 export type OpponentScript = {
-  /** Which of its own turns (1 = its first) it grows on. Absent: every turn. */
-  growOn?: readonly number[];
   /** Hexes it goes for first, in order, when it grows (a lesson's "they head for the gold"). */
   prefer?: readonly string[];
   /** Hexes it never grows on (a lesson's key hex stays free for you). */
@@ -46,9 +46,7 @@ export const scriptedOpponentAction = (s: State, script: OpponentScript = {}): A
   if (s.phase === 'DRAW') return legal.find((a) => a.t === 'Draw' && a.from === 'deck') ?? legal.find((a) => a.t === 'Draw') ?? legal[0]!;
 
   if (s.phase === 'ACT') {
-    const turn = opponentTurnIndex(s);
-    const grows = (s.sproutsThisTurn ?? 0) === 0 && (!script.growOn || script.growOn.includes(turn));
-    if (grows) {
+    if ((s.sproutsThisTurn ?? 0) === 0) {
       const hand = s.hands[OPP];
       const avoid = new Set(script.avoid ?? []);
       const sprouts = legal.filter((a): a is Extract<Action, { t: 'Sprout' }> => a.t === 'Sprout')
@@ -73,6 +71,18 @@ export const scriptedOpponentAction = (s: State, script: OpponentScript = {}): A
           || coordKey(a.coord).localeCompare(coordKey(b.coord)))[0];
         if (best) return best;
       }
+      // No room to spread: it strengthens its weakest tile, and only with nothing else to do takes
+      // your weakest tile — so every turn is a real move. Lowest card that does it; never on a hex the
+      // lesson keeps for you, never a move that surrounds your home.
+      const rank = (a: Extract<Action, { t: 'Sprout' }>) => hand.find((c) => c.id === a.card)?.rank ?? 99;
+      const tile = (a: Extract<Action, { t: 'Sprout' }>) => s.board[coordKey(a.coord)]?.strength ?? 99;
+      const weakestFirst = (xs: Extract<Action, { t: 'Sprout' }>[]) => [...xs].sort((a, b) =>
+        tile(a) - tile(b) || rank(a) - rank(b) || coordKey(a.coord).localeCompare(coordKey(b.coord)))[0];
+      const onto = (owner: 0 | 1) => legal.filter((a): a is Extract<Action, { t: 'Sprout' }> => a.t === 'Sprout')
+        .filter((a) => !avoid.has(coordKey(a.coord)) && s.board[coordKey(a.coord)]?.owner === owner)
+        .filter((a) => safe(s, a));
+      const fallback = weakestFirst(onto(OPP)) ?? weakestFirst(onto(YOU));
+      if (fallback) return fallback;
     }
     return legal.find((a) => a.t === 'EndAct') ?? legal[0]!;
   }

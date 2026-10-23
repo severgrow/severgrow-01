@@ -1272,13 +1272,16 @@ export const LESSON = Object.freeze({
   theirTurn: 'THEIR TURN',
   lastCards: 'LAST CARDS',
   lastTurn: 'LAST TURN',
+  // level 1's first three explanations: the display welcomes, it scrolls and never competes with
+  // the box (owner, 2026-10-22: it used to blink DRAW DRAW DRAW while the box was being read)
+  welcome: 'HELLO ♥ WELCOME ♥',
   // ---- the info box: explanations, one full sentence each ----
-  yourHomeLine: 'This is your home. Place cards on the tiles that connect to your home to GROW.',
+  yourHomeLine: 'This is your home. Place cards on the tiles that connect to your home to Grow.',
   theirHomeLine: 'TO WIN: surround opponent’s home tile, or have more tiles on the board when the Draw pile runs out.',
-  tapDrawLine: 'Every turn has 3 steps - DRAW, GROW and THROW. You start by drawing 1 card from the top of the Draw pile or the Throw pile.',
+  tapDrawLine: 'Every turn has 3 steps – Draw, Grow and Throw. You start by drawing 1 card from the top of the Draw pile or the Throw pile.',
   growLine: 'Grow: drag one of your cards from your hand onto the board, or tap it to select and then place it on the board.',
   // Owner's word list (2026-10-20, "Draw pile / Throw pile"): keep the online line's wording.
-  throwLine: 'Throw: swipe up, drag it to the Throw pile, or double tap to throw a card. This ends your turn.',
+  throwLine: 'Throw: swipe up, drag it to the Throw pile, or double tap to Throw a card. This ends your turn.',
   youGrewLine: 'Tiles keep the rank of the card used. Higher ranks are harder to cut.',
   biggerWinsLine: 'Strengthen: a stronger card can replace your own tile.',
   takeTileLine: 'Cut: a higher card can take an opponent’s tile.',
@@ -1287,15 +1290,17 @@ export const LESSON = Object.freeze({
   cutLinkLine: 'Cut a tile to break the chain behind it.',
   witheredLine: 'Tiles cut off from their home disappear.',
   cardsThatBloomLine: 'BLOOM: three cards with the same number, or three in order in one suit.',
-  bloomedLine: 'Bloom grows several tiles at once and does NOT cost your GROW turn.',
+  bloomedLine: 'Bloom grows several tiles at once and does NOT use your Grow.',
   surroundLine: 'Surround: fill every tile around their home for an instant win.',
   bombLine: 'Bomb: removes one enemy tile, even a 9. Uses your Grow.',
   blastLine: 'Blast: two Bombs clear a large area. Homes are safe.',
-  freeGrowLine: 'A Blast is an extra move: you can still Grow afterwards.',
+  freeGrowLine: 'Blast clears several tiles at once and does NOT use your Grow.',
   pileGoldLine: 'The Throw pile glows gold when its top card completes a Bloom in your hand.',
   optionalLine: 'Tap » to skip Grow/Bloom and keep your cards for later.',
-  lastTurnLine: 'The Draw pile is empty: each tile is now 1 point, and the numbers on tiles don’t count.',
-  theirTurnLine: 'They draw, grow and throw too.',
+  // right after the skip, the Undo key lit (owner, 2026-10-22)
+  undoLine: 'You are able to undo your previous moves until you Throw a card at the end of your turn.',
+  lastTurnLine: 'The Draw pile is empty – this is your last turn.',
+  theirTurnLine: 'They Draw, Grow and Throw too.',
   restartLine: 'This lesson cannot finish from here.',
   // the one button the box ever holds, only while the lesson cannot finish (owner, 2026-10-22)
   startAgain: 'START AGAIN',

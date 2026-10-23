@@ -20,6 +20,11 @@ export class Session {
   private cuts: { n: number; played: Played }[] = [];
   private restoredOpponentTurn: Played[] | null = null;
   private cache: { state: State; view: View; legal: Action[] } | null = null;
+  /**
+   * Moves the page may offer, narrower than the engine's (a lesson does not offer a power before it
+   * teaches it). Null: every legal move. Set once, before the first move.
+   */
+  allow: ((a: Action) => boolean) | null = null;
   /** Polish pass 3: a drawn line or clump waiting for Confirm (replaces the picked move while legal). */
   private drawn: Action | null = null;
 
@@ -39,7 +44,8 @@ export class Session {
   private get memo() {
     if (this.cache?.state !== this.state) {
       const view = viewFor(this.state, this.viewer);
-      const legal = this.state.phase !== 'GAME_OVER' && this.state.actor === this.viewer ? legalActions(view) : [];
+      const all = this.state.phase !== 'GAME_OVER' && this.state.actor === this.viewer ? legalActions(view) : [];
+      const legal = this.allow ? all.filter(this.allow) : all;
       this.cache = { state: this.state, view, legal };
     }
     return this.cache;
@@ -98,6 +104,7 @@ export class Session {
     // Five/six-card Blooms expose every recipe in the legal menu while the
     // exact player-painted tile assignment is validated on demand by apply.
     if (!enumerated && !(action.t==='Bloom' && action.cards.length>=5 && who===this.viewer)) return null;
+    if (who === this.viewer && this.allow && !this.allow(action)) return null;
     let after:State;
     try { after=apply(s,action); }
     catch(error) { if (!enumerated && error instanceof IllegalActionError) return null; throw error; }
