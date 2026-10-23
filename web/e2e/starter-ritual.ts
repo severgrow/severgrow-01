@@ -207,13 +207,73 @@ const checkResultAgainstEngine = async (page: Page, label: string): Promise<void
   check(`${label}: the result names the real starting seat`, expectedTitle.test(result.title), result.title);
   check(`${label}: two distinct ranks 1..9`, Number.isInteger(you) && Number.isInteger(opponent) && you !== opponent && you >= 1 && you <= 9 && opponent >= 1 && opponent <= 9, `${result.youRank}/${result.opponentRank}`);
   check(`${label}: the higher card belongs to the starter`, starter === 0 ? you > opponent : opponent > you, `starter=${starter} ${you}/${opponent}`);
-  check(`${label}: the two sides are labelled`, /drew the higher card/i.test(result.result), result.result);
+  check(`${label}: the result says who drew the higher card`, /drew the higher card/i.test(result.result), result.result);
 };
 
 const screenshot = async (page: Page, name: string): Promise<void> => {
   if (!SHOTS) return;
   mkdirSync(SHOT_DIR, { recursive: true });
   await page.screenshot({ path: `${SHOT_DIR}/e2e-${name}.png` });
+};
+
+type Box = { l: number; t: number; r: number; b: number; cx: number; cy: number; w: number; h: number };
+
+/**
+ * The layout is the point of this pass: one card at each player's own home, the deck between them,
+ * no label over a card, both faces actually turned up, nothing overlapping or clipped.
+ */
+const checkHomeLayout = async (page: Page, label: string): Promise<void> => {
+  const info = await page.evaluate(() => {
+    const box = (el: Element | null): Box | null => {
+      const r = el?.getBoundingClientRect();
+      return r ? { l: r.left, t: r.top, r: r.right, b: r.bottom, cx: r.left + r.width / 2, cy: r.top + r.height / 2, w: r.width, h: r.height } : null;
+    };
+    const hex = (key: string): Box | null => {
+      const el = document.querySelector(`#board .hex-cell[data-key="${key}"] .hex`);
+      return box(el);
+    };
+    const face = (id: string): { front: number; back: number } => {
+      const front = document.getElementById(`lottery-face-${id}`);
+      const back = document.getElementById(`lottery-back-${id}`);
+      return {
+        front: front ? Number(getComputedStyle(front).opacity) : -1,
+        back: back ? Number(getComputedStyle(back).opacity) : -1,
+      };
+    };
+    return {
+      you: box(document.getElementById('lottery-card-you')),
+      opponent: box(document.getElementById('lottery-card-opponent')),
+      deck: box(document.getElementById('lottery-deck')),
+      youHome: hex('-2,2'),
+      opponentHome: hex('2,-2'),
+      youFace: face('you'),
+      opponentFace: face('opponent'),
+      visibleLabels: document.querySelectorAll('.ritual-lane-label, .ritual-kicker').length,
+      vw: innerWidth,
+      vh: innerHeight,
+    };
+  });
+  const { you, opponent, deck, youHome, opponentHome } = info;
+  if (!you || !opponent || !deck || !youHome || !opponentHome) {
+    check(`${label}: both homes and both cards are measurable`, false);
+    return;
+  }
+  const near = (card: Box, home: Box): number => Math.hypot(card.cx - home.cx, card.cy - home.cy);
+  check(`${label}: my card is dealt at my home`, near(you, youHome) <= 52, `${near(you, youHome).toFixed(1)}px from the tree`);
+  check(`${label}: their card is dealt at their home`, near(opponent, opponentHome) <= 52, `${near(opponent, opponentHome).toFixed(1)}px from the volcano`);
+  check(`${label}: the cards are separated vertically, not in a row`, Math.abs(you.cy - opponent.cy) > Math.abs(you.cx - opponent.cx), `dy=${Math.round(Math.abs(you.cy - opponent.cy))} dx=${Math.round(Math.abs(you.cx - opponent.cx))}`);
+  check(`${label}: no name label is needed over a card`, info.visibleLabels === 0, `labels=${info.visibleLabels}`);
+  check(
+    `${label}: both faces are turned up`,
+    info.youFace.front > 0.9 && info.youFace.back < 0.1 && info.opponentFace.front > 0.9 && info.opponentFace.back < 0.1,
+    `${JSON.stringify(info.youFace)} / ${JSON.stringify(info.opponentFace)}`,
+  );
+  const between = (v: number, a: number, b: number): boolean => v >= Math.min(a, b) && v <= Math.max(a, b);
+  check(`${label}: the deck waits between the two cards`, between(deck.cy, you.cy, opponent.cy), `deck=${Math.round(deck.cy)} you=${Math.round(you.cy)} opp=${Math.round(opponent.cy)}`);
+  const overlaps = (a: Box, b: Box): boolean => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+  check(`${label}: the deck never covers a dealt card`, !overlaps(deck, you) && !overlaps(deck, opponent));
+  const outside = [you, opponent, deck].filter((r) => r.l < -1 || r.t < -1 || r.r > info.vw + 1 || r.b > info.vh + 1);
+  check(`${label}: the whole composition is inside the viewport`, outside.length === 0, `${outside.length} clipped`);
 };
 
 const main = async (): Promise<void> => {
@@ -239,6 +299,7 @@ const main = async (): Promise<void> => {
       await waitPhase(page, 'result');
       await screenshot(page, 'result-390x844');
       await checkResultAgainstEngine(page, 'normal');
+      await checkHomeLayout(page, 'normal');
       await waitHidden(page);
       const trace = await phases(page);
       const order = ['arrive', 'shuffle', 'deal', 'reveal', 'result', 'exit'];
@@ -322,8 +383,9 @@ const main = async (): Promise<void> => {
     // ------------------------------------------------------------------ reduced motion
     {
       const { page, errors } = await open(browser, 12, { width: 390, height: 844 }, { reduceMotion: true });
-      const t0 = Date.now();
       await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 20_000 });
+      // The budget is the ritual's own, not the page boot's: start the clock when it is on screen.
+      const t0 = Date.now();
       await page.waitForFunction(() => /start/i.test(document.getElementById('lottery-title')?.textContent ?? ''), undefined, { timeout: 2_000 });
       const result = await readResult(page);
       check('reduced motion: the result is immediate and both faces are shown', result.reduced && /start/i.test(result.title), `reduced=${result.reduced} ${result.title}`);
@@ -352,6 +414,7 @@ const main = async (): Promise<void> => {
         };
       });
       check('rotation: the composition stays inside the viewport', fit.bad === 0, JSON.stringify(fit));
+      await checkHomeLayout(page, 'rotation');
       await waitHidden(page);
       check('rotation: the game still starts', (await state(page)) !== null);
       check('rotation: the page threw no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
