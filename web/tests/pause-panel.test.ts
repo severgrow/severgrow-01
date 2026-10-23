@@ -163,14 +163,15 @@ describe('the panel keeps the pause behaviour it borrowed', () => {
   it('keeps the level label and the tutorial exit words on their existing elements', () => {
     // The title still names the campaign level (`onboarding` reads it); the exit still says what it
     // does. Neither moved into the new read-out.
-    expect(panel).toContain('<h2 id="gm-title">Paused</h2>');
-    expect(mainSource).toMatch(/title\.textContent = campaignLevel \? CAMPAIGN\.levelLabel\(campaignLevel\.number\) : 'Paused'/);
+    // The words are the SAME English copy; they now carry a localisation key beside them.
+    expect(panel).toMatch(/<h2 id="gm-title"[^>]*>Paused<\/h2>/);
+    expect(mainSource).toMatch(/title\.textContent = campaignLevel \? CAMPAIGN\.levelLabel\(campaignLevel\.number\) : t\('ui\.game\.paused', 'Paused'\)/);
     expect(mainSource).toMatch(/exitBtn\.textContent = TUTORIAL\.exit/);
   });
 
   it('names the mode in the corner plate, and never as a control', () => {
     expect(mainSource).toMatch(/function syncMenuMode\(\)/);
-    expect(mainSource).toMatch(/el\.textContent = campaignLevel \? 'Campaign' : isOnlineDuel\(\) \? 'Duel' : 'Practice'/);
+    expect(mainSource).toMatch(/el\.textContent = campaignLevel \? t\('ui\.game\.modeCampaign', 'Campaign'\) : isOnlineDuel\(\) \? t\('ui\.game\.modeDuel', 'Duel'\) : t\('ui\.game\.modePractice', 'Practice'\)/);
     // A <p>, not a button: it is a read-out.
     expect(panel).toMatch(/<p class="gm-mode" id="gm-mode">/);
   });
