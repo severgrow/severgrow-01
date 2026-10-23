@@ -722,6 +722,7 @@ function layoutMenu(canContinue: boolean) {
   $('menu-foot').setAttribute('aria-label', MENU.footerLabel);
   paintEarlyAccountKey($('menu-login') as HTMLButtonElement, accountsConfiguredInThisBuild());
   paintBetaLine(document.getElementById('menu-beta'));
+  syncMenuMode();
   // The account key's words are owned by the accounts module, not by this layout pass: a signed-out
   // guest sees MENU.login, a signed-in player sees their NAME, and both are the SAME key (one entry,
   // one flow, one place). Writing MENU.login here would stomp the name on every return to the menu.
