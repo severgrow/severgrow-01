@@ -107,8 +107,9 @@ describe('Settings is the last tool, last in tab order', () => {
 });
 
 describe('the face keeps its palette and its tempo', () => {
-  it('has exactly one amber note, read from the LIGHT contract', () => {
-    expect(bodyFor('gm-head h2::before')).toContain('var(--light-core');
+  it('has no lamp dot before the title (owner, 2026-10-23), and its one warm note is the lead key', () => {
+    expect(bodyFor('gm-head h2::before')).toContain('content: none');
+    expect(bodyFor('gm-head h2::before')).not.toContain('var(--light-core');
     expect(bodyFor('.gm-lead')).toContain('var(--light-bloom');
     expect(panelCss).not.toContain('radial-gradient');
   });

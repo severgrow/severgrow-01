@@ -25,6 +25,9 @@ import { preloadCardArt } from './cards.js';
 import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
 import { RITUAL_DECK_SIZE } from '../logic/starter-ritual.js';
 
+/** How long the outcome ("You start" / "Opponent starts") is held before the deck gathers. */
+export const RESULT_HOLD_MS = 1000;
+
 export type StarterRitualPhase = 'idle' | 'arrive' | 'shuffle' | 'deal' | 'reveal' | 'result' | 'exit' | 'done';
 
 export type StarterRitualTempo = 'slow' | 'normal' | 'fast' | 'skip';
@@ -347,7 +350,8 @@ class StarterRitual {
 
     this.setPhase('result');
     this.showOutcome();
-    await this.sleep(this.ms(450));
+    // "You start" / "Opponent starts" stays readable for a full second (owner, 2026-10-23).
+    await this.sleep(this.ms(RESULT_HOLD_MS));
     if (this.cancelled || this.skipRequested) return;
 
     await this.exit(false);

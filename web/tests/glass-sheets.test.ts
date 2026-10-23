@@ -37,7 +37,12 @@ describe('the screen behind an open sheet is veiled — and only when a sheet is
 describe('no frame around the glass, ever (owner, 2026-10-23)', () => {
   it('the last word on every glass surface takes away the border and the edge line', () => {
     const tail = css.slice(css.lastIndexOf('NO FRAME AROUND THE GLASS'));
-    expect(tail).toMatch(/html\.futasaku-product :is\(\.sheet, #sheet-menu, #gameover \.go-card, #play-menu \.levels-inner, #levels \.levels-inner\) \{\s*border: 0;\s*box-shadow: none;\s*\}/);
+    const rule = /html\.futasaku-product :is\(\.sheet, #sheet-menu, #gameover \.go-card, #play-menu \.levels-inner, #levels \.levels-inner\) \{([^}]*)\}/.exec(tail)?.[1] ?? '';
+    expect(rule).toMatch(/border: 0;/);
+    // Match Intel's own setup: its 15px corner and a soft DROP shadow, never an inset edge line.
+    expect(rule).toMatch(/border-radius: 15px;/);
+    expect(rule).toMatch(/box-shadow: 0 10px 28px rgba\(0, 0, 0, 0\.22\);/);
+    expect(rule).not.toMatch(/inset/);
     expect(tail).toMatch(/html\.futasaku-product #gameover \.go-card::before \{\s*display: none;/);
     // nothing after it brings a frame back
     expect(tail.slice(tail.indexOf('display: none;'))).not.toMatch(/border:\s*[1-9]/);
@@ -58,5 +63,15 @@ describe('the dark glass is the lesson window\'s own recipe', () => {
     expect(surface).toMatch(/backdrop-filter:blur\(9px\) saturate\(1\.05\)/);
     expect(css).toMatch(/--dark-glass: rgba\(8, 10, 10, 0\.42\);\s*--dark-glass-blur: blur\(9px\) saturate\(1\.05\);/);
     expect(css).not.toMatch(/color-mix\(in srgb, var\(--c-surface\) 72%, transparent\)/);
+  });
+});
+
+describe('Match Intel\'s own glass has no frame either', () => {
+  it('blur, shade and a soft drop shadow; no border and no inset edge line', () => {
+    const surface = readFileSync(fileURLToPath(new URL('../src/player/glass-surface.ts', import.meta.url)), 'utf8');
+    const base = /#futasaku-glass \{ position:fixed;[^}]*\}/.exec(surface)?.[0] ?? '';
+    expect(base).toContain('border:none');
+    expect(base).toContain('box-shadow:0 10px 28px rgba(0,0,0,.22)');
+    expect(base).not.toMatch(/inset|border:1px/);
   });
 });

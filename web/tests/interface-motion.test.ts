@@ -17,30 +17,31 @@ const declarations = (prefix: string): string[] =>
   [...css.matchAll(new RegExp(`--${prefix}-([\\w-]+):`, 'g'))].map((m) => m[1]!);
 
 describe('one interface vocabulary', () => {
-  it('has the seven tokens the brief allows and nothing else', () => {
+  it('has the eight tokens the owner set and nothing else (2026-10-23: "alive and organic")', () => {
     expect(INTERFACE_MOTION).toEqual({
-      open: 200,
-      close: 150,
+      open: 300,
+      close: 180,
       press: 90,
-      travel: 8,
-      scale: 0.99,
-      easeOpen: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
+      travel: 12,
+      scale: 0.965,
+      settle: 1.006,
+      easeOpen: 'cubic-bezier(0.22, 1, 0.36, 1)',
       easeClose: 'cubic-bezier(0.4, 0, 1, 1)',
     });
   });
 
-  it('stays inside the owner’s ranges: 150-230 open, 110-190 close, 70-130 press, 4-10px, 98.5-99%', () => {
-    expect(INTERFACE_MOTION.open).toBeGreaterThanOrEqual(150);
-    expect(INTERFACE_MOTION.open).toBeLessThanOrEqual(230);
-    expect(INTERFACE_MOTION.close).toBeGreaterThanOrEqual(110);
-    expect(INTERFACE_MOTION.close).toBeLessThanOrEqual(190);
+  it('stays one breath, never a bounce: short, small, and quicker to leave than to arrive', () => {
+    expect(INTERFACE_MOTION.open).toBeLessThanOrEqual(320);
     expect(INTERFACE_MOTION.close).toBeLessThan(INTERFACE_MOTION.open);
     expect(INTERFACE_MOTION.press).toBeGreaterThanOrEqual(70);
     expect(INTERFACE_MOTION.press).toBeLessThanOrEqual(130);
-    expect(INTERFACE_MOTION.travel).toBeGreaterThanOrEqual(4);
-    expect(INTERFACE_MOTION.travel).toBeLessThanOrEqual(10);
-    expect(INTERFACE_MOTION.scale).toBeGreaterThanOrEqual(0.985);
-    expect(INTERFACE_MOTION.scale).toBeLessThanOrEqual(0.99);
+    expect(INTERFACE_MOTION.travel).toBeLessThanOrEqual(16);
+    expect(INTERFACE_MOTION.scale).toBeGreaterThanOrEqual(0.95);
+    // the settle is a hair past rest, not a spring
+    expect(INTERFACE_MOTION.settle).toBeGreaterThan(1);
+    expect(INTERFACE_MOTION.settle).toBeLessThanOrEqual(1.01);
+    // a backdrop (no travel, no growth) never settles
+    expect(source).toMatch(/const settleScale = scale === 1 \? 1 : INTERFACE_MOTION\.settle;/);
   });
 
   it('the CSS custom properties are the same numbers, in one place', () => {
@@ -49,10 +50,11 @@ describe('one interface vocabulary', () => {
     expect(token('press')).toBe(`${INTERFACE_MOTION.press}ms`);
     expect(token('travel')).toBe(`${INTERFACE_MOTION.travel}px`);
     expect(token('scale')).toBe(String(INTERFACE_MOTION.scale));
+    expect(token('settle')).toBe(String(INTERFACE_MOTION.settle));
     expect(token('ease-open')).toBe(INTERFACE_MOTION.easeOpen);
     expect(token('ease-close')).toBe(INTERFACE_MOTION.easeClose);
     // No near-duplicate token has crept in under a second spelling.
-    expect(new Set(declarations('ix'))).toEqual(new Set(['open', 'close', 'press', 'travel', 'scale', 'ease-open', 'ease-close']));
+    expect(new Set(declarations('ix'))).toEqual(new Set(['open', 'close', 'press', 'travel', 'scale', 'settle', 'ease-open', 'ease-close']));
     // The board's locked vocabulary is untouched: interface motion does not add a `--dur-*`.
     expect(new Set(declarations('dur'))).toEqual(new Set(['ack', 'consequence', 'quick', 'moment', 'tap', 'move']));
   });
@@ -79,7 +81,7 @@ describe('one interface vocabulary', () => {
   });
 
   it('is documented, with tokens, adoption and the no-animation rule', () => {
-    for (const phrase of ['--ix-open', '200ms', '150ms', '90ms', 'enterSurface', 'exitSurface', 'data-ix-surface', 'reduced']) {
+    for (const phrase of ['--ix-open', '300ms', '180ms', '90ms', '--ix-settle', 'enterSurface', 'exitSurface', 'data-ix-surface', 'reduced']) {
       expect(doc.toLowerCase()).toContain(phrase.toLowerCase());
     }
   });

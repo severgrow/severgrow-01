@@ -5,8 +5,10 @@
 // surfaces around the game — sheets, the pause face, the finish plate, confirmations, overlays.
 //
 // The rule is one sentence: an element simply BECOMES PRESENT, with a little physical movement.
-// No bounce, no big slides, no zoom. Opening is 200ms and travels 8px at 99% scale; closing is
-// quicker (150ms) and is the coordinated reverse. Presses answer in 90ms.
+// Owner direction (2026-10-23): "make opening the menus and closing a bit alive and organic". So a
+// surface rises 12px from 96.5% scale over 300ms, eases a hair past rest (100.6%) and settles, the
+// way a sheet of glass set down on a table settles; it leaves in 180ms, sinking a little as it
+// fades. Still no bounce and no big slides: one breath, then stillness. Presses answer in 90ms.
 //
 // This layer is deliberately small and dependency-free: two durations, two easings, one travel
 // distance and two primitives. FUTURE AGENTS ADOPT IT BY MARKUP:
@@ -19,18 +21,20 @@
 
 /** The whole vocabulary. The CSS custom properties of the same names are kept in sync by a test. */
 export const INTERFACE_MOTION = Object.freeze({
-  /** A surface arrives: 200ms (the brief's 150–230ms). */
-  open: 200,
-  /** A surface leaves: 150ms, deliberately quicker than its arrival (110–190ms). */
-  close: 150,
+  /** A surface arrives: 300ms, long enough to read as one breath, short enough to never wait on. */
+  open: 300,
+  /** A surface leaves: 180ms, deliberately quicker than its arrival. */
+  close: 180,
   /** A press or a hover-sized acknowledgement: 90ms (70–130ms). */
   press: 90,
-  /** How far a surface travels while it arrives: 8px (the brief's 4–10px). */
-  travel: 8,
-  /** The scale it settles from: 99% (the brief's 98.5–99%). */
-  scale: 0.99,
-  /** Decelerate into rest. No overshoot: this interface never springs. */
-  easeOpen: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
+  /** How far a surface travels while it arrives: 12px. */
+  travel: 12,
+  /** The scale it grows from: 96.5%. */
+  scale: 0.965,
+  /** The hair past rest it eases through before it settles (one breath, never a bounce). */
+  settle: 1.006,
+  /** Decelerate into rest. */
+  easeOpen: 'cubic-bezier(0.22, 1, 0.36, 1)',
   /** Accelerate away. The exact reverse feeling, not a new personality. */
   easeClose: 'cubic-bezier(0.4, 0, 1, 1)',
 });
@@ -104,9 +108,13 @@ export function enterSurface(el: HTMLElement | null | undefined, options: Surfac
   }
   const travel = options.travel ?? INTERFACE_MOTION.travel;
   const scale = options.scale ?? INTERFACE_MOTION.scale;
+  // A surface that does not grow (a backdrop: travel 0, scale 1) does not settle either.
+  const settleScale = scale === 1 ? 1 : INTERFACE_MOTION.settle;
+  const settleLift = travel === 0 ? 0 : -1;
   const a = el.animate(
     [
       { opacity: 0, translate: `0 ${travel}px`, scale: String(scale) },
+      { opacity: 1, translate: `0 ${settleLift}px`, scale: String(settleScale), offset: 0.7 },
       { opacity: 1, translate: '0 0', scale: '1' },
     ],
     { duration, easing: INTERFACE_MOTION.easeOpen, fill: 'both' },
@@ -153,8 +161,8 @@ export function exitSurface(el: HTMLElement | null | undefined, options: Surface
     finish();
     return null;
   }
-  const travel = options.travel ?? Math.round(INTERFACE_MOTION.travel * 0.75);
-  const scale = options.scale ?? INTERFACE_MOTION.scale + 0.005;
+  const travel = options.travel ?? Math.round(INTERFACE_MOTION.travel * 0.6);
+  const scale = options.scale ?? 0.98;
   el.classList.add('ix-closing');
   el.setAttribute('inert', '');
   const a = el.animate(

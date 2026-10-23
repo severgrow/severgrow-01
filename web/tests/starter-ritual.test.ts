@@ -147,3 +147,14 @@ describe('presentation cards', () => {
     expect(() => starterRitualDeck('')).toThrow(/key/);
   });
 });
+
+describe('the outcome is readable (owner, 2026-10-23)', () => {
+  it('"You start" / "Opponent starts" is held for one second before the deck gathers', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const { RESULT_HOLD_MS } = await import('../src/player/starter-ritual.js');
+    expect(RESULT_HOLD_MS).toBe(1000);
+    const src = readFileSync(fileURLToPath(new URL('../src/player/starter-ritual.ts', import.meta.url)), 'utf8');
+    expect(src).toMatch(/this\.showOutcome\(\);\s*\/\/[^\n]*\n\s*await this\.sleep\(this\.ms\(RESULT_HOLD_MS\)\);/);
+  });
+});

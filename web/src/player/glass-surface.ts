@@ -1,6 +1,7 @@
 import type { Card } from '../../../src/engine/index.js';
 import type { MatchIntel } from '../logic/match-intel.js';
 import { drawLedCells, ledMessageWidth } from './led-cells.js';
+import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { cardFace, suitClass } from '../ui/effects.js';
 
 export type FocusShape = 'hex' | 'card' | 'pill' | 'none';
@@ -76,9 +77,10 @@ export type IntelOptions = {
 };
 
 const CSS = `
-#futasaku-glass { position:fixed; z-index:35; box-sizing:border-box; border:1px solid rgba(214,204,177,.14);
+/* No frame around the glass, ever (owner, 2026-10-23): blur and shade only, and a soft drop shadow. */
+#futasaku-glass { position:fixed; z-index:35; box-sizing:border-box; border:none;
   border-radius:15px; overflow:hidden; color:#f0e9dc; background:rgba(8,10,10,.42);
-  box-shadow:inset 0 1px rgba(243,232,202,.06),0 10px 28px rgba(0,0,0,.22);
+  box-shadow:0 10px 28px rgba(0,0,0,.22);
   backdrop-filter:blur(9px) saturate(1.05); -webkit-backdrop-filter:blur(9px) saturate(1.05);
   font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
 #futasaku-glass[hidden], #tutorial-focus[hidden] { display:none; }
@@ -1276,10 +1278,17 @@ export const mountGlassSurface = (onClose: () => void) => {
   };
 
   const close = () => {
+    // Match Intel leaves with the shared interface motion (owner, 2026-10-23: menus open and
+    // close "a bit alive and organic"); its content stays until it has gone. A lesson window keeps
+    // its own pinned timing and simply goes.
+    const leaving = mode === 'intel' && !panel.hidden;
     mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
     focusScene = null; cockpitLesson = false;
     setBloomDemo(false); clearTutorialReserve();
-    panel.hidden = true; showFocus(false); panel.replaceChildren(); onClose();
+    showFocus(false);
+    const gone = () => { panel.hidden = true; panel.replaceChildren(); };
+    if (!leaving || !exitSurface(panel, { onDone: gone })) gone();
+    onClose();
   };
 
   /**
@@ -1288,6 +1297,7 @@ export const mountGlassSurface = (onClose: () => void) => {
    */
   const hidePanel = (keepBand = false) => {
     mode = null; stopLoop(); smooth = null; focusScene = null; lightOff = false; cockpitLesson = false;
+    if (panel.dataset.ixState === 'closing') resetSurface(panel);
     panel.hidden = true; showFocus(false); setBloomDemo(false);
     if (!keepBand) clearTutorialReserve();
   };
@@ -1406,6 +1416,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     if (options.lesson) panel.dataset.lesson = '1';
     else delete panel.dataset.lesson;
     panel.dataset.focus = targetSelector.includes('#deck') ? 'deck' : targetSelector.includes('#discard') ? 'discard' : 'other';
+    if (panel.dataset.ixState === 'closing') resetSurface(panel); // a fading Match Intel must not hide the lesson window when it ends
     panel.hidden = false;
     showFocus(!lightOff);
     setBloomDemo(!!options.bloomDemo);
@@ -1495,9 +1506,12 @@ export const mountGlassSurface = (onClose: () => void) => {
     if (options.labels) intelLabels = options.labels;
     if (options.howToHtml !== undefined) howToHtml = options.howToHtml;
     if (options.tab) intelTab = options.tab;
+    // Only an appearance animates: a refresh of an open panel (a tab, a new turn) never re-enters.
+    const appearing = panel.hidden || mode !== 'intel' || panel.dataset.ixState === 'closing';
     mode = 'intel'; stopLoop(); smooth = null;
     delete panel.dataset.kicker;
     panel.dataset.mode = 'intel'; panel.hidden = false; showFocus(false);
+    if (appearing) enterSurface(panel);
     panel.setAttribute('aria-label', 'Match details'); panel.setAttribute('role', 'dialog');
     panel.removeAttribute('aria-live');
     renderIntel(data);
@@ -1508,6 +1522,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     const same = mode === 'guidance' && ledTitle === line && !panel.hidden;
     mode = 'guidance'; stopLoop(); smooth = null;
     delete panel.dataset.kicker;
+    if (panel.dataset.ixState === 'closing') resetSurface(panel);
     panel.dataset.mode = 'guidance'; panel.hidden = false; showFocus(false);
     panel.setAttribute('aria-label', 'Turn guidance'); panel.setAttribute('role', 'dialog');
     panel.removeAttribute('aria-live');

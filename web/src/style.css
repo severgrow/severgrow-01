@@ -1932,13 +1932,9 @@ html.game-veiled .scrim {
   white-space: nowrap;
 }
 /* The one amber note: the lamp beside the title, reading the LIGHT contract's core tone. */
+/* No lamp dot before the title (owner, 2026-10-23): the word stands alone. */
 #sheet-menu .gm-head h2::before {
-  content: '';
-  flex: none;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--light-core, #f5d8a4);
+  content: none;
 }
 #sheet-menu .gm-mode {
   margin: 0;
@@ -3478,12 +3474,13 @@ html.game-veiled .scrim {
      closes that vocabulary. `web/src/ui/interface-motion.ts` is the source of these numbers and a
      test keeps this block in sync. A surface becomes present in 200ms with 8px of travel at 99%
      scale; it leaves in 150ms; a press answers in 90ms. */
-  --ix-open: 200ms;
-  --ix-close: 150ms;
+  --ix-open: 300ms;
+  --ix-close: 180ms;
   --ix-press: 90ms;
-  --ix-travel: 8px;
-  --ix-scale: 0.99;
-  --ix-ease-open: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ix-travel: 12px;
+  --ix-scale: 0.965;
+  --ix-settle: 1.006;
+  --ix-ease-open: cubic-bezier(0.22, 1, 0.36, 1);
   --ix-ease-close: cubic-bezier(0.4, 0, 1, 1);
 }
 .btn,
@@ -6957,6 +6954,11 @@ html.settings-essentials #settings-report {
     translate: 0 var(--ix-travel);
     scale: var(--ix-scale);
   }
+  70% {
+    opacity: 1;
+    translate: 0 -1px;
+    scale: var(--ix-settle);
+  }
 }
 [data-ix-surface] {
   will-change: opacity, translate, scale;
@@ -7677,7 +7679,12 @@ html.futasaku-product :is(#play-menu, #levels) .levels-inner {
    confirmation plate's frame) cannot bring one back. */
 html.futasaku-product :is(.sheet, #sheet-menu, #gameover .go-card, #play-menu .levels-inner, #levels .levels-inner) {
   border: 0;
-  box-shadow: none;
+  /* Match Intel's own setup (owner, 2026-10-23: "same setup as the in-game Match Intel glass —
+     elegant"): its 15px corner and its soft drop shadow lifting the glass off the table. A shadow
+     is not a frame: nothing is drawn along the edge. */
+  border-radius: 15px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  color: #f0e9dc;
 }
 html.futasaku-product #gameover .go-card::before {
   display: none;
