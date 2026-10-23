@@ -66,10 +66,14 @@ describe('the beta line is a quiet version line between the wordmark and the ent
   // Owner, 2026-10-22: "make sure any future update from any agent adds ... last deploy: <time when
   // it was pushed to the live website>". The BUILD stamps the time (web/vite.config.ts), and the
   // deploy workflow builds the site right before it publishes, so no agent has to remember it.
-  it('says when the live build was deployed, in the reader\'s own time, and nothing when unknown', () => {
-    expect(FEEDBACK.betaNote('0.6', '22 Oct, 12:12')).toContain('(0.6, last deploy: 22 Oct, 12:12)');
-    expect(FEEDBACK.betaNote('0.6', null)).toContain('(0.6)');
-    expect(FEEDBACK.betaNote('0.6', null)).not.toContain('last deploy');
+  // Owner, 2026-10-23: the word is "last update" — it reads as the game being kept current rather
+  // than as server plumbing. The behaviour is unchanged.
+  it('says when the live build was updated, in the reader\'s own time, and nothing when unknown', () => {
+    expect(FEEDBACK.betaNote('0.6', '22 Oct, 12:12')).toContain('of an evolving game, last update: 22 Oct, 12:12.');
+    expect(FEEDBACK.betaNote('0.6', null)).toContain('(0.6) of an evolving game.');
+    expect(FEEDBACK.betaNote('0.6', null)).not.toContain('last update');
+    // The stamp is a TRAILING note, never tucked inside the version bracket (owner, 2026-10-23).
+    expect(FEEDBACK.betaNote('0.6', '22 Oct, 12:12')).toContain('beta version (0.6) of an evolving game, last update:');
     expect(deployLabel('2026-10-22T11:12:20Z', 'Europe/London')).toBe('22 Oct, 12:12');
     expect(deployLabel('2026-10-22T11:12:20Z', 'UTC')).toBe('22 Oct, 11:12');
     // A dev server, a test run or a garbled stamp shows no time rather than a wrong one.

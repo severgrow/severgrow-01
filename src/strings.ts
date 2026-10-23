@@ -890,10 +890,15 @@ export const FEEDBACK = Object.freeze({
   empty: 'Please write a few words first.',
   guideLink: 'Tester guide',
   close: 'Close',
-  /** The beta line on the main menu, between the wordmark and the buttons. */
   betaVersion: '0.6',
+  /**
+   * The beta line on the main menu, between the wordmark and the buttons. Owner direction
+   * (2026-10-23): the stamp reads "last update" and sits AFTER the sentence "beta version of an
+   * evolving game", not tucked inside the version bracket - so the sentence reads as one calm
+   * statement and the stamp is a trailing note about the build, not a parenthetical interruption.
+   */
   betaNote: (version: string, deployed: string | null = null) =>
-    `This is a beta version (${version}${deployed ? `, last deploy: ${deployed}` : ''}) of an evolving game. If you spot any problems or have suggestions for improvement,`,
+    `This is a beta version (${version}) of an evolving game${deployed ? `, last update: ${deployed}` : ''}. If you spot any problems or have suggestions for improvement,`,
   betaLink: 'let us know here.',
 });
 
