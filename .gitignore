@@ -21,3 +21,6 @@ web/e2e/out-design/
 !.env.example
 .tmp*
 supabase/.temp/
+
+# The futa05 preview build output (same rule as web/dist/): generated, never committed.
+web/dist-preview/
