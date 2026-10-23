@@ -55,9 +55,11 @@ describe('the pause panel: dark glass, one lead, one pair, one tool row', () => 
   });
 
   it('is dark glass floating over a veiled match', () => {
-    expect(bodyFor('#sheet-menu')).toMatch(/backdrop-filter: blur\(18px\) saturate\(1\.15\)/);
+    // The game's own dark glass (the lesson window's recipe), never a grey plate.
+    expect(bodyFor('#sheet-menu')).toMatch(/backdrop-filter: var\(--dark-glass-blur\)/);
     expect(bodyFor('#sheet-menu')).toMatch(/background: var\(--gm-glass\)/);
-    expect(panelCss).toMatch(/--gm-glass: color-mix\(in srgb, var\(--c-surface\) 72%, transparent\)/);
+    expect(panelCss).toMatch(/--gm-glass: var\(--dark-glass\)/);
+    expect(styleCss).toMatch(/--dark-glass: rgba\(8, 10, 10, 0\.42\);\s*--dark-glass-blur: blur\(9px\) saturate\(1\.05\);/);
     // The match behind is blurred and darkened while a sheet or the finish card is up.
     expect(styleCss).toMatch(/html\.game-veiled #game \{\s*filter: blur\(7px\) brightness\(0\.55\) saturate\(0\.85\);/);
     expect(mainSource).toMatch(/function syncVeil\(\)/);

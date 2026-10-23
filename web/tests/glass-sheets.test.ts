@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(fileURLToPath(new URL('../src/style.css', import.meta.url)), 'utf8');
 const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
-const glass = /background: color-mix\(in srgb, var\(--c-surface\) 72%, transparent\);\s*-webkit-backdrop-filter: blur\(18px\) saturate\(1\.15\);\s*backdrop-filter: blur\(18px\) saturate\(1\.15\);/;
+// The game's one dark glass (owner, 2026-10-23: "that's not the dark glass"): the lesson window's recipe.
+const glass = /background: var\(--dark-glass\);\s*-webkit-backdrop-filter: var\(--dark-glass-blur\);\s*backdrop-filter: var\(--dark-glass-blur\);/;
 
 describe('every sheet is the pause panel\'s glass', () => {
   it('on the product channels, every .sheet wears the glass', () => {
@@ -47,5 +48,15 @@ describe('no frame around the glass, ever (owner, 2026-10-23)', () => {
       expect(rule.length, String(re)).toBeGreaterThan(0);
       expect(rule, String(re)).not.toMatch(/border: 1px|box-shadow: inset/);
     }
+  });
+});
+
+describe('the dark glass is the lesson window\'s own recipe', () => {
+  const surface = readFileSync(fileURLToPath(new URL('../src/player/glass-surface.ts', import.meta.url)), 'utf8');
+  it('the shared tokens match the glass surface the lessons and Match Intel use', () => {
+    expect(surface).toMatch(/background:rgba\(8,10,10,\.42\)/);
+    expect(surface).toMatch(/backdrop-filter:blur\(9px\) saturate\(1\.05\)/);
+    expect(css).toMatch(/--dark-glass: rgba\(8, 10, 10, 0\.42\);\s*--dark-glass-blur: blur\(9px\) saturate\(1\.05\);/);
+    expect(css).not.toMatch(/color-mix\(in srgb, var\(--c-surface\) 72%, transparent\)/);
   });
 });

@@ -3,6 +3,11 @@
    main.ts from web/src/logic/themes.ts. Theme-only details sit at the end. */
 
 :root {
+  /* THE DARK GLASS (owner, 2026-10-23: "that's not the dark glass"): the game's one glass recipe,
+     the lesson window's and Match Intel's (web/src/player/glass-surface.ts) — a near-black smoked
+     tint, a light blur. Every panel that floats over the game or a menu uses these two tokens. */
+  --dark-glass: rgba(8, 10, 10, 0.42);
+  --dark-glass-blur: blur(9px) saturate(1.05);
   --c-bg: #18191a;
   --c-surface: #232425;
   --c-text: #eeebe4;
@@ -1843,15 +1848,15 @@ html.game-veiled .scrim {
   --gm-row: 46px;
   --gm-hair: color-mix(in srgb, var(--c-line) 50%, transparent);
   --gm-hair-strong: color-mix(in srgb, var(--c-line) 90%, transparent);
-  --gm-glass: color-mix(in srgb, var(--c-surface) 72%, transparent);
+  --gm-glass: var(--dark-glass);
   left: 10px;
   right: 10px;
   bottom: max(10px, env(safe-area-inset-bottom));
   padding: 6px var(--gm-pad) 14px;
   border-radius: calc(var(--radius) * 2);
   background: var(--gm-glass);
-  -webkit-backdrop-filter: blur(18px) saturate(1.15);
-  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
   /* A pause panel is brief by design: let it use the screen rather than scroll. */
   max-height: 94dvh;
   /* The panel rises in on the acknowledgement beat; translate and opacity only. */
@@ -7577,9 +7582,9 @@ html.futasaku-product #gameover {
   background: color-mix(in srgb, var(--c-bg) 22%, transparent);
 }
 html.futasaku-product #gameover .go-card {
-  background: color-mix(in srgb, var(--c-surface) 72%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.15);
-  backdrop-filter: blur(18px) saturate(1.15);
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
   border-radius: calc(var(--radius) * 2);
 }
 html.futasaku-product #gameover.won .go-title::after {
@@ -7617,9 +7622,9 @@ html.futasaku-product #gameover.won[data-fresh='1'] .go-title::after {
    darkened (the match by html.game-veiled, a menu screen here), so the sheet reads as the one
    thing on screen. Product channels only; the classic line keeps its bottom sheets. */
 html.futasaku-product .sheet {
-  background: color-mix(in srgb, var(--c-surface) 72%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.15);
-  backdrop-filter: blur(18px) saturate(1.15);
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
 }
 html.futasaku-product .sheet:not(#sheet-menu):not(.confirm-sheet) {
   left: 10px;
@@ -7659,9 +7664,9 @@ html.futasaku-product:has(body > .sheet:not([hidden])) .scrim {
    same glass plate, so every menu below the main one reads as one family. */
 html.futasaku-product :is(#play-menu, #levels) .levels-inner {
   padding: 14px 16px 18px;
-  background: color-mix(in srgb, var(--c-surface) 72%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.15);
-  backdrop-filter: blur(18px) saturate(1.15);
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
   border-radius: calc(var(--radius) * 2);
 }
 
@@ -7681,6 +7686,6 @@ html.futasaku-product #gameover .go-card::before {
    see-through, and blurs whatever scrolls under it instead of covering it with a solid strip. */
 html.futasaku-product .sheet .sheet-head {
   background: transparent;
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
 }
