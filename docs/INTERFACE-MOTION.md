@@ -100,17 +100,34 @@ over the whole board SVG was the one measurable cost this layer avoids.
 Do not add a new duration, curve or library for one surface. If the vocabulary genuinely cannot
 express a movement, change this file, its CSS block, this document and the test together.
 
-## Adoption status (2026-10-22)
+## Adoption status (2026-10-22, verified 2026-10-23)
 
 Wired: the central `sheet()` path (so Settings, pause, How to play, What happened, the campaign
 start confirmation and the new restart confirmation all share it), the profile read-out, the finish
 plate, the install invitation, the starter lottery's exit, the online hub/waiting/join screens, the
-matched card, and the screen-to-screen changes between menu-like screens. The pre-game card ritual
-and all gameplay animation are untouched.
+matched card, and the screen-to-screen changes between menu-like screens — which is how the PLAY
+submenu arrives (`#menu-play` → `openPlayMenu` → `enterSurface`, 6px travel; the main menu stands
+down while it is open and `openPlayMenu` keeps `shownScreen === 'menu'` so a late boot show cannot
+tear it down). The pre-game card ritual and all gameplay animation are untouched.
+
+Read-outs are NOT animated. The chapter caption under `LEVEL <n>` in the PLAY submenu and the
+campaign line on the main menu are text that a screen change repaints; they carry no entrance of
+their own, so a slow layout can never make a read-out look like a control arriving.
+
+### What the stills show (2026-10-23)
+
+`docs/screens/interface/` is one JPEG format in both sets (2x, quality 88, captured from the real
+app with Reduce motion on): `before/` is the 0.6 base, `after/` is the shipped layout. The result
+plate's vertical balance was measured, not eyeballed — at 390x844 the plate went 492 → 453px and
+its lockup's centre 54% → 58% of the frame; at 1280x800, 489 → 450px and 51% → 56%. The two quiet
+ways out now share one row, which is where the height came from, so the plate covers LESS board
+than before and still never scrolls. The doorway itself is pinned by `web/e2e/play-menu.ts`, which
+waits for `data-ix-state="open"` rather than for "not hidden".
 
 ## Files
 
 - `web/src/ui/interface-motion.ts` — tokens and the primitives.
 - `web/src/style.css` — the `--ix-*` block and the interface refinement section at the end.
 - `web/tests/interface-motion.test.ts` — the contract.
-- `web/src/main.ts` — `openSheetNow`, `showScreen`, `presentResult`, `hideGameOver`.
+- `web/src/main.ts` — `openSheetNow`, `openPlayMenu`, `showScreen`, `presentResult`, `hideGameOver`.
+- `web/e2e/play-menu.ts` — the doorway measured as a settled surface at 360x640 and 390x844.

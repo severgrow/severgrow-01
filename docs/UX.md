@@ -378,8 +378,15 @@ explains the move. It never plays for you.
 The surfaces around the game — pause, results, sheets, confirmations, online menus — share one
 quiet motion vocabulary: a panel *becomes present* with 8px of travel at 99% scale over 200ms and
 leaves in 150ms, while a press answers in 90ms. It is deliberately separate from the board's own
-choreography and switches off with Reduce motion or the OS preference. Tokens, adoption and the
-rules for when **not** to animate are in [`docs/INTERFACE-MOTION.md`](INTERFACE-MOTION.md).
+choreography and switches off with Reduce motion or the OS preference. The PLAY submenu belongs to
+the same vocabulary: it arrives like a screen (6px of travel), not like a sheet, and the main menu
+stands down behind it.
+
+The result plate is part of that layer too: it sits under the settled board rather than over it,
+and its balance is measured (the plate is shorter, its lockup sits at ~56–58% of the frame, and it
+never scrolls). Tokens, adoption, the stills and the rules for when **not** to animate are in
+[`docs/INTERFACE-MOTION.md`](INTERFACE-MOTION.md); the before/after captures are in
+[`docs/screens/interface/`](screens/interface/README.md).
 
 ## Animations and satisfying feel
 
