@@ -7016,3 +7016,71 @@ html.futasaku-product.reduce-motion .gameover.won .go-title::after {
     animation: none;
   }
 }
+
+/* GAME REVIEW on the finish card (owner, 2026-10-23). "Review" shares the "See the board" row, so
+   the card keeps its four rows before "More"; the review face takes the card's place while it is
+   open (go-card.reviewing), so the card never grows past one phone screen. */
+.go-buttons:has(#go-review:not([hidden])) {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.go-buttons:has(#go-review:not([hidden])) > * {
+  grid-column: 1 / -1;
+}
+.go-buttons:has(#go-review:not([hidden])) > #go-board,
+.go-buttons:has(#go-review:not([hidden])) > #go-review {
+  grid-column: auto;
+  padding: 0 10px;
+}
+.go-card.reviewing > :not(.go-review-face) {
+  display: none !important;
+}
+.go-review-face {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+.go-review-face[hidden] {
+  display: none;
+}
+.go-review-kicker {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--light-core, #f5d8a4);
+}
+.go-review-line {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+  border-radius: var(--radius);
+  font-size: 0.92rem;
+  line-height: 1.35;
+  color: var(--c-text);
+}
+.go-review-better {
+  border-color: color-mix(in srgb, var(--light-core, #f5d8a4) 45%, transparent);
+  box-shadow: 0 0 14px var(--light-bloom, rgba(255, 195, 104, 0.18));
+}
+.go-review-label {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+.go-review-keys {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.go-review-keys .btn {
+  min-height: 48px;
+}

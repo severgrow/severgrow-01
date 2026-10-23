@@ -160,6 +160,11 @@ export class Session {
     return best?.played ?? null;
   }
 
+  /** The position the log starts from (the set base, or the seed's own start). */
+  get start(): State {
+    return this.base ?? newGame(this.state.seed, this.state.config);
+  }
+
   /** Every action of `player`'s latest turn (for "Replay last turn"). */
   lastTurnOf(player: Player): Played[] {
     for (let i = this.turns.length - 1; i >= 0; i--) if (this.turns[i]!.player === player) return this.turns[i]!.plays;
@@ -170,7 +175,7 @@ export class Session {
     const wantedTurn = this.state.turnNumber - 1;
     const plays: Played[] = [];
     try {
-      let before = this.base ?? newGame(this.state.seed, this.state.config);
+      let before = this.start;
       for (const action of this.log) {
         const after = apply(before, action);
         if (before.turnNumber === wantedTurn && before.turnPlayer === player)

@@ -12,7 +12,7 @@ import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { cutLoss } from './analysis.js';
 import { cardName, hexName, moveCards } from './names.js';
-import { AnimQueue, captionFor } from './logic/anim.js';
+import { AnimQueue, buildSteps, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { displayEventForPlay } from './player/display-readout.js';
 import type { DisplayEvent } from './player/display-readout.js';
@@ -192,7 +192,9 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
 // V3 art is archived on this branch; always use the default painted board for Futa04.
 const defaultArt = IS_FUTA04 ? await import('./ui/defaultArtBoard.js') : null;
 import type { Overlay } from './ui/board.js';
-import { askBot } from './ui/botClient.js';
+import { askBot, askReview } from './ui/botClient.js';
+import type { TurningPoint } from '../../src/bots/review.js';
+import { moveSentence } from '../../src/playtest/names.js';
 import { anim, cardFace, createEffects, heavyShakeFrames, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
 import { mountDragLayer } from './ui/drag-layer.js';
 import { PILE_GRAB_PX } from './logic/drag.js';
@@ -203,7 +205,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PILES, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PILES, RESULT, REVIEW, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -6949,8 +6951,10 @@ function renderGameOver() {
     // The record line counts offline games only — never leak it onto a server match.
     $('go-stats').textContent = '';
     setGoExtra('go-stats', false);
-    // A duel has no offline cut replay to offer.
+    // A duel has no offline cut replay to offer, and no replayable log to review.
     setGoExtra('go-cut', false);
+    $('go-review').hidden = true;
+    if (wasHidden) closeReview();
     // The owner's ask: a REAL rematch leads the finish screen, ahead of the old "back out" that
     // used to sit in this slot. Back to matches and Menu stay, as secondary ways out
     // (`bind('go-rematch')` starts the rematch; `bind('go-other')` is Back to matches).
@@ -7051,6 +7055,8 @@ function renderGameOver() {
     scheduler.request('result-score', tick);
   }
   setGoExtra('go-cut', !!session?.biggestCut);
+  if (wasHidden) closeReview();
+  syncReview(st);
   $('go-share').textContent = RESULT.share;
   $('go-reason').textContent = taught ? '' : resultReason(r, HUMAN);
   if (taught) $('go-sub').hidden = true;
@@ -7074,6 +7080,91 @@ function renderGameOver() {
   if (wasHidden) setGoExtrasOpen(false);
   else syncGoExtras();
   $('go-rematch').focus();
+}
+
+// ---------- game review (owner, 2026-10-23) ----------
+// After an offline game the bot worker replays it and finds the player's turning point (see
+// src/bots/review.ts). "Review" appears beside "See the board" once that answer is in; it opens a
+// small face in the same card: the move, the stronger one, and "Show me" plays the stronger one on
+// the board from that moment, holds it, and brings the card back.
+
+/** The finished state the review belongs to, and its answer (undefined: still being worked out). */
+let reviewFor: State | null = null;
+let reviewPoint: TurningPoint | null | undefined;
+
+function syncReview(st: State) {
+  const btn = $('go-review');
+  // Practice and level games only: never a lesson (it teaches its own moves), never a duel.
+  if (!IS_FUTA04 || lessonActive() || !session || session.state !== st) {
+    btn.hidden = true;
+    return;
+  }
+  if (reviewFor !== st) {
+    reviewFor = st;
+    reviewPoint = undefined;
+    const s = session;
+    void askReview(s.start, s.log, HUMAN, st).then((p) => {
+      if (reviewFor !== st) return;
+      reviewPoint = p;
+      if (!$('gameover').hidden) syncReview(st);
+    });
+  }
+  btn.textContent = REVIEW.open;
+  btn.hidden = reviewPoint === undefined;
+}
+
+function openReview() {
+  if (reviewPoint === undefined) return;
+  const p = reviewPoint;
+  $('go-review-kicker').textContent = p ? REVIEW.kicker(p.turn) : '';
+  $('go-review-kicker').hidden = !p;
+  $('go-review-played-label').textContent = REVIEW.played;
+  $('go-review-better-label').textContent = REVIEW.better;
+  const v = p ? viewFor(p.before, HUMAN) : null;
+  $('go-review-played').textContent = !p ? REVIEW.clean : p.played.t === 'EndAct' ? REVIEW.stopped : moveSentence(v!, p.played);
+  $('go-review-played-label').hidden = !p;
+  $('go-review-better').textContent = p ? moveSentence(v!, p.better) : '';
+  $('go-review-better').parentElement!.hidden = !p;
+  $('go-review-show').textContent = REVIEW.show;
+  $('go-review-show').hidden = !p;
+  $('go-review-back').textContent = REVIEW.back;
+  document.querySelector('#gameover .go-card')!.classList.add('reviewing');
+  $('go-review-face').hidden = false;
+  (p ? $('go-review-show') : $('go-review-back')).focus();
+}
+
+function closeReview() {
+  document.querySelector('#gameover .go-card')?.classList.remove('reviewing');
+  const face = document.getElementById('go-review-face');
+  if (face) face.hidden = true;
+}
+
+/** Plays the stronger move on the board from the turning point, holds it, then restores the end. */
+async function showBetterMove() {
+  const p = reviewPoint;
+  if (!session || !p || busy()) return;
+  closeReview();
+  gameOverDismissed = true;
+  replaying = true;
+  replaySpeed = CUT_REPLAY_SPEED;
+  const steps = buildSteps(p.before, p.better, apply(p.before, p.better), HUMAN);
+  queue.reset(p.before.board);
+  const v0 = viewFor(p.before, HUMAN);
+  shownScores = [v0.score, v0.opponentScore];
+  rememberRemoved(steps, p.before);
+  queue.push(steps.filter((x) => x.k !== 'end' && x.k !== 'turn' && x.k !== 'draw'));
+  render();
+  const my = epoch;
+  await pump();
+  // Let the stronger position be seen before the real ending comes back.
+  await wait(1600, my);
+  if (my !== epoch || !session) return;
+  reopenGameOver = true;
+  replaying = true;
+  const v = session.view;
+  queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);
+  render();
+  void pump();
 }
 
 function renderHistory() {
@@ -8536,6 +8627,12 @@ bind('go-menu', () => {
   if (isOnlineDuel()) tearDownOnlineDuel();
   showScreen('menu');
 });
+bind('go-review', () => openReview());
+bind('go-review-back', () => {
+  closeReview();
+  $('go-review').focus();
+});
+bind('go-review-show', () => void showBetterMove());
 // Overhaul item 20: replay the game's biggest cut (from the board just before it), then come back here
 bind('go-cut', () => {
   const p = session?.biggestCut;

@@ -337,6 +337,25 @@ export const RESULT = Object.freeze({
   less: 'Less',
 });
 
+/**
+ * GAME REVIEW (owner, 2026-10-23): after a game the finish card can show the player's turning point
+ * — the one move that fell furthest short of the best move they had — and that better move on the board.
+ */
+export const REVIEW = Object.freeze({
+  /** The finish-card key, beside "See the board". */
+  open: 'Review',
+  /** The review face's kicker: "Turning point · Turn 9". */
+  kicker: (turn: number) => `Turning point · Turn ${turn}`,
+  played: 'You played',
+  better: 'Stronger',
+  /** What the player did when they ended their Grow early. */
+  stopped: 'You stopped growing with cards still in hand',
+  show: 'Show me',
+  back: 'Back',
+  /** No choice fell short enough to call a slip. */
+  clean: 'No slips to show: every move held up.',
+});
+
 /** The words for the one-card Grow. Code still uses action `Sprout`; players read Grow. */
 export type MoveWords = {
   Name: string;

@@ -732,12 +732,24 @@
         <p id="go-break" class="muted small" data-go-extra hidden></p>
         <p id="go-moves" class="muted small" data-go-extra hidden></p>
         <ul id="go-highlights" class="highlights" data-go-extra hidden></ul>
+        <!-- The review face: the card's own content gives way to it (html class go-reviewing). -->
+        <div id="go-review-face" class="go-review-face" hidden>
+          <p id="go-review-kicker" class="go-review-kicker"></p>
+          <p class="go-review-line"><span class="go-review-label" id="go-review-played-label"></span><span id="go-review-played"></span></p>
+          <p class="go-review-line go-review-better"><span class="go-review-label" id="go-review-better-label"></span><span id="go-review-better"></span></p>
+          <div class="go-review-keys">
+            <button id="go-review-show" class="btn primary" type="button">Show me</button>
+            <button id="go-review-back" class="btn ghost" type="button">Back</button>
+          </div>
+        </div>
         <div class="go-buttons">
           <button id="go-rematch" class="btn primary big" type="button">Play again</button>
           <button id="go-other" class="btn ghost" type="button"></button>
           <!-- "See the board" stays on the card (not behind the disclosure): it is how a player looks
                at the final position, and it is also the documented way to put the card away. -->
           <button id="go-board" class="btn ghost" type="button">See the board</button>
+          <!-- Game review shares the board's row (still four rows before "More"); offline games only. -->
+          <button id="go-review" class="btn ghost" type="button" hidden>Review</button>
           <button id="go-more" class="btn link" type="button" aria-expanded="false">More</button>
           <button id="go-share" class="btn ghost" type="button" data-go-extra hidden>Share</button>
           <button id="go-cut" class="btn ghost" type="button" data-go-extra hidden>Replay the biggest cut</button>
