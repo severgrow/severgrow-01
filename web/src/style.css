@@ -2654,18 +2654,10 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   margin: calc(var(--ritual-card-h) / -2) 0 0 calc(var(--ritual-card-w) / -2);
   perspective: 900px;
 }
-.ritual-slot::after {
-  content: '';
-  position: absolute;
-  inset: -5px;
-  border-radius: calc(var(--ritual-card-w) * .095);
-  border: 1px solid color-mix(in srgb, var(--ritual-cream) 58%, transparent);
-  box-shadow: 0 0 22px rgba(232, 221, 197, .1);
-  opacity: 0;
-  transition: opacity .28s ease;
-  pointer-events: none;
-}
-.ritual-slot.is-winner::after { opacity: 1; }
+/* Deliberately NO cream ring around the dealt cards (owner direction, 2026-10-23: the ritual drew
+   a white rectangle contour around the cards, and the cards read better without it). The result is
+   carried by the outcome line and by the winner's own depth, never by an outline. The `is-winner`
+   class is still toggled by the choreography; it simply has no ring to turn on. */
 .ritual-card {
   position: absolute;
   inset: 0;
@@ -2687,9 +2679,10 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .ritual-face.back { transform: rotateY(0deg); }
 .ritual-face.front { transform: rotateY(-90deg); opacity: 0; }
 .ritual-slot.is-winner .ritual-face.front .card {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--ritual-cream) 46%, transparent),
-    0 20px 40px rgba(0, 0, 0, .52);
+  /* Depth only: the winner sits a little higher than the other card. The 1px cream outline that
+     used to hug it is gone with the ring (owner, 2026-10-23), so no white contour is drawn round a
+     card at any point in the ritual. */
+  box-shadow: 0 20px 40px rgba(0, 0, 0, .52);
 }
 .ritual-slot.is-losing .ritual-card { opacity: .9; }
 .ritual-outcome {
@@ -2723,18 +2716,15 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   text-wrap: balance;
   text-shadow: 0 1px 22px rgba(8, 9, 10, .85), 0 0 2px rgba(8, 9, 10, .6);
 }
-.starter-ritual.is-reduced .ritual-outcome,
-.starter-ritual.is-reduced .ritual-slot::after { transition: none; }
+.starter-ritual.is-reduced .ritual-outcome { transition: none; }
 /* Short screens: keep the whole ritual inside the viewport height. */
 @media (max-height: 430px) {
   .starter-ritual { --ritual-card-w: clamp(56px, min(20vmin, 24vh), 92px); }
   .ritual-title { font-size: clamp(1.25rem, 5vmin, 1.7rem); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ritual-slot::after,
   .ritual-outcome { transition: none; }
 }
-.reduce-motion .ritual-slot::after,
 .reduce-motion .ritual-outcome { transition: none; }
 
 /* ---------- game over ---------- */
