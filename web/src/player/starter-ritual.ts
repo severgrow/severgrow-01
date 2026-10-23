@@ -75,7 +75,6 @@ type Refs = {
   youBack: HTMLElement;
   opponentBack: HTMLElement;
   title: HTMLElement;
-  result: HTMLElement;
   outcome: HTMLElement;
 };
 
@@ -94,10 +93,9 @@ const readRefs = (): Refs | null => {
   const youBack = document.getElementById('lottery-back-you');
   const opponentBack = document.getElementById('lottery-back-opponent');
   const title = document.getElementById('lottery-title');
-  const result = document.getElementById('lottery-result');
   const outcome = document.getElementById('lottery-outcome');
   if (!overlay || !deckAnchor || !deck || !youSlot || !opponentSlot || !youCard || !opponentCard || !youInner
-    || !opponentInner || !youFront || !opponentFront || !youBack || !opponentBack || !title || !result
+    || !opponentInner || !youFront || !opponentFront || !youBack || !opponentBack || !title
     || !outcome) return null;
   return {
     overlay,
@@ -115,7 +113,6 @@ const readRefs = (): Refs | null => {
     youBack,
     opponentBack,
     title,
-    result,
     outcome,
   };
 };
@@ -610,10 +607,8 @@ class StarterRitual {
     const r = this.refs;
     const starter = this.options.view.starter;
     const opponent = this.options.opponentLabel ?? OPP.label;
+    // The cards have just said which rank was higher; the outcome only needs to name the starter.
     r.title.textContent = starter === 'you' ? 'You start' : `${opponent} starts`;
-    r.result.textContent = starter === 'you'
-      ? 'You drew the higher card.'
-      : `${opponent} drew the higher card.`;
     r.outcome.classList.add('is-shown');
   }
 
@@ -946,7 +941,6 @@ class StarterRitual {
     for (const slot of [r.youSlot, r.opponentSlot]) slot.classList.remove('is-winner', 'is-losing');
     r.outcome.classList.remove('is-shown');
     r.title.textContent = '';
-    r.result.textContent = '';
     r.youFront.innerHTML = faceMarkup(this.options.view.you);
     r.opponentFront.innerHTML = faceMarkup(this.options.view.opponent);
     r.overlay.classList.toggle('is-reduced', this.options.reduceMotion || this.options.tempo === 'skip');
@@ -974,7 +968,6 @@ class StarterRitual {
     delete r.overlay.dataset.opponentRank;
     r.outcome.classList.remove('is-shown');
     r.title.textContent = '';
-    r.result.textContent = '';
     r.youSlot.classList.remove('is-winner', 'is-losing');
     r.opponentSlot.classList.remove('is-winner', 'is-losing');
     r.youCard.classList.remove('is-revealed');

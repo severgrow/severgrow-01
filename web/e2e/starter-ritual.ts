@@ -177,7 +177,7 @@ const readResult = (page: Page): Promise<{
   youRank: string | undefined;
   opponentRank: string | undefined;
   title: string;
-  result: string;
+  sentence: boolean;
   reduced: boolean;
 }> =>
   page.evaluate(() => {
@@ -189,7 +189,10 @@ const readResult = (page: Page): Promise<{
       youRank: el?.dataset.youRank,
       opponentRank: el?.dataset.opponentRank,
       title: document.getElementById('lottery-title')?.textContent ?? '',
-      result: document.getElementById('lottery-result')?.textContent ?? '',
+      // The outcome is one line: the deck has just shown which rank was higher, so a second
+      // sentence explaining the draw is noise. Fail if one ever comes back.
+      sentence: [...(document.getElementById('lottery-outcome')?.querySelectorAll('p') ?? [])]
+        .some((p) => (p.textContent ?? '').trim() !== ''),
       reduced: !!el?.classList.contains('is-reduced'),
     };
   });
@@ -203,11 +206,11 @@ const checkResultAgainstEngine = async (page: Page, label: string): Promise<void
   const starter = actual.startingPlayer ?? actual.turnPlayer;
   const you = Number(result.youRank);
   const opponent = Number(result.opponentRank);
-  const expectedTitle = starter === 0 ? /you start/i : /opponent starts/i;
+  const expectedTitle = starter === 0 ? /^you start$/i : /^.+ starts$/i;
   check(`${label}: the result names the real starting seat`, expectedTitle.test(result.title), result.title);
   check(`${label}: two distinct ranks 1..9`, Number.isInteger(you) && Number.isInteger(opponent) && you !== opponent && you >= 1 && you <= 9 && opponent >= 1 && opponent <= 9, `${result.youRank}/${result.opponentRank}`);
   check(`${label}: the higher card belongs to the starter`, starter === 0 ? you > opponent : opponent > you, `starter=${starter} ${you}/${opponent}`);
-  check(`${label}: the result says who drew the higher card`, /drew the higher card/i.test(result.result), result.result);
+  check(`${label}: the outcome is the single line naming the starter`, !result.sentence, result.sentence ? 'a sentence is shown' : '');
 };
 
 const screenshot = async (page: Page, name: string): Promise<void> => {

@@ -2723,13 +2723,6 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   text-wrap: balance;
   text-shadow: 0 1px 22px rgba(8, 9, 10, .85), 0 0 2px rgba(8, 9, 10, .6);
 }
-.ritual-result {
-  margin: 0;
-  font: 400 .78rem/1.35 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
-  letter-spacing: .045em;
-  color: color-mix(in srgb, var(--ritual-cream) 62%, transparent);
-  text-wrap: balance;
-}
 .starter-ritual.is-reduced .ritual-outcome,
 .starter-ritual.is-reduced .ritual-slot::after { transition: none; }
 /* Short screens: keep the whole ritual inside the viewport height. */
