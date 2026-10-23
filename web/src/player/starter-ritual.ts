@@ -23,6 +23,7 @@ import type { Card } from '../../../src/engine/index.js';
 import { cardFace, suitClass } from '../ui/effects.js';
 import { preloadCardArt } from './cards.js';
 import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
+import { RITUAL_DECK_SIZE } from '../logic/starter-ritual.js';
 
 export type StarterRitualPhase = 'idle' | 'arrive' | 'shuffle' | 'deal' | 'reveal' | 'result' | 'exit' | 'done';
 
@@ -45,7 +46,8 @@ export type StarterRitualOptions = {
 };
 
 const TEMPO_SCALE: Record<StarterRitualTempo, number> = { slow: 1.16, normal: 1, fast: 0.82, skip: 1 };
-const DECK_LAYERS = 9;
+/** One layer per card in the nine-card deck; the DOM stack and the logic deck must agree. */
+const DECK_LAYERS = RITUAL_DECK_SIZE;
 /** Distance from the edge of the viewport that a dealt card may never cross. */
 const SAFE_MARGIN = 14;
 
@@ -167,6 +169,7 @@ class StarterRitual {
       'aria-label',
       cardWords(this.options.view.opponent, `${this.options.opponentLabel ?? OPP.label}'s card`),
     );
+    this.stampDeck();
     this.layout();
     // The board can settle its own layout one frame after the game screen is shown; refine the two
     // dealt-card positions then, while both cards are still face down and invisible.
@@ -524,13 +527,20 @@ class StarterRitual {
     };
     const you = fly(r.youSlot, r.youCard, 'you', 0);
     const opponent = fly(r.opponentSlot, r.opponentCard, 'opponent', this.ms(70));
+    // The two dealt cards are the top two cards of the stack, so the stack behind them shrinks to
+    // seven as they leave. That keeps the count honest at every moment: nine cards in all, never
+    // nine backs plus two faces.
+    const leaving = this.dealtLayers().map((layer, index) => this.animate(layer, [
+      { opacity: 1 },
+      { opacity: 0 },
+    ], { duration: this.ms(110), delay: index === 0 ? this.ms(20) : this.ms(90), easing: 'ease-out' }));
     // The deck rocks back very slightly as the two cards leave it.
     const recoil = this.animate(r.deck, [
       { scale: 1, translate: '0px 0px' },
       { scale: 0.986, translate: '0px 1.5px', offset: 0.34 },
       { scale: 1, translate: '0px 0px' },
     ], { duration: this.ms(330), easing: 'ease-out' });
-    await this.playAnimations([you, opponent, recoil]);
+    await this.playAnimations([you, opponent, ...leaving, recoil]);
     await this.sleep(this.ms(24));
   }
 
@@ -702,6 +712,13 @@ class StarterRitual {
     ]);
     if (this.cancelled || this.skipRequested) return;
 
+    // Beat 1½: the two cards are back on the deck, so the stack is whole again — nine. Swap the
+    // travelling cards for their own layers at the same point on screen (cancelling the fills
+    // restores the layers the deal hid), so exactly nine cards leave for the pile, not eleven.
+    this.cancelAnimations();
+    for (const card of [r.youCard, r.opponentCard]) card.style.opacity = '0';
+    for (const slot of [r.youSlot, r.opponentSlot]) slot.classList.remove('is-winner', 'is-losing');
+
     // Beat 2: every card files into the draw pile.
     const pile = this.options.deckTarget?.() ?? null;
     const pileTarget = pile && pile.width > 1 && pile.height > 1
@@ -756,8 +773,6 @@ class StarterRitual {
     r.layers.forEach((layer, index) => {
       stream.push(toPile(layer, DECK_LAYERS - 1 - index, pileScale, this.deckScale));
     });
-    stream.push(toPile(r.youCard, DECK_LAYERS, pileScale * 0.96, 1));
-    stream.push(toPile(r.opponentCard, DECK_LAYERS + 1, pileScale * 0.96, 1));
 
     // The veil leaves while the cards are still travelling, so the pile receives them in the
     // already-visible game rather than behind a closed curtain.
@@ -776,6 +791,29 @@ class StarterRitual {
     return Array.from({ length: DECK_LAYERS }, (_, index) => {
       const depth = DECK_LAYERS - 1 - index;
       return { x: depth * 0.3, y: depth * 0.72, rot: (index - (DECK_LAYERS - 1)) * 0.13 };
+    });
+  }
+
+  /** The top two cards of the stack: the ones the deal takes off the deck and puts on the table. */
+  private dealtLayers(): HTMLElement[] {
+    return this.refs.layers.slice(-2);
+  }
+
+  /**
+   * The stack in the overlay IS the ritual deck: every layer is stamped with the card it stands for,
+   * so the nine distinct strengths are the stack's own, not a story told around it.
+   */
+  private stampDeck(): void {
+    const deck = this.options.view.deck;
+    this.refs.layers.forEach((layer, index) => {
+      const card = deck[index];
+      if (!card) {
+        delete layer.dataset.rank;
+        delete layer.dataset.suit;
+        return;
+      }
+      layer.dataset.rank = String(card.rank);
+      layer.dataset.suit = String(card.suit);
     });
   }
 

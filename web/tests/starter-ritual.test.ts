@@ -3,8 +3,9 @@
 // The engine owns who starts; the ritual is only a presentation of that result. These tests pin the
 // two things that must never drift apart:
 //   1. the engine's starting seat stays an unbiased 50/50 lottery;
-//   2. the two displayed ranks are always distinct, always 1..9, and the higher one always belongs
-//      to the seat that actually starts — from either client's point of view.
+//   2. the ritual deck is exactly nine cards, one of every strength 1..9, so the two dealt numbers
+//      can never tie — and the higher one always belongs to the seat that actually starts, from
+//      either client's point of view.
 //
 // They also prove the presentation stream is deterministic (both online clients agree), varies
 // between matches, and does not touch gameplay state.
@@ -14,7 +15,9 @@ import type { Player } from '../../src/engine/index.js';
 import {
   offlineRitualKey,
   onlineRitualKey,
+  RITUAL_DECK_SIZE,
   starterRitualCards,
+  starterRitualDeck,
   starterRitualView,
 } from '../src/logic/starter-ritual.js';
 
@@ -33,11 +36,45 @@ describe('starting-player lottery stays fair', () => {
   });
 });
 
+describe('the ritual deck is nine cards, one of every strength', () => {
+  it('holds each number 1..9 exactly once', () => {
+    for (let i = 0; i < 2_000; i++) {
+      for (const key of [offlineRitualKey(i), onlineRitualKey(`match-${i}`)]) {
+        const deck = starterRitualDeck(key);
+        expect(deck).toHaveLength(RITUAL_DECK_SIZE);
+        expect(deck.map((c) => c.rank).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      }
+    }
+  });
+
+  it('gives every card a real colour, chosen independently', () => {
+    const seen = new Set<number>();
+    for (let i = 0; i < 400; i++) {
+      for (const card of starterRitualDeck(offlineRitualKey(i))) {
+        expect(card.suit === 0 || card.suit === 1 || card.suit === 2 || card.suit === 3).toBe(true);
+        seen.add(card.suit);
+      }
+    }
+    // All four colours actually appear, rather than every card being the same back.
+    expect([...seen].sort()).toEqual([0, 1, 2, 3]);
+  });
+
+  it('is deterministic for the same key and differs between matches', () => {
+    const key = offlineRitualKey(4242);
+    expect(starterRitualDeck(key)).toEqual(starterRitualDeck(key));
+    const orders = new Set<string>();
+    for (let i = 0; i < 200; i++) orders.add(starterRitualDeck(offlineRitualKey(i)).map((c) => c.rank).join(''));
+    expect(orders.size).toBeGreaterThan(150);
+  });
+});
+
 describe('presentation cards', () => {
-  it('are two distinct ranks from 1..9, with the higher rank on the starting seat', () => {
+  it('deals two cards off the top of the deck, so a tie on numbers is impossible', () => {
     for (let i = 0; i < 8_000; i++) {
       const starter = (i % 2) as Player;
-      const cards = starterRitualCards(offlineRitualKey(i), starter);
+      const key = offlineRitualKey(i);
+      const deck = starterRitualDeck(key);
+      const cards = starterRitualCards(key, starter);
       const winner = cards[starter];
       const loser = cards[other(starter)];
       expect(winner.rank).toBeGreaterThan(loser.rank);
@@ -47,8 +84,12 @@ describe('presentation cards', () => {
       expect(loser.rank).toBeLessThanOrEqual(9);
       expect(winner.rank).not.toBe(loser.rank);
       for (const card of cards) {
-        expect(card.suit === 0 || card.suit === 1 || card.suit === 2 || card.suit === 3).toBe(true);
+        // Both cards are the deck's own cards — same number AND same colour — not faces that were
+        // invented on top of it.
+        expect(deck).toContainEqual(card);
       }
+      // They are the two cards actually taken off the top.
+      expect([deck[deck.length - 1], deck[deck.length - 2]]).toEqual(expect.arrayContaining([...cards]));
     }
   });
 
@@ -77,11 +118,15 @@ describe('presentation cards', () => {
       const seat1 = starterRitualView(key, starter, 1);
       expect(seat0.you).toEqual(seat1.opponent);
       expect(seat0.opponent).toEqual(seat1.you);
+      expect(seat0.deck).toEqual(seat1.deck);
       expect(seat0.starter).toBe(starter === 0 ? 'you' : 'opponent');
       expect(seat1.starter).toBe(starter === 1 ? 'you' : 'opponent');
       const startingView = seat0.starter === 'you' ? seat0 : seat1;
       const waitingView = seat0.starter === 'you' ? seat1 : seat0;
       expect(startingView.you.rank).toBeGreaterThan(waitingView.you.rank);
+      // The faces are the deck's own cards, by identity, not copies that could drift.
+      expect(startingView.deck).toContain(startingView.you);
+      expect(waitingView.deck).toContain(waitingView.you);
     }
   });
 
@@ -89,12 +134,16 @@ describe('presentation cards', () => {
     const state = newMatch(219682080);
     const before = structuredClone(state);
     const starter = state.startingPlayer ?? state.turnPlayer;
-    starterRitualView(offlineRitualKey(state.seed), starter, 0);
-    starterRitualView(offlineRitualKey(state.seed), starter, 1);
+    const key = offlineRitualKey(state.seed);
+    const first = starterRitualView(key, starter, 0);
+    starterRitualView(key, starter, 1);
     expect(state).toEqual(before);
+    // Each call hands out its own array: a caller cannot corrupt the next deal by editing it.
+    expect(first.deck).not.toBe(starterRitualDeck(key));
   });
 
   it('rejects an empty key instead of inventing a result', () => {
     expect(() => starterRitualCards('', 0)).toThrow(/key/);
+    expect(() => starterRitualDeck('')).toThrow(/key/);
   });
 });
