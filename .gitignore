@@ -21,6 +21,3 @@ web/e2e/out-design/
 !.env.example
 .tmp*
 supabase/.temp/
-
-# Localisation preview build (scratch)
-web/dist-i18n/
