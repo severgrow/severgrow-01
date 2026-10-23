@@ -7021,7 +7021,37 @@ function paintGoSeeds(): void {
  * plate becomes present. `wasHidden` is the state transition (not a timer): a re-render of a card
  * already on screen must not replay the entrance, while a genuinely new result always does.
  */
+/**
+ * The result owns the screen. A duel can decide itself while a menu is open — the match clock keeps
+ * running, and an opponent may resign or run out of time, so the finish lands on the next render —
+ * and a match can end on the frame a plate is leaving. Either way the plate underneath showed its
+ * header and its Settings key above the result card (owner's 2026-10-23 audit: "PAUSED" and
+ * "Settings" floating over the loss plate at desktop size). So any open sheet is put away FIRST,
+ * at once, and without handing the keyboard to a control the card now covers: the card is the only
+ * surface left. The game is also un-paused, because a finished match is not a paused one.
+ */
+function putAwaySheetsForResult(): void {
+  if (!openSheet && !closingSheet) return;
+  sheetExit++; // any pending close is now stale
+  sheetReturns.length = 0;
+  sheetOpener = null;
+  for (const el of [closingSheet, openSheet]) {
+    if (!el) continue;
+    resetSurface(el);
+    el.hidden = true;
+  }
+  closingSheet = null;
+  openSheet = null;
+  $('scrim').hidden = true;
+  setPaused(false);
+  if (IS_FUTA04) {
+    document.documentElement.classList.remove('futa04-information-blocked');
+    updateFuta04Help();
+  }
+}
+
 function presentResult(go: HTMLElement, wasHidden: boolean): void {
+  putAwaySheetsForResult();
   document.body.classList.add('result');
   if (!wasHidden) return;
   go.dataset.fresh = '1';
@@ -8378,8 +8408,16 @@ bind('lab-surprise', () => {
   labCategory = preset.category;
   applyLab(preset);
 });
-bind('hud-menu', () => sheet('sheet-menu'));
-bind('hud-history', () => sheet('sheet-history'));
+/**
+ * A finished match has no menu to open. The result card is the screen then, and the HUD keys stay
+ * in the DOM (the top bar is not covered by the card), so a tap used to open "Paused" over the
+ * result — the plate's own header and Settings key painted above the outcome (owner's 2026-10-23
+ * audit). The guard is the finished state itself, so it holds whether the match ended a moment ago
+ * or the player is reading the card a minute later.
+ */
+const matchIsFinished = (): boolean => !$('gameover').hidden;
+bind('hud-menu', () => { if (!matchIsFinished()) sheet('sheet-menu'); });
+bind('hud-history', () => { if (!matchIsFinished()) sheet('sheet-history'); });
 bind('gm-exit-tutorial', () => {
   sheet(null);
   exitTutorial();

@@ -221,4 +221,18 @@ describe('the panel keeps the pause behaviour it borrowed', () => {
     expect(panel).toContain('id="gm-score-bot"');
     expect(panel).toContain('id="gm-turn"');
   });
+
+  it('never lets the plate and the outcome share the screen', () => {
+    // Owner review 2026-10-23: a finished match showed "Paused" and "Settings" painted above the
+    // result card, because the HUD keys stay above the card and a tap opened the plate over it.
+    // Two locks: a finished match opens no menu, and a result puts any open plate away first.
+    expect(mainSource).toMatch(/const matchIsFinished = \(\): boolean => !\$\('gameover'\)\.hidden;/);
+    expect(mainSource).toMatch(/bind\('hud-menu', \(\) => \{ if \(!matchIsFinished\(\)\) sheet\('sheet-menu'\); \}\);/);
+    expect(mainSource).toMatch(/bind\('hud-history', \(\) => \{ if \(!matchIsFinished\(\)\) sheet\('sheet-history'\); \}\);/);
+    // The result is the authority: it cannot be painted under a plate, whatever opened it.
+    expect(mainSource).toMatch(/function putAwaySheetsForResult\(\): void \{/);
+    expect(mainSource).toMatch(/function presentResult\(go: HTMLElement, wasHidden: boolean\): void \{\n {2}putAwaySheetsForResult\(\);/);
+    // Putting the plate away also releases the pause it took (a finished match is not paused).
+    expect(mainSource).toMatch(/openSheet = null;\n {2}\$\('scrim'\)\.hidden = true;\n {2}setPaused\(false\);/);
+  });
 });
