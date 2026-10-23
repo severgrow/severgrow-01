@@ -719,19 +719,28 @@ class StarterRitual {
     for (const card of [r.youCard, r.opponentCard]) card.style.opacity = '0';
     for (const slot of [r.youSlot, r.opponentSlot]) slot.classList.remove('is-winner', 'is-losing');
 
-    // Beat 2: every card files into the draw pile.
-    const pile = this.options.deckTarget?.() ?? null;
-    const pileTarget = pile && pile.width > 1 && pile.height > 1
+    // Beat 2: every card files into the real draw pile.
+    const pileRect = this.options.deckTarget?.() ?? null;
+    const pile = pileRect && pileRect.width > 1 && pileRect.height > 1 ? pileRect : null;
+    const pileTarget = pile
       ? centerOfRect(pile)
       : { x: window.innerWidth * 0.2, y: window.innerHeight * 0.9 };
-    const cardH = this.cardSize().h;
-    const pileScale = clamp((pile?.height ?? 0) / cardH, 0.16, 0.62);
-    const streamMs = this.ms(390);
+    const { w: cardW, h: cardH } = this.cardSize();
+    // Land at the pile's own on-screen size: the cards finish inside the tile, on top of the pile's
+    // own card, instead of floating over it at a guessed scale.
+    const pileScale = pile
+      ? clamp(Math.min(pile.width / cardW, pile.height / cardH), 0.08, 1)
+      : 0.4;
+    const streamMs = this.ms(440);
+    const stagger = this.ms(10);
     const stream: (Animation | null)[] = [];
+    /** How far into each card's own flight the group has formed up on the line into the tile. */
+    const CONVERGE_AT = 0.62;
+    /** How much of the whole distance is already covered when the group has formed up. */
+    const CONVERGED_DISTANCE = 0.92;
     const toPile = (
       el: Element,
       order: number,
-      scaleTarget: number,
       parentScale: number,
     ): Animation | null => {
       const c = centerOfRect(el.getBoundingClientRect());
@@ -740,45 +749,53 @@ class StarterRitual {
       const dx = (pileTarget.x - c.x) / k;
       const dy = (pileTarget.y - c.y) / k;
       const len = Math.hypot(dx, dy) || 1;
-      // Each card curves on its own side of the straight line: they arrive together, never as one
-      // rigid block, but they all end at exactly the same point.
-      const bend = (order % 2 === 0 ? 1 : -1) * (8 + (order % 4) * 4);
-      const px = (-dy / len) * bend;
-      const py = (dx / len) * bend;
-      const tilt = (order % 2 === 0 ? 1 : -1) * (1.4 + (order % 3) * 0.5);
-      const localScale = clamp(scaleTarget / k, 0.06, 1);
+      // One shared line into the tile. Each card gets its own lane, but the lanes are a few pixels
+      // wide at most and close to nothing while most of the flight is still ahead, so what the eye
+      // follows is a single stream forming up — not nine cards on nine different arcs. The very last
+      // stretch is a short, almost straight drop onto the pile's own card.
+      const lane = DECK_LAYERS > 1 ? (order / (DECK_LAYERS - 1)) * 2 - 1 : 0;
+      const spread = lane * Math.min(7, len * 0.05);
+      const ux = -dy / len;
+      const uy = dx / len;
+      // Under 2° even at its widest, and gone well before the landing.
+      const tilt = lane * 1.6;
+      const localScale = clamp(pileScale / k, 0.05, 1);
       return this.animate(el, [
-        { translate: '0px 0px', rotate: '0deg', scale: 1, opacity: 1 },
+        // Ease out of the deck, build speed gently, then settle into the tile: one gesture, no
+        // keyframe where the direction visibly changes.
+        { translate: '0px 0px', rotate: '0deg', scale: 1, opacity: 1, easing: 'cubic-bezier(.33,.03,.43,.99)' },
         {
-          translate: `${(dx * 0.46 + px).toFixed(2)}px ${(dy * 0.46 + py).toFixed(2)}px`,
+          translate: `${(dx * 0.34 + ux * spread).toFixed(2)}px ${(dy * 0.34 + uy * spread).toFixed(2)}px`,
           rotate: `${tilt.toFixed(2)}deg`,
-          scale: lerp(1, localScale, 0.34),
+          scale: lerp(1, localScale, 0.2),
           opacity: 1,
-          offset: 0.46,
+          offset: 0.3,
+          easing: 'linear',
         },
         {
-          translate: `${(dx * 0.86).toFixed(2)}px ${(dy * 0.86).toFixed(2)}px`,
-          rotate: `${(tilt * 0.55).toFixed(2)}deg`,
-          scale: lerp(1, localScale, 0.85),
+          translate: `${(dx * CONVERGED_DISTANCE + ux * spread * 0.08).toFixed(2)}px ${(dy * CONVERGED_DISTANCE + uy * spread * 0.08).toFixed(2)}px`,
+          rotate: `${(tilt * 0.08).toFixed(2)}deg`,
+          scale: lerp(1, localScale, 0.78),
           opacity: 1,
-          offset: 0.82,
+          offset: CONVERGE_AT,
+          easing: 'cubic-bezier(.22,.32,.18,1)',
         },
         { translate: `${dx.toFixed(2)}px ${dy.toFixed(2)}px`, rotate: '0deg', scale: localScale, opacity: 0 },
       ], {
         duration: streamMs,
-        delay: this.ms(order * 16),
-        easing: 'cubic-bezier(.36,.02,.2,1)',
+        delay: order * stagger,
+        easing: 'linear',
       });
     };
     r.layers.forEach((layer, index) => {
-      stream.push(toPile(layer, DECK_LAYERS - 1 - index, pileScale, this.deckScale));
+      stream.push(toPile(layer, DECK_LAYERS - 1 - index, this.deckScale));
     });
 
     // The veil leaves while the cards are still travelling, so the pile receives them in the
     // already-visible game rather than behind a closed curtain.
     stream.push(this.animate(r.overlay, [{ opacity: 1 }, { opacity: 0 }], {
-      duration: this.ms(230),
-      delay: this.ms(320),
+      duration: this.ms(220),
+      delay: this.ms(380),
       easing: 'ease-out',
     }));
     await this.playAnimations(stream);
