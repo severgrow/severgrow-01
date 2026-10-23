@@ -1760,6 +1760,19 @@ const drawPileRect = (): DOMRect | null => {
   return rect && rect.width > 1 && rect.height > 1 ? rect : null;
 };
 
+/** One home tile as painted: the ritual places each dealt card beside its owner's own home. */
+const homeTileRect = (seat: Player): DOMRect | null => {
+  if (!session) return null;
+  try {
+    const key = coordKey(homeCoord(seat, session.state.config));
+    const hex = document.querySelector<SVGGraphicsElement>(`#board .hex-cell[data-key="${key}"] .hex`);
+    const rect = hex?.getBoundingClientRect();
+    return rect && rect.width > 1 && rect.height > 1 ? rect : null;
+  } catch {
+    return null;
+  }
+};
+
 /** One entry point for the ritual's presentation everywhere a match begins. */
 async function runStarterRitual(view: StarterRitualView): Promise<void> {
   await playStarterRitual({
@@ -1769,6 +1782,8 @@ async function runStarterRitual(view: StarterRitualView): Promise<void> {
     youLabel: 'You',
     opponentLabel: OPP.label,
     deckTarget: drawPileRect,
+    // Display seat 0 is always the local player (moss/tree), online and offline alike.
+    homeRects: () => ({ you: homeTileRect(HUMAN), opponent: homeTileRect(BOT) }),
   });
 }
 
