@@ -110,9 +110,9 @@ submenu arrives (`#menu-play` → `openPlayMenu` → `enterSurface`, 6px travel;
 down while it is open and `openPlayMenu` keeps `shownScreen === 'menu'` so a late boot show cannot
 tear it down). The pre-game card ritual and all gameplay animation are untouched.
 
-Read-outs are NOT animated. The chapter caption under `LEVEL <n>` in the PLAY submenu and the
-campaign line on the main menu are text that a screen change repaints; they carry no entrance of
-their own, so a slow layout can never make a read-out look like a control arriving.
+Read-outs are NOT animated. The chapter caption under `LEVEL <n>` in the PLAY submenu is text that
+the menu's own layout pass repaints; it carries no entrance of its own, so a slow layout can never
+make a read-out look like a control arriving.
 
 ### What the stills show (2026-10-23)
 
