@@ -1370,4 +1370,8 @@ export const ES: Dictionary = {
   "ui.coach.bullet.strengthen": "Refuerza la casilla que sostiene muchas otras.",
   "ui.coach.bullet.strangle": "Rodea el hogar {opp} para ganar al instante.",
   "ui.coach.bullet.planning": "Antes de un movimiento grande, mira qué pueden cortar.",
+  "ui.game.modeCampaign": "Campaña",
+  "ui.game.modeDuel": "Duelo",
+  "ui.game.modePractice": "Práctica",
+  "ui.game.yourTurnUpper": "TU TURNO",
 };

@@ -1372,4 +1372,8 @@ export const PL: Dictionary = {
   "ui.coach.bullet.strengthen": "Wzmacniaj kafel, który podtrzymuje wiele innych.",
   "ui.coach.bullet.strangle": "Otocz dom {opp}, by wygrać od razu.",
   "ui.coach.bullet.planning": "Przed dużym ruchem sprawdź, co może zostać odcięte.",
+  "ui.game.modeCampaign": "Kampania",
+  "ui.game.modeDuel": "Pojedynek",
+  "ui.game.modePractice": "Trening",
+  "ui.game.yourTurnUpper": "TWOJA TURA",
 };

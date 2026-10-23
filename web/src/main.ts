@@ -867,7 +867,7 @@ function syncResignMenu() {
 function syncMenuMode() {
   const el = document.getElementById('gm-mode');
   if (!el) return;
-  el.textContent = campaignLevel ? 'Campaign' : isOnlineDuel() ? 'Duel' : 'Practice';
+  el.textContent = campaignLevel ? t('ui.game.modeCampaign', 'Campaign') : isOnlineDuel() ? t('ui.game.modeDuel', 'Duel') : t('ui.game.modePractice', 'Practice');
 }
 
 let lessonChromeOn = false;
@@ -1411,6 +1411,26 @@ if (FEATURES.slimHeader) {
     history.addEventListener('click', () => sheet('sheet-history'));
   }
 }
+/**
+ * The HUD's turn line, from the live state — the ONE source the header and the pause read-out share.
+ * It is generated, never copied: a read-out that copied the header's DOM kept yesterday's language
+ * after a switch (and the header may be stale while the game is off-screen).
+ */
+function turnLineHtml(): string {
+  const st = session?.state;
+  if (!st) return '';
+  if (st.phase === 'GAME_OVER' && !busy()) return `<b>${t('ui.game.gameOver', 'Game over')}</b>`;
+  if (isOnlineDuel()) return '';
+  const thinkingNow = botBusy && st.turnPlayer === BOT;
+  const me = st.turnPlayer === HUMAN;
+  const word = me
+    ? (watching ? t('ui.game.greenTurn', 'Green turn (Level {level})', { level: watching.level }) : t('online.statusYourTurn', 'Your turn'))
+    : thinkingNow
+      ? `${t('ui.game.opponentTurn', '{opp} turn', { opp: OPP.label })}<span class="dots"><i></i><i></i><i></i></span>`
+      : t('ui.game.opponentTurn', '{opp} turn', { opp: OPP.label });
+  return `<b>${word}</b><small>${currentMatchLabel()}</small>`;
+}
+
 /** The test copy's menu: the scores and the turn, as the header used to show them. */
 function fillMenuStatus() {
   const you = document.getElementById('gm-score-you');
@@ -1418,8 +1438,15 @@ function fillMenuStatus() {
   you.textContent = $('score-you').textContent;
   $('gm-score-bot').textContent = $('score-bot').textContent;
   const turn = $('gm-turn');
-  turn.className = `gm-turn ${$('turn').className}`;
-  turn.innerHTML = $('turn').innerHTML;
+  if (session) {
+    turn.className = `gm-turn turn ${session.state.phase === 'GAME_OVER' && !busy() ? 'over' : session.state.turnPlayer === HUMAN ? 'you' : 'bot'}`;
+    turn.innerHTML = turnLineHtml();
+  } else {
+    turn.className = `gm-turn ${$('turn').className}`;
+    turn.innerHTML = $('turn').innerHTML;
+  }
+  const bot = document.querySelector('#gm-status .gm-bot small');
+  if (bot) bot.textContent = OPP.label;
   // Which level this is, where a paused player looks for it. A normal offline game keeps "Paused".
   const title = document.getElementById('gm-title');
   if (title) title.textContent = campaignLevel ? CAMPAIGN.levelLabel(campaignLevel.number) : t('ui.game.paused', 'Paused');
@@ -4229,7 +4256,7 @@ function tutorialFreePlayActive(): boolean {
 
 /** The free turn's step and its one line (logic/tutorial-script.ts freeTurnGuide). */
 function freeTurnGuideNow(): { title: string; line: string } {
-  if (!session) return { title: 'YOUR TURN', line: '' };
+  if (!session) return { title: t('ui.game.yourTurnUpper', 'YOUR TURN'), line: '' };
   const st = session.state;
   return freeTurnGuide({
     phase: st.phase,
@@ -5384,11 +5411,7 @@ function renderHud() {
   // (the turn pill here, and the pause sheet that copies this markup). Online the duel lane owns
   // the turn word; offline the pill says whose turn it is, and nothing else. The count was a
   // misleading upper bound (a match can end earlier by KO, an empty deck or a timeout).
-  turn.innerHTML = over
-    ? `<b>${t('ui.game.gameOver', 'Game over')}</b>`
-    : isOnlineDuel()
-      ? ''
-      : `<b>${st.turnPlayer === HUMAN ? (watching ? t('ui.game.greenTurn', 'Green turn (Level {level})', { level: watching.level }) : t('online.statusYourTurn', 'Your turn')) : thinking ? `${t('ui.game.opponentTurn', '{opp} turn', { opp: OPP.label })}<span class="dots"><i></i><i></i><i></i></span>` : t('ui.game.opponentTurn', '{opp} turn', { opp: OPP.label })}</b><small>${currentMatchLabel()}</small>`;
+  turn.innerHTML = turnLineHtml();
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');

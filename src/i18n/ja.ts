@@ -1368,4 +1368,8 @@ export const JA: Dictionary = {
   "ui.coach.bullet.strengthen": "多くのタイルを支える1枚を強化しましょう。",
   "ui.coach.bullet.strangle": "{opp}のホームを囲めば即勝利です。",
   "ui.coach.bullet.planning": "大きな手の前に、どこを切られるか確認しましょう。",
+  "ui.game.modeCampaign": "キャンペーン",
+  "ui.game.modeDuel": "対戦",
+  "ui.game.modePractice": "練習",
+  "ui.game.yourTurnUpper": "あなたの手番",
 };
