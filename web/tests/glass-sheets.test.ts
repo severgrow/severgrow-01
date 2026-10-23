@@ -32,3 +32,20 @@ describe('the screen behind an open sheet is veiled — and only when a sheet is
     expect(html).toMatch(/<div id="install-prompt" class="install-prompt" hidden data-ix-surface>[\s\S]{0,400}<section class="sheet install-sheet"/);
   });
 });
+
+describe('no frame around the glass, ever (owner, 2026-10-23)', () => {
+  it('the last word on every glass surface takes away the border and the edge line', () => {
+    const tail = css.slice(css.lastIndexOf('NO FRAME AROUND THE GLASS'));
+    expect(tail).toMatch(/html\.futasaku-product :is\(\.sheet, #sheet-menu, #gameover \.go-card, #play-menu \.levels-inner, #levels \.levels-inner\) \{\s*border: 0;\s*box-shadow: none;\s*\}/);
+    expect(tail).toMatch(/html\.futasaku-product #gameover \.go-card::before \{\s*display: none;/);
+    // nothing after it brings a frame back
+    expect(tail.slice(tail.indexOf('display: none;'))).not.toMatch(/border:\s*[1-9]/);
+  });
+  it('the glass rules themselves carry no frame', () => {
+    for (const re of [/#sheet-menu \{\n  --gm-pad[^}]*\}/, /html\.futasaku-product #gameover \.go-card \{[^}]*\}/, /html\.futasaku-product \.sheet \{[^}]*\}/, /html\.futasaku-product :is\(#play-menu, #levels\) \.levels-inner \{[^}]*\}/]) {
+      const rule = re.exec(css)?.[0] ?? '';
+      expect(rule.length, String(re)).toBeGreaterThan(0);
+      expect(rule, String(re)).not.toMatch(/border: 1px|box-shadow: inset/);
+    }
+  });
+});

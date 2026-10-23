@@ -1848,12 +1848,10 @@ html.game-veiled .scrim {
   right: 10px;
   bottom: max(10px, env(safe-area-inset-bottom));
   padding: 6px var(--gm-pad) 14px;
-  border: 1px solid color-mix(in srgb, var(--c-text) 10%, transparent);
   border-radius: calc(var(--radius) * 2);
   background: var(--gm-glass);
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
   backdrop-filter: blur(18px) saturate(1.15);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-text) 7%, transparent);
   /* A pause panel is brief by design: let it use the screen rather than scroll. */
   max-height: 94dvh;
   /* The panel rises in on the acknowledgement beat; translate and opacity only. */
@@ -7582,7 +7580,6 @@ html.futasaku-product #gameover .go-card {
   background: color-mix(in srgb, var(--c-surface) 72%, transparent);
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
   backdrop-filter: blur(18px) saturate(1.15);
-  border: 1px solid color-mix(in srgb, var(--c-text) 10%, transparent);
   border-radius: calc(var(--radius) * 2);
 }
 html.futasaku-product #gameover.won .go-title::after {
@@ -7623,8 +7620,6 @@ html.futasaku-product .sheet {
   background: color-mix(in srgb, var(--c-surface) 72%, transparent);
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
   backdrop-filter: blur(18px) saturate(1.15);
-  border: 1px solid color-mix(in srgb, var(--c-text) 10%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-text) 7%, transparent);
 }
 html.futasaku-product .sheet:not(#sheet-menu):not(.confirm-sheet) {
   left: 10px;
@@ -7667,7 +7662,25 @@ html.futasaku-product :is(#play-menu, #levels) .levels-inner {
   background: color-mix(in srgb, var(--c-surface) 72%, transparent);
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
   backdrop-filter: blur(18px) saturate(1.15);
-  border: 1px solid color-mix(in srgb, var(--c-text) 10%, transparent);
   border-radius: calc(var(--radius) * 2);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-text) 7%, transparent);
+}
+
+/* NO FRAME AROUND THE GLASS (owner, 2026-10-23: "no frames around the glass ever — no contour
+   thing"). The glass is defined by its blur and its shade alone: no border, no edge highlight, no
+   hairline drawn along its top. This is the last word on every glass surface, so the older rules
+   above (the wide-screen dialog's frame, the finish plate's frame and entering hairline, the
+   confirmation plate's frame) cannot bring one back. */
+html.futasaku-product :is(.sheet, #sheet-menu, #gameover .go-card, #play-menu .levels-inner, #levels .levels-inner) {
+  border: 0;
+  box-shadow: none;
+}
+html.futasaku-product #gameover .go-card::before {
+  display: none;
+}
+/* A sheet's title bar is part of the same glass, not a lighter band on top of it: it stays
+   see-through, and blurs whatever scrolls under it instead of covering it with a solid strip. */
+html.futasaku-product .sheet .sheet-head {
+  background: transparent;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
 }
