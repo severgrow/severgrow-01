@@ -108,12 +108,14 @@ try {
   // Start a fresh match again: its scoreboard must be zero, and the previous match's score
   // animation must not be able to write into it. Owner direction (2026-10-22): the pause face's
   // Restart resets THIS match in place (same tier, fresh seed) instead of walking out to the level
-  // grid, so the confirm is accepted when it is offered and the same board is ready again.
+  // grid. A confirmation appears ONLY when there is real progress to lose (main.ts
+  // `restartHasConsequence`: turn 2 or any history) — and this probe has just played a Sprout, so
+  // the sheet MUST be offered here. Asking "if offered" made the assertion depend on a driver
+  // accident; the move above is what makes the expectation true.
   await click('#hud-menu');
   await click('#gm-new');
-  if (await page.locator('#sheet-restart:not([hidden])').count()) {
-    await click('#restart-confirm');
-  }
+  await page.locator('#sheet-restart:not([hidden])').waitFor({ state: 'visible', timeout: 5000 });
+  await click('#restart-confirm');
   const restarted = await page.waitForFunction((seed: number) => {
     const game = (window as any).__severgrow;
     const s = game.state();
