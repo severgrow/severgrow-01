@@ -117,8 +117,20 @@ describe('the numbers are the Territory entry’s own reads, reused', () => {
 
 describe('the sheet speaks the pause panel’s language', () => {
   it('is a non-modal dialog labelled by its own title', () => {
-    expect(profileSection).toMatch(/id="sheet-profile" class="sheet" role="dialog" aria-labelledby="profile-title"/);
+    // Read the ATTRIBUTES, never one literal string (2026-10-22). The contract is "a sheet, a
+    // dialog, labelled by profile-title, not modal" — the byte order of those attributes is not
+    // part of it. The literal form broke the moment the interface-motion layer started marking
+    // surfaces (`data-ix-surface` inserted between `class` and `role`), which is exactly the kind
+    // of unrelated markup change this test must survive: it is about the reading, not the order.
+    const tag = /<section\b[^>]*\bid="sheet-profile"[^>]*>/.exec(profileSection)?.[0] ?? '';
+    expect(tag, 'the profile is a <section> with its own id').not.toBe('');
+    const attr = (name: string): string | null =>
+      new RegExp(`\\b${name}="([^"]*)"`).exec(tag)?.[1] ?? null;
+    expect(attr('class')?.split(/\s+/)).toContain('sheet');
+    expect(attr('role')).toBe('dialog');
+    expect(attr('aria-labelledby')).toBe('profile-title');
     // It traps nothing: no aria-modal on the profile.
+    expect(attr('aria-modal')).toBeNull();
     expect(profileSection).not.toContain('aria-modal');
     expect(profileSection).toContain('id="profile-title"');
   });

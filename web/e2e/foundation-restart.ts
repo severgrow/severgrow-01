@@ -106,15 +106,25 @@ try {
   await page.waitForFunction((n: number) => Number(document.querySelector('#score-you')?.textContent) > n, beforeScore, { timeout: 10000 });
 
   // Start a fresh match again: its scoreboard must be zero, and the previous match's score
-  // animation must not be able to write into it.
+  // animation must not be able to write into it. Owner direction (2026-10-22): the pause face's
+  // Restart resets THIS match in place (same tier, fresh seed) instead of walking out to the level
+  // grid. A confirmation appears ONLY when there is real progress to lose (main.ts
+  // `restartHasConsequence`: turn 2 or any history) — and this probe has just played a Sprout, so
+  // the sheet MUST be offered here. Asking "if offered" made the assertion depend on a driver
+  // accident; the move above is what makes the expectation true.
   await click('#hud-menu');
   await click('#gm-new');
-  await page.locator('#level-grid [data-difficulty="easy"]').waitFor({ state: 'attached' });
-  await click('#level-grid [data-difficulty="easy"]');
-  const restarted = await ready(scored.seed);
-  assert.notEqual(restarted.seed, scored.seed);
-  assert.equal(restarted.startingPlayer, startingPlayerFor(restarted.seed));
-  assert.notEqual(restarted.phase, 'GAME_OVER');
+  await page.locator('#sheet-restart:not([hidden])').waitFor({ state: 'visible', timeout: 5000 });
+  await click('#restart-confirm');
+  const restarted = await page.waitForFunction((seed: number) => {
+    const game = (window as any).__severgrow;
+    const s = game.state();
+    return !!s && s.seed !== seed && !game.busy();
+  }, scored.seed, { timeout: 20000 }).then(() => state());
+  assert(restarted, 'the restart opened a fresh match');
+  assert.notEqual(restarted!.seed, scored.seed);
+  assert.equal(restarted!.startingPlayer, startingPlayerFor(restarted!.seed));
+  assert.notEqual(restarted!.phase, 'GAME_OVER');
   assert.equal(await page.locator('#score-you').textContent(), '0', 'old score animation cannot overwrite new game');
   assert.deepEqual(errors, []);
   console.log('Fresh match cancels previous score count: passed');

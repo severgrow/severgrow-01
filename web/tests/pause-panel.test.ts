@@ -5,11 +5,14 @@
 // kinda lame — try to work on it a bit ... using the existing dark glass concept with the blurred,
 // darkened game interface under it". So the panel is now DARK GLASS over a veiled match: ONE lead
 // key, ONE pair of keys (New game, Main menu), the duel's own rows when they apply, and a quiet row
-// of icon tools (How to play, What happened, Report, Settings). `web/e2e/pause-panel.ts` measures the
-// built page; this test guards the markup and CSS that produce those numbers.
+// of icon tools (How to play, What happened, Report, Settings). Merged with the interface pass
+// (owner, 2026-10-23: "my look, keep their features"): the panel moves on the shared interface layer,
+// Restart resets the match in place, and a finished match never opens it. `web/e2e/pause-panel.ts`
+// measures the built page; this test guards the markup and CSS that produce those numbers.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { CAMPAIGN, PAUSE } from '../../src/strings.js';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const html = read('../index.html');
@@ -119,8 +122,12 @@ describe('the face keeps its palette and its tempo', () => {
     expect(literals.filter((c) => c.toLowerCase() !== '#f5d8a4'), 'only the light fallback may be a literal').toEqual([]);
   });
 
-  it('moves on the tempo tokens only, with transform-free motion', () => {
-    expect(bodyFor('#sheet-menu')).toContain('animation: gm-panel-in var(--dur-quick) var(--ease-standard)');
+  it('moves on the shared interface layer, and its own rules carry no raw durations', () => {
+    // One choreography per surface: the JS layer (web/src/ui/interface-motion.ts) animates the
+    // panel, and the CSS entrance is switched off for it.
+    expect(panel).toMatch(/<section id="sheet-menu"[^>]*data-ix-surface>/);
+    expect(styleCss).toMatch(/\.sheet,\s*#sheet-menu,[\s\S]{0,80}?\{\s*animation: none;/);
+    expect(mainSource).toMatch(/enterSurface\(next\);/);
     expect(panelCss).not.toMatch(/\b\d+(?:\.\d+)?(?:ms|s)\b/);
     expect(panelCss).not.toMatch(/cubic-bezier|ease-in-out|ease-out|\blinear\b/);
     expect(panelCss).not.toMatch(/@keyframes[^{]*\{[^}]*transform/);
@@ -134,22 +141,73 @@ describe('the face keeps its palette and its tempo', () => {
 });
 
 describe('the panel keeps the pause behaviour it borrowed', () => {
-  it('keeps the level label and the tutorial exit words on their existing elements', () => {
+  it('anchors the state in the heading and leaves the level to the kicker read-out', () => {
+    // Owner direction (2026-10-22): a pause is a state, so the heading says PAUSED offline and
+    // MATCH MENU online; a campaign level is named in the corner plate instead of the title.
     expect(panel).toContain('<h2 id="gm-title">Paused</h2>');
-    expect(mainSource).toMatch(/title\.textContent = campaignLevel \? CAMPAIGN\.levelLabel\(campaignLevel\.number\) : 'Paused'/);
+    expect(PAUSE.title).toBe('Paused');
+    expect(PAUSE.matchTitle).toBe('Match menu');
+    expect(mainSource).toMatch(/title\.textContent = isOnlineDuel\(\) \? PAUSE\.matchTitle : PAUSE\.title/);
+    // The tutorial exit keeps its own words and its own place above the lead key.
     expect(mainSource).toMatch(/exitBtn\.textContent = TUTORIAL\.exit/);
   });
 
-  it('names the mode as a small kicker over the title, never as a control', () => {
+  it('names the mode and the campaign level in the kicker over the title, never as a control', () => {
     expect(mainSource).toMatch(/function syncMenuMode\(\)/);
-    expect(mainSource).toMatch(/el\.textContent = campaignLevel \? 'Campaign' : isOnlineDuel\(\) \? 'Duel' : 'Practice'/);
+    expect(mainSource).toMatch(/el\.textContent = campaignLevel\s*\n?\s*\? CAMPAIGN\.levelLabel\(campaignLevel\.number\)/);
+    expect(mainSource).toMatch(/isOnlineDuel\(\) \? PAUSE\.duelMode : PAUSE\.practiceMode/);
+    // The corner reads the campaign's own label, not a second "Campaign" word that would compete
+    // with the level number the player actually needs.
+    expect(CAMPAIGN.levelLabel(12)).toBe('Level 12');
+    // A <p>, not a button: it is a read-out.
     expect(panel).toMatch(/<div class="gm-name">\s*<p class="gm-mode" id="gm-mode">/);
   });
 
+  it('makes Restart honest: the current match, never a silent trip to a level list', () => {
+    // The old key left for the level list under two different names ("New game"/"Back to levels").
+    // Owner brief 2026-10-22: Restart resets the match in place, with a confirmation only when
+    // there is real progress; a campaign keeps its deterministic seed, practice a fresh deal.
+    expect(mainSource).not.toMatch(/Start a new game\? This one will be lost/);
+    expect(mainSource).toMatch(/function requestRestart\(\)/);
+    expect(mainSource).toMatch(/function restartHasConsequence\(\)/);
+    expect(mainSource).toMatch(/campaign\.seed, campaign\.botLevel, null, campaign/);
+    expect(mainSource).toMatch(/startGame\(randomSeed\(\), level, null, null, difficulty\)/);
+    // Rapid taps are stopped by a state guard released by the new session, not by a timer.
+    expect(mainSource).toMatch(/if \(!session \|\| restarting \|\| isOnlineDuel\(\)\) return/);
+    expect(mainSource).toMatch(/restarting = false;/);
+    // A duel never offers Restart: it is hidden by the same paint that names the mode.
+    expect(mainSource).toMatch(/restart\.hidden = isOnlineDuel\(\) \|\| !!coach\.tutorial/);
+  });
+
   it('fills the read-out from the elements the slim header already updates', () => {
+    // The scores stay the HUD's own nodes, copied in; no second scoring path.
     expect(mainSource).toMatch(/you\.textContent = \$\('score-you'\)\.textContent/);
     expect(panel).toContain('id="gm-score-you"');
     expect(panel).toContain('id="gm-score-bot"');
     expect(panel).toContain('id="gm-turn"');
+  });
+
+  it('never lets the plate and the outcome share the screen', () => {
+    // Owner review 2026-10-23: a finished match showed "Paused" and "Settings" painted above the
+    // result card, because the HUD keys stay above the card and a tap opened the plate over it.
+    // Two locks: a finished match opens no menu, and a result puts any open plate away first.
+    expect(mainSource).toMatch(/const matchIsFinished = \(\): boolean => !\$\('gameover'\)\.hidden;/);
+    expect(mainSource).toMatch(/bind\('hud-menu', \(\) => \{ if \(!matchIsFinished\(\)\) sheet\('sheet-menu'\); \}\);/);
+    expect(mainSource).toMatch(/bind\('hud-history', \(\) => \{ if \(!matchIsFinished\(\)\) sheet\('sheet-history'\); \}\);/);
+    // The result is the authority: it cannot be painted under a plate, whatever opened it.
+    expect(mainSource).toMatch(/function putAwaySheetsForResult\(\): void \{/);
+    expect(mainSource).toMatch(/function presentResult\(go: HTMLElement, wasHidden: boolean\): void \{\n {2}putAwaySheetsForResult\(\);/);
+    // Putting the plate away also releases the pause it took (a finished match is not paused).
+    expect(mainSource).toMatch(/openSheet = null;\n {2}\$\('scrim'\)\.hidden = true;\n {2}setPaused\(false\);/);
+  });
+});
+
+describe('the icon tools keep their icons when the words are painted', () => {
+  it('paints the spoken label and the short word, never the whole button', () => {
+    expect(mainSource).toMatch(/tool\('gm-howto', HELP\.howToTitle, PAUSE\.howToShort\);/);
+    expect(mainSource).toMatch(/tool\('gm-history', PAUSE\.history, PAUSE\.historyShort\);/);
+    expect(mainSource).not.toMatch(/howto\.textContent =|history\.textContent = PAUSE\.history/);
+    expect(PAUSE.howToShort).toBe('Rules');
+    expect(PAUSE.historyShort).toBe('History');
   });
 });

@@ -16,6 +16,7 @@ import { legalActions, startingPlayerFor, viewFor } from '../../src/engine/index
 import type { Action, State } from '../../src/engine/index.js';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { MENU } from '../../src/strings.js';
+import { lessonFor, lessonOpening } from '../src/lessons/lessons.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
 
@@ -181,16 +182,22 @@ try {
     assert.equal(await tiles.count(), CAMPAIGN_LEVELS.length, 'the clone test left no tiles behind');
     await page.screenshot({ path: `${OUT}campaign-${vp.key}.png` });
 
-    // Level 1 opens on ITS seed and its authored (rock-free) board.
+    // Level 1 opens on ITS seed and its authored board. Levels 1-10 are the LESSONS (owner,
+    // 2026-10-22), so the tile starts the lesson's authored position and the match carries the
+    // LESSON's seed (96001) on the lesson's small map — never `CAMPAIGN_LEVELS[0].seed` (95001).
+    // `CAMPAIGN_LEVELS[0]` still names the level; `levelOpening` decides what the board is.
     const level1 = CAMPAIGN_LEVELS[0]!;
+    const lesson1 = lessonFor(level1.number);
+    const opening = lesson1 ? lessonOpening(lesson1) : null;
+    const openSeed = opening?.seed ?? level1.seed;
     await click(page, `#campaign .campaign-tile[data-level="${level1.id}"]`);
-    await page.waitForFunction((seed: number) => (window as any).__severgrow.state()?.seed === seed, level1.seed, { timeout: 20000 });
+    await page.waitForFunction((seed: number) => (window as any).__severgrow.state()?.seed === seed, openSeed, { timeout: 20000 });
     await waitIdle(page);
     const opened = (await stateOf(page))!;
-    assert.equal(opened.seed, level1.seed);
-    assert.equal(opened.config.board?.rock.length, 0, 'level 1 is the open board');
-    assert.equal(opened.config.board?.homes[0], '-2,2');
-    assert.ok(opened.startingPlayer === 0 || opened.startingPlayer === 1, 'the lottery picked a seat');
+    assert.equal(opened.seed, openSeed, `level ${level1.number} opens on its own opening seed (${openSeed})`);
+    assert.equal(opened.config.board?.rock.length, opening?.config.board?.rock.length ?? 0, 'the opening terrain is the level\'s own');
+    assert.equal(opened.config.board?.homes[0], opening?.config.board?.homes[0] ?? '-2,2');
+    assert.ok(opened.startingPlayer === 0 || opened.startingPlayer === 1, 'the opening has a starting seat');
     await page.screenshot({ path: `${OUT}level-${level1.number}-${vp.key}.png` });
 
     // Play a few real turns, then reload: the campaign match must resume as the SAME level.
@@ -214,12 +221,12 @@ try {
     assert.equal(await page.locator('#csa-resume').textContent(), `Continue level ${level1.number}`);
     assert.equal(await page.locator('#csa-start').textContent(), `Start level ${level1.number} over`);
     await click(page, '#csa-resume');
-    await page.waitForFunction((seed: number) => (window as any).__severgrow.state()?.seed === seed, level1.seed, { timeout: 20000 });
+    await page.waitForFunction((seed: number) => (window as any).__severgrow.state()?.seed === seed, openSeed, { timeout: 20000 });
     await waitIdle(page);
     const resumed = (await stateOf(page))!;
-    assert.equal(resumed.seed, level1.seed, 'the campaign match resumes');
-    assert.equal(resumed.config.board?.rock.length, 0, 'the resumed match keeps the LEVEL board');
-    assert.equal(resumed.config.board?.homes[0], '-2,2');
+    assert.equal(resumed.seed, openSeed, 'the campaign match resumes');
+    assert.equal(resumed.config.board?.rock.length, opening?.config.board?.rock.length ?? 0, 'the resumed match keeps the LEVEL board');
+    assert.equal(resumed.config.board?.homes[0], opening?.config.board?.homes[0] ?? '-2,2');
     // The resumed position is a real, continued game: at least as far as the state we reloaded from.
     assert.ok((resumed.history?.length ?? 0) >= 0 && (before.history?.length ?? 0) >= 0);
     assert.ok((resumed.history?.length ?? 0) > 0, 'the resumed match carries the moves played');
@@ -237,7 +244,7 @@ try {
     await page.waitForFunction(() => (window as any).__severgrow.state()?.phase === 'GAME_OVER', undefined, { timeout: 120000 });
     await page.waitForFunction(() => !document.getElementById('gameover')?.hidden, undefined, { timeout: 20000 });
     const finished = (await stateOf(page))!;
-    assert.equal(finished.seed, level1.seed);
+    assert.equal(finished.seed, openSeed);
     const sub = await page.locator('#go-sub').textContent();
     // The owner removed level and chapter NAMES from the finish screen (2026-10-16). The subtitle
     // now carries only the one useful note — what the win unlocked — and must never name the level.
@@ -269,11 +276,13 @@ try {
       await page.waitForFunction((seed: number) => {
         const s = (window as any).__severgrow.state();
         return !!s && s.seed === seed && s.phase !== 'GAME_OVER' && s.turnNumber === 1;
-      }, level1.seed, { timeout: 20000 });
+      }, openSeed, { timeout: 20000 });
       const restarted = (await stateOf(page))!;
-      assert.equal(restarted.seed, level1.seed, 'a replay uses the level seed, never a random one');
-      assert.equal(restarted.startingPlayer, startingPlayerFor(restarted.seed), 'the fixed opening seat');
-      assert.equal(restarted.config.board?.rock.length, 0);
+      assert.equal(restarted.seed, openSeed, 'a replay uses the level\'s own opening seed, never a random one');
+      // A lesson's opening seat is authored (you start), so the engine's seed lottery is not
+      // consulted; a level without a lesson still opens by `startingPlayerFor`.
+      assert.equal(restarted.startingPlayer, opening ? opening.startingPlayer : startingPlayerFor(restarted.seed), 'the fixed opening seat');
+      assert.equal(restarted.config.board?.rock.length, opening?.config.board?.rock.length ?? 0);
       console.log(`${vp.key}: level 1 won; unlock, states, the finish note and the fixed restart all pass`);
     } else {
       console.log(`${vp.key}: level 1 ended ${finished.result!.winner === null ? 'in a draw' : 'as a loss'}; unlock not exercised`);

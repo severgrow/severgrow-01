@@ -59,6 +59,10 @@ seat already set (`src/engine/match.ts`); the browser and `server-core` both use
 and the verifier can never disagree. Archived rule versions set `startingPlayerLottery: false` and
 always start with player 0, so old saves and replays still verify.
 
+The Who-starts ritual is presentation only: it deals two cards from its own nine-card deck — one
+card of every strength 1–9, colours random — so the two revealed numbers can never tie, and the
+higher card always belongs to the seat the engine (or the server) already chose.
+
 A match is reproducible from its **rules version + seed + config + starting-player result**:
 `matchSetup(seed, rulesVersion)` returns exactly that record, and `stateFromSetup` rebuilds the
 opening state from it.

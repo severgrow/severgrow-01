@@ -205,7 +205,15 @@
           <button id="play-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
           <h2 id="play-title">Play</h2>
         </header>
-        <div id="play-actions" class="menu-buttons"></div>
+        <div id="play-actions" class="menu-buttons">
+          <!-- The LEVEL <n> entry's own caption (owner review, 2026-10-23): how far through that
+               level's chapter the player is, e.g. "5 of 10 complete". main.ts moves it directly
+               under #menu-campaign at boot, so it reads as a detail OF that entry and never as a
+               fourth destination. It is a read-out, not a control: no frame, no tab stop, and
+               aria-live="off" so a menu visit is not announced. Empty until main.ts paints it from
+               real progress; hidden when there is no level to describe. -->
+          <p id="play-readout" class="play-readout" hidden aria-live="off"></p>
+        </div>
       </div>
     </section>
 
@@ -304,7 +312,7 @@
 
     <!-- Opponent found while playing the computer: gentle, dismissible, and it never loses the
          offline game (Continue keeps it). Reuses the online-card component, no new visual language. -->
-    <div id="online-matched" class="online-matched" role="dialog" aria-modal="false" aria-labelledby="online-matched-title" hidden>
+    <div id="online-matched" class="online-matched" data-ix-surface role="dialog" aria-modal="false" aria-labelledby="online-matched-title" hidden>
       <div class="online-card">
         <h3 id="online-matched-title">Opponent found</h3>
         <p id="online-matched-body" class="muted"></p>
@@ -487,7 +495,7 @@
     <!-- ===== Sheets and overlays ===== -->
     <div id="scrim" class="scrim" hidden></div>
 
-    <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+    <section id="sheet-settings" class="sheet" data-ix-surface role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
       <header class="sheet-head"><h2 id="settings-title" data-copy="title"></h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body">
         <!-- ESSENTIALS ONLY ON THE PRODUCT (owner, 2026-10-23: "settings is just essentials ... minimal").
@@ -579,7 +587,7 @@
              the DOM, so it is last in tab order.
          Nothing here scrolls; the layout is height-aware so every entry stays visible at 320x568
          and in landscape (see `#sheet-menu` in style.css). -->
-    <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
+    <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden data-ix-surface>
       <header class="sheet-head gm-head">
         <div class="gm-name">
           <p class="gm-mode" id="gm-mode">Practice</p>
@@ -595,19 +603,21 @@
             <span class="gm-bot"><b class="num" id="gm-score-bot">0</b><small></small></span>
           </div>
           <div class="gm-turn" id="gm-turn"></div>
+          <p id="gm-clock-note" class="gm-clock-note" hidden></p>
         </div>
         <!-- A lesson has TWO ways back (leave the tutorial, or return to it). They share one row, so
-             the extra key can never push the column into a scroll on a 320x568 phone; with one key
+             the extra key can never push the plate into a scroll on a 320x568 phone; with one key
              the row is simply full width. -->
         <div class="gm-leads">
           <button id="gm-exit-tutorial" class="btn primary gm-lead" type="button" aria-label="Exit tutorial" hidden>Exit tutorial</button>
-          <button id="gm-resume" class="btn primary gm-lead" type="button" aria-label="Back to the game">Back to the game</button>
+          <button id="gm-resume" class="btn primary gm-lead" type="button" aria-label="Resume">Resume</button>
         </div>
         <div class="gm-pair">
-          <button id="gm-new" class="btn ghost gm-act" type="button" aria-label="New game">New game</button>
+          <button id="gm-new" class="btn ghost gm-act" type="button" aria-label="Restart">Restart</button>
           <button id="gm-main" class="btn ghost gm-act" type="button" aria-label="Main menu">Main menu</button>
         </div>
-        <!-- The duel's rows (Leave live is inserted before Resign by online/live/ui.ts). -->
+        <!-- The duel's rows: Restart is hidden in a duel (a server match cannot be restarted by one
+             side), Resign is the honest way out, and the live module adds Leave live beside it. -->
         <div class="gm-acts">
           <button id="gm-resign" class="btn ghost gm-act" type="button" aria-label="Resign the duel" hidden>Resign</button>
         </div>
@@ -617,6 +627,19 @@
           <button id="gm-history" class="gm-tool" type="button" aria-label="What happened" hidden><span class="i" data-icon="history"></span><span class="gm-tool-word">History</span></button>
           <button id="gm-settings" class="gm-tool" type="button" aria-label="Settings"><span class="i" data-icon="gear"></span><span class="gm-tool-word">Settings</span></button>
         </nav>
+      </div>
+    </section>
+
+    <!-- Restart confirmation (owner direction, 2026-10-22). It is chained above the pause plate by
+         `sheet('sheet-restart')`, so Escape/Close/Keep playing return to the pause face and the
+         keyboard comes back to the key that asked. It only appears when there is real progress to
+         lose; a restart on a fresh turn happens at once. -->
+    <section id="sheet-restart" class="sheet confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="restart-title" hidden data-ix-surface>
+      <header class="sheet-head"><h2 id="restart-title">Restart this level?</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body stack">
+        <p id="restart-body" class="muted small"></p>
+        <button id="restart-confirm" class="btn primary" type="button">Restart</button>
+        <button id="restart-cancel" class="btn ghost" type="button">Keep playing</button>
       </div>
     </section>
 
@@ -654,7 +677,7 @@
       </div>
     </section>
 
-    <section id="sheet-campaign-start" class="sheet" role="dialog" aria-modal="true" aria-labelledby="csa-title" hidden>
+    <section id="sheet-campaign-start" class="sheet" data-ix-surface role="dialog" aria-modal="true" aria-labelledby="csa-title" hidden>
       <header class="sheet-head"><h2 id="csa-title">Your campaign match is unfinished.</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body stack">
         <p id="csa-body" class="muted"></p>
@@ -663,25 +686,25 @@
       </div>
     </section>
 
-    <section id="sheet-howto" class="sheet" role="dialog" aria-modal="true" aria-labelledby="howto-title" hidden>
+    <section id="sheet-howto" class="sheet" data-ix-surface role="dialog" aria-modal="true" aria-labelledby="howto-title" hidden>
       <header class="sheet-head"><h2 id="howto-title">How to play</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body prose" id="howto-body"></div>
     </section>
 
-    <section id="sheet-history" class="sheet" role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
+    <section id="sheet-history" class="sheet" data-ix-surface role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
       <header class="sheet-head"><h2 id="history-title">What happened</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body"><ol id="history" class="history"></ol></div>
     </section>
 
     <!-- ===== The pre-game card ritual =====
-         One static overlay for every match entry (offline and online): a deck arrives, shuffles,
-         deals one card to each seat, both reveal at once, and the higher card starts. The engine
-         (or the server) has already decided who starts; this only presents it. -->
-    <section id="starter-lottery" class="starter-lottery starter-ritual" role="dialog" aria-modal="true" aria-labelledby="lottery-title" aria-describedby="lottery-result" hidden>
+         One static overlay for every match entry (offline and online): a deck arrives, is cut and
+         riffled, deals one card beside each player's home, both reveal at once, and the higher card
+         starts. The engine (or the server) has already decided who starts; this only presents it.
+         Positions are measured from the rendered home tiles by `player/starter-ritual.ts`. -->
+    <section id="starter-lottery" class="starter-ritual" role="dialog" aria-modal="true" aria-label="Drawing cards to decide who starts" hidden>
       <div class="ritual-veil" aria-hidden="true"></div>
-      <div class="ritual-stage">
-        <p class="ritual-kicker" aria-hidden="true">Who starts</p>
-        <div id="lottery-deck" class="ritual-deck" aria-hidden="true">
+      <div id="lottery-deck-anchor" class="ritual-deck-anchor" aria-hidden="true">
+        <div id="lottery-deck" class="ritual-deck">
           <span class="ritual-deck-layer" data-i="0"><span class="card back"></span></span>
           <span class="ritual-deck-layer" data-i="1"><span class="card back"></span></span>
           <span class="ritual-deck-layer" data-i="2"><span class="card back"></span></span>
@@ -692,32 +715,25 @@
           <span class="ritual-deck-layer" data-i="7"><span class="card back"></span></span>
           <span class="ritual-deck-layer" data-i="8"><span class="card back"></span></span>
         </div>
-        <div id="lottery-lane-you" class="ritual-lane you">
-          <span id="lottery-you-label" class="ritual-lane-label">You</span>
-          <div class="ritual-slot">
-            <div id="lottery-card-you" class="ritual-card" aria-hidden="true">
-              <div id="lottery-inner-you" class="ritual-card-inner">
-                <div class="ritual-face back"><span class="card back"></span></div>
-                <div id="lottery-face-you" class="ritual-face front"></div>
-              </div>
-            </div>
+      </div>
+      <div id="lottery-lane-you" class="ritual-slot you" data-side="you">
+        <div id="lottery-card-you" class="ritual-card" role="img">
+          <div id="lottery-inner-you" class="ritual-card-inner">
+            <div id="lottery-back-you" class="ritual-face back"><span class="card back"></span></div>
+            <div id="lottery-face-you" class="ritual-face front"></div>
           </div>
         </div>
-        <div id="lottery-lane-opponent" class="ritual-lane opponent">
-          <span id="lottery-opponent-label" class="ritual-lane-label">Opponent</span>
-          <div class="ritual-slot">
-            <div id="lottery-card-opponent" class="ritual-card" aria-hidden="true">
-              <div id="lottery-inner-opponent" class="ritual-card-inner">
-                <div class="ritual-face back"><span class="card back"></span></div>
-                <div id="lottery-face-opponent" class="ritual-face front"></div>
-              </div>
-            </div>
+      </div>
+      <div id="lottery-lane-opponent" class="ritual-slot opponent" data-side="opponent">
+        <div id="lottery-card-opponent" class="ritual-card" role="img">
+          <div id="lottery-inner-opponent" class="ritual-card-inner">
+            <div id="lottery-back-opponent" class="ritual-face back"><span class="card back"></span></div>
+            <div id="lottery-face-opponent" class="ritual-face front"></div>
           </div>
         </div>
-        <div id="lottery-outcome" class="ritual-outcome">
-          <h2 id="lottery-title" class="ritual-title" aria-live="polite"></h2>
-          <p id="lottery-result" class="ritual-result"></p>
-        </div>
+      </div>
+      <div id="lottery-outcome" class="ritual-outcome">
+        <h2 id="lottery-title" class="ritual-title" aria-live="polite"></h2>
       </div>
     </section>
 
@@ -728,14 +744,19 @@
          and lives behind the single "More" disclosure below (main.ts drives it). A mode marks an
          extra as unavailable with `data-go-available="0"` (e.g. no big cut to replay), so the
          disclosure hides itself when there is nothing behind it. -->
-    <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden>
+    <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden data-ix-surface>
       <div class="go-card">
+        <div class="go-summary">
+        <!-- The context kicker (owner brief, 2026-10-22): LEVEL 12 above a loss. A campaign win
+             keeps its pinned sentence in #go-title and splits it visually; this line is empty then. -->
+        <p id="go-context" class="go-context" hidden></p>
         <h2 id="go-title" class="go-title"></h2>
         <p id="go-sub" class="go-sub"></p>
         <p id="go-learned" class="go-learned" hidden></p>
         <p id="go-seeds" class="muted small" hidden></p>
         <p id="go-score" class="go-score num"></p>
         <p id="go-reason" class="muted"></p>
+        </div>
         <p id="go-break" class="muted small" data-go-extra hidden></p>
         <p id="go-moves" class="muted small" data-go-extra hidden></p>
         <ul id="go-highlights" class="highlights" data-go-extra hidden></ul>
@@ -769,7 +790,7 @@
     <!-- Install invitation. Shown once the player has actually played (never in the menu, never
          during a match). It is a calm sheet that may open over the finish screen, so it carries
          its own dimmer and sits above it; the words come from src/strings.ts (INSTALL). -->
-    <div id="install-prompt" class="install-prompt" hidden>
+    <div id="install-prompt" class="install-prompt" hidden data-ix-surface>
       <div class="install-prompt-scrim" aria-hidden="true"></div>
       <section class="sheet install-sheet" role="dialog" aria-modal="true" aria-labelledby="install-title" tabindex="-1">
         <header class="sheet-head"><h2 id="install-title"></h2><button id="install-close" class="icon-only" type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>

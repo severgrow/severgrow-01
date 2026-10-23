@@ -241,6 +241,38 @@ export const ONLINE = Object.freeze({
   errResignFailed: 'Resign failed.',
 });
 
+/** The pause faceplate (owner direction, 2026-10-22). One set of words for both the offline pause
+ *  and the online match menu: a pause SUSPENDS a match; a match menu is still a live duel. The words
+ *  here are deliberately small and literal — no "quit", no "exit", no implied frozen clock. */
+export const PAUSE = Object.freeze({
+  /** Offline heading: the game quietly suspended itself. */
+  title: 'Paused',
+  /** Online heading: a menu over a match that is still running. */
+  matchTitle: 'Match menu',
+  /** The one dominant offline action. */
+  resume: 'Resume',
+  /** The one dominant online action: the match has not gone anywhere. */
+  returnToMatch: 'Return to match',
+  /** The secondary key's specific words; main.ts picks one by mode. */
+  restartLevel: 'Restart level',
+  restartMatch: 'Restart match',
+  restartLevelTitle: 'Restart this level?',
+  restartMatchTitle: 'Restart this match?',
+  restartLevelBody: 'The level starts again from its opening. Your progress in this level is lost.',
+  restartMatchBody: 'The match starts again with a fresh deal at the same difficulty. This game is lost.',
+  keepPlaying: 'Keep playing',
+  mainMenu: 'Main menu',
+  /** The compact turn-history helper (the reference's own title is HELP.howToTitle). */
+  history: 'What happened',
+  /** The words under the pause panel's icon tools (their spoken labels are the full names). */
+  howToShort: 'Rules',
+  historyShort: 'History',
+  practiceMode: 'Practice',
+  duelMode: 'Duel',
+  /** Online only: a truthful note over a match that is still live while the menu is open. */
+  clockRuns: 'The match clock keeps running.',
+});
+
 /**
  * The online duel header lane — the ONE place the strip's short words live (owner's cleanup,
  * 2026-10-14). The lane is a single fixed-height row that must never wrap or reach the board, so
@@ -335,6 +367,8 @@ export const RESULT = Object.freeze({
   more: 'More',
   /** The same disclosure once it is open. */
   less: 'Less',
+  /** The quiet way out of an offline result. (An online result uses `ONLINE.menuButton`.) */
+  backToMenu: 'Back to menu',
 });
 
 /**
@@ -877,10 +911,15 @@ export const FEEDBACK = Object.freeze({
   empty: 'Please write a few words first.',
   guideLink: 'Tester guide',
   close: 'Close',
-  /** The beta line on the main menu, between the wordmark and the buttons. */
   betaVersion: '0.6',
+  /**
+   * The beta line on the main menu, between the wordmark and the buttons. Owner direction
+   * (2026-10-23): the stamp reads "last update" and sits AFTER the sentence "beta version of an
+   * evolving game", not tucked inside the version bracket - so the sentence reads as one calm
+   * statement and the stamp is a trailing note about the build, not a parenthetical interruption.
+   */
   betaNote: (version: string, deployed: string | null = null) =>
-    `This is a beta version (${version}${deployed ? `, last deploy: ${deployed}` : ''}) of an evolving game. If you spot any problems or have suggestions for improvement,`,
+    `This is a beta version (${version}) of an evolving game${deployed ? `, last update: ${deployed}` : ''}. If you spot any problems or have suggestions for improvement,`,
   betaLink: 'let us know here.',
 });
 
@@ -1173,6 +1212,13 @@ export const CAMPAIGN = Object.freeze({
   locked: 'Locked',
   /** small progress line under the heading, e.g. "3 of 10 complete" */
   progress: (done: number, total: number): string => `${done} of ${total} complete`,
+  /**
+   * The caption under the PLAY submenu's LEVEL <n> key (owner direction, 2026-10-23): "3 of 10
+   * lessons completed". It is deliberately its own key rather than `progress`, because this line
+   * counts LESSONS in the level's own chapter (levels 1-10 are the tutorial), while the campaign
+   * screen's `progress` counts every level built. The line retires once the chapter is finished.
+   */
+  lessonsCompleted: (done: number, total: number): string => `${done} of ${total} lessons completed`,
   /** the chapter label, e.g. "Chapter I" (Roman numeral from the chapter number) */
   chapterName: (chapter: number): string =>
     `Chapter ${['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][chapter - 1] ?? chapter}`,

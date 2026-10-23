@@ -6,8 +6,15 @@
 // generation lives on the server and the online client never starts an offline match, so a campaign
 // config cannot reach an online board — `web/tests/campaign-seam.test.ts` pins both halves.
 import type { RulesConfig } from '../../../src/engine/index.js';
-import type { CampaignLevel, CampaignProgress } from '../../../src/campaign/index.js';
-import { CAMPAIGN_SAVE_KEY, LAST_MODE_KEY, CAMPAIGN_LEVELS, currentLevel, isCompleted } from '../../../src/campaign/index.js';
+import type { CampaignChapter, CampaignLevel, CampaignProgress } from '../../../src/campaign/index.js';
+import {
+  CAMPAIGN_CHAPTERS,
+  CAMPAIGN_SAVE_KEY,
+  LAST_MODE_KEY,
+  CAMPAIGN_LEVELS,
+  currentLevel,
+  isCompleted,
+} from '../../../src/campaign/index.js';
 import { SAVE_KEY } from './persist.js';
 
 export { CAMPAIGN_SAVE_KEY, LAST_MODE_KEY };
@@ -89,5 +96,26 @@ export const campaignEntry = (
   // `next` and `saved` may be the same level. The caller tells the two apart by comparing ids: the
   // same level asks continue-vs-start-over; a different one asks resume-saved-vs-start-next.
   return { kind: 'ask', next, saved: savedLevel };
+};
+
+/**
+ * How far the player is through the CHAPTER a level belongs to. The PLAY submenu's caption under
+ * LEVEL <n> is the one reader: the entry already says the level number, so the line says what the
+ * entry cannot — how much of that chapter is behind the player ("5 of 10 complete"). It counts from
+ * the same progress record the level list reads, and returns null when there is no level to describe
+ * (the entry opens the chapter list instead), so a caller can omit the line rather than invent one.
+ */
+export const chapterProgressFor = (
+  level: CampaignLevel | null,
+  progress: CampaignProgress,
+  chapters: readonly CampaignChapter[] = CAMPAIGN_CHAPTERS,
+): { done: number; total: number } | null => {
+  if (!level) return null;
+  const chapter = chapters.find((c) => c.number === level.chapter);
+  if (!chapter || chapter.levels.length === 0) return null;
+  return {
+    done: chapter.levels.filter((l) => isCompleted(progress, l.id)).length,
+    total: chapter.levels.length,
+  };
 };
 

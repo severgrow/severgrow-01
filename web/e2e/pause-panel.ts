@@ -181,6 +181,13 @@ const openPanel = async (page: Page, largeText: boolean, palette: string) => {
   await page.waitForTimeout(300);
   await page.locator('#levels .level-tile, #levels .difficulty-tile').nth(1).click({ force: true });
   await page.waitForSelector('#game:not([hidden])', { timeout: 25_000 });
+  // The pre-game starter ritual (2026-10-23) is an `aria-modal` surface that owns the first
+  // 1.8-3.6s of a match and deliberately swallows taps on `#hud-menu`. Wait for it to hand the
+  // board over before opening the pause panel: this suite measures the pause face, not the ritual.
+  await page.waitForFunction(() => {
+    const r = document.getElementById('starter-lottery');
+    return !r || r.hidden || !r.getClientRects().length;
+  }, undefined, { timeout: 12_000 }).catch(() => undefined);
   await page.waitForTimeout(2200);
   // The "who starts" ritual holds the menu until it lands; keep asking until the panel opens.
   for (let tries = 0; tries < 20 && !(await page.locator('#sheet-menu:not([hidden])').count()); tries++) {
@@ -268,6 +275,101 @@ for (const c of CASES) {
     `rows ${heights[0]}px; edges ${edge.left}..${edge.right}; title centre ${p.title.centre} (axis ${p.axis}); ` +
     `Settings ${p.settings.left}..${p.settings.right} y=${p.settings.top}, ${p.settings.h}px; mode "${p.mode.text}"`,
   );
+  await page.close();
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE RESULT AND THE PLATE NEVER SHARE THE SCREEN (owner review, 2026-10-23).
+//
+// The owner's desktop loss capture showed "Paused" and "Settings" painted above the outcome card:
+// the HUD keys sit above the result, and a tap opened the plate over a finished match. A finished
+// match has no menu to open, so this plays one out for real and proves the key does nothing.
+{
+  console.log('\nresult vs plate (1280x800)');
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.addInitScript(() => {
+    localStorage.setItem('severgrow.seen', '1');
+    // Speed skip: the point is the finished state, not the animation. The ritual still plays.
+    localStorage.setItem('severgrow.settings.v1', JSON.stringify({
+      sound: false, music: false, coach: false, speed: 'skip', reduceMotion: true,
+    }));
+    // Vite's bundle helper is referenced by class fields; a page evaluated by an init script must
+    // define it (the same shim the other suites use).
+    (window as unknown as { __name: (f: unknown) => unknown }).__name = (f: unknown) => f;
+  });
+  await page.goto(URL3, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#menu:not([hidden])', { timeout: 20_000 });
+  await page.waitForTimeout(400);
+  await page.click('#menu-play');
+  await page.waitForSelector('#play-menu:not([hidden])', { timeout: 10_000 });
+  await page.click('#menu-new');
+  await page.waitForSelector('#levels:not([hidden])', { timeout: 12_000 });
+  await page.waitForTimeout(300);
+  await page.locator('#levels .level-tile, #levels .difficulty-tile').nth(1).click({ force: true });
+  await page.waitForSelector('#game:not([hidden])', { timeout: 25_000 });
+  await page.waitForFunction(() => {
+    const r = document.getElementById('starter-lottery');
+    return !r || r.hidden || !r.getClientRects().length;
+  }, undefined, { timeout: 15_000 }).catch(() => undefined);
+  const idle = () => page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
+  await idle();
+  const read = () => page.evaluate(() => (window as unknown as { __severgrow: { state: () => { phase: string; actor: number } } }).__severgrow.state());
+
+  // Play only the human's turns; the computer takes its own, exactly as a player experiences it.
+  let waiting = 0;
+  for (let i = 0; i < 900; i++) {
+    const s = await read();
+    if (!s || s.phase === 'GAME_OVER') break;
+    await idle();
+    const now = (await read())!;
+    if (now.phase === 'GAME_OVER') break;
+    if (now.actor !== 0) {
+      if (++waiting > 400) break;
+      await page.waitForTimeout(50);
+      continue;
+    }
+    waiting = 0;
+    const legal = await page.evaluate(() => (window as unknown as { __severgrow: { legal: () => unknown[] } }).__severgrow.legal());
+    if (!legal.length) break;
+    const played = await page.evaluate(
+      (a) => (window as unknown as { __severgrow: { playFor: (x: unknown, p: number) => boolean } }).__severgrow.playFor(a, 0),
+      legal[0],
+    );
+    if (!played) break;
+  }
+  await idle();
+  await page.waitForTimeout(600);
+
+  const state = (await page.evaluate(() => {
+    const rects = (el: HTMLElement) => el.getClientRects().length;
+    return {
+      result: !document.getElementById('gameover')!.hidden,
+      plate: document.getElementById('sheet-menu')!.hidden || !rects(document.getElementById('sheet-menu')!),
+      sheets: [...document.querySelectorAll<HTMLElement>('.sheet')]
+        .filter((s) => !s.hidden && rects(s) && !s.classList.contains('install-sheet')).map((s) => s.id || '(no id)'),
+    };
+  })) as { result: boolean; plate: boolean; sheets: string[] };
+  check(state.result, 'finished: the outcome card is on screen');
+  check(state.plate, 'finished: the pause plate is not on screen beside it');
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, 'result-under-plate-1280x800.png') });
+
+  // The tap that used to paint "Paused" and "Settings" above the outcome.
+  await page.evaluate(() => (document.getElementById('hud-menu') as HTMLElement).click());
+  await page.waitForTimeout(500);
+  const after = await page.evaluate(() => {
+    const rects = (el: HTMLElement) => el.getClientRects().length;
+    return {
+      sheets: [...document.querySelectorAll<HTMLElement>('.sheet')]
+        .filter((s) => !s.hidden && rects(s) && !s.classList.contains('install-sheet')).map((s) => s.id || '(no id)'),
+      scrim: rects(document.getElementById('scrim')!),
+      blocked: document.documentElement.classList.contains('futa04-information-blocked'),
+    };
+  });
+  check(after.sheets.length === 0, `finished: the menu key opens nothing (${after.sheets.join(', ') || 'none'})`);
+  check(!after.scrim && !after.blocked, 'finished: no scrim and no blocked board, the result owns the screen');
+  check(errors.length === 0, `finished: no page errors (${errors.join(' | ')})`);
   await page.close();
 }
 

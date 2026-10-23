@@ -1,8 +1,11 @@
 // The pre-game card ritual's PRESENTATION layer.
 //
 // Who starts is decided by the engine (`startingPlayerFor` / `newMatch`, and by the server for an
-// online duel). This module never decides it. It only chooses two distinct playing-card faces that
-// represent that already-decided result: the starter's card is always the higher one.
+// online duel). This module never decides it. It deals two cards from the ritual's own nine-card
+// deck that represent that already-decided result: the starter's card is always the higher one.
+//
+// The deck holds exactly one card of each strength 1..9 (colours are random), so two drawn numbers
+// are always different and a draw on numbers is impossible by construction, not by a check.
 //
 // Consequences that matter:
 //   * it is pure and deterministic (same key -> same faces), so a replay or a refreshed online
@@ -20,6 +23,9 @@ import type { Player, Suit } from '../../../src/engine/index.js';
 
 export type RitualCard = { readonly suit: Suit; readonly rank: number };
 
+/** Nine cards: one of every strength 1..9. The deck's size is the ritual's whole fairness story. */
+export const RITUAL_DECK_SIZE = 9;
+
 export type StarterRitualView = {
   /** The card this device's player drew. */
   readonly you: RitualCard;
@@ -27,6 +33,12 @@ export type StarterRitualView = {
   readonly opponent: RitualCard;
   /** Which side the engine (or server) says starts; never inferred from the cards. */
   readonly starter: 'you' | 'opponent';
+  /**
+   * The ritual deck in stacking order, bottom first. The two dealt cards are its last two entries,
+   * so the cards on the table are literally the top of this deck — and nine cards are accounted
+   * for at every moment of the ritual.
+   */
+  readonly deck: readonly RitualCard[];
 };
 
 /** A stable string key for the offline ritual. One key per match seed. */
@@ -61,46 +73,64 @@ const boundedInt = (next: () => number, n: number): number => {
 };
 
 /**
- * Two distinct faces, assigned to the two seats. The starter's rank is strictly higher, so a tie is
- * impossible and the reveal can never contradict who actually moves first.
+ * The ritual's deck, shuffled deterministically from the match key.
+ *
+ * One card of every strength 1..9, each with a random colour. A strength never appears twice, so
+ * the two cards dealt can never show the same number. The order is a Fisher–Yates shuffle over the
+ * same stream, so the two seats see the same deal and a replay or a refreshed online client can
+ * never disagree about it.
  */
-export const starterRitualCards = (key: string, starter: Player): readonly [RitualCard, RitualCard] => {
+export const starterRitualDeck = (key: string): readonly RitualCard[] => {
   if (!key) throw new Error('starter ritual key must not be empty');
   const next = mulberry32(hashKey(key));
+  const deck: RitualCard[] = [];
+  for (let rank = 1; rank <= RITUAL_DECK_SIZE; rank++) {
+    deck.push({ suit: boundedInt(next, 4) as Suit, rank });
+  }
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = boundedInt(next, i + 1);
+    const swapped = deck[i]!;
+    deck[i] = deck[j]!;
+    deck[j] = swapped;
+  }
+  return deck;
+};
 
-  // Two distinct ranks from 1..9, uniform over ordered pairs. The pair is then sorted: the higher
-  // rank is the starter's. Doing it this way keeps every rank pair equally likely, while the
-  // assignment of "high" to the starter is fixed by the engine's result, not by chance here.
-  const first = 1 + boundedInt(next, 9);
-  // Map 0..7 onto 1..9 without landing on `first`: 1..8 shifted up by one from `first` onwards.
-  const secondBase = boundedInt(next, 8) + 1;
-  const second = secondBase >= first ? secondBase + 1 : secondBase;
-  const high = Math.max(first, second);
-  const low = Math.min(first, second);
-
-  const suit0 = boundedInt(next, 4) as Suit;
-  const suit1 = boundedInt(next, 4) as Suit;
+/**
+ * The two cards dealt off the top of the deck, assigned to the two seats. Both come from the deck
+ * (so their colours and numbers are the deck's own), the numbers always differ, and the starter's
+ * card is the higher of the two — the reveal can never contradict who actually moves first.
+ */
+const dealFrom = (deck: readonly RitualCard[], starter: Player): readonly [RitualCard, RitualCard] => {
+  const first = deck[deck.length - 1]!;
+  const second = deck[deck.length - 2]!;
+  const high = first.rank > second.rank ? first : second;
+  const low = first.rank > second.rank ? second : first;
   const other: Player = starter === 0 ? 1 : 0;
 
-  const cards: [RitualCard, RitualCard] = [
-    { suit: suit0, rank: starter === 0 ? high : low },
-    { suit: suit1, rank: starter === 1 ? high : low },
-  ];
+  const cards: [RitualCard, RitualCard] = [starter === 0 ? high : low, starter === 1 ? high : low];
   // A belt-and-braces invariant: this module's whole job is that the higher card belongs to the
-  // starter. If a future edit ever breaks it, fail loudly instead of showing a lie.
+  // starter, and that the two numbers differ. If a future edit ever breaks either, fail loudly
+  // instead of showing a lie (or a draw).
   if (!(cards[starter].rank > cards[other].rank)) {
     throw new Error('starter ritual cards must put the higher rank on the starting seat');
   }
   return cards;
 };
 
-/** The same two cards, from one seat's point of view. */
+/** The two dealt cards for a match, without the rest of the deck. */
+export const starterRitualCards = (key: string, starter: Player): readonly [RitualCard, RitualCard] =>
+  dealFrom(starterRitualDeck(key), starter);
+
+/** The same two cards, from one seat's point of view, with the deck they were taken from. */
 export const starterRitualView = (key: string, starter: Player, me: Player): StarterRitualView => {
-  const cards = starterRitualCards(key, starter);
+  const deck = starterRitualDeck(key);
+  const cards = dealFrom(deck, starter);
   const them: Player = me === 0 ? 1 : 0;
   return {
     you: cards[me],
     opponent: cards[them],
     starter: starter === me ? 'you' : 'opponent',
+    deck,
   };
 };
