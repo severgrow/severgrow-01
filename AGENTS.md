@@ -34,8 +34,8 @@ For UI changes also run the relevant `web/e2e/futa04-*.ts` suite with Chromium. 
 
 ## Localisation (read before touching player-facing text)
 
-Futasaku ships English, Polish, Spanish and Japanese. Read `docs/LOCALISATION.md`; the terminology
-source of truth is `docs/LOCALISATION-GLOSSARY.md`.
+Futasaku ships English, Polish, Spanish and Japanese on the 0.6 line (`futa0.5-online`). Read
+`docs/LOCALISATION.md`; the terminology source of truth is `docs/LOCALISATION-GLOSSARY.md`.
 
 - **Never change English copy as part of a translation task.** English is canonical; dictionaries
   follow it. Propose copy changes separately.

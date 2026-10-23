@@ -5,6 +5,9 @@ canonical source; the other three are written as native game copy, not as transl
 word order. Portuguese (Brazil), French and German are reserved by the architecture but are **not**
 selectable until their dictionaries are complete.
 
+Baseline: **Futasaku 0.6**, the live line `futa0.5-online` at `ccb4d2d` (the deploy of 22 Oct 2026,
+22:00). Everything below applies to that build.
+
 This document is the practical guide. `docs/LOCALISATION-GLOSSARY.md` is the terminology source of
 truth. `docs/LOCALISATION-COVERAGE.md` lists every surface checked and the known exceptions.
 
@@ -151,17 +154,19 @@ The reserved codes are already listed in `RESERVED_LOCALES` so tests can prove t
   Do not concatenate translated fragments; use `{placeholders}` or a function message.
 - **New strings in `src/strings.ts`:** keep the English object exactly as it is; wrap the export in
   `localized('groupName', EN_GROUP)`. The i18n coverage test will list every missing key.
-- **Pre-game starting-player animation:** use the existing semantic keys
-  `online.starterYou` (“You start”), `online.starterOpponent` (“Opponent starts”),
-  `online.scoreYou` (“You”), `online.scoreOpponent` (“Opponent”), and their screen-reader variants.
-  The animation implementation is untouched by this branch.
+- **Pre-game card ritual (0.6):** the overlay already speaks through `online.starterYou`
+  (“You start”), `online.starterOpponent` (“{opp} starts”), `online.scoreYou` (“You”),
+  `online.scoreOpponent` (“Opponent”), `ui.game.whoStarts`, `ui.ritual.youHigher`,
+  `ui.ritual.oppHigher`. The ritual implementation is untouched by this branch; a new line added
+  there follows the normal `t()` rule.
 - **Tutorial/onboarding:** levels 1–10 are the tutorial and use `src/strings.ts` `LESSON`/`ONBOARD`
   keys, which are already localised. New level copy should be added as semantic keys, never as
   language-specific branches in UI code.
 - **Files this branch touched:** `src/strings.ts` (localised views), `src/playtest/names.ts`,
   `web/index.html`, `web/src/main.ts`, `web/src/logic/{hint,log,endgame,race,emptyturn,tips,
-  forecast,match-intel,howto-reference,interaction}.ts`, `web/src/player/*` and `web/src/online/*`
-  copy surfaces. Merge conflicts are most likely in those files; take the other agent's gameplay
+  forecast,match-intel,howto-reference,interaction,difficulty}.ts`, `web/src/player/*`
+  (`starter-ritual`, `display-machine`, `led-cells`, `smart-cockpit`, `help`), `web/src/online/*`
+  and `web/src/accounts/{mount,profile,menu-key}`, `web/src/feedback/*` copy surfaces. Merge conflicts are most likely in those files; take the other agent's gameplay
   change and re-apply the `t()` wrapper around the new English text.
 
 ## Release checklist

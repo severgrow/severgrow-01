@@ -1,6 +1,7 @@
 # Localisation coverage report
 
-Baseline: branch `feature/futasaku-i18n`, from `futa0.5-levels-31-70` at `5daa8ea`.
+Baseline: **Futasaku 0.6**, branch `feature/futasaku-i18n-06`, from the live line
+`futa0.5-online` at `ccb4d2d` (deployed 22 Oct 2026, 22:00).
 Languages: **en**, **pl**, **es**, **ja**. Reserved, not exposed: pt-BR, fr, de.
 
 ## Covered player-facing surfaces
@@ -8,12 +9,16 @@ Languages: **en**, **pl**, **es**, **ja**. Reserved, not exposed: pt-BR, fr, de.
 | Surface | Status | Notes |
 |---|---|---|
 | Main menu, PLAY submenu, Continue/Resume | ✅ | Static markup + `MENU` / `CAMPAIGN` keys |
+| Menu footer (account key + Settings), beta line and deploy time | ✅ | `menu.footerLabel`, `PROFILE.open`, `FEEDBACK.betaNote`; the deploy date is formatted in the locale's own calendar |
 | Corner language control | ✅ | Native names, low-opacity type, keyboard listbox |
 | Settings sheet (all labels, groups, hints) | ✅ | `SETTINGS` group; segmented values localised |
 | Settings: training difficulty labels | ✅ | Easy / Medium / Hard |
 | First-run welcome card | ✅ | `WELCOME` group |
 | Tutorial chapters (legacy Pro run) | ⚠️ not translated | Hidden on the product channel; levels 1–10 are the tutorial. See exceptions. |
-| Campaign levels 1–10 (the tutorial) | ✅ | Every `LESSON` / `ONBOARD` title, line and wrong-tap answer |
+| Campaign levels 1–10 (the tutorial) | ✅ | Every 0.6 `LESSON` line (LED action line + info plate), `START AGAIN`, `YOU LEARNED` and the wrong-tap answers |
+| Pre-game card ritual | ✅ | Kicker, both seat labels, “You start” / “{opp} starts”, and the higher-card line |
+| Profile sheet (name, sign-in, Seeds, tiles, wins) | ✅ | `PROFILE` group; unknown values stay an em dash |
+| Territory FIT control, rematch-waiting screen | ✅ | `online.worldFit(L)` and `online.rematchWaiting*` |
 | Campaign levels 11–70 | ✅ | Gameplay UI, record of moves, results |
 | Level list, Resume/Continue dialog, progress | ✅ | `CAMPAIGN` group, chapter titles/subtitles |
 | Gameplay HUD, turn pill, score bar | ✅ | `ONLINE`/`HEADER` groups and UI keys |

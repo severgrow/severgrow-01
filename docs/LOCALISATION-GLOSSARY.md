@@ -37,6 +37,7 @@ for the Bomb; it is never used in player copy.
 | Defeat | You lost | Przegrywasz | Has perdido | 負けました | |
 | Draw (result) | No winner | Remis | Empate | 引き分け | Distinct from the Draw action |
 | Play offline | Against the computer, no network | Gra offline | Jugar sin conexión | オフラインで遊ぶ | |
+| Practice match | The offline tier picker (0.6 wording; no longer “Training”) | Gra treningowa | Partida de práctica | 練習対戦 | `menu.training`, `result.practice` |
 | Play online | Online duels | Gra online | Jugar en línea | オンライン対戦 | |
 | You start | You take the first turn | Ty zaczynasz | Empiezas tú | あなたが先手 | Also the pre-game animation |
 | Opponent starts | The other side takes the first turn | Przeciwnik zaczyna | Empieza tu rival | 相手が先手 | Also the pre-game animation |
