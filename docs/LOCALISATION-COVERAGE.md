@@ -99,3 +99,20 @@ Built with `CHANNEL=futa04`, served locally, driven by Playwright + Google Chrom
 - reload persistence of the manual language choice.
 
 Results are recorded in the PR/commit notes. No real-device Safari or Android test was performed.
+
+### English parity (0.6)
+
+The English screens were compared against an untouched build of `ccb4d2d`, driven by the same
+script: menu, PLAY submenu, Settings, Profile, pause panel and the first lesson (plate, cockpit
+display, turn line, mode word). **Every compared string is identical**; the only addition is the
+corner language control itself, which is the feature.
+
+### Automated results on this baseline
+
+- `npm run typecheck` (root, web, admin): pass.
+- `CHANNEL=futa04 npm run web:build` and `check-channel-assets.mjs`: pass.
+- Unit suite: **2601 passed**, 2 failed, both fixed by the final commit (`pause-panel` asserted the
+  old literal source around the same English copy); 54 skipped (environment/database gated).
+- `web/e2e/futa04-information.ts`: 168 checks passed.
+- `web/e2e/futa04-tutorial-flow.ts`: complete tutorial, touch free turn and eight responsive
+  layouts passed.
