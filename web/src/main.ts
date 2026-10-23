@@ -260,7 +260,7 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 // The Futasaku channels keep Settings to the essentials (owner, 2026-10-23); see parseSettings.
 let settings: Settings = parseSettings(store.get(SETTINGS_KEY), systemReduce(), IS_FUTA04);
-if (IS_FUTA04) document.documentElement.classList.add('settings-essentials');
+if (IS_FUTA04) document.documentElement.classList.add('settings-essentials', 'futasaku-product');
 let stats = parseStats(store.get(STATS_KEY));
 const SEEN_KEY = 'severgrow.seen';
 const SMOOTH_KEY = 'severgrow.smoother';
@@ -823,6 +823,7 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
     }
   }
   $('gameover').hidden = true;
+  syncVeil();
   render();
   // The seat anchor is placed whenever the map band becomes visible; from then on only a layout
   // or resize moves it (`applyLayout` schedules it when its key changes).
@@ -910,6 +911,17 @@ function restoreSheetFocus() {
 const sheetReturns: { to: string; focus: HTMLElement | null }[] = [];
 
 /** The one opener/closer of a sheet. `sheet()` decides where a close RETURNS before calling this. */
+/**
+ * THE VEIL (owner, 2026-10-23): on the Futasaku channels, while a sheet (the pause panel, or one it
+ * opened) or the finish card is up over a match, the match is blurred and darkened beneath the dark
+ * glass (html.game-veiled in style.css). Called wherever either of them opens or closes.
+ */
+function syncVeil() {
+  const inMatch = !$('game').hidden;
+  const over = !!openSheet || !$('gameover').hidden;
+  document.documentElement.classList.toggle('game-veiled', IS_FUTA04 && inMatch && over);
+}
+
 function openSheetNow(id: string | null, wasOpen: boolean) {
   if (id && glassSurface?.isOpen()) {
     glassSurface.hide();
@@ -932,6 +944,7 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
   }
   else if (id === null) setPaused(false);
   $('scrim').hidden = !openSheet;
+  syncVeil();
   if (openSheet) {
     openSheet.hidden = false;
     if (id === 'sheet-settings') syncSettingsForm();
@@ -6894,6 +6907,7 @@ function renderGameOver() {
     const wasHidden = go.hidden;
     const show = !!info && !gameOverDismissed && !$('game').hidden;
     go.hidden = !show;
+    syncVeil();
     if (!show || !info || !os) return;
     // A duel settles its own wallet server-side and this card has never carried a seed line; clear
     // the paragraph the three modes SHARE, so an offline award cannot leak onto a duel's result.
@@ -6960,6 +6974,7 @@ function renderGameOver() {
   const show = !!st && st.phase === 'GAME_OVER' && !!st.result && !busy() && !gameOverDismissed && !$('game').hidden;
   if (go.hidden === !show) return;
   go.hidden = !show;
+  syncVeil();
   if (!show || !st?.result) return;
   const r = st.result;
   const won = r.winner === HUMAN;
@@ -8125,6 +8140,7 @@ function tearDownOnlineDuel(): void {
 bind('go-other', () => {
   flushInstallInvite();
   $('gameover').hidden = true;
+  syncVeil();
   if (isOnlineDuel()) {
     // "Back to matches": the same one teardown, then the hub. Hiding #game is the same guard the
     // rematch uses — a stray resize render must never paint the finished board's overlay here.
@@ -8479,6 +8495,7 @@ bind('go-rematch', () => {
     // fresh match is created and the existing invite/share screen is shown. Hiding #game keeps a
     // stray resize render from painting the finished board's overlay over the opaque invite screen.
     $('gameover').hidden = true;
+    syncVeil();
     $('game').hidden = true;
     // The finished duel's id, read BEFORE the teardown clears the session: the server pairs both
     // players' presses on it (a mutual rematch, 2026-10-22).
@@ -8498,6 +8515,7 @@ bind('go-rematch', () => {
     const next = nextCampaignLevel(campaignLevel.number);
     if (next) return startCampaignLevel(next);
     $('gameover').hidden = true;
+    syncVeil();
     return showScreen('campaign');
   }
   // A campaign retry restarts the SAME level from its fixed seed (never a random one).
@@ -8512,6 +8530,7 @@ bind('go-board', () => {
 });
 bind('go-menu', () => {
   $('gameover').hidden = true;
+  syncVeil();
   // Leaving a duel must tear the session down, exactly like Back to matches (the match stays
   // resumable on the server).
   if (isOnlineDuel()) tearDownOnlineDuel();

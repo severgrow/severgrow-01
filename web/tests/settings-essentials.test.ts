@@ -52,7 +52,7 @@ describe('the Futasaku Settings sheet holds the essentials only', () => {
   });
 
   it('the product channels hide the classic nodes and the report key, and say so in one class', () => {
-    expect(main).toMatch(/if \(IS_FUTA04\) document\.documentElement\.classList\.add\('settings-essentials'\)/);
+    expect(main).toMatch(/if \(IS_FUTA04\) document\.documentElement\.classList\.add\('settings-essentials'/);
     expect(style).toMatch(/html\.settings-essentials #sheet-settings \[data-only="classic"\],\s*html\.settings-essentials #settings-report \{\s*display: none !important;/);
   });
 

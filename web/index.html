@@ -567,21 +567,24 @@
       </div>
     </section>
 
-    <!-- The pause panel, as ONE machine face (owner direction, 2026-10-20: between the old menu,
-         the Instrument and the Bare Rail). The parts, top to bottom:
-           - an engraved nameplate: the amber power lamp, the title (Paused / LEVEL n), and Close;
-           - the instrument read-out: both scores on either side of a centre hairline, the turn
-             under them — it is a read-out, never a control;
-           - the lead key: Back to the game (Exit tutorial in a lesson, above it);
-           - the quiet action column, one hairline between rows;
-           - the corner plate: the mode word on the left, SETTINGS as the small utility key on the
-             right. Settings is LAST in the DOM so it is last in tab order, and it is a full 44px
-             target under its small label.
+    <!-- The pause panel (owner, 2026-10-23: "even tho reworked is kinda lame"): dark glass over the
+         game, which blurs and darkens behind it (html.game-veiled). Top to bottom:
+           - the nameplate: the mode word as a small kicker over the title (Paused / LEVEL n), Close;
+           - the read-out: both scores either side of a centre hairline, the turn under them;
+           - the lead key: Back to the game (Exit tutorial beside it in a lesson);
+           - one pair of keys: New game and Main menu;
+           - the duel's own rows when they apply (Leave live, Resign), as a pair;
+           - the tool row: How to play, What happened, Report a problem (added by the feedback
+             module) and Settings, as quiet icon keys with a word under each. Settings is LAST in
+             the DOM, so it is last in tab order.
          Nothing here scrolls; the layout is height-aware so every entry stays visible at 320x568
          and in landscape (see `#sheet-menu` in style.css). -->
     <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
       <header class="sheet-head gm-head">
-        <h2 id="gm-title">Paused</h2>
+        <div class="gm-name">
+          <p class="gm-mode" id="gm-mode">Practice</p>
+          <h2 id="gm-title">Paused</h2>
+        </div>
         <button class="icon-only gm-close" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
       </header>
       <div class="sheet-body gm-body">
@@ -600,18 +603,20 @@
           <button id="gm-exit-tutorial" class="btn primary gm-lead" type="button" aria-label="Exit tutorial" hidden>Exit tutorial</button>
           <button id="gm-resume" class="btn primary gm-lead" type="button" aria-label="Back to the game">Back to the game</button>
         </div>
-        <div class="gm-acts">
+        <div class="gm-pair">
           <button id="gm-new" class="btn ghost gm-act" type="button" aria-label="New game">New game</button>
-          <button id="gm-howto" class="btn ghost gm-act" type="button" aria-label="How to play">How to play</button>
-          <!-- Product channels only (the slim header); main.ts reveals it. -->
-          <button id="gm-history" class="btn ghost gm-act" type="button" aria-label="What happened" hidden>What happened</button>
-          <button id="gm-resign" class="btn ghost gm-act" type="button" aria-label="Resign the duel" hidden>Resign</button>
-          <button id="gm-main" class="btn ghost gm-act gm-act-quiet" type="button" aria-label="Main menu">Main menu</button>
+          <button id="gm-main" class="btn ghost gm-act" type="button" aria-label="Main menu">Main menu</button>
         </div>
-        <footer class="gm-foot">
-          <p class="gm-mode" id="gm-mode">Practice</p>
-          <button id="gm-settings" class="btn ghost gm-key" type="button" aria-label="Settings">Settings</button>
-        </footer>
+        <!-- The duel's rows (Leave live is inserted before Resign by online/live/ui.ts). -->
+        <div class="gm-acts">
+          <button id="gm-resign" class="btn ghost gm-act" type="button" aria-label="Resign the duel" hidden>Resign</button>
+        </div>
+        <nav class="gm-tools" aria-label="More">
+          <button id="gm-howto" class="gm-tool" type="button" aria-label="How to play"><span class="i" data-icon="help"></span><span class="gm-tool-word">Rules</span></button>
+          <!-- Product channels only (the slim header); main.ts reveals it. -->
+          <button id="gm-history" class="gm-tool" type="button" aria-label="What happened" hidden><span class="i" data-icon="history"></span><span class="gm-tool-word">History</span></button>
+          <button id="gm-settings" class="gm-tool" type="button" aria-label="Settings"><span class="i" data-icon="gear"></span><span class="gm-tool-word">Settings</span></button>
+        </nav>
       </div>
     </section>
 

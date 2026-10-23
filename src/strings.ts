@@ -843,6 +843,8 @@ export const LIVE = Object.freeze({
  */
 export const FEEDBACK = Object.freeze({
   open: 'Report a problem',
+  /** The pause panel's tool key carries a one-word label under its flag (owner, 2026-10-23). */
+  openShort: 'Report',
   title: 'Report a problem',
   prompt: 'What happened? What did you expect?',
   placeholder: 'e.g. After my Bloom the board froze and I could not throw.',
