@@ -834,8 +834,6 @@ export const LIVE = Object.freeze({
   rematch: 'Rematch',
   rematchWaiting: (name: string, _secs: number) => `Rematch? Waiting for ${name}`,
   close: 'Close',
-  allowChallenges: 'Allow real time challenges',
-  allowChallengesHelp: 'Off: you show as Not available.',
   failed: 'Could not start real time right now.',
 });
 

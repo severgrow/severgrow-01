@@ -84,7 +84,6 @@ ${glassBaseCss('.acct-glass')}
 #acct-settings .acct-who { margin:0; font-weight:700; color:var(--ink, #f0e9dc); }
 #acct-settings p { margin:0; }
 #acct-settings .acct-actions.row { justify-content:flex-start; }
-body.acct-on #online-storage-note { display:none; }
 .acct-toast { position:fixed; z-index:96; left:50%; top:calc(env(safe-area-inset-top, 0px) + 14px); transform:translateX(-50%);
   width:min(420px, calc(100vw - 32px)); box-sizing:border-box; padding:12px 14px; border-radius:14px; background:rgba(8,10,10,.92);
   border:1px solid rgba(214,204,177,.25); color:#f0e9dc; font:400 14px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); text-align:center; }
@@ -571,10 +570,11 @@ export const mountAccounts = async (): Promise<void> => {
   });
 
   // ---- 5. the Account block in Settings ----
-  const note = document.getElementById('online-storage-note');
+  // Settings is essentials only (owner, 2026-10-23); the account is one of them: its own last group.
   const box = el('div');
   box.id = 'acct-settings';
-  note?.after(box);
+  const accountHead = el('h3', '', ACCOUNT.settingsTitle);
+  document.querySelector('#sheet-settings .sheet-body')?.append(accountHead, box);
 
   const ask = (title: string, lines: readonly string[], yes: string, danger: boolean, run: (status: HTMLElement, yesBtn: HTMLButtonElement) => Promise<boolean>) => {
     confirmSheet.panel.textContent = '';

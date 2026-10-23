@@ -82,7 +82,6 @@ describe('the mode is "Real time" everywhere a player can read it', () => {
       LIVE.leaveWarningHelp,
       LIVE.endedTitle,
       LIVE.rematchWaiting('Fern', 60),
-      LIVE.allowChallenges,
       LIVE.failed,
     ];
     for (const text of strings) expect(text, text).not.toMatch(OLD);

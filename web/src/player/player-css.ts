@@ -275,8 +275,13 @@ html[data-thumb] .dock-overlays > .coach {
 .idle-tip.instant.on {
   transition: none;
 }
-.thumb-settings h3 {
+.thumb-settings:not(.thumb-settings-last) h3 {
   margin-top: 4px;
+}
+/* On the Futasaku channels the Phone group comes after Comfort (owner, 2026-10-23): it takes the
+   sheet's own heading and row spacing, like the groups above it. */
+.thumb-settings.thumb-settings-last {
+  display: contents;
 }
 
 /* ---- thumb layout v2 ---- */

@@ -490,7 +490,13 @@
     <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
       <header class="sheet-head"><h2 id="settings-title" data-copy="title"></h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body">
-        <!-- OWNER DIRECTION (2026-10-17): "settings should hold only essentials". The surface is
+        <!-- ESSENTIALS ONLY ON THE PRODUCT (owner, 2026-10-23: "settings is just essentials ... minimal").
+             On the Futasaku channels (futasaku.com and its copies) every node marked
+             data-only="classic" is hidden (html.settings-essentials, style.css) and those options are
+             fixed defaults (logic/settings.ts parseSettings(..., essentialsOnly)): the sheet is Sound,
+             Vibration (hidden where the phone cannot vibrate), Reduce motion, Large text, then Hand
+             side (player/thumb.ts) and Account (accounts/mount.ts). The classic line keeps all of it.
+             OWNER DIRECTION (2026-10-17): "settings should hold only essentials". The surface is
              now the things a player changes while playing — colours, sound, comfort, and the two
              playing choices. EVERYTHING else sits in two folded groups: "More options" (look, motion
              and volume detail) and "More playing options" (the teaching aids). Nothing was deleted
@@ -498,19 +504,19 @@
              main.ts currentAdvice). Reduce motion and Large text MUST stay outside every group —
              they are accessibility, not clutter. The phone layout rows are injected at the top of
              this body by player/thumb.ts. -->
-        <h3 data-copy="lookHeading"></h3>
-        <div class="row"><span data-copy="colours"></span><div class="seg" role="radiogroup" aria-label="Colours" id="palette-seg"></div></div>
+        <h3 data-copy="lookHeading" data-only="classic"></h3>
+        <div class="row" data-only="classic"><span data-copy="colours"></span><div class="seg" role="radiogroup" aria-label="Colours" id="palette-seg"></div></div>
         <h3 data-copy="soundHeading"></h3>
         <label class="row"><span data-copy="sound"></span><input type="checkbox" data-setting="sound" /></label>
-        <label class="row"><span data-copy="music"></span><input type="checkbox" data-setting="music" /></label>
-        <label class="row"><span id="vibration-label"></span><input type="checkbox" data-setting="vibration" /></label>
+        <label class="row" data-only="classic"><span data-copy="music"></span><input type="checkbox" data-setting="music" /></label>
+        <label class="row" id="vibration-row"><span id="vibration-label"></span><input type="checkbox" data-setting="vibration" /></label>
         <h3 data-copy="motionHeading"></h3>
         <label class="row"><span data-copy="reduceMotion"></span><input type="checkbox" data-setting="reduceMotion" /></label>
         <label class="row"><span data-copy="largeText"></span><input type="checkbox" data-setting="largeText" /></label>
-        <h3 data-copy="playingHeading"></h3>
-        <div class="row"><span data-copy="confirmMoves"></span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
-        <label class="row"><span data-copy="autoSkip"></span><input type="checkbox" data-setting="autoSkip" /></label>
-        <details class="settings-lab" id="settings-look">
+        <h3 data-copy="playingHeading" data-only="classic"></h3>
+        <div class="row" data-only="classic"><span data-copy="confirmMoves"></span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
+        <label class="row" data-only="classic"><span data-copy="autoSkip"></span><input type="checkbox" data-setting="autoSkip" /></label>
+        <details class="settings-lab" id="settings-look" data-only="classic">
           <summary><span><strong data-copy="lookGroup"></strong><small data-copy="lookGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
           <div class="lab-inside">
             <div class="row"><span data-copy="materialDetail"></span><div class="seg" role="radiogroup" aria-label="Material detail" id="detail-seg"></div></div>
@@ -527,7 +533,7 @@
             <p id="test-note" class="muted small"></p>
           </div>
         </details>
-        <details class="settings-lab" id="settings-help">
+        <details class="settings-lab" id="settings-help" data-only="classic">
           <summary><span><strong data-copy="helpGroup"></strong><small data-copy="helpGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
           <div class="lab-inside">
             <!-- the Step guidance row is injected here by player/guide.ts -->
@@ -537,9 +543,9 @@
             <button id="restart-tutorial" class="btn ghost small" type="button" data-copy="restartTutorial"></button>
           </div>
         </details>
-        <h3>Online</h3>
-        <p id="online-storage-note" class="muted small">Your online matches live on this device until accounts exist.</p>
-        <div id="online-link-block" class="online-link-block" hidden>
+        <h3 data-only="classic">Online</h3>
+        <p id="online-storage-note" class="muted small" data-only="classic">Your online matches live on this device until accounts exist.</p>
+        <div id="online-link-block" class="online-link-block" data-only="classic" hidden>
           <p class="muted small" id="online-link-help">Creates a one-time code (10 minutes). It never moves your existing token.</p>
           <button id="online-link-make" class="btn ghost small" type="button">Make a link code</button>
           <label class="row" for="online-link-redeem-input"><span>Enter a link code</span>
@@ -548,7 +554,7 @@
           <button id="online-link-redeem" class="btn ghost small" type="button">Use code</button>
           <p id="online-link-status" class="muted small" role="status"></p>
         </div>
-        <details id="settings-lab" class="settings-lab">
+        <details id="settings-lab" class="settings-lab" data-only="classic">
           <summary><span class="lab-sigil" aria-hidden="true"></span><span><strong>Lab</strong><small>20 ways to tune the same game</small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
           <div class="lab-inside">
             <p>Small experiments made from the controls already inside Futasaku. Try one; your original setup stays ready to restore.</p>

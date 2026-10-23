@@ -258,7 +258,9 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 // ---------- settings ----------
 
-let settings: Settings = parseSettings(store.get(SETTINGS_KEY), systemReduce());
+// The Futasaku channels keep Settings to the essentials (owner, 2026-10-23); see parseSettings.
+let settings: Settings = parseSettings(store.get(SETTINGS_KEY), systemReduce(), IS_FUTA04);
+if (IS_FUTA04) document.documentElement.classList.add('settings-essentials');
 let stats = parseStats(store.get(STATS_KEY));
 const SEEN_KEY = 'severgrow.seen';
 const SMOOTH_KEY = 'severgrow.smoother';
@@ -277,6 +279,16 @@ let labBaseline: Settings | null = (() => {
     return value && typeof value === 'object' && !Array.isArray(value) ? parseSettings(savedLabBase, systemReduce()) : null;
   } catch { return null; }
 })();
+// The Futasaku channels have no Lab any more (owner, 2026-10-23). A player who left an experiment on
+// gets their own essentials back once, from the setup saved before the experiment.
+if (IS_FUTA04 && labBaseline) {
+  const base = labBaseline;
+  settings = { ...settings, sound: base.sound, vibration: base.vibration, reduceMotion: base.reduceMotion, largeText: base.largeText };
+  labBaseline = null;
+  store.remove(LAB_BASE_KEY);
+  store.remove(LAB_ACTIVE_KEY);
+  store.set(SETTINGS_KEY, JSON.stringify(settings));
+}
 let labActiveId = labBaseline ? store.get(LAB_ACTIVE_KEY) : null;
 let labCategory: LabCategory = LAB_PRESETS.find((preset) => preset.id === labActiveId)?.category ?? 'surface';
 // A previous automatic "Smoother mode" could leave this preview on Low effects. Restore
@@ -1123,6 +1135,8 @@ function syncSettingsForm() {
   const vib = document.querySelector<HTMLInputElement>('[data-setting="vibration"]')!;
   vib.disabled = !('vibrate' in navigator);
   $('vibration-label').textContent = vib.disabled ? SETTINGS.vibrationOff : SETTINGS.vibration;
+  // On the Futasaku channels a phone that cannot vibrate does not show the row at all (owner, 2026-10-23).
+  $('vibration-row').hidden = IS_FUTA04 && vib.disabled;
   for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]')) {
     input.checked = !!settings[input.dataset.setting as keyof Settings];
   }

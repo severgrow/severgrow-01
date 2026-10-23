@@ -6920,3 +6920,11 @@ html.futa04-branding[data-layout='side'] .dock {
 @keyframes lesson-pile-low { 50% { text-shadow: 0 0 3px rgba(255, 200, 90, .4); } }
 .reduce-motion #deck.lesson-pile-low .pile-count { animation: none; }
 @media (prefers-reduced-motion: reduce) { #deck.lesson-pile-low .pile-count { animation: none; } }
+
+/* SETTINGS ARE ESSENTIALS ON THE FUTASAKU CHANNELS (owner, 2026-10-23). main.ts sets the class there;
+   every Settings node marked data-only="classic" (index.html), and the report key the feedback
+   module adds, belong to the classic line only. */
+html.settings-essentials #sheet-settings [data-only="classic"],
+html.settings-essentials #settings-report {
+  display: none !important;
+}
