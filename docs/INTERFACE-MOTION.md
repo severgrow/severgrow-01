@@ -116,8 +116,9 @@ make a read-out look like a control arriving.
 
 ### What the stills show (2026-10-23)
 
-`docs/screens/interface/` is one JPEG format in both sets (2x, quality 88, captured from the real
-app with Reduce motion on): `before/` is the 0.6 base, `after/` is the shipped layout. The result
+`docs/screens/interface/` is one PNG format in both sets (2x, captured from the built app with
+Reduce motion on, after the pre-game ritual has handed the board over): `before/` is the 0.6 base,
+`after/` is the shipped layout. The result
 plate's vertical balance was measured, not eyeballed — at 390x844 the plate went 492 → 453px and
 its lockup's centre 54% → 58% of the frame; at 1280x800, 489 → 450px and 51% → 56%. The two quiet
 ways out now share one row, which is where the height came from, so the plate covers LESS board

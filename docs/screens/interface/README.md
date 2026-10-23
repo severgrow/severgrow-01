@@ -19,8 +19,9 @@ The before set predates the pass; the after set was taken with the final CSS and
 motion itself is measured, not inferred from stills: see the open/close samples in the hand-off
 notes and `web/tests/interface-motion.test.ts`.
 
-**Format (2026-10-23):** one format for both sets — JPEG, quality 88, 2× device scale. The earlier
-two passes had left a mix of `.png` and `.jpg` in `after/`; everything here is `.jpg` now, so a
-reviewer can flip between `before/` and `after/` without a converter. `*-victory` and `*-defeat`
-were re-captured for the result plate's balance pass (the plate is ~40px shorter and its lockup
-sits lower); the other moments were unchanged by it.
+**Format (2026-10-23):** one format for both sets — PNG, 2× device scale. The after set was
+re-generated from a `CHANNEL=futa04` build of the shipped tree, with Reduce motion on and the
+pre-game starter ritual allowed to hand the board over before the game and pause frames (otherwise
+the still would catch the ritual overlay). `before/` is the same 0.6 baseline, re-encoded
+losslessly from its JPEG captures into the one PNG format; nothing was cropped or rescaled. No
+`foo.png` + `foo.jpg` pairs remain.
