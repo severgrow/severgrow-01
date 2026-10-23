@@ -1039,6 +1039,18 @@ export const PROFILE = Object.freeze({
   matchesWon: 'Matches won',
   /** An em dash is a FACT: this value is not known. It is never a made-up 0. */
   unknown: '—',
+  /** Player stats (owner, 2026-10-23): the record against the computer, kept on this device. */
+  playTitle: 'Your games',
+  playNote: 'Against the computer, on this device',
+  games: 'Games',
+  winRate: 'Win rate',
+  streak: 'Win streak',
+  /** The streak tile's label once there is a record: the value is the current run. */
+  streakBest: (best: number): string => `Win streak · best ${best}`,
+  bestScore: 'Best score',
+  favourite: 'Favourite move',
+  longestBloom: 'Longest Bloom',
+  tilesCount: (n: number): string => `${n} tile${n === 1 ? '' : 's'}`,
 });
 
 /**

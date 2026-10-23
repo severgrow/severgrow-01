@@ -76,6 +76,7 @@ import { howToReferenceHtml } from './logic/howto-reference.js';
 import { mountInstallPrompt } from './logic/install.js';
 import { mountAppWindowButton } from './logic/app-window.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
+import { PLAY_KEY, parsePlay, recordPlay } from './logic/play-record.js';
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 // LEVEL_INFO is deliberately NOT imported: its names (the classic bot levels' labels) were only
@@ -2456,6 +2457,8 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
       // The install invitation counts EVERY finished game — offline here, online at the finish
       // screen — and never a tutorial step (the guard above already excludes the tutorial).
       noteFinishedForInstall(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
+      // Player stats in the profile: this game's moves join the record (logic/play-record.ts).
+      store.set(PLAY_KEY, JSON.stringify(recordPlay(parsePlay(store.get(PLAY_KEY)), p.after.history ?? [], HUMAN)));
       // The one-game carry-over, earned by this finished game: a win steps the training tier's next
       // game one bot level UP, a loss one DOWN (and never outside the tier). Anything else clears
       // that tier's pending step. Online duels and campaigns carry a null tier, so they never write.

@@ -120,6 +120,8 @@ const device = async (opts: { w: number; h: number; signedIn: boolean }) => {
       ([prefix]) => {
         localStorage.clear();
         localStorage.setItem(`${prefix}severgrow.duel.identity.v1`, JSON.stringify({ token: 'fixture-token', playerId: 'fixture-player', displayName: 'Ann', kind: 'account' }));
+        localStorage.setItem(`${prefix}severgrow.stats.v1`, JSON.stringify({ played: 12, wins: 7, losses: 5, draws: 0, best: 31, streak: 2, bestStreak: 4 }));
+        localStorage.setItem(`${prefix}severgrow.play.v1`, JSON.stringify({ grow: 140, bloom: 22, bomb: 9, blast: 2, longestBloom: 5 }));
         localStorage.setItem(`${prefix}futasaku.account.v1`, JSON.stringify({ provider: 'google', email: 'ann@gmail.com', playerId: 'fixture-player' }));
       },
       [PREFIX] as const,

@@ -15,6 +15,8 @@ import { glassBaseCss } from '../player/glass-surface.js';
 import { installProfileUI } from './profile.js';
 import { GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
 import type { ProfileFacts } from './profile.js';
+import { PLAY_KEY, parsePlay, playRows } from '../logic/play-record.js';
+import { STATS_KEY, parseStats } from '../logic/stats.js';
 import {
   WELCOME_KEY,
   authorizeUrl,
@@ -540,6 +542,15 @@ export const mountAccounts = async (): Promise<void> => {
    * matches-won line has no player-facing source in this build (the server's win count is
    * admin-only), so its fact is honestly null and the panel renders an em dash.
    */
+  /** This device's saved record (the game writes it under the same keys); blocked storage reads as none. */
+  const readLocal = (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  };
+
   const profileFacts = (identity: Identity): ProfileFacts => {
     const pair = cachedTerritory(identity.playerId);
     return {
@@ -548,6 +559,7 @@ export const mountAccounts = async (): Promise<void> => {
       seeds: pair?.seeds ?? null,
       tiles: pair?.tiles ?? null,
       matchesWon: null,
+      play: playRows(parseStats(readLocal(STATS_KEY)), parsePlay(readLocal(PLAY_KEY))),
     };
   };
 

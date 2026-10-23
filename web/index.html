@@ -644,6 +644,13 @@
           <div class="sp-row"><dt>Tiles</dt><dd id="profile-tiles">—</dd></div>
           <div class="sp-row"><dt>Matches won</dt><dd id="profile-wins">—</dd></div>
         </dl>
+        <!-- Player stats (owner, 2026-10-23): the record against the computer, filled by
+             web/src/accounts/profile.ts from web/src/logic/play-record.ts. -->
+        <div class="sp-play">
+          <h3 id="profile-play-title" class="sp-play-title">Your games</h3>
+          <dl id="profile-play" class="sp-play-grid" aria-labelledby="profile-play-title"></dl>
+          <p id="profile-play-note" class="sp-play-note"></p>
+        </div>
       </div>
     </section>
 

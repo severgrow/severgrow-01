@@ -14,6 +14,7 @@
 // map read, cached by web/src/online/territory-cache.ts); matches won has no player-facing source
 // in this build, so its fact is honestly null.
 import { PROFILE } from '../../../src/strings.js';
+import type { PlayRow } from '../logic/play-record.js';
 import { SEEDS_WORD } from '../online/seed-icon.js';
 
 export type ProfileFacts = {
@@ -27,6 +28,8 @@ export type ProfileFacts = {
   tiles: number | null;
   /** Finished online matches this player won, or null when there is no source for it. */
   matchesWon: number | null;
+  /** Player stats (owner, 2026-10-23): the record against the computer, as `playRows` words it. */
+  play?: readonly PlayRow[];
 };
 
 export type ProfileRow = Readonly<{ label: string; value: string }>;
@@ -84,12 +87,33 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     if (label) dt.textContent = label;
   });
 
+  const playTitle = doc.getElementById('profile-play-title');
+  if (playTitle) playTitle.textContent = PROFILE.playTitle;
+  const playNote = doc.getElementById('profile-play-note');
+  if (playNote) playNote.textContent = PROFILE.playNote;
+  const playGrid = doc.getElementById('profile-play');
+
   const fill = (facts: ProfileFacts) => {
     const rows = profileRows(facts);
     rows.forEach((row, index) => {
       const el = values[index];
       if (el) el.textContent = row.value;
     });
+    if (playGrid) {
+      playGrid.replaceChildren(
+        ...(facts.play ?? []).map((row) => {
+          const tile = doc.createElement('div');
+          tile.className = 'sp-tile';
+          const dt = doc.createElement('dt');
+          dt.textContent = row.label;
+          const dd = doc.createElement('dd');
+          dd.textContent = row.value;
+          tile.append(dt, dd);
+          return tile;
+        }),
+      );
+      playGrid.parentElement!.hidden = !facts.play?.length;
+    }
   };
 
   const close = () => {

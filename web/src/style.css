@@ -7084,3 +7084,74 @@ html.futasaku-product.reduce-motion .gameover.won .go-title::after {
 .go-review-keys .btn {
   min-height: 48px;
 }
+
+/* PLAYER STATS in the profile (owner, 2026-10-23): the record against the computer as a compact
+   grid of tiles under the five identity lines — the same neutral digits and small tracked caps. */
+#sheet-profile .sp-play {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sp-hair);
+}
+#sheet-profile .sp-play[hidden] {
+  display: none;
+}
+#sheet-profile .sp-play-title {
+  margin: 0 0 10px;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--c-muted);
+}
+#sheet-profile .sp-play-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+#sheet-profile .sp-tile {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 60px;
+  padding: 8px 4px;
+  border: 1px solid var(--sp-hair);
+  border-radius: var(--radius);
+  text-align: center;
+}
+#sheet-profile .sp-tile dd {
+  max-width: 100%;
+  text-align: center;
+  font-size: 1.05rem;
+}
+#sheet-profile .sp-tile dt {
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+}
+#sheet-profile .sp-play-note {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  text-align: center;
+  color: var(--c-muted);
+}
+/* Landscape phones: the identity lines and the record sit side by side, so nothing scrolls. */
+@media (max-height: 520px) and (min-width: 560px) {
+  #sheet-profile:has(.sp-play:not([hidden])) {
+    width: min(760px, 100% - 32px);
+  }
+  #sheet-profile:has(.sp-play:not([hidden])) .sp-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 20px;
+    max-width: none;
+  }
+  #sheet-profile .sp-play {
+    margin-top: 0;
+    padding-top: 6px;
+    border-top: 0;
+  }
+}
