@@ -78,9 +78,8 @@ export const ONLINE = Object.freeze({
   worldHeld: (filled: number, cells: number) => `${filled} of ${cells} tiles grown`,
   worldError: 'Could not read the map. Try again.',
   // THE FIT TOGGLE (owner, 2026-10-21: "keep it large and pannable in both axes, with a 'fit'
-  // toggle"). Plain words for the screen reader label, and the one short word the button shows.
+  // toggle"). Plain words for the screen reader label; the button shows a magnifying glass (2026-10-23).
   worldFit: 'Fit the whole map',
-  worldFitLabel: 'FIT',
   /** the Seeds invitation card's button that opens the Territory (uppercase, like its LATER sibling) */
   worldInviteOpen: 'OPEN TERRITORY',
   playWithFriend: 'Play with a friend',

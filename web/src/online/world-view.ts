@@ -30,6 +30,12 @@ const X = Math.sqrt(3);
  */
 const PAD = 18;
 /**
+ * THE FIT VIEW'S EDGE, in world units (owner, 2026-10-23: "max zoom out leaves minimal margin on
+ * the sides of the whole map"). Zoomed all the way out nothing is panned, so the large view's PAD
+ * gutter is not needed: the silhouette is framed with just this hairline of sea (~4px on a phone).
+ */
+const FIT_EDGE = 3;
+/**
  * THE SMALLEST A CELL MAY BE DRAWN in the large view, in CSS pixels. The owner's touch minimum is
  * 44px; one hex is √3·R = 17.32 world units wide, so the framed view is capped at the width that
  * keeps a cell at 46px — two pixels of headroom over the minimum, for stroke and rounding. FIT mode
@@ -317,7 +323,8 @@ export class WorldView {
    */
   private boundsFor(aspect: number): [number, number, number, number] | null {
     if (!this.fit || !Number.isFinite(aspect) || aspect <= 0) return null;
-    const [fx, fy, fw, fh] = this.fit;
+    const inset = PAD - FIT_EDGE;
+    const [fx, fy, fw, fh] = [this.fit[0] + inset, this.fit[1] + inset, this.fit[2] - 2 * inset, this.fit[3] - 2 * inset];
     let w = fh * aspect, h = fh;
     if (w > fw) { w = fw; h = fw / aspect; }
     return [fx + (fw - w) / 2, fy + (fh - h) / 2, w, h];
@@ -346,12 +353,13 @@ export class WorldView {
   }
   /**
    * THE FIT VIEW: the smallest rect with the panel's own aspect that CONTAINS the whole fit box.
-   * The silhouette is entirely on screen with `PAD` as a visible frame — hexes are small here, and
+   * The silhouette is entirely on screen with only FIT_EDGE of sea around it — hexes are small here, and
    * that is expected (the owner: "with a 'fit' toggle"). Used only while `fitted` is on.
    */
   private containFor(aspect: number): [number, number, number, number] | null {
     if (!this.fit || !Number.isFinite(aspect) || aspect <= 0) return null;
-    const [fx, fy, fw, fh] = this.fit;
+    const inset = PAD - FIT_EDGE;
+    const [fx, fy, fw, fh] = [this.fit[0] + inset, this.fit[1] + inset, this.fit[2] - 2 * inset, this.fit[3] - 2 * inset];
     let w = fw, h = fh;
     if (fw / fh > aspect) h = fw / aspect; else w = fh * aspect;
     return [fx + (fw - w) / 2, fy + (fh - h) / 2, w, h];

@@ -64,7 +64,7 @@ type Geometry = {
 
 const geometry = (page: Page): Promise<Geometry> => page.evaluate(() => {
   const panel = document.getElementById('online-world-grid') as HTMLElement;
-  const svg = panel.querySelector('svg') as SVGSVGElement;
+  const svg = panel.querySelector('svg.world-map-svg') as SVGSVGElement;
   const rect = panel.getBoundingClientRect();
   const vb = (svg.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
   const hexes = [...panel.querySelectorAll('.world-hex')] as SVGGraphicsElement[];
@@ -145,9 +145,9 @@ try {
     await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20_000 });
     await page.evaluate(() => document.fonts?.ready ?? Promise.resolve()).catch(() => undefined);
     // The lobby is a DYNAMIC import, and it owns the menu entry's click listener plus the map's own
-    // copy. Waiting for its FIT label is the honest readiness signal: a click before it lands is not
+    // copy. Waiting for its toggle's magnifying glass is the honest readiness signal: a click before it lands is not
     // a bug in the map, so the suite must not race it (it did once, at 360x640).
-    await page.waitForFunction(() => document.getElementById('online-world-fit')?.textContent === 'FIT', undefined, { timeout: 20_000 });
+    await page.waitForFunction(() => !!document.querySelector('#online-world-fit .world-fit-icon'), undefined, { timeout: 20_000 });
     await page.click('#menu-world');
     await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 20_000 });
     await page.locator('.world-hex').first().waitFor({ state: 'attached', timeout: 45_000 });
@@ -288,6 +288,15 @@ try {
     check(`[${tag}] FIT shows the WHOLE silhouette inside the panel`,
       outside.length === 0 && fitted.cells.length === WORLD_CELLS.length,
       `${outside.length} of ${fitted.cells.length} cells outside the panel`);
+    // Owner, 2026-10-23: zoomed all the way out the map fills the panel with a minimal margin, and the
+    // toggle is a magnifying glass, not a word.
+    const span = (k: 'left' | 'right' | 'top' | 'bottom') => k === 'left' || k === 'top'
+      ? Math.min(...fitted.cells.map((c) => c[k])) : Math.max(...fitted.cells.map((c) => c[k]));
+    const gaps = [span('left') - fitted.panel.left, fitted.panel.right - span('right'), span('top') - fitted.panel.top, fitted.panel.bottom - span('bottom')];
+    check(`[${tag}] zoomed out, the map touches the panel on one axis with a minimal margin`,
+      Math.min(gaps[0]! + gaps[1]!, gaps[2]! + gaps[3]!) <= 16, `gaps L${n1(gaps[0]!)} R${n1(gaps[1]!)} T${n1(gaps[2]!)} B${n1(gaps[3]!)}px`);
+    check(`[${tag}] the toggle shows a magnifying glass, no text`,
+      await fitButton.evaluate((el) => !!el.querySelector('svg.world-fit-icon') && (el.textContent ?? '').trim() === ''));
     check(`[${tag}] FIT draws the whole map small (a preview, as chosen)`,
       fitted.hex.width < large.hex.width * 0.8, `hex ${n1(fitted.hex.width)}px vs ${n1(large.hex.width)}px`);
     // OFF restores the EXACT large view: FIT is a view change, not a reset. Asserted SYNCHRONOUSLY
@@ -296,7 +305,7 @@ try {
     await fitButton.click();
     await page.waitForTimeout(150);
     const roundTrip = await page.evaluate(() => {
-      const svg = document.querySelector('#online-world-grid svg') as SVGSVGElement;
+      const svg = document.querySelector('#online-world-grid svg.world-map-svg') as SVGSVGElement;
       const button = document.getElementById('online-world-fit') as HTMLButtonElement;
       const before = svg.getAttribute('viewBox') ?? '';
       button.click();
@@ -319,7 +328,7 @@ try {
     await page.waitForTimeout(250);
     const afterPress = await page.evaluate(() => {
       const panel = document.getElementById('online-world-grid') as HTMLElement;
-      const svg = panel.querySelector('svg') as SVGSVGElement;
+      const svg = panel.querySelector('svg.world-map-svg') as SVGSVGElement;
       const button = document.getElementById('online-world-fit') as HTMLButtonElement;
       const pr = panel.getBoundingClientRect();
       const sr = svg.getBoundingClientRect();

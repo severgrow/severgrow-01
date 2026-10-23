@@ -270,7 +270,7 @@ try {
         // bounding box is what the SVG's viewBox is, so that is the ratio to compare against.
         fit: (() => {
           const w = document.getElementById('online-world-grid') as HTMLElement;
-          const svg = w.querySelector('svg') as SVGSVGElement | null;
+          const svg = w.querySelector('svg.world-map-svg') as SVGSVGElement | null;
           const vb = (svg?.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
           const viewBoxAspect = vb.length === 4 ? vb[2]! / vb[3]! : 0;
           const wr = w.getBoundingClientRect();
@@ -311,7 +311,7 @@ try {
     // aspect against the window's (the fill proof).
     const extra = await page.evaluate(() => {
       const grid = document.getElementById('online-world-grid') as HTMLElement;
-      const svg = grid.querySelector('svg') as SVGSVGElement;
+      const svg = grid.querySelector('svg.world-map-svg') as SVGSVGElement;
       const vb = (svg.getAttribute('viewBox') ?? '').split(/\s+/).map(Number);
       const wr = grid.getBoundingClientRect();
       const hexes = [...grid.querySelectorAll('.world-hex')] as SVGGraphicsElement[];
@@ -537,7 +537,7 @@ try {
     const noticed = await page.evaluate(() => {
       const grid = document.getElementById('online-world-grid') as HTMLElement;
       const wr = grid.getBoundingClientRect();
-      const svg = grid.querySelector('svg') as SVGSVGElement;
+      const svg = grid.querySelector('svg.world-map-svg') as SVGSVGElement;
       const vb = (svg.getAttribute('viewBox') ?? '').split(/\s+/).map(Number);
       const hexes = [...grid.querySelectorAll('.world-hex')].map((h) => h.getBoundingClientRect());
       const sel = (document.getElementById('online-world-selection') as HTMLElement).getBoundingClientRect();
