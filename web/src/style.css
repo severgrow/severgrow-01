@@ -7612,3 +7612,62 @@ html.futasaku-product #gameover.won[data-fresh='1'] .go-title::after {
     animation: none !important;
   }
 }
+
+/* EVERY SUBMENU ON DARK GLASS (owner, 2026-10-23: "use glass style on all submenus"). Settings,
+   How to play, What happened, the profile, the Restart and campaign confirmations, the help
+   reference and the install invitation wear the pause panel's glass and float clear of the edges
+   on a phone, as the pause panel does. Whatever screen is behind an open sheet is blurred and
+   darkened (the match by html.game-veiled, a menu screen here), so the sheet reads as the one
+   thing on screen. Product channels only; the classic line keeps its bottom sheets. */
+html.futasaku-product .sheet {
+  background: color-mix(in srgb, var(--c-surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+  border: 1px solid color-mix(in srgb, var(--c-text) 10%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-text) 7%, transparent);
+}
+html.futasaku-product .sheet:not(#sheet-menu):not(.confirm-sheet) {
+  left: 10px;
+  right: 10px;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  max-height: calc(100dvh - 20px);
+  border-radius: calc(var(--radius) * 2);
+}
+/* A floating plate is not a bottom sheet: no grab handle. */
+html.futasaku-product .sheet::before {
+  display: none;
+}
+/* Wide screens centre every sheet as a dialog (the shared .sheet rule's own transform): the
+   floating edges give way to that centring there. */
+@media (min-width: 760px) and (min-aspect-ratio: 1/1), (orientation: landscape) and (max-height: 560px) {
+  html.futasaku-product .sheet:not(#sheet-menu):not(.confirm-sheet) {
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    max-height: calc(100dvh - 32px);
+  }
+}
+/* Outside a match the screen behind an open sheet takes the same veil as the match does. */
+/* (Only a sheet that can be on screen counts: the top-level ones, and the install invitation by its
+   own container; the install sheet inside a hidden container is not "open".) */
+html.futasaku-product:has(body > .sheet:not([hidden]), .install-prompt:not([hidden])) .screen:not(#game):not([hidden]) {
+  filter: blur(7px) brightness(0.55) saturate(0.85);
+  transition: filter var(--dur-quick) var(--ease-standard);
+}
+html.futasaku-product:has(body > .sheet:not([hidden])) .scrim {
+  background: color-mix(in srgb, var(--c-bg) 22%, transparent);
+}
+.reduce-motion.futasaku-product .screen {
+  transition: none;
+}
+/* The PLAY submenu and the practice difficulty list are submenus too: their column rests on the
+   same glass plate, so every menu below the main one reads as one family. */
+html.futasaku-product :is(#play-menu, #levels) .levels-inner {
+  padding: 14px 16px 18px;
+  background: color-mix(in srgb, var(--c-surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+  border: 1px solid color-mix(in srgb, var(--c-text) 10%, transparent);
+  border-radius: calc(var(--radius) * 2);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-text) 7%, transparent);
+}

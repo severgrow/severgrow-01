@@ -1002,6 +1002,12 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
   else if (id === null) setPaused(false);
   syncVeil();
   if (next) {
+    // A sheet now covers the board: any finger that was on it has stopped meaning anything there
+    // (and on the iPhone its lift may never reach the board): release the map, the tile press and
+    // the painting stroke, so nothing is left half-pressed when the sheet closes.
+    camera?.release();
+    board.releasePress();
+    if (draw.ptr) draw.ptr = null;
     sheetExit++; // any pending close is now stale
     if (closingSheet && closingSheet !== next) {
       resetSurface(closingSheet);
@@ -7086,6 +7092,9 @@ function putAwaySheetsForResult(): void {
 
 function presentResult(go: HTMLElement, wasHidden: boolean): void {
   putAwaySheetsForResult();
+  // The result covers the board: a finger that was on it is released, as when a sheet opens.
+  camera?.release();
+  board.releasePress();
   document.body.classList.add('result');
   syncVeil();
   if (!wasHidden) return;

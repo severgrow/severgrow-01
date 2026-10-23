@@ -892,6 +892,17 @@ export class BoardView {
   }
 
   /** Overhaul item 19: dim the board except these hexes (null: no dimming). */
+  /**
+   * Forget a press in progress: a sheet now covers the board, so the finger that pressed a tile is
+   * no longer pressing it. Without this a lift lost to a redraw let the long-press timer fire later
+   * and open a tile card nobody asked for.
+   */
+  releasePress() {
+    clearTimeout(this.pressTimer);
+    this.pressed = null;
+    this.longPressed = false;
+  }
+
   focus(keys: readonly string[] | null) {
     const g = this.layers.dim;
     if (!keys || keys.length === 0) {
