@@ -25,7 +25,7 @@
 // at once (no animation may be required for the doorway to work).
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import type { Browser, Page } from 'playwright-core';
+import type { Page } from 'playwright-core';
 import { assertDistChannel } from './helpers/dist-channel.js';
 import { servePreview } from './helpers/preview-port.js';
 import { LESSONS } from '../src/lessons/lessons.js';
