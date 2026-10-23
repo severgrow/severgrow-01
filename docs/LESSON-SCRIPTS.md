@@ -22,8 +22,9 @@ If you change a beat, a word or a position, change it here too. If you change a 
 - **The opponent** (levels 1-9) is gentle, deterministic and always plays (owner, 2026-10-22: "every
   level has to still feel like a game and a slight challenge"):
   - it plays only legal moves and always draws from the Draw pile;
-  - it grows on EVERY turn: one tile, spreading on its own side with its lowest card; with no room to
-    spread it strengthens its weakest tile, and only then takes your weakest tile;
+  - from level 2 it grows on EVERY turn: one tile, spreading on its own side with its lowest card;
+    with no room to spread it strengthens its weakest tile, and only then takes your weakest tile
+    (level 1 grows once, on its 2nd turn);
   - it throws its lowest card (never a Bomb) and never takes the last open side of your home;
   - a lesson may keep a hex free for you (`avoid`) or send it to one first (`prefer`).
   - Following the light always wins with room to spare; very poor play can lose, and the level is
@@ -136,6 +137,8 @@ label and no words. Then the lesson's explanations begin.
   - a MOVE is explained after the draw, the first moment it can be played, right before the tap:
     gold, Bloom, surround, Bomb, Blast; level 2's cut and level 4's cut wait for the turn the cut
     is there to play.
+  - an explanation is never skipped because its card was picked first; and the light never points
+    at a move the player has not been shown (no taking a tile before level 2).
 
 ### Wrong taps
 
@@ -217,8 +220,10 @@ The same in every level:
 
 - **Setup:**
   - 19 hexes; no rock, no gold, no tiles.
-  - Locked on the first turn. Draw pile: 13 cards (the last of your draws leaves 1, so LAST CARDS shows).
-  - The opponent grows every turn.
+  - Locked on the first turn. Draw pile: 12 cards.
+  - The opponent grows once, on its 2nd turn, and never takes a tile (owner, 2026-10-23: the first
+    game is calm). The light never suggests taking their tile here; that is level 2's lesson.
+  - The display scrolls HELLO ♥ WELCOME ♥ from the level's first frame until the third sentence is read.
 - **Beats:**
   1. LIT your home | BOX: "This is your home. Place cards on the tiles that connect to your home to Grow." | tap anywhere
   2. LIT their home | BOX: "TO WIN: surround opponent’s home tile, or have more tiles on the board when the Draw pile runs out." | tap anywhere
@@ -236,7 +241,7 @@ The same in every level:
   14. Draw pile at 3 cards: LIT the Draw pile together with its count | DISPLAY: LAST CARDS | tap anywhere
   15. Pile empty: DISPLAY: LAST TURN | BOX: "The Draw pile is empty – this is your last turn." | tap anywhere
 - **Finish:** YOU WIN / YOU LEARNED: DRAW, GROW, THROW (✦)
-- **Proof:** the follower wins 4-2 in 4 of your turns. The browser tapper does it with 0 wrong taps.
+- **Proof:** the follower wins 4-1 in 4 of your turns. The browser tapper does it with 0 wrong taps.
 
 ## LEVEL 2 — TILE NUMBERS
 
@@ -376,7 +381,7 @@ Measured by the unit suite (`web/tests/lessons.test.ts`), counting the player's 
 
 | Level | Turns | Result (you – them) |
 |---|---|---|
-| 1 | 4 | 4–2 on points |
+| 1 | 4 | 4–1 on points |
 | 2 | 4 | 4–2 on points |
 | 3 | 4 | 6–2 on points |
 | 4 | 3 | 5–2 on points |

@@ -3,7 +3,7 @@
 // It plays by the same rules as everyone (every move it makes comes from `legalActions`), it looks
 // like a calm human, and it is never the reason a lesson fails:
 //   * it always draws from the Draw pile, so the Throw pile stays exactly as the lesson set it;
-//   * it grows on every turn (owner, 2026-10-22: a level that does not move feels like a bug), one
+//   * it grows on every turn from level 2 (owner, 2026-10-22: a level that does not move feels like a bug; level 1 grows once, on its 2nd turn), one
 //     tile at a time, on its own side of the board. With no room to spread it strengthens its
 //     weakest tile, and only then takes your weakest one, so every turn is a real move. A
 //     beginner who does the lesson still ends well ahead; one who plays very badly may lose;
@@ -14,6 +14,11 @@ import { apply, coordKey, hexDistance, homeCoord, isStrangled, legalActions, par
 import type { Action, Card, State } from '../../../src/engine/index.js';
 
 export type OpponentScript = {
+  /**
+   * Which of its own turns (1 = its first) it grows on. Absent: EVERY turn (the rule since
+   * 2026-10-22). Only level 1 uses it: the first game is calm, and the opponent grows once.
+   */
+  growOn?: readonly number[];
   /** Hexes it goes for first, in order, when it grows (a lesson's "they head for the gold"). */
   prefer?: readonly string[];
   /** Hexes it never grows on (a lesson's key hex stays free for you). */
@@ -46,7 +51,7 @@ export const scriptedOpponentAction = (s: State, script: OpponentScript = {}): A
   if (s.phase === 'DRAW') return legal.find((a) => a.t === 'Draw' && a.from === 'deck') ?? legal.find((a) => a.t === 'Draw') ?? legal[0]!;
 
   if (s.phase === 'ACT') {
-    if ((s.sproutsThisTurn ?? 0) === 0) {
+    if ((s.sproutsThisTurn ?? 0) === 0 && (!script.growOn || script.growOn.includes(opponentTurnIndex(s)))) {
       const hand = s.hands[OPP];
       const avoid = new Set(script.avoid ?? []);
       const sprouts = legal.filter((a): a is Extract<Action, { t: 'Sprout' }> => a.t === 'Sprout')

@@ -92,10 +92,11 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       seed: 96001,
       hand: [[0, 8], [1, 2], [1, 5], [2, 4], [1, 3], [2, 6], [3, 5]],
       opponent: [[1, 2], [2, 2], [3, 3], [0, 2], [3, 2], [2, 3], [3, 4]],
-      deck: [[2, 7], [0, 4], [0, 5], [0, 6], [1, 7], [3, 6], [3, 7], [3, 2], [0, 7], [1, 6], [2, 8], [1, 4], [2, 9]],
+      deck: [[2, 7], [0, 4], [0, 5], [0, 6], [1, 7], [3, 6], [3, 7], [3, 2], [0, 7], [1, 6], [2, 8], [1, 4]],
       discard: [[3, 1]],
     },
-    opponent: { script: {} },
+    // The first game is calm: it grows once, on its 2nd turn, and never takes anything (owner, 2026-10-23).
+    opponent: { script: { growOn: [2] } },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'DRAW, GROW, THROW', icon: '✦' },
   },
   {
@@ -350,14 +351,19 @@ const bloomCardsFor = (hand: readonly Card[]): Card[] => {
   return [];
 };
 
+/** Taking one of their tiles is taught in level 2; before it the light never points at one. */
+const takesTaught = (lesson: Pick<Lesson, 'level'>): boolean => lesson.level >= 2;
+
 /**
  * The plain Grow a careful beginner makes: gold first, then one of their tiles it can take (a
  * two-point swing, and the opponent grows every turn — owner, 2026-10-22), then forward, with the
- * lowest card that does it.
+ * lowest card that does it. `takes` is false before the lesson that teaches taking a tile (level 2):
+ * the light never suggests a move the player has not been shown.
  */
-const plainGrow = (s: State, legal: readonly Action[]): Sprout | null => {
+const plainGrow = (s: State, legal: readonly Action[], takes = true): Sprout | null => {
   const theirs = homeCoord(THEM, s.config);
-  const sprouts = legal.filter((a): a is Sprout => a.t === 'Sprout' && s.board[coordKey(a.coord)]?.owner !== YOU);
+  const sprouts = legal.filter((a): a is Sprout => a.t === 'Sprout'
+    && (takes ? s.board[coordKey(a.coord)]?.owner !== YOU : !s.board[coordKey(a.coord)]));
   if (!sprouts.length) return null;
   const gold = (a: Sprout) => (s.terrain[coordKey(a.coord)] === 'rich' ? 0 : 1);
   const take = (a: Sprout) => (s.board[coordKey(a.coord)]?.owner === THEM ? 0 : 1);
@@ -435,7 +441,7 @@ const surroundStep = (s: State, legal: readonly Action[]): Action | null => {
   const around = new Set(neighbors(homeCoord(THEM, s.config), s.config.boardRadius).map(keyOf));
   const onSide = legal.filter((a): a is Sprout => a.t === 'Sprout' && around.has(keyOf(a.coord)) && s.board[keyOf(a.coord)]?.owner !== YOU)
     .sort((a, b) => keyOf(a.coord).localeCompare(keyOf(b.coord)) || rankOf(s, a.card) - rankOf(s, b.card))[0];
-  return onSide ?? plainGrow(s, legal);
+  return onSide ?? plainGrow(s, legal);  // the surround lesson (6) comes after taking is taught
 };
 
 /** The throw: the lowest card that no remaining idea needs (Bombs and Bloom cards are kept). */
@@ -495,13 +501,13 @@ export const opensBloom = (s: State, legal: readonly Action[], card: number): bo
 };
 
 /** The same Grow (same hex) with a card that taps as a Grow, else the best plain Grow that does. */
-const asTappableGrow = (s: State, legal: readonly Action[], a: Action | null, notKo: (x: Action | null) => Action | null): Action | null => {
+const asTappableGrow = (s: State, legal: readonly Action[], a: Action | null, notKo: (x: Action | null) => Action | null, takes: boolean): Action | null => {
   if (!a || a.t !== 'Sprout' || !opensBloom(s, legal, a.card)) return a;
   const plain = legal.filter((x): x is Sprout => x.t === 'Sprout' && !opensBloom(s, legal, x.card));
   const sameHex = plain.filter((x) => keyOf(x.coord) === keyOf(a.coord))
     .sort((x, y) => rankOf(s, y.card) - rankOf(s, x.card) || x.card - y.card)[0];
   // A Strengthen keeps its number when it can (the lesson names a card); otherwise any plain card.
-  return sameHex ?? notKo(plainGrow(s, plain.filter((x) => notKo(x) !== null))) ?? a;
+  return sameHex ?? notKo(plainGrow(s, plain.filter((x) => notKo(x) !== null), takes)) ?? a;
 };
 
 // Your legal moves in a position, worked out once (read-only: nothing here changes the list).
@@ -559,7 +565,7 @@ const suggestFresh = (lesson: Lesson, s: State): Action | null => {
     if (!x || koAllowed) return x;
     try { return isStrangled(apply(s, x), THEM) ? null : x; } catch { return null; }
   };
-  return asTappableGrow(s, legal, a, notKo);
+  return asTappableGrow(s, legal, a, notKo, takesTaught(lesson));
 };
 
 const suggestRaw = (lesson: Lesson, s: State): Action | null => {
@@ -593,7 +599,7 @@ const suggestRaw = (lesson: Lesson, s: State): Action | null => {
       case 'strangle': { const m = win ?? (!grew ? surroundStep(s, legal) : null); if (m) return m; break; }
       case 'bomb': if (!grew) { const m = legal.find((a) => a.t === 'PlayFruit' && keyOf(a.target) === goal.key); if (m) return m; } break;
       case 'blast': { const m = legal.find((a) => a.t === 'MegaBomb' && keyOf(a.target) === goal.key) ?? legal.find((a) => a.t === 'MegaBomb'); if (m) return m; break; }
-      case 'blastGrow': if (!grew) { const m = plainGrow(s, legal); if (m) return m; } break;
+      case 'blastGrow': if (!grew) { const m = plainGrow(s, legal, takesTaught(lesson)); if (m) return m; } break;
       case 'grow': break;
     }
   }
@@ -606,7 +612,7 @@ const suggestRaw = (lesson: Lesson, s: State): Action | null => {
     if (power) return power;
   }
   if (!grew) {
-    const g = notKo(plainGrow(s, legal.filter((a) => notKo(a) !== null)));
+    const g = notKo(plainGrow(s, legal.filter((a) => notKo(a) !== null), takesTaught(lesson)));
     if (g) return g;
   }
   // Level 10 is a real game: the light never nudges toward ending the turn.
@@ -769,6 +775,16 @@ const introFor = (s: State, which: IntroKind, id: string, legal: readonly Action
   }
 };
 
+/**
+ * What the display says before the lesson's first sentence is on screen (the stage intro and the
+ * opening deal): level 1 welcomes from its very first frame, never a step word (owner, 2026-10-22:
+ * "the first second it still says DRAW"). Null: the display keeps its own calm face.
+ */
+export const openingDisplay = (lesson: Lesson, s: State, seen: ReadonlySet<string>): string | null =>
+  lesson.level === 1 && s.phase === 'DRAW' && myTurns(s).length === 0
+    && lesson.intro.some((which) => (which === 'tree' || which === 'their-home' || which === 'first-draw') && !seen.has(`${lesson.level}:intro:${which}`))
+    ? W.welcome : null;
+
 const introBeat = (lesson: Lesson, s: State, ctx: BeatCtx): Beat | null => {
   const beforeFirstDraw = s.phase === 'DRAW' && myTurns(s).length === 0;
   // A move's explanation waits for the draw and for a free hand: nothing picked, nothing placing.
@@ -830,7 +846,11 @@ const momentBeat = (lesson: Lesson, s: State, seen: ReadonlySet<string>): Beat |
 const ideaBeat = (
   lesson: Lesson, s: State, ctx: BeatCtx, goal: Goal | null, move: Action,
 ): Beat | null => {
-  if (ctx.card !== null || ctx.placing !== null || ctx.throwPending !== null) return null;
+  // An explanation comes directly before its move, every time: a card already picked does not skip
+  // it when that card is the one the move uses (owner, 2026-10-22: the cut sentence was lost when
+  // the player picked the card first).
+  const pickedOther = ctx.card !== null && !('card' in move && move.card === ctx.card);
+  if (pickedOther || ctx.placing !== null || ctx.throwPending !== null) return null;
   const once = (id: string) => !ctx.seen.has(`${lesson.level}:idea:${id}`);
   if (lesson.level === 1 && s.phase === 'ACT' && once('first-grow')
     && !mine(s).some((e) => e.t === 'Sprout') && move.t === 'Sprout')

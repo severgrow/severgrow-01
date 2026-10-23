@@ -1019,7 +1019,17 @@ try {
     console.log('\nLevel 1 opens with a welcome on the display:');
     const { page, errors } = await newPage(390, 844);
     await page.goto(URL3, { waitUntil: 'networkidle' });
+    // Every face the display shows from the menu tap on (owner, 2026-10-22: "the first second it
+    // still says DRAW" — the welcome must be the FIRST thing level 1 shows).
+    await page.evaluate(`(() => { window.__ledLog = [];
+      const tick = () => { const el = document.querySelector('#smart-led-text'); const t = el ? el.textContent : '';
+        const log = window.__ledLog; if (!log.length || log[log.length - 1] !== t) log.push(t); requestAnimationFrame(tick); };
+      tick(); })()`);
     await openNextLevel(page);
+    const faces = (await page.evaluate('window.__ledLog')) as string[];
+    const firstWelcome = faces.indexOf(LESSON.welcome);
+    check(firstWelcome >= 0 && !faces.slice(0, firstWelcome).some((t) => /DRAW|GROW|THROW|TAP/.test(t)),
+      `the welcome is the first thing the display says (${faces.join(' > ')})`);
     const ledText = () => page.evaluate(() => document.querySelector('#smart-led-text')?.textContent ?? '');
     const seen: string[] = [];
     for (let i = 0; i < 3; i++) {

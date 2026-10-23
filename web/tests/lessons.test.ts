@@ -404,9 +404,47 @@ describe('final sign-off (owner, 2026-10-22)', () => {
     expect(LESSON.lastTurnLine).toBe('The Draw pile is empty – this is your last turn.');
   });
 
-  it('levels 1-9: the opponent makes a Grow on every turn it can, whatever you do', () => {
+  it('level 1: the opponent grows once, on its 2nd turn, and never takes your tile (owner, 2026-10-23)', () => {
+    const l = lessonFor(1)!;
+    for (let seed = 0; seed <= 12; seed++) {
+      const rand = mulberry32(seed * 313 + 1);
+      const end = play(l, (s) => { const o = lessonLegal(l, s); return seed === 0 ? suggestMove(l, s)! : o[Math.floor(rand() * o.length)]!; });
+      const theirs = (end.history ?? []).filter((e) => 'player' in e && e.player === 1);
+      const grows = theirs.filter((e) => e.t === 'Sprout' || e.t === 'Strengthen' || e.t === 'Overgrow');
+      expect(grows.length, `seed ${seed}`).toBeLessThanOrEqual(1);
+      expect(theirs.some((e) => e.t === 'Overgrow'), `seed ${seed}: never takes`).toBe(false);
+    }
+  });
+
+  it('level 1: the light never suggests taking their tile (that is level 2)', () => {
+    const l = lessonFor(1)!;
+    tapOnlyTheLight(l, undefined, (beat, s) => {
+      const m = suggestMove(l, s);
+      if (m?.t === 'Sprout') expect(s.board[coordKey(m.coord)]?.owner, `L1 ${beat?.id}`).not.toBe(1);
+    });
+  });
+
+  it('a take or cut is explained right before it, even when its card was picked first', () => {
+    for (const level of [2, 4]) {
+      const l = lessonFor(level)!;
+      const goal = l.goals.find((g) => g.t === 'take' || g.t === 'cut')! as { key: string };
+      let s = lessonOpening(l);
+      // Play the light until the goal's move is next and could be played.
+      for (let i = 0; i < 200; i++) {
+        const m = s.actor === 0 ? suggestMove(l, s) : null;
+        if (m?.t === 'Sprout' && coordKey(m.coord) === goal.key) break;
+        s = apply(s, s.actor === 0 ? m! : opponentMove(l, s));
+      }
+      const move = suggestMove(l, s) as { card: number };
+      const beat = lessonBeat(l, s, { card: move.card, placing: null, throwPending: null, seen: new Set() });
+      expect(beat?.id, `L${level}: the card is already picked`).toBe(`${level}:idea:${level === 2 ? 'take' : 'cut'}`);
+      expect(beat?.lit).toEqual({ t: 'hex', key: goal.key });
+    }
+  });
+
+  it('levels 2-9: the opponent makes a Grow on every turn it can, whatever you do', () => {
     const GROWS = new Set(['Sprout', 'Strengthen', 'Overgrow']);
-    for (const l of LESSONS.filter((x) => 'script' in x.opponent)) {
+    for (const l of LESSONS.filter((x) => 'script' in x.opponent && x.level >= 2)) {
       for (let seed = 0; seed <= 12; seed++) {
         const rand = mulberry32(seed * 977 + l.level);
         let s = lessonOpening(l);

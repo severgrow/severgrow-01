@@ -90,7 +90,7 @@ import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { throwPileAction } from './logic/throw-pile.js';
 import {
-  goalReachable, lessonAllows, lessonBeat, lessonFor, lessonLocked, lessonOffersBloom, lessonOpening,
+  goalReachable, lessonAllows, lessonBeat, openingDisplay, lessonFor, lessonLocked, lessonOffersBloom, lessonOpening,
   presentedLessonBeat, suggestMove,
 } from './lessons/lessons.js';
 import type { Beat, Lesson } from './lessons/lessons.js';
@@ -4958,7 +4958,7 @@ function renderLessonGuide(): void {
       glassSurface.hide();
       hideLessonPlate();
       smartCockpit?.quiet?.(true);
-      if (!lessonHoldingScore) smartCockpit?.led?.(null);
+      if (!lessonHoldingScore) smartCockpit?.led?.(openingDisplay(lesson, st, lessonSeen));
     }
     return;
   }
@@ -4971,6 +4971,9 @@ function renderLessonGuide(): void {
       lessonShownKey = '';
       glassSurface.hide();
     }
+    // Level 1 welcomes from the first frame, while the opening hand is still being dealt.
+    const opening = openingDisplay(lesson, st, lessonSeen);
+    if (opening) { smartCockpit?.quiet?.(true); smartCockpit?.led?.(opening); }
     return;
   }
   const mine = st.actor === HUMAN && !busy();
