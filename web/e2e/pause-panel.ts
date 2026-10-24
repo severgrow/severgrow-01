@@ -122,7 +122,10 @@ const MEASURE = `(() => {
     order: items.map((i) => i.id),
     grid: innerWidth > innerHeight,
     tools: box(tools),
-    veiled: document.documentElement.classList.contains('game-veiled') && getComputedStyle(document.getElementById('game')).filter.includes('blur'),
+    // A fixed-position scrim has no offsetParent, even while covering the whole viewport.
+    veiled: document.documentElement.classList.contains('game-veiled') && !document.getElementById('scrim').hidden
+      && document.getElementById('scrim').getBoundingClientRect().height >= innerHeight
+      && getComputedStyle(document.getElementById('scrim')).backdropFilter.includes('blur'),
   };
 })()`;
 

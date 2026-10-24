@@ -6,6 +6,7 @@
 // a column the in-memory store does not keep, the difference is stated at that line rather than
 // faked (there is one: a world claim's `source`).
 import { playerTag } from '../../../src/player-tag.js';
+import { newId } from '../ids.js';
 import { WORLD_CELLS } from '../world.js';
 import { SEED_ECONOMY } from '../seeds/config.js';
 import { shapeCampaign } from './campaign.js';
@@ -253,7 +254,12 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
     async grantSeeds(input) {
       if (!(await sources.storage.playerById(input.playerId))) return null;
       if (!sources.economy) throw new Error('No Seeds economy in this dev server.');
-      return sources.economy.grant({ playerId: input.playerId, amount: input.amount, sourceKey: `admin:${input.requestId}`, now: input.now });
+      const result = await sources.economy.grant({ playerId: input.playerId, amount: input.amount, sourceKey: `admin:${input.requestId}`, now: input.now });
+      if (!result.replayed) auditRows.push({
+        id: newId(), actorId: input.actorId, action: 'seeds.grant', targetType: 'player', targetId: input.playerId,
+        detail: { amount: input.amount, reasonLength: input.reason.length, balance: result.balance, replayed: false }, createdAt: input.now,
+      });
+      return result;
     },
 
     async stuck(now, windows) {

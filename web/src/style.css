@@ -7755,3 +7755,25 @@ html.futasaku-product #gameover .go-territory {
   font-family: var(--font-ui); font-size: 0.8rem; line-height: 1.35; color: var(--fu-cream-70);
 }
 html.futasaku-product #gameover .go-territory[hidden] { display: none; }
+
+/* Calm, legible settings glass: a lit key behind the sheet must not become a bright stripe
+   through the comfort controls. Keep the shared frameless surface and its organic shadow. */
+html.futasaku-product #sheet-settings {
+  background: rgba(8, 10, 10, 0.88);
+  scrollbar-width: thin;
+  scrollbar-color: var(--fu-cream-22) transparent;
+  scroll-padding-top: 52px;
+}
+html.futasaku-product #sheet-settings .sheet-head {
+  z-index: 2;
+  background: rgba(8, 10, 10, 0.96);
+  min-height: 44px;
+}
+/* Spend less space on group gaps when a phone is sideways; never shrink the 44px targets.
+   The sheet remains scrollable for account controls, zoom and exceptionally short windows. */
+@media (orientation: landscape) and (max-height: 560px) {
+  html.futasaku-product #sheet-settings .sheet-body.stack { gap: 0; }
+  html.futasaku-product #sheet-settings h3 { margin: 4px 0 2px; }
+  html.futasaku-product #sheet-settings .row { min-height: 44px; padding-block: 2px; }
+  html.futasaku-product #sheet-settings .thumb-settings-last { margin-top: 0; }
+}

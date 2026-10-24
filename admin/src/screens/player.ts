@@ -218,7 +218,7 @@ const addSeedsCard = (ctx: Ctx, playerId: string, name: string, query: string): 
   const amount = el('input', { id: 'grant-amount', type: 'number', inputmode: 'numeric', min: '1', max: '1000', step: '1', value: '100' });
   const reason = el('input', { id: 'grant-reason', type: 'text', maxlength: '200', placeholder: 'Why (it goes in the ledger)', autocomplete: 'off' });
   const feedback = el('p', { class: 'muted small grant-feedback', role: 'status', 'aria-live': 'polite' });
-  let requestId = newRequestId();
+  const requestId = newRequestId();
   let busy = false;
   const submit = button('Add Seeds', () => {
     if (busy) return;
@@ -229,23 +229,32 @@ const addSeedsCard = (ctx: Ctx, playerId: string, name: string, query: string): 
     if (!window.confirm(`Add ${value} Seeds to ${name}?\n\nReason: ${why}`)) return;
     busy = true;
     submit.disabled = true;
+    amount.disabled = true;
+    reason.disabled = true;
     feedback.textContent = 'Adding…';
     void ctx.api.post<{ ok: true; amount: number; balance: number; replayed: boolean }>(
       `/v1/admin/players/${encodeURIComponent(playerId)}/seeds`, { amount: value, reason: why, requestId },
     ).then((result) => {
-      busy = false;
-      submit.disabled = false;
       if (!result.ok) {
+        busy = false;
+        submit.disabled = false;
         if (result.status === 401 || result.status === 403) { ctx.denied(); return; }
-        feedback.textContent = result.message;
+        // A lost response can hide a successful payment. Retry the same payload and request id.
+        const uncertain = result.status === 0 || result.status >= 500 || result.code === 'BAD_BODY';
+        amount.disabled = uncertain;
+        reason.disabled = uncertain;
+        submit.textContent = uncertain ? 'Retry grant' : 'Add Seeds';
+        feedback.textContent = uncertain ? 'The payment could not be confirmed. Retry safely; it will only be added once.' : result.message;
         return;
       }
-      requestId = newRequestId();
       feedback.textContent = result.data.replayed
         ? `Already added. Balance ${formatNumber(result.data.balance)}.`
         : `Added ${formatNumber(result.data.amount)} Seeds. Balance ${formatNumber(result.data.balance)}.`;
       // Show the new balance and the ledger row the server just wrote.
-      window.setTimeout(() => ctx.navigate(`#/player?q=${encodeURIComponent(query)}&t=${Date.now()}`), 900);
+      // Keep the completed form locked until the refreshed record replaces it.
+      window.setTimeout(() => {
+        if (submit.isConnected) ctx.navigate(`#/player?q=${encodeURIComponent(query)}&t=${Date.now()}`);
+      }, 900);
     });
   }, { primary: true, title: 'Add Seeds to this player' });
   return card('Add Seeds', [

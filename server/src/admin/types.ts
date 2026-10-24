@@ -289,7 +289,8 @@ export interface AdminStore {
   /**
    * The dashboard's one Seeds write (owner, 2026-10-24): add Seeds to a player's wallet, recorded in
    * the ledger as `admin_grant` under `admin:<requestId>` (so a repeated request never pays twice),
-   * with the reason and the admin's id in its metadata. Null when the player does not exist.
+   * with the reason and the admin's id in its metadata. The audit record is committed in the same
+   * transaction, once per successful grant. Null when the player does not exist.
    */
   grantSeeds(input: AdminSeedGrant): Promise<{ balance: number; replayed: boolean } | null>;
   stuck(now: number, windows: { guestMaxAgeMs: number; waitingExpireMs: number; turnTimeoutMs: number }): Promise<AdminStuck>;
