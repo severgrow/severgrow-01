@@ -718,3 +718,54 @@ describe('the Players screen: every player, and the last thing the server record
     expect((await call(t.app, 'GET', '/v1/admin/players', guest.token)).status).toBe(403);
   });
 });
+
+// Owner, 2026-10-24: "I can't find a button to add seeds to someone's account". The dashboard's one
+// Seeds write: amount 1-1000, a reason, idempotent by request id, recorded in the ledger as
+// `admin_grant` and in the audit log. Refused without a token (401) and for a normal player (403).
+describe('adding Seeds to a player', () => {
+  const PLAYER = '5d1f6a0e-1c2b-4d3e-9f40-0a1b2c3d4e5f';
+  const path = `/v1/admin/players/${PLAYER}/seeds`;
+  const grant = { amount: 150, reason: 'Playtest thank-you', requestId: 'grant-request-0001' };
+
+  it('is refused without a token (401) and for a normal player (403)', async () => {
+    const t = setup();
+    await t.makePlayer(PLAYER);
+    expect((await call(t.app, 'POST', path, undefined, grant)).status).toBe(401);
+    const guest = await t.service.createGuest();
+    expect((await call(t.app, 'POST', path, guest.token, grant)).status).toBe(403);
+    expect((await t.economy.wallet(PLAYER)).balance).toBe(0);
+  });
+
+  it('adds the Seeds once, writes the ledger and the audit, and a repeated request pays nothing more', async () => {
+    const t = setup();
+    const admin = await t.makePlayer(ADMIN_ID, 'account', 'RYK');
+    await t.makePlayer(PLAYER);
+    const res = await call(t.app, 'POST', path, admin.token, grant);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, amount: 150, balance: 150, replayed: false });
+    const again = await call(t.app, 'POST', path, admin.token, grant);
+    expect(await again.json()).toMatchObject({ ok: true, balance: 150, replayed: true });
+    expect((await t.economy.wallet(PLAYER)).balance).toBe(150);
+    const rows = t.economy.ledger.filter((e) => e.playerId === PLAYER);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ delta: 150, category: 'admin_grant', sourceKey: 'admin:grant-request-0001', balanceAfter: 150 });
+    // It shows on the player's own page, in the ledger the dashboard already reads.
+    const page = await (await call(t.app, 'GET', `/v1/admin/player?q=${PLAYER}`, admin.token)).json() as { wallet: { balance: number }; ledger: { category: string }[] };
+    expect(page.wallet.balance).toBe(150);
+    expect(page.ledger[0]!.category).toBe('admin_grant');
+  });
+
+  it('refuses a bad amount, a missing reason, a bad id, or a player who does not exist', async () => {
+    const t = setup();
+    const admin = await t.makePlayer(ADMIN_ID, 'account', 'RYK');
+    await t.makePlayer(PLAYER);
+    for (const amount of [0, -5, 1001, 2.5, '50']) {
+      expect((await call(t.app, 'POST', path, admin.token, { ...grant, amount })).status, String(amount)).toBe(400);
+    }
+    expect((await call(t.app, 'POST', path, admin.token, { ...grant, reason: ' ' })).status).toBe(400);
+    expect((await call(t.app, 'POST', path, admin.token, { ...grant, requestId: 'x' })).status).toBe(400);
+    expect((await call(t.app, 'POST', '/v1/admin/players/not-an-id/seeds', admin.token, grant)).status).toBe(400);
+    expect((await call(t.app, 'POST', `/v1/admin/players/${ADMIN_ID.replace('3', '4')}/seeds`, admin.token, grant)).status).toBe(404);
+    expect((await t.economy.wallet(PLAYER)).balance).toBe(0);
+  });
+});

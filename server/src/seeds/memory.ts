@@ -90,6 +90,15 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     }
     return { awarded: decision.amount, reason: decision.reason, wallet: { ...wallet }, replayed: false };
   }
+  /** An admin grant (admin dashboard): idempotent by `sourceKey`, never below zero. */
+  async grant(input: { playerId: string; amount: number; sourceKey: string; now: number }): Promise<{ balance: number; replayed: boolean }> {
+    const wallet = this.current(input.playerId);
+    if (this.ledger.some((e) => e.playerId === input.playerId && e.sourceKey === input.sourceKey)) return { balance: wallet.balance, replayed: true };
+    wallet.balance += input.amount;
+    wallet.lifetimeEarned += input.amount;
+    this.ledger.push({ id: newId(), playerId: input.playerId, delta: input.amount, category: 'admin_grant', sourceKey: input.sourceKey, balanceAfter: wallet.balance, createdAt: input.now });
+    return { balance: wallet.balance, replayed: false };
+  }
   async acknowledgeInvitation(playerId: string): Promise<void> { this.current(playerId).worldInvitationSeen = true; }
   async issueTrainingTicket(ticket: TrainingTicket): Promise<void> { this.tickets.set(ticket.id, { ...ticket }); }
   async trainingTicket(id: string): Promise<TrainingTicket | null> { return this.tickets.get(id) ?? null; }

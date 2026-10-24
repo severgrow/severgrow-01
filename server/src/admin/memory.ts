@@ -250,6 +250,12 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
       auditRows.push({ ...entry });
     },
 
+    async grantSeeds(input) {
+      if (!(await sources.storage.playerById(input.playerId))) return null;
+      if (!sources.economy) throw new Error('No Seeds economy in this dev server.');
+      return sources.economy.grant({ playerId: input.playerId, amount: input.amount, sourceKey: `admin:${input.requestId}`, now: input.now });
+    },
+
     async stuck(now, windows) {
       const all = await visibleMatches();
       const participantCounts = new Map<string, number>();

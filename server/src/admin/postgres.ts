@@ -8,6 +8,7 @@
 import { WORLD_CELLS, WORLD_VERSION } from '../world.js';
 import { SEED_ECONOMY } from '../seeds/config.js';
 import { ApiError } from '../errors.js';
+import { newId } from '../ids.js';
 import { playerTag } from '../../../src/player-tag.js';
 import { shapeCampaign } from './campaign.js';
 import { shapePlayers, PLAYERS_LIMIT } from './players.js';
@@ -407,6 +408,46 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
           client.release?.();
         }
       });
+    },
+
+    async grantSeeds(input) {
+      // One transaction, the same locking order as every other Seeds write (wallet row first), so a
+      // grant can never race a claim or a reward. Idempotent by its ledger key.
+      const client = await pool.connect();
+      try {
+        await client.query('begin');
+        const exists = await client.query('select 1 from players where id = $1', [input.playerId]);
+        if (exists.rows.length === 0) {
+          await client.query('rollback');
+          return null;
+        }
+        const sourceKey = `admin:${input.requestId}`;
+        await client.query('insert into seed_wallets(player_id) values ($1) on conflict do nothing', [input.playerId]);
+        const locked = await client.query('select balance from seed_wallets where player_id = $1 for update', [input.playerId]);
+        const prior = await client.query('select 1 from seed_ledger where player_id = $1 and source_key = $2', [input.playerId, sourceKey]);
+        if (prior.rows.length) {
+          await client.query('commit');
+          return { balance: num(locked.rows[0]?.balance), replayed: true };
+        }
+        const changed = await client.query(
+          `update seed_wallets set balance = balance + $2, lifetime_earned = lifetime_earned + $2
+            where player_id = $1 returning balance`, [input.playerId, input.amount],
+        );
+        const balance = num(changed.rows[0]?.balance);
+        await client.query(
+          `insert into seed_ledger(id,player_id,delta,balance_after,category,source_key,economy_version,created_at,metadata)
+           values($1,$2,$3,$4,'admin_grant',$5,$6,$7,$8::jsonb)`,
+          [newId(), input.playerId, input.amount, balance, sourceKey, SEED_ECONOMY.version, input.now,
+            JSON.stringify({ reason: input.reason, actorId: input.actorId })],
+        );
+        await client.query('commit');
+        return { balance, replayed: false };
+      } catch (error) {
+        await client.query('rollback').catch(() => undefined);
+        throw error;
+      } finally {
+        client.release?.();
+      }
     },
 
     async audit(entry: AdminAuditEntry) {
