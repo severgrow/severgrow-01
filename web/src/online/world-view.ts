@@ -77,20 +77,19 @@ const coords = (q: number, r: number) => ({ x: X * (q + r / 2) * R, y: 1.5 * r *
  * centre, inside the hex's 8.66-unit inradius, so it never touches the timer ring on the outline.
  */
 const SWORD_PATH = [
-  'M0,-5.40',                                                     // the point
-  'L0.46,-4.05', 'L0.84,-2.30', 'L1.12,-0.60', 'L1.18,0.70',      // blade: straight taper, widest at the guard
-  'L2.92,0.44', 'L3.24,0.86', 'L2.92,1.40',                       // guard: a flat perpendicular bar, pointed at the outer end
-  'L0.60,1.46',                                                   //   in to the grip
-  'L0.86,1.80', 'L0.58,2.14', 'L0.86,2.48', 'L0.58,2.82',          // grip: scalloped ribs
-  'L0.86,3.14', 'L0.58,3.44',
-  'L1.16,3.78', 'L0,5.02',                                        // pommel: compact diamond
-  'L-1.16,3.78', 'L-0.58,3.44',                                   //   and back up the other side
-  'L-0.86,3.14', 'L-0.58,2.82', 'L-0.86,2.48', 'L-0.58,2.14', 'L-0.86,1.80',
-  'L-0.60,1.46',
-  'L-2.92,1.40', 'L-3.24,0.86', 'L-2.92,0.44',                    // guard: the mirrored bar
-  'L-1.18,0.70', 'L-1.12,-0.60', 'L-0.84,-2.30', 'L-0.46,-4.05', 'Z', // blade: mirrored taper to the point
+  'M0,-5.35',                                                     // the point
+  'L0.46,-4.00', 'L0.88,-2.00', 'L1.10,1.05',                      // blade: straight taper, widest at the guard
+  'L1.95,0.86', 'L2.72,0.42', 'L2.62,1.20', 'L2.00,2.05',          // guard: flat bar, outer end swept up into a barb
+  'L0.54,2.05',                                                    //   in to the grip
+  'L0.74,2.35', 'L0.54,2.70', 'L0.74,3.05', 'L0.54,3.40',          // grip: three ribs
+  'L0.54,3.75', 'L1.02,4.20', 'L0,5.05',                           // pommel: a compact diamond
+  'L-1.02,4.20', 'L-0.54,3.75',                                    //   and back up the other side
+  'L-0.54,3.40', 'L-0.74,3.05', 'L-0.54,2.70', 'L-0.74,2.35', 'L-0.54,2.05',
+  'L-2.00,2.05', 'L-2.62,1.20', 'L-2.72,0.42', 'L-1.95,0.86',      // guard: the mirrored bar
+  'L-1.10,1.05',                                                   // blade: base, left
+  'L-0.88,-2.00', 'L-0.46,-4.00', 'Z',                             // blade: mirrored taper to the point
 ].join(' ');
-const SWORD_SCALE = 1.28;
+const SWORD_SCALE = 1.31;
 const hexPath = (x: number, y: number) => {
   const points = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]];
   return points.map(([dx, dy], index) => `${index ? 'L' : 'M'}${(x + dx! * R).toFixed(2)},${(y + dy! * R).toFixed(2)}`).join(' ') + 'Z';
