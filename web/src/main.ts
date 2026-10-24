@@ -2064,8 +2064,7 @@ async function startGame(
   // A lesson's stage card waits for the ritual below: the ceremony owns the screen until it
   // resolves, and level 10's send-off is the last beat before the first move. Levels 1-9 have no
   // ritual, so their stage starts here, exactly as it always has.
-  if (lessonNow && !playRitual) startLessonStage();
-  // beginSession freshens the generation token for THIS match; another entry starting a match now
+  if (lessonNow && !playRitual) startLessonStage();  // beginSession freshens the generation token for THIS match; another entry starting a match now
   // would supersede it and the checks below would stop this older start from touching that one.
   generation = startGameGeneration;
   save();
@@ -2083,10 +2082,16 @@ async function startGame(
       if (generation === startGameGeneration) pregameHold = false;
     }
     if (generation !== startGameGeneration) return;
+    // The hand has NOT been dealt yet: `dealIn()` below starts it. `beginSession` set
+    // `handSettled = true` (it cannot know a ritual is coming), so without this the send-off would
+    // paint during this render and then sit there while the cards flew in — a beat with the hand
+    // still moving, which is exactly what a lesson must never show. Holding the gate makes the
+    // send-off the last beat before the first move, as intended.
+    handSettled = false;
     render(); // lift the ritual gate and draw the controls in their real, playable state
-    // Deliberately NO stage card here. On level 10 the stage's only content is level 1's welcome
-    // (openingDisplay), so after the ceremony it would be an empty 1.2 s gate — a stutter between
-    // the cards and the send-off, which is meant to be the last thing before the first move.
+    // Every lesson still opens with its stage card, level 10 included: `lessons-3` pins that
+    // contract for all ten levels, and the ceremony precedes it rather than replacing it.
+    if (lessonNow) startLessonStage();
   }
   dealIn();
   firstToolTips();
