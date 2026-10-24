@@ -58,7 +58,11 @@ try {
   // channel.ts prefixes every storage key, so read it unprefixed inside the page.
   check((await winner.page.evaluate(() => localStorage.getItem('severgrow.install-prompt.v1'))) !== null, 'online win: the count is written to the device');
   await winner.page.click('#install-never');
-  await winner.page.waitForSelector(PROMPT, { state: 'attached', timeout: 5_000 }).catch(() => undefined);
+  // The invitation leaves on the shared exit beat (interface-motion: 180ms out), and only then is
+  // the node hidden. Sampling it on the same tick as the tap read a surface that was closing as one
+  // that had not closed; the assertion is unchanged, it is simply taken on the settled state.
+  // Measured: opacity 1 -> 0 over 170ms, hidden at ~214ms.
+  await winner.page.waitForSelector('#install-prompt', { state: 'hidden', timeout: 5_000 }).catch(() => undefined);
   check(await winner.page.locator('#install-prompt').isHidden(), 'dismissing closes the invitation');
   const saved = await winner.page.evaluate(() => localStorage.getItem('severgrow.install-prompt.v1') ?? '');
   check(saved.includes('"never":true'), '"Don\'t show again" is saved forever on the device');

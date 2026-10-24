@@ -7681,6 +7681,128 @@ html.futasaku-product .sheet .sheet-head {
   -webkit-backdrop-filter: var(--dark-glass-blur);
   backdrop-filter: var(--dark-glass-blur);
 }
+
+/* ---------- THE INSTALL INVITATION, AS A DIALOG ON THE GLASS ----------
+   Owner, 2026-10-24: "grow futasaku on ur home screen looks so cramped — that can never happen.
+   stretch the dark glass and blur background so it's nice".
+   It was the last bottom sheet in the game, and on a phone it showed why: 4px of air above a
+   title running the full width with the close key laid over the end of it, no measure, and on a
+   tablet it stretched into a 748px strip. It is now a centred plate with room on every side, a
+   readable measure, and the page behind it properly veiled. It wears the same glass family as the
+   pause panel and the challenge card; nothing here is a new surface style, it is the old one
+   finished. Placed after the sheet rules above so it has the last word on this one card. */
+html.futasaku-product #install-prompt {
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+           max(16px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+}
+/* A deeper blur and a darker shade than a sheet's own scrim: this is the one invitation that opens
+   over a finished game, so the glass has to be the only thing in focus. */
+html.futasaku-product #install-prompt > .install-prompt-scrim {
+  background: color-mix(in srgb, var(--c-bg) 38%, transparent);
+  -webkit-backdrop-filter: blur(20px) brightness(0.5) saturate(0.9);
+  backdrop-filter: blur(20px) brightness(0.5) saturate(0.9);
+}
+html.futasaku-product #install-prompt > .install-sheet.sheet {
+  /* STATIC, not fixed: the container grid centres this card, so no viewport anchoring from the
+     bottom-sheet rules can pull it out of place. (Left over from the sheet family, those offsets
+     were the reason the card could hang off the top of a desktop window.) */
+  position: static;
+  /* The wide-screen dialog rule centres a sheet with `left/top: 50%` plus a -50% transform. The
+     grid below already centres this card, so that transform would shift it half its own size up
+     and to the left (a card hanging off the top of a desktop window). Offsets are inert on a static
+     box; the transform is not, so it is named here. */
+  inset: auto;
+  transform: none;
+  width: min(100%, 30rem);
+  max-height: 100%;
+  padding: 24px 24px 20px;
+  border-radius: 18px;
+  /* A plate lifted off the table, not a sheet sliding up: the arrival is the motion layer's
+     (enterSurface in logic/install.ts), so the bottom-sheet keyframe stands down. */
+  animation: none;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.34);
+}
+/* The title is a sentence, not a label: it sits on the card's own left edge like the list under
+   it, and only the close key's width is reserved at the right. Centring a two-line sentence over
+   left-aligned bullets was most of what read as cramped. */
+html.futasaku-product #install-prompt .sheet-head {
+  justify-content: flex-start;
+  padding: 0;
+}
+html.futasaku-product #install-prompt #install-title {
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px 0 0;
+  text-align: left;
+  font-size: clamp(1.15rem, 4.6vw, 1.32rem);
+  line-height: 1.25;
+  /* A two-line sentence must not leave one word stranded on the second line — that orphan was the
+     "cramped" reading more than any measurement was. */
+  text-wrap: balance;
+}
+html.futasaku-product #install-prompt .sheet-head > .icon-only:last-child {
+  position: static;
+  translate: none;
+  flex: none;
+  margin: -6px -8px 0 0;
+}
+/* The body breathes: one gap scale for the list and the keys, and room under the title. */
+html.futasaku-product #install-prompt .sheet-body {
+  gap: 14px;
+  margin-top: 14px;
+}
+html.futasaku-product #install-prompt :is(.install-why, .install-steps) {
+  gap: 10px;
+  padding-left: 1.15rem;
+}
+html.futasaku-product #install-prompt :is(.install-why, .install-steps) li {
+  line-height: 1.45;
+}
+/* Both keys are the card's width: one clear primary, one quiet way out, and the "don't show
+   again" line under them as a text key. A stacked pair reads at a glance; a half-width pair in a
+   narrow measure does not. */
+html.futasaku-product #install-prompt .install-sheet .btn.primary.big,
+html.futasaku-product #install-prompt .install-sheet .btn.ghost {
+  width: 100%;
+}
+/* A short screen has less height than these words need (320x568, 360x640, a phone on its side).
+   The type steps down one size and the rhythm tightens, so the card stays a dialog with air around
+   it instead of filling the whole screen and scrolling. NO words are dropped and no touch target
+   shrinks: only the space between them does. */
+@media (max-height: 700px) {
+  html.futasaku-product #install-prompt > .install-sheet.sheet {
+    padding: 18px 18px 15px;
+  }
+  html.futasaku-product #install-prompt #install-title {
+    font-size: 1.08rem;
+    line-height: 1.22;
+  }
+  html.futasaku-product #install-prompt .sheet-body {
+    margin-top: 10px;
+    gap: 10px;
+  }
+  html.futasaku-product #install-prompt :is(.install-why, .install-steps) {
+    gap: 6px;
+    padding-left: 1rem;
+    font-size: 0.88rem;
+  }
+  html.futasaku-product #install-prompt :is(.install-why, .install-steps) li {
+    line-height: 1.3;
+  }
+}
+/* A phone on its side has less height than the card wants: keep it on the glass and let the body
+   scroll, never clip a key. */
+@media (orientation: landscape) and (max-height: 560px) {
+  html.futasaku-product #install-prompt > .install-sheet.sheet {
+    padding: 16px 18px;
+    max-height: calc(100dvh - 20px);
+    overflow-y: auto;
+  }
+  html.futasaku-product #install-prompt .sheet-body { margin-top: 10px; gap: 10px; }
+}
+
 /* A phone on its side (owner, 2026-10-24: "the tiniest margin above and below the board"): the
    cards and controls stand on the right, centred, so nothing needs the home bar's strip at the
    bottom; the board uses it, and keeps the same few pixels above as below. */

@@ -68,6 +68,49 @@ describe('the dark glass is the lesson window\'s own recipe', () => {
   });
 });
 
+describe('the install invitation is a dialog on the glass, not a bottom sheet (owner, 2026-10-24)', () => {
+  // "grow futasaku on ur home screen looks so cramped — that can never happen. stretch the dark
+  // glass and blur background so it's nice". The rules that stop it regressing are pinned here;
+  // the four sizes (320x568, 390x844, 768x1024, 1280x800) were measured in a real browser.
+  const block = css.slice(
+    css.indexOf('THE INSTALL INVITATION, AS A DIALOG ON THE GLASS'),
+    css.indexOf('/* ONE TITLE PATTERN'),
+  );
+
+  it('the card is centred by its own container, with air on every side', () => {
+    expect(block).toMatch(/#install-prompt \{\s*display: grid;\s*place-items: center;/);
+    expect(block).toMatch(/padding: max\(16px, env\(safe-area-inset-top\)\)/);
+  });
+
+  it('nothing can anchor it to a window edge', () => {
+    // STATIC, and the wide-screen dialog centring (left/top 50% + a -50% transform) is named: that
+    // transform moved the card half its own size up and to the LEFT, hanging it off a desktop
+    // window's top. Offsets are inert on a static box; the transform is not.
+    expect(block).toMatch(/position: static;/);
+    expect(block).toMatch(/transform: none;/);
+    expect(block).toMatch(/inset: auto;/);
+    expect(block).not.toMatch(/bottom: max\(10px/);
+  });
+
+  it('the title owns its line and the close key cannot sit on the words', () => {
+    // The sheet family places the close ABSOLUTELY at the right and centres the title under it.
+    // For a sentence-length title that is what read as cramped, so this card puts both in flow.
+    expect(block).toMatch(/#install-prompt \.sheet-head > \.icon-only:last-child \{\s*position: static;/);
+    expect(block).toMatch(/#install-prompt #install-title \{[^}]*text-align: left;/);
+    expect(block).toMatch(/text-wrap: balance;/);
+    expect(block).toMatch(/font-size: clamp\(1\.15rem, 4\.6vw, 1\.32rem\);/);
+  });
+
+  it('the page behind it is veiled harder than a sheet is, because it opens over a finished game', () => {
+    expect(block).toMatch(/backdrop-filter: blur\(20px\) brightness\(0\.5\) saturate\(0\.9\);/);
+  });
+
+  it('a short screen tightens the rhythm rather than turning the plate into a scroller', () => {
+    expect(block).toMatch(/@media \(max-height: 700px\)/);
+    expect(block).toMatch(/font-size: 0\.88rem;/);
+  });
+});
+
 describe('Match Intel\'s own glass has no frame either', () => {
   it('blur, shade and a soft drop shadow; no border and no inset edge line', () => {
     const surface = readFileSync(fileURLToPath(new URL('../src/player/glass-surface.ts', import.meta.url)), 'utf8');
