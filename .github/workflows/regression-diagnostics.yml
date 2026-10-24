@@ -14,11 +14,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run view 40087975275 --repo severgrow/severgrow-01 --log-failed > failed-regression.log
+          gh run view 40087975308 --repo severgrow/severgrow-01 --log-failed > failed-regression.log
+          gh run view 40089118986 --repo severgrow/severgrow-01 --log-failed >> failed-regression.log
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
             for (const line of readFileSync("failed-regression.log", "utf8").split("\n")) {
-              if (/FAIL |EXIT FAILED|AssertionError|retained-heap|heap end/.test(line)) {
+              if (/FAIL |EXIT FAILED|Error|page.click|locator resolved|waiting for locator/.test(line)) {
                 console.log("::notice::" + line.replaceAll("%", "%25").replaceAll("\r", "%0D"));
               }
             }
