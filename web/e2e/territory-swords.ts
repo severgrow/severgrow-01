@@ -262,6 +262,7 @@ try {
       challenger?.label === 'Challenge on this tile. You challenged RYK.',
       `${defender?.label} / ${challenger?.label}`);
     await page.screenshot({ path: join(OUT, `map-defender-${tag}.png`) });
+    await page.screenshot({ path: join(OUT, `map-challenger-${tag}.png`) });
     await closeup(page, own1, join(OUT, `closeup-defender-${tag}.png`));
     await closeup(page, rival2, join(OUT, `closeup-challenger-${tag}.png`));
 
