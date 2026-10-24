@@ -182,9 +182,12 @@ export function mountDragLayer(hooks: DragLayerHooks) {
 
   const buildGhost = (a: Active) => {
     const g = document.createElement('div');
+    const fromDeck = a.source.kind === 'deck';
     const cls = a.faceEl.classList.contains('card') ? a.faceEl.className : 'card';
-    g.className = `drag-ghost ${cls}`;
-    g.innerHTML = a.faceEl.innerHTML;
+    // A card dragged off the Draw pile is face down: it wears the game's real card back
+    // (`.card.back`, cards.ts), never a copy of the pile's own markup (owner, 2026-10-24).
+    g.className = fromDeck ? 'drag-ghost card back drag-from-deck' : `drag-ghost ${cls}`;
+    g.innerHTML = fromDeck ? '' : a.faceEl.innerHTML;
     const fromPile = a.source.kind === 'deck' || a.source.kind === 'discard';
     g.classList.toggle('drag-from-pile', fromPile);
     const r = a.faceEl.getBoundingClientRect();
