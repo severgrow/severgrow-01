@@ -35,8 +35,13 @@ export const INFORMATION_CSS = `
   border-color: var(--c-accent);
   box-shadow: 0 0 10px color-mix(in srgb, var(--c-accent) 28%, transparent), inset 0 0 7px color-mix(in srgb, var(--c-accent) 8%, transparent);
 }
-/* Picked toward a Bloom (or in the Bloom being painted): the Bloom's own aqua, as on the board. */
-.futa04-information .dock .hand .card.futa04-bloom-pick {
+/* Picked toward a Bloom (or in the Bloom being painted): the Bloom's own aqua, as on the board.
+   The #hand id is load-bearing, not decoration: the lifted-card rule in cards.ts (five classes,
+   on the card-art-ready lifted card, injected LATER) and the generic Grow edge light below both
+   outrank a class-only selector, so this rule silently lost the border and the glow and a selected
+   Bloom looked exactly like any playable card. An id beats any number of classes, and the Grow
+   edge light excludes this class explicitly. */
+html.futa04-information #hand .card.futa04-bloom-pick {
   border-color: #8fd3c9;
   box-shadow: 0 0 12px rgba(143, 211, 201, 0.38), inset 0 0 8px rgba(143, 211, 201, 0.10);
 }
@@ -324,8 +329,10 @@ html.futa04-information[data-step='throw'] #discard .gd-halo {
 }
 html.futa04-information[data-step='throw'] #discard .gd-ring { animation: none !important; opacity: 0; }
 html.futa04-information #hand .card { touch-action: manipulation; }
-/* A short edge light belongs to each card, and follows its fan rotation and lift. */
-html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim) {
+/* A short edge light belongs to each card, and follows its fan rotation and lift. A card picked
+   toward a Bloom opts out: its edge is the Bloom's aqua (see the bloom-pick rule above), never the
+   green of a plain Grow. */
+html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick) {
   box-shadow: 0 0 0 1px rgba(119,179,116,.22), 0 0 8px 1px rgba(88,158,89,.18), 0 5px 15px rgba(5,16,9,.30);
 }
 /* Scale is separate from the fan's rotate/translate, preserving its hit targets. */

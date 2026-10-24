@@ -51,8 +51,19 @@ describe('Bloom has its own colour', () => {
     expect(cockpit).not.toMatch(/:is\(\.kind-strengthen,\.kind-bloom\)/);
   });
   it('the cards picked for it glow the same aqua in the hand', () => {
-    expect(info).toMatch(/\.card\.futa04-bloom-pick \{\s*border-color: #8fd3c9;/);
+    // The id is load-bearing: the lifted-card cream (cards.ts, injected later) and the generic Grow
+    // edge light are more specific, and both overrode a class-only rule — so a selected Bloom was
+    // painted cream/green and looked like any other playable card. 2026-10-24.
+    expect(info).toMatch(/html\.futa04-information #hand \.card\.futa04-bloom-pick \{\s*border-color: #8fd3c9;/);
     expect(main).toMatch(/b\.classList\.toggle\('futa04-bloom-pick', IS_FUTA04 && inBloom\);/);
+  });
+  it('no generic Grow edge light repaints a picked card green', () => {
+    for (const source of [info, cockpit]) {
+      const rules = [...source.matchAll(/html\.futa04-information[^{]*\[data-step='grow'\][^{]*\.card\.playable[^{]*\{[^}]*\}/g)].map((m) => m[0]);
+      const shadows = rules.filter((rule) => rule.includes('box-shadow'));
+      expect(shadows.length).toBeGreaterThan(0);
+      for (const rule of shadows) expect(rule).toContain(':not(.futa04-bloom-pick)');
+    }
   });
   it('every card of the Bloom is lifted, all by the same height (owner, 2026-10-24)', () => {
     expect(main).toMatch(/const lifted = sel\.card === c\.id \|\| picked\.has\(c\.id\) \|\| bloomPick\.includes\(c\.id\) \|\| inBloom;/);
