@@ -206,6 +206,9 @@ const installRitualRecorder = (page: Page): Promise<void> =>
         opponentRank: Number(el?.dataset.opponentRank),
         title: document.getElementById('lottery-title')?.textContent?.trim() ?? '',
         layers: document.querySelectorAll('#lottery-deck .ritual-deck-layer').length,
+        // The lesson window must never stand over the ceremony (or the ceremony over it).
+        plateShown: (() => { const p = document.getElementById('lesson-plate'); return !!p && !p.hidden; })(),
+        glassShown: (() => { const g = document.getElementById('futasaku-glass'); return !!g && !g.hidden; })(),
         you: box('lottery-card-you'),
         opponent: box('lottery-card-opponent'),
         deck: box('lottery-deck'),
@@ -224,6 +227,7 @@ type RitualSnap = {
   deck: { l: number; t: number; r: number; b: number; cx: number; cy: number } | null;
   youHome: { cx: number; cy: number } | null;
   opponentHome: { cx: number; cy: number } | null;
+  plateShown: boolean; glassShown: boolean;
   vw: number; vh: number;
 };
 
@@ -268,6 +272,9 @@ const main = async (): Promise<void> => {
         `${result?.starter} / "${result?.title}"`);
       check('L10: the higher card is the seat that starts', (result?.youRank ?? 0) > (result?.opponentRank ?? 9),
         `${result?.youRank} vs ${result?.opponentRank}`);
+      check('L10: no lesson window stands over the ceremony',
+        snaps.every((x) => !x.plateShown && !x.glassShown),
+        snaps.filter((x) => x.plateShown || x.glassShown).map((x) => x.phase).join(','));
       check('L10: the engine’s starting seat is unchanged while the cards are on screen',
         during?.startingPlayer === 0 && during?.actor === 0 && during?.phase === 'DRAW',
         `startingPlayer=${during?.startingPlayer} actor=${during?.actor} phase=${during?.phase}`);

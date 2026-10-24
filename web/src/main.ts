@@ -5329,7 +5329,10 @@ function renderLessonGuide(): void {
   syncLessonPile(st);
   if (!glassSurface) return;
   // The header stays the menu and the logo; the words are chosen below.
-  if (guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
+  // `pregameHold`: the Who-starts ceremony owns the screen. A lesson (level 10 onwards, the only
+  // levels that have both) must not paint its window or its light over the cards — the send-off
+  // comes after the ceremony, when the hold is released and this function is repainted.
+  if (pregameHold || guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
     lessonBeatNow = null;
     lessonBreath?.clear();
     hideLessonPlate();
