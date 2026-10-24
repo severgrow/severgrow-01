@@ -158,6 +158,47 @@ const tapCell = async (page: Page, cellId: string) => {
   await page.waitForTimeout(40);
 };
 
+/** A finger tap on the crossed swords themselves (the marker's own hit disc). */
+const tapSwords = async (page: Page, cellId: string) => {
+  await page.evaluate((id) => {
+    const hit = document.querySelector(`.world-swords[data-cell-id="${id}"] .world-swords-hit`) as SVGCircleElement | null;
+    const svg = hit?.ownerSVGElement;
+    if (!hit || !svg) return;
+    const box = hit.getBoundingClientRect();
+    const init = {
+      bubbles: true, cancelable: true,
+      clientX: box.left + box.width / 2, clientY: box.top + box.height / 2,
+      pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0,
+    };
+    svg.dispatchEvent(new PointerEvent('pointerdown', init));
+    svg.dispatchEvent(new PointerEvent('pointerup', init));
+  }, cellId);
+  await page.waitForTimeout(60);
+};
+
+/** The marker as the browser draws it: where it sits on its tile, how big it is, what it says. */
+const swordsData = (page: Page, cellId: string) => page.evaluate((id) => {
+  const group = document.querySelector(`.world-swords[data-cell-id="${id}"]`) as SVGGElement | null;
+  const hit = group?.querySelector('.world-swords-hit') as SVGCircleElement | null;
+  const tile = document.querySelector(`.world-hex[data-cell-id="${id}"]`) as SVGPathElement | null;
+  if (!group || !hit || !tile) return null;
+  const hb = hit.getBoundingClientRect();
+  const tb = tile.getBoundingClientRect();
+  const glyph = group.querySelector('.world-swords-glyph') as SVGGElement | null;
+  return {
+    label: hit.getAttribute('aria-label') ?? '',
+    role: hit.getAttribute('role') ?? '',
+    tabindex: hit.getAttribute('tabindex') ?? '',
+    side: group.getAttribute('data-side') ?? '',
+    hit: { w: hb.width, h: hb.height },
+    dx: (hb.left + hb.width / 2) - (tb.left + tb.width / 2),
+    dy: (hb.top + hb.height / 2) - (tb.top + tb.height / 2),
+    swordGroups: group.querySelectorAll(':scope > g > g').length,
+    animation: glyph ? getComputedStyle(glyph).animationName : '',
+    transition: glyph ? getComputedStyle(glyph).transitionDuration : '',
+  };
+}, cellId);
+
 /** Keyboard activation of a real button: no mouse move across the hidden game board. */
 const activate = async (page: Page, selector: string) => {
   await page.locator(selector).first().focus();
@@ -218,18 +259,25 @@ try {
     const sent: { cellId?: string; requestId?: string }[] = [];
     const answered: { accept?: boolean }[] = [];
     const confirmed: string[] = [];
+    // The mock is STATEFUL for the defender's answer: once DECLINE is posted, the list read back no
+    // longer carries the incoming challenge. That is what lets the suite prove the swords leave because
+    // the DATA closed the challenge, not because a local timer fired.
+    let answeredIncoming = false;
 
     // A regex, not a glob: the respond/confirm paths contain slashes, which a single `*` would not
     // cross. This is one handler for the list, the send and both transitions.
     await page.route(/\/v1\/world\/challenges(\/.*)?$/, async (route) => {
       const request = route.request();
       if (request.method() === 'GET') {
-        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, ...challenges, serverNow: NOW }) });
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+          ok: true, incoming: answeredIncoming ? [] : challenges.incoming, outgoing: challenges.outgoing, serverNow: NOW,
+        }) });
         return;
       }
       const body = JSON.parse(request.postData() ?? '{}') as Record<string, unknown>;
       if (request.url().endsWith('/respond')) {
         answered.push({ accept: body.accept === true });
+        if (body.accept !== true) answeredIncoming = true;
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, challenge: { ...challenges.incoming[0], status: 'declined' }, matchId: null }) });
         return;
       }
@@ -315,14 +363,22 @@ try {
         const chip = document.querySelector('.world-challenge-chip') as HTMLElement;
         chip.dataset.probe = 'kept';
         chip.focus();
+        // The swords are REUSED by challenge id too; probe the node so a poll that rebuilt it shows.
+        const swords = document.querySelector('.world-swords') as SVGGElement | null;
+        if (swords) swords.dataset.probe = 'kept';
       });
       await page.waitForTimeout(13_500);
       const survived = await page.evaluate(() => {
         const chip = document.querySelector('.world-challenge-chip') as HTMLElement | null;
-        return { same: chip?.dataset.probe === 'kept', focused: document.activeElement === chip };
+        const swords = document.querySelector('.world-swords') as SVGGElement | null;
+        return {
+          same: chip?.dataset.probe === 'kept', focused: document.activeElement === chip,
+          swords: swords?.dataset.probe === 'kept',
+        };
       });
       check(`[${tag}] a poll keeps the same chip nodes and the player's focus`, survived.same && survived.focused,
         `same node ${survived.same}, focus kept ${survived.focused}`);
+      check(`[${tag}] a poll keeps the same swords nodes too`, survived.swords);
       await page.evaluate(() => (document.querySelector('.world-challenge-chip') as HTMLElement).blur());
     }
     const chipRings = await page.evaluate(() => [...document.querySelectorAll('.world-chip-ring-path')].map((node) => {
@@ -369,6 +425,45 @@ try {
         incoming.territory === incoming.lineTerritory && outgoing.territory === outgoing.lineTerritory,
         `${incoming.territory} / ${outgoing.territory}`);
     }
+
+    // ---- 2b. the crossed swords on the contested tile (owner, 2026-10-24) --------------------
+    const incomingSwords = await swordsData(page, own1);
+    const outgoingSwords = await swordsData(page, rival2);
+    const swordCount = await page.evaluate(() => document.querySelectorAll('.world-swords').length);
+    check(`[${tag}] the crossed swords mark the DEFENDER's contested tile`, !!incomingSwords &&
+      incomingSwords.side === 'incoming' && incomingSwords.swordGroups === 2);
+    check(`[${tag}] the crossed swords mark the CHALLENGER's contested tile`, !!outgoingSwords &&
+      outgoingSwords.side === 'outgoing' && outgoingSwords.swordGroups === 2);
+    check(`[${tag}] only contested tiles carry swords (no marker on a plain rival tile)`, swordCount === 2,
+      `${swordCount} marker(s)`);
+    // The glyph is a drawing OF the tile, not an overlay near it: the hit disc is centred on the hex.
+    check(`[${tag}] the swords sit at the tile's centre, inside its ring`,
+      !!incomingSwords && Math.abs(incomingSwords.dx) <= 1 && Math.abs(incomingSwords.dy) <= 1 &&
+      Math.abs(outgoingSwords!.dx) <= 1 && Math.abs(outgoingSwords!.dy) <= 1,
+      `offset ${n2(incomingSwords?.dx ?? -99)}, ${n2(incomingSwords?.dy ?? -99)}px`);
+    check(`[${tag}] the swords' touch target is at least 44px`, !!incomingSwords &&
+      incomingSwords.hit.w >= 44 && incomingSwords.hit.h >= 44,
+      `${n2(incomingSwords?.hit.w ?? 0)}x${n2(incomingSwords?.hit.h ?? 0)}px`);
+    check(`[${tag}] the glyph is a real, named button for keyboard and screen readers`,
+      incomingSwords?.role === 'button' && incomingSwords.tabindex === '0' &&
+      incomingSwords.label.startsWith('Challenge on this tile.') ,
+      incomingSwords?.label ?? 'missing');
+    check(`[${tag}] the marker says who, from each side`,
+      incomingSwords?.label.includes('RYK challenged you') === true &&
+      outgoingSwords?.label.includes('You challenged RYK') === true,
+      `${incomingSwords?.label} / ${outgoingSwords?.label}`);
+    check(`[${tag}] the swords glyph itself is static (no animation, no transition)`,
+      incomingSwords?.animation === 'none' && incomingSwords.transition === '0s');
+    // Tapping the SWORDS opens the existing challenge sheet, which already answers "who challenged".
+    await tapSwords(page, own1);
+    await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await settleSheet(page);
+    const swordsSheet = await page.evaluate(() =>
+      (document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-line') as HTMLElement | null)?.textContent ?? '');
+    check(`[${tag}] tapping the swords says who challenged this tile`,
+      swordsSheet.includes('RYK') && swordsSheet.includes('challenged you'), swordsSheet);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
 
     // ---- 3. the frontier mark, after selecting a cell of mine --------------------------------
     await page.keyboard.press('Escape');
@@ -452,6 +547,19 @@ try {
     await page.waitForTimeout(400);
     check(`[${tag}] the second DECLINE press posts the answer`, answered.length === 1 && answered[0]!.accept === false,
       JSON.stringify(answered[0] ?? {}));
+    // The answer closes the challenge in the data; the swords and the ring must leave with it.
+    await page.waitForFunction(
+      (id) => !document.querySelector(`.world-swords[data-cell-id="${id}"]`) &&
+        !document.querySelector(`.world-ring[data-cell-id="${id}"]`),
+      own1, { timeout: 5000 }).catch(() => undefined);
+    const afterDecline = await page.evaluate((id) => ({
+      swords: !!document.querySelector(`.world-swords[data-cell-id="${id}"]`),
+      ring: !!document.querySelector(`.world-ring[data-cell-id="${id}"]`),
+      markers: document.querySelectorAll('.world-swords').length,
+    }), own1);
+    check(`[${tag}] DECLINE clears the swords and the ring from that tile`,
+      !afterDecline.swords && !afterDecline.ring && afterDecline.markers === 1,
+      JSON.stringify(afterDecline));
 
     // ---- 6. a finished linked duel offers TAKE THE GROUND -----------------------------------
     await activate(page, '.world-challenge-chip[data-challenge-id="out-2"]');
@@ -520,6 +628,17 @@ try {
   check('[reduced] the breath is off', reduced.animation === 'none' && reduced.chipAnimation === 'none', reduced.animation);
   check('[reduced] the drain transition is off', reduced.transition === '0s', reduced.transition);
   check('[reduced] the ring still shows its drained length', reduced.offset > 0.5 && reduced.offset <= 1, `offset ${n2(reduced.offset)}`);
+  // The swords are static in BOTH motion modes: there is nothing here to switch off, and the glyph is
+  // still fully drawn (the marker is information, not decoration).
+  const reducedSwords = await page.evaluate(() => {
+    const glyph = document.querySelector('.world-swords-glyph') as SVGGElement | null;
+    if (!glyph) return null;
+    const style = getComputedStyle(glyph);
+    return { animation: style.animationName, transition: style.transitionDuration, opacity: style.opacity };
+  });
+  check('[reduced] the swords stay drawn and static', !!reducedSwords &&
+    reducedSwords.animation === 'none' && reducedSwords.transition === '0s' && reducedSwords.opacity === '1',
+    JSON.stringify(reducedSwords ?? {}));
   await page.screenshot({ path: join(OUT, 'challenges-reduced-motion.png') });
   await page.close();
 
