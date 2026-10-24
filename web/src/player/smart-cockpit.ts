@@ -598,7 +598,8 @@ html.futa04-information.reduce-motion :is(#smart-led-cells,#smart-led-bloom,#sma
 html.futa04-information.reduce-motion #board .l-over .target.kind-grow { animation:none; transition:none; }
 `;
 
-export function mountSmartCockpit() {
+/** `heldMove`: the display's word for a held move (GROW 1, BLOOM 3, BOMB), shown instead of CANCEL. */
+export function mountSmartCockpit(options: { heldMove?: () => string | null } = {}) {
   const box = document.getElementById('futa04-box')!;
   const actions = document.getElementById('futa04-actions')!;
   const moves = document.getElementById('moves')!;
@@ -942,7 +943,7 @@ export function mountSmartCockpit() {
     // was lingering into the throw step after EndAct.
     if (lastPhase === phase && lastAction && first?.key !== lastAction) {
       const hint = first?.icon === 'clear' ? 'CLEAR' : first?.icon === 'reverse' ? 'FLIP'
-        : first?.icon === 'cancel' ? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM' : '';
+        : first?.icon === 'cancel' ? options.heldMove?.() ?? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM' : '';
       if (hint) machine.hint(hint);
     }
     if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});

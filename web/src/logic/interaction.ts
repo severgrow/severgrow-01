@@ -333,3 +333,18 @@ export const tapHex = (v: View, legal: readonly Action[], sel: Sel, key: string)
 };
 
 export const tapKind = (sel: Sel, kind: string): Sel => (sel.kind === kind ? { ...sel, kind: null, option: 0 } : { ...sel, kind, option: 0 });
+
+/**
+ * The display's word while a move is held (owner, 2026-10-24: "the LED reads GROW 1, BLOOM 3,
+ * BOMB instead of CANCEL"): what the next board tap will do, and how many tiles it takes.
+ * null when nothing is held.
+ */
+export const heldMoveWord = (sel: Sel, cardIsBomb: boolean): string | null => {
+  const kind = sel.kind;
+  if (kind?.startsWith('bloom-mega-')) return 'BLAST';
+  if (kind?.startsWith('bloom-')) return `BLOOM ${kind.split('-')[1]}`;
+  if (kind === 'fruit') return 'BOMB';
+  if (kind === 'sprout') return 'GROW 1';
+  if (sel.card !== null) return cardIsBomb ? 'BOMB' : 'GROW 1';
+  return null;
+};

@@ -26,10 +26,12 @@ describe('every sheet is the pause panel\'s glass', () => {
   });
 });
 
-describe('the screen behind an open sheet is veiled — and only when a sheet is really open', () => {
+describe('the screen behind an open sheet is veiled by the backdrop — and only while one is open', () => {
   it('counts only the top-level sheets (the install sheet lives inside its own hidden container)', () => {
-    expect(css).toContain('html.futasaku-product:has(body > .sheet:not([hidden]), .install-prompt:not([hidden])) .screen:not(#game):not([hidden])');
-    expect(css).not.toMatch(/:has\(\.sheet:not\(\[hidden\]\)/);
+    // The veil is the backdrop's own blur: it exists only while the scrim (or the install
+    // invitation's own scrim) is shown, so a closed sheet can never leave a screen blurred.
+    expect(css).toMatch(/html\.futasaku-product \.scrim,\s*html\.futasaku-product #gameover,\s*html\.futasaku-product \.install-prompt-scrim \{/);
+    expect(css).not.toMatch(/:has\([^)]*\.sheet:not\(\[hidden\]\)/);
     expect(html).toMatch(/<div id="install-prompt" class="install-prompt" hidden data-ix-surface>[\s\S]{0,400}<section class="sheet install-sheet"/);
   });
 });

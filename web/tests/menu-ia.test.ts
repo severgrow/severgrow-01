@@ -57,12 +57,12 @@ describe('tutorial: no lesson decomposition, one closing pointer', () => {
     expect([...TUTORIAL_CORE].length).toBeGreaterThan(0);
   });
 
-  it("the tutorial's final line points at the Match Intel How to reference", () => {
+  it("the tutorial's final line points at the Match Intel Rules reference (owner, 2026-10-24: Now · Tips · Rules)", () => {
     const lastChapter = TUTORIAL_CHAPTER_IDS.indexOf(TUTORIAL_CORE.at(-1)!);
     const last = tutorialLessons(lastChapter).at(-1)!;
     expect(last.why).toContain(HELP.tutorialFinal);
     expect(last.why).toMatch(/Match Intel/);
-    expect(last.why).toMatch(/How to/);
+    expect(last.why).toMatch(/Rules/);
   });
 });
 

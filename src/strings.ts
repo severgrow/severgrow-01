@@ -674,14 +674,76 @@ export const ONBOARD = Object.freeze({
 export const HELP = Object.freeze({
   /** the only tutorial entry on the main menu */
   tutorial: 'Tutorial',
-  /** Match Intel tab 1 — what happened in this match */
+  /** the glass's own name (its spoken label) */
   intelTab: 'Match Intel',
-  /** Match Intel tab 2 — the moves reference */
-  howToTab: 'How to',
+  /** Match Intel's three tabs (owner, 2026-10-24: "Now · Tips · Rules"): the match as it stands,
+   *  tips for this moment, and the ten lessons as cards with the full rules folded below. */
+  nowTab: 'Now',
+  tipsTab: 'Tips',
+  rulesTab: 'Rules',
   /** the reference heading (also the legacy sheet title) */
   howToTitle: 'How to play',
   /** the tutorial's closing pointer to the reference (its last line) */
-  tutorialFinal: 'Look up a move in Match Intel › How to.',
+  tutorialFinal: 'Look up a move in Match Intel › Rules.',
+});
+
+/** Match Intel's words (owner, 2026-10-24: "pristine… easy to go through and read"). Titles are
+ *  sentences, labels are short capitals, the rest is one plain sentence each. Every tip names
+ *  only what is public: the board, my own hand and the Throw pile. */
+export const INTEL = Object.freeze({
+  lead: (by: number): string => `You lead by ${by}`,
+  behind: (by: number): string => `They lead by ${by}`,
+  level: 'All square',
+  scoreLine: (you: number, them: number, turn: number): string => `${you} – ${them} points · turn ${turn}`,
+  latest: 'LATEST',
+  noMoves: 'No moves yet. The first card is face up on the Throw pile.',
+  tiles: 'TILES',
+  drawPile: 'DRAW PILE',
+  theirHand: 'THEIR HAND',
+  bombsUnseen: 'BOMBS UNSEEN',
+  thrown: 'THROWN SO FAR',
+  thrownNone: 'Nothing thrown yet.',
+  /** one sentence per public move; `you` is true for my own */
+  move: (you: boolean, verb: string, detail: string | null): string => {
+    const who = you ? 'You' : 'They';
+    const card = detail === 'BOMB' ? 'a Bomb' : detail ? `a ${detail}` : 'a card';
+    switch (verb) {
+      case 'THREW': return `${who} threw ${card}.`;
+      case 'TOOK': return `${who} took ${card} from the Throw pile.`;
+      case 'DREW': return `${who} drew ${card} from the Draw pile.`;
+      case 'GREW': return `${who} grew ${card}.`;
+      case 'UP': return `${who} strengthened a tile ${detail ?? ''}.`.replace(' .', '.');
+      case 'BLOOM': return `${who} bloomed ${detail ?? 'three'} tiles at once.`;
+      case 'BOMB': return `${who} played a Bomb.`;
+      case 'BLAST': return `${who} blasted ${detail ?? 'several'} tiles.`;
+      case 'CUT': return `${who} cut off ${detail ?? 'some'} tiles.`;
+      case 'WIN': return `${who} surrounded the home.`;
+      default: return `${who}: ${verb.toLowerCase()}${detail ? ` ${detail}` : ''}.`;
+    }
+  },
+  tipLabel: (level: number, name: string): string => `LESSON ${level} · ${name.toUpperCase()}`,
+  seeRule: 'See the rule',
+  fullRules: 'Full rules',
+  /** the tips, most urgent first */
+  tips: Object.freeze({
+    homeDanger: (left: number): string => left === 1
+      ? 'Your home has one open side left. Fill it now, or they win by surrounding it.'
+      : `Your home has ${left} open sides left. Fill one before they surround it.`,
+    surround: (left: number): string => left === 1
+      ? 'Their home has one open side left. Take it for an instant win.'
+      : `Their home has only ${left} open sides left. Take them and you win at once.`,
+    cut: (n: number): string => `A higher card on their weak link cuts off ${n} of their tiles.`,
+    blast: 'Two Bombs make a Blast: it clears a whole area and does not use your Grow.',
+    bloom: 'You can Bloom: several tiles at once, and it does not use your Grow.',
+    bomb: 'Your Bomb removes any one of their tiles, even a 9.',
+    pileBloom: 'The top card of the Throw pile completes a Bloom in your hand. Take it.',
+    gold: 'A gold hex is in reach. It counts double at the end.',
+    weak: (n: number): string => `If they cut your weak link you lose ${n} tiles. A higher card there holds it.`,
+    deckLow: (n: number): string => n === 1 ? 'One card left in the Draw pile. Make this turn count.' : `${n} cards left in the Draw pile. Make each turn count.`,
+    throwIt: 'Throw a card you cannot use. They see it, and may take it.',
+    keepJoined: 'Keep every tile joined to your home. A cut chain withers.',
+    stronger: 'A higher card can take their tile. Grow toward their home.',
+  }),
 });
 
 /** FUTASAKU 0.5 main menu and its PLAY submenu (owner direction, 2026-10-15). One place for the

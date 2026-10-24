@@ -57,10 +57,11 @@ try {
   for (const topic of ['fruit', 'strengthen', 'draw']) {
     await menu.click('#hud-menu');
     await menu.click('#gm-howto');
-    // FUTASAKU: the pause menu opens the Match Intel "How to" tab, not a separate sheet.
-    check(await menu.locator('#futasaku-glass[data-mode="intel"] [data-intel-tab="howto"][aria-selected="true"]').isVisible(),
-      `${topic}: the pause menu opens the Match Intel How to reference`);
-    check((await menu.locator('#futasaku-glass .intel-tab[data-intel-tab="howto"]').textContent())?.trim() === 'How to', `${topic}: the tab is named How to`);
+    // FUTASAKU: the pause menu opens Match Intel's Rules tab with the full rules unfolded, not a
+    // separate sheet (owner, 2026-10-24: the tabs are Now · Tips · Rules).
+    check(await menu.locator('#futasaku-glass[data-mode="intel"] [data-intel-tab="rules"][aria-selected="true"]').isVisible(),
+      `${topic}: the pause menu opens the Match Intel Rules reference`);
+    check((await menu.locator('#futasaku-glass .intel-tab[data-intel-tab="rules"]').textContent())?.trim() === 'Rules', `${topic}: the tab is named Rules`);
     await menu.locator(`#futasaku-glass .intel-howto [data-tip="${topic}"]`).click();
     check(await menu.locator('#sheet-futa04-help').isVisible(), `${topic}: explicit lesson opens during a game`);
     check(!/\bfruit(?:ed)?\b/i.test(await menu.locator('#sheet-futa04-help').innerText()), `${topic}: help uses Bomb terminology`);

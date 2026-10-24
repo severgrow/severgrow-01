@@ -61,7 +61,11 @@ describe('the pause panel: dark glass, one lead, one pair, one tool row', () => 
     expect(panelCss).toMatch(/--gm-glass: var\(--dark-glass\)/);
     expect(styleCss).toMatch(/--dark-glass: rgba\(8, 10, 10, 0\.42\);\s*--dark-glass-blur: blur\(9px\) saturate\(1\.05\);/);
     // The match behind is blurred and darkened while a sheet or the finish card is up.
-    expect(styleCss).toMatch(/html\.game-veiled #game \{\s*filter: blur\(7px\) brightness\(0\.55\) saturate\(0\.85\);/);
+    // The veil lives on the BACKDROP, never as a filter on the game (owner, 2026-10-24: on an iPhone a
+    // filtered game made the panel appear with no animation).
+    expect(styleCss).toMatch(/html\.futasaku-product \.scrim,\s*html\.futasaku-product #gameover,\s*html\.futasaku-product \.install-prompt-scrim \{[^}]*backdrop-filter: var\(--veil\);/);
+    expect(styleCss).toMatch(/--veil: blur\(7px\) brightness\(0\.58\) saturate\(0\.85\);/);
+    expect(styleCss).not.toMatch(/#game \{\s*filter: blur/);
     expect(mainSource).toMatch(/function syncVeil\(\)/);
     expect(mainSource).toMatch(/classList\.toggle\('game-veiled', IS_FUTA04 && inMatch && over\)/);
   });
@@ -139,7 +143,8 @@ describe('the face keeps its palette and its tempo', () => {
   it('has a designed reduce-motion state: the panel is simply there', () => {
     expect(panelCss).toMatch(/\.reduce-motion #sheet-menu[\s\S]*?animation: none/);
     expect(panelCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*#sheet-menu \{\s*animation: none/);
-    expect(styleCss).toMatch(/\.reduce-motion\.game-veiled #game \{\s*transition: none;/);
+    // the backdrop's own fade is the interface layer's, which stands still under Reduce motion
+    expect(styleCss).not.toMatch(/\.screen:not\(#game\):not\(\[hidden\]\) \{\s*filter:/);
   });
 });
 

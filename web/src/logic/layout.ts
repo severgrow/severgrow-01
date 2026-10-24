@@ -381,7 +381,12 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
       : Math.min(420, Math.max(340, Math.round(W * 0.32)));
     const card = cardSize(dockW, maxHand, wideDesktop ? Math.min(150, Math.round(dockW * 0.17)) : 72);
     const rows = { table: Math.max(HEIGHTS.table, card.h + PILE_LABEL), hand: card.h + HEIGHTS.handPad };
-    const zone: Box = { x: sl + BOARD_MARGIN, y: top, w: W - dockW - 3 * BOARD_MARGIN, h: v.h - top - sb - BOARD_MARGIN };
+    // A phone on its side (owner, 2026-10-24): the board takes the whole height with the same tiny
+    // margin above and below. The menu key and the wordmark sit in the corners, where a hexagonal
+    // board has no tiles. Desktops keep the board under the header.
+    const phoneSide = v.w > v.h && v.h <= 560;
+    const zoneTop = phoneSide ? st + BOARD_MARGIN : top;
+    const zone: Box = { x: sl + BOARD_MARGIN, y: zoneTop, w: W - dockW - 3 * BOARD_MARGIN, h: v.h - zoneTop - sb - BOARD_MARGIN };
     const fit = bestFit(zone.w, zone.h, radius);
     const u = boardUnits(radius, fit.orient);
     const bw = u.w * fit.scale;

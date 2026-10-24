@@ -20,7 +20,7 @@ import { createTheirsDim, replayedByOpponent } from './player/replay-display.js'
 import { outcomeCue } from './player/outcome-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
 import { gameHighlights } from './logic/highlights.js';
-import { EMPTY_SEL, futa04OneTap, growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { EMPTY_SEL, futa04OneTap, growControls, heldMoveWord, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
 import { ONBOARDING_LEVELS, guideKey, onboardGuide, revealTierFor } from './logic/onboarding.js';
@@ -149,7 +149,8 @@ import {
 } from './logic/tutorial-gate.js';
 import type { TutorialGate } from './logic/tutorial-gate.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
-import type { GlassSurface } from './player/glass-surface.js';
+import type { GlassSurface, IntelGuide, IntelTabId } from './player/glass-surface.js';
+import { intelTips, nearestRule, ruleCards, tipLabel } from './logic/intel-guide.js';
 import { cancelStarterRitual, isStarterRitualPlaying, playStarterRitual } from './player/starter-ritual.js';
 import { offlineRitualKey, onlineRitualKey, starterRitualView } from './logic/starter-ritual.js';
 import type { StarterRitualView } from './logic/starter-ritual.js';
@@ -1411,6 +1412,7 @@ let pregameHold = false;
 let startGameGeneration = 0;
 
 function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null, holdForRitual = false) {
+  turnWasMine = null; // a new game never opens with a hand-off cue
   // A match started from anywhere supersedes a ritual belonging to an older one.
   cancelStarterRitual();
   startGameGeneration++;
@@ -1663,7 +1665,9 @@ async function mountPlayerEnhancements() {
       isPaintDragging: () => !!draw.ptr || draw.shape.length > 0,
     });
     futa04Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
-    smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
+    smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit({
+      heldMove: () => session ? heldMoveWord(session.sel, session.view.hand.find((c) => c.id === session!.sel.card)?.suit === null) : null,
+    });
     lessonBreath = (await import('./player/lesson-breath.js')).mountLessonBreath();
     layoutKey = '';
     if (session) render();
@@ -4305,6 +4309,31 @@ function renderRevealTile(): void {
   noteRenderCost('tile', performance.now() - t0);
 }
 
+/**
+ * Turn hand-off (owner, 2026-10-24): the moment the turn comes back to me, a soft light runs round
+ * the board's edge and the display says YOUR TURN. Not in lessons or the tutorial (they say it in
+ * words); with reduced motion the display word alone carries it.
+ */
+let turnWasMine: boolean | null = null;
+function cueTurnHandOff(v: View): void {
+  if (busy()) return; // the opponent's turn is still being shown
+  const was = turnWasMine;
+  turnWasMine = v.turnPlayer === HUMAN && !v.result;
+  if (was !== false || !turnWasMine || !IS_FUTA04 || lessonActive() || coach.tutorial) return;
+  smartCockpit?.event({ message: 'YOUR TURN', priority: 20, duration: 1300, mode: 'green' });
+  if (document.documentElement.classList.contains('reduce-motion') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  let cue = document.getElementById('turn-cue');
+  if (!cue) {
+    cue = document.createElement('div');
+    cue.id = 'turn-cue';
+    cue.setAttribute('aria-hidden', 'true');
+    $('game').append(cue);
+  }
+  cue.classList.remove('on');
+  void cue.offsetWidth; // restart the sweep
+  cue.classList.add('on');
+}
+
 function render() {
   const t0 = performance.now();
   applyLayout();
@@ -4361,12 +4390,14 @@ function render() {
   syncTutorialChrome();
   renderTutorial();
   syncFreePlayBulbNudge();
+  cueTurnHandOff(v);
   if (glassSurface?.isOpen()) {
     if (tutorialFreePlayActive() && glassSurface.mode?.() === 'guidance') {
       glassSurface.guidance(freePlayGuidanceLine());
     } else if (intelState !== session.state && glassSurface.mode?.() === 'intel') {
       intelState = session.state;
-      glassSurface.intel(matchIntel(v, session.state.history ?? [], openingPublicDiscard(session.state, session.base)));
+      const model = intelModel()!;
+      glassSurface.intel(model.data, { guide: model.guide });
     }
   }
   if (!IS_FUTA04 && placeTeachingPanel && thumbLayout) {
@@ -5354,30 +5385,48 @@ function toggleMatchIntel() {
     noteFreePlayBulbInteraction();
     return;
   }
-  openIntel('intel');
+  openIntel(lastIntelTab());
 }
 
 /** Match Intel tab labels, kept in src/strings.ts for a one-line rename. */
-const INTEL_TABS = Object.freeze({ intel: HELP.intelTab, howto: HELP.howToTab });
+const INTEL_TABS = Object.freeze({ now: HELP.nowTab, tips: HELP.tipsTab, rules: HELP.rulesTab });
+/** Match Intel opens on the tab the player used last (owner, 2026-10-24). */
+const INTEL_TAB_KEY = 'severgrow.intel.tab.v1';
+const lastIntelTab = (): IntelTabId => {
+  const saved = store.get(INTEL_TAB_KEY);
+  return saved === 'tips' || saved === 'rules' ? saved : 'now';
+};
 
-/** Open the Match Intel glass on a tab. Tab 1 is public match history, tab 2 the moves reference. */
-function openIntel(tab: 'intel' | 'howto'): void {
+/** Match Intel's content: the public match record, plus tips and lesson cards for this moment. */
+function intelModel(): { data: ReturnType<typeof matchIntel>; guide: IntelGuide } | null {
+  if (!session) return null;
+  const v = session.view;
+  const tips = intelTips(v);
+  return {
+    data: matchIntel(v, session.state.history ?? [], openingPublicDiscard(session.state, session.base)),
+    guide: { tips: tips.map((t) => ({ level: t.level, label: tipLabel(t), text: t.text })), rules: ruleCards(session.state.config), rule: nearestRule(tips) },
+  };
+}
+
+/** Open the Match Intel glass: Now (the match), Tips (this moment), Rules (the lessons, the full rules). */
+function openIntel(tab: IntelTabId, fullRules = false): void {
   if (!glassSurface || !session) return;
-  const model = matchIntel(session.view,session.state.history ?? [],openingPublicDiscard(session.state,session.base));
-  glassSurface.intel(model, { tab, labels: INTEL_TABS, howToHtml: howToReferenceHtml(session.state.config) });
+  const model = intelModel()!;
+  glassSurface.intel(model.data, { tab, labels: INTEL_TABS, howToHtml: howToReferenceHtml(session.state.config), guide: model.guide, fullRules,
+    onTab: (next) => store.set(INTEL_TAB_KEY, next) });
   intelState=session.state;
   $('futa04-help-button').setAttribute('aria-expanded','true');
   document.querySelector<HTMLElement>('#futasaku-glass .intel-close')?.focus();
 }
 
-/** The pause menu's "How to play" opens the same moves reference: the Match Intel "How to" tab
+/** The pause menu's "How to play" opens the same moves reference: Match Intel's Rules tab, full rules unfolded,
  *  where the glass exists, the legacy sheet during a guided tutorial step (the glass is the
  *  tutorial window then) and on channels without the glass. */
 function openHowToReference(): void {
   if (coach.tutorial && !tutorialFreePlayActive()) { sheet('sheet-howto'); return; }
   if (!session || !glassSurface) { sheet('sheet-howto'); return; }
   sheet(null);
-  openIntel('howto');
+  openIntel('rules', true);
 }
 
 /** The coach's arrow: points at the one thing to tap next for the suggested move. */
@@ -5822,8 +5871,27 @@ function applyLayout() {
   if (IS_FUTA04) sideDockStale = true;
 
 }
-window.addEventListener('resize', () => applyLayout());
-window.visualViewport?.addEventListener('resize', () => applyLayout());
+/**
+ * iPhone Safari fires resize before it reports the new size when the phone turns (and often no
+ * second event once the size settles), so a layout taken on the event alone could keep the other
+ * orientation's numbers: back in portrait the board stayed squeezed at the bottom (owner report,
+ * 2026-10-24). After any resize the real size is read again a few times while it settles, and
+ * the layout follows whenever it moved. applyLayout is cheap when nothing changed (its key).
+ */
+let settleTimers: number[] = [];
+function layoutSoon() {
+  applyLayout();
+  for (const t of settleTimers) clearTimeout(t);
+  settleTimers = [80, 250, 600, 1200].map((ms) => window.setTimeout(() => {
+    const before = layoutKey;
+    applyLayout();
+    if (layoutKey !== before && session) render();
+  }, ms));
+}
+window.addEventListener('resize', layoutSoon);
+window.addEventListener('orientationchange', layoutSoon);
+window.visualViewport?.addEventListener('resize', layoutSoon);
+screen.orientation?.addEventListener?.('change', layoutSoon);
 
 /**
  * Positioning pass: the score bar keeps "You" and "Opponent" only while both fit their (equal)
