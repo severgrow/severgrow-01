@@ -95,7 +95,7 @@ export class Session {
   }
 
   /** Plays `action` for `who` (default: the player) if it is legal right now. */
-  play(action: Action, who: Player = this.viewer): Played | null {
+  play(action: Action, who: Player = this.viewer, opts: { auto?: boolean } = {}): Played | null {
     const s = this.state;
     if (s.phase === 'GAME_OVER' || s.actor !== who) return null;
     const legal = who === this.viewer ? this.legal : legalActions(viewFor(s, who));
@@ -110,8 +110,14 @@ export class Session {
     catch(error) { if (!enumerated && error instanceof IllegalActionError) return null; throw error; }
     // Growing tiles, Strengthen, a Fruit card (and pressing "Throw a card") reveal nothing new, so the player
     // may take them back. A draw, a throw or any bot move makes everything before final.
-    if (who === this.viewer && (action.t === 'Bloom' || action.t === 'MegaBomb' || action.t === 'Sprout' || action.t === 'PlayFruit' || action.t === 'EndAct')) this.undoStack.push({ state: s, n: this.log.length });
-    else this.undoStack = [];
+    if (who === this.viewer && (action.t === 'Bloom' || action.t === 'MegaBomb' || action.t === 'Sprout' || action.t === 'PlayFruit' || action.t === 'EndAct')) {
+      // An EndAct the APP plays on the player's behalf — skipping the optional Bloom to go to Throw
+      // after the one Grow — is not a move the player made, so it must not become its own undo stop.
+      // Without this, the first Undo after a Grow took back the app's jump to Throw while the board
+      // still showed the Grow, so it looked like Undo did nothing at all (owner report, 2026-10-24).
+      // A DELIBERATE "throw a card" still checkpoints normally, so that one stays undoable.
+      if (!(opts.auto && action.t === 'EndAct')) this.undoStack.push({ state: s, n: this.log.length });
+    } else this.undoStack = [];
     const played: Played = { before: s, action, after, steps: buildSteps(s, action, after, this.viewer) };
     this.state = after;
     this.restoredOpponentTurn = null;

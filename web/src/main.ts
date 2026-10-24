@@ -2811,7 +2811,7 @@ function flushInstallInvite() {
   if (outcome) window.setTimeout(() => noteFinishedForInstall(outcome, true), 900);
 }
 
-function humanPlay(a: Action) {
+function humanPlay(a: Action, opts: { auto?: boolean } = {}) {
   bloomPick = []; // a move is made: nothing stays held toward a Bloom
   // The » step, taken once in a lesson, is taught: from then on the game moves on by itself.
   if (isOnlineDuel()) {
@@ -2830,7 +2830,7 @@ function humanPlay(a: Action) {
   fastForward();
   const advice = currentAdvice();
   rememberCardRects();
-  const p = session.play(a, HUMAN);
+  const p = session.play(a, HUMAN, opts);
   if (!p) return;
   inspectKey = null;
   guideGoal = null;
@@ -8350,7 +8350,9 @@ function trySkipBloomToThrow(): boolean {
   if (!session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb')) return false;
   const end = session.legal.find(a => a.t === 'EndAct');
   if (!end) return false;
-  humanPlay(end);
+  // `auto`: this EndAct is the app's own jump to Throw, not a move the player made, so it must not
+  // become an undo stop of its own (see Session.play).
+  humanPlay(end, { auto: true });
   return true;
 }
 
