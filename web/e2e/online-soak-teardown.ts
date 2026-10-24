@@ -34,6 +34,7 @@ import {
   statePhase,
   tapExposed,
   waitingFlag,
+  waitIdle,
 } from './helpers/local-duel.js';
 import {
   type ListenerCounts,
@@ -141,7 +142,9 @@ const drawViaDeck = async (s: SeatSession): Promise<boolean> => {
       const start = Date.now();
       while (Date.now() - start < 8_000) {
         const phase = await statePhase(s);
-        if (phase === 'ACT' || phase === 'DISCARD') return true;
+        // The shadow phase changes before the drawn card's flight finishes. Inputs are still
+        // closed during that animation, so a phase-only wait races the next card/hex tap.
+        if (phase === 'ACT' || phase === 'DISCARD') return waitIdle(s);
         await sleep(80);
       }
     }
@@ -393,6 +396,15 @@ const apiTurn = async (duel: LocalDuel, matchId: string, token: string, maxSteps
 /** Tap the first card, then try lit hexes until a mid-turn draft exists. */
 const makeDraft = async (s: SeatSession): Promise<boolean> => {
   if (await hasDraft(s)) return true;
+  const confirmPendingMove = async (): Promise<boolean> => {
+    // Smart confirmation is a fixed product default. A risky legal Grow is still only a preview
+    // until the player accepts it; the old fallback mistook that preview for a missing draft.
+    if (await s.page.locator('#confirm-play').isVisible()) {
+      await s.page.click('#confirm-play');
+      await sleep(220);
+    }
+    return hasDraft(s);
+  };
   // Prefer the multi-tile Bloom path (the kind buttons), which is exact.
   if (await paintGrow(s, 2)) return true;
   // Otherwise take the exact legal Sprout: its own card, its own coordinate.
@@ -406,16 +418,16 @@ const makeDraft = async (s: SeatSession): Promise<boolean> => {
   if (!sp) return false;
   await tapExposed(s, `#hand [data-card="${sp.card}"]`);
   await sleep(180);
-  if (await hasDraft(s)) return true;
+  if (await confirmPendingMove()) return true;
   await tapExposed(s, `#board .hex-cell[data-key="${sp.key}"]`);
   await sleep(220);
-  if (await hasDraft(s)) return true;
+  if (await confirmPendingMove()) return true;
   // Last resort: the card is a fanned-out sliver — try the page's own card element directly.
   await s.page.click(`#hand [data-card="${sp.card}"]`, { force: true }).catch(() => undefined);
   await sleep(180);
   await tapExposed(s, `#board .hex-cell[data-key="${sp.key}"]`);
   await sleep(220);
-  return hasDraft(s);
+  return confirmPendingMove();
 };
 
 // ---- heavy-Bloom helper: the multi-tile sequential reveal path ---------------------------------
