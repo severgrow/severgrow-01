@@ -698,6 +698,22 @@ device, or produced by a bundle built before the change, must never be refused b
   70 levels and miss one: nothing past the gap opens**) and a save cannot be edited into a shortcut.
   A loss removes nothing. A completed level stays replayable. Restarting a level reproduces the
   intended fixed start (the seed is never rerolled).
+- **The player's PLACE is the anchor (owner, 2026-10-24).** *Place* is `currentLevel(progress)`: the
+  level they are working on (the one they just finished, or the next unfinished one). Everything that
+  returns the player to the campaign reads it: the PLAY entry, the level list's `current` tile, its
+  Continue, and the way back from a finished level. The level list scrolls that tile into view and
+  keeps its head (Back, Continue) fixed above the scrolling chapters.
+- **A replay can never move the place.** A saved match on any level *behind* the place is a replay in
+  progress; it is never offered by the campaign entry, and the level list's Continue never says
+  "Resume" for it (that was the reported stranding: replaying level 1 made the entry resume level 1).
+  `recordCampaignResult` already kept a replay's win from unlocking anything; the entry and the saved
+  match now agree. A won replay's finish card leads **Back to levels**, not "Next level", so the player
+  is never marched through levels they already passed.
+- **The Tutorial (Settings → Tutorial).** The first nine campaign levels, replayable at any progress.
+  It is an ENTRY POINT only: the tiles are the campaign's own `CampaignLevel` objects (same seed, bot,
+  config and lesson), started through the same `startGame` seam with `tutorial = true`. A tutorial
+  match writes nothing at all — no `CampaignProgress`, no resume save, no lesson notes, no Seed proof —
+  and its finish card leads **Back to Tutorial** (Settings), never into the campaign.
 - Progress is its own record, `severgrow.campaign.progress.v3`: the completed ids, the best attempt
   per level, and the derived unlocked count. Classic's `severgrow.stats.v1` (`winsByLevel`, a length-9
   array) is never migrated or reshaped.
@@ -870,4 +886,7 @@ Reading:
 | `tests/campaign/isolation.test.ts` | the shared rules version has no board; `src/engine/`, `server/src/` and `web/src/online/` never read a campaign level |
 | `web/tests/campaign-seam.test.ts` | only a campaign level produces overrides; the online client cannot build a match from a config; campaign saves never share the classic key |
 | `web/tests/campaign-save.test.ts` | progress saves/restores; an unfinished campaign match resumes as its level; existing classic (and legacy) saves still decode |
+| `web/tests/campaign-flow.test.ts` | a replay never moves the place; the entry ignores a replay save; the Tutorial is the campaign's own levels 1-9 by reference and leaves progress byte-identical; the entry/sheet/save wiring |
+| `web/tests/finish-card.test.ts` | which action leads the finish card in every mode, including a replay (Back to levels) and a tutorial (Back to Tutorial) |
 | `web/e2e/campaign-shots.ts` | the browser flow at 360x640 and 390x844: menu → campaign → level on its own seed and board → resume on reload → win unlocks the next → tile states, reading sizes, no clipping, screenshots |
+| `web/e2e/level-flow.ts` | the browser flow of the return path: finish level 23, open the list on the place, replay level 1, keep the place, refuse to resume the replay save, and the Settings → Tutorial round trip (screenshots in `/tmp/levelflow`) |

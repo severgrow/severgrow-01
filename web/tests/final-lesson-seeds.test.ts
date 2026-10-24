@@ -17,7 +17,7 @@ describe('the final lesson pays Seeds', () => {
     expect(FINAL_LESSON.id).toBe('lesson-10');
     expect(main).toMatch(/const finalLessonWon = lessonNow\?\.level === FINAL_LESSON\.level && p\.after\.result\.winner === HUMAN;/);
     expect(main).toMatch(/levelId: FINAL_LESSON\.id, actions: \[\.\.\.session\.log\]/);
-    expect(main).toMatch(/campaignLevel && !lessonNow && p\.after\.result\.winner === HUMAN/);
+    expect(main).toMatch(/campaignLevel && !lessonNow && !tutorialReplay && p\.after\.result\.winner === HUMAN/);
     expect(main).toMatch(/if \(taught && taught\.level !== FINAL_LESSON\.level\) seedRewardMessage = '';/);
   });
   it('a proof sent before the server knows the lesson is kept, not thrown away', () => {
@@ -40,7 +40,7 @@ describe('the won card explains Seeds and Territory', () => {
     expect(html).toContain('<p id="go-territory" class="go-territory" hidden>');
     expect(html).toContain('<button id="go-territory-open" class="btn ghost" type="button" hidden>');
     expect(main).toMatch(/const territoryIntro = !!taught && taught\.level === FINAL_LESSON\.level && won/);
-    expect(main).toMatch(/other\.hidden = lead === 'back-to-campaign' \|\| territoryIntro;/);
+    expect(main).toMatch(/other\.hidden = lead === 'back-to-campaign' \|\| lead === 'back-to-tutorial' \|\| territoryIntro;/);
     expect(main).toMatch(/bind\('go-territory-open', \(\) => \{\n  hideGameOver\(\);\n  showScreen\('menu'\);\n  onlineLobbyCtl\?\.openWorld\('menu'\);/);
   });
 });

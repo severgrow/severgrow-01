@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CAMPAIGN, RESULT } from '../../src/strings.js';
+import { CAMPAIGN, RESULT, TUTORIAL_REPLAY } from '../../src/strings.js';
 import { CAMPAIGN_LEVELS, nextCampaignLevel } from '../../src/campaign/index.js';
 import { finishLead } from '../src/logic/finish-actions.js';
 
@@ -42,6 +42,22 @@ describe('which action leads the finish card, per mode', () => {
   it('a plain offline game keeps its own two words', () => {
     expect(finishLead({ online: false, campaign: false, won: true, hasNext: false })).toBe('play-again');
   });
+
+  it('a REPLAY of a level behind the place goes back to the levels, never forward', () => {
+    // Owner (2026-10-24): "you always go from the one you finished on". After replaying level 1 the
+    // finish card must not march the player through levels 2, 3, … they already passed; the honest
+    // way out is the list, which opens on their real level.
+    expect(finishLead({ online: false, campaign: true, won: true, hasNext: true, replay: true })).toBe('back-to-campaign');
+    expect(finishLead({ online: false, campaign: true, won: true, hasNext: false, replay: true })).toBe('back-to-campaign');
+    // A loss already leads with Try again; the secondary is still the anchored list.
+    expect(finishLead({ online: false, campaign: true, won: false, hasNext: true, replay: true })).toBe('try-again');
+  });
+
+  it('a TUTORIAL replay returns to the Tutorial, never into campaign progression', () => {
+    expect(finishLead({ online: false, campaign: true, won: true, hasNext: true, tutorial: true })).toBe('back-to-tutorial');
+    expect(finishLead({ online: false, campaign: true, won: false, hasNext: false, tutorial: true })).toBe('back-to-tutorial');
+    expect(TUTORIAL_REPLAY.back).toBe('Back to Tutorial');
+  });
 });
 
 describe('the last level is decided by the DATA, never a hardcoded count', () => {
@@ -54,13 +70,13 @@ describe('the last level is decided by the DATA, never a hardcoded count', () =>
   });
 
   it('main.ts asks the level data, so a growing campaign needs no change here', () => {
-    expect(mainSource).toMatch(/const lead = finishLead\(\{ online: false, campaign: !!campaign, won, hasNext: !!next \}\)/);
-    expect(mainSource).toMatch(/const next = campaign && won \? nextCampaignLevel\(campaign\.number\) : null/);
+    expect(mainSource).toMatch(/const lead = finishLead\(\{ online: false, campaign: !!campaign, won, hasNext: !!next, tutorial, replay \}\)/);
+    expect(mainSource).toMatch(/const next = campaign && won && !tutorial && !replay \? nextCampaignLevel\(campaign\.number\) : null/);
     expect(mainSource).not.toMatch(/campaign\.number\s*===?\s*(10|30)\b/);
   });
 
   it('the leading button really starts that next level', () => {
-    expect(mainSource).toMatch(/if \(campaignLevel && wonNow\) \{[\s\S]{0,200}const next = nextCampaignLevel\(campaignLevel\.number\)/);
+    expect(mainSource).toMatch(/if \(campaignLevel && wonNow\) \{[\s\S]{0,200}const next = campaignReplay \? null : nextCampaignLevel\(campaignLevel\.number\)/);
     expect(mainSource).toMatch(/if \(next\) return startCampaignLevel\(next\)/);
   });
 
@@ -105,7 +121,7 @@ describe('the card is one screen: the result leads, the rest waits behind "More"
     // Game review (owner, 2026-10-23) is a key, not a row: it shares the board's row. Open Territory
     // (level 10's won card, owner 2026-10-24) is the secondary's alternate, never shown beside it.
     expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-territory-open', 'go-board', 'go-review', 'go-more', 'go-menu']);
-    expect(mainSource).toMatch(/other\.hidden = lead === 'back-to-campaign' \|\| territoryIntro;/);
+    expect(mainSource).toMatch(/other\.hidden = lead === 'back-to-campaign' \|\| lead === 'back-to-tutorial' \|\| territoryIntro;/);
     expect(mainSource).toMatch(/\$\('go-territory-open'\)\.hidden = !territoryIntro;/);
     const css = read('../src/style.css');
     expect(css).toMatch(/\.go-buttons:has\(#go-review:not\(\[hidden\]\)\) > #go-board,\s*\.go-buttons:has\(#go-review:not\(\[hidden\]\)\) > #go-review \{\s*grid-column: auto;/);

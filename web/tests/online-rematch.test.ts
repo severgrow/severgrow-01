@@ -78,6 +78,6 @@ describe('offline keeps its own words (the campaign now leads with a level)', ()
     // (`web/src/logic/finish-actions.ts` decides which one, and its test covers the whole matrix).
     expect(mainSource).toContain("won ? 'Play again' : 'Try again'");
     expect(mainSource).toContain("lead === 'next-level' ? CAMPAIGN.nextLevel");
-    expect(mainSource).toMatch(/const lead = finishLead\(\{ online: false, campaign: !!campaign, won, hasNext: !!next \}\)/);
+    expect(mainSource).toMatch(/const lead = finishLead\(\{ online: false, campaign: !!campaign, won, hasNext: !!next, tutorial, replay \}\)/);
   });
 });
