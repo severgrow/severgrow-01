@@ -856,7 +856,8 @@ export const INSTALL = Object.freeze({
   never: "Don't show again",
   iosSteps: Object.freeze([
     'Tap the Share button — the square with the arrow pointing up.',
-    'Choose Add to Home Screen, then tap Add.',
+    // iOS 26 asks whether to "Open as Web App"; off, the game opens inside Safari with its bars.
+    'Choose Add to Home Screen, keep Open as Web App on, then tap Add.',
   ] as const),
   manualSteps: Object.freeze([
     'Open your browser menu (the three dots).',
