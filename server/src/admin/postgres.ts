@@ -901,8 +901,19 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
         // or a guessed id cannot surface test data either.
         pool.query(`${MATCH_SELECT} where m.id = $1 and ${MATCH_VISIBLE('m')}`, [id]),
         pool.query(
+          // `events` is written as a JSON STRING around a JSON array (double-encoded): every row in
+          // the live table is `jsonb_typeof = 'string'`, so a bare `jsonb_array_length(events)`
+          // raises "cannot get array length of a scalar" and the whole match screen fails. Handle
+          // both shapes: an array as-is, a string that holds an array parsed, anything else counted
+          // as zero rather than crashing the page.
           `select revision, seat, player_id, action->>'type' as action_type, created_at,
-                  coalesce(jsonb_array_length(events), 0) as events
+                  coalesce(jsonb_array_length(
+                    case jsonb_typeof(events)
+                      when 'array' then events
+                      when 'string' then case when (events #>> '{}') like '[%' then (events #>> '{}')::jsonb else '[]'::jsonb end
+                      else '[]'::jsonb
+                    end
+                  ), 0) as events
              from match_moves where match_id = $1 order by revision asc limit ${clampLimit(moveLimit, 200)}`,
           [id],
         ),

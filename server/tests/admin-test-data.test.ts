@@ -227,5 +227,13 @@ describe('the real SQL store filters test data in every read', () => {
     const matchQuery = sql.find((s) => /\bfrom matches m\b/.test(s));
     expect(matchQuery, 'matchDetail did not read the match row').toBeTruthy();
     expect(matchQuery!).toMatch(/is_test/);
+    // The move timeline must survive the double-encoded `events` column: every live row is a JSON
+    // STRING around an array, and a bare jsonb_array_length() raised "cannot get array length of a
+    // scalar", failing the whole screen. The read now handles the array, the string, and neither.
+    // (the match read also counts moves in a subquery, so pick the timeline read itself)
+    const movesQuery = sql.find((s) => /\bfrom match_moves where match_id = \$1\b/.test(s));
+    expect(movesQuery, 'matchDetail did not read the moves').toBeTruthy();
+    expect(movesQuery!).toMatch(/jsonb_typeof\(events\)/);
+    expect(movesQuery!).toMatch(/#>> '\{\}'/);
   });
 });
