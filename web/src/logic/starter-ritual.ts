@@ -47,6 +47,25 @@ export const offlineRitualKey = (seed: number): string => `offline:${seed}`;
 /** A stable string key for the online ritual. One key per server match. */
 export const onlineRitualKey = (matchId: string): string => `online:${matchId}`;
 
+/**
+ * The first campaign level that opens with the ritual (owner, 2026-10-24: "from level 10 onwards
+ * the ritual card for picking who starts the game should be visible").
+ *
+ * Levels 1-9 keep their hand-held, authored openings: their first sentence is about the board, and
+ * a ceremony over it would be a second thing to read before the first lesson. Level 10 is the last
+ * lesson and the first real game; from there every campaign level opens exactly like a practice
+ * match or an online duel — the same component, timing, reveal and sound.
+ */
+export const RITUAL_FROM_CAMPAIGN_LEVEL = 10;
+
+/**
+ * Does this match open with the ritual? A presentation rule only: it never decides who starts
+ * (the engine's `newMatch` / the server does, and the ritual presents that result).
+ * `campaignLevel` is null for every non-campaign start (practice, rematch, a URL seed).
+ */
+export const playsStarterRitual = (productChannel: boolean, campaignLevel: number | null): boolean =>
+  productChannel && (campaignLevel === null || campaignLevel >= RITUAL_FROM_CAMPAIGN_LEVEL);
+
 /** FNV-1a + an avalanche step: tiny, stable and good enough to seed the presentation stream. */
 const hashKey = (key: string): number => {
   let h = 2166136261 >>> 0;

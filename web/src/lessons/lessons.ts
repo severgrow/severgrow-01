@@ -71,7 +71,13 @@ export type Lesson = {
 /** The one-time concepts a lesson explains in its info box before the first move. */
 export type IntroKind =
   | 'tree' | 'their-home' | 'first-draw' | 'rock' | 'gold'
-  | 'bloom-cards' | 'surround' | 'bomb' | 'blast' | 'pile-gold';
+  | 'bloom-cards' | 'surround' | 'bomb' | 'blast' | 'pile-gold'
+  /**
+   * Level 10's send-off, said once before the first draw of the first real game (owner,
+   * 2026-10-24). It explains nothing on the board: nothing is lit, a tap anywhere dismisses it,
+   * and it never comes back.
+   */
+  | 'first-game';
 
 /**
  * The level that first teaches each power. Before it the lesson never offers that move; a hello
@@ -241,7 +247,9 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
   },
   {
     level: 10, version: 3, locked: false, guide: 'idle',
-    intro: [],
+    // The last level opens like a real game (the ritual plays from level 10 on), then says this one
+    // thing before the first draw: you know the game now, go and play it (owner, 2026-10-24).
+    intro: ['first-game'],
     goals: [],
     newActions: [],
     // A normal opening, the one copy the server's Seeds verifier also replays (final.ts).
@@ -748,6 +756,8 @@ const introFor = (s: State, which: IntroKind, id: string, legal: readonly Action
       return rock ? explain(id, W.rocksBlockLine, { t: 'rock', key: rock }) : null;
     }
     case 'pile-gold': return explain(id, W.pileGoldLine, { t: 'discard' });
+    // Level 10's send-off: no target, no action word — the box speaks and a tap anywhere starts play.
+    case 'first-game': return explain(id, W.firstGameLine, { t: 'none' });
     case 'gold': {
       const gold = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rich' && legal.some((a) => a.t === 'Sprout' && keyOf(a.coord) === k));
       return gold ? explain(id, W.goldDoubleLine, { t: 'hex', key: gold }) : null;

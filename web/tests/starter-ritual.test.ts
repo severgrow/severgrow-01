@@ -15,11 +15,14 @@ import type { Player } from '../../src/engine/index.js';
 import {
   offlineRitualKey,
   onlineRitualKey,
+  playsStarterRitual,
   RITUAL_DECK_SIZE,
+  RITUAL_FROM_CAMPAIGN_LEVEL,
   starterRitualCards,
   starterRitualDeck,
   starterRitualView,
 } from '../src/logic/starter-ritual.js';
+import { lessonFor, lessonOpening } from '../src/lessons/lessons.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -156,5 +159,57 @@ describe('the outcome is readable (owner, 2026-10-23)', () => {
     expect(RESULT_HOLD_MS).toBe(1000);
     const src = readFileSync(fileURLToPath(new URL('../src/player/starter-ritual.ts', import.meta.url)), 'utf8');
     expect(src).toMatch(/this\.showOutcome\(\);\s*\/\/[^\n]*\n\s*await this\.sleep\(this\.ms\(RESULT_HOLD_MS\)\);/);
+  });
+});
+
+describe('which matches open with the ritual (owner, 2026-10-24)', () => {
+  it('plays on a practice match and on every campaign level from 10 on', () => {
+    expect(RITUAL_FROM_CAMPAIGN_LEVEL).toBe(10);
+    expect(playsStarterRitual(true, null), 'practice').toBe(true);
+    for (const n of [10, 11, 12, 13, 31, 70]) expect(playsStarterRitual(true, n), `level ${n}`).toBe(true);
+  });
+
+  it('never plays on the hand-held lessons 1-9', () => {
+    // Those nine openings are authored and deliberately skip the draw (their first sentence is
+    // about the board, not about who starts). Enabling the ritual there would be a different game.
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9]) expect(playsStarterRitual(true, n), `level ${n}`).toBe(false);
+    expect(lessonFor(10), 'level 10 is the first level after them').not.toBeNull();
+    expect(lessonFor(9)!.level).toBe(9);
+  });
+
+  it('is a product-channel rule, exactly like the ritual itself', () => {
+    expect(playsStarterRitual(false, null)).toBe(false);
+    for (const n of [1, 10, 11, 70]) expect(playsStarterRitual(false, n), `level ${n}`).toBe(false);
+  });
+});
+
+describe('the campaign opening decides the starter; the ritual only presents it', () => {
+  it('level 10 opens on your turn, and dealing its two cards changes nothing', () => {
+    const l10 = lessonFor(10)!;
+    const opening = lessonOpening(l10);
+    expect(opening.startingPlayer, 'the authored opening is the engine\'s decision').toBe(0);
+    expect(opening.actor).toBe(0);
+    expect(opening.phase).toBe('DRAW');
+    const snapshot = structuredClone(opening);
+    const starter = opening.startingPlayer ?? opening.turnPlayer;
+    const view = starterRitualView(offlineRitualKey(opening.seed), starter, 0);
+    expect(view.starter).toBe('you');
+    expect(view.you.rank).toBeGreaterThan(view.opponent.rank);
+    // The match is byte-identical: the ritual drew from its own stream and touched nothing.
+    expect(opening).toEqual(snapshot);
+    expect(lessonOpening(l10)).toEqual(snapshot);
+  });
+
+  it('a campaign match from 11 on names the seat newMatch decided, for any seed', () => {
+    for (let i = 0; i < 300; i++) {
+      const seed = 96_010 + i;
+      const state = newMatch(seed);
+      const starter = state.startingPlayer!;
+      expect(starter).toBe(startingPlayerFor(seed));
+      const view = starterRitualView(offlineRitualKey(seed), starter, 0);
+      expect(view.starter, `seed ${seed}`).toBe(starter === 0 ? 'you' : 'opponent');
+      // The higher card belongs to whoever the engine says starts, never the other way round.
+      expect(view.starter === 'you' ? view.you.rank > view.opponent.rank : view.opponent.rank > view.you.rank).toBe(true);
+    }
   });
 });

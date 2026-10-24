@@ -42,6 +42,15 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 | 9 | the Throw pile can finish a Bloom; skip the Grow | on points |
 | 10 | a normal game against the gentlest bot | on points (or surround) |
 
+**The Who-starts ritual from level 10 on** (owner, 2026-10-24). Levels 1-9 keep their authored
+openings and go straight to the board. From level 10 — the first real game — every campaign match
+opens with the same card ritual as a practice match and an online duel: same component, timing,
+reveal and sound (`logic/starter-ritual.ts` decides where it plays, `player/starter-ritual.ts` draws
+it). It is presentation only; the engine's `startingPlayerFor`/`newMatch` (and the server, online)
+still decides who starts, and a lesson opening always starts on the player's turn. After the cards,
+level 10 says one line in the info box before the first draw: "You are ready now for your first game
+of Futasaku. Good luck!" — dismissible with a tap anywhere, never repeated.
+
 **How a lesson is authored** (`web/src/lessons/`):
 
 - `authored.ts` builds the exact opening from real engine cards on the 19-hex map:

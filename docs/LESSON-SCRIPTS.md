@@ -366,14 +366,21 @@ The same in every level:
   - Gold 0,0, rock 0,1.
   - Your tile -1,1 (4); their tiles 1,-1 (4), 1,-2 (6), 2,-1 (7).
   - The gentlest bot (level 1). Draw pile: 14 cards.
+  - **This is the first level that opens with the Who-starts ritual** (owner, 2026-10-24): the same
+    card ceremony as a practice match and an online duel, before the board is yours. It presents the
+    engine's starter — `authoredState` opens every lesson on your turn — and decides nothing.
+    Levels 1-9 keep their authored openings and never show it.
 - **Beats:**
+  - Before the first draw, once: BOX: "You are ready now for your first game of Futasaku. Good
+    luck!" | nothing lit, a tap anywhere dismisses it | no action line on the display (the box
+    speaks, the display keeps the score). Skipped in a resumed game, where the draw has happened.
   - No guidance unless you are idle for 6 s: then the light and the action line on the display
     (never a lone word, never a button).
   - When the Draw pile is empty: DISPLAY: LAST TURN | BOX: "The Draw pile is empty – this is your
     last turn." | tap anywhere
 - **Finish:** YOU CAN PLAY FUTASAKU / YOU LEARNED: THE WHOLE GAME (★), then Next: the big board.
 
-Level 11 is the first 37-hex level. It has no lesson.
+Level 11 is the first 37-hex level. It has no lesson, and it also opens with the ritual.
 
 ## Turn counts (the player who follows the light)
 

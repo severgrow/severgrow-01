@@ -1423,6 +1423,8 @@ export const LESSON = Object.freeze({
   blastLine: 'Blast: two Bombs clear a large area. Homes are safe.',
   freeGrowLine: 'Blast clears several tiles at once and does NOT use your Grow.',
   pileGoldLine: 'The Throw pile glows gold when its top card completes a Bloom in your hand.',
+  // the last lesson's send-off, before the first real game (owner, 2026-10-24), verbatim
+  firstGameLine: 'You are ready now for your first game of Futasaku. Good luck!',
   optionalLine: 'Tap » to skip Grow/Bloom and keep your cards for later.',
   // right after the skip, the Undo key lit (owner, 2026-10-22)
   undoLine: 'You are able to undo your previous moves until you Throw a card at the end of your turn.',
