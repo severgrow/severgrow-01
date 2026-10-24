@@ -85,12 +85,15 @@ const SET3: readonly (readonly [0 | 1 | 2 | 3, number])[] = [[0, 3], [1, 3], [2,
 
 export const LESSONS: readonly Lesson[] = Object.freeze([
   {
-    level: 1, version: 3, locked: true, guide: 'always',
+    level: 1, version: 4, locked: true, guide: 'always',
     intro: ['tree', 'their-home', 'first-draw'],
     goals: [{ t: 'grow' }],
     newActions: ['draw', 'grow', 'throw'],
     position: {
       seed: 96001,
+      // Taking their ground is explained in level 2, so level 1 withholds it (owner, 2026-10-24:
+      // "i dont want anyone to take opp's tile before its explained"). Grows on empty ground stay.
+      rules: { allowOvergrow: false },
       hand: [[0, 8], [1, 2], [1, 5], [2, 4], [1, 3], [2, 6], [3, 5]],
       opponent: [[1, 2], [2, 2], [3, 3], [0, 2], [3, 2], [2, 3], [3, 4]],
       deck: [[2, 7], [0, 4], [0, 5], [0, 6], [1, 7], [3, 6], [3, 7], [3, 2], [0, 7], [1, 6], [2, 8], [1, 4]],

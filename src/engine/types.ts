@@ -51,6 +51,11 @@ export type RulesConfig = {
   allowStrengthen: boolean;
   /** v0.5: Strengthens per player per game; -1 = no limit. */
   strengthenLimitPerGame: number;
+  /**
+   * Futasaku 0.4: a stronger tile may take an enemy non-root tile (Overgrow). Off only where that
+   * rule has not been taught yet; off means no growth of mine may land on their ground at all.
+   */
+  allowOvergrow: boolean;
   /** v0.6: Fruit cards in the deck (joker-style: no suit, no number). */
   fruitCardCount: number;
   /** v0.6: a Fruit target may be touched by my root, not only by my other tiles. */
