@@ -7722,3 +7722,27 @@ html.futasaku-product #turn-cue.on { animation: turn-cue 1100ms cubic-bezier(.22
 }
 html.reduce-motion #turn-cue { display: none; }
 @media (prefers-reduced-motion: reduce) { html.futasaku-product #turn-cue { display: none; } }
+
+/* CENTRED MENUS (owner, 2026-10-24: "everything should be centered here and in any similar
+   menus"). The finish card and its review face: kicker, title, score, reason and every key sit on
+   the card's centre line; the won rule under the title centres with them. */
+html.futasaku-product #gameover .go-card,
+html.futasaku-product #gameover :is(.go-context, .go-title, .go-sub, .go-learned, .go-reason, .go-review-face) {
+  text-align: center;
+}
+html.futasaku-product #gameover .go-score { justify-content: center; }
+html.futasaku-product #gameover .go-reason { margin-inline: auto; }
+html.futasaku-product #gameover.won .go-title::after { margin-inline: auto; }
+html.futasaku-product #gameover .go-buttons .btn { justify-content: center; text-align: center; }
+html.futasaku-product #gameover :is(#go-highlights, #go-break, #go-moves, #go-stats) { text-align: center; }
+/* The pause panel's turn line centres in its pill, and every sheet's title sits on the centre
+   line with its close key at the right edge (Settings, Restart, Profile, How to play…). Rows that
+   pair a label with a control (a switch, a choice) keep the label left and the control right:
+   that is a form, not a menu. */
+html.futasaku-product #sheet-menu .gm-turn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  justify-items: center; text-align: center;
+}
+html.futasaku-product .sheet .sheet-head { position: sticky; justify-content: center; }
+html.futasaku-product .sheet .sheet-head > h2 { flex: 1; min-width: 0; text-align: center; padding-inline: 44px; }
+html.futasaku-product .sheet .sheet-head > .icon-only:last-child { position: absolute; right: 0; top: 50%; translate: 0 -50%; }
