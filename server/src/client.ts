@@ -107,6 +107,15 @@ export type DuelClientOptions = {
   region?: string;
   /** Self-heal hook for a rejected token. See `UnauthorizedHandler`. */
   onUnauthorized?: UnauthorizedHandler;
+  /**
+   * Tag guests this client creates as automated test traffic (`x-futasaku-traffic: test`), so they
+   * are marked `is_test` at creation and never land on the owner's human views.
+   *
+   * Default: TRUE when there is no browser (`typeof window === 'undefined'`). A real player is always
+   * in a browser; a harness, an e2e suite and a soak script are Node processes. It is still an
+   * explicit option, so a browser-driven suite can opt in and any other caller can opt out.
+   */
+  testTraffic?: boolean;
 };
 
 export const DEFAULT_SESSION_KEY = 'severgrow.duel.session.v1';
@@ -122,6 +131,8 @@ export class DuelClient {
    * The pinned Edge region, appended as `forceFunctionRegion`. See `DuelClientOptions.region`.
    */
   private readonly region: string | null;
+  /** Whether this client tags the guests it creates as test traffic (see `DuelClientOptions`). */
+  private readonly testTraffic: boolean;
   /**
    * Recovery hook for a rejected token. A public field (not just readonly options) so the owner of
    * this client can wire it after the identity store that the hook itself needs has been built.
@@ -143,6 +154,7 @@ export class DuelClient {
     this.clientVersion = options.clientVersion ?? DUEL_CLIENT_VERSION;
     this.rulesVersion = options.rulesVersion ?? CURRENT_RULES_VERSION;
     this.region = options.region && options.region.trim() ? options.region.trim() : null;
+    this.testTraffic = options.testTraffic ?? (globalThis as { window?: unknown }).window === undefined;
     this.onUnauthorized = options.onUnauthorized;
   }
 
@@ -151,6 +163,9 @@ export class DuelClient {
   createGuest(displayName?: string): Promise<CreateGuestResponse> {
     return this.request<CreateGuestResponse>('POST', '/v1/guests', {
       body: displayName === undefined ? {} : { displayName },
+      // Only ever sent for guest CREATION, and only by a harness (see `DuelClientOptions`). The
+      // server stores it as `players.is_test` — the marker the dashboard trusts.
+      traffic: this.testTraffic,
     });
   }
 
@@ -358,7 +373,7 @@ export class DuelClient {
 
   // ---- transport ----
 
-  private request<T>(method: string, path: string, options: { token?: string; body?: unknown } = {}): Promise<T> {
+  private request<T>(method: string, path: string, options: { token?: string; body?: unknown; traffic?: boolean } = {}): Promise<T> {
     return this.send<T>(method, path, options, true);
   }
 
@@ -383,7 +398,7 @@ export class DuelClient {
   private async send<T>(
     method: string,
     path: string,
-    options: { token?: string; body?: unknown },
+    options: { token?: string; body?: unknown; traffic?: boolean },
     mayRecover: boolean,
   ): Promise<T> {
     const headers: Record<string, string> = {
@@ -391,6 +406,7 @@ export class DuelClient {
       'x-futasaku-client-version': this.clientVersion,
       'x-futasaku-rules-version': this.rulesVersion,
     };
+    if (options.traffic === true) headers['x-futasaku-traffic'] = 'test';
     if (options.token !== undefined) headers.authorization = `Bearer ${options.token}`;
     const init: { method: string; headers: Record<string, string>; body?: string } = { method, headers };
     if (options.body !== undefined) {

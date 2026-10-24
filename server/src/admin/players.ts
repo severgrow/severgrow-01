@@ -22,6 +22,12 @@ export type PlayerFacts = {
   createdAt: number;
   google: boolean;
   presenceAt: number | null;
+  /** The stored test marker (`players.is_test`, migration 0013). Never inferred from a name. */
+  isTest: boolean;
+  /** Why the row was marked, written by the tool that marked it. Null when nothing recorded one. */
+  testReason: string | null;
+  /** The owner's correction: false = always a real person, true = always a bot, null = follow the marker. */
+  testOverride: boolean | null;
   matches: { played: number; finished: number; wins: number; lastAt: number | null; lastStatus: string | null };
   campaign: { highest: number | null; clears: number; lastAt: number | null; lastLevel: number | null };
   reports: { count: number; lastAt: number | null };
@@ -39,12 +45,26 @@ export type PlayerActivity =
   | 'tile'
   | 'report';
 
+/** The two sides of the split the owner cares about. A human tester is `human`, never `bot`. */
+export type PlayerClassification = 'human' | 'bot';
+
 export type AdminPlayersRow = {
   id: string;
   tag: string;
   displayName: string | null;
   kind: 'guest' | 'account';
   google: boolean;
+  /**
+   * `bot` means an AUTOMATED test account — a harness created it, or the conservative backfill
+   * recognised a CI burst. A real person testing the game is `human`, whatever their name looks like.
+   */
+  classification: PlayerClassification;
+  /** The sentence shown beside the account, so the owner can trust or correct the call. */
+  classificationReason: string;
+  /** The stored reason for the test marker itself (null when none was recorded). */
+  testReason: string | null;
+  /** True when the owner has moved this row to the other side by hand. */
+  testOverridden: boolean;
   createdAt: number;
   /** The newest recorded activity of any kind (never earlier than `createdAt`). */
   lastSeenAt: number;
@@ -61,11 +81,21 @@ export type AdminPlayersRow = {
 };
 
 export type AdminPlayersSummary = {
+  /** Real players (humans): the number every human-facing view shows as "players". */
   players: number;
+  /** The same number, named for the arithmetic: `humans + bots === total`. */
+  humans: number;
   accounts: number;
   guests: number;
   google: number;
-  /** "Seen" = newest recorded activity of any kind inside the window. */
+  /** Automated test accounts, counted separately. `players + bots` is exactly `total`. */
+  bots: number;
+  /** Bots with a recorded event in the last 24 h — the "is a test running right now" signal. */
+  botsActive24h: number;
+  botsCreated24h: number;
+  /** Rows the owner has moved by hand (in either direction). */
+  overridden: number;
+  /** "Seen" = newest recorded activity of any kind inside the window. Humans only. */
   seen24h: number;
   seen7d: number;
   seen30d: number;
@@ -131,15 +161,50 @@ const activityOf = (f: PlayerFacts, now: number): { at: number; activity: Player
   return best;
 };
 
+/**
+ * The ONE place an account is called a bot or a human. Deterministic, and the same on both stores.
+ *
+ * Order of evidence:
+ *   1. the owner's own override, in either direction (he is the authority, and it is reversible);
+ *   2. the stored test marker plus the reason the tool wrote when it marked the row;
+ *   3. otherwise human. A missing reason is never treated as evidence, and a generated-looking name
+ *      is never evidence at all — every guest name is generated from its id.
+ */
+export const classificationOf = (f: {
+  isTest: boolean;
+  testReason: string | null;
+  testOverride: boolean | null;
+}): { classification: PlayerClassification; reason: string; overridden: boolean } => {
+  if (f.testOverride === false) {
+    return { classification: 'human', reason: 'Owner override: this is a real person, always shown.', overridden: true };
+  }
+  if (f.testOverride === true) {
+    return { classification: 'bot', reason: 'Owner override: marked as an automated test account.', overridden: true };
+  }
+  if (f.isTest) {
+    return {
+      classification: 'bot',
+      reason: f.testReason?.trim() || 'Marked as test data in the database (no reason recorded).',
+      overridden: false,
+    };
+  }
+  return { classification: 'human', reason: 'No test marker: treated as a real player.', overridden: false };
+};
+
 export const shapePlayers = (facts: readonly PlayerFacts[], now: number, limit = PLAYERS_LIMIT): AdminPlayers => {
   const rows: AdminPlayersRow[] = facts.map((f) => {
     const last = activityOf(f, now);
+    const judged = classificationOf(f);
     return {
       id: f.id,
       tag: playerTag(f.id),
       displayName: f.displayName,
       kind: f.kind,
       google: f.google,
+      classification: judged.classification,
+      classificationReason: judged.reason,
+      testReason: f.testReason,
+      testOverridden: judged.overridden,
       createdAt: f.createdAt,
       lastSeenAt: last.at,
       lastActivity: last.activity,
@@ -154,28 +219,37 @@ export const shapePlayers = (facts: readonly PlayerFacts[], now: number, limit =
   });
   rows.sort((a, b) => b.lastSeenAt - a.lastSeenAt || b.createdAt - a.createdAt || a.id.localeCompare(b.id));
 
-  const within = (ms: number) => rows.filter((r) => now - r.lastSeenAt <= ms).length;
+  // Every human-facing figure below counts HUMANS only. Bots are counted in their own fields, so a
+  // number is never quietly a mix of the two.
+  const humans = rows.filter((r) => r.classification === 'human');
+  const bots = rows.filter((r) => r.classification === 'bot');
+  const within = (list: readonly AdminPlayersRow[], ms: number) => list.filter((r) => now - r.lastSeenAt <= ms).length;
   const levels = new Map<number, number>();
-  for (const r of rows) if (r.campaignHighest !== null) levels.set(r.campaignHighest, (levels.get(r.campaignHighest) ?? 0) + 1);
+  for (const r of humans) if (r.campaignHighest !== null) levels.set(r.campaignHighest, (levels.get(r.campaignHighest) ?? 0) + 1);
   const left = new Map<PlayerActivity, number>();
-  for (const r of rows) left.set(r.lastActivity, (left.get(r.lastActivity) ?? 0) + 1);
+  for (const r of humans) left.set(r.lastActivity, (left.get(r.lastActivity) ?? 0) + 1);
 
   const summary: AdminPlayersSummary = {
-    players: rows.length,
-    accounts: rows.filter((r) => r.kind === 'account').length,
-    guests: rows.filter((r) => r.kind === 'guest').length,
-    google: rows.filter((r) => r.google).length,
-    seen24h: within(DAY),
-    seen7d: within(7 * DAY),
-    seen30d: within(30 * DAY),
-    joined7d: rows.filter((r) => now - r.createdAt <= 7 * DAY).length,
+    players: humans.length,
+    humans: humans.length,
+    accounts: humans.filter((r) => r.kind === 'account').length,
+    guests: humans.filter((r) => r.kind === 'guest').length,
+    google: humans.filter((r) => r.google).length,
+    bots: bots.length,
+    botsActive24h: within(bots, DAY),
+    botsCreated24h: bots.filter((r) => now - r.createdAt <= DAY).length,
+    overridden: rows.filter((r) => r.testOverridden).length,
+    seen24h: within(humans, DAY),
+    seen7d: within(humans, 7 * DAY),
+    seen30d: within(humans, 30 * DAY),
+    joined7d: humans.filter((r) => now - r.createdAt <= 7 * DAY).length,
     funnel: [
-      { label: 'Known to the server', n: rows.length },
-      { label: 'Played an online match', n: rows.filter((r) => r.matches.played > 0).length },
-      { label: 'Finished an online match', n: rows.filter((r) => r.matches.finished > 0).length },
-      { label: 'Won an online match', n: rows.filter((r) => r.matches.wins > 0).length },
-      { label: 'Cleared a campaign level (11+)', n: rows.filter((r) => r.campaignHighest !== null).length },
-      { label: 'Claimed a world tile', n: rows.filter((r) => r.tiles > 0).length },
+      { label: 'Known to the server', n: humans.length },
+      { label: 'Played an online match', n: humans.filter((r) => r.matches.played > 0).length },
+      { label: 'Finished an online match', n: humans.filter((r) => r.matches.finished > 0).length },
+      { label: 'Won an online match', n: humans.filter((r) => r.matches.wins > 0).length },
+      { label: 'Cleared a campaign level (11+)', n: humans.filter((r) => r.campaignHighest !== null).length },
+      { label: 'Claimed a world tile', n: humans.filter((r) => r.tiles > 0).length },
     ],
     highestLevel: [...levels.entries()].sort((a, b) => a[0] - b[0]).map(([level, n]) => ({ level, n })),
     leftAt: [...left.entries()]

@@ -12,6 +12,7 @@
 import { AdminApi, apiBaseFromLocation, apiBaseUrl, clearSignedOut, findToken, forgetDeadToken, forgetToken, gameToken, rememberPastedToken, type AdminSession } from './api.js';
 import { finishGoogle, googleAvailable, startGoogle, supabaseConfig } from './google.js';
 import { renderPlayers } from './screens/players.js';
+import { renderBots } from './screens/bots.js';
 import type { Ctx } from './ui.js';
 import type { TokenSource } from './api.js';
 import { button, el } from './ui.js';
@@ -28,6 +29,7 @@ import { formatDateTime, parseHash } from './format.js';
 const ROUTES: readonly { group: string; route: string; label: string }[] = [
   { group: 'Today', route: 'overview', label: 'Overview' },
   { group: 'Players', route: 'players', label: 'All players' },
+  { group: 'Players', route: 'bots', label: 'Bots (test accounts)' },
   { group: 'Players', route: 'player', label: 'Look up a player' },
   { group: 'Players', route: 'campaign', label: 'Campaign progress' },
   { group: 'Play', route: 'matches', label: 'Online matches' },
@@ -120,6 +122,9 @@ const render = (session: AdminSession, api: AdminApi, source: TokenSource): void
         return;
       case 'players':
         await renderPlayers(view, ctxIn, params);
+        return;
+      case 'bots':
+        await renderBots(view, ctxIn, params);
         return;
       case 'player':
         await renderPlayer(view, ctxIn, params);

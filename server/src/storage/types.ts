@@ -16,6 +16,17 @@ export type PlayerRecord = {
    * direct SQL. Absent/false means a real player.
    */
   isTest?: boolean;
+  /**
+   * Why `isTest` was set, written by the tool that set it (a harness at creation, or the backfill
+   * that recognised a CI burst). Shown beside the account on the Bots tab so the owner can judge it.
+   * Null when nothing recorded a reason; never invented.
+   */
+  testReason?: string | null;
+  /**
+   * The owner's correction (migration 0016): `false` = always a real person, `true` = always a bot,
+   * absent/null = follow `isTest`. Every admin read treats this as part of the test marker.
+   */
+  testOverride?: boolean | null;
 };
 
 export type TokenRecord = {

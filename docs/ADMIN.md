@@ -124,6 +124,8 @@ All routes require an allow-listed bearer token. `X` marks a mutation.
 | `GET /v1/admin/reports` | `feedback_reports` + triage, filtered and paginated (keyset) |
 | `GET /v1/admin/reports.csv` | the same rows as CSV, same filters, same fields, capped |
 | `POST /v1/admin/reports/:id/triage` **X** | status (`new`/`reviewing`/`resolved`) + private note; audited |
+| `GET /v1/admin/players` | every account, **both sides of the human/bot split** (each row carries `classification`, `classificationReason`, `testReason`), with humans and bots counted separately |
+| `POST /v1/admin/players/:id/visibility` **X** | the owner's correction: `{override:'human' \| 'bot' \| 'auto'}`. Stored on the player row and audited in the same transaction |
 | `GET /v1/admin/player?q=` | nickname, tag (`#7QK2`) or player id lookup |
 | `GET /v1/admin/matches[/:id]` | match list, and one match's result, participants and move timeline |
 | `GET /v1/admin/ledger` | the Seeds ledger, filtered and paginated |
@@ -144,7 +146,8 @@ returns *how many* events a move produced, never the event payloads (they are th
 server-side record and can contain the opponent's hidden draw). This is asserted by tests, not just
 intended.
 
-**The content mutations** are report triage and the two owner edits in §3a. Triage Each change appends a row to `admin_audit` (who, what, when,
+**The content mutations** are report triage, the two owner edits in §3a and the human/bot correction
+in §3b. Each change appends a row to `admin_audit` (who, what, when,
 old→new status, the note *length*). The note text itself is **not** copied into the audit row: it
 already lives on the report, and duplicating player-adjacent text into a second table is how private
 text ends up somewhere nobody expected. There are still no bans, no map publishing and no gameplay
@@ -167,6 +170,50 @@ which is never touched. Reassigning a tile keeps its history.
 
 Needs: migration `0014_world_challenges.sql` (it adds the `'admin'` tile source) and the `duel` Edge
 Function redeployed. Until then the two forms answer "This needs the updated server" and change nothing.
+
+### 3b. Bots vs real people testing the game (2026-10-24)
+
+The owner: *"i mainly care about not confusing bots with real players who are testing the game."*
+There are **three** groups, and the dashboard never collapses the last two:
+
+1. **Automated test accounts** — created by an e2e suite, a soak/simulation script or CI. Nothing
+   human looks at them. Hidden from every human-facing view by default; listed on the **Bots** tab.
+2. **Real people testing the game** — the owner, friends, invited playtesters. **Never hidden**, and
+   never labelled a bot. Their guest name is generated from their id like everyone else's, so a
+   generated-looking name is not evidence of anything.
+3. **Regular players** — humans, same as group 2.
+
+**How an account is classified** (`classificationOf`, `server/src/admin/players.ts` — one function,
+both stores, the dashboard reads its sentence):
+
+| evidence | result |
+|---|---|
+| the owner's override (`players.test_override`) | wins in both directions, and is reversible |
+| `players.is_test` + the reason written when it was marked | bot, with that reason shown |
+| `players.is_test` with no reason recorded | bot, "no reason recorded" shown — never a guessed reason |
+| no marker | **human**. Names are never consulted |
+
+**Two ways the marker is written**, both explicit:
+
+- **At creation** (`POST /v1/guests` with `x-futasaku-traffic: test` → `is_test = true`, reason
+  "Tagged at creation by an automated test harness"). `DuelClient` sends it by default when there is
+  no browser, because a real player is always in a browser and a harness is always a Node process;
+  `testTraffic` remains an explicit option. The game's own guest creation never sends it.
+- **The conservative backfill** (`server/scripts/backfill-test-bursts.ts`, dry-run by default): only a
+  `guest` with **no recorded activity of any kind ever** (no match seat, wallet, ledger, claim,
+  receipt, report, identity or presence) **and** created inside a CI-sized burst (≥ 8 accounts within
+  ±5 minutes) **and** older than 6 hours. Anything ambiguous is left human on purpose.
+
+**The correction.** The Bots tab prints each reason and offers *"This is a real person — always
+show"*: `POST /v1/admin/players/:id/visibility {override:'human'}`, stored on the player row so it
+survives a reload, audited in the same transaction, and honoured by **every** admin read
+(`coalesce(test_override, is_test)`). *"Undo"* hands the row back to its stored marker. A corrected
+account moves between the human list and the Bots tab immediately, and the counts are recomputed from
+the rows, so `humans + bots` always equals the total shown.
+
+**The game's campaign/training bots are not here** and never were players: they live in `src/bots/`
+and leave no `players` row (they are verified offline by `server/src/seeds/verify.ts`). The Bots tab
+states this so "bots" cannot be read as "in-game opponents".
 
 ---
 
@@ -294,6 +341,30 @@ npm run server:migrate                 # applies it (ONLY after approval)
 and the report list will read as if every report were `new` — the read screens otherwise work, because
 `feedback_triage` is only ever `LEFT JOIN`ed.
 
+### 6a. `0016_player_visibility.sql` — APPLIED (2026-10-24)
+
+Two **nullable** columns on `players` and nothing else, so every existing row keeps exactly the meaning
+it had (`null` override == follow `is_test`):
+
+| column | why |
+|---|---|
+| `test_reason text` | the evidence behind a bot call ("Tagged at creation by an automated test harness", or the backfill's burst sentence). Shown beside the account so the owner can judge it, never guessed |
+| `test_override boolean` | the owner's correction: `false` = always a real person, `true` = always a bot, `null` = follow `is_test`. Read by **every** admin query as `coalesce(test_override, is_test)` |
+
+Additive and idempotent (`add column if not exists`), no backfill inside the migration, no index
+(the table is small and the effective predicate is a `coalesce`), same RLS lock-down as its
+predecessors (P-21). Applied on the live project with `npm run server:migrate`; verified present in
+`information_schema.columns`.
+
+```sh
+npm run server:migrate -- --status   # 0016 shows "applied"
+```
+
+The history marking is a **data** change, done separately and reversibly:
+`npm run server:backfill-bots` (dry run) / `npm run server:backfill-bots -- --commit` — 118 rows on
+2026-10-24. It never deletes and never touches accounts. Revert one row from the Bots tab, or all of
+them with the `update` the script prints.
+
 ---
 
 ## 7. Rollout — prepared, not done
@@ -346,8 +417,10 @@ and the report list will read as if every report were `new` — the read screens
 | suite | covers |
 |---|---|
 | `server/tests/admin.test.ts` | authorization on **every** endpoint (no token → 401, player → 403, admin → 200); the empty allow-list locking everything; a second id in the list; the allow-list parser (and that junk can never become an admin); triage + audit; filters, keyset pagination, the limit clamp; the CSV header/cap/formula hardening; `normalizeBuild`; the economy ratio with no denominator; **the ledger reconciled entry by entry against the authoritative wallet** (including a replayed repeat clear and a zero-award denial); **the world replay bucketed against the stored claims**; the campaign shaper (recorded rows, opaque ids, incomplete list); and that no secret or hidden-state column can reach a payload |
+| `admin/tests/players-view.test.ts` | the human/bot split: the default is humans; a **human whose name looks generated is never hidden**; a marked account is hidden and counted as hidden; `humans + bots` equals the total; the "N hidden" count follows the same search; `traffic=all` / `bots`; an owner override moves the row between the lists |
+| `server/tests/admin-bots.test.ts` | `classificationOf` (override first, marker + reason, never a name; deterministic); the summary's separate human/bot counts and the 24 h testing signal; the in-memory override persisting and moving the row; a bot still absent from every other read; the real SQL being one scoped `update players set test_override …` plus its `admin_audit` row in one transaction |
 | `admin/tests/format.test.ts` | the pure formatting/replay logic; **no game source imports `admin/`**; the dashboard carries no key or connection string; its own Vite root and output; and a stylesheet check that it introduces no colour, radius or shadow outside the app's own tokens |
-| `web/e2e/admin-dashboard.ts` | the built page in Chromium against a real local API: the access-denied screen for a normal player, all six screens plus Health & ops, "since you last looked", triage + the note really stored, CSV 200/403, the whole map (every cell in `server/src/world.ts`) and a cumulative replay, the Seeds and tile edits made by clicking, keyboard navigation, and no horizontal overflow at 390 px |
+| `web/e2e/admin-dashboard.ts` | the built page in Chromium against a real local API: the access-denied screen for a normal player, every screen (including **Bots**) plus Health & ops, "since you last looked", triage + the note really stored, CSV 200/403, the whole map (every cell in `server/src/world.ts`) and a cumulative replay, the Seeds and tile edits made by clicking, keyboard navigation, no horizontal overflow at 390 px, and the bot split end to end: the automated account hidden from All players with "1 bot hidden", a human with a generated name kept, the reason shown on the Bots tab, and an override that survives a reload and moves the account between the lists |
 | `tests/compose-futa05-preview.test.ts` | the composer publishes `/admin/` **only** when handed a build, puts it at the site root (never inside `/firststep/`), teaches the root worker to ignore it, and refuses a build that could not work from a subdirectory |
 
 ```sh

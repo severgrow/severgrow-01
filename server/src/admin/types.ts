@@ -7,7 +7,7 @@
 // invite codes or hidden hands — the field lists below are the whole contract, and the router
 // returns exactly these.
 import type { FeedbackKind } from '../feedback/feedback.js';
-import type { AdminPlayers } from './players.js';
+import type { AdminPlayers, PlayerClassification } from './players.js';
 
 export type AdminTriageStatus = 'new' | 'reviewing' | 'resolved';
 
@@ -273,6 +273,18 @@ export type AdminFunnel = {
 };
 
 export type AdminSeedGrant = { playerId: string; amount: number; reason: string; actorId: string; requestId: string; now: number };
+
+/** The owner's correction to the human/bot call. `null` hands the row back to its stored marker. */
+export type AdminPlayerOverride = boolean | null;
+
+export type AdminPlayerVisibility = {
+  isTest: boolean;
+  testReason: string | null;
+  testOverride: AdminPlayerOverride;
+  classification: PlayerClassification;
+  /** The same sentence the screen shows, produced by the one classification function. */
+  reason: string;
+};
 /** The largest single grant, so a slipped digit can never mint a fortune. */
 export const ADMIN_GRANT_MAX = 1000;
 export const ADMIN_GRANT_REASON_MAX = 200;
@@ -293,6 +305,12 @@ export interface AdminStore {
    * transaction, once per successful grant. Null when the player does not exist.
    */
   grantSeeds(input: AdminSeedGrant): Promise<{ balance: number; replayed: boolean } | null>;
+  /**
+   * Move one account between the human list and the Bots tab (owner, 2026-10-24). `false` = "this is
+   * a real person, always show them", `true` = "this is a bot", `null` = follow the stored marker.
+   * Returns null when the player does not exist. The audit row is committed with the change.
+   */
+  setPlayerVisibility(input: { playerId: string; override: AdminPlayerOverride; actorId: string; now: number }): Promise<AdminPlayerVisibility | null>;
   stuck(now: number, windows: { guestMaxAgeMs: number; waitingExpireMs: number; turnTimeoutMs: number }): Promise<AdminStuck>;
   rulesVersionCounts(): Promise<AdminValueCount[]>;
   funnel(now: number): Promise<AdminFunnel>;

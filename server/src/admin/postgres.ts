@@ -11,7 +11,7 @@ import { ApiError } from '../errors.js';
 import { newId } from '../ids.js';
 import { playerTag } from '../../../src/player-tag.js';
 import { shapeCampaign } from './campaign.js';
-import { shapePlayers, PLAYERS_LIMIT } from './players.js';
+import { classificationOf, shapePlayers, PLAYERS_LIMIT } from './players.js';
 import type { PgPool } from '../storage/postgres.js';
 import type {
   AdminAuditEntry,
@@ -89,16 +89,22 @@ const requireAdminTables = async <T>(run: () => Promise<T>): Promise<T> => {
 //     the dashboard. Only the MATCH is hidden; the real player's own row is untouched.
 //
 // Every read below uses these so the rule cannot drift from the query. A test asserts the SQL.
+/**
+ * The owner's override (migration 0016 `players.test_override`) is part of the rule, not a UI
+ * decoration: when he says "this is a real person", that account is a real person on every screen.
+ * `coalesce(test_override, is_test)` is the effective marker; null means "follow the stored marker".
+ */
+export const EFFECTIVE_TEST = (alias: string): string => `coalesce(${alias}.test_override, ${alias}.is_test)`;
 /** A row that carries the flag itself (`players` / `matches`). */
-export const NOT_TEST = (alias: string): string => `${alias}.is_test = false`;
+export const NOT_TEST = (alias: string): string => `${EFFECTIVE_TEST(alias)} = false`;
 /** A row that OWNS/REFERENCES a player by id (wallets, ledger, receipts, claims, reports, links). */
 export const PLAYER_OF_NOT_TEST = (expr: string): string =>
-  `not exists (select 1 from players vis_p where vis_p.id = ${expr} and vis_p.is_test)`;
+  `not exists (select 1 from players vis_p where vis_p.id = ${expr} and ${EFFECTIVE_TEST('vis_p')})`;
 /** A match is visible only when neither it nor any of its participants is marked. */
 export const MATCH_VISIBLE = (alias: string): string =>
   `${alias}.is_test = false and not exists (` +
   `select 1 from match_participants vis_mp join players vis_pl on vis_pl.id = vis_mp.player_id ` +
-  `where vis_mp.match_id = ${alias}.id and vis_pl.is_test)`;
+  `where vis_mp.match_id = ${alias}.id and ${EFFECTIVE_TEST('vis_pl')})`;
 
 /**
  * Run the query thunks ONE AT A TIME, in order.
@@ -449,6 +455,50 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
         );
         await client.query('commit');
         return { balance, replayed: false };
+      } catch (error) {
+        await client.query('rollback').catch(() => undefined);
+        throw error;
+      } finally {
+        client.release?.();
+      }
+    },
+
+    async setPlayerVisibility(input) {
+      // The owner's correction lives on the player row (`test_override`), so it is one fact read by
+      // every screen: no join, no cache to go stale, and a reload cannot lose it. `null` clears the
+      // override and hands the row back to its stored marker.
+      const client = await pool.connect();
+      try {
+        await client.query('begin');
+        const updated = await client.query(
+          `update players set test_override = $2 where id = $1
+             returning is_test, test_reason, test_override`,
+          [input.playerId, input.override],
+        );
+        const row = updated.rows[0];
+        if (!row) {
+          await client.query('rollback');
+          return null;
+        }
+        // The audit row is written in the same transaction as the change it records.
+        await client.query(
+          `insert into admin_audit (id, actor_id, action, target_type, target_id, detail, created_at)
+           values ($1,$2,'player.visibility','player',$3,$4::jsonb,$5)`,
+          [newId(), input.actorId, input.playerId, JSON.stringify({ override: input.override }), input.now],
+        );
+        await client.query('commit');
+        const judged = classificationOf({
+          isTest: row.is_test === true,
+          testReason: nstr(row.test_reason),
+          testOverride: row.test_override === true ? true : row.test_override === false ? false : null,
+        });
+        return {
+          isTest: row.is_test === true,
+          testReason: nstr(row.test_reason),
+          testOverride: row.test_override === true ? true : row.test_override === false ? false : null,
+          classification: judged.classification,
+          reason: judged.reason,
+        };
       } catch (error) {
         await client.query('rollback').catch(() => undefined);
         throw error;
@@ -1004,8 +1054,12 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       // One row per visible player, newest first, bounded. Every sub-read is keyed by the player id
       // (indexed on each table) and never touches match_moves or matches.state. Campaign levels are
       // parsed from the recorded `campaign:c<chapter>-<level>` key, exactly as the world map does.
+      // This read is deliberately NOT filtered to `is_test = false`: it is the one list that must be
+      // able to show the automated accounts (the Bots tab) and count them honestly beside the humans.
+      // The split is decided by `classificationOf` in players.ts; every OTHER read excludes bots.
       const { rows } = await pool.query(
         `select p.id, p.display_name, p.kind, p.created_at, p.presence_at,
+                p.is_test, p.test_reason, p.test_override,
                 exists (select 1 from player_identities i where i.player_id = p.id) as google,
                 mm.played, mm.finished, mm.wins, mm.last_at as match_last_at, mm.last_status as match_last_status,
                 cp.highest as campaign_highest, cp.clears as campaign_clears, cp.last_at as campaign_last_at, cp.last_level as campaign_last_level,
@@ -1032,7 +1086,6 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
                from seed_reward_receipts r
               where r.player_id = p.id and r.mode = 'campaign'
            ) cp on true
-          where ${NOT_TEST('p')}
           order by p.created_at desc
           limit ${PLAYERS_LIMIT * 5}`,
       );
@@ -1044,6 +1097,9 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
           createdAt: num(row.created_at),
           google: row.google === true,
           presenceAt: nnum(row.presence_at),
+          isTest: row.is_test === true,
+          testReason: nstr(row.test_reason),
+          testOverride: row.test_override === true ? true : row.test_override === false ? false : null,
           matches: {
             played: num(row.played),
             finished: num(row.finished),

@@ -337,6 +337,25 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
       return { status: 200, body: { ok: true, playerId: playerId.toLowerCase(), amount, balance: result.balance, replayed: result.replayed, serverNow: now } };
     }
 
+    // ------------------------------------------------- human/bot correction (owner, 2026-10-24)
+    // "This is a real person, always show them" — and its reverse. Stored on the player row, so it
+    // survives a reload, and audited inside the same write (never a change without its record).
+    const visibilityRoute = /^\/v1\/admin\/players\/([^/]+)\/visibility$/.exec(path);
+    if (visibilityRoute && req.method === 'POST') {
+      const playerId = decodeURIComponent(visibilityRoute[1]!);
+      if (!UUID_PATTERN.test(playerId)) throw new ApiError('INVALID_REQUEST', 'That is not a player id.');
+      const body = asRecord(await req.json().catch(() => ({})));
+      const value = body.override;
+      if (value !== 'human' && value !== 'bot' && value !== 'auto') {
+        throw new ApiError('INVALID_REQUEST', 'override must be human, bot or auto.');
+      }
+      const override = value === 'human' ? false : value === 'bot' ? true : null;
+      const result = await deps.store.setPlayerVisibility({ playerId: playerId.toLowerCase(), override, actorId: player.id, now });
+      if (result === null) throw new ApiError('NOT_FOUND', 'That player does not exist.');
+      log(`ADMIN_VISIBILITY player:${player.id} target:${playerId} override:${value}`);
+      return { status: 200, body: { ok: true, playerId: playerId.toLowerCase(), ...result, serverNow: now } };
+    }
+
     // ---------------------------------------------------------------- player lookup
     if (req.method === 'GET' && path === '/v1/admin/player') {
       const q = strParam(url, 'q', 120);

@@ -85,7 +85,11 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
     if (method === 'POST' && path === '/v1/guests') {
       await readJson(req, config.maxBodyBytes);
-      const created = await service.createGuest(null, clientIpOf(req));
+      // An automated harness tags its own guests (`x-futasaku-traffic: test`). Only guest CREATION
+      // reads it, and only to set `players.is_test` — no gameplay path, no way to change an existing
+      // account. A real player's browser never sends it (DuelClient sets it only outside a browser).
+      const testTraffic = req.headers.get('x-futasaku-traffic')?.trim().toLowerCase() === 'test';
+      const created = await service.createGuest(null, clientIpOf(req), testTraffic);
       return { status: 201, body: { ok: true, ...created, serverNow: service.serverNow() } };
     }
 

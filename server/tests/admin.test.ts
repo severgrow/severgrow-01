@@ -650,6 +650,9 @@ describe('the Players screen: every player, and the last thing the server record
     createdAt: NOW - 30 * 24 * HOUR,
     google: false,
     presenceAt: null,
+    isTest: false,
+    testReason: null,
+    testOverride: null,
     matches: { played: 0, finished: 0, wins: 0, lastAt: null, lastStatus: null },
     campaign: { highest: null, clears: 0, lastAt: null, lastLevel: null },
     reports: { count: 0, lastAt: null },
@@ -697,7 +700,7 @@ describe('the Players screen: every player, and the last thing the server record
     expect(stale.lastSeenAt).toBe(NOW - 3 * HOUR);
   });
 
-  it('the endpoint lists real players from the stores, without test players or secrets', async () => {
+  it('the endpoint lists real players, marks the test account as a bot (not as a person), and never leaks secrets', async () => {
     const t = setup();
     const admin = await t.makePlayer(ADMIN_ID, 'account', 'Owner');
     const guest = await t.makePlayer('66666666-6666-4666-8666-666666666666', 'guest', 'MapleFox');
@@ -706,9 +709,20 @@ describe('the Players screen: every player, and the last thing the server record
     await t.economy.settle({ playerId: guest.player.id, sourceKey: 'campaign:c2-14', mode: 'campaign', now: NOW, outcome: 'win', campaignLevel: 14 } as never);
     const res = await call(t.app, 'GET', '/v1/admin/players', admin.token);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { rows: { id: string; google: boolean; campaignHighest: number | null; lastActivity: string }[]; total: number };
-    expect(body.total).toBe(2);
-    expect(body.rows.map((r) => r.id).sort()).toEqual([ADMIN_ID, guest.player.id].sort());
+    const body = (await res.json()) as {
+      rows: { id: string; google: boolean; campaignHighest: number | null; lastActivity: string; classification: string }[];
+      total: number;
+      summary: { players: number; humans: number; bots: number };
+    };
+    // The list now carries both sides of the human/bot split (the All players screen filters, the
+    // Bots tab lists). The test row is present but classified, so no human-facing number includes it.
+    expect(body.total).toBe(3);
+    expect(body.summary.players).toBe(2);
+    expect(body.summary.humans).toBe(2);
+    expect(body.summary.bots).toBe(1);
+    expect(body.summary.humans + body.summary.bots).toBe(body.total);
+    expect(body.rows.find((r) => r.id === '77777777-7777-4777-8777-777777777777')!.classification).toBe('bot');
+    expect(body.rows.find((r) => r.id === ADMIN_ID)!.classification).toBe('human');
     expect(body.rows.find((r) => r.id === ADMIN_ID)!.google).toBe(true);
     expect(body.rows.find((r) => r.id === guest.player.id)!.campaignHighest).toBe(14);
     const raw = JSON.stringify(body);

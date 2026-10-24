@@ -10,7 +10,7 @@ import { newId } from '../ids.js';
 import { WORLD_CELLS } from '../world.js';
 import { SEED_ECONOMY } from '../seeds/config.js';
 import { shapeCampaign } from './campaign.js';
-import { shapePlayers, PLAYERS_LIMIT, type PlayerFacts } from './players.js';
+import { classificationOf, shapePlayers, PLAYERS_LIMIT, type PlayerFacts } from './players.js';
 import { campaignLevelOfSourceKey } from '../seeds/config.js';
 import type { MatchRecord, PlayerRecord } from '../storage/types.js';
 import type { MemoryStorage } from '../storage/memory.js';
@@ -62,10 +62,14 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
   // production: a PLAYER is judged by its own flag and nothing else; a MATCH is judged by its own
   // flag OR by any participant being a marked player; an OWNED row (wallet, ledger entry, receipt,
   // claim, report, identity link) is judged by the player it belongs to.
-  const testPlayerIds = (): Set<string> => new Set(players().filter((p) => p.isTest === true).map((p) => p.id));
+  // The effective marker, exactly as SQL's `coalesce(test_override, is_test)`: the owner's override
+  // is part of the rule on every read, not a label the screen applies afterwards.
+  const effectiveTest = (p: PlayerRecord): boolean =>
+    p.testOverride === false ? false : p.testOverride === true ? true : p.isTest === true;
+  const testPlayerIds = (): Set<string> => new Set(players().filter(effectiveTest).map((p) => p.id));
   const isMarked = (playerId: string | null | undefined): boolean =>
     typeof playerId === 'string' && testPlayerIds().has(playerId);
-  const visiblePlayers = (): PlayerRecord[] => players().filter((p) => p.isTest !== true);
+  const visiblePlayers = (): PlayerRecord[] => players().filter((p) => !effectiveTest(p));
   const matchVisible = async (match: MatchRecord): Promise<boolean> => {
     if (match.isTest === true) return false;
     const parts = await sources.storage.participantsOf(match.id);
@@ -131,6 +135,33 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
   };
 
   return {
+    async setPlayerVisibility(input) {
+      const row = players().find((p) => p.id === input.playerId);
+      if (!row) return null;
+      const updated: PlayerRecord = { ...row, testOverride: input.override };
+      await sources.storage.updatePlayer(updated);
+      auditRows.push({
+        id: newId(),
+        actorId: input.actorId,
+        action: 'player.visibility',
+        targetType: 'player',
+        targetId: input.playerId,
+        detail: { override: input.override },
+        createdAt: input.now,
+      });
+      const judged = classificationOf({
+        isTest: updated.isTest === true,
+        testReason: updated.testReason ?? null,
+        testOverride: updated.testOverride === true ? true : updated.testOverride === false ? false : null,
+      });
+      return {
+        isTest: updated.isTest === true,
+        testReason: updated.testReason ?? null,
+        testOverride: updated.testOverride === true ? true : updated.testOverride === false ? false : null,
+        classification: judged.classification,
+        reason: judged.reason,
+      };
+    },
     async readSeen(adminId) {
       return seen.get(adminId)?.seenAt ?? null;
     },
@@ -605,7 +636,9 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
       );
     },
     async players(now) {
-      const all = visiblePlayers();
+      // The ONE read that includes the automated accounts: the Bots tab lists them and the summary
+      // counts both sides. Every other read above uses `visiblePlayers()`.
+      const all = players();
       const store = economy();
       const receipts = [...(store?.receipts.values() ?? [])];
       const facts: PlayerFacts[] = [];
@@ -638,6 +671,9 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
           google: (sources.links?.rows ?? []).some((link) => link.playerId === player.id),
           // Live presence lives in the live-duel store, not here; the SQL store reads `presence_at`.
           presenceAt: null,
+          isTest: player.isTest === true,
+          testReason: player.testReason ?? null,
+          testOverride: player.testOverride === true ? true : player.testOverride === false ? false : null,
           matches: {
             played: mine.length,
             finished: finished.length,

@@ -6,7 +6,7 @@
 // here; the honesty panel at the bottom says so.
 import type { AdminPlayers, AdminPlayersRow } from '../../../server/src/admin/players.js';
 import { formatAgo, formatDateTime, formatNumber, formatShare, queryString } from '../format.js';
-import { filterPlayers, readPlayersFilter, type PlayersFilter } from '../players-view.js';
+import { filterPlayers, playersCounts, readPlayersFilter, type PlayersFilter } from '../players-view.js';
 import { bars, card, controls, el, emptyBox, errorBox, honesty, loading, noticeBox, screenTitle, stat, table, type Ctx } from '../ui.js';
 
 type PlayersResponse = AdminPlayers & { ok: true; serverNow: number };
@@ -43,6 +43,7 @@ export const renderPlayers = async (host: HTMLElement, ctx: Ctx, params: URLSear
       'Anything a player does offline: lessons 1-10, campaign levels that pay no Seeds, and practice games never reach the server. A player who never opened online play is not listed at all.',
       '"Last seen" is the newest recorded row of any kind (an online match, a verified campaign clear, a world tile, a report, a live presence ping) — not a visit log.',
       'The highest level is the highest campaign level the server verified a win on (level 11 and up).',
+      'Automated test accounts are hidden from this list by default. They are not the game\'s campaign bots (those never create a player row); they are accounts a test harness created. The Bots tab lists them with the reason each was classified, and "Everyone" shows both sides.',
     ]),
   );
 };
@@ -55,7 +56,10 @@ const summary = (data: PlayersResponse): HTMLElement[] => {
     el(
       'section',
       { class: 'grid stats-row' },
+      // "Players" is real people. The bots are the separate number beside it, so the total is never
+      // a silent mix of the two.
       stat('Players', formatNumber(s.players), `${formatNumber(s.accounts)} accounts · ${formatNumber(s.guests)} guests`),
+      stat('Test accounts', formatNumber(s.bots), s.bots === 0 ? 'none marked' : `hidden from this list · ${formatNumber(s.botsActive24h)} active in 24 h`),
       stat('Signed in with Google', formatNumber(s.google), share(s.google)),
       stat('Seen in 24 h', formatNumber(s.seen24h), `${formatNumber(s.seen7d)} in 7 days · ${formatNumber(s.seen30d)} in 30`),
       stat('Joined in 7 days', formatNumber(s.joined7d), `as of ${formatDateTime(now)}`),
@@ -85,10 +89,22 @@ const summary = (data: PlayersResponse): HTMLElement[] => {
 const list = (data: PlayersResponse, filter: PlayersFilter, ctx: Ctx): HTMLElement => {
   const now = data.serverNow;
   const rows = filterPlayers(data.rows, filter, now);
+  const counts = playersCounts(data.rows, filter, now);
   const apply = (name: string, value: string) => ctx.navigate(`#/players${queryString({ ...filter, [name]: value })}`);
   const bar = controls(
     [
       { kind: 'text', name: 'q', label: 'Find', value: filter.q, placeholder: 'name, #TAG or id', wide: true },
+      {
+        kind: 'select',
+        name: 'traffic',
+        label: 'Traffic',
+        value: filter.traffic,
+        options: [
+          { value: 'humans', label: 'Real players (bots hidden)' },
+          { value: 'all', label: 'Everyone' },
+          { value: 'bots', label: 'Automated only' },
+        ],
+      },
       {
         kind: 'select',
         name: 'kind',
@@ -128,11 +144,26 @@ const list = (data: PlayersResponse, filter: PlayersFilter, ctx: Ctx): HTMLEleme
     apply,
   );
   const shown = rows.slice(0, SHOWN);
-  const capped = data.total > data.rows.length ? ` The server sent the ${formatNumber(data.rows.length)} most recently active of ${formatNumber(data.total)}.` : '';
+  const capped = data.total > data.rows.length ? ` The server sent the ${formatNumber(data.rows.length)} most recently active of ${formatNumber(data.total)} recorded accounts.` : '';
+  // The arithmetic, stated in full: the human number, plus what was hidden and why, so nobody has to
+  // wonder whether a total quietly changed. It adds up even when the search excludes the bots.
+  const hidden =
+    counts.hiddenBots > 0
+      ? el(
+          'p',
+          { class: 'muted small' },
+          `${formatNumber(counts.humans)} real ${counts.humans === 1 ? 'player' : 'players'} · ${formatNumber(counts.hiddenBots)} ${counts.hiddenBots === 1 ? 'bot' : 'bots'} hidden. `,
+          el('a', { href: '#/bots', text: 'See the Bots tab' }),
+          ' to check the classification or bring one back.',
+        )
+      : filter.traffic === 'humans'
+        ? el('p', { class: 'muted small', text: `${formatNumber(counts.humans)} real ${counts.humans === 1 ? 'player' : 'players'} · no test accounts marked.` })
+        : null;
   return card(
-    'All players',
+    filter.traffic === 'bots' ? 'Automated test accounts' : 'All players',
     [
       bar,
+      hidden,
       shown.length === 0
         ? emptyBox('No player matches these filters.')
         : table<AdminPlayersRow>(
@@ -147,6 +178,11 @@ const list = (data: PlayersResponse, filter: PlayersFilter, ctx: Ctx): HTMLEleme
                     el('span', { class: 'muted small', text: ` #${row.tag}` }),
                     el('br'),
                     el('span', { class: `tag${row.kind === 'account' ? ' resolved' : ''}`, text: row.google ? 'Google' : row.kind }),
+                    // Only shown when the split is visible ("Everyone"/"Automated only"), never on
+                    // the default human list where every row is a real player.
+                    filter.traffic !== 'humans' && row.classification === 'bot'
+                      ? el('span', { class: 'tag', text: ' test account' })
+                      : null,
                   ),
               },
               { label: 'Joined', render: (row) => el('span', { class: 'small nowrap', title: formatDateTime(row.createdAt), text: formatAgo(row.createdAt, now) }) },
@@ -158,7 +194,7 @@ const list = (data: PlayersResponse, filter: PlayersFilter, ctx: Ctx): HTMLEleme
             ],
             shown,
             {
-              caption: `${formatNumber(rows.length)} shown of ${formatNumber(data.rows.length)}${rows.length > SHOWN ? ` (first ${SHOWN}; narrow the filters to see the rest)` : ''}.${capped} Open a row for the full record.`,
+              caption: `${formatNumber(shown.length)} shown of ${formatNumber(counts.shown)} matching this view${rows.length > SHOWN ? ` (first ${SHOWN}; narrow the filters to see the rest)` : ''}.${capped} Open a row for the full record.`,
               onRowClick: (row) => ctx.navigate(`#/player?q=${encodeURIComponent(row.id)}`),
             },
           ),

@@ -82,9 +82,14 @@ const startApi = async (): Promise<Seeded> => {
   const economy = new WorldEconomyService(economyStore, storage, () => Date.now());
   const service = new MatchService({ storage, config, economy, now: () => Date.now() });
 
-  const makePlayer = async (id: string | null, kind: 'guest' | 'account', name: string): Promise<{ player: PlayerRecord; token: string }> => {
+  const makePlayer = async (
+    id: string | null,
+    kind: 'guest' | 'account',
+    name: string,
+    extra: Partial<PlayerRecord> = {},
+  ): Promise<{ player: PlayerRecord; token: string }> => {
     const playerId = id ?? newId();
-    const player: PlayerRecord = { id: playerId, kind, displayName: name, createdAt: now - 3 * DAY, upgradedAt: kind === 'account' ? now - 2 * DAY : null };
+    const player: PlayerRecord = { id: playerId, kind, displayName: name, createdAt: now - 3 * DAY, upgradedAt: kind === 'account' ? now - 2 * DAY : null, ...extra };
     await storage.createPlayer(player);
     const token = newToken();
     await storage.issueToken({ id: newId(), playerId, tokenHash: hashToken(token), createdAt: now, revokedAt: null });
@@ -95,6 +100,14 @@ const startApi = async (): Promise<Seeded> => {
   await links.link({ provider: 'google', subject: 'e2e-subject-only', playerId: owner.player.id, createdAt: now });
   const rival = await makePlayer(null, 'guest', 'BrambleOwl');
   const other = await makePlayer(null, 'account', 'HazelFinch');
+  // One automated test account (marked, with the reason the backfill records) and one HUMAN whose
+  // generated guest name looks exactly like a bot's. The human must survive the default filter.
+  // Seeded, not referenced again: the suite drives the page by name, exactly as the owner would.
+  await makePlayer(null, 'guest', 'CoralBear', {
+    isTest: true,
+    testReason: 'Backfill: created in a burst of at least 8 accounts within 5 minutes, with no recorded activity of any kind.',
+  });
+  await makePlayer(null, 'guest', 'AmberFox');
 
   // One report and one crash, with the awkward shapes the brief asks about: a long message, a
   // message that looks like a spreadsheet formula, and a nested context.
@@ -489,6 +502,46 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
   check('the players filter narrows the list', (await page.locator('#view tbody tr').count()) === 1, `${await page.locator('#view tbody tr').count()} rows`);
   await page.locator('#view tbody tr').first().click();
   check('a player row opens the full record', await settle(page, 'BrambleOwl') && /#\/player\?q=/.test(page.url()));
+  // The two shots the brief names are taken at 1280x800, the owner's desktop size.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await goto(page, '/players');
+  await settle(page, 'All players');
+  const humansText = await textOf(page);
+  // The human/bot split: the marked account is not on the human list, and the arithmetic says so.
+  check('the default players view hides the automated account', !/CoralBear/.test(humansText), 'CoralBear must not be here');
+  check('the default players view keeps a human whose name looks generated', /AmberFox/.test(humansText), 'AmberFox is a real guest');
+  check('the hidden-bot count is stated beside the human count', /1 bot hidden/.test(humansText), humansText.split('\n').find((line) => /bot hidden/.test(line)) ?? 'no count line');
+  await page.screenshot({ path: `${OUT}players-humans-1280x800.png`, fullPage: false });
+
+  // The Bots tab: the same account, with the reason, and a one-click correction.
+  await goto(page, '/bots');
+  check('the bots screen renders', await settle(page, 'Automated test accounts'));
+  const botsText = await textOf(page);
+  check('the bots tab lists the automated account', /CoralBear/.test(botsText));
+  check('the bots tab prints the classification reason', /burst of at least 8 accounts/.test(botsText));
+  check('the bots tab says these are not the game bots', /never create a player row|never were players/.test(botsText));
+  check('the bots tab says a human tester stays on All players', /real person testing the game stays on All players/.test(botsText));
+  await page.screenshot({ path: `${OUT}bots-1280x800.png`, fullPage: false });
+
+  // The owner's correction: one click, then it survives a reload and moves between the lists.
+  const botRow = page.locator('#view tbody tr', { hasText: 'CoralBear' }).first();
+  await botRow.getByRole('button', { name: 'This is a real person' }).click();
+  await tick(500);
+  await goto(page, '/players');
+  await settle(page, 'All players');
+  const afterOverride = await textOf(page);
+  check('an owner override brings the account back into the human list', /CoralBear/.test(afterOverride));
+  check('the hidden-bot count drops to zero after the override', /no test accounts marked/.test(afterOverride), afterOverride.split('\n').find((line) => /real player/.test(line)) ?? 'no count line');
+  await page.reload();
+  await settle(page, 'All players');
+  check('the override survives a reload', /CoralBear/.test(await textOf(page)));
+  await goto(page, '/bots');
+  await settle(page, 'Automated test accounts');
+  const botTableText = await page.locator('#view .card', { hasText: 'Automated test accounts' }).first().innerText();
+  check('the corrected account leaves the bots list', !/CoralBear/.test(botTableText), botTableText.split('\n').slice(0, 6).join(' | '));
+  const keptTableText = await page.locator('#view .card', { hasText: 'Kept as real people by you' }).first().innerText();
+  check('the correction is kept, with an Undo', /CoralBear/.test(keptTableText) && /Undo/.test(keptTableText), keptTableText.split('\n').slice(0, 8).join(' | '));
+
   await goto(page, '/players');
   await settle(page, 'All players');
   await page.screenshot({ path: `${OUT}players-desktop.png`, fullPage: true });
@@ -533,7 +586,7 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
 
   // Narrow width: every table must stay inside the page.
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [route, name] of [['/overview', 'overview'], ['/players', 'players'], ['/reports', 'reports'], ['/seeds', 'seeds'], ['/ops', 'ops']] as const) {
+  for (const [route, name] of [['/overview', 'overview'], ['/players', 'players'], ['/bots', 'bots'], ['/reports', 'reports'], ['/seeds', 'seeds'], ['/ops', 'ops']] as const) {
     await goto(page, route);
     await tick(500);
     const overflow = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, inner: window.innerWidth }));

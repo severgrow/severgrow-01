@@ -59,8 +59,11 @@ const rowToPlayer = (row: PgRow): PlayerRecord => ({
   displayName: asNullableString(row.display_name),
   createdAt: asNumber(row.created_at),
   upgradedAt: asNullableNumber(row.upgraded_at),
-  // Migration 0013. `select *` now carries it; writes never touch it, so it survives updates.
+  // Migrations 0013/0016. `select *` now carries them; the game never writes them, so they survive
+  // updates. The two optionals are only written when a harness tags a row at creation.
   isTest: row.is_test === true || row.is_test === 't',
+  testReason: asNullableString(row.test_reason),
+  testOverride: row.test_override === true || row.test_override === 't' ? true : row.test_override === false || row.test_override === 'f' ? false : null,
 });
 
 const rowToMatch = (row: PgRow): MatchRecord => ({
@@ -450,9 +453,11 @@ const runCommit = async (client: PgClient, input: {
 
 export const postgresStorage = (pool: PgPool): Storage => ({
   async createPlayer(player: PlayerRecord): Promise<void> {
+    // `is_test` / `test_reason` are written ONLY when the caller supplies them (the automated-harness
+    // creation path); an ordinary guest insert leaves them at their defaults, exactly as before.
     await pool.query(
-      'insert into players (id, kind, display_name, created_at, upgraded_at) values ($1,$2,$3,$4,$5)',
-      [player.id, player.kind, player.displayName, player.createdAt, player.upgradedAt],
+      'insert into players (id, kind, display_name, created_at, upgraded_at, is_test, test_reason) values ($1,$2,$3,$4,$5,$6,$7)',
+      [player.id, player.kind, player.displayName, player.createdAt, player.upgradedAt, player.isTest === true, player.testReason ?? null],
     );
   },
 

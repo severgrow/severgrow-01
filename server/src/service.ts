@@ -119,12 +119,26 @@ export class MatchService {
 
   // ---- identity ----
 
-  async createGuest(_displayName: string | null = null, clientIp: string | null = null): Promise<{ player: PlayerSummary; token: string }> {
+  async createGuest(
+    _displayName: string | null = null,
+    clientIp: string | null = null,
+    testTraffic = false,
+  ): Promise<{ player: PlayerSummary; token: string }> {
     await this.rateLimit(`guest:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.guestPerIpPerHour);
     const now = this.now();
     const id = newId();
     // Nature names only — no free-text moderation surface (rule 8).
-    const player: PlayerRecord = { id, kind: 'guest', displayName: natureName(id), createdAt: now, upgradedAt: null };
+    const player: PlayerRecord = {
+      id,
+      kind: 'guest',
+      displayName: natureName(id),
+      createdAt: now,
+      upgradedAt: null,
+      // Only when the caller is an automated harness (the header in fetch-app.ts). This marker is the
+      // durable answer the dashboard trusts; it is never inferred, and a real player's browser cannot
+      // reach this branch.
+      ...(testTraffic ? { isTest: true, testReason: 'Tagged at creation by an automated test harness.' } : {}),
+    };
     await this.storage.createPlayer(player);
     const token = await this.issueToken(player.id, now);
     return { player: playerSummary(player), token };
