@@ -853,15 +853,15 @@ html.futa04-information .hex.rich {
   pointer-events: none;
   filter: drop-shadow(0 0 1.6px rgba(231, 181, 83, .32));
 }
-#board .gold-frame-art {
-  /* A metal rim, not a wooden one (owner, 2026-10-23: "the gold tiles frames are too brown - looks
-     wooden - make it look more gold, a bit brighter - but don't increase its glow"). The brown came
-     from the sepia step, which is what makes metal look like timber; dropping it and leaning the hue
-     a little further into yellow gives the supplied atlas its gold back, and the small brightness
-     lift adds the highlight without touching the glow. The glow is the `drop-shadow` on
-     `.gold-frame` (unchanged), so this stays a change to the ART only. */
-  filter: sepia(0) saturate(2.25) hue-rotate(16deg) brightness(1.28) contrast(1.1);
-}
+/* NO FILTER ON THE RIM (owner, 2026-10-24, second pass: "is that in? i think they look the same -
+   still not like gold"). The 2026-10-23 pass filtered a BROWN atlas and could never work: `sepia`,
+   `saturate` and `hue-rotate` push the existing brown around, they cannot re-map a tonal ramp, so
+   the body stayed at hue 35 (orange-brown = varnished timber). The ARTWORK is gold now: the atlas
+   was rebuilt as a real gold ramp - one chromaticity, hue 45 / sat .94, with the top of the ramp
+   desaturating into cream - so there is nothing left for a filter to do, and a 2.25x saturate on top
+   of a correct ramp would blow it out. The glow is the `drop-shadow` on `.gold-frame` and is
+   untouched, as the owner asked. Measured on a rendered board at deviceScaleFactor 3, the rim's body
+   went from hue 33 to hue 45, and its specular from sat .83 to sat .32. */
 /* A V3 board enters on its finished painting, never on grey placeholder hexes. */
 html.futa04-information.design-v3 #board.skin-board:not(.skin-ground-ready) {
   opacity: 0;
