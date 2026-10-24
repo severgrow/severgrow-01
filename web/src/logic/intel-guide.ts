@@ -80,9 +80,10 @@ export const intelTips = (v: View, legal: readonly Action[] = legalActions(v)): 
   if (weak && v.result === null) add('weak', 2, INTEL.tips.weak(weak.loss));
   if (v.result === null && v.deckCount > 0 && v.deckCount <= 4) add('deck', 10, INTEL.tips.deckLow(v.deckCount));
   if (mine && v.phase === 'DISCARD') add('throw', 1, INTEL.tips.throwIt);
-  // Never an empty tab: the two ideas every turn leans on.
+  // Never an empty tab: the two ideas every turn leans on. Taking their tile is one of them only
+  // where the rule is on: level 1 withholds Overgrow, so its Tips tab must not invite it.
   if (out.length < 1) add('joined', 4, INTEL.tips.keepJoined);
-  if (out.length < 2) add('stronger', 2, INTEL.tips.stronger);
+  if (out.length < 2 && v.config.allowOvergrow !== false) add('stronger', 2, INTEL.tips.stronger);
   return out.slice(0, 3);
 };
 

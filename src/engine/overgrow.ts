@@ -25,5 +25,10 @@ export const claimBlocker = (ctx: BoardCtx, player: Player, coord: Coord, streng
   if (!existing) return null;
   if (existing.owner === player) return 'OWN_TILE';
   if (existing.root) return 'ROOT_IMMUNE';
+  // A level may withhold Overgrow until it is taught. Off means it is off for every growth path
+  // (Sprout and Bloom alike): none of my tiles may land on the opponent's ground. Only an explicit
+  // `false` withholds it, so a config saved before this key existed (an old match, an archived
+  // rules version) keeps the rule it was played under.
+  if (ctx.config.allowOvergrow === false) return 'OVERGROW_FORBIDDEN';
   return canOvergrow(existing, player, strength) ? null : 'NOT_STRONGER';
 };

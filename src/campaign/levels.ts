@@ -125,9 +125,11 @@ const level = (
   spec: BoardSpec,
   intent: string,
   boardRadius = 3,
+  /** Further engine overrides for this level only (a rule the level withholds, never invents). */
+  extra: Partial<RulesConfig> = {},
 ): CampaignLevel => ({
   id, number, chapter, name, intent, seed, botLevel,
-  config: { ...BASE, boardRadius, board: spec },
+  config: { ...BASE, ...extra, boardRadius, board: spec },
 });
 
 /**
@@ -151,8 +153,10 @@ const level = (
  */
 export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // A completely open board: a clean first win, no obstacle at all — the tutorial's own map and its
-  // single gold centre, nothing else.
-  level(1, 1, 'c1-01', 'First Seed', 95001, 1, board([], OPEN_GOLD, TUTORIAL_BOARD_RADIUS), 'Completely open, welcoming; the tutorial map.', TUTORIAL_BOARD_RADIUS),
+  // single gold centre, nothing else. Taking their ground is withheld here: level 1's opponent is
+  // the gentlest one and taking is only explained in level 2, so the first level must not offer it
+  // (owner, 2026-10-24). Growth on empty ground is untouched, and the level stays a clean first win.
+  level(1, 1, 'c1-01', 'First Seed', 95001, 1, board([], OPEN_GOLD, TUTORIAL_BOARD_RADIUS), 'Completely open, welcoming; the tutorial map.', TUTORIAL_BOARD_RADIUS, { allowOvergrow: false }),
   // A second open board on the small map: the centre gold plus one inner pair, so gold is worth
   // reaching for early without any obstacle to read.
   level(1, 2, 'c1-02', 'New Growth', 95002, 1, board([], RICH_PAIR_INNER, TUTORIAL_BOARD_RADIUS), 'Another open board; a first taste of contested gold.', TUTORIAL_BOARD_RADIUS),

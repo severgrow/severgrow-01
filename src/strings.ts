@@ -1427,6 +1427,8 @@ export const LESSON = Object.freeze({
   rockBlocks: 'ROCK BLOCKS THIS',
   isTheirHome: 'HOMES ARE SAFE',
   isYourHome: 'THAT IS YOUR HOME',
+  /** level 1 withholds Overgrow: a tap on their tile with a higher card says why, not "too weak" */
+  theirTileSafe: 'THEIR TILE IS SAFE',
   tooWeak: (card: number, tile: number): string => `TOO WEAK: ${card} VS ${tile}`,
   ownTile: 'YOUR TILE NEEDS A HIGHER CARD',
   mustTouch: 'MUST TOUCH YOUR TILES',

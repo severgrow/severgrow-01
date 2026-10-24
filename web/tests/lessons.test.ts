@@ -917,7 +917,10 @@ describe('per-action mastery fade', () => {
 
   it('the lesson version is bumped, so explain-once and mastery start clean', () => {
     expect(LESSON_VERSION).toBe(3);
-    for (const l of LESSONS) expect(l.version, `L${l.level}`).toBe(LESSON_VERSION);
+    // Level 1 was re-issued at version 4 (2026-10-24) when it stopped offering Overgrow: an
+    // unfinished pre-fix level-1 save must restart, never resume under the old, taking-enabled
+    // rules. Every other lesson keeps the shared version, so their saves and teaching are untouched.
+    for (const l of LESSONS) expect(l.version, `L${l.level}`).toBe(l.level === 1 ? LESSON_VERSION + 1 : LESSON_VERSION);
     // Saves round-trip under that version; a record from another version is ignored.
     const saved = encodeMastery(recordHello(recordAction(freshMastery(), 'draw', { level: 1, tier: 'guide' }), 'bloom'));
     const read = decodeMastery(saved, LESSON_VERSION);

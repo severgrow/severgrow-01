@@ -102,6 +102,7 @@ export const tapAnswer = (s: State, selected: number | null, tap: Tap, lit: Lit 
     const tile = s.board[key];
     if (tile?.owner === YOU) return W.ownTile;
     const blocker = claimBlocker(v, YOU, coord, card.rank);
+    if (blocker === 'OVERGROW_FORBIDDEN') return W.theirTileSafe;
     if (blocker === 'NOT_STRONGER' && tile) return W.tooWeak(card.rank, tile.strength);
     const touches = allNeighbors(coord).some((n) => s.board[coordKey(n)]?.owner === YOU);
     if (!touches) return W.connect;
