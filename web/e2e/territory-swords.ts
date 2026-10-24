@@ -276,6 +276,24 @@ try {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(250);
 
+    // ---- 2b. the same answer without a finger: focus the marker, press Enter ------------------
+    const focused = await page.evaluate((id) => {
+      const hit = document.querySelector(`.world-swords[data-cell-id="${id}"] .world-swords-hit`) as SVGCircleElement | null;
+      hit?.focus();
+      return { focused: document.activeElement === hit, label: hit?.getAttribute('aria-label') ?? '' };
+    }, own1);
+    check(`[${tag}] the swords are a separate keyboard stop with their spoken name`,
+      focused.focused && focused.label.startsWith('Challenge on this tile.'), focused.label);
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await settleSheet(page);
+    const keyboardLine = await page.evaluate(() =>
+      (document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-line') as HTMLElement | null)?.textContent ?? '');
+    check(`[${tag}] Enter on the swords opens the same who-challenged sheet`,
+      keyboardLine.includes('RYK') && keyboardLine.includes('challenged you'), keyboardLine);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+
     await tapSwords(page, rival2);
     await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
     await settleSheet(page);
@@ -314,13 +332,13 @@ try {
     const beforeBox = await viewBox(page);
     const beforeDefender = await markerInfo(page, own1);
     await dragTo(page, size.touch ? 110 : 160, 90, size.touch);
-    if (!size.touch) {
-      const panel = await page.locator('.world-map-svg').boundingBox();
-      if (panel) {
-        await page.mouse.move(panel.x + panel.width / 2, panel.y + panel.height / 2);
-        await page.mouse.wheel(0, -240);
-        await page.waitForTimeout(150);
-      }
+    const panel = await page.locator('.world-map-svg').boundingBox();
+    if (panel) {
+      // Zoom as well as pan, at BOTH sizes: the same wheel the desktop uses works in the emulated
+      // touch viewport, and it is the honest proof that the glyph's coordinates are the map's.
+      await page.mouse.move(panel.x + panel.width / 2, panel.y + panel.height / 2);
+      await page.mouse.wheel(0, -240);
+      await page.waitForTimeout(150);
     }
     const afterBox = await viewBox(page);
     const afterDefender = await markerInfo(page, own1);
