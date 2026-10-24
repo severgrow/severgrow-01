@@ -22,6 +22,23 @@ import type { Page } from 'playwright-core';
 import { serveStaticDist } from './helpers/preview-port.js';
 import { WORLD_CELLS, worldNeighbours } from '../../server/src/world.js';
 import type { WorldChallengeWire } from '../../server/src/seeds/types.js';
+import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
+import { serializeProgress } from '../../src/campaign/progress.js';
+import type { CampaignProgress } from '../../src/campaign/progress.js';
+
+/**
+ * A campaign record that has cleared levels 1..22, i.e. "I am on level 23". The app prefixes its
+ * storage keys per channel, so this is written by a page init script under each prefix.
+ */
+const progressAt22 = (): string => {
+  const progress: CampaignProgress = {
+    version: 1,
+    unlocked: 23,
+    completed: CAMPAIGN_LEVELS.filter((level) => level.number <= 22).map((level) => level.id),
+    best: {},
+  };
+  return serializeProgress(progress);
+};
 
 const opt = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const DIST = resolve(opt('dist') ?? 'web/dist');
@@ -64,7 +81,10 @@ const claims = [
   cellId,
   ownerId: OWN.has(cellId) ? 'p1' : 'r1',
   ownerName: OWN.has(cellId) ? 'BloomHeron' : 'RYK',
-  ownerLevel: null,
+  // MY OWN GROUND CARRIES A STALE NUMBER ON PURPOSE (owner report, 2026-10-24): the server's is the
+  // highest Campaign clear it was ever told about, which lags real progress. The suite seeds this
+  // device's record at level 23 and asserts the map shows 23, not this 11.
+  ownerLevel: OWN.has(cellId) ? 11 : null,
   ownerTag: OWN.has(cellId) ? '1001' : '1002',
   colour: OWN.has(cellId) ? 'hsl(80 34% 49%)' : 'hsl(220 34% 49%)',
   claimedAt: NOW - 5 * 60_000,
@@ -185,6 +205,15 @@ try {
     });
     await page.addInitScript(() => localStorage.clear());
     await page.addInitScript({ content: 'window.__name = (f) => f;' });
+    // THIS DEVICE'S CAMPAIGN RECORD, at level 23 (owner report, 2026-10-24: "im at level 23 - but on
+    // territory it says im level 11"). Registered after the clear so it wins, and written under every
+    // channel prefix a build might use, because the prefix patch installs at boot, after this runs.
+    await page.addInitScript(({ progress }) => {
+      for (const prefix of ['', 'futa05:', 'futa04:', 'main2:']) {
+        localStorage.setItem(`${prefix}severgrow.seen`, '1');
+        localStorage.setItem(`${prefix}severgrow.campaign.progress.v3`, progress);
+      }
+    }, { progress: progressAt22() });
 
     const sent: { cellId?: string; requestId?: string }[] = [];
     const answered: { accept?: boolean }[] = [];
@@ -251,6 +280,19 @@ try {
     await page.locator('.world-hex').first().waitFor({ state: 'attached', timeout: 45_000 });
     await page.waitForSelector('.world-challenge-chip', { timeout: 20_000 });
     await page.waitForTimeout(300);
+
+    // ---- 0. THE OWNER'S OWN GROUND SHOWS WHERE THEY ACTUALLY ARE (2026-10-24) ------------------
+    // The server's number for these tiles is 11 (a stale "last clear it was told about"); this
+    // device's record is level 23. The map must say 23 — and must leave a neighbour's line alone,
+    // because no client can know another account's progress.
+    await tapCell(page, hub.id);
+    const mineLine = await page.evaluate(() => (document.getElementById('online-world-selection')?.textContent ?? '').trim());
+    check(`[${tag}] my own ground shows my real level, not the last one the server was paid for`,
+      mineLine.includes('LEVEL 23') && !mineLine.includes('LEVEL 11') && mineLine.includes('YOURS'), mineLine);
+    await tapCell(page, rival);
+    const rivalLine = await page.evaluate(() => (document.getElementById('online-world-selection')?.textContent ?? '').trim());
+    check(`[${tag}] a neighbour's line is untouched: no local level leaks onto it`,
+      rivalLine.includes('RYK') && !rivalLine.includes('LEVEL'), rivalLine);
 
     // ---- 1. no page scroll, with the rail on screen ------------------------------------------
     const scroll = await scrollState(page);

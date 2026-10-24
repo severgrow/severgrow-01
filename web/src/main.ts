@@ -9635,6 +9635,10 @@ void import('./online/lobby-ui.js').then(async (m) => {
   const leaveOnline = () => tearDownOnlineDuel();
 
   const lobby = m.installOnlineLobby({
+    // The Territory's own-tile level: the SAME number the PLAY entry opens, so the map and the menu
+    // can never disagree about where the player is (owner report, 2026-10-24: "im at level 23 - but
+    // on territory it says im level 11").
+    campaignLevel: () => currentLevel(campaignProgress).number,
     // The Territory is part of the same instrument as the board, so its keys speak in the same
     // voice. It reuses the bank's existing cues; it never ships a second sound system.
     cue: (name: string) => sound.cue(name),

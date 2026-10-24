@@ -185,6 +185,25 @@ export class WorldView {
     }
   }
 
+  /**
+   * THIS DEVICE's campaign level, injected by lobby-ui from the same progress record the PLAY entry
+   * reads (owner report, 2026-10-24: "im at level 23 - but on territory it says im level 11").
+   * The server's `ownerLevel` is the last clear it was ever TOLD about, so it lags behind a player
+   * whose proofs are still queued; this device knows where the player actually is. Used for the
+   * viewer's own tiles only — nobody can know another account's progress.
+   */
+  private myLevelHook: (() => number | null) | null = null;
+  setMyLevel(read: () => number | null): void {
+    this.myLevelHook = read;
+  }
+  private myLevel(): number | null {
+    try {
+      return this.myLevelHook?.() ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async open() {
     this.active = true;
     // A fresh visit starts FRAMED to the window (see `boundsFor`), not wherever the last visit was
@@ -576,7 +595,9 @@ export class WorldView {
     }
     const tile = this.world.claims.find((claim) => claim.cellId === this.selected);
     if (tile) {
-      pane.textContent = ownerLine(tile, tile.ownerId === this.identity?.playerId);
+      const mine = tile.ownerId === this.identity?.playerId;
+      // Own ground: this device's real level beats the server's last-paid one (2026-10-24 report).
+      pane.textContent = ownerLine(tile, mine, mine ? this.myLevel() : null);
       return;
     }
     const label = document.createElement('span');

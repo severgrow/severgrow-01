@@ -379,3 +379,34 @@ different prefixes, so a player who tested `/3/` does not carry that progress in
 way. If the owner later wants "keep completed", it must be an explicit, visible migration (a one-time
 `completed` import into the `.v3` record), never a silent read of the old key — reading it silently
 would unlock levels nobody has been taught in the new script.
+
+### 2026-10-24 — The Territory shows YOUR level, not the last one the server was paid for
+
+Owner report: *"on my account - im at level 23 - but on territory it says im level 11 - should never
+happen"*. Confirmed rather than assumed. The map's `ownerLevel` is not campaign progress: it is
+`max(campaign level in seed_reward_receipts)` — the highest clear the server was ever **told about**
+(`server/src/seeds/postgres.ts`, the lateral over `seed_reward_receipts`; `server/src/seeds/memory.ts`
+computes the same thing on read). A receipt is written once per level, when a proof is settled, and
+proofs are queued on the device until the next menu visit — so the number is a **lower bound** on
+progress, and on the owner's account (paid through 11, actually on 23, because levels 12–22 were
+never submitted) it understated by twelve.
+
+The honest source of truth for "my level" is the device's own campaign record
+(`severgrow.campaign.progress.v3`), the same record the PLAY entry reads. So the viewer's own ground
+now takes `max(this device's level, the server's recorded level)`:
+
+- both numbers are statements of *"at least this far"*, so the larger one is the strongest true
+  answer and can never show an older number than either source already knows;
+- the `max` matters in the other direction too — progress is per device, so a second phone or a
+  cleared browser must not pull a player who is at 22 back down to `LEVEL 1`;
+- somebody else's ground is **untouched**: no client can know another account's progress, so their
+  line keeps the server's recorded figure (and shows none when there is none).
+
+No data to recalculate: there is no `owner_level` column — `world_claims` holds only `cell_id`,
+`owner_id`, `claimed_at`, `purchase_request_key`, `source`; the number is derived on every read. The
+owner's number corrects itself the moment this web build is live, with **no server deploy** (the
+payload did not change).
+
+Known limit, stated plainly: another player's figure can still understate their real progress while
+their proofs are queued or if they were never submitted. Closing that needs the server to record
+submitted progress rather than paid clears — a separate change, not made here.

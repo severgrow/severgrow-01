@@ -59,6 +59,12 @@ export type LobbyUiHooks = {
    * screen uses it so its keys speak the same voice as the board; absent, it is simply silent.
    */
   cue?: (name: string) => void;
+  /**
+   * The campaign level this device is on, for the Territory's selection line (owner report,
+   * 2026-10-24). It is the SAME record the PLAY entry reads, so the two surfaces can never disagree
+   * about the player's own number.
+   */
+  campaignLevel?: () => number | null;
   now?: () => number;
 };
 
@@ -424,6 +430,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     return id ? { token: id.token, playerId: id.playerId } : null;
   });
   worldView.setCue((name) => hooks.cue?.(name));
+  // The Territory's own-tile level comes from this device's campaign record, not from the server's
+  // last paid clear (owner report, 2026-10-24).
+  worldView.setMyLevel(() => hooks.campaignLevel?.() ?? null);
 
   const reloadMatches = async () => {
     const id = await ensureIdentity();
