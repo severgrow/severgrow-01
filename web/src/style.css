@@ -7742,6 +7742,8 @@ html.futasaku-product #gameover :is(#go-highlights, #go-break, #go-moves, #go-st
 html.futasaku-product #sheet-menu .gm-turn {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   justify-items: center; text-align: center;
+  /* No frame around the turn line (owner, 2026-10-24): the words alone, in their colour. */
+  border: 0; border-radius: 0; background: none; box-shadow: none; padding: 0; min-width: 0;
 }
 html.futasaku-product .sheet .sheet-head { position: sticky; justify-content: center; }
 html.futasaku-product .sheet .sheet-head > h2 { flex: 1; min-width: 0; text-align: center; padding-inline: 44px; }

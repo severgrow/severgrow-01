@@ -20,6 +20,9 @@ describe('centred menus', () => {
     expect(tail).toMatch(/\.sheet \.sheet-head > h2 \{[^}]*text-align: center;/);
     expect(tail).toMatch(/\.sheet \.sheet-head > \.icon-only:last-child \{ position: absolute; right: 0;/);
   });
+  it('the pause turn line has no frame, ever (owner, 2026-10-24)', () => {
+    expect(tail).toMatch(/#sheet-menu \.gm-turn \{[^}]*border: 0;[^}]*background: none;/);
+  });
   it('nothing after it puts them back on the left', () => {
     expect(tail).not.toMatch(/text-align: left|justify-content: flex-start/);
   });
