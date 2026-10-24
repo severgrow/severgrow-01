@@ -73,14 +73,19 @@ export class WorldEconomyService {
 
   async acknowledge(player: PlayerRecord): Promise<void> { await this.store.acknowledgeInvitation(player.id); }
 
-  async settleOnline(match: MatchRecord): Promise<void> {
+  async settleOnline(match: MatchRecord): Promise<Map<string, { awarded: number; reason: string | null }>> {
     if (match.status !== 'finished' || match.state.phase !== 'GAME_OVER' || !match.result ||
-      match.result.reason === 'resigned' || match.result.reason === 'timeout') return;
+      match.result.reason === 'resigned' || match.result.reason === 'timeout') return new Map();
     const seats = await this.matches.participantsOf(match.id);
-    if (seats.length !== 2 || seats[0]!.playerId === seats[1]!.playerId) return;
+    if (seats.length !== 2 || seats[0]!.playerId === seats[1]!.playerId) return new Map();
+    // What each seat was actually PAID, keyed by player id, so the finished view can report it.
+    // Returned rather than discarded: the result card's Seeds line is this map or nothing, and it
+    // can never be derived on the client (a daily cap pays 0). `settle` is idempotent, so a second
+    // view returns the stored receipt's amount rather than paying twice.
+    const settled = new Map<string, { awarded: number; reason: string | null }>();
     for (const seat of seats) {
       const opponent = seats.find((p) => p.seat !== seat.seat)!;
-      await this.store.settle({
+      const reward = await this.store.settle({
         playerId: seat.playerId,
         sourceKey: `duel:${match.id}`,
         mode: match.openQueue ? 'queue' : 'friend',
@@ -88,7 +93,9 @@ export class WorldEconomyService {
         opponentId: opponent.playerId,
         now: match.finishedAt ?? this.now(),
       });
+      settled.set(seat.playerId, { awarded: reward.awarded, reason: reward.reason });
     }
+    return settled;
   }
 
   async campaign(player: PlayerRecord, levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION) {

@@ -94,12 +94,13 @@ describe('the shared Seeds paragraph cannot leak between modes', () => {
 
 describe('the server rules the client mirrors', () => {
   it('a resignation and a timeout still pay nothing — if that changes, this fails on purpose', () => {
-    // `settleOnline`'s early return is the reason a resign win must show no Seeds line. The client
-    // cannot see a settled award today, but when the server field lands this is the guard that
-    // keeps the two in step: if the server starts paying these, the client's assumptions need a
-    // decision, not a silent mismatch.
+    // `settleOnline`'s early return is the reason a resign win must show no Seeds line. The server
+    // now RETURNS its per-seat awards, so the guard returns an empty map rather than bare `void`;
+    // what must not change is that it returns BEFORE settling and names both reasons. If the server
+    // ever starts paying these, this fails on purpose: the client's assumptions need a decision,
+    // not a silent mismatch.
     const service = read('../../server/src/seeds/service.ts');
-    const guard = /async settleOnline[\s\S]{0,400}?return;/.exec(service)?.[0] ?? '';
+    const guard = /async settleOnline[\s\S]{0,500}?return new Map\(\);/.exec(service)?.[0] ?? '';
     expect(guard).toContain("'resigned'");
     expect(guard).toContain("'timeout'");
   });

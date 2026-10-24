@@ -54,6 +54,14 @@ export type MatchViewPayload = {
   gracePeriods: number;
   opponent: { seat: Player; playerId: string; displayName: string | null } | null;
   result: OnlineGameResult | null;
+  /**
+   * What THIS seat was paid for a finished duel, when the server knows it. Present only on a
+   * finished match that actually settled (`settleOnline` returns before settling a resignation or
+   * a timeout, so those carry no field). It is a REPORT, never a promise: `awarded` is what the
+   * receipt says, which is 0 when a daily cap denied the reward — the client shows nothing for 0
+   * rather than "+0".
+   */
+  seeds?: { awarded: number; reason: string | null };
   serverNow: number;
 };
 

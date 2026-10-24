@@ -524,14 +524,16 @@ export class MatchService {
    */
   async viewPayload(player: PlayerRecord, matchId: string, sinceRevision = 0): Promise<MatchViewPayload> {
     const match = await this.requireParticipantFresh(player, matchId);
-    if (match.status === 'finished') await this.safeSettleOnline(match);
+    // A finished match settles on every view (idempotent): the retry is what makes a transient
+    // economy failure self-heal. Its report is this player's own award, or nothing.
+    const settled = match.status === 'finished' ? await this.safeSettleOnline(match) : null;
     this.assertRulesSupported(match.rulesVersion);
     const seat = await this.seatOf(player, matchId);
     await this.storage.touchParticipant(matchId, player.id, this.now());
     const visibleRevision = gatedRevisionFor(match, seat);
     const moves = await this.storage.movesOf(matchId, sinceRevision);
     const visibleMoves = moves.filter((m) => m.revision <= visibleRevision);
-    return this.payload(match, seat, visibleMoves.flatMap((m) => m.events));
+    return this.payload(match, seat, visibleMoves.flatMap((m) => m.events), settled?.get(player.id) ?? null);
   }
 
   async resign(player: PlayerRecord, matchId: string): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
@@ -725,7 +727,13 @@ export class MatchService {
   }
 
   /** Assembles the wire payload for one seat from an authoritative match and raw events. */
-  private async payload(match: MatchRecord, seat: Player, events: readonly Event[]): Promise<MatchViewPayload> {
+  private async payload(
+    match: MatchRecord,
+    seat: Player,
+    events: readonly Event[],
+    /** This seat's settled award for the duel, when the finished view just asked the economy. */
+    seeds: { awarded: number; reason: string | null } | null = null,
+  ): Promise<MatchViewPayload> {
     const source = gatedStateFor(match, seat);
     const revision = gatedRevisionFor(match, seat);
     const view = viewFor(source, seat);
@@ -757,6 +765,9 @@ export class MatchService {
         ? { seat: opp.seat, playerId: opp.playerId, displayName: oppPlayer?.displayName ?? null }
         : null,
       result: match.result,
+      // Present only when this seat's finish was settled and the economy reported it. A resign or a
+      // timeout never settles, so those cards carry no field and show no Seeds line.
+      ...(seeds ? { seeds } : {}),
       serverNow: this.now(),
     };
   }
@@ -803,13 +814,18 @@ export class MatchService {
     return participant.seat;
   }
 
-  /** Economy failures never roll back a completed duel. A later finished view retries safely. */
-  private async safeSettleOnline(match: MatchRecord): Promise<void> {
-    if (!this.economy) return;
+  /**
+   * Economy failures never roll back a completed duel. A later finished view retries safely.
+   * Returns what each seat was paid (empty when nothing settled, or when the economy is absent or
+   * failing) so the finished view can report a seat's own award instead of the client guessing one.
+   */
+  private async safeSettleOnline(match: MatchRecord): Promise<Map<string, { awarded: number; reason: string | null }>> {
+    if (!this.economy) return new Map();
     try {
-      await this.economy.settleOnline(match);
+      return await this.economy.settleOnline(match);
     } catch (error) {
       console.warn(`Seeds settlement pending for match ${match.id}: ${String(error)}`);
+      return new Map();
     }
   }
 
