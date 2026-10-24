@@ -9,6 +9,7 @@ import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parked
 import { createLobbyActionGuard } from './lobby-action.js';
 import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
+import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { WorldView } from './world-view.js';
 import { installTerritoryCountUI, territoryCounts } from './menu-territory.js';
 import type { TerritoryCounts } from './menu-territory.js';
@@ -16,6 +17,9 @@ import { cachedTerritory, registerTerritoryReader, rememberTerritory } from './t
 import { seedIcon } from './seed-icon.js';
 import { flushSeedProofs } from './seed-rewards.js';
 import type { RewardResult, SeedWallet } from '../../../server/src/seeds/types.js';
+
+/** The Territory zoom toggle's mark: a lens and a handle, stroked in currentColor, no text. */
+export const WORLD_FIT_ICON = '<svg class="world-fit-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.4 15.4 20.5 20.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
 import {
   FIRST_ONLINE_CARD_KEY,
   friendlyJoinError,
@@ -263,6 +267,12 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     waitingEl.hidden = next !== 'waiting';
     joinEl.hidden = next !== 'join';
     worldEl.hidden = next !== 'world';
+    // Each online screen arrives on the shared interface beat; the screens we leave are reset so a
+    // half-finished entrance can never surface later. No transform on the game: these are menus.
+    for (const [key, el] of Object.entries(screens) as [keyof typeof screens, HTMLElement][]) {
+      if (key === next) enterSurface(el, { travel: 6 });
+      else resetSurface(el);
+    }
     // The online screens are their own full-screen view: keep the main menu fully out of the
     // way (hidden, not merely behind) so its title/buttons can never bleed through the panel.
     // Every path back to the menu goes through hooks.showMenu() → showScreen('menu').
@@ -295,10 +305,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     $('online-world-title').textContent = ONLINE.worldTitle;
     $('online-world-screen').setAttribute('aria-label', ONLINE.worldTitle);
     // THE ONE MAP CONTROL (owner, 2026-10-21): one quiet FIT toggle. Spoken as a plain sentence,
-    // shown as one word; `aria-pressed` is owned by world-view.ts, which owns the toggle's state.
+    // shown as a magnifying glass; `aria-pressed` is owned by world-view.ts, which owns its state.
     const fitButton = document.getElementById('online-world-fit');
     if (fitButton) {
-      fitButton.textContent = ONLINE.worldFitLabel;
+      // A simple magnifying glass, drawn in the button's own ink (owner, 2026-10-23: no "FIT" word).
+      fitButton.innerHTML = WORLD_FIT_ICON;
       fitButton.setAttribute('aria-label', ONLINE.worldFit);
       fitButton.title = ONLINE.worldFit;
     }
@@ -567,12 +578,22 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (nowBtn) nowBtn.textContent = ONLINE.matchedPlayNow;
     if (laterBtn) laterBtn.textContent = ONLINE.matchedLater;
     el.hidden = false;
+    el.classList.remove('ix-closing');
+    const card = el.querySelector<HTMLElement>('.online-card');
+    if (card) enterSurface(card);
   };
 
   const closeMatchedPrompt = () => {
     pendingMatched = null;
     const el = document.getElementById('online-matched');
-    if (el) el.hidden = true;
+    if (!el) return;
+    const card = el.querySelector<HTMLElement>('.online-card');
+    el.classList.add('ix-closing');
+    const done = () => {
+      if (!pendingMatched) el.hidden = true;
+      el.classList.remove('ix-closing');
+    };
+    if (!exitSurface(card ?? el, { onDone: done })) done();
   };
 
   const pollSearch = async () => {

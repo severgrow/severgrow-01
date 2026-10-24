@@ -272,6 +272,11 @@ export type AdminFunnel = {
   upgradedAtMayBeUnpopulated: boolean;
 };
 
+export type AdminSeedGrant = { playerId: string; amount: number; reason: string; actorId: string; requestId: string; now: number };
+/** The largest single grant, so a slipped digit can never mint a fortune. */
+export const ADMIN_GRANT_MAX = 1000;
+export const ADMIN_GRANT_REASON_MAX = 200;
+
 export interface AdminStore {
   readSeen(adminId: string): Promise<number | null>;
   writeSeen(adminId: string, at: number): Promise<void>;
@@ -281,6 +286,12 @@ export interface AdminStore {
   reports(filter: AdminReportFilter): Promise<AdminPage<AdminReportRow>>;
   triage(input: { reportId: string; status: AdminTriageStatus; note: string; actorId: string; now: number }): Promise<{ changed: boolean; previous: AdminTriageStatus | null } | null>;
   audit(entry: AdminAuditEntry): Promise<void>;
+  /**
+   * The dashboard's one Seeds write (owner, 2026-10-24): add Seeds to a player's wallet, recorded in
+   * the ledger as `admin_grant` under `admin:<requestId>` (so a repeated request never pays twice),
+   * with the reason and the admin's id in its metadata. Null when the player does not exist.
+   */
+  grantSeeds(input: AdminSeedGrant): Promise<{ balance: number; replayed: boolean } | null>;
   stuck(now: number, windows: { guestMaxAgeMs: number; waitingExpireMs: number; turnTimeoutMs: number }): Promise<AdminStuck>;
   rulesVersionCounts(): Promise<AdminValueCount[]>;
   funnel(now: number): Promise<AdminFunnel>;

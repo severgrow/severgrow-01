@@ -1,6 +1,8 @@
 // Approved player phone extras (Test and Futa04): the "thumb layout" settings
 // (Thumb layout, Hand side) and the idle tip shown faintly over the board. The layout itself is
 // computed by the one layout engine (logic/layout.ts, computeLayout's `thumb` variant).
+import { IS_FUTA04 } from '../channel.js';
+
 export type ThumbPrefs = { thumb: boolean; side: 'right' | 'left'; idleTip: boolean };
 
 const KEY = 'severgrow-thumb';
@@ -12,7 +14,9 @@ const load = (): ThumbPrefs => {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}');
     const x = (raw && typeof raw === 'object' ? raw : {}) as Partial<ThumbPrefs>;
-    return { thumb: x.thumb !== false, side: x.side === 'left' ? 'left' : 'right', idleTip: x.idleTip !== false };
+    // On the Futasaku channels the thumb layout is always on (owner, 2026-10-23: settings are
+    // essentials); only the hand side is a choice there.
+    return { thumb: IS_FUTA04 || x.thumb !== false, side: x.side === 'left' ? 'left' : 'right', idleTip: x.idleTip !== false };
   } catch {
     return { ...DEFAULTS };
   }
@@ -65,13 +69,21 @@ export const mountThumb = (hooks: { relayout: () => void; reduceMotion: () => bo
   const painters: (() => void)[] = [];
   const paintAll = () => painters.forEach((p) => p());
   const h3 = document.createElement('h3');
-  h3.textContent = 'Phone layout';
-  box.append(
-    h3,
-    seg('Thumb layout', 'thumb-seg', [['on', 'On'], ['off', 'Off']], () => (prefs.thumb ? 'on' : 'off'), (v) => (prefs = { ...prefs, thumb: v === 'on' })),
-    seg('Hand side', 'hand-side-seg', [['right', 'Right'], ['left', 'Left']], () => prefs.side, (v) => (prefs = { ...prefs, side: v === 'left' ? 'left' : 'right' })),
-  );
-  body?.prepend(box);
+  h3.textContent = IS_FUTA04 ? 'Phone' : 'Phone layout';
+  const handSide = seg('Hand side', 'hand-side-seg', [['right', 'Right'], ['left', 'Left']], () => prefs.side, (v) => (prefs = { ...prefs, side: v === 'left' ? 'left' : 'right' }));
+  if (IS_FUTA04) {
+    // Essentials (owner, 2026-10-23): no Thumb layout row; Hand side is the group after Comfort.
+    box.classList.add('thumb-settings-last');
+    box.append(h3, handSide);
+    body?.append(box);
+  } else {
+    box.append(
+      h3,
+      seg('Thumb layout', 'thumb-seg', [['on', 'On'], ['off', 'Off']], () => (prefs.thumb ? 'on' : 'off'), (v) => (prefs = { ...prefs, thumb: v === 'on' })),
+      handSide,
+    );
+    body?.prepend(box);
+  }
   paintAll();
 
   // ---------- the idle tip: large faint words over the board's emptiest part ----------

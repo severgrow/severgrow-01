@@ -12,6 +12,18 @@ const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executab
 const base = external ?? served!.url;
 let checks = 0;
 const check = (value: unknown, label: string) => { assert(value, label); checks++; };
+/**
+ * Wait for a closing surface to finish leaving, then report whether it is gone.
+ *
+ * The interface-motion pass (2026-10-23) fades a surface out for `--ix-close` (150ms) and only then
+ * sets `hidden`, so `isVisible()` sampled on the same tick as the tap reads the fading surface and
+ * reports a close that is happening as a close that did not. The assertion is unchanged — the
+ * surface must be gone — it is simply taken on the settled state, which is what a player sees.
+ */
+const goneAfterClose = async (target: { waitFor: (o: { state: 'hidden'; timeout: number }) => Promise<unknown>; isVisible: () => Promise<boolean> }, timeout = 3000) => {
+  await target.waitFor({ state: 'hidden', timeout }).catch(() => undefined);
+  return !(await target.isVisible());
+};
 try {
   // Lessons must work before a game has been created.
   const menu = await browser.newPage({ viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true, ignoreHTTPSErrors: true });
@@ -45,17 +57,18 @@ try {
   for (const topic of ['fruit', 'strengthen', 'draw']) {
     await menu.click('#hud-menu');
     await menu.click('#gm-howto');
-    // FUTASAKU: the pause menu opens the Match Intel "How to" tab, not a separate sheet.
-    check(await menu.locator('#futasaku-glass[data-mode="intel"] [data-intel-tab="howto"][aria-selected="true"]').isVisible(),
-      `${topic}: the pause menu opens the Match Intel How to reference`);
-    check((await menu.locator('#futasaku-glass .intel-tab[data-intel-tab="howto"]').textContent())?.trim() === 'How to', `${topic}: the tab is named How to`);
+    // FUTASAKU: the pause menu opens Match Intel's Rules tab with the full rules unfolded, not a
+    // separate sheet (owner, 2026-10-24: the tabs are Now · Tips · Rules).
+    check(await menu.locator('#futasaku-glass[data-mode="intel"] [data-intel-tab="rules"][aria-selected="true"]').isVisible(),
+      `${topic}: the pause menu opens the Match Intel Rules reference`);
+    check((await menu.locator('#futasaku-glass .intel-tab[data-intel-tab="rules"]').textContent())?.trim() === 'Rules', `${topic}: the tab is named Rules`);
     await menu.locator(`#futasaku-glass .intel-howto [data-tip="${topic}"]`).click();
     check(await menu.locator('#sheet-futa04-help').isVisible(), `${topic}: explicit lesson opens during a game`);
     check(!/\bfruit(?:ed)?\b/i.test(await menu.locator('#sheet-futa04-help').innerText()), `${topic}: help uses Bomb terminology`);
     if (topic === 'fruit') check((await menu.locator('#first-tip-title').innerText()).includes('Bomb'), 'Bomb help title');
     check((await menu.locator('#first-tip-title').innerText()).length > 3 && (await menu.locator('#first-tip-text').innerText()).length > 60, `${topic}: full lesson is populated`);
     await menu.click('#first-tip-ok');
-    check(!await menu.locator('#sheet-futa04-help').isVisible(), `${topic}: acknowledgement closes help`);
+    check(await goneAfterClose(menu.locator('#sheet-futa04-help')), `${topic}: acknowledgement closes help`);
     check(!!await menu.evaluate(() => (window as any).__severgrow.state()), `${topic}: lessons leave the match available`);
   }
   await menu.close();
@@ -171,7 +184,7 @@ try {
     check(layout.fits && layout.aligned && !layout.overflow, `${width}: glass fits the cockpit and viewport`);
     check(layout.taps && layout.cards>0, `${width}: close target and public card thumbnail are present`);
     await page.keyboard.press('Escape');
-    check(!await page.locator('#futasaku-glass').isVisible(), `${width}: Escape closes Match Intel`);
+    check(await goneAfterClose(page.locator('#futasaku-glass')), `${width}: Escape closes Match Intel`);
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(before), `${width}: reading Match Intel leaves state intact`);
     await page.locator('#deck').click({ force: true });
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
@@ -209,7 +222,7 @@ try {
       `${width}: LED and four fixed buttons align in exactly two rows (${JSON.stringify(cockpit)})`);
     await page.click('#futa04-help-button');
     await page.keyboard.press('Escape');
-    check(!await page.locator('#futasaku-glass').isVisible(), `${width}: Escape closes`);
+    check(await goneAfterClose(page.locator('#futasaku-glass')), `${width}: Escape closes`);
     check(await page.evaluate(() => document.activeElement?.id === 'futa04-help-button'), `${width}: focus returns to Match Intel`);
     const boundaries = await page.evaluate(() => {
       const rail = document.querySelector('#futa04-information-rail')!.getBoundingClientRect();

@@ -12,6 +12,7 @@ import { glassBaseCss } from '../player/glass-surface.js';
 import { buildContext, cleanStack, createCrashGate, createQueue, safePath } from './core.js';
 import type { FeedbackKind, FeedbackPayload } from './core.js';
 import { paintBetaLine, replayEarlyTap } from './beta-line.js';
+import { ICONS } from '../ui/icons.js';
 
 declare const __CHANNEL__: string;
 
@@ -367,11 +368,18 @@ export const mountFeedback = (): void => {
     b.addEventListener('click', openReport);
     return b;
   };
-  // The report row belongs to the quiet action column (never the corner plate): Settings is the
-  // panel's LAST control, alone in the bottom-right corner.
-  const acts = document.querySelector('#sheet-menu .gm-acts');
-  const reportRow = button('gm-report', 'btn ghost gm-act');
-  if (acts) acts.insertBefore(reportRow, document.getElementById('gm-main'));
+  // The pause panel's tool row (owner, 2026-10-23): a flag key with its word, placed BEFORE Settings,
+  // which stays the panel's last control.
+  const tools = document.querySelector('#sheet-menu .gm-tools');
+  const reportKey = el('button', 'gm-tool', '');
+  reportKey.type = 'button';
+  reportKey.id = 'gm-report';
+  reportKey.dataset.fb = 'open';
+  reportKey.setAttribute('aria-label', FEEDBACK.open);
+  reportKey.innerHTML = `<span class="i" data-icon="flag">${ICONS.flag}</span><span class="gm-tool-word"></span>`;
+  reportKey.querySelector('.gm-tool-word')!.textContent = FEEDBACK.openShort;
+  reportKey.addEventListener('click', openReport);
+  if (tools) tools.insertBefore(reportKey, document.getElementById('gm-settings'));
   const settingsBody = document.querySelector('#sheet-settings .sheet-body');
   settingsBody?.append(button('settings-report', 'btn ghost'));
 };

@@ -7,6 +7,10 @@ export const ICONS: Record<string, string> = {
   menu: wrap('<path d="M4 7h16M4 12h16M4 17h16"/>'),
   history: wrap('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/>'),
   close: wrap('<path d="M6 6l12 12M18 6L6 18"/>'),
+  // The pause panel's tool row (owner, 2026-10-23): a question mark for How to play, a flag for
+  // Report a problem.
+  help: wrap('<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.2-2.4 3.7M12 17.2h0"/>'),
+  flag: wrap('<path d="M6 21V4"/><path d="M6 4h11l-2.2 4L17 12H6"/>'),
   back: wrap('<path d="M15 5l-7 7 7 7"/>'),
   shield: wrap('<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M12 8v5M12 16h0"/>'),
   target: wrap('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'),

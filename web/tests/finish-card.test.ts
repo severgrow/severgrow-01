@@ -102,7 +102,13 @@ describe('the card is one screen: the result leads, the rest waits behind "More"
     const firstIds = [...goButtons.matchAll(/<button id="([^"]+)"([^>]*)>/g)]
       .filter((m) => !/data-go-extra/.test(m[2]!))
       .map((m) => m[1]!);
-    expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-board', 'go-more', 'go-menu']);
+    // Game review (owner, 2026-10-23) is a key, not a row: it shares the board's row. Open Territory
+    // (level 10's won card, owner 2026-10-24) is the secondary's alternate, never shown beside it.
+    expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-territory-open', 'go-board', 'go-review', 'go-more', 'go-menu']);
+    expect(mainSource).toMatch(/other\.hidden = lead === 'back-to-campaign' \|\| territoryIntro;/);
+    expect(mainSource).toMatch(/\$\('go-territory-open'\)\.hidden = !territoryIntro;/);
+    const css = read('../src/style.css');
+    expect(css).toMatch(/\.go-buttons:has\(#go-review:not\(\[hidden\]\)\) > #go-board,\s*\.go-buttons:has\(#go-review:not\(\[hidden\]\)\) > #go-review \{\s*grid-column: auto;/);
   });
 
   it('is driven by one disclosure in main.ts, shared by every mode', () => {
@@ -148,5 +154,24 @@ describe('after the tutorial, the player lands in a level (never back at a menu)
     // `currentLevel(progress)` is the existing campaign getter: an untouched progress is level 1.
     expect(mainSource).not.toMatch(/startCampaignLevel\(CAMPAIGN_LEVELS\[0\]/);
     expect(mainSource).toMatch(/enterCampaign\(\)/);
+  });
+});
+
+describe('game review on the finish card (owner, 2026-10-23)', () => {
+  it('starts hidden, and appears only once the worker has the answer', () => {
+    expect(goButtons).toMatch(/<button id="go-review" class="btn ghost" type="button" hidden>/);
+    expect(mainSource).toMatch(/btn\.hidden = reviewPoint === undefined;/);
+    expect(mainSource).toMatch(/void askReview\(s\.start, s\.log, HUMAN, st\)/);
+  });
+
+  it('is offered for practice and level games only: never a lesson, never a duel', () => {
+    expect(mainSource).toMatch(/if \(!IS_FUTA04 \|\| lessonActive\(\) \|\| !session \|\| session\.state !== st\)/);
+    expect(mainSource).toMatch(/no replayable log to review\.\s*setGoExtra\('go-cut', false\);\s*\$\('go-review'\)\.hidden = true;/);
+  });
+
+  it('opens in the same card (the card never grows), and a fresh finish starts closed', () => {
+    expect(goCard).toMatch(/<div id="go-review-face" class="go-review-face" hidden>/);
+    expect(read('../src/style.css')).toMatch(/\.go-card\.reviewing > :not\(\.go-review-face\) \{\s*display: none !important;/);
+    expect((mainSource.match(/if \(wasHidden\) closeReview\(\);/g) ?? []).length).toBe(2);
   });
 });

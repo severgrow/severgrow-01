@@ -166,8 +166,8 @@ try {
     // --- Match Intel on the "How to" tab ---------------------------------------------------
     await a.page.click('#futa04-help-button');
     await a.page.waitForSelector('#futasaku-glass .intel-tabs', { timeout: 15_000 });
-    await a.page.click('.intel-tab[data-intel-tab="howto"]');
-    await a.page.waitForSelector('[data-intel-panel="howto"]', { timeout: 10_000 });
+    await a.page.click('.intel-tab[data-intel-tab="rules"]');
+    await a.page.waitForSelector('[data-intel-panel="rules"]', { timeout: 10_000 });
     check(`[${vp.tag}] Match Intel has a "How to" tab`, true);
     await a.page.waitForTimeout(300);
     await shoot(a.page, `match-intel-howto-${vp.tag}`);

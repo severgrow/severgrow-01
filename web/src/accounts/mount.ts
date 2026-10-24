@@ -15,6 +15,8 @@ import { glassBaseCss } from '../player/glass-surface.js';
 import { installProfileUI } from './profile.js';
 import { GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
 import type { ProfileFacts } from './profile.js';
+import { PLAY_KEY, parsePlay, playRows } from '../logic/play-record.js';
+import { STATS_KEY, parseStats } from '../logic/stats.js';
 import {
   WELCOME_KEY,
   authorizeUrl,
@@ -84,7 +86,6 @@ ${glassBaseCss('.acct-glass')}
 #acct-settings .acct-who { margin:0; font-weight:700; color:var(--ink, #f0e9dc); }
 #acct-settings p { margin:0; }
 #acct-settings .acct-actions.row { justify-content:flex-start; }
-body.acct-on #online-storage-note { display:none; }
 .acct-toast { position:fixed; z-index:96; left:50%; top:calc(env(safe-area-inset-top, 0px) + 14px); transform:translateX(-50%);
   width:min(420px, calc(100vw - 32px)); box-sizing:border-box; padding:12px 14px; border-radius:14px; background:rgba(8,10,10,.92);
   border:1px solid rgba(214,204,177,.25); color:#f0e9dc; font:400 14px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); text-align:center; }
@@ -541,6 +542,15 @@ export const mountAccounts = async (): Promise<void> => {
    * matches-won line has no player-facing source in this build (the server's win count is
    * admin-only), so its fact is honestly null and the panel renders an em dash.
    */
+  /** This device's saved record (the game writes it under the same keys); blocked storage reads as none. */
+  const readLocal = (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  };
+
   const profileFacts = (identity: Identity): ProfileFacts => {
     const pair = cachedTerritory(identity.playerId);
     return {
@@ -549,6 +559,7 @@ export const mountAccounts = async (): Promise<void> => {
       seeds: pair?.seeds ?? null,
       tiles: pair?.tiles ?? null,
       matchesWon: null,
+      play: playRows(parseStats(readLocal(STATS_KEY)), parsePlay(readLocal(PLAY_KEY))),
     };
   };
 
@@ -571,10 +582,11 @@ export const mountAccounts = async (): Promise<void> => {
   });
 
   // ---- 5. the Account block in Settings ----
-  const note = document.getElementById('online-storage-note');
+  // Settings is essentials only (owner, 2026-10-23); the account is one of them: its own last group.
   const box = el('div');
   box.id = 'acct-settings';
-  note?.after(box);
+  const accountHead = el('h3', '', ACCOUNT.settingsTitle);
+  document.querySelector('#sheet-settings .sheet-body')?.append(accountHead, box);
 
   const ask = (title: string, lines: readonly string[], yes: string, danger: boolean, run: (status: HTMLElement, yesBtn: HTMLButtonElement) => Promise<boolean>) => {
     confirmSheet.panel.textContent = '';

@@ -2,8 +2,18 @@
 
 A read-only operations dashboard for the owner, served at **`/admin/`** on the site. It reads the
 same database the game writes, through its own narrowly scoped API, and it can change three
-things: **report triage**, and — for testing, at the owner's request (2026-10-22) — **a player's
-Seeds** and **who owns a map tile** (§3a).
+things: **report triage**, **a player's Seeds** (an audited grant below, and — for testing, at the
+owner's request, 2026-10-22 — the test edits in §3a), and **who owns a map tile** (§3a).
+
+### Adding Seeds
+
+The player page (`#/player?q=…`) has an **Add Seeds** card: a whole number from 1 to 1000 and a
+short reason, confirmed once. `POST /v1/admin/players/:id/seeds` with `{ amount, reason, requestId }`
+writes one `seed_ledger` row (`category = 'admin_grant'`, `source_key = 'admin:<requestId>'`, the
+reason and the admin's id in `metadata`) and one `admin_audit` row (`seeds.grant`). The request id
+makes a double tap pay once. It is refused without a token (401) and for any non-admin (403), like
+every admin route. No migration is needed (`seed_ledger.category` is free text). **Needs the `duel`
+function redeployed.**
 
 - **Status: built, not published.** The migration is written and **unapplied**; the `/admin/` route is
   **not** wired into the Pages deploy and is **not** linked from the game. Publishing is the owner's

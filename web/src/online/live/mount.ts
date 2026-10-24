@@ -26,7 +26,6 @@ import {
   createPill,
   injectLiveStyles,
   mountLeaveItem,
-  mountSettingsSwitch,
 } from './ui.js';
 import type { PillModel } from './ui.js';
 
@@ -147,7 +146,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
       onInbox: (inbox) => {
         offset = inbox.serverNow - Date.now();
         lastInbox = inbox;
-        setSwitch(inbox.challengesEnabled);
+        keepChallengesOn(inbox.challengesEnabled);
         // The sender's quiet answers: "Not now" / no answer.
         for (const c of inbox.outgoing) {
           const before = seenOutgoing.get(c.id);
@@ -172,7 +171,14 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   const hud = createHud();
   const end = createEndWindow();
   const setLeave = mountLeaveItem(() => void leave());
-  const setSwitch = mountSettingsSwitch(true, (on) => void api.setEnabled(on).then(() => center?.pollNow()));
+  // Real-time challenges are always on (owner, 2026-10-23: no setting for it). A player who switched
+  // them off before is switched back on, once per session, the first time the server says so.
+  let reenabling = false;
+  const keepChallengesOn = (enabled: boolean) => {
+    if (enabled || reenabling) return;
+    reenabling = true;
+    void api.setEnabled(true).then(() => center?.pollNow());
+  };
 
   let status: LiveStatusWire | null = null;
   let statusFor: string | null = null;

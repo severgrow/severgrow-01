@@ -159,7 +159,7 @@ export function mountAtmosphere(): OutcomeLight {
     const shape = paths.map(path => path.getAttribute('d') ?? '').join(' ');
     if (shape === signature && board.querySelector('#futa04-map-rim')) return;
     const boxes = paths.map(path => path.getBBox());
-    const pad = 24;
+    const pad = 48;
     const x = Math.min(...boxes.map(box => box.x)) - pad;
     const y = Math.min(...boxes.map(box => box.y)) - pad;
     const w = Math.max(...boxes.map(box => box.x + box.width)) - x + pad;
@@ -190,6 +190,27 @@ export function mountAtmosphere(): OutcomeLight {
     b.drawImage(mask, -b.shadowOffsetX, 0);
     b.shadowOffsetX = 0; b.shadowBlur = 0; b.globalCompositeOperation = 'destination-out';
     b.drawImage(mask, 0, 0);
+    /* Feather the baked glow to nothing before it reaches the image's own border.
+     *
+     * Owner report (2026-10-23): after a big action the glow read as a slightly brighter grey that
+     * "cut off in a clean line just under the board". The baked glow is painted into a canvas whose
+     * rectangle ends a fixed number of units past the map, so any light that reached that border was
+     * clipped by it — a straight edge belongs to the canvas, never to the map. Erasing the last few
+     * pixels with a gradient means the glow fades out on its own terms and the image's rectangle can
+     * no longer be seen, whatever the zoom. Bake-time only: nothing here runs per frame. */
+    const feather = Math.max(6, Math.round(Math.min(baked.width, baked.height) * 0.08));
+    const fade = (x0: number, y0: number, x1: number, y1: number) => {
+      const g = b.createLinearGradient(x0, y0, x1, y1);
+      g.addColorStop(0, 'rgba(0,0,0,1)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      b.fillStyle = g;
+    };
+    // Each strip runs from the border (fully erased) inward (untouched).
+    fade(0, 0, feather, 0); b.fillRect(0, 0, feather, baked.height);
+    fade(baked.width, 0, baked.width - feather, 0); b.fillRect(baked.width - feather, 0, feather, baked.height);
+    fade(0, 0, 0, feather); b.fillRect(0, 0, baked.width, feather);
+    fade(0, baked.height, 0, baked.height - feather); b.fillRect(0, baked.height - feather, baked.width, feather);
+    b.globalCompositeOperation = 'source-over';
     const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
     image.id = 'futa04-map-rim';
     image.setAttribute('aria-hidden', 'true');

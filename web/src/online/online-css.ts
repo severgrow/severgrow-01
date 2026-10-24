@@ -484,10 +484,11 @@ export const ONLINE_CSS = `
   box-sizing: border-box; min-width: 44px; min-height: 44px; padding: 0 10px;
   display: grid; place-items: center;
   color: #cfc8ae; background: #161b17cc; border: 1px solid #d5c89b40; border-radius: 9px;
-  font: inherit; font-size: .72rem; font-weight: 700; letter-spacing: .12em;
+  font: inherit; font-size: .72rem; font-weight: 700; letter-spacing: .12em; line-height: 0;
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); cursor: pointer;
 }
 .world-fit[aria-pressed='true'] { color: #f2e5c5; border-color: #d5c89b9c; background: #2b3029e6; }
+.world-fit-icon { display: block; pointer-events: none; }
 .world-fit:focus { outline: none; }
 .world-fit:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 /* THE TWO LAYERS (world-view.ts). Each tile is drawn TWICE: a FACE (its surface) and a LINE (its

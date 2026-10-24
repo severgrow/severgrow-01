@@ -35,7 +35,7 @@ const GEOMETRY = `(() => {
   const first = svg ? svg.querySelector('.world-hex') : null;
   return {
     panel: panel ? box(panel) : null,
-    fit: fit ? { text: fit.textContent.trim(), pressed: fit.getAttribute('aria-pressed'), ...box(fit) } : null,
+    fit: fit ? { text: fit.textContent.trim(), icon: !!fit.querySelector('.world-fit-icon'), pressed: fit.getAttribute('aria-pressed'), ...box(fit) } : null,
     viewBox: (svg?.getAttribute('viewBox') ?? '').split(/[\\s,]+/).map(Number),
     hex: first ? { width: +first.getBoundingClientRect().width.toFixed(1), height: +first.getBoundingClientRect().height.toFixed(1) } : null,
     cells,
@@ -84,7 +84,7 @@ try {
     check(`[${tag}] the live map draws ${large.count} cells`, large.count > 250, large.count);
     check(`[${tag}] a cell is a real touch target (>=44px)`, large.hex.width >= 44 && large.hex.height >= 44, `${n1(large.hex.width)}x${n1(large.hex.height)}`);
     check(`[${tag}] the page does not scroll on open`, large.docScroll <= 1 && large.scrollY === 0, `${large.docScroll}px`);
-    check(`[${tag}] the FIT toggle is there and off`, !!large.fit && large.fit.text === 'FIT' && large.fit.pressed === 'false', `${large.fit?.text}/${large.fit?.pressed}`);
+    check(`[${tag}] the zoom toggle (magnifying glass) is there and off`, !!large.fit && large.fit.icon && large.fit.pressed === 'false', `${large.fit?.icon}/${large.fit?.pressed}`);
     await page.screenshot({ path: `${SHOTS}/territory-large-${tag}.png` });
 
     const centre = { x: large.panel.left + large.panel.width / 2, y: large.panel.top + large.panel.height / 2 };

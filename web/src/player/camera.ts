@@ -31,6 +31,39 @@ export type CamInput = {
   canMove: boolean;
 };
 
+/**
+ * Which fingers are down on the map. A lift can be LOST: the iPhone keeps a touch on the node it
+ * started on, and when the board redraws that node away mid-touch (it does on most changes, opening
+ * the pause menu included) the lift goes to a detached element and never reaches the map. A lost
+ * lift used to leave a ghost finger behind: the camera froze ("a finger is down"), and the next
+ * ordinary one-finger drag became a pinch against the ghost, zooming and pushing the map away
+ * (owner report, 2026-10-23: "it breaks after closing menu sometimes"). So the book heals itself:
+ * a PRIMARY pointer starts a new touch sequence, which proves every earlier finger has lifted, and
+ * `release()` clears everything when a sheet covers the map or the page loses focus.
+ */
+export const pointerBook = () => {
+  const down = new Set<number>();
+  return {
+    /** A pointer went down on the map. Returns true when it cleared ghosts from a lost lift. */
+    down(id: number, primary: boolean): boolean {
+      const healed = primary && down.size > 0;
+      if (primary) down.clear();
+      down.add(id);
+      return healed;
+    },
+    /** A pointer lifted (anywhere). Returns true when it was one of ours. */
+    up(id: number): boolean {
+      return down.delete(id);
+    },
+    release() {
+      down.clear();
+    },
+    get count() {
+      return down.size;
+    },
+  };
+};
+
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { reduceMotion: () => boolean; changed: () => void }) => {
@@ -45,7 +78,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   let input: CamInput | null = null;
   let anim = 0;
   let peekTimer = 0;
-  let touching = 0;
+  const book = pointerBook();
   let culled = false;
 
   // ---------- the UI: edge arrows and the "Whole map" pill ----------
@@ -303,7 +336,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     clearTimeout(peekTimer);
     show(viewAt(x, y, tileOf(view)));
     peekTimer = window.setTimeout(() => {
-      if (!touching && auto) frame(true);
+      if (!book.count && auto) frame(true);
     }, CAMERA.peekMs);
   };
 
@@ -364,7 +397,12 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   wrap.addEventListener(
     'pointerdown',
     (e) => {
-      touching++;
+      if (book.down(e.pointerId, e.isPrimary)) {
+        // a lost lift left ghosts behind: forget them, and any pinch they were part of
+        pts.clear();
+        gesture = false;
+        last = null;
+      }
       document.documentElement.classList.add('cam-touch');
       if (e.pointerType === 'mouse') return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -403,8 +441,8 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     true,
   );
   const end = (e: PointerEvent) => {
-    touching = Math.max(0, touching - 1);
-    if (!touching) document.documentElement.classList.remove('cam-touch');
+    book.up(e.pointerId);
+    if (!book.count) document.documentElement.classList.remove('cam-touch');
     if (!pts.has(e.pointerId)) return;
     pts.delete(e.pointerId);
     if (gesture) {
@@ -419,6 +457,28 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   };
   wrap.addEventListener('pointerup', end, true);
   wrap.addEventListener('pointercancel', end, true);
+  // A finger that lifts off the map (over a sheet, a card, the cockpit) still lifted.
+  const endElsewhere = (e: PointerEvent) => {
+    if (!wrap.contains(e.target as Node | null)) end(e);
+  };
+  window.addEventListener('pointerup', endElsewhere, true);
+  window.addEventListener('pointercancel', endElsewhere, true);
+  /** Forget every finger and any gesture: a sheet now covers the map, or the page lost focus. */
+  const release = () => {
+    book.release();
+    pts.clear();
+    gesture = false;
+    last = null;
+    document.documentElement.classList.remove('cam-touch');
+    if (pending && auto && input?.canMove) {
+      pending = false;
+      frame();
+    }
+  };
+  window.addEventListener('blur', release);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) release();
+  });
   wrap.addEventListener(
     'wheel',
     (e) => {
@@ -451,10 +511,11 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
         pending = true;
       }
       if (!pending || !auto) return;
-      if (!i.canMove || touching > 0) return;
+      if (!i.canMove || book.count > 0) return;
       pending = false;
       frame();
     },
+    release,
     /** True when the whole map is in view (the fan's smart overlap needs that). */
     isWhole: () => whole(),
     /** The tile size shown now (CSS px, centre to centre). */

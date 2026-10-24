@@ -427,7 +427,7 @@ export class DisplayMachine {
     if (STEP_WORDS.has(word)) return word;
     if (!this.quiet) return word;
     if (word === 'TAP DRAW PILE' || word === 'DRAW') return 'DRAW';
-    if (word.startsWith('TAP LIT') || word.startsWith('PICK') || word.startsWith('CHOOSE') || word.startsWith('TAP THEIR')) return 'GROW';
+    if (word.startsWith('TAP LIT') || word.startsWith('PICK') || word.startsWith('CHOOSE')) return 'GROW';
     if (word.startsWith('THROW') || word.startsWith('TAP THROW')) return 'THROW';
     if (word.startsWith('TAP BLOOM') || word.startsWith('TAP »')) return 'GROW';
     return word;

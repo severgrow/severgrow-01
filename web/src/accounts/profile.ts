@@ -14,7 +14,9 @@
 // map read, cached by web/src/online/territory-cache.ts); matches won has no player-facing source
 // in this build, so its fact is honestly null.
 import { PROFILE } from '../../../src/strings.js';
+import type { PlayRow } from '../logic/play-record.js';
 import { SEEDS_WORD } from '../online/seed-icon.js';
+import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 
 export type ProfileFacts = {
   /** The player's display name with its #TAG, or null when the device has none. */
@@ -27,6 +29,8 @@ export type ProfileFacts = {
   tiles: number | null;
   /** Finished online matches this player won, or null when there is no source for it. */
   matchesWon: number | null;
+  /** Player stats (owner, 2026-10-23): the record against the computer, as `playRows` words it. */
+  play?: readonly PlayRow[];
 };
 
 export type ProfileRow = Readonly<{ label: string; value: string }>;
@@ -58,7 +62,6 @@ export type ProfileUI = {
 };
 
 const VALUE_IDS = ['profile-name', 'profile-signin', 'profile-seeds', 'profile-tiles', 'profile-wins'] as const;
-
 /**
  * Wire the markup once. The panel traps no focus: Tab moves through the page as it always does, a
  * scrim tap or Escape closes it, and closing returns focus to the account key. Nothing here fetches.
@@ -84,22 +87,47 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     if (label) dt.textContent = label;
   });
 
+  const playTitle = doc.getElementById('profile-play-title');
+  if (playTitle) playTitle.textContent = PROFILE.playTitle;
+  const playNote = doc.getElementById('profile-play-note');
+  if (playNote) playNote.textContent = PROFILE.playNote;
+  const playGrid = doc.getElementById('profile-play');
+
   const fill = (facts: ProfileFacts) => {
     const rows = profileRows(facts);
     rows.forEach((row, index) => {
       const el = values[index];
       if (el) el.textContent = row.value;
     });
+    if (playGrid) {
+      playGrid.replaceChildren(
+        ...(facts.play ?? []).map((row) => {
+          const tile = doc.createElement('div');
+          tile.className = 'sp-tile';
+          const dt = doc.createElement('dt');
+          dt.textContent = row.label;
+          const dd = doc.createElement('dd');
+          dd.textContent = row.value;
+          tile.append(dt, dd);
+          return tile;
+        }),
+      );
+      playGrid.parentElement!.hidden = !facts.play?.length;
+    }
   };
 
   const close = () => {
     if (!opened) return;
     opened = false;
-    sheet.hidden = true;
-    scrim.hidden = true;
     const back = trigger;
     trigger = null;
-    back?.focus({ preventScroll: true });
+    const done = () => {
+      if (opened) return; // a rapid reopen interrupts the exit and keeps the panel painted
+      sheet!.hidden = true;
+      scrim!.hidden = true;
+      back?.focus({ preventScroll: true });
+    };
+    if (!exitSurface(sheet, { onDone: done })) done();
   };
 
   scrim.addEventListener('click', close);
@@ -125,6 +153,7 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
       sheet.hidden = false;
       scrim.hidden = false;
       opened = true;
+      enterSurface(sheet);
       (sheet.querySelector('[data-profile-close]') as HTMLElement | null)?.focus({ preventScroll: true });
     },
     show(facts) {

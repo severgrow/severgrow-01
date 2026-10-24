@@ -70,6 +70,8 @@ export const renderPlayer = async (host: HTMLElement, ctx: Ctx, params: URLSearc
       ],
     ),
 
+    addSeedsCard(ctx, player.id, nameOf(player), query),
+
     card('Seeds ledger (newest 20)', [
       found.ledger.length === 0
         ? emptyBox('No Seeds have moved for this player.')
@@ -204,4 +206,60 @@ const campaignResetCard = (player: AdminPlayerResult['player']): HTMLElement => 
   };
   paint();
   return card(title, [body]);
+};
+
+/**
+ * ADD SEEDS (owner, 2026-10-24: "on mobile admin dashboard I can't find a button to add seeds to
+ * someone's account"). The dashboard's one Seeds write: a whole number from 1 to 1000 and a short
+ * reason, confirmed once. The server records it in the ledger as `admin_grant` (with the reason and
+ * your id) and in the audit log; one request id per press, so a double tap never pays twice.
+ */
+const addSeedsCard = (ctx: Ctx, playerId: string, name: string, query: string): HTMLElement => {
+  const amount = el('input', { id: 'grant-amount', type: 'number', inputmode: 'numeric', min: '1', max: '1000', step: '1', value: '100' });
+  const reason = el('input', { id: 'grant-reason', type: 'text', maxlength: '200', placeholder: 'Why (it goes in the ledger)', autocomplete: 'off' });
+  const feedback = el('p', { class: 'muted small grant-feedback', role: 'status', 'aria-live': 'polite' });
+  let requestId = newRequestId();
+  let busy = false;
+  const submit = button('Add Seeds', () => {
+    if (busy) return;
+    const value = Number(amount.value);
+    const why = reason.value.trim();
+    if (!Number.isInteger(value) || value < 1 || value > 1000) { feedback.textContent = 'Seeds must be a whole number from 1 to 1000.'; return; }
+    if (why.length < 3) { feedback.textContent = 'Write a short reason first.'; reason.focus(); return; }
+    if (!window.confirm(`Add ${value} Seeds to ${name}?\n\nReason: ${why}`)) return;
+    busy = true;
+    submit.disabled = true;
+    feedback.textContent = 'Adding…';
+    void ctx.api.post<{ ok: true; amount: number; balance: number; replayed: boolean }>(
+      `/v1/admin/players/${encodeURIComponent(playerId)}/seeds`, { amount: value, reason: why, requestId },
+    ).then((result) => {
+      busy = false;
+      submit.disabled = false;
+      if (!result.ok) {
+        if (result.status === 401 || result.status === 403) { ctx.denied(); return; }
+        feedback.textContent = result.message;
+        return;
+      }
+      requestId = newRequestId();
+      feedback.textContent = result.data.replayed
+        ? `Already added. Balance ${formatNumber(result.data.balance)}.`
+        : `Added ${formatNumber(result.data.amount)} Seeds. Balance ${formatNumber(result.data.balance)}.`;
+      // Show the new balance and the ledger row the server just wrote.
+      window.setTimeout(() => ctx.navigate(`#/player?q=${encodeURIComponent(query)}&t=${Date.now()}`), 900);
+    });
+  }, { primary: true, title: 'Add Seeds to this player' });
+  return card('Add Seeds', [
+    el('div', { class: 'controls grant-controls' },
+      el('label', { class: 'control', for: 'grant-amount' }, el('span', { text: 'Seeds (1–1000)' }), amount),
+      el('label', { class: 'control wide', for: 'grant-reason' }, el('span', { text: 'Reason' }), reason),
+      submit,
+    ),
+    feedback,
+  ], { sub: 'Recorded in the Seeds ledger as admin_grant, with your reason.' });
+};
+
+const newRequestId = (): string => {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return `grant-${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 };

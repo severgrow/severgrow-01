@@ -27,6 +27,8 @@ const ICON: Record<Step, string> = {
 };
 
 const loadMode = (): GuideMode => {
+  // The Futasaku channels keep Settings to the essentials (owner, 2026-10-23): guidance is always Full.
+  if (IS_FUTA04) return 'full';
   try {
     const v = localStorage.getItem(KEY);
     return v === 'subtle' || v === 'off' ? v : 'full';

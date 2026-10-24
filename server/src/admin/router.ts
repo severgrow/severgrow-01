@@ -8,8 +8,9 @@
 //     and BOTH are refused before the store is touched, so no data can leak through an error shape;
 //   * the response shapes live in `./types.ts`; this router never widens them, and the CSV export
 //     uses the SAME field list as the JSON path (never "because CSV makes it easy");
-//   * the only writes are report triage, the admin's own "last looked" cursor, the owner's two test
-//     edits (Seeds and tiles, docs/ADMIN.md §3a), and the audit row that records each of them.
+//   * the only writes are report triage, the admin's own "last looked" cursor, adding Seeds to a
+//     player (owner, 2026-10-24: amount 1-1000, a reason, idempotent by request id), the owner's two
+//     test edits (Seeds and tiles, docs/ADMIN.md §3a), and the audit row that records each of them.
 import { ApiError } from '../errors.js';
 import { newId } from '../ids.js';
 import type { ServerConfig } from '../config.js';
@@ -26,7 +27,7 @@ import type {
   AdminStore,
   AdminTriageStatus,
 } from './types.js';
-import { CSV_MAX_ROWS, MAX_PAGE, TAG_SCAN_LIMIT, normalizeBuild } from './types.js';
+import { ADMIN_GRANT_MAX, ADMIN_GRANT_REASON_MAX, CSV_MAX_ROWS, MAX_PAGE, TAG_SCAN_LIMIT, normalizeBuild } from './types.js';
 import { clampLimit } from './util.js';
 
 export type AdminOutcome = {
@@ -313,6 +314,34 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
         now,
       });
       return { status: 200, body: { ok: true, reportId, status, noteLength: note.length, previous: result.previous, changed: result.changed, serverNow: now } };
+    }
+
+    // ---------------------------------------------------------------- add Seeds (owner, 2026-10-24)
+    const grantRoute = /^\/v1\/admin\/players\/([^/]+)\/seeds$/.exec(path);
+    if (grantRoute && req.method === 'POST') {
+      const playerId = decodeURIComponent(grantRoute[1]!);
+      if (!UUID_PATTERN.test(playerId)) throw new ApiError('INVALID_REQUEST', 'That is not a player id.');
+      const body = asRecord(await req.json().catch(() => ({})));
+      const amount = body.amount;
+      if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 1 || amount > ADMIN_GRANT_MAX) {
+        throw new ApiError('INVALID_REQUEST', `Seeds must be a whole number from 1 to ${ADMIN_GRANT_MAX}.`);
+      }
+      const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, ADMIN_GRANT_REASON_MAX) : '';
+      if (reason.length < 3) throw new ApiError('INVALID_REQUEST', 'Write a short reason (it goes in the ledger).');
+      const requestId = typeof body.requestId === 'string' ? body.requestId : '';
+      if (!/^[A-Za-z0-9_-]{8,100}$/.test(requestId)) throw new ApiError('INVALID_REQUEST', 'A request id is required.');
+      const result = await deps.store.grantSeeds({ playerId: playerId.toLowerCase(), amount, reason, actorId: player.id, requestId, now });
+      if (result === null) throw new ApiError('NOT_FOUND', 'That player does not exist.');
+      await audit({
+        actorId: player.id,
+        action: 'seeds.grant',
+        targetType: 'player',
+        targetId: playerId.toLowerCase(),
+        detail: { amount, reasonLength: reason.length, balance: result.balance, replayed: result.replayed },
+        now,
+      });
+      log(`ADMIN_GRANT player:${player.id} to:${playerId} amount:${amount} replayed:${result.replayed}`);
+      return { status: 200, body: { ok: true, playerId: playerId.toLowerCase(), amount, balance: result.balance, replayed: result.replayed, serverNow: now } };
     }
 
     // ---------------------------------------------------------------- player lookup

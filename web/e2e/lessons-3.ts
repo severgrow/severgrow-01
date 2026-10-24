@@ -14,6 +14,7 @@ import type { Page } from 'playwright-core';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { SMALL_HOMES } from '../src/lessons/authored.js';
 import { LESSON } from '../../src/strings.js';
+import { LESSON_VERSION } from '../src/lessons/mastery.js';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
 const SHOTS = process.env.SHOTS ?? '';
@@ -571,9 +572,21 @@ try {
         title: document.getElementById('go-title')?.textContent?.trim(),
         line: document.getElementById('go-learned')?.textContent?.trim(),
         seeds: !(document.getElementById('go-seeds')?.hidden ?? true) ? document.getElementById('go-seeds')?.textContent?.trim() : '',
+        territory: !(document.getElementById('go-territory')?.hidden ?? true) ? document.getElementById('go-territory')?.textContent?.trim() : '',
+        territoryKey: !(document.getElementById('go-territory-open')?.hidden ?? true),
       }));
       check(!!card.line, `L${level} finish card: ${card.title} / ${card.line}`);
-      check(!card.seeds, `L${level} finish card has no Seeds line`);
+      if (level < 10) {
+        check(!card.seeds, `L${level} finish card has no Seeds line`);
+        check(!card.territory && !card.territoryKey, `L${level} finish card says nothing about Territory`);
+      } else {
+        // Owner, 2026-10-24: level 10 pays 100 Seeds once (the server verifies it; here the CI
+        // placeholder server cannot answer, so the line is the pending one), and its won card says
+        // what Seeds and Territory are, with Open Territory.
+        check(!!card.seeds, `L10 finish card has its Seeds line (${card.seeds})`);
+        check(card.territory === 'Seeds are earned by winning.Spend 100 to claim a tile of Territory on the world map.', `L10 finish card explains Seeds and Territory (${card.territory})`);
+        check(card.territoryKey, 'L10 finish card offers Open Territory');
+      }
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/L${level}-finish.png` });
       results.push(`L${level}: ${r.reason}, ${r.turns} turns, ${r.wrong} wrong taps`);
       const words = await page.evaluate(() => document.querySelectorAll('.tap-why').length);
@@ -710,6 +723,8 @@ try {
       for (let i = 0; i < 8 && (await hook<any>(page, 'lesson'))?.beat?.explain; i++) { await dismissExplanation(page); }
       const deck = (await litPoints(page, { t: 'deck' }))[0]!;
       await page.mouse.click(deck.x, deck.y); await idle(page); await page.waitForTimeout(300);
+      // The gold is explained after the draw now, right before it can be grown (owner, 2026-10-22).
+      for (let i = 0; i < 4 && (await hook<any>(page, 'lesson'))?.beat?.explain; i++) { await dismissExplanation(page); }
       if (level === 3) {
         const rock = (await litPoints(page, { t: 'hex', key: '-1,0' }))[0]!;
         const answers = new Set<string>();
@@ -750,6 +765,13 @@ try {
       await page.evaluate(`localStorage.setItem('severgrow.campaign.progress.v3', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 5, completed: done, best: {} }))})`);
       await page.reload({ waitUntil: 'networkidle' });
       await openNextLevel(page);
+      // The Bloom is explained after the draw, the moment it can be played (owner, 2026-10-22).
+      // From level 2 the draw prompt is not the lesson's own step, so it waits for a quiet moment
+      // (owner, 2026-10-24); either way nothing but the draw is asked for before it.
+      const before = (await hook<any>(page, 'lesson'))?.beat?.id ?? null;
+      check(before === null || before === 'draw', `${tag}: before the draw the display asks for nothing but the draw (${before})`);
+      const deck = (await litPoints(page, { t: 'deck' }))[0]!;
+      await page.mouse.click(deck.x, deck.y); await idle(page);
       await page.waitForSelector('#lesson-plate:not([hidden]) .lesson-copy', { timeout: 15000 });
       await page.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === '5:intro:bloom-cards', undefined, { timeout: 15000 });
       await page.waitForTimeout(500);
@@ -840,6 +862,8 @@ try {
       await rm.evaluate(`localStorage.setItem('severgrow.campaign.progress.v3', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 5, completed: done, best: {} }))})`);
       await rm.reload({ waitUntil: 'networkidle' });
       await openNextLevel(rm);
+      const rmDeck = (await litPoints(rm, { t: 'deck' }))[0]!;
+      await rm.mouse.click(rmDeck.x, rmDeck.y); await idle(rm);
       // Wait for the Bloom beat itself. The example is only present when the fit rule allows it:
       // on a tall phone the box would cover a hex, so it is deliberately dropped. Waiting for it
       // to be visible would contradict the "never cover the map" rule.
@@ -1004,6 +1028,127 @@ try {
     assert.deepEqual(errors, [], `breath/display: no page errors: ${errors.join(' | ')}`);
     await page.close();
   }
+  if (ONLY === 'all' || ONLY === 'welcome') {
+    // Owner, 2026-10-22: while level 1's first three sentences are read, the display scrolls
+    // HELLO ♥ WELCOME ♥ instead of blinking DRAW; after them it is back to the action.
+    console.log('\nLevel 1 opens with a welcome on the display:');
+    const { page, errors } = await newPage(390, 844);
+    await page.goto(URL3, { waitUntil: 'networkidle' });
+    // Every face the display shows from the menu tap on (owner, 2026-10-22: "the first second it
+    // still says DRAW" — the welcome must be the FIRST thing level 1 shows).
+    await page.evaluate(`(() => { window.__ledLog = [];
+      const tick = () => { const el = document.querySelector('#smart-led-text'); const t = el ? el.textContent : '';
+        const log = window.__ledLog; if (!log.length || log[log.length - 1] !== t) log.push(t); requestAnimationFrame(tick); };
+      tick(); })()`);
+    await openNextLevel(page);
+    const faces = (await page.evaluate('window.__ledLog')) as string[];
+    const firstWelcome = faces.indexOf(LESSON.welcome);
+    check(firstWelcome >= 0 && !faces.slice(0, firstWelcome).some((t) => /DRAW|GROW|THROW|TAP/.test(t)),
+      `the welcome is the first thing the display says (${faces.join(' > ')})`);
+    const ledText = () => page.evaluate(() => document.querySelector('#smart-led-text')?.textContent ?? '');
+    const seen: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const beat = (await hook<any>(page, 'lesson'))?.beat;
+      seen.push(beat?.id);
+      await page.waitForTimeout(400);
+      const samples = new Set<string>();
+      for (let k = 0; k < 6; k++) { samples.add(await ledText()); await page.waitForTimeout(250); }
+      check([...samples].every((t) => t === LESSON.welcome), `${beat?.id}: the display says ${LESSON.welcome} (${[...samples].join(' / ')})`);
+      if (SHOTS && i === 0) await page.screenshot({ path: `${SHOTS}/l1-welcome.png` });
+      await dismissExplanation(page);
+    }
+    check(seen.join(',') === '1:intro:tree,1:intro:their-home,1:intro:first-draw', `the three opening sentences (${seen.join(', ')})`);
+    await page.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === 'draw', undefined, { timeout: 8000 });
+    await page.waitForTimeout(600);
+    const after = await ledText();
+    check(after !== LESSON.welcome && !after.includes('WELCOME'), `then the display is back to the action (${after})`);
+    // Owner, 2026-10-22: a picked card's legal tiles invite the tap — a soft glow that breathes in
+    // the tile's own ink, light only (never a scale, so the board's proportions never move).
+    const deck = (await litPoints(page, { t: 'deck' }))[0]!;
+    await page.mouse.click(deck.x, deck.y); await idle(page);
+    for (let i = 0; i < 3 && (await hook<any>(page, 'lesson'))?.beat?.explain; i++) await dismissExplanation(page);
+    const move = await hook<any>(page, 'lessonMove');
+    const card = (await litPoints(page, { t: 'card', id: move.card }))[0]!;
+    await page.mouse.click(card.x, card.y); await page.waitForTimeout(250);
+    const frames: { n: number; targets: number; o: number[]; w: number[]; tf: string[] }[] = [];
+    for (let k = 0; k < 12; k++) {
+      frames.push(await page.evaluate(() => {
+        const inv = [...document.querySelectorAll('#board .target-invite')];
+        return {
+          n: inv.length, targets: document.querySelectorAll('#board .target').length,
+          o: inv.map((e) => +getComputedStyle(e).opacity), w: inv.map((e) => Math.round(e.getBoundingClientRect().width)),
+          tf: inv.map((e) => getComputedStyle(e).transform),
+        };
+      }));
+      await page.waitForTimeout(200);
+    }
+    const ops = frames.map((f) => f.o[0] ?? 0);
+    check(frames[0]!.n > 0 && frames.every((f) => f.n === f.targets), `every legal tile has its invitation (${frames[0]!.n} of ${frames[0]!.targets})`);
+    check(Math.max(...ops) - Math.min(...ops) > 0.08 && Math.max(...ops) <= 0.2, `it breathes softly (opacity ${Math.min(...ops).toFixed(2)}-${Math.max(...ops).toFixed(2)})`);
+    check(frames.every((f) => f.w.every((w) => w === frames[0]!.w[0]) && f.tf.every((t) => t === 'none')), `light only: the tile never changes size (${frames[0]!.w[0]}px, no transform)`);
+    assert.deepEqual(errors, [], `welcome: no page errors: ${errors.join(' | ')}`);
+    await page.close();
+  }
+  if (ONLY === 'all' || ONLY === 'restart') {
+    // Owner, 2026-10-22: a lesson that can no longer teach its idea offers START AGAIN in the box,
+    // and one tap restarts the same level in place (never a trip to the menu).
+    console.log('\nA stuck lesson: START AGAIN in the box restarts the level in place:');
+    const { page, errors } = await newPage(390, 844);
+    await page.goto(URL3, { waitUntil: 'networkidle' });
+    const done = CAMPAIGN_LEVELS.slice(0, 7).map((l) => l.id);
+    await page.evaluate(`localStorage.setItem('severgrow.campaign.progress.v3', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 8, completed: done, best: {} }))})`);
+    await page.reload({ waitUntil: 'networkidle' });
+    await openNextLevel(page);
+    check((await hook<any>(page, 'lesson'))?.level === 8, 'the Blast lesson is open');
+    // Spend ONE Bomb on its own: two Bombs are needed for the Blast, so the lesson cannot finish.
+    let spent = false;
+    for (let i = 0; i < 6 && !spent; i++) {
+      await idle(page);
+      spent = await page.evaluate(() => {
+        const h = (window as any).__severgrow;
+        if (h.state().actor !== 0) return false;
+        const legal = h.legal() as { t: string }[];
+        const bomb = legal.find((a) => a.t === 'PlayFruit');
+        if (bomb) return h.playFor(bomb, 0) && 'spent';
+        const draw = legal.find((a) => a.t === 'Draw');
+        if (draw) h.playFor(draw, 0);
+        return false;
+      }) === 'spent';
+    }
+    check(spent, 'one Bomb was played on its own');
+    await page.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === 'restart', undefined, { timeout: 15000 });
+    await page.waitForSelector('#lesson-plate:not([hidden]) .lesson-restart', { timeout: 5000 });
+    const stuck = await page.evaluate(() => {
+      const plate = document.getElementById('lesson-plate')!;
+      const btn = plate.querySelector<HTMLButtonElement>('.lesson-restart')!;
+      const r = btn.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return {
+        copy: plate.querySelector('.lesson-copy')?.textContent ?? '', label: btn.textContent ?? '',
+        hit: at === btn || btn.contains(at), w: r.width, h: r.height,
+        onScreen: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth,
+      };
+    });
+    check(stuck.copy === LESSON.restartLine, `the box explains why (${stuck.copy})`);
+    check(stuck.label === LESSON.startAgain, `the button says ${LESSON.startAgain} (${stuck.label})`);
+    check(stuck.onScreen && stuck.h >= 40, `the button is on screen and thumb-sized (${stuck.w}x${stuck.h})`);
+    check(stuck.hit, 'a tap on the button reaches the button');
+    await page.tap('#lesson-plate .lesson-restart');
+    await page.waitForFunction(() => {
+      const h = (window as any).__severgrow;
+      const s = h?.state?.();
+      return !!s && s.hands[0].filter((c: { suit: number | null }) => c.suit === null).length >= 2 && h.lesson?.()?.beat?.id !== 'restart';
+    }, undefined, { timeout: 15000 });
+    const after = await page.evaluate(() => ({
+      level: (window as any).__severgrow.lesson()?.level,
+      game: !document.getElementById('game')!.hidden,
+      buttons: document.querySelectorAll('#lesson-plate button').length,
+    }));
+    check(after.level === 8 && after.game, 'the same level starts again, in place');
+    check(after.buttons === 0, 'the box holds no button once the lesson can finish again');
+    assert.deepEqual(errors, [], `restart: no page errors: ${errors.join(' | ')}`);
+    await page.close();
+  }
   if (ONLY === 'all' || ONLY === 'layout') {
     console.log('\nLayout: the header, the plate under the map, and the hexes:');
     for (const [w, h] of [[390, 844], [1440, 900]] as const) {
@@ -1077,9 +1222,10 @@ try {
       await page.evaluate((c) => {
         localStorage.clear();
         localStorage.setItem('severgrow.campaign.progress.v3', JSON.stringify({ version: 1, unlocked: 1, completed: [], best: {} }));
-        localStorage.setItem('severgrow.lesson.meta.v1', JSON.stringify({ level: 1, version: 2, seen: ['1:intro:tree', '1:intro:their-home'] }));
-        localStorage.setItem('severgrow.lesson.mastery.v1', JSON.stringify({ version: 2, counts: c, spotlights: {}, hellos: [] }));
-      }, counts);
+        localStorage.setItem('severgrow.lesson.meta.v1', JSON.stringify({ level: 1, version: c.__v, seen: ['1:intro:tree', '1:intro:their-home'] }));
+        const { __v, ...only } = c;
+        localStorage.setItem('severgrow.lesson.mastery.v1', JSON.stringify({ version: __v, counts: only, spotlights: {}, hellos: [] }));
+      }, { ...counts, __v: LESSON_VERSION });
       await page.reload({ waitUntil: 'networkidle' });
       await openNextLevel(page);
       // A fresh level replays its opening explanations; move past them to the first Draw.

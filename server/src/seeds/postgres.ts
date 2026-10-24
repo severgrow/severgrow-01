@@ -232,7 +232,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
           `insert into seed_ledger(id,player_id,delta,balance_after,category,source_key,economy_version,created_at,metadata)
            values($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,
           [newId(), input.playerId, decision.amount, next.balance, input.mode, input.sourceKey,
-            SEED_ECONOMY.version, input.now, JSON.stringify({ outcome: input.outcome, campaignLevel: input.campaignLevel ?? null })],
+            SEED_ECONOMY.version, input.now, JSON.stringify({ outcome: input.outcome, campaignLevel: input.campaignLevel ?? null, lessonLevel: input.lessonLevel ?? null })],
         );
       }
       return { awarded: decision.amount, reason: decision.reason, wallet: next, replayed: false };

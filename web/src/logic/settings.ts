@@ -79,8 +79,26 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const SETTINGS_KEY = 'severgrow.settings.v1';
 
-/** Settings from a saved string; `systemReduce` is the device's reduce-motion wish. */
-export const parseSettings = (raw: string | null, systemReduce = false): Settings => {
+/**
+ * The fields a player still sets on the Futasaku channels (owner, 2026-10-23: "settings is just
+ * essentials"): the four switches in Settings, the bot level (chosen by the level, not in Settings)
+ * and the hand order (switched by the game's own Sort key). Hand side lives in player/thumb.ts.
+ */
+export const ESSENTIAL_SETTINGS = ['level', 'handSort', 'sound', 'vibration', 'reduceMotion', 'largeText'] as const;
+
+/**
+ * Settings from a saved string; `systemReduce` is the device's reduce-motion wish. With
+ * `essentialsOnly` (the Futasaku channels) every field outside ESSENTIAL_SETTINGS is its fixed
+ * default whatever was saved, so a choice made before that change can never leave a player on an
+ * option they can no longer reach. The classic line keeps every saved option.
+ */
+export const parseSettings = (raw: string | null, systemReduce = false, essentialsOnly = false): Settings => {
+  if (essentialsOnly) {
+    const all = parseSettings(raw, systemReduce);
+    const out: Settings = { ...DEFAULT_SETTINGS, reduceMotion: systemReduce };
+    for (const k of ESSENTIAL_SETTINGS) (out as Record<string, unknown>)[k] = all[k];
+    return out;
+  }
   const out: Settings = { ...DEFAULT_SETTINGS, reduceMotion: systemReduce };
   let saved: unknown;
   try {

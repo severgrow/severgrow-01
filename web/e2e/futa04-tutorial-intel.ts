@@ -170,7 +170,7 @@ try {
       // The last guide line points at the reference that replaced the in-match "?".
       const lastLine=await page.locator('#futasaku-glass .glass-why').textContent();
       assert.match(lastLine??'',/Match Intel/i,`tutorial's final line points at Match Intel: ${lastLine}`);
-      assert.match(lastLine??'',/How to/i,`tutorial's final line names the How to reference: ${lastLine}`);
+      assert.match(lastLine??'',/Rules/,`tutorial's final line names the Rules reference (owner, 2026-10-24: Now · Tips · Rules): ${lastLine}`);
     }
     await page.evaluate(()=>(window as any).__severgrow.tutorialNext());
     await page.waitForTimeout(250);
@@ -208,24 +208,38 @@ try {
   await page.locator('#futa04-help-button').evaluate(element=>(element as HTMLElement).click());
   assert.equal(await page.locator('#futasaku-glass[data-mode="intel"]').isVisible(),true);
   assert((await page.locator('#futasaku-glass .intel-card-wrap').count())>=1,'public discarded card art is visible');
-  // Match Intel has two clearly separate tabs: what happened, and the moves reference.
-  assert.equal(await page.locator('#futasaku-glass .intel-tab').count(),2,'Match Intel shows exactly two tab headings');
-  assert.equal(await page.locator('#futasaku-glass .intel-tab[data-intel-tab="intel"]').getAttribute('aria-selected'),'true','tab 1 (what happened) opens first');
-  await page.locator('#futasaku-glass .intel-tab[data-intel-tab="howto"]').click();
-  assert.equal(await page.locator('#futasaku-glass .intel-tab[data-intel-tab="howto"]').getAttribute('aria-selected'),'true','the How to tab is selectable');
-  const howto=await page.locator('#futasaku-glass [data-intel-panel="howto"]').innerText();
+  // Match Intel has three tabs (owner, 2026-10-24): Now (the match), Tips (this moment), Rules
+  // (the ten lessons as cards, the full moves reference folded under them).
+  assert.equal(await page.locator('#futasaku-glass .intel-tab').count(),3,'Match Intel shows exactly three tab headings');
+  assert.deepEqual((await page.locator('#futasaku-glass .intel-tab').allInnerTexts()).map(t=>t.trim().toLowerCase()),['now','tips','rules'],'the tabs read Now, Tips, Rules');
+  assert.equal(await page.locator('#futasaku-glass .intel-tab[data-intel-tab="now"]').getAttribute('aria-selected'),'true','a first open starts on Now');
+  assert.match(await page.locator('#futasaku-glass .intel-lead').innerText(),/lead|square/i,'Now says who leads');
+  await page.locator('#futasaku-glass .intel-tab[data-intel-tab="tips"]').click();
+  const tips=await page.locator('#futasaku-glass .intel-tip').count();
+  assert(tips>=1&&tips<=3,`Tips shows one to three tips (${tips})`);
+  await page.locator('#futasaku-glass .intel-tab[data-intel-tab="rules"]').click();
+  assert.equal(await page.locator('#futasaku-glass .intel-tab[data-intel-tab="rules"]').getAttribute('aria-selected'),'true','the Rules tab is selectable');
+  assert.equal(await page.locator('#futasaku-glass .intel-rule').count(),10,'Rules lists the ten lessons');
+  assert.equal(await page.locator('#futasaku-glass .intel-rule[aria-expanded="true"]').count(),1,'Rules opens at one lesson');
+  await page.locator('#futasaku-glass .intel-full > summary').click();
+  const howto=await page.locator('#futasaku-glass [data-intel-panel="rules"]').innerText();
   for(const move of ['Grow','Bloom','Strengthen','Bomb','Blast','points'])
     assert(howto.includes(move),`the moves reference explains ${move}`);
   assert(!/seed/i.test(howto),'the reference shows no hidden seed');
   assert.equal(await page.locator('#futasaku-glass .intel-card-wrap').count(),0,'the reference does not mix in the match log');
+  // Match Intel remembers the tab: closed on Rules, it opens on Rules again.
+  await page.locator('#futasaku-glass .intel-close').click();
+  await page.locator('#futa04-help-button').evaluate(element=>(element as HTMLElement).click());
+  assert.equal(await page.locator('#futasaku-glass .intel-tab[data-intel-tab="rules"]').getAttribute('aria-selected'),'true','Match Intel opens on the tab used last');
   // The pause menu's How to play opens this same reference, not the old sheet.
   await page.locator('#futasaku-glass .intel-close').click();
   await page.locator('#hud-menu').click();
   await page.locator('#gm-howto').click();
-  assert.equal(await page.locator('#futasaku-glass[data-mode="intel"] [data-intel-tab="howto"][aria-selected="true"]').isVisible(),true,'gm-howto opens the Match Intel How to reference');
+  assert.equal(await page.locator('#futasaku-glass[data-mode="intel"] [data-intel-tab="rules"][aria-selected="true"]').isVisible(),true,'gm-howto opens the Match Intel Rules reference');
+  assert.equal(await page.locator('#futasaku-glass .intel-full[open] .intel-howto').isVisible(),true,'with the full rules unfolded');
   assert.equal(await page.locator('#sheet-howto').isVisible(),false,'FUTASAKU no longer opens the legacy How-to sheet');
-  await page.locator('#futasaku-glass .intel-tab[data-intel-tab="intel"]').click();
-  assert((await page.locator('#futasaku-glass .intel-card-wrap').count())>=1,'back on tab 1 the public card art returns');
+  await page.locator('#futasaku-glass .intel-tab[data-intel-tab="now"]').click();
+  assert((await page.locator('#futasaku-glass .intel-card-wrap').count())>=1,'back on Now the public card art returns');
   for (const width of [360,390,430]) {
     await page.setViewportSize({width,height:844});
     await page.waitForFunction(w=>{

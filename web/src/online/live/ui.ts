@@ -660,27 +660,6 @@ export const createEndWindow = () => {
   };
 };
 
-/** "Allow live challenges" in the Settings sheet (no `data-setting`, so main.ts's form ignores it). */
-export const mountSettingsSwitch = (initial: boolean, onChange: (on: boolean) => void): ((on: boolean) => void) => {
-  const sheet = document.querySelector('#sheet-settings .sheet-body') ?? document.getElementById('sheet-settings');
-  if (!sheet) return () => undefined;
-  const row = el('label', 'row live-setting');
-  const span = el('span', '', LIVE.allowChallenges);
-  span.append(el('small', '', LIVE.allowChallengesHelp));
-  const box = el('input');
-  box.type = 'checkbox';
-  box.id = 'live-allow';
-  box.checked = initial;
-  box.addEventListener('change', () => onChange(box.checked));
-  row.append(span, box);
-  const anchor = sheet.querySelector('[data-setting="vibration"]')?.closest('label');
-  if (anchor?.parentElement) anchor.parentElement.insertBefore(row, anchor.nextSibling);
-  else sheet.prepend(row);
-  return (on) => {
-    box.checked = on;
-  };
-};
-
 /** "Leave live" in the pause menu, shown only while this match is live. */
 export const mountLeaveItem = (onLeave: () => void): ((show: boolean) => void) => {
   const btn = el('button', 'btn ghost gm-act', LIVE.leaveLive);

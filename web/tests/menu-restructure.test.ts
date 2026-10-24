@@ -86,7 +86,10 @@ describe('PLAY is a real screen, not a layer on the menu', () => {
 
   it('hides the menu while it is open, and its back button returns to the menu', () => {
     expect(mainSource).toMatch(/function openPlayMenu\(\)[\s\S]*?\$\('menu'\)\.hidden = true/);
-    expect(mainSource).toContain("bind('play-back', () => showScreen('menu'))");
+    // The back key closes the submenu EXPLICITLY before showing the menu: a redundant late
+    // `showScreen('menu')` (boot finishing after async mounts) must never tear down a submenu the
+    // player has just opened, so the two calls are no longer one expression.
+    expect(mainSource).toMatch(/bind\('play-back', \(\) => \{[\s\S]{0,240}?closePlayMenu\(\);[\s\S]{0,240}?showScreen\('menu'\);/);
     expect(mainSource).toMatch(/function showScreen[\s\S]*?closePlayMenu\(\)/);
   });
 });
@@ -107,6 +110,41 @@ describe('PLAY holds exactly the three product entries, moved not copied', () =>
     // no stray node can be appended back into the submenu.
     expect(html).not.toContain('id="menu-levels"');
     expect(mainSource).not.toContain("'menu-levels'");
+  });
+});
+
+describe('the campaign read-out lives in PLAY, under LEVEL <n>, and nowhere else', () => {
+  it('is gone from the main menu entirely', () => {
+    // Owner review (2026-10-23): the boxed "CAMPAIGN — LEVEL 1" strip read as a separate mode
+    // competing with PLAY. It is not hidden there — it does not exist there.
+    expect(menuSection).not.toMatch(/readout/);
+    expect(html).not.toContain('menu-readout');
+  });
+
+  it('is a read-out in the submenu, not a fourth control', () => {
+    expect(playSection).toContain('id="play-readout"');
+    expect(playSection).toMatch(/<p id="play-readout"[^>]*aria-live="off"/);
+    expect(playSection).not.toMatch(/<button[^>]*id="play-readout"/);
+    // No heading role: it is a machine read-out, not a section title.
+    expect(playSection).not.toMatch(/id="play-readout"[^>]*role=/);
+  });
+
+  it('is placed directly under the LEVEL entry at boot, not appended as a sibling entry', () => {
+    expect(mainSource).toMatch(/\$\('menu-campaign'\)\.after\(\$\('play-readout'\)\)/);
+  });
+
+  it('counts the ten lessons, never the level number a second time', () => {
+    // The entry already says LEVEL <n>; the caption's words come from the one strings module and
+    // from real campaign progress, never from a duplicate number.
+    // Owner direction (2026-10-23): it reads "n of 10 lessons completed" and RETIRES once the ten
+    // lessons are won. "Lessons" is only true of levels 1-10, so the line is gated on the entry
+    // still opening a lesson (lessonFor) rather than on a campaign chapter - chapter II would
+    // otherwise advertise "0 of 10 lessons" for levels that are not lessons.
+    expect(mainSource).toMatch(/const lessonsDone = LESSONS\.filter/);
+    expect(mainSource).toMatch(/const stillTeaching = !!target && lessonsDone < lessonsTotal && lessonFor\(target\.number\) !== null/);
+    expect(mainSource).toMatch(/readout\.textContent = stillTeaching \? CAMPAIGN\.lessonsCompleted\(lessonsDone, lessonsTotal\) : ''/);
+    expect(mainSource).toMatch(/readout\.hidden = !stillTeaching/);
+    expect(mainSource).not.toMatch(/readoutValue\.textContent = MENU\.level/);
   });
 });
 

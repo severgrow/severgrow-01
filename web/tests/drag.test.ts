@@ -276,3 +276,14 @@ describe('a drag can only ever commit a move that is legal right now', () => {
     expect(sawDiscard).toBe(true);
   });
 });
+
+describe('dragging off the Draw pile (owner, 2026-10-24)', () => {
+  it('the dragged card shows the real card back, not a copy of the pile', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../src/ui/drag-layer.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/g\.className = fromDeck \? 'drag-ghost card back drag-from-deck'/);
+    expect(src).toMatch(/g\.innerHTML = fromDeck \? '' : a\.faceEl\.innerHTML;/);
+    const cards = readFileSync(new URL('../src/player/cards.ts', import.meta.url), 'utf8');
+    expect(cards).toMatch(/\.futa04-cards \.card\.back,[\s\S]{0,200}background-image:url\('\$\{backArt\}'\)/);
+  });
+});

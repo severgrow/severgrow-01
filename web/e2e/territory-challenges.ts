@@ -230,7 +230,9 @@ try {
     await page.goto(BASE, { waitUntil: 'load' });
     await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20_000 });
     await page.evaluate(() => document.fonts?.ready ?? Promise.resolve()).catch(() => undefined);
-    await page.waitForFunction(() => document.getElementById('online-world-fit')?.textContent === 'FIT', undefined, { timeout: 20_000 });
+    // The map control is an ICON since 2026-10-23 (owner: no "FIT" word), so readiness is the icon
+    // in place, not a text value. world-pan.ts waits on the same thing.
+    await page.waitForFunction(() => !!document.querySelector('#online-world-fit .world-fit-icon'), undefined, { timeout: 20_000 });
     await activate(page, '#menu-world');
     await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 20_000 });
     await page.locator('.world-hex').first().waitFor({ state: 'attached', timeout: 45_000 });
@@ -395,7 +397,9 @@ try {
   }));
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20_000 });
-  await page.waitForFunction(() => document.getElementById('online-world-fit')?.textContent === 'FIT', undefined, { timeout: 20_000 });
+  // The map control is an ICON since 2026-10-23 (owner: no "FIT" word), so readiness is the icon
+  // in place, not a text value. world-pan.ts waits on the same thing.
+  await page.waitForFunction(() => !!document.querySelector('#online-world-fit .world-fit-icon'), undefined, { timeout: 20_000 });
   await activate(page, '#menu-world');
   await page.waitForSelector('.world-ring.low', { timeout: 20_000 });
   const reduced = await page.evaluate(() => {

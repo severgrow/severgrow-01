@@ -449,12 +449,25 @@ html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53),0 5px 12px rgba(20,11,10,.34); }
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53) !important; }
 html.futa04-information #discard .gd-halo { inset:0; border-radius:6px; }
-/* Both legal draw choices catch a cool white edge light on the actual card.
-   The discard's amber edge is reserved for a card that completes a combo. */
+/* Both legal draw choices glow softly: a cool white light around the actual card, no outline box
+   (owner, 2026-10-22: "remove the contour thing, make the glow a tiny bit brighter and make it
+   breathe"). The light is its own layer whose OPACITY breathes on the pile's 1.8 s breath
+   (information.ts), so the two move as one and no shadow is ever re-painted per frame. The
+   discard's amber edge is reserved for a card that completes a combo. */
 html.futa04-information[data-step='draw'] :is(#deck,#discard).ready .pile-card {
   border-radius:calc(var(--cw) * .075);
-  box-shadow:0 0 0 1px rgba(239,234,220,.63),0 0 8px 1px rgba(242,237,224,.27) !important;
+  box-shadow:none !important;
 }
+html.futa04-information[data-step='draw'] :is(#deck,#discard).ready .pile-card::after {
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  box-shadow:0 0 12px 2px rgba(242,237,224,.42);
+  opacity:.8;
+  animation:futa04-draw-pile-glow 1.8s ease-in-out 240ms infinite;
+}
+@keyframes futa04-draw-pile-glow { 0%, 100% { opacity:.6; } 50% { opacity:1; } }
+html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-card::after { display:none; }
+html.futa04-information.reduce-motion[data-step='draw'] :is(#deck,#discard).ready .pile-card::after { animation:none; }
+@media (prefers-reduced-motion:reduce) { html.futa04-information[data-step='draw'] :is(#deck,#discard).ready .pile-card::after { animation:none; } }
 html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-card { box-shadow:none !important; }
 html.futa04-information[data-step='draw'] :is(#deck,#discard) .gd-fx { display:none !important; }
 html.futa04-information[data-step='draw'] #discard.ready:not(.futa04-bloom-draw) .pile-top.card { border-color:var(--c-line); box-shadow:0 1px 2px rgba(0,0,0,.4); }
@@ -468,8 +481,31 @@ html.futa04-information #board .l-over .receptive-well {
   fill:rgba(225,216,190,.045); stroke:rgba(5,6,5,.66); stroke-width:2.5;
   pointer-events:none;
 }
-html.futa04-information #board .l-over .receptive-well:is(.kind-strengthen,.kind-bloom) { fill:rgba(99,171,96,.11); }
+html.futa04-information #board .l-over .receptive-well.kind-strengthen { fill:rgba(99,171,96,.11); }
+/* BLOOM HAS ITS OWN COLOUR (owner, 2026-10-23: "blooming highlighted on the board a different colour
+   than grow 1 tile, so it's intuitive"). Cream is a one-tile Grow, green your tiles and Strengthen,
+   coral a take or a cut, gold a rich tile; a Bloom is aqua everywhere: the tiles it may reach, their
+   breath, the shape being painted, the preview and the cards picked for it in the hand. */
+html.futa04-information #board .l-over .receptive-well.kind-bloom { fill:rgba(120,204,194,.12); }
 html.futa04-information #board .l-over .receptive-well:is(.kind-replace,.kind-fruit) { fill:rgba(192,83,65,.11); }
+/* Legal tiles invite the tap (owner, 2026-10-22: "slight movement inviting for tapping ... CLICK
+   HERE but subtly"). A glow in the tile's own ink breathes in and out, rolling outward from home
+   one ring at a time; light only, never a scale, so the board's ratios stay exact. The hit target
+   and its hover brightening are the .target path above it, untouched. */
+html.futa04-information #board .l-over .target-invite {
+  fill:#ded6bd; stroke:none; opacity:0; pointer-events:none;
+  animation:target-invite 2400ms cubic-bezier(.45,0,.55,1) infinite both; /* delay: board.ts (its clock) */
+}
+html.futa04-information #board .l-over .target-invite.kind-strengthen { fill:#a6d49b; }
+html.futa04-information #board .l-over .target-invite.kind-bloom { fill:#9adbd2; }
+html.futa04-information #board .l-over .target-invite:is(.kind-replace,.kind-fruit) { fill:#e5a18b; }
+@keyframes target-invite {
+  0%, 100% { opacity:0; }
+  45% { opacity:.17; }
+  60% { opacity:.13; }
+}
+@media (prefers-reduced-motion:reduce) { html.futa04-information #board .l-over .target-invite { animation:none; opacity:0; } }
+html.futa04-information.reduce-motion #board .l-over .target-invite { animation:none; opacity:0; }
 html.futa04-information #board .l-over .target.kind-grow {
   fill:#ded6bd; fill-opacity:calc(.10 + var(--near,0) * .22);
   stroke:color-mix(in srgb,#d8c8a5 76%,var(--light-core,#f5d8a4) 24%);
@@ -484,7 +520,8 @@ html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom,.
   animation:target-in .2s ease-out both;
   transition:fill-opacity .14s ease,stroke-opacity .14s ease;
 }
-html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom) { fill:#a6d49b; stroke:color-mix(in srgb,#a5d294 76%,var(--light-core,#f5d8a4) 24%); }
+html.futa04-information #board .l-over .target.kind-strengthen { fill:#a6d49b; stroke:color-mix(in srgb,#a5d294 76%,var(--light-core,#f5d8a4) 24%); }
+html.futa04-information #board .l-over .target.kind-bloom { fill:#9adbd2; stroke:color-mix(in srgb,#8fd3c9 80%,var(--light-core,#f5d8a4) 20%); }
 html.futa04-information #board .l-over .target:is(.kind-replace,.kind-fruit) { fill:#e5a18b; stroke:color-mix(in srgb,#db917a 76%,var(--light-core,#f5d8a4) 24%); }
 html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom,.kind-replace,.kind-fruit):hover { fill-opacity:.23; stroke-opacity:.74; }
 html.futa04-information #board .l-over .will-cut,
@@ -492,8 +529,10 @@ html.futa04-information #board .l-over .blast-affected {
   fill:#db806e; fill-opacity:.12; stroke:#d99179; stroke-width:1.15; stroke-opacity:.58;
   stroke-dasharray:none; pointer-events:none;
 }
-html.futa04-information #board .l-over .blast-affected { fill-opacity:.18; stroke-opacity:.76; }
-html.futa04-information #board .l-over .selected.blast-selected { fill:#e5a18b; fill-opacity:.25; stroke:#e5aa90; stroke-width:1.5; stroke-opacity:.88; pointer-events:none; }
+/* A Blast reads as its target first (owner, 2026-10-23): the tile it lands on is the strongest
+   mark, the neighbours it also destroys clearly fainter, so the eye finds the middle at once. */
+html.futa04-information #board .l-over .blast-affected { fill-opacity:.09; stroke-opacity:.46; }
+html.futa04-information #board .l-over .selected.blast-selected { fill:#e5a18b; fill-opacity:.30; stroke:#e5aa90; stroke-width:1.6; stroke-opacity:.95; pointer-events:none; }
 html.futa04-information #board .l-over .target.kind-grow:hover {
   fill-opacity:.24; stroke-opacity:.72;
 }
@@ -505,8 +544,11 @@ html.futa04-information #board .l-over .selected.receptive-active {
 html.futa04-information #board .l-over :is(.selected,.ghost-tile) {
   stroke-dasharray:none; stroke-width:1.2; fill-opacity:.19; stroke-opacity:.74; pointer-events:none;
 }
-html.futa04-information #board .l-over :is(.selected,.ghost-tile):is(.kind-strengthen,.kind-bloom,.kind-grow) {
+html.futa04-information #board .l-over :is(.selected,.ghost-tile):is(.kind-strengthen,.kind-grow) {
   fill:#a6d49b; stroke:#a5d294;
+}
+html.futa04-information #board .l-over :is(.selected,.ghost-tile).kind-bloom {
+  fill:#9adbd2; stroke:#8fd3c9;
 }
 html.futa04-information #board .l-over :is(.selected,.ghost-tile).kind-replace {
   fill:#e5a18b; stroke:#db917a;
@@ -518,8 +560,8 @@ html.futa04-information #board .l-over :is(.selected,.ghost-tile).kind-replace {
    well it grew out of. Each hex pops softly as it joins the shape (the group holds the ink and
    its stone, so both arrive together). */
 html.futa04-information #board .l-draw .ghost-tile {
-  fill:#a6d49b; fill-opacity:.19;
-  stroke:color-mix(in srgb,#a5d294 76%,var(--light-core,#f5d8a4) 24%); stroke-width:1.45; stroke-opacity:.74;
+  fill:#9adbd2; fill-opacity:.19;
+  stroke:color-mix(in srgb,#8fd3c9 80%,var(--light-core,#f5d8a4) 20%); stroke-width:1.45; stroke-opacity:.74;
   stroke-dasharray:none; animation:none;
   transition:fill-opacity .18s ease-out, stroke-opacity .18s ease-out, stroke .18s ease-out;
 }
@@ -556,7 +598,8 @@ html.futa04-information.reduce-motion :is(#smart-led-cells,#smart-led-bloom,#sma
 html.futa04-information.reduce-motion #board .l-over .target.kind-grow { animation:none; transition:none; }
 `;
 
-export function mountSmartCockpit() {
+/** `heldMove`: the display's word for a held move (GROW 1, BLOOM 3, BOMB), shown instead of CANCEL. */
+export function mountSmartCockpit(options: { heldMove?: () => string | null } = {}) {
   const box = document.getElementById('futa04-box')!;
   const actions = document.getElementById('futa04-actions')!;
   const moves = document.getElementById('moves')!;
@@ -900,7 +943,7 @@ export function mountSmartCockpit() {
     // was lingering into the throw step after EndAct.
     if (lastPhase === phase && lastAction && first?.key !== lastAction) {
       const hint = first?.icon === 'clear' ? 'CLEAR' : first?.icon === 'reverse' ? 'FLIP'
-        : first?.icon === 'cancel' ? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM' : '';
+        : first?.icon === 'cancel' ? options.heldMove?.() ?? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM' : '';
       if (hint) machine.hint(hint);
     }
     if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});
