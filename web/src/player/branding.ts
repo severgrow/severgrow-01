@@ -40,11 +40,20 @@ html.futa04-branding[data-layout='side'] .dock { align-self: end; row-gap: 8px; 
 /* The screen already reserves the notch/home-indicator insets. */
 html.futa04-branding .dock { padding-bottom: 4px; }
 html.futa04-branding[data-thumb] .dock { padding: 0; }
+/* THE BADGE (owner, 2026-10-24: "when paused - dont blur the futasaku in top right corner").
+   It used to live in the HUD grid. The pause scrim (z 10) and the finish screen (z 12) both carry
+   a backdrop-filter of var(--veil), and a backdrop filter blurs everything painted BENEATH it — so
+   the badge inside #game was smeared and darkened by a veil it could never escape. The mark is now
+   the app's own fixed layer, outside #game and above every veil, at exactly the optical spot it has
+   in play: its top meets the menu ink's top (measured in alignBrand, never guessed) and its right
+   edge keeps the HUD's 6px lane. Silent, untappable, and above scrim 10 / sheets 11 / finish 12 /
+   tutorial 50. */
 html.futa04-branding #hud-brand {
-  grid-column: 3;
-  justify-self: end;
+  position: fixed;
+  top: var(--futasaku-logo-top, 16px);
+  right: calc(env(safe-area-inset-right, 0px) + 6px);
+  z-index: 74;
   height: var(--futasaku-logo-height, 22px);
-  align-self: start; margin-top: var(--futasaku-logo-top, 18px);
   width: auto;
   max-width: 90px;
   display: block;
@@ -52,8 +61,39 @@ html.futa04-branding #hud-brand {
   pointer-events: none;
   user-select: none;
 }
-html.futa04-branding #hud-menu,
-html.futa04-branding #hud-brand { position: relative; top: 0; }
+/* ONE mark per screen. The layer stays off until main.ts says which surface owns the screen: the
+   main menu keeps the big logo, the finish plate carries its own cap, the online header its own. */
+html.futa04-branding:not(.brand-mark) #hud-brand { display: none; }
+/* The HUD's own key is untouched by the move. */
+html.futa04-branding #hud-menu { position: relative; top: 0; }
+/* THE FINISH PLATE'S CAP — the SAME mark through the SAME helper, at the same size token, on the
+   plate's own axis. The corner badge stands down there (never two marks), so the plate is the
+   matching half: the mark the corner would wear is centred over the lockup. */
+html.futa04-branding #go-brand {
+  display: block;
+  height: var(--futasaku-logo-height, 22px);
+  width: auto;
+  max-width: 90px;
+  margin: 0 auto 12px;
+  opacity: .8;
+  pointer-events: none;
+  user-select: none;
+}
+/* It fades in WITH the plate, on the title's own beat; it never moves, loops or delays a tap. */
+html.futa04-branding #gameover[data-fresh='1'] #go-brand {
+  animation: go-brand-in var(--ix-open) var(--ix-ease-open) both;
+}
+@keyframes go-brand-in { from { opacity: 0; } }
+.reduce-motion #gameover #go-brand { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  #gameover #go-brand { animation: none !important; }
+}
+/* A short phone keeps the mark, a step smaller, so the lockup never has to move for it. */
+@media (max-height: 660px) {
+  html.futa04-branding #hud-brand,
+  html.futa04-branding #go-brand { height: calc(var(--futasaku-logo-height, 22px) * 0.82); }
+  html.futa04-branding #go-brand { margin-bottom: 9px; }
+}
 html.futa04-branding #menu #terrarium { display: none !important; }
 html.futa04-branding #menu #logo {
   display: block !important;
@@ -154,8 +194,14 @@ export function createHudBrandMark(id = 'futasaku-hud-white'): SVGSVGElement {
   return whiteLogo(id, true, true);
 }
 
+/** The badge is measured from the HUD's own menu ink; main.ts asks for a re-measure on screen change. */
+let alignBrand: (() => void) | null = null;
+
 export function mountBranding() {
   document.documentElement.classList.add('futa04-branding');
+  // ONE mark per screen: the layer is off until main.ts's syncBrandMark says which surface owns
+  // the screen (the menu's big logo, the corner badge, or the finish plate's cap).
+  document.documentElement.classList.remove('brand-mark');
   document.title = 'Futasaku';
   const title = document.querySelector('#menu .title');
   if (title) title.textContent = 'Futasaku';
@@ -167,28 +213,36 @@ export function mountBranding() {
   if (race) { race.hidden = true; race.setAttribute('aria-hidden', 'true'); }
   const image = whiteLogo('futasaku-hud-white', true, true);
   image.id = 'hud-brand';
-  document.querySelector('#game > .hud')?.append(image);
+  // OUTSIDE #game. The veils live on the scrim (z 10) and the finish screen (z 12); a backdrop
+  // blur can only veil what is painted beneath it, so the badge is appended to the page itself
+  // and painted above them (see the #hud-brand note in BRANDING_CSS).
+  document.body.append(image);
+  // The finish plate's cap: the SAME helper, asset, filter and size token, mounted once. It is
+  // the corner mark's matching half, so the owner's "same logo, symmetrically" is one definition.
+  const cap = createHudBrandMark('futasaku-go-white');
+  cap.id = 'go-brand';
+  document.querySelector('#gameover .go-summary')?.prepend(cap);
   // Match the visible ink, including the rounded stroke, rather than the 44px tap target.
   const menuIcon = document.querySelector<HTMLElement>('#hud-menu .i');
+  const root = document.documentElement.style;
   const align = () => {
+    // The HUD is display:none on the menu and the submenus; measuring it then returns a fraction
+    // of a pixel and would shrink the badge for the screen that follows. Keep the last good (or
+    // the CSS fallback) until the match is actually on screen.
+    if (document.getElementById('game')?.hidden) return;
     const path = menuIcon?.querySelector<SVGGraphicsElement>('path');
     const matrix = path?.getScreenCTM();
     if (!path || !matrix) return;
     const stroke = parseFloat(getComputedStyle(path).strokeWidth) || 0;
-    const height = (path.getBBox().height + stroke) * Math.hypot(matrix.c, matrix.d);
-    if (height > 0) {
-      image.style.setProperty('--futasaku-logo-height', `${height * 1.82}px`);
-      // The taller logo also changes the grid row's height, which moves the menu ink.
-      // Re-measure both after each small correction until their tops meet, including safe areas.
-      for (let i = 0; i < 7; i++) {
-        const inkTop = path.getBoundingClientRect().top - stroke * Math.hypot(matrix.c, matrix.d) / 2;
-        const delta = inkTop - image.getBoundingClientRect().top;
-        if (Math.abs(delta) < .15) break;
-        const top = parseFloat(getComputedStyle(image).marginTop) || 0;
-        image.style.setProperty('--futasaku-logo-top', `${Math.max(0, top + delta)}px`);
-      }
-    }
+    const ink = (path.getBBox().height + stroke) * Math.hypot(matrix.c, matrix.d);
+    if (!(ink > 8)) return;
+    root.setProperty('--futasaku-logo-height', `${ink * 1.82}px`);
+    // The badge is out of the HUD grid now, so the menu ink no longer moves with it: one measure
+    // is enough (the old seven-pass correction chased a row height the mark no longer sets).
+    const inkTop = path.getBoundingClientRect().top - stroke * Math.hypot(matrix.c, matrix.d) / 2;
+    root.setProperty('--futasaku-logo-top', `${Math.max(0, inkTop)}px`);
   };
+  alignBrand = align;
   if (menuIcon) {
     new ResizeObserver(align).observe(menuIcon);
     new MutationObserver(align).observe(menuIcon, { childList: true, subtree: true });
@@ -196,4 +250,10 @@ export function mountBranding() {
   window.addEventListener('resize', align);
   requestAnimationFrame(align);
   drawLogo();
+}
+
+/** The badge is measured from the HUD's own menu ink; main.ts asks for a re-measure on screen change. */
+export function setBrandMark(on: boolean) {
+  document.documentElement.classList.toggle('brand-mark', on);
+  if (on) requestAnimationFrame(() => alignBrand?.());
 }

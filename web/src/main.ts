@@ -662,6 +662,7 @@ let seedRewardMessage = '';
  */
 function closePlayMenu() {
   $('play-menu').hidden = true;
+  syncBrandMark();
 }
 function openPlayMenu() {
   $('play-menu').hidden = false;
@@ -671,6 +672,7 @@ function openPlayMenu() {
   // The menu is still the screen underneath the submenu. Keeping that fact (rather than nulling
   // it) lets a redundant late boot `showScreen('menu')` leave the player's open submenu alone.
   shownScreen = 'menu';
+  syncBrandMark();
 }
 /**
  * One leader per screen (owner direction, 2026-10-15): the ONE action that carries the cream fill,
@@ -980,6 +982,28 @@ function syncVeil() {
   const inMatch = !$('game').hidden;
   const over = !!openSheet || !$('gameover').hidden;
   document.documentElement.classList.toggle('game-veiled', IS_FUTA04 && inMatch && over);
+  syncBrandMark();
+}
+
+/**
+ * WHICH SURFACE OWNS THE MARK (owner, 2026-10-24: "have nearly every page have the logo somewhere"
+ * — but never two on one). Exactly one surface carries it:
+ *   - the main menu: the big logo (#logo);
+ *   - a match or a submenu (and any sheet opened over either): the crisp corner badge
+ *     (#hud-brand), which is app-level and above the veils so pausing can never blur it;
+ *   - the finish plate: its own centred cap (#go-brand), the corner standing down;
+ *   - the online hub / waiting / join screens: their existing header mark (#online-brand).
+ * A sheet opened from the MAIN MENU changes nothing: the menu's big logo is still the screen's mark
+ * (the sheet only veils it), so the badge does not appear and the screen never shows two.
+ */
+function syncBrandMark() {
+  if (!branding) return;
+  const online = ['online-hub', 'online-waiting', 'online-join', 'online-world-screen']
+    .some((id) => !!document.getElementById(id) && !document.getElementById(id)!.hidden);
+  const result = !$('gameover').hidden;
+  const inMatch = !$('game').hidden;
+  const submenu = !$('levels').hidden || !$('play-menu').hidden;
+  branding.setBrandMark(!result && !online && (inMatch || submenu));
 }
 
 let sheetExit = 0;
