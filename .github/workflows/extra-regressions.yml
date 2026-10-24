@@ -54,7 +54,7 @@ jobs:
             import { readFileSync, existsSync } from "node:fs";
             if (existsSync("regression.log")) {
               for (const line of readFileSync("regression.log", "utf8").split("\n")) {
-                if (/^FAIL |EXIT FAILED|AssertionError/.test(line)) {
+                if (/^FAIL |EXIT FAILED|AssertionError|TimeoutError|locator\.click:|page\.click:/.test(line)) {
                   const safe = line.replaceAll("%", "%25").replaceAll("\r", "%0D");
                   console.log("::error::" + safe);
                 }

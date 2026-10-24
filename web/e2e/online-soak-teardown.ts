@@ -23,7 +23,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { onlinePerspective } from '../src/online/perspective.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
-import { chooseBloom, drawMeld } from './drawing.js';
+import { drawMeld } from './drawing.js';
 import type { Action } from '../../src/engine/index.js';
 import {
   type LocalDuel,
@@ -438,8 +438,13 @@ const paintGrow = async (s: SeatSession, minHexes = 2): Promise<boolean> => {
     return hook.legal().find((a) => a.t === 'Bloom' && a.hexes.length >= minimum) ?? null;
   }, minHexes);
   if (!action) return false;
-  // Use the current Bloom family chooser and real drag gestures, not retired data-kind buttons.
-  await chooseBloom(s.page, action);
+  // This suite measures drafts/teardown, not the popup (covered by painting/propass). Select the
+  // exact legal group through the same hook as chooseBloom, without racing a poll's DOM redraw.
+  await s.page.evaluate((move) => {
+    if (move.t !== 'Bloom') return;
+    const kind = `bloom-${move.cards.length}-${[...move.cards].sort((a, b) => a - b).join('.')}`;
+    (window as unknown as { __severgrow: { pickKind(kind: string): void } }).__severgrow.pickKind(kind);
+  }, action);
   if (!(await drawMeld(s.page, action))) return false;
   if (await s.page.locator('#confirm-play').isVisible()) await s.page.click('#confirm-play');
   await sleep(220);
