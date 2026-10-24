@@ -10,6 +10,8 @@ import { botSeed } from '../../src/bots/levels.js';
 import { botFor, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { SMALL_BOARD_RADIUS } from '../../src/campaign/small-board.js';
 import { LESSON } from '../../src/strings.js';
+import { FINAL_LESSON } from '../src/lessons/final.js';
+import { lessonResumable } from '../src/lessons/lesson-save.js';
 import {
   LESSONS, currentGoal, goalDone, goalReachable, lessonAllows, lessonBeat, lessonFor, lessonLegal, lessonLocked,
   lessonOffersBloom, lessonOpening, presentedLessonBeat, suggestMove,
@@ -293,6 +295,62 @@ describe('player (c): taps only the lit thing', () => {
     const { taps } = tapOnlyTheLight(lessonFor(1)!);
     expect(taps).toBeLessThan(60);
     expect(lessonFor(1)!.intro.length).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('level 10’s send-off (owner, 2026-10-24)', () => {
+  const l10 = lessonFor(10)!;
+  const ctx = () => ({ card: null, placing: null, throwPending: null, seen: new Set<string>() });
+
+  it('opens on the owner’s sentence, verbatim, with nothing lit', () => {
+    expect(LESSON.firstGameLine).toBe('You are ready now for your first game of Futasaku. Good luck!');
+    const beat = lessonBeat(l10, lessonOpening(l10), ctx());
+    expect(beat?.id).toBe('10:intro:first-game');
+    expect(beat?.line).toBe(LESSON.firstGameLine);
+    // A tap anywhere dismisses it (the same explanation rule as every other lesson), and it asks
+    // for no tap of its own: the board is not lit, so the first move stays the player's choice.
+    expect(beat?.explain).toBe(true);
+    expect(beat?.lit).toEqual({ t: 'none' });
+    // The box speaks; the display is given no words of its own.
+    expect(beat?.say).toBeUndefined();
+    expect(lessonVoiceFor({ beat, answer: null, stuck: false, restartLine: LESSON.restartLine }))
+      .toEqual({ box: LESSON.firstGameLine, display: null, restart: false });
+  });
+
+  it('comes before the first draw, once, and never comes back', () => {
+    const s = lessonOpening(l10);
+    const seen = new Set<string>();
+    const first = lessonBeat(l10, s, { ...ctx(), seen })!;
+    expect(first.id).toBe('10:intro:first-game');
+    seen.add(first.id);
+    // The very next beat is the game's own: the send-off is not repeated and does not block.
+    expect(lessonBeat(l10, s, { ...ctx(), seen })?.id).not.toBe(first.id);
+    // It is a greeting, not a rule: every legal move was already there, and the light asks for the
+    // draw exactly as it would without the message.
+    expect(legalActions(viewFor(s, 0)).length).toBeGreaterThan(0);
+    expect(suggestMove(l10, s)?.t).toBe('Draw');
+  });
+
+  it('is level 10’s alone: levels 1-9 keep exactly the intros they had', () => {
+    expect(l10.intro).toEqual(['first-game']);
+    for (const l of LESSONS.filter((x) => x.level !== 10)) expect(l.intro, `L${l.level}`).not.toContain('first-game');
+  });
+
+  it('changes nothing else about level 10 — its goals, its idle guide, its finish and the Seeds proof', () => {
+    expect(l10.goals).toEqual([]);
+    expect(l10.guide).toBe('idle');
+    expect(l10.finish.learned).toBe('THE WHOLE GAME');
+    expect(l10.position, 'the one copy the server replays').toBe(FINAL_LESSON.position);
+  });
+
+  it('needs no version bump: the greeting is a start beat, so a saved game still resumes', () => {
+    // `version` guards a saved POSITION against resuming onto a lesson it no longer matches. The
+    // opening, the goals and the script of every position are untouched here: the sentence only
+    // speaks before the first draw (it is already past in a resumed game, so it is simply skipped).
+    // LESSON_VERSION is one number for all ten levels, so bumping it for a greeting would restart
+    // every unfinished lesson in the game.
+    expect(l10.version).toBe(LESSON_VERSION);
+    expect(lessonResumable({ level: 10, version: l10.version, seen: [] }, l10)).toBe(true);
   });
 });
 

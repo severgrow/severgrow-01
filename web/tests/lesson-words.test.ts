@@ -85,6 +85,11 @@ describe('lesson words', () => {
     expect(LESSON.welcome).toBe('HELLO ♥ WELCOME ♥');
   });
 
+  it('level 10 says the owner’s send-off exactly, word for word and mark for mark', () => {
+    // Owner, 2026-10-24. Quoted, not paraphrased: the punctuation is part of the copy.
+    expect(LESSON.firstGameLine).toBe('You are ready now for your first game of Futasaku. Good luck!');
+  });
+
   it('the display labels use the game’s own names: Draw pile and Throw pile', () => {
     // Owner, 2026-10-20: at most three words on the display.
     expect(LESSON.tapDraw).toBe('TAP DRAW PILE');
@@ -121,7 +126,9 @@ describe('lesson words', () => {
     for (const [k, v] of entries.filter(([k]) => k.endsWith('Line'))) {
       expect(v.length, `${k}: ${v}`).toBeLessThanOrEqual(160);
       expect(words(v).length, `${k}: ${v}`).toBeLessThanOrEqual(28);
-      expect(v.endsWith('.'), `${k}: ${v}`).toBe(true);
+      // A sentence's own final mark. The owner's level 10 send-off is two sentences and ends on
+      // "Good luck!"; it is quoted verbatim, so the mark is "!" and never a full stop.
+      expect(v, `${k}: ${v}`).toMatch(/[.!]$/);
       expect(/^[A-Z]/.test(v), `${k}: ${v}`).toBe(true);
     }
   });
