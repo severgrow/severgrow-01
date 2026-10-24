@@ -154,7 +154,7 @@ import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
 import type { GlassSurface, IntelGuide, IntelTabId } from './player/glass-surface.js';
 import { intelTips, nearestRule, ruleCards, tipLabel } from './logic/intel-guide.js';
 import { cancelStarterRitual, isStarterRitualPlaying, playStarterRitual } from './player/starter-ritual.js';
-import { offlineRitualKey, onlineRitualKey, starterRitualView } from './logic/starter-ritual.js';
+import { offlineRitualKey, onlineRitualKey, playsStarterRitual, starterRitualView } from './logic/starter-ritual.js';
 import type { StarterRitualView } from './logic/starter-ritual.js';
 import { previewMove } from './logic/preview.js';
 import { STUCK_MS, hintFor, hintWeight, isRoutineHint } from './logic/hint.js';
@@ -1942,15 +1942,19 @@ async function startGame(
       ? `${CAMPAIGN.started(campaign.number)}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`
       : `New ${matchLabel({ campaign: null, difficulty, botLevel: level })} practice match. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
   ];
-  // A campaign level's opening is authored and deliberately skips the draw, exactly as before; a
-  // normal offline match keeps the ritual. The board/session is prepared BEFORE the ritual so the
-  // player sees the real match behind it and the first legal tap is available the instant it leaves.
-  const playRitual = IS_FUTA04 && !campaign;
+  // The pre-game ritual is the product's own opening for every match — practice, a campaign level
+  // from 10 on (that is where the hand-held lessons end), and online. Levels 1-9 keep their authored
+  // openings and skip it. The board/session is prepared BEFORE the ritual so the player sees the
+  // real match behind it and the first legal tap is available the instant it leaves.
+  const playRitual = playsStarterRitual(IS_FUTA04, campaign?.number ?? null);
   // A campaign match always keeps its opening as the replay base: the save must replay under the
   // LEVEL's config (its authored board), never under the default config.
   if (lessonNow) handSettled = false;
   beginSession(state, null, [], campaign || opponentStarts ? state : null, playRitual);
-  if (lessonNow) startLessonStage();
+  // A lesson's stage card waits for the ritual below: the ceremony owns the screen until it
+  // resolves, and level 10's send-off is the last beat before the first move. Levels 1-9 have no
+  // ritual, so their stage starts here, exactly as it always has.
+  if (lessonNow && !playRitual) startLessonStage();
   // beginSession freshens the generation token for THIS match; another entry starting a match now
   // would supersede it and the checks below would stop this older start from touching that one.
   generation = startGameGeneration;
@@ -1970,6 +1974,9 @@ async function startGame(
     }
     if (generation !== startGameGeneration) return;
     render(); // lift the ritual gate and draw the controls in their real, playable state
+    // Deliberately NO stage card here. On level 10 the stage's only content is level 1's welcome
+    // (openingDisplay), so after the ceremony it would be an empty 1.2 s gate — a stutter between
+    // the cards and the send-off, which is meant to be the last thing before the first move.
   }
   dealIn();
   firstToolTips();
