@@ -34,14 +34,25 @@ describe('unpaid Seeds proofs', () => {
     expect(pending(a)).toEqual([]); expect(pending(b)).toEqual([]);
   });
 
-  it('does not remove a newer replay queued while an older replay is in flight', async () => {
+  it('does not drop a newer replay queued while an older replay is in flight', async () => {
+    // Owner report 2026-10-24 ("seeds pending"): the queue is now DRAINED rather than snapshotted,
+    // so a replay that arrives mid-flight is sent by the same run instead of waiting for the next
+    // menu visit. The protective property is unchanged — the newer replay must reach the server, not
+    // be clobbered by the older one's completion — so it is asserted on what was SUBMITTED.
     const store = storage(); queueSeedProof(store, proof('lesson-10'));
-    let finish!: () => void;
-    const submit = vi.fn(() => new Promise((resolve) => { finish = () => resolve({ awarded: 100 }); }));
+    const submits: string[] = [];
+    // Resolves on a microtask, so the first submit is genuinely in flight when the second proof is
+    // queued (the call below runs before any continuation of the flush).
+    const submit = vi.fn(async (_token: string, _source: unknown, _actions: unknown, botVersion: string) => {
+      submits.push(botVersion);
+      return { awarded: 100 };
+    });
     const flushing = flushSeedProofs(store, clientOf(submit), 'account');
     queueSeedProof(store, { ...proof('lesson-10'), botVersion: 'new-replay' });
-    finish(); await flushing;
-    expect(pending(store)).toHaveLength(1);
+    await flushing;
+    // Both replays were sent, in queue order, and the queue is empty afterwards.
+    expect(submits).toEqual(['audit', 'new-replay']);
+    expect(pending(store)).toEqual([]);
   });
 
   it('ignores malformed saved entries without blocking a valid reward', async () => {
@@ -53,6 +64,21 @@ describe('unpaid Seeds proofs', () => {
     await flushSeedProofs(store, clientOf(submit), 'account');
     expect(submit).toHaveBeenCalledTimes(1);
     expect(submit.mock.calls[0]![1]).toEqual({ levelId: 'lesson-10' });
+  });
+
+  it('pays a proof that is queued while the flush is still in flight (same run)', async () => {
+    // Owner report 2026-10-24 ("there was some issues with seeds pending"). The queue used to be
+    // snapshotted once, so a win that landed mid-flight waited for the NEXT menu visit: the finish
+    // card looked for its own key in the answer, found nothing, and sat on "Seeds pending
+    // verification" for a reward that was already safe on the device. The queue is drained now.
+    const store = storage();
+    queueSeedProof(store, proof('lesson-10'));
+    const submit = vi.fn(async () => ({ awarded: 100 }));
+    const flushing = flushSeedProofs(store, clientOf(submit), 'account');
+    queueSeedProof(store, proof('c1-1'));
+    const awards = await flushing;
+    expect(awards.map((a) => a.key).sort()).toEqual(['campaign:c1-1', 'campaign:lesson-10']);
+    expect(pending(store)).toEqual([]);
   });
 
   it('keeps a proof on network failure and retries successfully', async () => {

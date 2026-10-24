@@ -21,7 +21,11 @@ describe('the final lesson pays Seeds', () => {
     expect(main).toMatch(/if \(taught && taught\.level !== FINAL_LESSON\.level\) seedRewardMessage = '';/);
   });
   it('a proof sent before the server knows the lesson is kept, not thrown away', () => {
-    expect(rewards).toMatch(/proof\.levelId\.startsWith\('lesson-'\) && \/not available\/i\.test\(error\.message\)/);
+    // The rule, not the loop variable's name: the queue is drained one entry at a time, so this
+    // reads `next` where it once read `proof`. What must hold is that a 400 for a `lesson-` proof
+    // whose message says "not available" is KEPT (skipped) rather than deleted.
+    expect(rewards).toMatch(/(?:proof|next)\.levelId\.startsWith\('lesson-'\) && \/not available\/i\.test\(error\.message\)/);
+    expect(rewards).toMatch(/if \(unknownLesson\) continue;/);
   });
   it('a receipt paid before never shows a second +N', () => {
     expect(main).toMatch(/seedRewardMessage = verified\.replayed \? '' :/);

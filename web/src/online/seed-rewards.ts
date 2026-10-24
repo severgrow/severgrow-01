@@ -48,24 +48,41 @@ export const flushSeedProofs = (storage: KeyValue, client: DuelClient, token: st
   if (existing) return existing;
   const flushing = (async () => {
     const awarded: Awards = [];
-    for (const proof of read(storage)) {
+    /**
+     * The queue is DRAINED, not snapshotted (owner report, 2026-10-24: "seeds pending"). A player can
+     * win the next level while this very flush is still in flight; a snapshot taken once at the top
+     * left that proof queued, and the caller's `.find(key)` then found nothing, so the finish card
+     * sat on "Seeds pending verification" for a reward that was already safe. Re-reading the queue
+     * each pass pays whatever arrived meanwhile, and the promise only resolves once it is empty (or
+     * transiently blocked), so every caller sees its own key in the answer.
+     *
+     * `tried` is the run's memory of proofs it must NOT re-attempt: a kept-but-unpayable one (the
+     * final lesson on a server without its verifier) would otherwise be resubmitted forever. New
+     * replays are different objects, so they are still picked up.
+     */
+    const tried = new Set<string>();
+    for (;;) {
+      const next = read(storage).find((proof) => !tried.has(JSON.stringify(proof)));
+      if (!next) break;
+      tried.add(JSON.stringify(next));
       try {
-        const source = proof.kind === 'campaign' ? { levelId: proof.levelId } : { ticketId: proof.ticketId };
-        const reward = await client.submitSeedProof(token, source, proof.actions, proof.botVersion);
-        awarded.push({ key: proofKey(proof), reward });
-        removeSettledProof(storage, proof);
+        const source = next.kind === 'campaign' ? { levelId: next.levelId } : { ticketId: next.ticketId };
+        const reward = await client.submitSeedProof(token, source, next.actions, next.botVersion);
+        awarded.push({ key: proofKey(next), reward });
+        removeSettledProof(storage, next);
       } catch (error) {
         // Invalid/expired proofs cannot become valid later; transient network errors keep the
         // locally queued replay so the next menu visit can retry it.
         // The final lesson's proof (`lesson-10`) can reach a server not yet redeployed with its
         // verifier: that server answers "not available". Keep it, so the 100 Seeds land once the
         // server knows the lesson (owner, 2026-10-24); any other refusal is final.
-        const unknownLesson = error instanceof DuelError && error.status === 400 && proof.kind === 'campaign'
-          && proof.levelId.startsWith('lesson-') && /not available/i.test(error.message);
+        const unknownLesson = error instanceof DuelError && error.status === 400 && next.kind === 'campaign'
+          && next.levelId.startsWith('lesson-') && /not available/i.test(error.message);
         if (unknownLesson) continue;
-        if (error instanceof DuelError && error.status === 400) {
-          removeSettledProof(storage, proof);
-        } else break;
+        if (error instanceof DuelError && error.status === 400) removeSettledProof(storage, next);
+        // A transient failure stops THIS run: retrying down a queue on a dead network only stacks
+        // failures. Everything stays queued for the next visit.
+        else break;
       }
     }
     return awarded;
