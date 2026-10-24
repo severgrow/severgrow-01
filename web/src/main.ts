@@ -124,7 +124,6 @@ import {
   isUnlocked,
   nextCampaignLevel,
   parseProgress,
-  recordCampaignResult,
   serializeProgress,
   CAMPAIGN_PROGRESS_KEY,
 } from '../../src/campaign/index.js';
@@ -135,10 +134,16 @@ import {
   campaignEntry,
   decodeCampaignSave,
   encodeCampaignSave,
+  isReplay,
   offlineSaveKey,
   overridesForMatch,
   parseLastMode,
+  progressAfterMatch,
+  resumeOffersPlace,
+  tutorialLevels,
+  TUTORIAL_LEVEL_COUNT,
 } from './logic/campaign.js';
+import type { CampaignMatchKind } from './logic/campaign.js';
 import {
   freeTurnGuide, migrateTutorialProgress, nextTutorialChapter, previousTutorialChapter,
   tutorialAccepts, tutorialChapter, tutorialFeedback, tutorialTrackFor,
@@ -210,7 +215,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, RESULT, REVIEW, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, RESULT, REVIEW, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL, TUTORIAL_REPLAY } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -493,6 +498,10 @@ function beatHome(p: Player, my: number) {
 const save = () => {
   if (isOnlineDuel()) return; // online matches live on the server + device identity, not the offline save
   if (!session) return;
+  // A Tutorial replay is deliberately UNSAVED (owner, 2026-10-24): it may neither overwrite the
+  // campaign's resume save nor become "the match" a reload resumes. Replaying a lesson can never
+  // move the player's place, so there is nothing here worth keeping.
+  if (tutorialReplay) return;
   const encoded = encodeSave({
     seed: session.state.seed,
     actions: session.log,
@@ -1162,6 +1171,10 @@ function campaignResume(): { level: CampaignLevel; saved: Loaded<CoachProgress> 
   // A save can only resume a level the record actually opened. A stale or edited save pointing at a
   // level the player has not reached is ignored, so it cannot become a shortcut past the order rule.
   if (!isUnlocked(campaignProgress, level)) return null;
+  // ...and it can only be offered on the player's PLACE (owner, 2026-10-24). A save on a level
+  // behind progress is a replay in progress: offering it here is exactly how a replay of level 1
+  // used to make the campaign "resume" level 1 and strand the player behind their own progress.
+  if (!resumeOffersPlace(campaignProgress, level)) return null;
   const saved = decodeSave<CoachProgress>(raw.match);
   if (!saved || saved.state.phase === 'GAME_OVER') return null;
   return { level, saved };
@@ -1240,6 +1253,68 @@ function renderCampaignScreen() {
       return block;
     }),
   );
+  orientCampaignList();
+}
+
+/**
+ * THE LIST OPENS ON THE PLAYER'S PLACE (owner, 2026-10-24). The current tile is painted already;
+ * this brings it into view, so returning from a finished level always shows the level the player is
+ * working on, not the top of chapter I. The chapters column is the scroller on the product screen
+ * (the head's Back and Continue stay put); a channel where the column fits falls back to the screen.
+ */
+function orientCampaignList() {
+  const chapters = $('campaign-chapters');
+  const tile = chapters.querySelector<HTMLElement>('.campaign-tile[data-state="current"]');
+  if (!tile) return;
+  const screen = $('campaign');
+  const scroller = chapters.scrollHeight > chapters.clientHeight + 1 ? chapters : screen;
+  const r = tile.getBoundingClientRect();
+  const box = scroller.getBoundingClientRect();
+  // Centre the tile in the visible column. Reading the rects first forces the layout, so this is
+  // exact even though the list was just rebuilt; the assignment is instant (no animation to outrun).
+  scroller.scrollTop += r.top - box.top - Math.max(0, (box.height - r.height) / 2);
+}
+
+// ---------- the Tutorial (Settings → Tutorial) ----------
+// Owner (2026-10-24): "the first 9 levels are replayable as 'Tutorial' - available in settings -
+// plays the levels 1-9 levels exactly like in campaing." So this is an ENTRY POINT to the same
+// CAMPAIGN_LEVELS, never a parallel copy: the tiles are built from `tutorialLevels()` (references to
+// the campaign's own level objects) and start through the same `startGame` seam with the level's own
+// seed, bot and config. The ONE difference is the flag: a tutorial match writes nothing.
+function renderTutorialSheet() {
+  $('tutorial-title').textContent = TUTORIAL_REPLAY.title;
+  $('tutorial-hint').textContent = TUTORIAL_REPLAY.hint;
+  $('tutorial-levels').replaceChildren(
+    ...tutorialLevels().map((level) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'campaign-tile';
+      b.dataset.level = level.id;
+      const num = document.createElement('span');
+      num.className = 'ct-num';
+      num.textContent = String(level.number).padStart(2, '0');
+      b.append(num);
+      b.setAttribute('aria-label', TUTORIAL_REPLAY.levelAria(level.number));
+      b.addEventListener('click', () => {
+        sound.unlock();
+        startTutorialLevel(level);
+      });
+      return b;
+    }),
+  );
+}
+
+/**
+ * Opens a campaign level AS A TUTORIAL REPLAY. No unlock check on purpose: the Tutorial is offered
+ * from Settings at any progress, and it cannot move progress in either direction — the record and
+ * the resume save are both left alone (progressAfterMatch / save), so there is nothing to protect
+ * with the campaign's order rule. It is the same level object the campaign plays, untouched.
+ */
+function startTutorialLevel(level: CampaignLevel) {
+  if (level.number < 1 || level.number > TUTORIAL_LEVEL_COUNT) return;
+  closeAllSheets();
+  gameOverDismissed = true;
+  void startGame(level.seed, level.botLevel, null, level, null, true);
 }
 
 /** Fills the Settings sheet's words from src/strings.ts (SETTINGS). The markup carries keys
@@ -1252,6 +1327,9 @@ function applySettingsCopy() {
 }
 
 function syncSettingsForm() {
+  // The Tutorial entry exists only where campaign levels do (the product channels). Hidden, not
+  // removed, so the legacy sheet keeps the shape it has always had.
+  $('settings-tutorial').hidden = !FEATURES.campaign;
   // Phones whose browser cannot vibrate (all iPhones) get an honest label, not a dead switch.
   const vib = document.querySelector<HTMLInputElement>('[data-setting="vibration"]')!;
   vib.disabled = !('vibrate' in navigator);
@@ -1887,6 +1965,11 @@ async function startGame(
    * recorded against when the game ends; online never calls this at all, so it stays null there.
    */
   difficulty: DifficultyId | null = null,
+  /**
+   * A TUTORIAL replay (Settings → Tutorial): the SAME campaign level and opening, played without
+   * touching progress or the resume save. Default false, so no other caller can become one.
+   */
+  tutorial = false,
 ) {
   let generation = ++startGameGeneration;
   // The first lesson board on a cold first visit waits (briefly, capped) for its own art. Repeat
@@ -1923,6 +2006,9 @@ async function startGame(
   gameLevel = level;
   gameDifficulty = difficulty;
   campaignLevel = campaign;
+  tutorialReplay = !!campaign && tutorial;
+  // Read the place BEFORE the match can change it (see `campaignReplay`).
+  campaignReplay = !!campaign && isReplay(campaignProgress, campaign);
   lessonNow = campaign ? lessonFor(campaign.number) : null;
   lessonSeen = new Set();
   lessonAnswerText = '';
@@ -2148,6 +2234,9 @@ function startTutorial(chapter = 0, track = tutorialTrackFor(chapter)) {
   log = ['A small match, played to learn.'];
   gameLevel = 7;
   gameDifficulty = null; // the tutorial is its own match, never one of the training tiers
+  campaignLevel = null; // the guided run is not a campaign level
+  tutorialReplay = false;
+  campaignReplay = false;
   tipOpen = null;
   beginSession(state, { ...freshCoach(), tutorial: { chapter, step: 0, version: TUTORIAL_VERSION, track } }, [], state);
   save();
@@ -2502,6 +2591,8 @@ function continueCampaignMatch(r: { level: CampaignLevel; saved: Loaded<CoachPro
     lab?.watchingChanged(null);
   }
   campaignLevel = r.level;
+  tutorialReplay = false;
+  campaignReplay = isReplay(campaignProgress, r.level);
   gameLevel = r.saved.level;
   gameDifficulty = null; // a campaign level is not a training tier: it never writes a carry-over
   store.set(LAST_MODE_KEY, 'campaign');
@@ -2544,6 +2635,8 @@ function continueGame() {
     trainingRewardTicketId = gameDifficulty && ticket?.seed === saved.seed && typeof ticket.id === 'string' ? ticket.id : null;
   } catch { trainingRewardTicketId = null; }
   campaignLevel = null; // a resumed classic match is never a campaign match
+  tutorialReplay = false;
+  campaignReplay = false;
   store.set(LAST_MODE_KEY, 'classic');
   beginSession(saved.state, saved.coach, saved.actions, saved.base);
 }
@@ -2627,13 +2720,19 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
       }
       // Campaign progress: a win unlocks the next level and marks this one completed; a loss
       // removes nothing. Its own record — the classic stats above are never reshaped by it.
+      // A TUTORIAL replay returns the SAME record (progressAfterMatch), so a replay can never
+      // mark a level, unlock anything, or rewrite the record on its way through.
       if (campaignLevel) {
-        campaignProgress = recordCampaignResult(campaignProgress, campaignLevel, {
+        const kind: CampaignMatchKind = tutorialReplay ? 'tutorial' : 'campaign';
+        const after = progressAfterMatch(campaignProgress, kind, campaignLevel, {
           won: p.after.result.winner === HUMAN,
           score: p.after.result.scores[HUMAN],
           turns: p.after.turnNumber,
         });
-        saveCampaignProgress();
+        if (after !== campaignProgress) {
+          campaignProgress = after;
+          saveCampaignProgress();
+        }
       }
       if (onlineBuildEnabled() && session) {
         // Levels 1-9 (lessons) pay no Seeds. Level 10, the final lesson, pays 100 once (owner,
@@ -2642,7 +2741,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
         const finalLessonWon = lessonNow?.level === FINAL_LESSON.level && p.after.result.winner === HUMAN;
         const proof = finalLessonWon
           ? { kind: 'campaign' as const, levelId: FINAL_LESSON.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
-          : campaignLevel && !lessonNow && p.after.result.winner === HUMAN
+          : campaignLevel && !lessonNow && !tutorialReplay && p.after.result.winner === HUMAN
           ? { kind: 'campaign' as const, levelId: campaignLevel.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
           : gameDifficulty && trainingRewardTicketId
             ? { kind: 'training' as const, ticketId: trainingRewardTicketId, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
@@ -2976,6 +3075,18 @@ function currentMatchLabel(): string {
  * way a match can start, so a campaign board can never leak into a classic or online game.
  */
 let campaignLevel: CampaignLevel | null = null;
+/**
+ * True while the match on screen is a TUTORIAL replay (Settings → Tutorial, owner 2026-10-24): the
+ * same campaign level, played inertly. It never writes the progress record or the resume save, and
+ * its finish card returns to the Tutorial. Every other way a match starts clears it.
+ */
+let tutorialReplay = false;
+/**
+ * True when the ACTIVE campaign match is a replay: a level already behind the player's place when it
+ * was started. Read once, at match start, because the result moves the place: after a normal clear
+ * the finished level is behind it too, and the finish card must still say "Next level".
+ */
+let campaignReplay = false;
 /** The lesson of the campaign level on screen (levels 1-10), or null. Set with `campaignLevel`. */
 let lessonNow: Lesson | null = null;
 /** The explanations already read in this level (saved beside the level's match). */
@@ -4529,10 +4640,15 @@ function bloomsShown(): boolean {
 
 function saveLessonMeta() {
   if (!lessonNow) return;
+  // A tutorial replay never writes the campaign lesson notes: which explanations the player has
+  // already read belongs to the level they are actually working on (owner, 2026-10-24).
+  if (tutorialReplay) return;
   store.set(LESSON_META_KEY, encodeLessonMeta({ level: lessonNow.level, version: lessonNow.version, seen: [...lessonSeen] }));
 }
 
 function saveLessonMastery() {
+  // ...and neither does it touch the mastery record the campaign lessons read for their pace.
+  if (tutorialReplay) return;
   store.set(LESSON_MASTERY_KEY, encodeMastery(lessonMastery));
   lessonPowerSeen = new Set(lessonMastery.hellos);
 }
@@ -7343,9 +7459,14 @@ function renderGameOver() {
   const r = st.result;
   const won = r.winner === HUMAN;
   const campaign = campaignLevel;
-  // The next level the win unlocked (null on a loss, and null past the last built level — read from
-  // the level data, never a hardcoded count, so a worker adding levels needs no change here).
-  const next = campaign && won ? nextCampaignLevel(campaign.number) : null;
+  // Which kind of campaign match this was (owner, 2026-10-24): a TUTORIAL replay returns to the
+  // Tutorial it came from; a REPLAY of a level behind the place has no next level to lead to.
+  const tutorial = !!campaign && tutorialReplay;
+  const replay = !!campaign && !tutorial && campaignReplay;
+  // The next level the win unlocked (null on a loss, on a replay, in a tutorial, and past the last
+  // built level — read from the level data, never a hardcoded count, so a worker adding levels
+  // needs no change here).
+  const next = campaign && won && !tutorial && !replay ? nextCampaignLevel(campaign.number) : null;
   $('go-title').textContent = won
     ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.won
     : resultTitle(r, HUMAN);
@@ -7354,10 +7475,13 @@ function renderGameOver() {
     paintGoTitle(CAMPAIGN.levelWon(campaign.number), true);
   }
   // A loss keeps the honest outcome words; the level rides above them as context, never as a
-  // second title. A win already names the level, so the context line stays away.
+  // second title. A win already names the level, so the context line stays away — except in the
+  // Tutorial, where the win's title is the lesson's own and the line says where the card returns to.
   const context = document.getElementById('go-context');
   if (context) {
-    const label = campaign && !won ? CAMPAIGN.levelLabel(campaign.number) : '';
+    const label = tutorial
+      ? `${TUTORIAL_REPLAY.title} · ${CAMPAIGN.levelLabel(campaign.number)}`
+      : campaign && !won ? CAMPAIGN.levelLabel(campaign.number) : '';
     context.textContent = label;
     context.hidden = label === '';
   }
@@ -7366,9 +7490,11 @@ function renderGameOver() {
   // again below was repetition, and "Branching Out" tells a player nothing they can use. What is
   // left is the one genuinely useful note — what the win unlocked.
   if (campaign) {
-    const note = next
-      ? CAMPAIGN.unlockedNext()
-      : won && !next ? CAMPAIGN.chapterDone : '';
+    const note = tutorial || replay
+      ? ''
+      : next
+        ? CAMPAIGN.unlockedNext()
+        : won && !next ? CAMPAIGN.chapterDone : '';
     $('go-sub').textContent = note;
     $('go-sub').hidden = note === '';
   } else {
@@ -7396,8 +7522,11 @@ function renderGameOver() {
   // has no next, so that same button becomes the honest way out (the level list) rather than a dead
   // one. A loss and a plain offline game keep the retry/again words they always had. Which one leads
   // is decided in one pure place (`finishLead`), and the next level is read from the level DATA.
-  const lead = finishLead({ online: false, campaign: !!campaign, won, hasNext: !!next });
-  const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel : lead === 'back-to-campaign' ? CAMPAIGN.back : won ? 'Play again' : 'Try again';
+  const lead = finishLead({ online: false, campaign: !!campaign, won, hasNext: !!next, tutorial, replay });
+  const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel
+    : lead === 'back-to-campaign' ? CAMPAIGN.back
+    : lead === 'back-to-tutorial' ? TUTORIAL_REPLAY.back
+    : won ? 'Play again' : 'Try again';
   $('go-rematch').textContent = leadWord;
   $('go-rematch').setAttribute('aria-label', leadWord);
   // Lessons 1-9 pay no Seeds: no Seeds line at all on their finish card. Level 10 pays 100 once, and
@@ -7411,10 +7540,11 @@ function renderGameOver() {
   $('go-territory-open').textContent = SEEDS_INTRO.open;
   $('go-territory-open').hidden = !territoryIntro;
   const other = $('go-other');
-  // On the last level the primary already IS "Back to campaign": one action, not two that do the
-  // same thing (the online rematch keeps its own secondary, untouched).
-  // On the tutorial's last card, Open Territory takes the second place (the card never grows a row).
-  other.hidden = lead === 'back-to-campaign' || territoryIntro;
+  // On the last level, on a replay and in the Tutorial the primary already IS the way back to the
+  // list/Tutorial: one action, not two that do the same thing (the online rematch keeps its own
+  // secondary, untouched). On the tutorial's last card, Open Territory takes the second place
+  // (the card never grows a row).
+  other.hidden = lead === 'back-to-campaign' || lead === 'back-to-tutorial' || territoryIntro;
   const otherWord = campaign ? CAMPAIGN.back : 'Change difficulty';
   other.textContent = otherWord;
   other.setAttribute('aria-label', otherWord);
@@ -8703,6 +8833,8 @@ bind('go-other', () => {
     void onlineLobbyCtl?.openHub();
     return;
   }
+  // A tutorial replay never enters campaign progression; its card's own way out is the Tutorial.
+  if (tutorialReplay) return showScreen('menu');
   showScreen(campaignLevel ? 'campaign' : 'levels');
 });
 bind('menu-continue', () => continueGame());
@@ -8715,6 +8847,10 @@ bind('menu-tutorial', () => {
   startTutorialFromMenu();
 });
 bind('menu-settings', () => sheet('sheet-settings'));
+bind('settings-tutorial', () => {
+  renderTutorialSheet();
+  sheet('sheet-tutorial');
+});
 ($('settings-lab') as HTMLDetailsElement).addEventListener('toggle', () => {
   renderSettingsLab();
   const section = $('settings-lab') as HTMLDetailsElement;
@@ -8788,7 +8924,7 @@ async function restartCurrentMatch(): Promise<void> {
       return;
     }
     gameOverDismissed = true;
-    await startGame(campaign.seed, campaign.botLevel, null, campaign);
+    await startGame(campaign.seed, campaign.botLevel, null, campaign, null, tutorialReplay);
     return;
   }
   await startGame(randomSeed(), level, null, null, difficulty);
@@ -9115,13 +9251,25 @@ bind('go-rematch', () => {
     });
     return;
   }
+  // A TUTORIAL replay returns to where it came from: Settings → Tutorial. It must never hand the
+  // player to the campaign's next level (owner, 2026-10-24).
+  if (tutorialReplay) {
+    hideGameOver();
+    resultAdvance = false;
+    showScreen('menu');
+    sheet('sheet-settings');
+    sheet('sheet-tutorial');
+    return;
+  }
   // A WON campaign level leads with the next one (owner direction, 2026-10-16): the player never
   // walks back to the level list to pick it. The next level comes from the level DATA, so the last
   // built level honestly has none: that same button is then the way out, back to the level list. A
-  // loss, and a plain offline game, restart what was just played — exactly as before.
+  // REPLAY of a level behind the place also has no NEXT to march through — the card's own
+  // `finishLead` says the level list, so this press goes there. A loss, and a plain offline game,
+  // restart what was just played — exactly as before.
   const wonNow = session?.state.phase === 'GAME_OVER' && session.state.result?.winner === HUMAN;
   if (campaignLevel && wonNow) {
-    const next = nextCampaignLevel(campaignLevel.number);
+    const next = campaignReplay ? null : nextCampaignLevel(campaignLevel.number);
     if (next) return startCampaignLevel(next);
     hideGameOver();
     resultAdvance = false;
@@ -9763,6 +9911,8 @@ void import('./online/lobby-ui.js').then(async (m) => {
       // surface (guidance, the tutorial window, lesson copy) can read a stale one. The save keeps
       // the campaign's own progress; this is only what THIS match is.
       campaignLevel = null;
+      tutorialReplay = false;
+      campaignReplay = false;
       syncSessionFromOnline(true);
       if (session) {
         board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);

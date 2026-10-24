@@ -3347,6 +3347,37 @@ html.futasaku-product .install-prompt-scrim {
   text-align: center;
 }
 
+/* THE LEVEL LIST OPENS ON THE PLAYER'S PLACE (owner, 2026-10-24): the chapters column is the
+   scroller, so the head (Back) and Continue stay put while `orientCampaignList` brings the current
+   level into view. Returning from a finished level therefore always shows where the player is
+   without hiding the way out. */
+html.futasaku-product #campaign { overflow: hidden; }
+html.futasaku-product #campaign .campaign-inner { min-height: 0; max-height: 100dvh; }
+html.futasaku-product #campaign .campaign-chapters {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--fu-cream-22) transparent;
+}
+
+/* Settings → Tutorial: one quiet row that opens the replay picker. It is a button because it does
+   something, but it wears the same row contour as the switches around it. */
+.settings-tutorial {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--c-line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-tutorial small { margin-left: auto; }
+.settings-tutorial .st-go { color: var(--fu-cream-55); line-height: 1; }
+#tutorial-levels { margin-top: 2px; }
+
 /* Weak-spot buttons: just the icon until switched on. */
 .chip .chip-label {
   display: none;

@@ -3,17 +3,20 @@
 // The card is shared by every mode, and each mode needs a different first button:
 //
 //   online            Rematch (a fresh invite to the same friend — unchanged, it has its own flow)
+//   tutorial          Back to Tutorial — a replay returns to where it was started from (Settings),
+//                     never into campaign progression (owner, 2026-10-24)
 //   campaign, won     Next level — the next level starts straight away, so the player never has to
 //                     walk back to the level list to pick it. On the LAST built level there is no
 //                     next one, so the same slot becomes the honest way out (the level list) rather
-//                     than a button that does nothing.
+//                     than a button that does nothing. A REPLAY of a level behind the player's place
+//                     also takes that honest way out: there is no "next" to march them through.
 //   campaign, lost    Try again
 //   offline classic   Play again (a win) / Try again (a loss)
 //
 // It is pure and exported so the whole matrix is a unit test instead of a source-text guess — the
 // level count is never read here (the caller asks the level DATA whether a next level exists), so a
 // campaign that grows needs no change.
-export type FinishLead = 'rematch' | 'next-level' | 'back-to-campaign' | 'play-again' | 'try-again';
+export type FinishLead = 'rematch' | 'back-to-tutorial' | 'next-level' | 'back-to-campaign' | 'play-again' | 'try-again';
 
 export type FinishContext = {
   /** a real-time duel against another player (its own rematch flow, never a level) */
@@ -24,10 +27,15 @@ export type FinishContext = {
   won: boolean;
   /** the campaign level's next level exists in the level data */
   hasNext: boolean;
+  /** a Tutorial replay: the way out is the Tutorial it started from, never the campaign */
+  tutorial?: boolean;
+  /** a level BEHIND the player's place: a win unlocks nothing, so it never leads forward */
+  replay?: boolean;
 };
 
-export const finishLead = ({ online, campaign, won, hasNext }: FinishContext): FinishLead => {
+export const finishLead = ({ online, campaign, won, hasNext, tutorial, replay }: FinishContext): FinishLead => {
+  if (tutorial) return 'back-to-tutorial';
   if (online) return 'rematch';
-  if (campaign && won) return hasNext ? 'next-level' : 'back-to-campaign';
+  if (campaign && won) return replay || !hasNext ? 'back-to-campaign' : 'next-level';
   return won ? 'play-again' : 'try-again';
 };

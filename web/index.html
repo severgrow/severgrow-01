@@ -532,6 +532,16 @@
         <h3 data-copy="motionHeading"></h3>
         <label class="row"><span data-copy="reduceMotion"></span><input type="checkbox" data-setting="reduceMotion" /></label>
         <label class="row"><span data-copy="largeText"></span><input type="checkbox" data-setting="largeText" /></label>
+        <!-- THE TUTORIAL (owner, 2026-10-24): the first nine campaign levels, replayable from
+             Settings. It is an ENTRY POINT to the same level objects the campaign plays, not a
+             second copy: main.ts builds the tiles from `tutorialLevels()` and starts them through
+             the campaign's own seam. It exists only where campaign levels do; `syncSettingsForm`
+             hides it on the legacy channels. -->
+        <button id="settings-tutorial" class="row settings-tutorial" type="button" aria-haspopup="dialog" hidden>
+          <span data-copy="tutorial"></span>
+          <small class="muted" data-copy="tutorialLevels"></small>
+          <span class="st-go" aria-hidden="true">›</span>
+        </button>
         <h3 data-copy="playingHeading" data-only="classic"></h3>
         <div class="row" data-only="classic"><span data-copy="confirmMoves"></span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
         <label class="row" data-only="classic"><span data-copy="autoSkip"></span><input type="checkbox" data-setting="autoSkip" /></label>
@@ -583,6 +593,20 @@
             <div class="lab-actions"><button id="lab-surprise" type="button">Surprise me <span aria-hidden="true">↗</span></button><button id="lab-restore" type="button" disabled>Restore my setup</button></div>
           </div>
         </details>
+      </div>
+    </section>
+
+    <!-- ===== Tutorial (Settings → Tutorial) ===== -->
+    <!-- A REPLAY of campaign levels 1-9, built by main.ts from the campaign's own level objects
+         (`tutorialLevels()`), so there is no second copy of the levels here. Every tile opens the
+         same seed, bot and config the campaign uses; the match itself is inert (no completion, no
+         unlock, no resume save, no Seeds). Dark glass on the shared sheet surface, like every
+         other sheet. -->
+    <section id="sheet-tutorial" class="sheet" data-ix-surface role="dialog" aria-modal="true" aria-labelledby="tutorial-title" hidden>
+      <header class="sheet-head"><h2 id="tutorial-title"></h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body">
+        <p id="tutorial-hint" class="muted small"></p>
+        <div id="tutorial-levels" class="campaign-grid" role="group" aria-label="Tutorial levels"></div>
       </div>
     </section>
 

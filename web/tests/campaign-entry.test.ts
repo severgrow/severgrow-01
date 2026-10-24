@@ -1,6 +1,9 @@
 // THE CAMPAIGN ENTRY (menu label + press). The bug this covers was a mismatch between the two: the
 // label came from progress, the press preferred a saved match, so an old replay could make the entry
 // say LEVEL 70 and open level 31. These cases pin the decision, not the DOM.
+//
+// Owner (2026-10-24) went one step further: the entry's anchor is the PLACE (currentLevel), so a
+// saved match on any level behind it — a replay in progress — is never offered by the entry.
 import { describe, expect, it } from 'vitest';
 import { CAMPAIGN_CHAPTERS, CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { campaignEntry, chapterProgressFor } from '../src/logic/campaign.js';
@@ -27,19 +30,21 @@ describe('campaignEntry decides what the entry does', () => {
     expect(e).toEqual({ kind: 'ask', next: lvl(31), saved: lvl(31) });
   });
 
-  it('asks when the saved match is a DIFFERENT level too', () => {
-    // The reported bug: everything is done, an old replay of 31 is unfinished.
+  it('a saved match on an EARLIER level is a replay and never hijacks the entry', () => {
+    // Owner (2026-10-24): the reported stranding. Everything is done, and an old replay of 31 is
+    // unfinished: the entry stays the list (there is no place left to open), not a resume of 31.
     const e = campaignEntry(progress(70, range(70)), lvl(31));
     expect(e.kind).toBe('list');
-    // And with 70 still open, the same old replay must produce a choice, not a silent resume.
-    const open = campaignEntry(progress(70, range(69)), lvl(31));
-    expect(open).toEqual({ kind: 'ask', next: lvl(70), saved: lvl(31) });
+    // With 70 still open, the same old replay must not make the entry offer "Resume level 31".
+    // The entry opens the PLACE; the replay save is left on the device for the level list.
+    expect(campaignEntry(progress(70, range(69)), lvl(31))).toEqual({ kind: 'start', level: lvl(70) });
   });
 
-  it('asks when the saved match is AHEAD of the next unfinished level', () => {
-    // Reachable by replaying a later level after clearing an earlier one out of order.
+  it('a saved match anywhere but the place starts the place (a replay is not the place)', () => {
+    // Reachable by replaying a later level after clearing an earlier one out of order: the saved
+    // match is a replay too, so the place (35) is what the entry opens.
     const e = campaignEntry(progress(40, range(40).filter((n) => n !== 35)), lvl(38));
-    expect(e).toEqual({ kind: 'ask', next: lvl(35), saved: lvl(38) });
+    expect(e).toEqual({ kind: 'start', level: lvl(35) });
   });
 
   it('opens the list, and claims no level number, once every built level is complete', () => {

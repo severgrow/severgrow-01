@@ -1028,6 +1028,23 @@ export const BETA_GUIDE = Object.freeze({
 });
 
 /**
+ * The TUTORIAL (owner, 2026-10-24): the first nine campaign levels, replayable from Settings.
+ * "Tutorial" is the owner's word for it, so it is the label everywhere the player sees it. A replay
+ * is deliberately inert: these words never promise progress ("play again", not "continue").
+ */
+export const TUTORIAL_REPLAY = Object.freeze({
+  title: 'Tutorial',
+  /** the Settings row's short value, beside the entry */
+  levelsWord: 'Levels 1–9',
+  /** what the sheet says the replay is, in one line */
+  hint: 'Play the first nine levels again. Your place in the campaign stays where it is.',
+  /** a tutorial tile's spoken label (the tile itself is its number, exactly like a campaign tile) */
+  levelAria: (number: number): string => `Level ${number}. Play the tutorial lesson.`,
+  /** the finish card's leading action after a tutorial lesson: back to where they came from */
+  back: 'Back to Tutorial',
+});
+
+/**
  * The Settings sheet (`web/index.html` `#sheet-settings`). Every visible word lives here, so the
  * screen can be re-organised without hunting through markup; `web/src/main.ts` fills them in from
  * the `data-copy` keys (`applySettingsCopy`).
@@ -1043,6 +1060,9 @@ export const BETA_GUIDE = Object.freeze({
  */
 export const SETTINGS = Object.freeze({
   title: 'Settings',
+  /** the Tutorial entry (owner, 2026-10-24): replays campaign levels 1-9 from Settings. */
+  tutorial: TUTORIAL_REPLAY.title,
+  tutorialLevels: TUTORIAL_REPLAY.levelsWord,
   lookHeading: 'Look',
   colours: 'Colours',
   materialDetail: 'Material detail',
