@@ -139,10 +139,12 @@ try {
       check(`${vp.key}: the submenu takes over the menu`, !(await page.locator('#menu').isVisible()));
       check(`${vp.key}: the PLAY heading reads Play`, (await page.textContent('#play-title'))?.trim() === 'Play');
       const entries = await page.locator('#play-actions button').allTextContents();
-      // LEVEL leads the column (owner, 2026-10-20); Play online is second and still the only fill.
+      // LEVEL leads the column AND carries the cream fill (owner, 2026-10-20: LEVEL is the first
+      // entry of PLAY, above Play online; owner, 2026-10-22: "highlight 'level n' instead"). Play
+      // online is a quiet ghost key now, so the old "it is still Play online" claim is retired.
       check(`${vp.key}: PLAY holds LEVEL n / Play online / Practice match`, JSON.stringify(entries) === JSON.stringify(['LEVEL 1', 'Play online', 'Practice match']), entries.join(' | '));
-      check(`${vp.key}: exactly one filled button in the submenu, and it is still Play online`,
-        JSON.stringify(await leaders(page, '#play-menu')) === JSON.stringify(['menu-online']), (await leaders(page, '#play-menu')).join(' | '));
+      check(`${vp.key}: exactly one filled button in the submenu, and it is LEVEL`,
+        JSON.stringify(await leaders(page, '#play-menu')) === JSON.stringify(['menu-campaign']), (await leaders(page, '#play-menu')).join(' | '));
       const fit = await page.evaluate(() => {
         const inner = document.querySelector('#play-menu .levels-inner')!;
         return inner.scrollHeight - inner.clientHeight;
@@ -204,12 +206,13 @@ try {
       await context.close();
     }
 
-    // ---- 6. the saved-game resume survives a reload (the regression guard, 2026-10-15) ----
-    // A player who reloads with a saved match MUST be offered Continue on the fresh menu: it is the
-    // only way back into that match. The boot shows the menu while `shownScreen` may already say
-    // 'menu' (returning from PLAY sets it back), so the reveal must not depend on "the screen
-    // changed". Seeded from the URL: the game starts at once, is played one real turn, and the page
-    // is then reloaded WITHOUT the query, exactly as a player who taps the browser's reload does.
+    // ---- 6. a reload with a saved match keeps that match (the regression guard, 2026-10-15) ----
+    // The menu REPLACED this guard's first premise: since the owner's 2026-10-19 decision the product
+    // menu has no Continue at all (a match is resumed from its level in PLAY). What still matters is
+    // that a reload never loses the save: the hidden control is bound to the same continueGame(), so
+    // invoking it must return the exact same position. Seeded from the URL: the game starts at once,
+    // is played one real turn, and the page is then reloaded WITHOUT the query, exactly as a player
+    // who taps the browser's reload does.
     {
       const { context, page } = await device(vp, false, `resume-${vp.key}`);
       page.on('dialog', (d) => void d.accept());
@@ -230,13 +233,16 @@ try {
       await page.evaluate(() => history.replaceState(null, '', location.pathname));
       await page.reload();
       await page.waitForSelector('#menu:not([hidden])', { timeout: 40_000 });
-      // Poll for the reveal (the menu section is unhidden a beat before its buttons are styled).
-      const offered = await page.locator('#menu-continue').waitFor({ state: 'visible', timeout: 20_000 }).then(() => true).catch(() => false);
-      check(`${vp.key}: a reload with a saved game still offers Continue`, offered);
-      await page.click('#menu-continue');
+      // Owner decision (2026-10-19, commit 76546c1b): the PRODUCT main menu has NO Continue. A
+      // saved match is offered when the player enters its level from PLAY, never as a resume key.
+      // The control is hidden, not deleted — so the save itself must still round-trip through it.
+      await page.waitForSelector('#menu[data-laid-out]', { timeout: 20_000 });
+      const offered = await page.locator('#menu-continue').isVisible().catch(() => false);
+      check(`${vp.key}: a reload offers NO Continue on the product menu (the player enters the level)`, !offered);
+      await page.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement).click());
       await page.waitForFunction(settled, undefined, { timeout: 40_000 });
       const resumed = await page.evaluate('JSON.stringify(window.__severgrow.state())');
-      check(`${vp.key}: Continue resumes the exact saved game`, resumed === saved);
+      check(`${vp.key}: the saved game still resumes exactly (hidden control, same continueGame)`, resumed === saved);
       await context.close();
     }
   }

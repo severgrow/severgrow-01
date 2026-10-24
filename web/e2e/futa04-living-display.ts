@@ -5,7 +5,7 @@ import { servePreview } from './helpers/preview-port.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import type { Page } from 'playwright-core';
-import { openMenuEntry } from './helpers/menu-nav.js';
+import { openMenuEntry, resumeSavedGame } from './helpers/menu-nav.js';
 
 // A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
 const { server, url: BASE } = await servePreview(4224, { logLevel: 'silent' });
@@ -27,29 +27,50 @@ try {
     await page.addInitScript(() => window.addEventListener('severor-ready', () => { (window as any).__ready = true; }));
     await page.goto(BASE);
     await page.waitForFunction(() => !!(window as any).__ready);
-    check((await page.locator('#menu .menu-buttons button:visible').allTextContents()).join('|').includes('New game|Tutorial|Settings'),`${width}: minimal main menu`);
+    // The product menu (owner restructure, 2026-10-15, commit 8f3f54f2) is PLAY / Territory /
+    // LOG IN / Settings. It has no Continue (owner, 2026-10-19) and no Tutorial (levels 1-10 are
+    // the tutorial), and the old flat "New game / Tutorial / Settings" column is retired.
+    // Territory needs a live duel endpoint, which this local preview build does not have.
+    const menuKeys = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#menu .menu-buttons .btn')]
+      .filter(button => button.getClientRects().length > 0).map(button => button.id));
+    check(menuKeys[0] === 'menu-play' && !menuKeys.includes('menu-continue') && !menuKeys.includes('menu-tutorial'),
+      `${width}: product main menu leads with PLAY and holds no Continue/Tutorial (${menuKeys.join(' | ')})`);
+    check(await page.locator('#menu-continue').isHidden() && await page.locator('#menu-tutorial').isHidden(), `${width}: no Continue and no second Tutorial on the product menu`);
     check(await page.locator('#menu-howto,#menu-stats,#menu-v3').count()===0,`${width}: obsolete front-menu elements absent`);
     await openMenuEntry(page, 'menu-new');
-    check((await page.locator('.difficulty-tile').allTextContents()).length===5,`${width}: five named difficulty choices`);
+    // The five named difficulties were retired on 2026-10-15 (commit b9533fb4): Practice match now
+    // offers three carry-over tiers, Easy 3-4 / Medium 5-7 / Hard 8-9.
+    check(JSON.stringify(await page.locator('.difficulty-tile').allTextContents()) === JSON.stringify(['EASY', 'MEDIUM', 'HARD']),`${width}: three carry-over tiers`);
     await page.locator('[data-difficulty="medium"]').click();
     await page.waitForSelector('#deck.ready');
     const level=await page.evaluate(()=>(window as any).__severgrow.settings().level);
     check([5,6,7].includes(level),`${width}: Medium selects one saved engine level`);
     await page.reload();
     await page.waitForFunction(() => !!(window as any).__ready);
-    await page.locator('#menu-continue').click();
+    await resumeSavedGame(page);
     check(await page.evaluate(()=>(window as any).__severgrow.settings().level)===level,`${width}: exact chosen level survives reload`);
     const resting=await restingScore(page);
+    // The sign announces the step word first (DRAW!, ~1.2 s under Reduce Motion; display-machine.ts)
+    // and then rests on the live score. Waiting for the settled face is the same requirement the
+    // current cockpit suite (futa04-smart-cockpit) states, not a looser one.
+    await page.waitForFunction(want => document.getElementById('smart-led-text')?.textContent?.trim() === want, resting, { timeout: 6000 });
     check(await page.locator('#smart-led-text').innerText()===resting,`${width}: score is resting display during Draw (${resting})`);
     check(await page.locator('#smart-led').getAttribute('data-mode')==='score',`${width}: the resting face is the score mode (one neutral ink, no team colour)`);
-    await page.waitForFunction(() => getComputedStyle(document.querySelector('#deck .pile-card')!).boxShadow.includes('239, 234, 220'));
-    const white=await page.locator('#deck .pile-card').evaluate(el=>getComputedStyle(el).boxShadow);
-    check(white.includes('239, 234, 220'),`${width}: legal deck draw has restrained white card-edge light`);
+    // The owner moved the draw light OFF the card's contour onto its own layer (2026-10-22: "remove
+    // the contour thing ... the light is its own layer whose opacity breathes"): the pile card now
+    // has box-shadow:none and the light is its ::after. Assert the real thing, not the removed one.
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('#deck .pile-card')!, '::after').boxShadow.includes('242, 237, 224'));
+    const white=await page.evaluate(() => ({
+      contour: getComputedStyle(document.querySelector('#deck .pile-card')!).boxShadow,
+      light: getComputedStyle(document.querySelector('#deck .pile-card')!, '::after').boxShadow,
+    }));
+    check(white.light.includes('242, 237, 224') && white.contour === 'none',`${width}: legal deck draw has restrained white card-edge light and no contour (${JSON.stringify(white)})`);
     if(!await page.locator('#discard.futa04-bloom-draw').count() && await page.locator('#discard.ready').count())
-      check((await page.locator('#discard .pile-card').evaluate(el=>getComputedStyle(el).boxShadow)).includes('239, 234, 220'),`${width}: ordinary legal discard draw shares white edge light`);
+      check((await page.locator('#discard .pile-card').evaluate(el=>getComputedStyle(el,'::after').boxShadow)).includes('242, 237, 224'),`${width}: ordinary legal discard draw shares white edge light`);
     await page.locator('#deck').evaluate(el=>(el as HTMLElement).click());
     await page.waitForFunction(()=>(window as any).__severgrow.state().phase==='ACT' && !(window as any).__severgrow.busy());
     const grown=await restingScore(page);
+    await page.waitForFunction(want => document.getElementById('smart-led-text')?.textContent?.trim() === want, grown, { timeout: 6000 });
     check(await page.locator('#smart-led-text').innerText()===grown,`${width}: score remains during Grow (${grown})`);
     await page.screenshot({path:`/tmp/futasaku-living-display-${width}.png`});
     check(errors.length===0,`${width}: no browser errors (${errors.join(' | ')})`);
@@ -57,8 +78,10 @@ try {
   }
   const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await page.goto(`${BASE}?seed=3`);await page.waitForSelector('#deck.ready');
-  await page.waitForTimeout(6100);
-  check(await page.locator('#smart-led-text').innerText()==='DRAW','idle phase hint appears after six seconds');
+  // The idle re-prompt re-shows the step word, usually with a bang (display-machine.ts scheduleIdle:
+  // the alarm blink and a deterministic ! are part of it), so both spellings are the real prompt.
+  await page.waitForFunction(() => ['DRAW', 'DRAW!'].includes(document.getElementById('smart-led-text')?.textContent?.trim() ?? ''), undefined, { timeout: 12000 });
+  check(['DRAW','DRAW!'].includes((await page.locator('#smart-led-text').innerText()).trim()),'idle phase hint appears after a quiet beat');
   await page.locator('#deck').evaluate(el=>(el as HTMLElement).click());
   await page.waitForFunction(()=>(window as any).__severgrow.state().phase==='ACT'&&!(window as any).__severgrow.busy());
   const state=await page.evaluate(()=>(window as any).__severgrow.state());

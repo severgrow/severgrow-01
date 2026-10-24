@@ -14,6 +14,7 @@ import { decodeSave } from '../src/logic/persist.js';
 import { hexCenter } from './drawing.js';
 import { positionSave } from './position.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
+import { resumeSavedGame } from './helpers/menu-nav.js';
 import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
 import { fixture } from '../../tests/helpers.js';
 
@@ -104,7 +105,7 @@ async function open(width: number, height: number, seed: number, humanFirst = fa
     await page.addInitScript(save => localStorage.setItem('main2:severgrow.save.v7', save), positionSave({ state: newGame(seed) }));
     await page.goto(base);
     await assertDistChannel(page);   // loud if the served dist was built for another channel
-    await page.locator('#menu-continue').click();
+    await resumeSavedGame(page);
   } else {
     await page.goto(`${base}?seed=${seed}`);
     await assertDistChannel(page);   // loud if the served dist was built for another channel
@@ -114,6 +115,9 @@ async function open(width: number, height: number, seed: number, humanFirst = fa
   await page.waitForFunction(() => document.querySelectorAll('#board .hex-cell').length > 0);
   await page.locator('#splash').waitFor({state:'hidden'});
   await page.waitForFunction(() => document.fonts.status === 'loaded');
+  // The pre-game card ritual (starter-ritual.ts) owns the screen and swallows pointers/keys while
+  // it plays; the game is only ready to drive after it has gathered itself into the real draw pile.
+  await page.waitForSelector('#starter-lottery', { state: 'hidden', timeout: 20_000 });
   await page.waitForTimeout(180);
   equal(await state(page), newGame(seed), `${width}x${height}: seeded Classic setup`);
   return { page, touch, errors };
@@ -378,7 +382,14 @@ async function idleTiming(page: Page, label: string) {
   await page.keyboard.press('Shift');
   await page.waitForTimeout(160);
   const after = (await page.locator('#smart-led-text').innerText()).trim();
-  check(after !== 'DRAW' && after !== 'DRAW!', `${label}: new input promptly hides idle guidance`);
+  // Sticky idle urgency (display-machine.ts, owner 2026-10-11 "LED dwell/urgency"): the re-prompt
+  // keeps blinking until the player STARTS THE NEXT MOVE. A stray key is a fidget, and the machine
+  // deliberately does not let it dismiss the prompt ("a fidget tap must not dismiss it"). The old
+  // check asserted the opposite, so it now pins the real behaviour: the prompt survives the fidget
+  // and the cockpit stays in its urgency state.
+  check(after === 'DRAW' || after === 'DRAW!', `${label}: a fidget key never dismisses the sticky idle prompt (${after})`);
+  check(await page.evaluate(() => document.documentElement.classList.contains('idle-urgency')),
+    `${label}: the cockpit keeps its idle-urgency state until the next move`);
   equal(await state(page),before,`${label}: the idle timer changes no game state`);
 }
 
@@ -395,7 +406,7 @@ async function fruitFlow(width: number, height: number) {
       localStorage.setItem('main2:severgrow.tips.v1',JSON.stringify({fruit:true,fruitAny:true,strengthen:true}));
     },positionSave({state:before}));
     await page.goto(base);
-    await page.click('#menu-continue'); await idle(page);
+    await resumeSavedGame(page); await idle(page);
     equal(await state(page),before,'Bomb: saved position resumes unchanged');
     const palette = await page.locator('#hand .card').evaluateAll(cards => cards.map(card => ({
       suit:card.className.match(/\bs[0-3]\b/)?.[0] ?? 'bomb', ink:getComputedStyle(card.querySelector('.c-num')!).color,
@@ -434,6 +445,11 @@ async function fruitFlow(width: number, height: number) {
 async function undo(page: Page, before: State, label: string) {
   await idle(page);
   check(await page.locator('#tool-undo').isEnabled(), `${label}: Undo is available immediately after the move settles`);
+  // The same slot also stands in for "Replay their last turn" (renderHud sets mode='replay' and
+  // swaps the icon + label). "Enabled" alone therefore does not mean "Undo": a tap here would
+  // replay the opponent instead of taking the move back, and the state would rightly not change.
+  check(await page.locator('#tool-undo').evaluate(el => el.dataset.mode !== 'replay'),
+    `${label}: the slot offers Undo, not a replay of the opponent's turn`);
   await page.click('#tool-undo');
   equal(await state(page), before, `${label}: one Undo immediately restores the entire state`);
   await idle(page);
@@ -675,7 +691,7 @@ async function sproutFlow(width: number, height: number) {
     equal([manifest.name,manifest.short_name], ['Futasaku','Futasaku'], `${label}: installed-app name uses Futasaku`);
     await page.screenshot({ path: `${dir}/${width}x${height}-futasaku-menu.png` });
     await evidence(page,`${width}x${height}-futasaku-menu`);
-    await page.click('#menu-continue'); await idle(page);
+    await resumeSavedGame(page); await idle(page);
     equal(await state(page),resumed,`${label}: reload resumes exact save after real turns`);
     const untouched = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => key === 'severgrow.save.v7' || key === 'test:severgrow.save.v7')));
     equal(untouched,{ 'severgrow.save.v7':'MAIN-POLISH-SENTINEL','test:severgrow.save.v7':'TEST-POLISH-SENTINEL' },`${label}: other-channel saves stay intact`);
@@ -780,7 +796,19 @@ async function bloomFlow(width: number, height: number) {
     await pick();
     check(await page.locator('#moves .futa04-skip').evaluate(button => !!button.querySelector('svg') && !button.textContent?.trim() && button.getAttribute('aria-label')?.startsWith('Skip')),`${label}: Bloom retains an accessible icon-only Skip button`);
     check(await page.locator('#moves .futa04-skip').isEnabled(),`${label}: subdued Skip remains usable`);
-    equal(await page.locator('#hand .futa04-bloom-card').count(),action.cards.length,`${label}: selected Bloom highlights exactly its cards`);
+    // The lifted, selected cards carry `futa04-bloom-pick` (main.ts renderHand; the Bloom's own
+    // colour, owner 2026-10-23). `futa04-bloom-card` is the IDLE hint for cards that could bloom,
+    // and it is deliberately dropped once a recipe is selected, so counting it here measured the
+    // hint, not the selection. Assert the selection AND that it is actually painted in aqua: the
+    // lifted-card cream and the generic Grow green both used to win the cascade over this rule.
+    const bloomHighlight = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll<HTMLElement>('#hand .futa04-bloom-pick')];
+      const css = cards[0] ? getComputedStyle(cards[0]) : null;
+      return { count: cards.length, border: css?.borderTopColor ?? '', shadow: css?.boxShadow ?? '' };
+    });
+    equal(bloomHighlight.count, action.cards.length, `${label}: selected Bloom highlights exactly its cards`);
+    check(bloomHighlight.border === 'rgb(143, 211, 201)' && bloomHighlight.shadow.includes('143, 211, 201'),
+      `${label}: the selected cards glow the Bloom's aqua, never the Grow green (${JSON.stringify(bloomHighlight)})`);
     check(!/Bloom \d+ tiles|Skip sprout/.test(await page.locator('#moves').innerText()),`${label}: Bloom choices use combination icons rather than prose`);
     // The retired plate is gone; Futa04 shows the selected Bloom group on the LED after its
     // idle re-prompt ("BLOOM" / "BLOOM!" from phaseMessage when data-futa04-bloom is true).
@@ -928,7 +956,7 @@ async function drawGlow() {
         localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({coach:true,sound:false,music:false,reduceMotion:true,speed:'skip',autoSkip:false}));
       },positionSave({state:game}));
       await page.goto(base); await page.waitForFunction(() => !!(window as any).__severgrow);
-      await page.click('#menu-continue'); await idle(page);
+      await resumeSavedGame(page); await idle(page);
       equal(await state(page),game,`${label}: exact real position resumes`);
       equal(await page.locator('#discard').evaluate(el=>el.classList.contains('futa04-bloom-draw')),wanted,`${label}: only a new Bloom combination changes the throw-pile highlight`);
       equal(await page.locator('#deck.coach-glow').count(),0,`${label}: no square Deck recommendation`);
@@ -958,7 +986,7 @@ async function bloomMenuFit() {
       localStorage.setItem('main2:severgrow.save.v7',save);
       localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({coach:false,sound:false,music:false,reduceMotion:true,speed:'skip',autoSkip:false}));
     },positionSave({state:positioned}));
-    await page.goto(base); await page.click('#menu-continue'); await idle(page);
+    await page.goto(base); await resumeSavedGame(page); await idle(page);
     equal(await state(page),positioned,'multiple Bloom choices fixture resumes exactly');
     const toggle = page.locator('#smart-bloom-button');
     check(await toggle.isVisible(),'multiple Bloom choices have a menu control');
@@ -997,7 +1025,7 @@ async function goldFrameVisuals() {
         localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({coach:false,sound:false,music:false,reduceMotion:true,speed:'skip'}));
       },positionSave({state:game}));
       await page.goto(base);
-      await page.click('#menu-continue'); await idle(page);
+      await resumeSavedGame(page); await idle(page);
       equal(await state(page),game,`standard ${width}: frame art does not change the position`);
       const visual = await page.evaluate(async () => {
         const rich = [...document.querySelectorAll<SVGGElement>('#board .hex-cell.rich')];
@@ -1039,7 +1067,7 @@ async function goldFrameVisuals() {
         visual.variants.every(variant=>variant>=0 && variant<3),
         `standard ${width}: three deterministic rim designs fit the hexes under the stones (${JSON.stringify(visual)})`);
       await page.screenshot({path:`${dir}/${width}x${height}-gold-frame-standard.png`});
-      await page.reload(); await page.click('#menu-continue'); await idle(page);
+      await page.reload(); await resumeSavedGame(page); await idle(page);
       const reloaded = await page.locator('#board .l-rich-frames .gold-frame').evaluateAll(frames=>frames.map(frame=>Number(frame.getAttribute('data-variant'))));
       equal(reloaded,visual.variants,`standard ${width}: frame variants survive reload`);
     } finally { await page.close(); }

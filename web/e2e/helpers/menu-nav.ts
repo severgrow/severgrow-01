@@ -87,6 +87,29 @@ export const openMenuEntry = async (page: Page, id: string, options: MenuEntryOp
   await page.click(`#${id}`);
 };
 
+/**
+ * Resume the saved match from the product main menu as the app itself does.
+ *
+ * Owner decision (2026-10-19, commit 76546c1b): the PRODUCT main menu has NO Continue/resume.
+ * `web/src/main.ts` keeps `#menu-continue` `hidden` forever on `futa04` / `futa05`
+ * (`FEATURES.campaign`), while the control, its aria-label and its handler stay bound. A
+ * `page.click('#menu-continue')` can therefore never work on a product build — not because the
+ * resume is broken, but because the button is deliberately invisible. A suite that needs a saved
+ * position resumes the way the app's own code path does: once the app is ready, invoke that
+ * control's click handler directly. Legacy channels keep the visible button, so they still click.
+ */
+export const resumeSavedGame = async (page: Page, options: MenuEntryOptions = {}): Promise<void> => {
+  const timeout = options.timeout ?? 40_000;
+  await page.waitForFunction(() => !!(window as any).__severgrow?.ready?.(), undefined, { timeout });
+  const button = page.locator('#menu-continue');
+  await button.waitFor({ state: 'attached', timeout });
+  const visible = await button.isVisible().catch(() => false);
+  if (visible) await button.click({ timeout });
+  // Hidden on the product channel: the bound handler is the only door, and it is the real one
+  // (bind('menu-continue', () => continueGame()) in main.ts) — nothing is faked or stubbed.
+  else await button.evaluate((el) => (el as HTMLButtonElement).click());
+};
+
 /** Play online: the PLAY doorway then the Play online entry, and wait for the duel lobby. */
 export const openOnlineHub = async (page: Page, options: MenuEntryOptions = {}): Promise<void> => {
   const timeout = options.timeout ?? 40_000;
