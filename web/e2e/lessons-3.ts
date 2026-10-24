@@ -572,9 +572,21 @@ try {
         title: document.getElementById('go-title')?.textContent?.trim(),
         line: document.getElementById('go-learned')?.textContent?.trim(),
         seeds: !(document.getElementById('go-seeds')?.hidden ?? true) ? document.getElementById('go-seeds')?.textContent?.trim() : '',
+        territory: !(document.getElementById('go-territory')?.hidden ?? true) ? document.getElementById('go-territory')?.textContent?.trim() : '',
+        territoryKey: !(document.getElementById('go-territory-open')?.hidden ?? true),
       }));
       check(!!card.line, `L${level} finish card: ${card.title} / ${card.line}`);
-      check(!card.seeds, `L${level} finish card has no Seeds line`);
+      if (level < 10) {
+        check(!card.seeds, `L${level} finish card has no Seeds line`);
+        check(!card.territory && !card.territoryKey, `L${level} finish card says nothing about Territory`);
+      } else {
+        // Owner, 2026-10-24: level 10 pays 100 Seeds once (the server verifies it; here the CI
+        // placeholder server cannot answer, so the line is the pending one), and its won card says
+        // what Seeds and Territory are, with Open Territory.
+        check(!!card.seeds, `L10 finish card has its Seeds line (${card.seeds})`);
+        check(card.territory === 'Seeds are earned by winning.Spend 100 to claim a tile of Territory on the world map.', `L10 finish card explains Seeds and Territory (${card.territory})`);
+        check(card.territoryKey, 'L10 finish card offers Open Territory');
+      }
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/L${level}-finish.png` });
       results.push(`L${level}: ${r.reason}, ${r.turns} turns, ${r.wrong} wrong taps`);
       const words = await page.evaluate(() => document.querySelectorAll('.tap-why').length);
