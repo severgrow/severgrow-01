@@ -34,6 +34,31 @@ export function seedReward(message: string): SeedReward {
   return { kind: 'notice', text };
 }
 
+/**
+ * What the server reported for THIS seat in a finished duel — the shape `store.settle` already
+ * returns (`server/src/seeds/types.ts` `RewardResult`: `awarded` plus the denial `reason`).
+ * `awarded: 0` with a `*_daily_limit` reason is a real, honest outcome: the cap bit.
+ */
+export type SettledSeeds = { awarded: number; reason: string | null };
+
+/**
+ * The duel result card's Seeds line, from what the server said — NEVER from a guessed rate.
+ *
+ * Online duels pay per seat (friend 15/4, queue 30/8, draw 6/12), but the client cannot work the
+ * number out for itself: a daily cap pays 0 (`planSeedReward` writes a 0-value receipt with a
+ * `*_daily_limit` reason) and a resignation or a timeout pays nothing at all. So an absent report
+ * means no line, and a denied report is the same calm sentence the campaign card uses rather than a
+ * "+0". Pure, so all four states are pinned without a browser.
+ */
+export function duelSeedsMessage(settled: SettledSeeds | null | undefined): string {
+  if (!settled) return '';
+  const awarded = settled.awarded;
+  if (!Number.isFinite(awarded) || awarded < 0) return '';
+  if (awarded > 0) return `+${Math.floor(awarded)} Seeds`;
+  // A limit is worth saying: the player did everything right and the day's allowance is gone.
+  return settled.reason && /limit/.test(settled.reason) ? 'Seed limit reached today' : '';
+}
+
 /** The numbers the count passes through: five steps, easing out, always landing on the amount. */
 export function seedCountValues(amount: number, steps = 5): number[] {
   const n = Math.max(1, Math.min(steps, amount));

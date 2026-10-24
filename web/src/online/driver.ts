@@ -7,6 +7,7 @@ import type { MatchViewPayload } from '../../../server/src/protocol.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { ONLINE } from '../../../src/strings.js';
 import { mark } from '../logic/timing.js';
+import type { SettledSeeds } from '../ui/seed-reveal.js';
 import { remainingMs } from './clock.js';
 import type { ClockState } from './clock.js';
 import { createDraftEngine } from './draft.js';
@@ -159,6 +160,18 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     },
   });
 
+  /**
+   * The award this seat was paid for the duel, if the server told us. Read DEFENSIVELY: the field is
+   * not in `MatchViewPayload` today, so this is normally absent and the finish card shows no Seeds
+   * line (see `MatchDriverSnapshot.seeds` for the one server change that fills it). Never inferred
+   * from the mode or the outcome — a daily cap pays 0 and a resignation pays nothing.
+   */
+  const readSettledSeeds = (view: MatchViewPayload): Pick<MatchDriverSnapshot, 'seeds'> => {
+    const reported = (view as MatchViewPayload & { seeds?: SettledSeeds }).seeds;
+    if (!reported || typeof reported.awarded !== 'number') return {};
+    return { seeds: { awarded: reported.awarded, reason: reported.reason ?? null } };
+  };
+
   const snapshot = (): MatchDriverSnapshot => {
     if (!player) {
       throw new Error('OnlineDriver has no view yet.');
@@ -186,6 +199,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       screenEvents,
       turnDeadlineAt: player.turnDeadlineAt,
       result: player.result,
+      ...readSettledSeeds(player),
       opponentName: player.opponent?.displayName ?? null,
       connection,
       presence,

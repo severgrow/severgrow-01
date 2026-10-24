@@ -1,6 +1,7 @@
 // Shared types for the online client layer (Phase 3). No screens — only the seam.
 import type { Action, Event, Player, View } from '../../../src/engine/index.js';
 import type { MatchStatus, MatchViewPayload, OnlineGameResult } from '../../../server/src/protocol.js';
+import type { SettledSeeds } from '../ui/seed-reveal.js';
 
 /** Connection / sync status shown quietly in the UI (Phase 5). */
 export type ConnectionStatus = 'online' | 'reconnecting' | 'offline' | 'client_too_old';
@@ -54,6 +55,23 @@ export type MatchDriverSnapshot = {
   screenEvents: Event[];
   turnDeadlineAt: number | null;
   result: OnlineGameResult | null;
+  /**
+   * What this seat was PAID for this duel, if the server said. Absent today: `MatchViewPayload`
+   * and `MatchSummary` both stop at `result: OnlineGameResult`, and `settleOnline`
+   * (server/src/seeds/service.ts) returns void, discarding the `RewardResult` that `store.settle`
+   * already produces.
+   *
+   * THE ONE SERVER CHANGE that turns the finish card's Seeds line on — nothing else is needed:
+   *   1. add `seeds?: { awarded: number; reason: string | null }` to `MatchViewPayload`
+   *      (server/src/protocol.ts), meaning "what THIS seat was paid";
+   *   2. have `settleOnline` return the per-seat `RewardResult` map instead of void;
+   *   3. carry it through `safeSettleOnline` (server/src/service.ts) into the finished-view path,
+   *      so the response built for each seat includes its own award.
+   * Until then the card shows NOTHING rather than guessing — a daily cap pays 0, and a resignation
+   * or timeout pays nothing, so a client-side rate table would print money nobody received
+   * (see `duelSeedsMessage` in ui/seed-reveal.ts).
+   */
+  seeds?: SettledSeeds;
   opponentName: string | null;
   connection: ConnectionStatus;
   presence: PresenceStatus;

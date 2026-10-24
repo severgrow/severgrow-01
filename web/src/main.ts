@@ -181,7 +181,7 @@ const look = () => materialLook(settings.palette, settings.materialDetail, setti
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import { glintSeedStone, setSeedStoneStrength } from './ui/seedstone.js';
-import { paintSeedReward, seedReward } from './ui/seed-reveal.js';
+import { duelSeedsMessage, paintSeedReward, seedReward } from './ui/seed-reveal.js';
 let DesignView: typeof BoardView = BoardView;
 const branding = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')
   ? await import('./player/branding.js') : null;
@@ -7252,9 +7252,16 @@ function renderGameOver() {
     if (!info || !os) return;
     go.hidden = false;
     presentResult(go, wasHidden);
-    // A duel settles its own wallet server-side and this card has never carried a seed line; clear
-    // the paragraph the three modes SHARE, so an offline award cannot leak onto a duel's result.
+    // A duel settles its own wallet server-side, and this paragraph is SHARED by every mode — so it
+    // is reset first, or the previous offline game's "+15 Seeds" would appear on a duel's card.
+    // Then the one honest line: what the server reported this seat was paid (owner, 2026-10-24:
+    // "seeds pending or shit like that"). No payload carries that award yet, so this is silence in
+    // practice — and it must be, because a daily cap pays 0 and a resignation pays nothing, so any
+    // number the client worked out for itself would be a guess. See `duelSeedsMessage`.
     clearGoSeeds();
+    const snapshot = os.driver.snapshot();
+    seedRewardMessage = duelSeedsMessage(snapshot.seeds ?? null);
+    paintGoSeeds();
     // The match's whole public history is one fetch; when it lands, re-render so the highlights are
     // the real ones (offline's are computed from the same event list). Fetched at most once.
     if (!os.historyLoaded && !os.historyLoading) {
@@ -7268,7 +7275,7 @@ function renderGameOver() {
     const draw = info.title === RESULT.draw;
     // Count this ONLINE finish for the install invitation too — an online-only player must reach
     // the trigger. Once per match: the finish screen re-renders, so the match id is the guard.
-    const matchId = os.driver.snapshot().matchId;
+    const matchId = snapshot.matchId;
     if (onlineResultNoted !== matchId) {
       onlineResultNoted = matchId;
       installPrompt.noteFinished(won ? 'won' : draw ? 'draw' : 'lost');
