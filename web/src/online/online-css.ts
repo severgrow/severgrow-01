@@ -602,9 +602,12 @@ export const ONLINE_CSS = `
   vector-effect: non-scaling-stroke;
 }
 .world-swords-glyph {
-  fill: none; stroke: #f8f2e1; stroke-width: 1.2;
-  stroke-linecap: round; stroke-linejoin: round;
-  vector-effect: non-scaling-stroke; pointer-events: none;
+  /* Solid, not stroked: the mark is the owner's heraldic reference (2026-10-24), so it is filled in
+     the tiles' own warm ink-white with the challenge's red bloom underneath it. No stroke means
+     non-scaling-stroke is unnecessary — the shape is drawn on the ground and scales with it, which
+     is what keeps it locked to its hex through pan and zoom. */
+  fill: #f8f2e1; stroke: none;
+  pointer-events: none;
   filter: drop-shadow(0 0 1px #0b0f0bcc) drop-shadow(0 0 2.2px #ff3b2ed0) drop-shadow(0 0 5.5px #b81c14a8);
 }
 /* THE CHALLENGE LIST. Hidden when empty, a horizontal rail when not, so it costs the map no room

@@ -61,14 +61,36 @@ const FIT_EDGE = 3;
 const MIN_CELL_PX = 46;
 const coords = (q: number, r: number) => ({ x: X * (q + r / 2) * R, y: 1.5 * r * R });
 /**
- * THE CROSSED SWORDS' one glyph, in the map's own units, pointing up: a tapered blade, a straight
- * guard, a short grip and a pommel. Two copies turned ±45° about the tile's centre make the X — a
- * drawn mark that scales with the ground it sits on, not an icon badge pasted over it. The whole
- * glyph's radius is ~5.2 units (scaled 1.3 → ~6.8), comfortably inside the hex's 8.66-unit
- * inradius, so it never touches the timer ring traced on the outline.
+ * THE CROSSED SWORDS' one glyph, in the map's own units, pointing up: a long blade that tapers in a
+ * straight line to a point, a perpendicular guard bar with a pointed outer end, a ribbed grip and a
+ * diamond pommel. Two copies turned ±45° about the tile's centre make the X. This is the owner's
+ * reference (2026-10-24): solid filled shapes with the reference's silhouette language — wide
+ * tapered blade, flared guard, ribbed grip, diamond pommel — rather than the hairline outline this
+ * mark started as, which read as a generic icon instead of his swords.
+ *
+ * The hilt detail is deliberately kept: at the phone's 46 px cell the mark is only ~14 px across, so
+ * the shape has to survive being averaged. The guard bar stays a flat perpendicular block (a fin
+ * that sweeps up turns to mush at that size) and the pommel is a compact wide diamond rather than a
+ * long spike, because a spike just reads as a longer blade.
+ *
+ * Reach: tip 5.40, guard end 3.24, pommel 5.02. At SWORD_SCALE the tips land ~6.9 units from the
+ * centre, inside the hex's 8.66-unit inradius, so it never touches the timer ring on the outline.
  */
-const SWORD_PATH = 'M0,-5.1 L0.58,1.62 L-0.58,1.62 Z M-2.05,1.62 L2.05,1.62 M0,1.62 L0,3.35';
-const SWORD_SCALE = 1.3;
+const SWORD_PATH = [
+  'M0,-5.40',                                                     // the point
+  'L0.46,-4.05', 'L0.84,-2.30', 'L1.12,-0.60', 'L1.18,0.70',      // blade: straight taper, widest at the guard
+  'L2.92,0.44', 'L3.24,0.86', 'L2.92,1.40',                       // guard: a flat perpendicular bar, pointed at the outer end
+  'L0.60,1.46',                                                   //   in to the grip
+  'L0.86,1.80', 'L0.58,2.14', 'L0.86,2.48', 'L0.58,2.82',          // grip: scalloped ribs
+  'L0.86,3.14', 'L0.58,3.44',
+  'L1.16,3.78', 'L0,5.02',                                        // pommel: compact diamond
+  'L-1.16,3.78', 'L-0.58,3.44',                                   //   and back up the other side
+  'L-0.86,3.14', 'L-0.58,2.82', 'L-0.86,2.48', 'L-0.58,2.14', 'L-0.86,1.80',
+  'L-0.60,1.46',
+  'L-2.92,1.40', 'L-3.24,0.86', 'L-2.92,0.44',                    // guard: the mirrored bar
+  'L-1.18,0.70', 'L-1.12,-0.60', 'L-0.84,-2.30', 'L-0.46,-4.05', 'Z', // blade: mirrored taper to the point
+].join(' ');
+const SWORD_SCALE = 1.28;
 const hexPath = (x: number, y: number) => {
   const points = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]];
   return points.map(([dx, dy], index) => `${index ? 'L' : 'M'}${(x + dx! * R).toFixed(2)},${(y + dy! * R).toFixed(2)}`).join(' ') + 'Z';
@@ -836,13 +858,11 @@ export class WorldView {
     for (const turn of [45, -45]) {
       const sword = document.createElementNS(NS, 'g');
       sword.setAttribute('transform', `rotate(${turn})`);
+      // One filled path per sword: blade, guard, grip and pommel are a single silhouette, so there
+      // is no overlap seam at the crossing and no stroke to keep in step with zoom.
       const blade = document.createElementNS(NS, 'path');
       blade.setAttribute('d', SWORD_PATH);
-      const pommel = document.createElementNS(NS, 'circle');
-      pommel.setAttribute('cx', '0');
-      pommel.setAttribute('cy', '3.72');
-      pommel.setAttribute('r', '.4');
-      sword.append(blade, pommel);
+      sword.append(blade);
       glyph.append(sword);
     }
     group.append(hit, glyph);

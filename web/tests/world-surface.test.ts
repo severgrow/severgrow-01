@@ -221,8 +221,7 @@ describe('the world map rests on the ONE shared page surface', () => {
     // swords are the LAST of the challenge groups, so the ring is never drawn over the glyph.
     expect(worldView, 'the edge group must be appended after the fill group')
       .toMatch(/svg\.append\(faces, lines, marks, rings, swords\)/);
-    expect(worldView, 'the selection must draw last of all, above every edge').toMatch(/svg\.append\(accentGroup\)/);
-    // The fill layer MUST paint before the stroke layer, and a face must not swallow a tap.
+    expect(worldView, 'the selection must draw last of all, above every edge').toMatch(/svg\.append\(accentGroup\)/);    // The fill layer MUST paint before the stroke layer, and a face must not swallow a tap.
     const face = bodyOf(onlineCss, '.world-hex-face');
     expect(face, '.world-hex-face must exist').not.toBeNull();
     expect(face!, 'the face carries no stroke').not.toMatch(/stroke\s*:/);
@@ -239,6 +238,35 @@ describe('the world map rests on the ONE shared page surface', () => {
     expect(accent, '.world-accent-line must exist').not.toBeNull();
     expect(accent!, 'the accent is the selection cream').toMatch(/stroke:\s*#[0-9a-f]{3,8}/i);
     expect(accent!, 'the accent must not take a tap').toContain('pointer-events: none');
+  });
+
+  it('the crossed swords are a solid heraldic mark, not a hairline outline', () => {
+    // Owner, 2026-10-24: "change the shape of the swords very close to the reference image" — two
+    // FILLED crossed swords with a wide tapered blade, a perpendicular guard, a ribbed grip and a
+    // diamond pommel. The mark started life as a 1.2px stroked outline, which is the opposite of
+    // that reference, so the fill is the thing this test protects: a future edit that goes back to
+    // stroking the glyph would silently undo the owner's one visual instruction about it.
+    const glyph = bodyOf(onlineCss, '.world-swords-glyph');
+    expect(glyph, '.world-swords-glyph must exist').not.toBeNull();
+    expect(glyph!.replace(/\s+/g, ''), 'the glyph is filled, not stroked').toContain('fill:#f8f2e1');
+    expect(glyph!.replace(/\s+/g, ''), 'and it paints no outline of its own').toContain('stroke:none');
+    expect(glyph!, 'the challenge red bloom is what makes it a challenge marker').toContain('#ff3b2e');
+    expect(glyph!, 'the glyph is information, never a tap target').toContain('pointer-events: none');
+
+    // One closed silhouette per sword: a single subpath ending in Z, so the blade meets the guard
+    // and grip with no seam at the crossing.
+    const path = /const SWORD_PATH = \[([\s\S]*?)\]\.join\(' '\)/.exec(worldView);
+    expect(path, 'SWORD_PATH must stay one joined array').not.toBeNull();
+    const points = [...path![1]!.matchAll(/'[ML]?(-?[\d.]+),(-?[\d.]+)'/g)].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
+    expect(points.length, 'the silhouette carries real geometry').toBeGreaterThan(20);
+    expect((path![1]!.match(/Z/g) ?? []).length, 'exactly one closed subpath, no seam').toBe(1);
+
+    // Reach must stay inside the hex so the mark never touches the timer ring on the outline
+    // (hex inradius is R * sqrt(3)/2 = 8.66 map units at the 10-unit radius the world uses).
+    const scale = Number(/const SWORD_SCALE = ([\d.]+)/.exec(worldView)![1]);
+    const reach = Math.max(...points.map((p) => Math.hypot(p.x, p.y))) * scale;
+    expect(reach, 'the blades must clear the ring').toBeLessThan(8.66);
+    expect(reach, 'but still fill the tile, not shrink into a dot').toBeGreaterThan(6);
   });
 });
 
