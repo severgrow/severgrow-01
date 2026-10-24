@@ -7610,33 +7610,10 @@ html.futasaku-product #gameover .go-card {
   backdrop-filter: var(--dark-glass-blur);
   border-radius: calc(var(--radius) * 2);
 }
-html.futasaku-product #gameover.won .go-title::after {
-  content: '';
-  display: block;
-  width: 56px;
-  height: 2px;
-  margin: 12px 0 0;
-  border-radius: 1px;
-  background: var(--light-core, #f5d8a4);
-  box-shadow: 0 0 10px var(--light-bloom, rgba(255, 195, 104, 0.3));
-}
-html.futasaku-product #gameover.won[data-fresh='1'] .go-title::after {
-  animation: go-rule var(--ix-open) var(--ix-ease-open) 120ms both;
-}
-@keyframes go-rule {
-  from {
-    opacity: 0;
-    scale: 0 1;
-  }
-}
-.reduce-motion #gameover .go-title::after {
-  animation: none !important;
-}
-@media (prefers-reduced-motion: reduce) {
-  #gameover .go-title::after {
-    animation: none !important;
-  }
-}
+/* The amber rule under a won title is GONE (owner, 2026-10-24: "remove the awkward line that
+   separates whatever's below"). It read as a divider between the lockup and the score, which this
+   plate does not need: the words are already the shape. Nothing replaces it — deleting the rule is
+   the change, so the title's own spacing carries the gap. */
 
 /* EVERY SUBMENU ON DARK GLASS (owner, 2026-10-23: "use glass style on all submenus"). Settings,
    How to play, What happened, the profile, the Restart and campaign confirmations, the help
@@ -7756,7 +7733,6 @@ html.futasaku-product #gameover :is(.go-context, .go-title, .go-sub, .go-learned
 }
 html.futasaku-product #gameover .go-score { justify-content: center; }
 html.futasaku-product #gameover .go-reason { margin-inline: auto; }
-html.futasaku-product #gameover.won .go-title::after { margin-inline: auto; }
 html.futasaku-product #gameover .go-buttons .btn { justify-content: center; text-align: center; }
 html.futasaku-product #gameover :is(#go-highlights, #go-break, #go-moves, #go-stats) { text-align: center; }
 /* The pause panel's turn line centres in its pill, and every sheet's title sits on the centre
@@ -7779,3 +7755,25 @@ html.futasaku-product #gameover .go-territory {
   font-family: var(--font-ui); font-size: 0.8rem; line-height: 1.35; color: var(--fu-cream-70);
 }
 html.futasaku-product #gameover .go-territory[hidden] { display: none; }
+
+/* Calm, legible settings glass: a lit key behind the sheet must not become a bright stripe
+   through the comfort controls. Keep the shared frameless surface and its organic shadow. */
+html.futasaku-product #sheet-settings {
+  background: rgba(8, 10, 10, 0.88);
+  scrollbar-width: thin;
+  scrollbar-color: var(--fu-cream-22) transparent;
+  scroll-padding-top: 52px;
+}
+html.futasaku-product #sheet-settings .sheet-head {
+  z-index: 2;
+  background: rgba(8, 10, 10, 0.96);
+  min-height: 44px;
+}
+/* Spend less space on group gaps when a phone is sideways; never shrink the 44px targets.
+   The sheet remains scrollable for account controls, zoom and exceptionally short windows. */
+@media (orientation: landscape) and (max-height: 560px) {
+  html.futasaku-product #sheet-settings .sheet-body.stack { gap: 0; }
+  html.futasaku-product #sheet-settings h3 { margin: 4px 0 2px; }
+  html.futasaku-product #sheet-settings .row { min-height: 44px; padding-block: 2px; }
+  html.futasaku-product #sheet-settings .thumb-settings-last { margin-top: 0; }
+}

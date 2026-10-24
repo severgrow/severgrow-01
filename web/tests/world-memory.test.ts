@@ -12,7 +12,7 @@ const store = () => {
   return { m, kv: { get: (k: string) => m.get(k) ?? null, set: (k: string, v: string) => void m.set(k, v), remove: (k: string) => void m.delete(k) } };
 };
 const world = {
-  version: 2, revision: 12, cost: 100,
+  version: 2, revision: 12, cost: 100, challengeStake: 50,
   cells: [{ id: '0,0', q: 0, r: 0 }, { id: '1,0', q: 1, r: 0 }],
   claims: [{ cellId: '0,0', ownerId: 'p1', ownerName: 'RYK', ownerLevel: 3, ownerTag: '7QK2', colour: '#aa8844', claimedAt: 1 }],
 };

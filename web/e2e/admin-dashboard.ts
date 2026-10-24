@@ -14,6 +14,7 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { createFetchApp } from '../../server/src/fetch-app.js';
+import { WORLD_CELLS } from '../../server/src/world.js';
 import { chainRouters, createFeedbackRouter, MemoryFeedbackStore } from '../../server/src/feedback/feedback.js';
 import { MemoryIdentityLinkStore } from '../../server/src/accounts/accounts.js';
 import { MatchService } from '../../server/src/service.js';
@@ -27,12 +28,11 @@ import { hashToken, newId, newToken } from '../../server/src/ids.js';
 import { playerTag } from '../../src/player-tag.js';
 import { serveStaticDist } from './helpers/preview-port.js';
 import type { PlayerRecord } from '../../server/src/storage/types.js';
-import { WORLD_CELLS } from '../../server/src/world.js';
 import type { Action } from '../../src/engine/index.js';
 
 const ADMIN_ID = '37e3d4d0-a34c-45b3-bc61-992fcf392912';
 const DAY = 24 * 60 * 60 * 1000;
-const OUT = new URL('../../docs/screens/admin/', import.meta.url).pathname;
+const OUT = process.env.SHOTS ? `${process.env.SHOTS.replace(/\/$/, '')}/` : new URL('../../docs/screens/admin/', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
 
 let failed = 0;
@@ -404,7 +404,9 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
 
   const hexes = await page.locator('.world-grid polygon').count();
   const latestClaims = await page.locator('.world-grid polygon[fill]:not([fill="var(--c-surface)"])').count();
-  check('the map draws the whole landmass', hexes === WORLD_CELLS.length, `${hexes} of ${WORLD_CELLS.length} hexes`);
+  // Both sides fixed the same stale 183-cell assertion to the real world size; they only wrote the
+  // detail text differently. Keep the current reading, which is the one the rest of the suite uses.
+  check('the map draws the whole landmass', hexes === WORLD_CELLS.length, `${hexes}/${WORLD_CELLS.length} hexes`);
   check('the map draws the claimed tiles', latestClaims === 2, `${latestClaims} claimed`);
 
   const slider = page.locator('input[type="range"][aria-label="Replay day"]');
@@ -572,6 +574,39 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
   check('POST /v1/admin/seen answers 200 for the admin', probe.seen === 200, `status ${probe.seen}`);
   check('POST triage answers 200 for the admin', probe.triage === 200, `status ${probe.triage}`);
   check('a request with no token at all is refused', probe.noToken === 401, `status ${probe.noToken}`);
+  await context.close();
+}
+
+// A lost HTTP response must not pay twice, and a successful form stays locked until refresh.
+{
+  const { context, page } = await openAs(seeded.adminToken, seeded.playerId, 'RYK');
+  await page.setViewportSize({ width: 360, height: 640 });
+  await goto(page, '/player?q=BrambleOwl');
+  await page.waitForSelector('#grant-amount');
+  page.on('dialog', (dialog) => dialog.accept());
+  const submitted: { requestId: string; amount: number }[] = [];
+  await page.route('**/v1/admin/players/*/seeds', async (route) => {
+    submitted.push(route.request().postDataJSON() as { requestId: string; amount: number });
+    if (submitted.length === 1) {
+      // The real local server commits, but the admin never receives its response.
+      const response = await route.fetch();
+      check('the first grant really committed before its response was lost', response.status() === 200);
+      await route.abort('failed');
+    } else await route.continue();
+  });
+  await page.locator('#grant-amount').fill('37');
+  await page.locator('#grant-reason').fill('Audit safe retry');
+  await page.getByRole('button', { name: 'Add Seeds', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry grant', exact: true }).waitFor();
+  check('a lost grant response keeps the amount and reason locked',
+    await page.locator('#grant-amount').isDisabled() && await page.locator('#grant-reason').isDisabled());
+  await page.getByRole('button', { name: 'Retry grant', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('.grant-feedback')?.textContent?.startsWith('Already added.'));
+  const submit = page.getByRole('button', { name: 'Retry grant', exact: true });
+  check('the successful grant form stays locked before refresh', await submit.isDisabled());
+  await submit.evaluate((button) => (button as HTMLButtonElement).click());
+  check('a safe retry reuses the same payment id; a repeat press sends nothing',
+    submitted.length === 2 && submitted[0]!.requestId === submitted[1]!.requestId);
   await context.close();
 }
 

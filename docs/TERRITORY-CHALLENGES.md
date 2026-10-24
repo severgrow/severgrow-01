@@ -24,11 +24,11 @@ disconnect, only to a duel they chose to play — and so the reversal is narrow 
 ## The loop, in one paragraph
 
 You may challenge a **neighbour's tile that shares a hex side with your own territory**. The
-challenge is a formal, staked invitation: you put 100 Seeds behind it, and the defender has **24 h**
+challenge is a formal invitation you pay to make: you put 50 Seeds behind it, and the defender has **24 h**
 to answer. Decline, or let the timer run out, and the challenge **lapses and your Seeds come back** —
 the defender keeps their tile. Accept, and the two of you are handed a **linked duel** (the existing
 match engine, unchanged). When that duel finishes, **either player may confirm the result, and the
-first confirmation settles it**: the winner takes the tile, and the 100-Seed stake follows the win.
+first confirmation settles it**: the winner takes the tile, and the 50-Seed stake follows the win.
 Then the map is redrawn for both, and the loser's territory is one cell smaller.
 
 Why this shape:
@@ -36,8 +36,10 @@ Why this shape:
 - **The tile moves only after a real game, or after silence.** As BUILT (owner's decision, 2026-10-21)
   an unanswered challenge is a FORFEIT: after 24 h the challenger takes the tile. See the warning
   below, because this is the one rule that can cost an absent player their ground.
-- **It is a stake, not a fee.** Both sides wager value ≈ 100 (one a tile, one the Seeds), so the
-  risk is symmetric even though the objects differ.
+- **It is a stake, not a fee.** Both sides put something real on it (one a tile, one the Seeds), so
+  the risk is symmetric even though the objects differ. The amount moved 100 → 50 on 2026-10-24
+  (`SEED_ECONOMY.challengeStake`, its own constant: a challenge is not a tile purchase, and charging
+  a whole tile's price made the offer look like buying the land).
 - **First-confirmed-wins is a feature, not a race to exploit.** It means a player whose connection
   dropped at the end of a duel still loses or wins the tile correctly, because the other side's
   confirm is enough. The settlement is idempotent — the second confirm is a no-op that returns the
@@ -51,7 +53,7 @@ and refunds the challenger's own stake. Consequences, all accepted deliberately 
 - A player who is ill, travelling or simply not logging in **loses paid tiles without playing**.
 - Anyone can park three challenges on a quiet neighbourhood and collect it daily for free.
 - The defence is social (the defender gets 24 h of notice in the rail and can decline, which keeps
-  the tile) and economic (the challenger risks 100 Seeds per attempt, returned only on a win or a
+  the tile) and economic (the challenger risks 50 Seeds per attempt, returned only on a win or a
   decline).
 
 The exposure is one constant: `WORLD_CHALLENGE_FORFEIT_MS` in `server/src/seeds/config.ts`. Raising
@@ -69,7 +71,7 @@ are not the owner, that constant should be revisited first.
    incoming**, and **one per cell** — enforced by a partial unique index, exactly as
    `live_challenges_one_pending_idx` already does for duels. This is what stops a 274-cell map
    turning into a notification war.
-4. **Cost.** The challenger escrows **100 Seeds**. It is debited on *send* (so you cannot promise
+4. **Cost.** The challenger escrows **50 Seeds** (`SEED_ECONOMY.challengeStake`). It is debited on *send* (so you cannot promise
    money you spent) and refunded on lapse/decline. On a win it returns to you; on a loss it is paid
    to the defender. Seeds are only ever moved, never created or destroyed by this feature.
 5. **The timer.** 24 h from send. A cell may be challenged again only after its previous challenge
@@ -144,8 +146,9 @@ ink, one `--territory` accent. The challenge layer adds **three** things and no 
   path, so it costs one attribute and no layout. Under 6 h it starts a slow breath; on expiry it
   collapses to nothing over 400 ms. On the challenge list each row carries a small version of the
   same ring, so one shape means one thing everywhere.
-- **The challenge sheet.** Two states, one sentence each: *"RYK holds this ground. Stake 100 Seeds
-  and give them 24 h?"* with one key — `CHALLENGE` — and, for the defender, `ACCEPT` / `DECLINE`
+- **The challenge sheet.** Two states, one sentence each: *"RYK holds this ground. Challenge it for
+  50 Seeds?"* with one key — `CHALLENGE` — and, for the defender, *"RYK challenged you for this
+  ground. 50 Seeds on it. Answer?"* with `ACCEPT` / `DECLINE`
   with the staked amount and the remaining time spelled out. No second button appears until the
   duel is confirmed, where the single line is *"TAKE THE GROUND"*.
 
@@ -166,7 +169,9 @@ match engine with `kind = 'territory'`; a duel is a duel. Claims, the ledger's i
 1. **May a played duel transfer a paid tile?** → **Yes, the winner takes the cell.** Code.
 2. **If the defender never answers within 24 h?** → **Forfeit: the challenger takes the tile.**
    Code (`expireChallenges`). The warning above applies.
-3. **The stake?** → **Challenger escrows 100; the winner takes it and the tile.** Code.
+3. **The stake?** → **Challenger escrows 50; the winner takes it and the tile.** Code. (The owner
+   first answered 100 — one tile's price — then set it to 50 on 2026-10-24, because the two purchases
+   are not the same thing and the offer read as buying the land.)
 4. **What counts as "adjacent / connected"?** → **A shared hex side with your territory.** Code.
 
 Everything below describes the build that followed.

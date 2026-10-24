@@ -175,3 +175,21 @@ describe('game review on the finish card (owner, 2026-10-23)', () => {
     expect((mainSource.match(/if \(wasHidden\) closeReview\(\);/g) ?? []).length).toBe(2);
   });
 });
+
+describe('the won lockup (owner, 2026-10-24)', () => {
+  it('the level title ends in a capital Complete, as the outcome stamp of the lockup', () => {
+    // "Level 6 Complete": the number is the kicker, the outcome word is the stamp under it. A
+    // lowercase tail read as a sentence someone forgot to finish.
+    expect(CAMPAIGN.levelWon(6)).toBe('Level 6 Complete');
+    expect(CAMPAIGN.levelWon(12)).toBe('Level 12 Complete');
+    // main.ts still splits on the LAST space, so the kicker/outcome halves keep working.
+    expect(mainSource).toMatch(/const at = split \? text\.lastIndexOf\(' '\) : -1;/);
+  });
+
+  it('no amber rule under the title: the words are the shape', () => {
+    // Owner: "remove the awkward line that separates whatever's below". It was a real element
+    // (a 2px ::after on the title), so its absence is asserted at the source.
+    expect(read('../src/style.css')).not.toMatch(/#gameover\.won \.go-title::after/);
+    expect(read('../src/style.css')).not.toMatch(/@keyframes go-rule/);
+  });
+});

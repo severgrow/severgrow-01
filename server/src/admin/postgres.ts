@@ -440,6 +440,13 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
           [newId(), input.playerId, input.amount, balance, sourceKey, SEED_ECONOMY.version, input.now,
             JSON.stringify({ reason: input.reason, actorId: input.actorId })],
         );
+        // An acknowledged payment must always have its audit record; either both commit or neither.
+        await client.query(
+          `insert into admin_audit (id, actor_id, action, target_type, target_id, detail, created_at)
+           values ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
+          [newId(), input.actorId, 'seeds.grant', 'player', input.playerId,
+            JSON.stringify({ amount: input.amount, reasonLength: input.reason.length, balance, replayed: false }), input.now],
+        );
         await client.query('commit');
         return { balance, replayed: false };
       } catch (error) {

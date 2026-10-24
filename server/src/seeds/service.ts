@@ -50,6 +50,12 @@ export class WorldEconomyService {
         ownerTag: playerTag(claim.ownerId), colour: territoryColour(claim.ownerId), claimedAt: claim.claimedAt,
       })),
       cost: SEED_ECONOMY.tileCost,
+      /**
+       * What a challenge costs to send. Its own number, because a challenge is not a tile purchase
+       * (owner, 2026-10-24: 50, not the tile's 100). The client reads the stake from HERE so the
+       * price on the sheet can never drift from the price the server charges.
+       */
+      challengeStake: SEED_ECONOMY.challengeStake,
     };
   }
 
@@ -217,8 +223,8 @@ export class WorldEconomyService {
       challengerId: player.id,
       cellId,
       requestId,
-      // The stake is one tile's price: both sides wager the same value (docs/TERRITORY-CHALLENGES.md).
-      stake: SEED_ECONOMY.tileCost,
+      // Its own price, not a tile's (owner, 2026-10-24: "make it cost 50 seeds no 100").
+      stake: SEED_ECONOMY.challengeStake,
       now,
     });
     if (!result.ok) return result;

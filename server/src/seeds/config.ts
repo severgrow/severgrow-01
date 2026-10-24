@@ -2,6 +2,13 @@
 export const SEED_ECONOMY = Object.freeze({
   version: 1,
   tileCost: 100,
+  /**
+   * What a Territory challenge costs to send (owner, 2026-10-24: "make it cost 50 seeds no 100").
+   * Deliberately NOT `tileCost`: growing a tile and disputing someone else's are different
+   * purchases, and one number serving both made the challenge look like the price of land. The
+   * stake still goes to the winner and comes back on a decline or a lapse; only the amount moved.
+   */
+  challengeStake: 50,
   utcDailyRepeatableCap: 600,
   online: {
     queue: { win: 30, loss: 8, draw: 12, dailyMatches: 20, pairDailyMatches: 5 },
@@ -11,9 +18,10 @@ export const SEED_ECONOMY = Object.freeze({
 } as const);
 
 /**
- * Territory challenges (docs/TERRITORY-CHALLENGES.md). The stake is `SEED_ECONOMY.tileCost` — one
- * tile's price — so the two sides wager the same value. The timers are not economy values: they are
- * the defender's answer window and the outer bound on a linked duel that never resolves.
+ * Territory challenges (docs/TERRITORY-CHALLENGES.md). The stake is `SEED_ECONOMY.challengeStake`,
+ * its own price since 2026-10-24 (a challenge is not the same purchase as a tile). The timers are
+ * not economy values: they are the defender's answer window and the outer bound on a linked duel
+ * that never resolves.
  */
 export const WORLD_CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
 export const WORLD_CHALLENGE_STALE_MS = 7 * 24 * 60 * 60 * 1000;

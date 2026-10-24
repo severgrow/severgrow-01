@@ -1325,8 +1325,9 @@ export const CAMPAIGN = Object.freeze({
   resumeHint: 'Your level is unfinished.',
   /** the log line when a campaign level opens (Level N · name) */
   started: (number: number): string => `Level ${number}`,
-  /** the campaign finish title after a win: "Level 6 complete" */
-  levelWon: (number: number): string => `Level ${number} complete`,
+  /** the campaign finish title after a win: "Level 6 Complete" (owner, 2026-10-24: capital C, it is
+   *  the outcome word of the lockup and reads as a stamp, not a sentence tail). */
+  levelWon: (number: number): string => `Level ${number} Complete`,
   /** the finish screen's secondary way out, back to the level list */
   back: 'Back to levels',
   /**

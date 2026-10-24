@@ -1,0 +1,71 @@
+name: Extra regression checks
+
+on:
+  push:
+    branches: [futa0.5-online, 'fix/**']
+  pull_request:
+    paths:
+      - 'admin/**'
+      - 'server/**'
+      - 'web/**'
+      - '.github/workflows/extra-regressions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extra-regressions-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  browser:
+    name: extra (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [admin-dashboard, online-stale-token-recovery, online-soak-teardown, settings-visual]
+    env:
+      # These suites only use their own in-process API; never touch a live wallet or project.
+      VITE_SUPABASE_URL: http://127.0.0.1:9
+      VITE_SUPABASE_ANON_KEY: local-e2e-placeholder
+      SOAK_MATCHES: '5'
+      SOAK_TURNS: '4'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright-core install --with-deps chromium
+      - name: Select the pinned browser
+        run: node --input-type=module -e 'import {chromium} from "playwright-core"; console.log("PW_CHROMIUM=" + chromium.executablePath())' >> "$GITHUB_ENV"
+      - name: Run the regression suite
+        run: |
+          set -o pipefail
+          node --import tsx web/e2e/${{ matrix.suite }}.ts 2>&1 | tee regression.log
+      - name: Annotate failed checks
+        if: failure()
+        run: |
+          node --input-type=module -e '
+            import { readFileSync, existsSync } from "node:fs";
+            if (existsSync("regression.log")) {
+              for (const line of readFileSync("regression.log", "utf8").split("\n")) {
+                if (/^FAIL |EXIT FAILED|AssertionError|TimeoutError|locator\.click:|page\.click:/.test(line)) {
+                  const safe = line.replaceAll("%", "%25").replaceAll("\r", "%0D");
+                  console.log("::error::" + safe);
+                }
+              }
+            }
+          '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extra-${{ matrix.suite }}
+          path: |
+            regression.log
+            docs/screens/online/soak-report.json
+          retention-days: 7

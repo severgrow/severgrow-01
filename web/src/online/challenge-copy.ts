@@ -8,34 +8,36 @@
  *
  * One sentence per state, one primary key, and the same words on the map, the sheet and the list.
  *
- * 2026-10-24 pass: the sheet no longer prints the contested cell's coordinate. A player reads the
- * holder's name, what it costs and how long is left; `3,-10` is the machine's name for the ground
- * and stays in the DOM (data attributes) rather than in a sentence. The stake is always read from
- * the world's own `cost`, never written as "100" here.
+ * 2026-10-24 pass, owner's words: "dont say 'staked' just challenged you - make it cost 50 seeds no
+ * 100 - simple vocab everywhere easy to understand at first glance". So:
+ *   - "staked" is gone from every line. One player *challenges* your ground; that is the whole idea
+ *     and it is a word everyone already knows.
+ *   - no cell coordinates: "3,-10" is the machine's name for the ground, not a sentence.
+ *   - short sentences, one idea each, and the stake is always read from the world's own price.
  */
 export const CHALLENGE = Object.freeze({
   title: 'Territory challenge',
   listLabel: 'Challenges',
   incoming: 'INCOMING',
   outgoing: 'OUTGOING',
-  /** the challenger's sheet: the rival's name and the exact stake, then one key */
-  sendLine: (name: string, stake: number) => `${name} holds this ground. Stake ${stake} Seeds and give them 24 h?`,
+  /** the challenger's sheet: who holds it and what it costs, then one key */
+  sendLine: (name: string, stake: number) => `${name} holds this ground. Challenge it for ${stake} Seeds?`,
   sendKey: 'CHALLENGE',
-  /** the defender's sheet: what is at stake and how long is left, then ACCEPT / DECLINE */
-  defendLine: (name: string, stake: number) => `${name} staked ${stake} Seeds on this ground. Answer within 24 h?`,
+  /** the defender's sheet: who challenged you and what is at stake, then ACCEPT / DECLINE */
+  defendLine: (name: string, stake: number) => `${name} challenged you for this ground. ${stake} Seeds on it. Answer?`,
   acceptKey: 'ACCEPT',
   declineKey: 'DECLINE',
   /** Declining is the one irreversible key: the first press only arms it. */
   declineConfirm: 'TAP AGAIN TO DECLINE',
-  waitLine: (name: string) => `Your challenge is with ${name}. They have 24 h to answer.`,
-  duelLine: 'The duel decides the ground.',
+  waitLine: (name: string) => `You challenged ${name}. They have 24 h to answer.`,
+  duelLine: 'Win the duel, take the ground.',
   openDuelKey: 'OPEN DUEL',
   confirmLine: (name: string) => `${name} won the duel. Take the ground?`,
-  drawLine: 'The duel was a draw. The ground stays with its holder.',
+  drawLine: 'A draw. The ground stays where it is.',
   drawKey: 'CONFIRM DRAW',
   takeKey: 'TAKE THE GROUND',
-  resolvedLine: (name: string | null) => (name ? `${name} took this ground.` : 'The ground did not change hands.'),
-  closedLine: 'This challenge is closed.',
+  resolvedLine: (name: string | null) => (name ? `${name} took this ground.` : 'The ground stayed where it was.'),
+  closedLine: 'This challenge is over.',
   notNow: 'NOT NOW',
   close: 'CLOSE',
   remaining: (left: string) => `${left} left`,
@@ -47,20 +49,20 @@ export const CHALLENGE = Object.freeze({
   /** The rail's cap: anything past it is counted, never silently dropped. */
   more: (count: number) => `+${count} MORE`,
   /** A polite screen-reader line for a player who cannot see the rail appear. */
-  incomingAnnounce: (name: string) => `${name} is challenging your ground.`,
+  incomingAnnounce: (name: string) => `${name} challenged your ground.`,
   /** The menu key's spoken line, without the challenger's name (the menu has not read it). */
   incomingAnnounceCount: (count: number) => (count === 1
     ? '1 challenge is waiting for your answer.'
     : `${count} challenges are waiting for your answer.`),
   noFunds: (stake: number) => `You need ${stake} Seeds to challenge.`,
-  busy: 'That ground is already challenged.',
-  sendFailed: 'That challenge could not be sent. No Seeds were taken.',
-  answerFailed: 'That answer could not be sent. Try again.',
-  confirmFailed: 'That result could not be confirmed yet. Try again.',
+  busy: 'Someone already challenged this ground.',
+  sendFailed: 'The challenge did not send. No Seeds were taken.',
+  answerFailed: 'That answer did not send. Try again.',
+  confirmFailed: 'That result is not confirmed yet. Try again.',
   settled: 'The ground is yours.',
   resultSettled: 'The result is settled.',
   alreadySettled: 'That result was already confirmed.',
-  sent: (stake: number) => `The challenge is sent. Your ${stake} Seeds are held until it is answered.`,
+  sent: (stake: number) => `Challenge sent. Your ${stake} Seeds are held until they answer.`,
   duel: 'DUEL',
   ready: 'READY TO CLAIM',
   settledShort: 'SETTLED',

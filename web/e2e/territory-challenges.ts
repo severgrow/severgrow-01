@@ -70,11 +70,12 @@ const claims = [
   claimedAt: NOW - 5 * 60_000,
 }));
 
-const SAMPLE = { ok: true, world: { version: 2, revision: 5, cost: 100, cells: WORLD_CELLS, claims } };
+// `cost` is a TILE's price; `challengeStake` is what a challenge costs (owner, 2026-10-24: 50).
+const SAMPLE = { ok: true, world: { version: 2, revision: 5, cost: 100, challengeStake: 50, cells: WORLD_CELLS, claims } };
 
 const base = {
   challengerId: 'p1', defenderId: 'r1', challengerName: 'BloomHeron', defenderName: 'RYK',
-  fromMe: true, stake: 100, respondedAt: null, matchId: null, matchFinished: false,
+  fromMe: true, stake: 50, respondedAt: null, matchId: null, matchFinished: false,
   matchWinnerId: null, winnerId: null, resolvedAt: null, remainingMs: 0, serverNow: NOW,
 };
 const challenges: { incoming: WorldChallengeWire[]; outgoing: WorldChallengeWire[] } = {
@@ -360,7 +361,7 @@ try {
       };
     });
     check(`[${tag}] the send sheet names the holder and the stake`,
-      sendSheet.line.includes('RYK') && sendSheet.line.includes('100'), sendSheet.line);
+      sendSheet.line.includes('RYK') && sendSheet.line.includes('50'), sendSheet.line);
     check(`[${tag}] the send sheet arrives as a shared interface surface`,
       sendSheet.surface && (sendSheet.state === 'open' || sendSheet.state === 'opening'), sendSheet.state);
     check(`[${tag}] the sheet's meta line carries no cell coordinate`,
@@ -391,7 +392,7 @@ try {
       };
     });
     check(`[${tag}] the defender sheet spells out the stake and the time`,
-      defendSheet.line.includes('100 Seeds') && /SEEDS · .* LEFT/.test(defendSheet.meta), defendSheet.meta);
+      defendSheet.line.includes('50 Seeds') && /SEEDS · .* LEFT/.test(defendSheet.meta), defendSheet.meta);
     check(`[${tag}] the defender sheet offers ACCEPT as the one primary key`,
       defendSheet.primary === 'ACCEPT' && defendSheet.secondary === 'DECLINE');
     // DECLINE is now armed by the first press (owner review, 2026-10-24): it is the one

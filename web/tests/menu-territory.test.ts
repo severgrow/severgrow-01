@@ -42,6 +42,8 @@ const world = (owners: { cellId: string; ownerId: string }[]): World => ({
   version: 1,
   revision: 7,
   cost: 100,
+  // A challenge is its own purchase (owner, 2026-10-24): 50, not a tile's 100.
+  challengeStake: 50,
   cells: [
     { id: '0,0', q: 0, r: 0 },
     { id: '1,0', q: 1, r: 0 },

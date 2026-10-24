@@ -16,6 +16,13 @@ import type { PlayerRecord } from '../src/storage/types.js';
 
 const START = Date.UTC(2026, 9, 21, 12);
 
+/**
+ * What one challenge costs to send. These tests are about the STAKE, so they must read the stake's
+ * own constant: it stopped being a tile's price on 2026-10-24 (owner: "make it cost 50 seeds no
+ * 100"), and a test funded with `tileCost` would now silently over-fund every wallet.
+ */
+const STAKE = SEED_ECONOMY.challengeStake;
+
 const player = (id: string, displayName: string): PlayerRecord => ({
   id, kind: 'guest', displayName, createdAt: START, upgradedAt: null,
 });
@@ -82,20 +89,20 @@ describe('territory challenges: the send', () => {
     await h.register(h.a, h.b);
     h.own(pair.near, h.a.id);
     h.own(pair.target, h.b.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost);
+    h.fund(h.a.id, STAKE);
 
     const out = await send(h, h.a, pair.target, 'challenge-request-1');
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.challenge).toMatchObject({
       cellId: pair.target, challengerId: h.a.id, defenderId: h.b.id,
-      status: 'pending', stake: SEED_ECONOMY.tileCost, challengerName: 'BloomHeron', defenderName: 'RYK',
+      status: 'pending', stake: STAKE, challengerName: 'BloomHeron', defenderName: 'RYK',
     });
     expect((await h.store.wallet(h.a.id)).balance).toBe(0);
     // The escrow is honestly categorised and exactly one row.
     const escrow = h.store.ledger.filter((entry) => entry.category === 'world_challenge');
     expect(escrow).toHaveLength(1);
-    expect(escrow[0]).toMatchObject({ playerId: h.a.id, delta: -SEED_ECONOMY.tileCost });
+    expect(escrow[0]).toMatchObject({ playerId: h.a.id, delta: -STAKE });
     expect(escrow[0]!.sourceKey).toContain(':escrow');
   });
 
@@ -104,8 +111,8 @@ describe('territory challenges: the send', () => {
     await h.register(h.a, h.b);
     h.own(pair.target, h.a.id); // my own tile
     h.own(FAR, h.c.id); // a holder far away
-    h.fund(h.a.id, SEED_ECONOMY.tileCost * 4);
-    h.fund(h.c.id, SEED_ECONOMY.tileCost * 4);
+    h.fund(h.a.id, STAKE * 4);
+    h.fund(h.c.id, STAKE * 4);
 
     expect(await send(h, h.a, pair.target, 'own-tile-request')).toMatchObject({ ok: false, code: 'OWN_TILE' });
     expect(await send(h, h.c, pair.target, 'far-request')).toMatchObject({ ok: false, code: 'NOT_ADJACENT' });
@@ -116,7 +123,7 @@ describe('territory challenges: the send', () => {
     expect(await send(h, h.a, '99,99', 'rock-request')).toMatchObject({ ok: false, code: 'INVALID_CELL' });
     expect(WORLD_CELL_IDS.has('99,99')).toBe(false);
     // Not one rejected request took a Seed.
-    expect(await h.store.wallet(h.a.id)).toMatchObject({ balance: SEED_ECONOMY.tileCost * 4 });
+    expect(await h.store.wallet(h.a.id)).toMatchObject({ balance: STAKE * 4 });
     expect(h.store.ledger).toHaveLength(0);
   });
 
@@ -126,15 +133,15 @@ describe('territory challenges: the send', () => {
     h.own(pair.near, h.a.id);
     h.own(pair.near2, h.c.id);
     h.own(pair.target, h.b.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost * 2);
-    h.fund(h.c.id, SEED_ECONOMY.tileCost);
+    h.fund(h.a.id, STAKE * 2);
+    h.fund(h.c.id, STAKE);
 
     expect((await send(h, h.a, pair.target, 'first-challenger-1')).ok).toBe(true);
     expect(await send(h, h.a, pair.target, 'first-challenger-2')).toMatchObject({ ok: false, code: 'CELL_BUSY' });
     expect(await send(h, h.c, pair.target, 'second-challenger')).toMatchObject({ ok: false, code: 'CELL_BUSY' });
     // Only the first send debited a stake.
-    expect((await h.store.wallet(h.a.id)).balance).toBe(SEED_ECONOMY.tileCost);
-    expect((await h.store.wallet(h.c.id)).balance).toBe(SEED_ECONOMY.tileCost);
+    expect((await h.store.wallet(h.a.id)).balance).toBe(STAKE);
+    expect((await h.store.wallet(h.c.id)).balance).toBe(STAKE);
   });
 
   it('holds at most three open outgoing challenges', async () => {
@@ -145,14 +152,14 @@ describe('territory challenges: the send', () => {
     await h.register(h.a, ...defenders);
     h.own(hub, h.a.id);
     for (const [index, cellId] of targets.entries()) h.own(cellId, defenders[index]!.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost * 4);
+    h.fund(h.a.id, STAKE * 4);
 
     for (let index = 0; index < 3; index++) {
       expect((await send(h, h.a, targets[index]!, `cap-request-${index}`)).ok).toBe(true);
     }
     expect(await send(h, h.a, targets[3]!, 'cap-request-3')).toMatchObject({ ok: false, code: 'TOO_MANY_OPEN' });
     // Three escrows, never a fourth.
-    expect((await h.store.wallet(h.a.id)).balance).toBe(SEED_ECONOMY.tileCost);
+    expect((await h.store.wallet(h.a.id)).balance).toBe(STAKE);
     expect(h.store.ledger.filter((entry) => entry.delta < 0)).toHaveLength(3);
   });
 
@@ -161,7 +168,7 @@ describe('territory challenges: the send', () => {
     await h.register(h.a, h.b);
     h.own(pair.near, h.a.id);
     h.own(pair.target, h.b.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost);
+    h.fund(h.a.id, STAKE);
 
     const first = await send(h, h.a, pair.target, 'same-request-id');
     const again = await send(h, h.a, pair.target, 'same-request-id');
@@ -180,7 +187,7 @@ describe('territory challenges: decline and conservation', () => {
     await h.register(h.a, h.b);
     h.own(pair.near, h.a.id);
     h.own(pair.target, h.b.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost);
+    h.fund(h.a.id, STAKE);
     h.fund(h.b.id, 40);
     const before = await h.balances([h.a.id, h.b.id]);
 
@@ -197,7 +204,7 @@ describe('territory challenges: decline and conservation', () => {
 
     expect(await h.balances([h.a.id, h.b.id])).toEqual(before);
     expect(h.ledgerSum([h.a.id, h.b.id])).toBe(0);
-    expect((await h.store.wallet(h.a.id)).balance).toBe(SEED_ECONOMY.tileCost);
+    expect((await h.store.wallet(h.a.id)).balance).toBe(STAKE);
     // The tile never moves on a decline.
     expect(h.store.claims.get(pair.target)?.ownerId).toBe(h.b.id);
   });
@@ -209,7 +216,7 @@ describe('territory challenges: accept, linked duel, first-confirmed-wins', () =
     await h.register(h.a, h.b);
     h.own(pair.near, h.a.id);
     h.own(pair.target, h.b.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost);
+    h.fund(h.a.id, STAKE);
     h.fund(h.b.id, 0);
     const revisionBefore = h.store.revision;
 
@@ -236,7 +243,7 @@ describe('territory challenges: accept, linked duel, first-confirmed-wins', () =
     expect(h.store.claims.get(pair.target)?.ownerId).toBe(h.a.id);
     expect(h.store.revision).toBe(revisionBefore + 1);
     // The challenger wins their own stake back; the defender's balance never changes.
-    expect(await h.balances([h.a.id, h.b.id])).toEqual([SEED_ECONOMY.tileCost, 0]);
+    expect(await h.balances([h.a.id, h.b.id])).toEqual([STAKE, 0]);
     expect(h.ledgerSum([h.a.id, h.b.id])).toBe(0);
 
     // Second confirm (from the loser) replays the stored result and transfers nothing again.
@@ -244,7 +251,7 @@ describe('territory challenges: accept, linked duel, first-confirmed-wins', () =
     expect(second).toMatchObject({ settled: false, winnerId: h.a.id, cellId: pair.target, replayed: true });
     expect(h.store.claims.get(pair.target)?.ownerId).toBe(h.a.id);
     expect(h.store.revision).toBe(revisionBefore + 1);
-    expect(await h.balances([h.a.id, h.b.id])).toEqual([SEED_ECONOMY.tileCost, 0]);
+    expect(await h.balances([h.a.id, h.b.id])).toEqual([STAKE, 0]);
     expect(h.store.ledger.filter((entry) => entry.delta > 0)).toHaveLength(1);
   });
 
@@ -253,7 +260,7 @@ describe('territory challenges: accept, linked duel, first-confirmed-wins', () =
     await h.register(h.a, h.b);
     h.own(pair.near, h.a.id);
     h.own(pair.target, h.b.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost);
+    h.fund(h.a.id, STAKE);
     h.fund(h.b.id, 0);
     const before = await h.balances([h.a.id, h.b.id]);
 
@@ -266,8 +273,8 @@ describe('territory challenges: accept, linked duel, first-confirmed-wins', () =
     expect(settled).toMatchObject({ settled: true, winnerId: h.b.id });
     expect(h.store.claims.get(pair.target)?.ownerId).toBe(h.b.id);
     // Total Seeds are unchanged (100 before, 100 after); the feature's own ledger nets to zero.
-    expect(before.reduce((sum, value) => sum + value, 0)).toBe(SEED_ECONOMY.tileCost);
-    expect(await h.balances([h.a.id, h.b.id])).toEqual([0, SEED_ECONOMY.tileCost]);
+    expect(before.reduce((sum, value) => sum + value, 0)).toBe(STAKE);
+    expect(await h.balances([h.a.id, h.b.id])).toEqual([0, STAKE]);
     expect(h.ledgerSum([h.a.id, h.b.id])).toBe(0);
   });
 
@@ -276,7 +283,7 @@ describe('territory challenges: accept, linked duel, first-confirmed-wins', () =
     await h.register(h.a, h.b, h.c);
     h.own(pair.near, h.a.id);
     h.own(pair.target, h.b.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost);
+    h.fund(h.a.id, STAKE);
     const sent = await send(h, h.a, pair.target, 'stranger-request');
     if (!sent.ok) throw new Error('send failed');
     await expect(h.service.respond(h.c, sent.challenge.id, true)).rejects.toMatchObject({ code: 'CHALLENGE_NOT_FOUND' });
@@ -290,7 +297,7 @@ describe('territory challenges: expiry is a forfeit, stale never transfers', () 
     await h.register(h.a, h.b);
     h.own(pair.near, h.a.id);
     h.own(pair.target, h.b.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost);
+    h.fund(h.a.id, STAKE);
     h.fund(h.b.id, 25);
     const before = await h.balances([h.a.id, h.b.id]);
     const revisionBefore = h.store.revision;
@@ -325,7 +332,7 @@ describe('territory challenges: expiry is a forfeit, stale never transfers', () 
     await h.register(h.a, h.b);
     h.own(pair.near, h.a.id);
     h.own(pair.target, h.b.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost);
+    h.fund(h.a.id, STAKE);
     h.fund(h.b.id, 0);
     const before = await h.balances([h.a.id, h.b.id]);
 
@@ -362,7 +369,7 @@ describe('territory challenges: HTTP surface', () => {
     await h.register(h.a, h.b);
     h.own(pair.near, h.a.id);
     h.own(pair.target, h.b.id);
-    h.fund(h.a.id, SEED_ECONOMY.tileCost);
+    h.fund(h.a.id, STAKE);
     const router = routerFor(h);
     const body = () => ({
       method: 'POST',
@@ -404,7 +411,7 @@ describe('territory challenges: HTTP surface', () => {
     }), `/v1/world/challenges/${firstBody.challenge.id}/respond`);
     expect(respond?.status).toBe(200);
     expect((respond?.body as { challenge: { status: string } }).challenge.status).toBe('declined');
-    expect((await h.store.wallet(h.a.id)).balance).toBe(SEED_ECONOMY.tileCost);
+    expect((await h.store.wallet(h.a.id)).balance).toBe(STAKE);
   });
 });
 

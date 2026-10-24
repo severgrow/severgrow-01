@@ -584,7 +584,7 @@ export class WorldView {
     // OWNER WORDING (2026-10-16): "when placing a tile dont say 'claim hex' say grow a tile
     // everywhere". The verb is GROW and the noun is TILE throughout this screen - it also matches
     // the game's own Grow action, so the world map and the board speak the same language.
-    label.textContent = available ? `FREE TILE · ${this.world.cost} SEEDS` : this.wallet && this.wallet.balance < this.world.cost ? '100 SEEDS NEEDED' : 'GROW NEXT TO YOUR TILES';
+    label.textContent = available ? `FREE TILE · ${this.world.cost} SEEDS` : this.wallet && this.wallet.balance < this.world.cost ? `${this.world.cost} SEEDS NEEDED` : 'GROW NEXT TO YOUR TILES';
     pane.append(label);
     if (!available || this.busy) return;
     const action = document.createElement('button');
@@ -1050,15 +1050,13 @@ export class WorldView {
     const tile = this.world?.claims.find((claim) => claim.cellId === cellId);
     if (!tile || !this.identity) return;
     const sheet = this.ensureSheet();
-    const stake = this.world?.cost ?? 100;
+    const stake = this.challengeStake();
     this.sheetMode = 'send';
     this.sheetCellId = cellId;
     this.sheetChallenge = null;
     this.sheetRequestId = crypto.randomUUID();
     this.setSheetGround(tile.colour ?? null);
     sheet.line.textContent = CHALLENGE.sendLine(tile.ownerName ?? 'Player', stake);
-    // The stake and the answer window, not a coordinate. A player reads "100 SEEDS · 24 H"; the
-    // cell id is the machine's name for the ground and belongs in the DOM, not in the sentence.
     sheet.meta.textContent = CHALLENGE.sendMeta(stake);
     sheet.notice.textContent = '';
     if (this.wallet && this.wallet.balance < stake) {
@@ -1068,6 +1066,12 @@ export class WorldView {
       this.setSheetKeys(CHALLENGE.sendKey, CHALLENGE.notNow);
     }
     this.showSheet();
+  }
+
+  /** One place reads the challenge price: the server sends it, the sheet only prints it. */
+  private challengeStake(): number {
+    const stake = this.world?.challengeStake;
+    return typeof stake === 'number' && Number.isFinite(stake) && stake > 0 ? stake : 50;
   }
 
   /** Every other state of the same sheet. The server's status chooses it; the client never guesses. */
@@ -1183,7 +1187,7 @@ export class WorldView {
     } catch (error) {
       const code = (error as { code?: unknown } | null)?.code;
       sheet.notice.textContent =
-        code === 'NO_FUNDS' ? CHALLENGE.noFunds(this.world?.cost ?? 100) :
+        code === 'NO_FUNDS' ? CHALLENGE.noFunds(this.challengeStake()) :
           code === 'CELL_BUSY' ? CHALLENGE.busy : failure;
     } finally {
       if (this.sheet) this.setSheetBusy(false);
@@ -1200,7 +1204,7 @@ export class WorldView {
       await this.client.sendWorldChallenge(me.token, cellId, requestId);
       // The stake is a weight, so it lands as one.
       this.cue('thud');
-      this.notice(CHALLENGE.sent(this.world?.cost ?? 100));
+      this.notice(CHALLENGE.sent(this.challengeStake()));
       this.closeSheet();
       await this.refresh(true);
     }, CHALLENGE.sendFailed);

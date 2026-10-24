@@ -23,6 +23,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { onlinePerspective } from '../src/online/perspective.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { drawMeld } from './drawing.js';
+import type { Action } from '../../src/engine/index.js';
 import {
   type LocalDuel,
   type SeatSession,
@@ -32,6 +34,7 @@ import {
   statePhase,
   tapExposed,
   waitingFlag,
+  waitIdle,
 } from './helpers/local-duel.js';
 import {
   type ListenerCounts,
@@ -139,7 +142,9 @@ const drawViaDeck = async (s: SeatSession): Promise<boolean> => {
       const start = Date.now();
       while (Date.now() - start < 8_000) {
         const phase = await statePhase(s);
-        if (phase === 'ACT' || phase === 'DISCARD') return true;
+        // The shadow phase changes before the drawn card's flight finishes. Inputs are still
+        // closed during that animation, so a phase-only wait races the next card/hex tap.
+        if (phase === 'ACT' || phase === 'DISCARD') return waitIdle(s);
         await sleep(80);
       }
     }
@@ -212,12 +217,13 @@ const toMenu = async (s: SeatSession): Promise<void> => {
       continue;
     }
     if (await isVisible(s, '#menu')) return;
-    if (await isVisible(s, '#game')) {
+    if (await isVisible(s, '#gameover')) {
+      // The finished board is still visible UNDER this modal; handle the topmost surface first.
+      await clickVisible(s, '#go-menu');
+    } else if (await isVisible(s, '#game')) {
       await clickVisible(s, '#hud-menu');
       await sleep(120);
       await clickVisible(s, '#gm-main');
-    } else if (await isVisible(s, '#gameover')) {
-      await clickVisible(s, '#go-other');
     } else if (await isVisible(s, '#levels')) {
       await clickVisible(s, '#levels-back');
     } else if (await isVisible(s, '#online-hub')) {
@@ -390,6 +396,15 @@ const apiTurn = async (duel: LocalDuel, matchId: string, token: string, maxSteps
 /** Tap the first card, then try lit hexes until a mid-turn draft exists. */
 const makeDraft = async (s: SeatSession): Promise<boolean> => {
   if (await hasDraft(s)) return true;
+  const confirmPendingMove = async (): Promise<boolean> => {
+    // Smart confirmation is a fixed product default. A risky legal Grow is still only a preview
+    // until the player accepts it; the old fallback mistook that preview for a missing draft.
+    if (await s.page.locator('#confirm-play').isVisible()) {
+      await s.page.click('#confirm-play');
+      await sleep(220);
+    }
+    return hasDraft(s);
+  };
   // Prefer the multi-tile Bloom path (the kind buttons), which is exact.
   if (await paintGrow(s, 2)) return true;
   // Otherwise take the exact legal Sprout: its own card, its own coordinate.
@@ -403,53 +418,36 @@ const makeDraft = async (s: SeatSession): Promise<boolean> => {
   if (!sp) return false;
   await tapExposed(s, `#hand [data-card="${sp.card}"]`);
   await sleep(180);
-  if (await hasDraft(s)) return true;
+  if (await confirmPendingMove()) return true;
   await tapExposed(s, `#board .hex-cell[data-key="${sp.key}"]`);
   await sleep(220);
-  if (await hasDraft(s)) return true;
+  if (await confirmPendingMove()) return true;
   // Last resort: the card is a fanned-out sliver — try the page's own card element directly.
   await s.page.click(`#hand [data-card="${sp.card}"]`, { force: true }).catch(() => undefined);
   await sleep(180);
   await tapExposed(s, `#board .hex-cell[data-key="${sp.key}"]`);
   await sleep(220);
-  return hasDraft(s);
+  return confirmPendingMove();
 };
 
 // ---- heavy-Bloom helper: the multi-tile sequential reveal path ---------------------------------
 
 const paintGrow = async (s: SeatSession, minHexes = 2): Promise<boolean> => {
-  const plan = (await s.page.evaluate(`(() => {
-    var legal = (window.__severgrow && window.__severgrow.legal) ? window.__severgrow.legal() : [];
-    var key = function (c) { return c.q + ',' + c.r; };
-    for (var i = 0; i < legal.length; i++) {
-      var a = legal[i];
-      if (a.t === 'Bloom' && a.hexes.length >= ${minHexes}) {
-        var cards = a.cards.slice().sort(function (x, y) { return x - y; });
-        return { kind: 'bloom-' + cards.length + '-' + cards.join('.'), hexes: a.hexes.map(key) };
-      }
-    }
-    return null;
-  })()`)) as { kind: string; hexes: string[] } | null;
-  if (!plan) return false;
-  const entered = (await s.page.evaluate(`(() => {
-    var k = ${JSON.stringify(plan.kind)};
-    var visible = function (el) { return !!el && el.offsetParent !== null; };
-    var btn = document.querySelector('#moves [data-kind="' + k + '"]');
-    if (visible(btn)) { btn.click(); return true; }
-    var toggle = document.querySelector('#moves .bloom-toggle');
-    if (toggle) {
-      toggle.click();
-      btn = document.querySelector('#moves [data-kind="' + k + '"]');
-      if (btn) { btn.click(); return true; }
-    }
-    return false;
-  })()`)) as boolean;
-  if (!entered) return false;
-  await sleep(150);
-  for (const key of plan.hexes) {
-    const p = await tapExposed(s, `#board .hex-cell[data-key="${key}"]`);
-    if (p && (await hasDraft(s))) return true;
-  }
+  const action = await s.page.evaluate((minimum) => {
+    const hook = (window as unknown as { __severgrow: { legal(): Action[] } }).__severgrow;
+    return hook.legal().find((a) => a.t === 'Bloom' && a.hexes.length >= minimum) ?? null;
+  }, minHexes);
+  if (!action) return false;
+  // This suite measures drafts/teardown, not the popup (covered by painting/propass). Select the
+  // exact legal group through the same hook as chooseBloom, without racing a poll's DOM redraw.
+  await s.page.evaluate((move) => {
+    if (move.t !== 'Bloom') return;
+    const kind = `bloom-${move.cards.length}-${[...move.cards].sort((a, b) => a - b).join('.')}`;
+    (window as unknown as { __severgrow: { pickKind(kind: string): void } }).__severgrow.pickKind(kind);
+  }, action);
+  if (!(await drawMeld(s.page, action))) return false;
+  if (await s.page.locator('#confirm-play').isVisible()) await s.page.click('#confirm-play');
+  await sleep(220);
   return hasDraft(s);
 };
 
@@ -799,7 +797,7 @@ try {
   const driftPerMatch = Math.max(slopeB0, slopeB1) / 1024;
   if (driftPerMatch > 128) {
     console.log(
-      `WARN  retained heap still drifts ~${driftPerMatch.toFixed(0)} KB/match in the tail — below the ${GUARD_KB_PER_MATCH} KB/match guard, but a 500-match session would retain ~${((driftPerMatch * 500) / 1024).toFixed(0)} MB. See docs/ONLINE-POLISH.md.`,
+      `WARN  retained heap still drifts ~${driftPerMatch.toFixed(0)} KB/match in the tail — ${driftPerMatch < GUARD_KB_PER_MATCH ? "below" : "above"} the ${GUARD_KB_PER_MATCH} KB/match guard; a linear extrapolation to 500 matches would retain ~${((driftPerMatch * 500) / 1024).toFixed(0)} MB. See docs/ONLINE-POLISH.md.`,
     );
   }
 

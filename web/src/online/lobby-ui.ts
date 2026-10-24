@@ -405,10 +405,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     return status.identity;
   };
+  // Stable storage scope: browserStorage() creates a fresh adapter on every call.
+  const rewardStorage = browserStorage();
   const syncSeedRewards = async () => {
     const id = await ensureIdentity();
-    const storage = browserStorage();
-    return id && storage ? flushSeedProofs(storage, client, id.token) : [];
+    return id && rewardStorage ? flushSeedProofs(rewardStorage, client, id.token) : [];
   };
   const trainingSeedTicket = async (botLevel: number) => {
     const id = await ensureIdentity();
