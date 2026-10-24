@@ -29,7 +29,9 @@ describe('bloom by hand', () => {
     expect(main).toMatch(/smartCockpit\?\.hint\(`PICK \$\{left\} MORE`\)/);
   });
   it('nothing stays held after a move, a new game, the Bloom button, a cancel, or outside my Grow step', () => {
-    expect(main).toMatch(/function humanPlay\(a: Action\) \{\s*bloomPick = \[\];/);
+    // The signature gained `opts` on 2026-10-24 so the app's own end-of-Grow EndAct is not treated as
+    // an undo stop; what this pins is unchanged — the held pick is dropped the moment a move is made.
+    expect(main).toMatch(/function humanPlay\(a: Action(?:, opts: \{[^}]*\} = \{\})?\) \{\s*bloomPick = \[\];/);
     expect(main).toMatch(/session = new Session\(state, HUMAN, log, base\);\s*bloomPick = \[\];/);
     expect(main).toMatch(/bloomMenu = false;\s*bloomPick = \[\];/);
     expect(main).toMatch(/function cancelSel\(\) \{\s*bloomPick = \[\];/);

@@ -29,9 +29,14 @@ describe('golden games', () => {
       expect(rest.config.board).toBeNull();
       expect(rest.config.reshuffleDiscard).toBe(false);
       // Newer config keys stay off under archived rules and are omitted from the frozen hash.
-      const { board, reshuffleDiscard, deckFinalTurns, expandedBloom, strengthTiebreak, startingPlayerLottery, ...classicConfig } = rest.config;
+      const { board, reshuffleDiscard, deckFinalTurns, expandedBloom, strengthTiebreak, startingPlayerLottery, allowOvergrow, ...classicConfig } = rest.config;
       expect(strengthTiebreak).toBe(false);
       expect(startingPlayerLottery).toBe(false);
+      // `allowOvergrow` (added 2026-10-24 for campaign level 1) resolves ON for an archived rules
+      // version, so these fixtures keep the rule they were recorded under. Its presence in the
+      // config object is what moved the hash, not any change in play: the GreedyBot loop above
+      // matched every archived move, and the history hash below is untouched.
+      expect(allowOvergrow).toBe(true);
       expect(stateHash({ ...rest, config: classicConfig })).toBe(g.stateHash);
       expect(stateHash(history)).toBe(g.historyHash);
     });
