@@ -587,6 +587,26 @@ export const ONLINE_CSS = `
   0%, 100% { opacity: 1; }
   50% { opacity: .42; }
 }
+/* THE CROSSED SWORDS (owner, 2026-10-24: "2 swords graphic on top of the tile that is being
+   challenged. white symbol with red glow or something... lowkey, but visible and elegant"). Drawn in
+   the map's own SVG, so they pan and zoom with their tile; sized to sit INSIDE the timer ring rather
+   than on top of it. White here is the game's warm ink-white, and the red is a bloom rather than a
+   fill: the glyph is a mark on the ground, not a badge over it. NOTHING animates — the swords are
+   static in every motion mode, so there is no reduced-motion variant to keep in step. */
+.world-swords { pointer-events: none; }
+.world-swords-hit { fill: #0000; pointer-events: all; cursor: pointer; }
+.world-swords-hit:focus { outline: none; }
+/* Keyboard focus draws the same cream the tiles use, around the whole 44 px target. */
+.world-swords-hit:focus-visible {
+  stroke: #f2e5c5; stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.world-swords-glyph {
+  fill: none; stroke: #f8f2e1; stroke-width: 1.2;
+  stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke; pointer-events: none;
+  filter: drop-shadow(0 0 1px #0b0f0bcc) drop-shadow(0 0 2.2px #ff3b2ed0) drop-shadow(0 0 5.5px #b81c14a8);
+}
 /* THE CHALLENGE LIST. Hidden when empty, a horizontal rail when not, so it costs the map no room
    until there is something to answer. Each chip carries the same ring at chip size. */
 .world-challenges {

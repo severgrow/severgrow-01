@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import type { WorldChallengeWire } from '../../server/src/seeds/types.js';
 import {
   CHALLENGE_LOW_MS,
+  SWORDS_HIT_RADIUS,
   challengeForCell,
+  challengeMarkerFor,
   isLow,
   opponentName,
   playerName,
   remainingLabel,
   ringFraction,
   sheetModeFor,
+  swordsHitPx,
   winnerName,
 } from '../src/online/challenge-view.js';
 
@@ -108,5 +111,71 @@ describe('cell and name lookups', () => {
     expect(winnerName(challenge({ winnerId: 'a' }))).toBe('BloomHeron');
     expect(winnerName(challenge({ winnerId: 'b' }))).toBe('RYK');
     expect(winnerName(challenge())).toBeNull();
+  });
+});
+
+/**
+ * THE CROSSED SWORDS (owner, 2026-10-24: "place 2 swords graphic on top of the tile that is being
+ * challenged... if someone clicks at it they can see who challenged it too"). The glyph is drawn in
+ * the map's SVG, so its presence and its spoken name are pure decisions, not pixels.
+ */
+describe('the crossed swords marker', () => {
+  it('marks the contested tile for the defender AND for the challenger', () => {
+    const incoming = challenge({ id: 'in', fromMe: false });
+    const outgoing = challenge({ id: 'out', fromMe: true });
+    expect(challengeMarkerFor([incoming], '0,0')).toEqual({
+      challengeId: 'in',
+      cellId: '0,0',
+      incoming: true,
+      name: 'BloomHeron',
+      label: 'Challenge on this tile. BloomHeron challenged you.',
+    });
+    expect(challengeMarkerFor([outgoing], '0,0')).toEqual({
+      challengeId: 'out',
+      cellId: '0,0',
+      incoming: false,
+      name: 'RYK',
+      label: 'Challenge on this tile. You challenged RYK.',
+    });
+  });
+
+  it('clears the moment the challenge stops being pending — by data, not by a timer', () => {
+    expect(challengeMarkerFor([challenge({ status: 'pending' })], '0,0')).not.toBeNull();
+    for (const status of ['accepted', 'declined', 'expired', 'stale', 'resolved'] as const) {
+      expect(challengeMarkerFor([challenge({ status })], '0,0')).toBeNull();
+    }
+    // A pending challenge on ANOTHER tile never marks this one.
+    expect(challengeMarkerFor([challenge({ cellId: '4,-2' })], '0,0')).toBeNull();
+    expect(challengeMarkerFor([], '0,0')).toBeNull();
+  });
+
+  it('says who, in words, with a neutral fallback instead of an id', () => {
+    expect(challengeMarkerFor([challenge({ fromMe: false, challengerName: null })], '0,0')!.label)
+      .toBe('Challenge on this tile. Player challenged you.');
+    expect(challengeMarkerFor([challenge({ fromMe: true, defenderName: null })], '0,0')!.label)
+      .toBe('Challenge on this tile. You challenged Player.');
+  });
+
+  it('is deterministic when a cell carries more than one entry: the defender’s answer wins, then the timer', () => {
+    const later = challenge({ id: 'z', fromMe: false, expiresAt: TTL });
+    const sooner = challenge({ id: 'a', fromMe: false, expiresAt: TTL - HOUR });
+    expect(challengeMarkerFor([later, sooner], '0,0')!.challengeId).toBe('a');
+    expect(challengeMarkerFor([sooner, later], '0,0')!.challengeId).toBe('a');
+    // A pending incoming challenge outranks an outgoing one on the same tile, however the list is sorted.
+    const outgoing = challenge({ id: 'm', fromMe: true, expiresAt: TTL - 2 * HOUR });
+    expect(challengeMarkerFor([outgoing, later], '0,0')!.challengeId).toBe('z');
+    // Same challenge, same answer: the label cannot shimmer between polls.
+    expect(challengeMarkerFor([later], '0,0')).toEqual(challengeMarkerFor([later], '0,0'));
+  });
+
+  it('keeps a >=44px touch target at the map’s 46px cell floor, inside the hex', () => {
+    // world-view draws one cell at MIN_CELL_PX = 46; the marker's circle must cover the owner's 44px
+    // minimum there, and must stay inside the hex's inradius (R * sqrt(3)/2 = 8.66) so it never
+    // becomes an invisible halo over a neighbour.
+    expect(swordsHitPx(46)).toBeGreaterThanOrEqual(44);
+    expect(swordsHitPx(46)).toBeLessThan(46);
+    expect(SWORDS_HIT_RADIUS).toBeLessThan(10 * Math.sqrt(3) / 2);
+    // It only grows with the map, never shrinks below the floor.
+    expect(swordsHitPx(92)).toBeCloseTo(swordsHitPx(46) * 2, 6);
   });
 });
