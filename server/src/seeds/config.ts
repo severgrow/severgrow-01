@@ -49,3 +49,10 @@ export const campaignLevelOfSourceKey = (sourceKey: string): number | null => {
   const match = /^campaign:c\d+-(\d+)$/.exec(sourceKey);
   return match ? Number(match[1]) : null;
 };
+
+/**
+ * The tutorial's one payment (owner, 2026-10-24): winning level 10, the final lesson, pays 100
+ * Seeds once — exactly one Territory claim. Levels 1-9 teach and pay nothing. Its receipt is
+ * `lesson:10` (one per player, like a Campaign first clear).
+ */
+export const LESSON_SEED_REWARD = Object.freeze({ level: 10, seeds: 100 });

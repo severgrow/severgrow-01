@@ -102,8 +102,11 @@ describe('the card is one screen: the result leads, the rest waits behind "More"
     const firstIds = [...goButtons.matchAll(/<button id="([^"]+)"([^>]*)>/g)]
       .filter((m) => !/data-go-extra/.test(m[2]!))
       .map((m) => m[1]!);
-    // Game review (owner, 2026-10-23) is a key, not a row: it shares the board's row.
-    expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-board', 'go-review', 'go-more', 'go-menu']);
+    // Game review (owner, 2026-10-23) is a key, not a row: it shares the board's row. Open Territory
+    // (level 10's won card, owner 2026-10-24) is the secondary's alternate, never shown beside it.
+    expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-territory-open', 'go-board', 'go-review', 'go-more', 'go-menu']);
+    expect(mainSource).toMatch(/other\.hidden = lead === 'back-to-campaign' \|\| territoryIntro;/);
+    expect(mainSource).toMatch(/\$\('go-territory-open'\)\.hidden = !territoryIntro;/);
     const css = read('../src/style.css');
     expect(css).toMatch(/\.go-buttons:has\(#go-review:not\(\[hidden\]\)\) > #go-board,\s*\.go-buttons:has\(#go-review:not\(\[hidden\]\)\) > #go-review \{\s*grid-column: auto;/);
   });

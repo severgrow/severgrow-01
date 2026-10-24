@@ -42,6 +42,12 @@ export const flushSeedProofs = (storage: KeyValue, client: DuelClient, token: st
       } catch (error) {
         // Invalid/expired proofs cannot become valid later; transient network errors keep the
         // locally queued replay so the next menu visit can retry it.
+        // The final lesson's proof (`lesson-10`) can reach a server not yet redeployed with its
+        // verifier: that server answers "not available". Keep it, so the 100 Seeds land once the
+        // server knows the lesson (owner, 2026-10-24); any other refusal is final.
+        const unknownLesson = error instanceof DuelError && error.status === 400 && proof.kind === 'campaign'
+          && proof.levelId.startsWith('lesson-') && /not available/i.test(error.message);
+        if (unknownLesson) continue;
         if (error instanceof DuelError && error.status === 400) {
           write(storage, read(storage).filter((v) => proofKey(v) !== proofKey(proof)));
         } else break;

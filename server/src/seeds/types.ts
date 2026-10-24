@@ -29,6 +29,8 @@ export type RewardInput = {
   now: number;
   /** Only for server-verified campaign first clear. */
   campaignLevel?: number;
+  /** Only for the server-verified final lesson (level 10): paid once, a fixed amount. */
+  lessonLevel?: number;
   /** Server-issued before a rewarded Training match starts. */
   trainingTicketId?: string;
 };

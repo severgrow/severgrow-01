@@ -8,7 +8,8 @@ import type { MatchRecord, PlayerRecord, Storage } from '../storage/types.js';
 import { WORLD_CELLS, WORLD_VERSION, territoryColour } from '../world.js';
 import { SEED_ECONOMY } from './config.js';
 import type { WorldEconomyStore } from './types.js';
-import { verifyCampaignProof, verifyTrainingProof } from './verify.js';
+import { verifyCampaignProof, verifyLessonProof, verifyTrainingProof } from './verify.js';
+import { FINAL_LESSON } from '../../../web/src/lessons/final.js';
 
 export class WorldEconomyService {
   constructor(
@@ -65,6 +66,7 @@ export class WorldEconomyService {
   }
 
   async campaign(player: PlayerRecord, levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION) {
+    if (levelId === FINAL_LESSON.id) return this.lesson(player, actions, botVersion);
     const level = campaignLevelById(levelId);
     if (!level) throw new ApiError('INVALID_REQUEST', 'That Campaign level is not available.');
     const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
@@ -76,6 +78,24 @@ export class WorldEconomyService {
     return this.store.settle({
       playerId: player.id, sourceKey: `campaign:${levelId}`, mode: 'campaign', outcome: 'win',
       opponentId: null, now: this.now(), campaignLevel: level.number,
+    });
+  }
+
+  /**
+   * The final lesson's first win (owner, 2026-10-24): replayed against the real bot from its one
+   * opening, then paid once through the same receipts as a Campaign first clear (mode `campaign`,
+   * key `lesson:10`), so the database needs no new mode.
+   */
+  private async lesson(player: PlayerRecord, actions: readonly Action[], botVersion: string) {
+    const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
+    if (!(await this.matches.hitRateLimit(`seeds:proof:${player.id}`, bucket, 90)).ok) {
+      throw new ApiError('RATE_LIMITED', 'Please wait before verifying another match.');
+    }
+    const verified = verifyLessonProof(FINAL_LESSON.id, actions, botVersion);
+    if (!verified || verified.winner !== 0) throw new ApiError('INVALID_REQUEST', 'That lesson result could not be verified.');
+    return this.store.settle({
+      playerId: player.id, sourceKey: `lesson:${FINAL_LESSON.level}`, mode: 'campaign', outcome: 'win',
+      opponentId: null, now: this.now(), lessonLevel: FINAL_LESSON.level,
     });
   }
 

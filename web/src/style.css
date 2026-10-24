@@ -7748,3 +7748,10 @@ html.futasaku-product #sheet-menu .gm-turn {
 html.futasaku-product .sheet .sheet-head { position: sticky; justify-content: center; }
 html.futasaku-product .sheet .sheet-head > h2 { flex: 1; min-width: 0; text-align: center; padding-inline: 44px; }
 html.futasaku-product .sheet .sheet-head > .icon-only:last-child { position: absolute; right: 0; top: 50%; translate: 0 -50%; }
+/* Level 10's won card (owner, 2026-10-24): what Seeds and Territory are, two quiet lines under the
+   +100 Seeds, centred like the rest of the card. */
+html.futasaku-product #gameover .go-territory {
+  display: grid; gap: 3px; margin: 10px auto 0; max-width: 34ch; text-align: center;
+  font-family: var(--font-ui); font-size: 0.8rem; line-height: 1.35; color: var(--fu-cream-70);
+}
+html.futasaku-product #gameover .go-territory[hidden] { display: none; }

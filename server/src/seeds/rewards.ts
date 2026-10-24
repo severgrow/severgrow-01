@@ -1,4 +1,4 @@
-import { SEED_ECONOMY, campaignSeedReward } from './config.js';
+import { LESSON_SEED_REWARD, SEED_ECONOMY, campaignSeedReward } from './config.js';
 import type { RewardInput } from './types.js';
 
 /** Called inside a locked settlement transaction using server-owned completed match facts. */
@@ -7,6 +7,11 @@ export const planSeedReward = (input: RewardInput, day: {
   pairPaid: number;
   totalEarned: number;
 }): { amount: number; reason: string | null } => {
+  if (input.mode === 'campaign' && input.lessonLevel !== undefined) {
+    return input.lessonLevel === LESSON_SEED_REWARD.level && input.outcome === 'win'
+      ? { amount: LESSON_SEED_REWARD.seeds, reason: null }
+      : { amount: 0, reason: 'not_a_first_clear' };
+  }
   if (input.mode === 'campaign') {
     const reward = campaignSeedReward(input.campaignLevel ?? 0);
     return reward && input.outcome === 'win'

@@ -96,6 +96,7 @@ import {
   presentedLessonBeat, suggestMove, LESSONS,
 } from './lessons/lessons.js';
 import type { Beat, Lesson } from './lessons/lessons.js';
+import { FINAL_LESSON } from './lessons/final.js';
 import { scriptedOpponentAction } from './lessons/opponent.js';
 import { tapAnswer } from './lessons/answer.js';
 import { litTarget, litTargetAndQuiet, tapOf } from './lessons/lesson-view.js';
@@ -208,7 +209,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, RESULT, REVIEW, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, RESULT, REVIEW, SEEDS_INTRO, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -2634,9 +2635,13 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
         saveCampaignProgress();
       }
       if (onlineBuildEnabled() && session) {
-        // Levels 1-10 (lessons) pay no Seeds in this preview: their authored openings cannot be
-        // replayed by the server's verifier, so no proof is sent and the finish card has no Seeds line.
-        const proof = campaignLevel && !lessonNow && p.after.result.winner === HUMAN
+        // Levels 1-9 (lessons) pay no Seeds. Level 10, the final lesson, pays 100 once (owner,
+        // 2026-10-24): it is a real game from one authored opening (lessons/final.ts), which the
+        // server replays like a Campaign level, so its win sends a proof under the id `lesson-10`.
+        const finalLessonWon = lessonNow?.level === FINAL_LESSON.level && p.after.result.winner === HUMAN;
+        const proof = finalLessonWon
+          ? { kind: 'campaign' as const, levelId: FINAL_LESSON.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
+          : campaignLevel && !lessonNow && p.after.result.winner === HUMAN
           ? { kind: 'campaign' as const, levelId: campaignLevel.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
           : gameDifficulty && trainingRewardTicketId
             ? { kind: 'training' as const, ticketId: trainingRewardTicketId, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
@@ -2648,7 +2653,8 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
           void onlineLobbyCtl?.syncSeedRewards().then((results) => {
             const verified = results.find((entry) => entry.key === key)?.reward;
             if (!verified) return;
-            seedRewardMessage = verified.awarded ? `+${verified.awarded} Seeds` : 'Seed limit reached today';
+            // A replayed receipt was paid before: the line says nothing rather than a second "+N".
+            seedRewardMessage = verified.replayed ? '' : verified.awarded ? `+${verified.awarded} Seeds` : 'Seed limit reached today';
             // The reward can land while the finish card is already up: the SAME line repaints in
             // place (no reflow), and the award gets its one moment here rather than a silent swap.
             if (!$('gameover').hidden) paintGoSeeds();
@@ -7386,13 +7392,21 @@ function renderGameOver() {
   const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel : lead === 'back-to-campaign' ? CAMPAIGN.back : won ? 'Play again' : 'Try again';
   $('go-rematch').textContent = leadWord;
   $('go-rematch').setAttribute('aria-label', leadWord);
-  // Lessons pay no Seeds in this preview: no Seeds line at all on their finish card.
-  if (taught) seedRewardMessage = '';
+  // Lessons 1-9 pay no Seeds: no Seeds line at all on their finish card. Level 10 pays 100 once, and
+  // its won card says what Seeds and Territory are, with the way there (owner, 2026-10-24).
+  if (taught && taught.level !== FINAL_LESSON.level) seedRewardMessage = '';
   paintGoSeeds();
+  const territoryIntro = !!taught && taught.level === FINAL_LESSON.level && won && onlineBuildEnabled() && !!onlineLobbyCtl;
+  $('go-territory-earned').textContent = SEEDS_INTRO.earned;
+  $('go-territory-spend').textContent = SEEDS_INTRO.spend;
+  $('go-territory').hidden = !territoryIntro;
+  $('go-territory-open').textContent = SEEDS_INTRO.open;
+  $('go-territory-open').hidden = !territoryIntro;
   const other = $('go-other');
   // On the last level the primary already IS "Back to campaign": one action, not two that do the
   // same thing (the online rematch keeps its own secondary, untouched).
-  other.hidden = lead === 'back-to-campaign';
+  // On the tutorial's last card, Open Territory takes the second place (the card never grows a row).
+  other.hidden = lead === 'back-to-campaign' || territoryIntro;
   const otherWord = campaign ? CAMPAIGN.back : 'Change difficulty';
   other.textContent = otherWord;
   other.setAttribute('aria-label', otherWord);
@@ -9123,6 +9137,11 @@ bind('go-menu', () => {
   if (isOnlineDuel()) tearDownOnlineDuel();
   showScreen('menu');
 });
+bind('go-territory-open', () => {
+  hideGameOver();
+  showScreen('menu');
+  onlineLobbyCtl?.openWorld('menu');
+});
 bind('go-review', () => openReview());
 bind('go-review-back', () => {
   closeReview();
@@ -9592,7 +9611,9 @@ type OnlineLobbyCtl = {
   openHub(): Promise<void>;
   rematch(finishedMatchId?: string | null): Promise<void>;
   trainingSeedTicket(level: number): Promise<{ id: string; seed: number } | null>;
-  syncSeedRewards(): Promise<{ key: string; reward: { awarded: number } }[]>;
+  syncSeedRewards(): Promise<{ key: string; reward: { awarded: number; replayed?: boolean } }[]>;
+  /** The Territory map (the menu's own entry); the finish card of level 10 opens it too. */
+  openWorld(from: 'hub' | 'menu'): void;
 };
 let onlineLobbyCtl: OnlineLobbyCtl | null = null;
 /** Set while an online duel is open; the pause menu's Resign calls it (one confirm). */

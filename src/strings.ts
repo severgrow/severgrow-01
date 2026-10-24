@@ -329,6 +329,14 @@ export const headerText = (key: HeaderKey): string => HEADER[key];
  * perspective-aware: "you" is always the player reading the screen. The three outcome titles
  * (`won` / `lost` / `draw`) are the product's fixed names and are never renamed.
  */
+/** The tutorial's last finish card (owner, 2026-10-24): level 10 pays 100 Seeds, and the card says,
+ *  in two lines, what Seeds and Territory are — then offers the way there. */
+export const SEEDS_INTRO = Object.freeze({
+  earned: 'Seeds are earned by winning.',
+  spend: 'Spend 100 to claim a tile of Territory on the world map.',
+  open: 'Open Territory',
+});
+
 export const RESULT = Object.freeze({
   /** Outcome titles — the same three offline and online. */
   won: 'You won',

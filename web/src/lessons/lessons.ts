@@ -14,6 +14,7 @@ import type { Action, Card, Coord, Event, State } from '../../../src/engine/inde
 import type { Level } from '../../../src/bots/levels.js';
 import { LESSON as W } from '../../../src/strings.js';
 import { authoredState } from './authored.js';
+import { FINAL_LESSON } from './final.js';
 import type { PositionSpec } from './authored.js';
 import type { OpponentScript } from './opponent.js';
 import type { ActionKind, LessonTier, PowerKind } from './mastery.js';
@@ -240,18 +241,9 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     intro: [],
     goals: [],
     newActions: [],
-    position: {
-      seed: 96010,
-      gold: ['0,0'],
-      rock: ['0,1'],
-      // A normal opening: both sides have grown a little, and their home already has cover.
-      tiles: [['-1,1', YOU, 4], ['1,-1', THEM, 4], ['1,-2', THEM, 6], ['2,-1', THEM, 7]],
-      hand: [[0, 4], [0, 5], [1, 5], [2, 5], [3, 7], [null, 0], [1, 8]],
-      opponent: [[1, 1], [2, 2], [3, 3], [0, 2], [3, 2], [2, 1], [3, 4]],
-      deck: [[0, 6], [1, 4], [3, 5], [0, 3], [1, 6], [2, 4], [3, 6], [0, 8], [1, 7], [2, 7], [3, 8], [2, 8], [0, 7], [1, 3]],
-      discard: [[3, 1]],
-    },
-    opponent: { bot: 1 },
+    // A normal opening, the one copy the server's Seeds verifier also replays (final.ts).
+    position: FINAL_LESSON.position,
+    opponent: { bot: FINAL_LESSON.botLevel },
     finish: { title: W.canPlay, line: W.canPlayLine, learned: 'THE WHOLE GAME', icon: '★' },
   },
 ] satisfies Lesson[]);

@@ -3,6 +3,7 @@ import type { Action, State } from '../../../src/engine/index.js';
 import { botSeed } from '../../../src/bots/levels.js';
 import { botFor, CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
 import { ALTERNATE_OPENINGS, campaignLevelById, campaignOpening } from '../../../src/campaign/index.js';
+import { FINAL_LESSON, finalLessonOpening } from '../../../web/src/lessons/final.js';
 
 export type OfflineProof = { actions: readonly Action[]; botVersion: string };
 export type VerifiedOffline = { winner: 0 | 1 | null; actionCount: number; result: State['result'] };
@@ -53,3 +54,11 @@ export const verifyCampaignProof = (levelId: string, actions: readonly Action[],
 
 export const verifyTrainingProof = (seed: number, botLevel: number, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION): VerifiedOffline | null =>
   verifyOfflineMatch(newMatch(seed), botLevel, { actions, botVersion });
+
+/**
+ * Level 10, the final lesson (owner, 2026-10-24: it pays 100 Seeds): a real game against the real
+ * bot from its one authored opening (web/src/lessons/final.ts), replayed exactly like a Campaign
+ * level. Levels 1-9 are scripted lessons and pay nothing, so no other lesson id is accepted.
+ */
+export const verifyLessonProof = (levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION): VerifiedOffline | null =>
+  levelId === FINAL_LESSON.id ? verifyOfflineMatch(finalLessonOpening(), FINAL_LESSON.botLevel, { actions, botVersion }) : null;
