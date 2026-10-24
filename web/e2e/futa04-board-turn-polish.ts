@@ -35,6 +35,14 @@ const check = (value: unknown, label: string) => { assert(value, label); checks+
 const equal = (actual: unknown, expected: unknown, label: string) => { assert.deepEqual(actual, expected, label); checks++; };
 const state = (page: Page): Promise<State> => page.evaluate(() => (window as any).__severgrow.state());
 const idle = (page: Page) => page.waitForFunction(() => { const h = (window as any).__severgrow; return h?.state() && !h.busy() && (h.state().actor === 0 || h.state().phase === 'GAME_OVER'); }, undefined, { timeout: 30000 });
+// Owner decision (2026-10-19): the PRODUCT main menu has NO Continue — a saved match is offered
+// when the player enters its level. These fixtures only need the resume itself, so boot first and
+// invoke the still-bound hidden control, exactly as futa04-critical/motion do. Waiting for it to be
+// VISIBLE (page.click) can never succeed on this channel: `[hidden]` is display:none by design.
+const resumeSave = async (page: Page) => {
+  await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 20000 });
+  await page.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
+};
 const rawSave = (page: Page): Promise<string | null> => page.evaluate(() => Object.entries(localStorage).find(([key]) => key === 'main2:severgrow.save.v7')?.[1] ?? null);
 const savedMatches = async (page: Page, label: string) => equal(decodeSave(await rawSave(page))?.state, await state(page), `${label}: autosave replays the exact current state`);
 // The fan intentionally overlaps; find that card's exposed region instead of assuming its
@@ -104,7 +112,7 @@ async function open(width: number, height: number, seed: number, humanFirst = fa
     await page.addInitScript(save => localStorage.setItem('main2:severgrow.save.v7', save), positionSave({ state: newGame(seed) }));
     await page.goto(base);
     await assertDistChannel(page);   // loud if the served dist was built for another channel
-    await page.locator('#menu-continue').click();
+    await resumeSave(page);
   } else {
     await page.goto(`${base}?seed=${seed}`);
     await assertDistChannel(page);   // loud if the served dist was built for another channel
@@ -114,6 +122,11 @@ async function open(width: number, height: number, seed: number, humanFirst = fa
   await page.waitForFunction(() => document.querySelectorAll('#board .hex-cell').length > 0);
   await page.locator('#splash').waitFor({state:'hidden'});
   await page.waitForFunction(() => document.fonts.status === 'loaded');
+  // A NEW match deals the pre-game card lottery (starter-ritual.ts) and it owns the screen until it
+  // leaves: a tap on #deck/#hud-menu/#smart-context before then lands on the overlay, not the
+  // control. A resumed save never plays it, so `hidden` (which also covers "never ran") is the
+  // state to wait for, not "it disappeared".
+  await page.locator('#starter-lottery').waitFor({state:'hidden',timeout:20000}).catch(() => undefined);
   await page.waitForTimeout(180);
   equal(await state(page), newGame(seed), `${width}x${height}: seeded Classic setup`);
   return { page, touch, errors };
@@ -395,7 +408,7 @@ async function fruitFlow(width: number, height: number) {
       localStorage.setItem('main2:severgrow.tips.v1',JSON.stringify({fruit:true,fruitAny:true,strengthen:true}));
     },positionSave({state:before}));
     await page.goto(base);
-    await page.click('#menu-continue'); await idle(page);
+    await resumeSave(page); await idle(page);
     equal(await state(page),before,'Bomb: saved position resumes unchanged');
     const palette = await page.locator('#hand .card').evaluateAll(cards => cards.map(card => ({
       suit:card.className.match(/\bs[0-3]\b/)?.[0] ?? 'bomb', ink:getComputedStyle(card.querySelector('.c-num')!).color,
@@ -675,7 +688,7 @@ async function sproutFlow(width: number, height: number) {
     equal([manifest.name,manifest.short_name], ['Futasaku','Futasaku'], `${label}: installed-app name uses Futasaku`);
     await page.screenshot({ path: `${dir}/${width}x${height}-futasaku-menu.png` });
     await evidence(page,`${width}x${height}-futasaku-menu`);
-    await page.click('#menu-continue'); await idle(page);
+    await resumeSave(page); await idle(page);
     equal(await state(page),resumed,`${label}: reload resumes exact save after real turns`);
     const untouched = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => key === 'severgrow.save.v7' || key === 'test:severgrow.save.v7')));
     equal(untouched,{ 'severgrow.save.v7':'MAIN-POLISH-SENTINEL','test:severgrow.save.v7':'TEST-POLISH-SENTINEL' },`${label}: other-channel saves stay intact`);
@@ -928,7 +941,7 @@ async function drawGlow() {
         localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({coach:true,sound:false,music:false,reduceMotion:true,speed:'skip',autoSkip:false}));
       },positionSave({state:game}));
       await page.goto(base); await page.waitForFunction(() => !!(window as any).__severgrow);
-      await page.click('#menu-continue'); await idle(page);
+      await resumeSave(page); await idle(page);
       equal(await state(page),game,`${label}: exact real position resumes`);
       equal(await page.locator('#discard').evaluate(el=>el.classList.contains('futa04-bloom-draw')),wanted,`${label}: only a new Bloom combination changes the throw-pile highlight`);
       equal(await page.locator('#deck.coach-glow').count(),0,`${label}: no square Deck recommendation`);
@@ -958,7 +971,7 @@ async function bloomMenuFit() {
       localStorage.setItem('main2:severgrow.save.v7',save);
       localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({coach:false,sound:false,music:false,reduceMotion:true,speed:'skip',autoSkip:false}));
     },positionSave({state:positioned}));
-    await page.goto(base); await page.click('#menu-continue'); await idle(page);
+    await page.goto(base); await resumeSave(page); await idle(page);
     equal(await state(page),positioned,'multiple Bloom choices fixture resumes exactly');
     const toggle = page.locator('#smart-bloom-button');
     check(await toggle.isVisible(),'multiple Bloom choices have a menu control');
@@ -997,7 +1010,7 @@ async function goldFrameVisuals() {
         localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({coach:false,sound:false,music:false,reduceMotion:true,speed:'skip'}));
       },positionSave({state:game}));
       await page.goto(base);
-      await page.click('#menu-continue'); await idle(page);
+      await resumeSave(page); await idle(page);
       equal(await state(page),game,`standard ${width}: frame art does not change the position`);
       const visual = await page.evaluate(async () => {
         const rich = [...document.querySelectorAll<SVGGElement>('#board .hex-cell.rich')];
@@ -1039,7 +1052,7 @@ async function goldFrameVisuals() {
         visual.variants.every(variant=>variant>=0 && variant<3),
         `standard ${width}: three deterministic rim designs fit the hexes under the stones (${JSON.stringify(visual)})`);
       await page.screenshot({path:`${dir}/${width}x${height}-gold-frame-standard.png`});
-      await page.reload(); await page.click('#menu-continue'); await idle(page);
+      await page.reload(); await resumeSave(page); await idle(page);
       const reloaded = await page.locator('#board .l-rich-frames .gold-frame').evaluateAll(frames=>frames.map(frame=>Number(frame.getAttribute('data-variant'))));
       equal(reloaded,visual.variants,`standard ${width}: frame variants survive reload`);
     } finally { await page.close(); }

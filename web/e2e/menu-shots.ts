@@ -22,6 +22,15 @@ const API = 'https://fake-duel.example';
 /** The storage prefix a `CHANNEL=futa04`, non-preview-path build installs (web/src/channel.ts). */
 const PREFIX = 'main2:';
 
+// Owner decision (2026-10-19): the PRODUCT main menu has NO Continue — a saved match is offered
+// when the player enters its level. These fixtures only need the resume itself, so boot first and
+// invoke the still-bound hidden control, exactly as futa04-critical/motion do. Waiting for it to be
+// VISIBLE (page.click) can never succeed on this channel: `[hidden]` is display:none by design.
+const resumeSave = async (page: Page) => {
+  await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 20000 });
+  await page.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
+};
+
 const VIEWPORTS = [
   { key: '360x640', width: 360, height: 640 },
   { key: '390x844', width: 390, height: 844 },
@@ -233,7 +242,7 @@ try {
       // Poll for the reveal (the menu section is unhidden a beat before its buttons are styled).
       const offered = await page.locator('#menu-continue').waitFor({ state: 'visible', timeout: 20_000 }).then(() => true).catch(() => false);
       check(`${vp.key}: a reload with a saved game still offers Continue`, offered);
-      await page.click('#menu-continue');
+      await resumeSave(page);
       await page.waitForFunction(settled, undefined, { timeout: 40_000 });
       const resumed = await page.evaluate('JSON.stringify(window.__severgrow.state())');
       check(`${vp.key}: Continue resumes the exact saved game`, resumed === saved);

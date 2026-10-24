@@ -24,6 +24,15 @@ const midGame = (seed: number, turns: number): State => {
 
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 
+// Owner decision (2026-10-19): the PRODUCT main menu has NO Continue — a saved match is offered
+// when the player enters its level. These fixtures only need the resume itself, so boot first and
+// invoke the still-bound hidden control, exactly as futa04-critical/motion do. Waiting for it to be
+// VISIBLE (page.click) can never succeed on this channel: `[hidden]` is display:none by design.
+const resumeSave = async (page: Page) => {
+  await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 20000 });
+  await page.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
+};
+
 const openSeat = async (
   browser: Awaited<ReturnType<typeof chromium.launch>>,
   state: State,
@@ -53,7 +62,7 @@ const openSeat = async (
   }, save);
   await page.goto(BASE);
   await assertDistChannel(page);   // loud if the served dist was built for another channel
-  await page.click('#menu-continue');
+  await resumeSave(page);
   await page.waitForTimeout(1600);
   const path = `${dir}/perspective-seat-${label}.png`;
   await page.screenshot({ path, type: 'png' });

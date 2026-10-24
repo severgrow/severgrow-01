@@ -20,6 +20,14 @@ const restingScore=async(page:Page)=>{
   const view=viewFor(state,0);
   return `${view.score}:${view.opponentScore}`;
 };
+// Owner decision (2026-10-19): the PRODUCT main menu has NO Continue — a saved match is offered
+// when the player enters its level. These fixtures only need the resume itself, so boot first and
+// invoke the still-bound hidden control, exactly as futa04-critical/motion do. Waiting for it to be
+// VISIBLE (page.click) can never succeed on this channel: `[hidden]` is display:none by design.
+const resumeSave=async(page:Page)=>{
+  await page.waitForFunction(()=>(window as any).__severgrow?.ready?.()===true,undefined,{timeout:20000});
+  await page.evaluate(()=>(document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
+};
 try {
   for(const [width,height] of [[390,844],[1920,1080]] as const){
     const page=await browser.newPage({viewport:{width,height},isMobile:width<600,hasTouch:width<600});
@@ -37,7 +45,7 @@ try {
     check([5,6,7].includes(level),`${width}: Medium selects one saved engine level`);
     await page.reload();
     await page.waitForFunction(() => !!(window as any).__ready);
-    await page.locator('#menu-continue').click();
+    await resumeSave(page);
     check(await page.evaluate(()=>(window as any).__severgrow.settings().level)===level,`${width}: exact chosen level survives reload`);
     const resting=await restingScore(page);
     check(await page.locator('#smart-led-text').innerText()===resting,`${width}: score is resting display during Draw (${resting})`);
