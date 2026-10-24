@@ -157,6 +157,10 @@
               <span id="menu-world-tiles-value" class="menu-territory-value">0</span>
               <span class="menu-territory-icon i" data-icon="tile" aria-hidden="true"></span>
             </span>
+            <!-- THE LOOP'S SIGNAL (2026-10-24): one small lamp when a challenge is waiting for this
+                 player's answer. Absolutely placed so it never disturbs the entry's symmetric pair;
+                 the spoken line on the button carries the exact count. -->
+            <span id="menu-world-waiting" class="menu-territory-waiting" hidden aria-hidden="true"></span>
           </button>
           <!-- LOG IN and Settings used to be two entries of this column. Owner brief (2026-10-21):
                the bottom row of the menu is TWO keys side by side, LOG IN (left) and Settings
@@ -257,6 +261,9 @@
              when there is nothing to answer. Each chip carries a small copy of the map's timer ring
              (world-view.ts), so one shape means one thing on both surfaces. -->
         <div id="online-world-challenges" class="world-challenges" aria-label="Challenges" hidden></div>
+        <!-- A polite line for a player who cannot see the rail appear. The map itself never
+             announces movement; this is the one sentence that says a challenge arrived. -->
+        <p id="online-world-live" class="world-live" role="status" aria-live="polite"></p>
         <div id="online-world-grid" class="world-grid">
           <!-- THE ONE MAP CONTROL (owner, 2026-10-21: "with a 'fit' toggle"). It sits on the panel's
                corner like a map control, and it is a real <button> so it is keyboard reachable and

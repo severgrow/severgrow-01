@@ -54,6 +54,11 @@ export type LobbyUiHooks = {
    * offline save/Continue mechanism is unchanged.
    */
   startComputerGame?: () => void;
+  /**
+   * Play one of the game's own sound cues by name (the bank in `ui/sound-bank.ts`). The Territory
+   * screen uses it so its keys speak the same voice as the board; absent, it is simply silent.
+   */
+  cue?: (name: string) => void;
   now?: () => number;
 };
 
@@ -417,6 +422,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const id = await ensureIdentity();
     return id ? { token: id.token, playerId: id.playerId } : null;
   });
+  worldView.setCue((name) => hooks.cue?.(name));
 
   const reloadMatches = async () => {
     const id = await ensureIdentity();
@@ -909,16 +915,24 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     let wallet: SeedWallet | null = null;
     let world: WorldMapPayload['world'] | null = null;
+    let incoming = 0;
     try {
-      const [readWallet, map] = await Promise.all([client.seedWallet(id.token), client.worldMap()]);
+      const [readWallet, map, challenges] = await Promise.all([
+        client.seedWallet(id.token),
+        client.worldMap(),
+        // The menu's own signal: a challenge waiting for an answer. It is read in the SAME pass as
+        // the wallet and the map, and a failure here only means the entry shows no signal.
+        client.worldChallenges(id.token).catch(() => null),
+      ]);
       wallet = readWallet;
       world = map.world;
+      incoming = challenges?.incoming?.length ?? 0;
     } catch {
       // Offline, signed out, or a failed request: both read-outs stay hidden, together.
       wallet = null;
       world = null;
     }
-    const counts = territoryCounts(wallet, world, id.playerId);
+    const counts = territoryCounts(wallet, world, id.playerId, incoming);
     rememberTerritory(id.playerId, counts);
     if (menuEl?.hidden === false) territoryUI.paint(counts);
     // The invitation reads the SAME wallet response; it never costs a second request.

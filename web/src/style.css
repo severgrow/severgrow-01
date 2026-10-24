@@ -471,6 +471,30 @@ button {
   column-gap: 6px;
   /* The shared big-entry frame and its 44px tap floor are untouched; the sides add no height. */
   padding: 1px 16px 0;
+  /* The waiting lamp is placed against the key, not inside the symmetric pair. */
+  position: relative;
+}
+/* THE LOOP'S SIGNAL: one small amber lamp when a challenge is waiting for an answer. It is a dot,
+   not a badge: the count lives in the button's spoken label, and a number here would compete with
+   the Seeds/tiles pair that is the entry's whole design. */
+.menu-territory-waiting {
+  position: absolute;
+  top: 9px;
+  right: 11px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-gold) 16%, transparent);
+  animation: menu-territory-waiting 2.6s ease-in-out infinite;
+}
+@keyframes menu-territory-waiting {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+.reduce-motion .menu-territory-waiting { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .menu-territory-waiting { animation: none; }
 }
 .menu-territory-label { grid-area: 1 / 2; }
 .menu-territory-side {

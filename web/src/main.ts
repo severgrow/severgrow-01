@@ -8566,7 +8566,7 @@ bind('csa-start', () => {
 // tick (Sound) and, with Effects High, a tiny tap (Vibration). Nothing plays before a tap.
 // Sound is a CONSUMER of the phase 0 press seam, never a second primitive: the same pointerdown
 // gets a quiet tick, the lift gets the click, and a drag (a paint, not a tap) gets neither.
-const BUTTON_SELECTOR = '.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile';
+const BUTTON_SELECTOR = '.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile, .world-challenge-chip, .world-challenge-primary, .world-challenge-secondary, .world-claim-button';
 let soundPress: { el: Element; x: number; y: number; id: number; cancelled: boolean } | null = null;
 const pressableAt = (target: EventTarget | null): Element | null => {
   const el = target instanceof Element ? target.closest(PRESS_SELECTOR) : null;
@@ -9635,6 +9635,9 @@ void import('./online/lobby-ui.js').then(async (m) => {
   const leaveOnline = () => tearDownOnlineDuel();
 
   const lobby = m.installOnlineLobby({
+    // The Territory is part of the same instrument as the board, so its keys speak in the same
+    // voice. It reuses the bank's existing cues; it never ships a second sound system.
+    cue: (name: string) => sound.cue(name),
     showMenu: () => {
       leaveOnline();
       showScreen('menu');

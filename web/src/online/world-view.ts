@@ -4,6 +4,7 @@ import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload } from '../
 import { worldNeighbours } from '../../../server/src/world.js';
 import { CHALLENGE } from './challenge-copy.js';
 import {
+  CHALLENGE_RAIL_MAX,
   challengeForCell as challengeOnCell,
   isLow,
   opponentName,
@@ -17,6 +18,7 @@ import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { ownerLine } from './world-selection.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
+import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 
 type Identity = { token: string; playerId: string };
 
@@ -120,6 +122,9 @@ export class WorldView {
   private matchOpener: ((matchId: string) => void) | null = null;
   private sheet: {
     root: HTMLElement;
+    card: HTMLElement;
+    glyph: SVGSVGElement;
+    glyphPath: SVGPathElement;
     line: HTMLElement;
     meta: HTMLElement;
     primary: HTMLButtonElement;
@@ -133,10 +138,25 @@ export class WorldView {
   private sheetBusy = false;
   private sheetReturnFocus: HTMLElement | null = null;
   private readonly onSheetKey = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this.sheet && !this.sheet.root.hidden) {
+    const sheet = this.sheet;
+    if (!sheet || sheet.root.hidden) return;
+    if (event.key === 'Escape') {
       event.preventDefault();
       this.closeSheet();
+      return;
     }
+    // The dialog declares `aria-modal`, so Tab must not walk out of it into the map behind. Only
+    // the keys actually on the card are in the ring (a hidden primary is not a stop).
+    if (event.key !== 'Tab') return;
+    const stops = [sheet.primary, sheet.secondary].filter((key) => !key.hidden && !key.disabled);
+    if (stops.length === 0) return;
+    const active = document.activeElement;
+    const at = stops.indexOf(active as HTMLButtonElement);
+    event.preventDefault();
+    const next = event.shiftKey
+      ? (at <= 0 ? stops[stops.length - 1]! : stops[at - 1]!)
+      : (at === -1 || at === stops.length - 1 ? stops[0]! : stops[at + 1]!);
+    next.focus({ preventScroll: true });
   };
 
   constructor(private readonly client: DuelClient, private readonly ensureIdentity: () => Promise<Identity | null>) {
@@ -150,6 +170,19 @@ export class WorldView {
   /** lobby-ui owns opening a duel; the challenge layer only knows the match id. */
   setMatchOpener(open: (matchId: string) => void): void {
     this.matchOpener = open;
+  }
+
+  /** The game's own cue bank, injected by lobby-ui. Absent, the screen stays silent. */
+  private cueHook: ((name: string) => void) | null = null;
+  setCue(play: (name: string) => void): void {
+    this.cueHook = play;
+  }
+  private cue(name: string) {
+    try {
+      this.cueHook?.(name);
+    } catch {
+      /* a missing or muted bank is not an error */
+    }
   }
 
   async open() {
@@ -224,12 +257,23 @@ export class WorldView {
           return !previous || previous.cellId !== claim.cellId || previous.ownerName !== claim.ownerName ||
             previous.ownerId !== claim.ownerId;
         });
+      // The ground that changed hands, captured BEFORE the new map replaces the old one: this is the
+      // only moment that knows both answers, and it is what the settle ceremony points at.
+      const moving = ownerChanged
+        ? map.world.claims
+          .filter((claim) => {
+            const previous = this.world?.claims.find((candidate) => candidate.cellId === claim.cellId);
+            return previous && previous.ownerId !== claim.ownerId;
+          })
+          .map((claim) => claim.cellId)
+        : [];
       if (this.fromMemory || !this.world || map.world.revision > this.world.revision ||
         (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged))) {
         this.world = map.world;
         this.fromMemory = false;
         this.paint();
         rememberWorld(browserStorage(), map.world);
+        if (moving.length) this.celebrateGround(moving);
       }
       this.paintWallet();
       this.paintSelection();
@@ -670,79 +714,192 @@ export class WorldView {
     }
   }
 
-  /** The incoming/outgoing strip. Hidden when there is nothing to answer, so the map keeps its room. */
+  /**
+   * THE SETTLE BEAT. When a challenge actually moves a tile, the ground is redrawn by `paint()` like
+   * any other change — correct, and completely silent. This is the one moment the whole feature
+   * exists for, so the cell draws its own outline once in its NEW owner's colour and fades: a
+   * receipt for the ground, lasting 1.25 s, then leaving no trace on the map.
+   * Opacity and one dash offset only, and reduced motion holds it still instead of drawing it.
+   */
+  private celebrateGround(cellIds: readonly string[]) {
+    const group = this.ringsGroup;
+    if (!group || !this.world) return;
+    const me = this.identity?.playerId ?? null;
+    let gained = false;
+    for (const id of cellIds) {
+      const cell = this.world.cells.find((candidate) => candidate.id === id);
+      if (!cell) continue;
+      const claim = this.world.claims.find((candidate) => candidate.cellId === id);
+      if (claim && me && claim.ownerId === me) gained = true;
+      const at = coords(cell.q, cell.r);
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('d', hexPath(at.x, at.y));
+      path.setAttribute('pathLength', '1');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('aria-hidden', 'true');
+      path.classList.add('world-settle');
+      if (claim) path.style.setProperty('--territory', claim.colour);
+      group.append(path);
+      window.setTimeout(() => path.remove(), 1400);
+    }
+    // The ground is the reward, so a gain is heard as well as seen. A loss is left to the list and
+    // the sheet: a sad noise at a stranger's good news would be a punishment, not information.
+    if (gained) this.cue('chime');
+  }
+
+  /**
+   * The incoming/outgoing strip. Hidden when there is nothing to answer, so the map keeps its room.
+   *
+   * The chips are REUSED by challenge id, exactly as the ring paths are. Rebuilding them on every
+   * 12 s poll destroyed the node under the player's focus (Tab onto a chip and it vanished under
+   * you within 12 s) and made any arrival animation impossible: it would restart on every poll.
+   */
+  private readonly chipNodes = new Map<string, {
+    chip: HTMLButtonElement;
+    ring: SVGPathElement;
+    head: HTMLElement;
+    sub: HTMLElement;
+  }>();
+
   private paintChallenges() {
     const strip = document.getElementById('online-world-challenges');
     if (!strip) return;
-    const rows = this.allChallenges.slice(0, 8);
-    strip.replaceChildren();
+    strip.setAttribute('aria-label', CHALLENGE.listLabel);
+    const all = this.allChallenges;
+    const rows = all.slice(0, CHALLENGE_RAIL_MAX);
+    strip.hidden = rows.length === 0;
     if (rows.length === 0) {
-      strip.hidden = true;
-      strip.setAttribute('aria-label', CHALLENGE.listLabel);
+      for (const [id, node] of this.chipNodes) {
+        node.chip.remove();
+        this.chipNodes.delete(id);
+      }
       return;
     }
-    strip.hidden = false;
-    strip.setAttribute('aria-label', CHALLENGE.listLabel);
     const now = this.challengeNow();
-    for (const challenge of rows) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'world-challenge-chip';
-      chip.dataset.challengeId = challenge.id;
-      chip.append(this.smallRing(challenge, now));
-      const copy = document.createElement('span');
-      copy.className = 'world-challenge-chip-copy';
-      const head = document.createElement('strong');
-      const other = challenge.fromMe ? challenge.defenderName : challenge.challengerName;
-      head.textContent = `${challenge.fromMe ? CHALLENGE.outgoing : CHALLENGE.incoming} · ${other ?? 'Player'}`;
-      const sub = document.createElement('span');
-      sub.textContent = this.chipStatus(challenge, now);
-      copy.append(head, sub);
-      chip.append(copy);
-      chip.setAttribute('aria-label', `${head.textContent}. ${sub.textContent}`);
-      chip.addEventListener('click', () => this.openChallengeSheet(challenge));
-      strip.append(chip);
+    const wanted = new Set(rows.map((challenge) => challenge.id));
+    // A chip whose challenge has left the list goes away in the same frame; it is not information.
+    for (const [id, node] of [...this.chipNodes]) {
+      if (wanted.has(id)) continue;
+      node.chip.remove();
+      this.chipNodes.delete(id);
     }
+    let index = 0;
+    for (const challenge of rows) {
+      let node = this.chipNodes.get(challenge.id);
+      if (!node) {
+        node = this.makeChip(challenge);
+        this.chipNodes.set(challenge.id, node);
+        // ONE arrival: a chip that is new to this player settles in. It is the only entrance in the
+        // rail, and it never repeats because the node is reused from here on.
+        node.chip.classList.add('is-arriving');
+        const chip = node.chip;
+        window.setTimeout(() => chip.classList.remove('is-arriving'), 600);
+      }
+      const other = challenge.fromMe ? challenge.defenderName : challenge.challengerName;
+      const head = `${challenge.fromMe ? CHALLENGE.outgoing : CHALLENGE.incoming} · ${other ?? 'Player'}`;
+      const sub = this.chipStatus(challenge, now);
+      node.head.textContent = head;
+      node.sub.textContent = sub;
+      node.chip.setAttribute('aria-label', `${head}. ${sub}`);
+      node.chip.dataset.status = challenge.status;
+      // The same ring at chip size: the cell's own hex outline, never a circle.
+      if (challenge.status === 'pending') {
+        node.ring.setAttribute('pathLength', '1');
+        node.ring.setAttribute('stroke-dasharray', '1');
+        node.ring.setAttribute('stroke-dashoffset', String(1 - ringFraction(challenge, now)));
+        node.ring.classList.remove('world-chip-hex');
+        node.ring.classList.add('world-chip-ring-path');
+        node.ring.classList.toggle('low', isLow(challenge, now));
+      } else {
+        node.ring.removeAttribute('pathLength');
+        node.ring.removeAttribute('stroke-dasharray');
+        node.ring.removeAttribute('stroke-dashoffset');
+        node.ring.classList.remove('world-chip-ring-path', 'low');
+        node.ring.classList.add('world-chip-hex');
+      }
+      const claim = this.world?.claims.find((candidate) => candidate.cellId === challenge.cellId);
+      if (claim) node.ring.style.setProperty('--territory', claim.colour);
+      // Keep the DOM order equal to the list order without moving (and possibly blurring) a chip
+      // that is already in place.
+      const at = strip.children[index];
+      if (at !== node.chip) strip.insertBefore(node.chip, at ?? null);
+      index += 1;
+    }
+    // Anything past the cap is counted, never silently dropped.
+    const rest = all.length - rows.length;
+    let more = strip.querySelector<HTMLElement>('.world-challenge-more');
+    if (rest > 0) {
+      if (!more) {
+        more = document.createElement('span');
+        more.className = 'world-challenge-more';
+        strip.append(more);
+      }
+      more.textContent = CHALLENGE.more(rest);
+      more.hidden = false;
+      strip.append(more);
+    } else if (more) {
+      more.remove();
+    }
+    this.announceChallenges(rows);
+  }
+
+  /**
+   * A quiet live line for a player who cannot see the rail appear: the sheet's own notice is
+   * `aria-live`, and this says only what changed since the last paint.
+   */
+  private announced = new Set<string>();
+  private announceChallenges(rows: readonly WorldChallengeWire[]) {
+    const fresh = rows.filter((challenge) =>
+      challenge.status === 'pending' && !challenge.fromMe && !this.announced.has(challenge.id));
+    for (const challenge of rows) this.announced.add(challenge.id);
+    const region = document.getElementById('online-world-live');
+    if (!region || fresh.length === 0) return;
+    region.textContent = fresh
+      .map((challenge) => CHALLENGE.incomingAnnounce(challenge.challengerName ?? 'Player'))
+      .join(' ');
+  }
+
+  private makeChip(challenge: WorldChallengeWire) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'world-challenge-chip';
+    chip.dataset.challengeId = challenge.id;
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '-12 -12 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.classList.add('world-chip-ring');
+    const ring = document.createElementNS(NS, 'path');
+    ring.setAttribute('d', hexPath(0, 0));
+    svg.append(ring);
+    const copy = document.createElement('span');
+    copy.className = 'world-challenge-chip-copy';
+    const head = document.createElement('strong');
+    const sub = document.createElement('span');
+    copy.append(head, sub);
+    chip.append(svg, copy);
+    chip.addEventListener('click', () => {
+      const live = this.allChallenges.find((candidate) => candidate.id === challenge.id);
+      if (live) this.openChallengeSheet(live);
+    });
+    return { chip, ring, head, sub };
   }
 
   private chipStatus(challenge: WorldChallengeWire, now: number): string {
     switch (challenge.status) {
       case 'pending':
-        return `${challenge.cellId} · ${CHALLENGE.remaining(remainingLabel(challenge.expiresAt - now))}`;
+        // The clock, not the coordinate: the chip already names the player.
+        return CHALLENGE.remaining(remainingLabel(challenge.expiresAt - now));
       case 'accepted':
-        return `${challenge.cellId} · ${challenge.matchFinished ? CHALLENGE.ready : CHALLENGE.duel}`;
+        return challenge.matchFinished ? CHALLENGE.ready : CHALLENGE.duel;
       case 'resolved':
-        return `${challenge.cellId} · ${CHALLENGE.settledShort}`;
+        return CHALLENGE.settledShort;
       case 'expired':
-        return `${challenge.cellId} · ${CHALLENGE.forfeited}`;
+        return CHALLENGE.forfeited;
       case 'stale':
-        return `${challenge.cellId} · ${CHALLENGE.stale}`;
+        return CHALLENGE.stale;
       default:
-        return `${challenge.cellId} · ${CHALLENGE.declinedShort}`;
+        return CHALLENGE.declinedShort;
     }
-  }
-
-  /** The same ring at chip size: the cell's own hex outline, never a circle. */
-  private smallRing(challenge: WorldChallengeWire, now: number): SVGSVGElement {
-    const svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('viewBox', '-12 -12 24 24');
-    svg.setAttribute('aria-hidden', 'true');
-    svg.classList.add('world-chip-ring');
-    const path = document.createElementNS(NS, 'path');
-    path.setAttribute('d', hexPath(0, 0));
-    if (challenge.status === 'pending') {
-      path.setAttribute('pathLength', '1');
-      path.setAttribute('stroke-dasharray', '1');
-      path.setAttribute('stroke-dashoffset', String(1 - ringFraction(challenge, now)));
-      path.classList.add('world-chip-ring-path');
-      path.classList.toggle('low', isLow(challenge, now));
-    } else {
-      path.classList.add('world-chip-hex');
-    }
-    const claim = this.world?.claims.find((candidate) => candidate.cellId === challenge.cellId);
-    if (claim) path.style.setProperty('--territory', claim.colour);
-    svg.append(path);
-    return svg;
   }
 
   // ---- the two-state challenge sheet ---------------------------------------
@@ -754,12 +911,26 @@ export class WorldView {
     root.hidden = true;
     const card = document.createElement('div');
     card.className = 'world-invitation-card world-challenge-card';
+    card.dataset.ixSurface = '1';
     card.setAttribute('role', 'dialog');
     card.setAttribute('aria-modal', 'true');
     card.setAttribute('aria-labelledby', 'world-challenge-title');
+    // The ground itself, at the top of the card: a small copy of the contested hex in the holder's
+    // own colour, so the sentence has something to point at. It is the same six-point outline the
+    // map and the timer ring use, never a second shape.
+    const head = document.createElement('div');
+    head.className = 'world-challenge-head';
+    const glyph = document.createElementNS(NS, 'svg');
+    glyph.setAttribute('viewBox', '-12 -12 24 24');
+    glyph.setAttribute('aria-hidden', 'true');
+    glyph.classList.add('world-challenge-glyph');
+    const glyphPath = document.createElementNS(NS, 'path');
+    glyphPath.setAttribute('d', hexPath(0, 0));
+    glyph.append(glyphPath);
     const title = document.createElement('strong');
     title.id = 'world-challenge-title';
     title.textContent = CHALLENGE.title;
+    head.append(glyph, title);
     const line = document.createElement('p');
     line.className = 'world-challenge-line';
     const meta = document.createElement('p');
@@ -777,7 +948,7 @@ export class WorldView {
     notice.setAttribute('role', 'status');
     notice.setAttribute('aria-live', 'polite');
     keys.append(primary, secondary);
-    card.append(title, line, meta, keys, notice);
+    card.append(head, line, meta, keys, notice);
     root.append(card);
     document.body.append(root);
     // Dismiss on POINTERDOWN, not click: the tap that opens the sheet is followed by a synthetic
@@ -785,25 +956,59 @@ export class WorldView {
     // gesture. A pointerdown can only belong to a new touch.
     root.addEventListener('pointerdown', (event) => { if (event.target === root) this.closeSheet(); });
     primary.addEventListener('click', () => void this.sheetPrimary());
-    secondary.addEventListener('click', () => this.sheetSecondary());
-    this.sheet = { root, line, meta, primary, secondary, notice };
+    secondary.addEventListener('click', () => void this.sheetSecondary());
+    this.sheet = { root, card, glyph, glyphPath, line, meta, primary, secondary, notice };
     return this.sheet;
   }
 
   private setSheetKeys(primary: string | null, secondary: string) {
     const sheet = this.ensureSheet();
+    if (this.declineArmed) {
+      window.clearTimeout(this.declineArmed);
+      this.declineArmed = 0;
+    }
+    sheet.secondary.classList.remove('is-armed');
     sheet.primary.hidden = primary === null;
     sheet.primary.textContent = primary ?? '';
     sheet.secondary.hidden = false;
     sheet.secondary.textContent = secondary;
-    sheet.primary.disabled = false;
-    sheet.secondary.disabled = false;
-    this.sheetBusy = false;
+    this.setSheetBusy(false);
+  }
+
+  /**
+   * An in-flight key says so with the app's own convention (`aria-busy` + the calmer face the
+   * online actions already use). Both keys are disabled so a second tap cannot double-send, but the
+   * player is told WHY the key they pressed has gone quiet.
+   */
+  private setSheetBusy(busy: boolean) {
+    const sheet = this.sheet;
+    if (!sheet) return;
+    this.sheetBusy = busy;
+    for (const key of [sheet.primary, sheet.secondary]) {
+      key.disabled = busy;
+      if (busy) key.setAttribute('aria-busy', 'true');
+      else key.removeAttribute('aria-busy');
+    }
+  }
+
+  /** Paint the contested ground's own colour into the card's hex, so the glyph is not decoration. */
+  private setSheetGround(colour: string | null) {
+    const sheet = this.ensureSheet();
+    if (colour) sheet.glyphPath.style.setProperty('--territory', colour);
+    else sheet.glyphPath.style.removeProperty('--territory');
+    sheet.glyph.classList.toggle('is-rock', !colour);
   }
 
   private showSheet() {
     const sheet = this.ensureSheet();
     sheet.root.hidden = false;
+    // The same two-part arrival every other surface in the game uses: the scrim only changes
+    // density (no travel, no scale), and the card becomes present — it is never a hard cut.
+    enterSurface(sheet.root, { travel: 0, scale: 1, duration: 150 });
+    enterSurface(sheet.card);
+    // A challenge that is waiting for THIS player's answer gets one low note: the sheet is asking,
+    // not merely informing. Every other state of the sheet is silent so the ask stays singular.
+    if (this.sheetMode === 'defend') this.cue('thud');
     this.sheetReturnFocus = (document.activeElement as HTMLElement | null) ?? null;
     document.addEventListener('keydown', this.onSheetKey);
     const target = !sheet.primary.hidden ? sheet.primary : sheet.secondary;
@@ -813,15 +1018,31 @@ export class WorldView {
   private closeSheet(restoreFocus = true) {
     const sheet = this.sheet;
     if (!sheet) return;
-    sheet.root.hidden = true;
+    // The sheet's STATE is released now (this match is not "in" a challenge any more); only the
+    // pixels take 180ms to leave, and a re-open in that window simply takes the card back.
     document.removeEventListener('keydown', this.onSheetKey);
+    if (this.declineArmed) {
+      window.clearTimeout(this.declineArmed);
+      this.declineArmed = 0;
+    }
     this.sheetMode = 'closed';
     this.sheetChallenge = null;
     this.sheetCellId = null;
     this.sheetRequestId = null;
     this.sheetBusy = false;
-    if (restoreFocus && this.sheetReturnFocus?.isConnected) this.sheetReturnFocus.focus({ preventScroll: true });
+    const returnTo = this.sheetReturnFocus;
     this.sheetReturnFocus = null;
+    let finished = false;
+    const done = () => {
+      if (finished || this.sheet?.root !== sheet.root) return;
+      finished = true;
+      sheet.root.hidden = true;
+      resetSurface(sheet.card);
+      resetSurface(sheet.root);
+      if (restoreFocus && returnTo?.isConnected) returnTo.focus({ preventScroll: true });
+    };
+    exitSurface(sheet.card, { onDone: done });
+    exitSurface(sheet.root, { travel: 0, scale: 1, duration: 150 });
   }
 
   /** The challenger's offer: one sentence, one primary key. */
@@ -834,12 +1055,15 @@ export class WorldView {
     this.sheetCellId = cellId;
     this.sheetChallenge = null;
     this.sheetRequestId = crypto.randomUUID();
+    this.setSheetGround(tile.colour ?? null);
     sheet.line.textContent = CHALLENGE.sendLine(tile.ownerName ?? 'Player', stake);
-    sheet.meta.textContent = `${cellId} · ${stake} SEEDS`;
+    // The stake and the answer window, not a coordinate. A player reads "100 SEEDS · 24 H"; the
+    // cell id is the machine's name for the ground and belongs in the DOM, not in the sentence.
+    sheet.meta.textContent = CHALLENGE.sendMeta(stake);
     sheet.notice.textContent = '';
     if (this.wallet && this.wallet.balance < stake) {
       this.setSheetKeys(null, CHALLENGE.notNow);
-      sheet.notice.textContent = CHALLENGE.noFunds;
+      sheet.notice.textContent = CHALLENGE.noFunds(stake);
     } else {
       this.setSheetKeys(CHALLENGE.sendKey, CHALLENGE.notNow);
     }
@@ -857,6 +1081,9 @@ export class WorldView {
     this.sheetMode = sheetModeFor(challenge, me);
     const now = this.challengeNow();
     const other = opponentName(challenge, me);
+    // The glyph carries the contested ground's colour (the same `--territory` the tile and its ring
+    // use), so the card is anchored to the map it came from. Rock holds no tile and has no colour.
+    this.setSheetGround(this.world?.claims.find((claim) => claim.cellId === challenge.cellId)?.colour ?? null);
     sheet.notice.textContent = '';
     switch (this.sheetMode) {
       case 'defend':
@@ -871,7 +1098,7 @@ export class WorldView {
         break;
       case 'duel':
         sheet.line.textContent = CHALLENGE.duelLine;
-        sheet.meta.textContent = `${challenge.cellId} · ${other}`;
+        sheet.meta.textContent = other;
         this.setSheetKeys(CHALLENGE.openDuelKey, CHALLENGE.close);
         break;
       case 'confirm': {
@@ -883,17 +1110,17 @@ export class WorldView {
           sheet.line.textContent = CHALLENGE.confirmLine(winner);
           this.setSheetKeys(CHALLENGE.takeKey, CHALLENGE.notNow);
         }
-        sheet.meta.textContent = `${challenge.cellId} · ${challenge.stake} SEEDS`;
+        sheet.meta.textContent = CHALLENGE.stakeOnly(challenge.stake);
         break;
       }
       case 'resolved':
         sheet.line.textContent = CHALLENGE.resolvedLine(winnerName(challenge));
-        sheet.meta.textContent = challenge.cellId;
+        sheet.meta.textContent = CHALLENGE.settledShort;
         this.setSheetKeys(null, CHALLENGE.close);
         break;
       default:
         sheet.line.textContent = CHALLENGE.closedLine;
-        sheet.meta.textContent = challenge.cellId;
+        sheet.meta.textContent = CHALLENGE.closedShort;
         this.setSheetKeys(null, CHALLENGE.close);
     }
     this.showSheet();
@@ -915,8 +1142,33 @@ export class WorldView {
     }
   }
 
+  /**
+   * DECLINE is the one irreversible key in the sheet, and it sits beside ACCEPT on a thumb-sized
+   * target. A single mis-tap would end a neighbour's challenge, so the first press only arms it:
+   * the key says what the second press will do, and disarms itself after a beat.
+   */
+  private declineArmed = 0;
+
   private sheetSecondary(): void {
-    if (this.sheetMode === 'defend') return void this.sheetRespond(false);
+    if (this.sheetMode === 'defend') {
+      const sheet = this.sheet;
+      if (!sheet || this.sheetBusy) return;
+      if (this.declineArmed) {
+        window.clearTimeout(this.declineArmed);
+        this.declineArmed = 0;
+        sheet.secondary.textContent = CHALLENGE.declineKey;
+        return void this.sheetRespond(false);
+      }
+      sheet.secondary.textContent = CHALLENGE.declineConfirm;
+      sheet.secondary.classList.add('is-armed');
+      this.declineArmed = window.setTimeout(() => {
+        this.declineArmed = 0;
+        if (!this.sheet) return;
+        this.sheet.secondary.textContent = CHALLENGE.declineKey;
+        this.sheet.secondary.classList.remove('is-armed');
+      }, 4000);
+      return;
+    }
     this.closeSheet();
   }
 
@@ -924,22 +1176,17 @@ export class WorldView {
     const sheet = this.sheet;
     if (!sheet || this.sheetBusy) return;
     this.sheetBusy = true;
-    sheet.primary.disabled = true;
-    sheet.secondary.disabled = true;
+    this.setSheetBusy(true);
     sheet.notice.textContent = '';
     try {
       await work();
     } catch (error) {
       const code = (error as { code?: unknown } | null)?.code;
       sheet.notice.textContent =
-        code === 'NO_FUNDS' ? CHALLENGE.noFunds :
+        code === 'NO_FUNDS' ? CHALLENGE.noFunds(this.world?.cost ?? 100) :
           code === 'CELL_BUSY' ? CHALLENGE.busy : failure;
     } finally {
-      this.sheetBusy = false;
-      if (this.sheet) {
-        this.sheet.primary.disabled = false;
-        this.sheet.secondary.disabled = false;
-      }
+      if (this.sheet) this.setSheetBusy(false);
     }
   }
 
@@ -951,7 +1198,9 @@ export class WorldView {
     const requestId = this.sheetRequestId;
     await this.runSheet(async () => {
       await this.client.sendWorldChallenge(me.token, cellId, requestId);
-      this.notice(CHALLENGE.sent);
+      // The stake is a weight, so it lands as one.
+      this.cue('thud');
+      this.notice(CHALLENGE.sent(this.world?.cost ?? 100));
       this.closeSheet();
       await this.refresh(true);
     }, CHALLENGE.sendFailed);
@@ -977,8 +1226,11 @@ export class WorldView {
     const requestId = this.sheetRequestId;
     await this.runSheet(async () => {
       const result = await this.client.confirmWorldChallenge(me.token, challenge.id, requestId);
+      const mine = result.settled && result.winnerId === me.playerId;
+      // The one sound the whole loop earns: the ground changed hands, and it is yours.
+      if (mine) this.cue('chime');
       this.notice(result.settled
-        ? (result.winnerId === me.playerId ? CHALLENGE.settled : CHALLENGE.resultSettled)
+        ? (mine ? CHALLENGE.settled : CHALLENGE.resultSettled)
         : CHALLENGE.alreadySettled);
       this.closeSheet();
       await this.refresh(true);

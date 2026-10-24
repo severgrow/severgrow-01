@@ -62,16 +62,18 @@ describe('the 24 h ring', () => {
 });
 
 describe('the one time label', () => {
-  it('reads minutes, then hours, then days', () => {
+  it('reads minutes, then hours, then days — and never claims more time than is left', () => {
     expect(remainingLabel(0)).toBe('0 min');
     expect(remainingLabel(-1)).toBe('0 min');
     expect(remainingLabel(5 * 60_000)).toBe('5 min');
-    // A minute short of the hour rounds up to it; the label never reads "60 min" beside "1 h".
-    expect(remainingLabel(59 * 60_000 + 1)).toBe('1 h');
+    // FLOOR, not round up (owner review, 2026-10-24). This is a countdown: a label that read
+    // "24 h" with 23 h 01 m left, or "1 h" with 59 minutes left, would be telling the player they
+    // have time they do not have. The old expectations here pinned the rounded-up values.
+    expect(remainingLabel(59 * 60_000 + 1)).toBe('59 min');
     expect(remainingLabel(HOUR)).toBe('1 h');
-    expect(remainingLabel(23 * HOUR + 59 * 60_000)).toBe('24 h');
+    expect(remainingLabel(23 * HOUR + 59 * 60_000)).toBe('23 h');
     expect(remainingLabel(47 * HOUR)).toBe('47 h');
-    expect(remainingLabel(48 * HOUR + 1)).toBe('3 d');
+    expect(remainingLabel(48 * HOUR + 1)).toBe('2 d');
   });
 });
 

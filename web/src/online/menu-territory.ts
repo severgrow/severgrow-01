@@ -18,6 +18,7 @@ import type { SeedWallet } from '../../../server/src/seeds/types.js';
 import { MENU, ONLINE } from '../../../src/strings.js';
 import { EASE, MOTION } from '../logic/motion.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
+import { CHALLENGE } from './challenge-copy.js';
 
 /**
  * The pair the entry shows, plus the world's own size for the spoken line. The WORDS are the
@@ -26,7 +27,16 @@ import { seedBalanceLabel, seedIcon } from './seed-icon.js';
  * (`seedBalanceLabel`, "128 SEEDS") and the tiles read exactly as the Territory screen reads them
  * (`ONLINE.worldHeld`, "3 of 183 tiles grown"). Nothing here coins copy.
  */
-export type TerritoryCounts = Readonly<{ seeds: number; tiles: number; cells: number }>;
+export type TerritoryCounts = Readonly<{
+  seeds: number;
+  tiles: number;
+  cells: number;
+  /**
+   * Challenges waiting for THIS player's answer, or 0. It is a count, never a guess: when the
+   * challenge list could not be read it stays 0 and the entry simply shows nothing new.
+   */
+  incoming?: number;
+}>;
 
 /** A sanity ceiling on both reads, so a malformed payload can never paint a broken number. */
 const MAX_TILES = 100_000;
@@ -46,6 +56,8 @@ export const territoryCounts = (
   wallet: SeedWallet | null,
   world: WorldMapPayload['world'] | null,
   playerId: string | null,
+  /** Challenges waiting for this player's answer. An unreadable list is 0, never a guess. */
+  incoming = 0,
 ): TerritoryCounts | null => {
   if (!wallet || !world || !playerId) return null;
   if (!Number.isFinite(wallet.balance) || wallet.balance < 0 || wallet.balance > MAX_SEEDS) return null;
@@ -58,7 +70,8 @@ export const territoryCounts = (
   if (owned.size > MAX_TILES) return null;
   const cells = Array.isArray(world.cells) ? world.cells.length : 0;
   if (!cells) return null;
-  return { seeds: Math.floor(wallet.balance), tiles: owned.size, cells };
+  const waiting = Number.isFinite(incoming) ? Math.max(0, Math.min(99, Math.floor(incoming))) : 0;
+  return { seeds: Math.floor(wallet.balance), tiles: owned.size, cells, incoming: waiting };
 };
 
 export type TerritoryCountsUI = {
@@ -99,6 +112,7 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
   const seedsValue = doc.getElementById('menu-world-seeds-value');
   const tilesValue = doc.getElementById('menu-world-tiles-value');
   const seedsIcon = doc.getElementById('menu-world-seeds-icon');
+  const waiting = doc.getElementById('menu-world-waiting');
   if (!button || !seeds || !tiles || !seedsValue || !tilesValue) {
     return { paint: () => undefined };
   }
@@ -108,11 +122,13 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
     paint(counts) {
       button.setAttribute('aria-label', counts
         // The screen-reader line reuses the Territory screen's own words for both counts.
-        ? `${MENU.world}. ${seedBalanceLabel(counts.seeds)}. ${ONLINE.worldHeld(counts.tiles, counts.cells)}`
+        ? `${MENU.world}. ${seedBalanceLabel(counts.seeds)}. ${ONLINE.worldHeld(counts.tiles, counts.cells)}${
+          counts.incoming ? `. ${CHALLENGE.incomingAnnounceCount(counts.incoming)}` : ''}`
         : MENU.world);
       if (!counts) {
         seeds.hidden = true;
         tiles.hidden = true;
+        if (waiting) waiting.hidden = true;
         shown = null;
         return;
       }
@@ -123,6 +139,16 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
       // lone number: the pair appears and disappears as one instrument.
       seeds.hidden = false;
       tiles.hidden = false;
+      if (waiting) {
+        // THE LOOP'S SIGNAL: a challenge waiting for your answer is the reason to open this screen,
+        // so the key itself says so. Quiet by design — one lamp, not a badge with a number in it.
+        const waitingCount = counts.incoming ?? 0;
+        waiting.hidden = waitingCount === 0;
+        if (waitingCount > 0 && waiting.dataset.count !== String(waitingCount)) {
+          waiting.dataset.count = String(waitingCount);
+          settle(waiting);
+        }
+      }
       if (changed) {
         settle(seeds);
         settle(tiles);

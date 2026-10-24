@@ -108,6 +108,18 @@ const n2 = (value: number) => Number(value.toFixed(2));
  * pointerdown/pointerup → nearest-centre → select path a finger does, without moving the mouse across
  * the hidden game board (whose document listener is not part of this feature).
  */
+/**
+ * The challenge card arrives through interface-motion (300ms, from 96.5% scale). Every measurement
+ * below is of the SETTLED surface: reading it on the opening frame measures the animation, not the
+ * design, and would report a 43.6px key that is 44px the moment it lands.
+ */
+const settleSheet = async (page: Page): Promise<void> => {
+  await page.waitForFunction(() => {
+    const card = document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-card') as HTMLElement | null;
+    return !!card && card.dataset.ixState === 'open';
+  }, undefined, { timeout: 5000 }).catch(() => undefined);
+};
+
 const tapCell = async (page: Page, cellId: string) => {
   await page.evaluate((id) => {
     const path = document.querySelector(`.world-hex[data-cell-id="${id}"]`) as SVGPathElement | null;
@@ -245,6 +257,31 @@ try {
       `y ${scroll.y}, ${scroll.height}/${scroll.viewport}`);
     const chipBox = await page.locator('.world-challenge-chip').first().boundingBox();
     check(`[${tag}] a challenge chip is a 44px touch target`, !!chipBox && chipBox.height >= 44, `${n2(chipBox?.height ?? 0)}px`);
+    // The chip speaks in a player's words: the player and the clock, never the cell's coordinate
+    // (owner review, 2026-10-24: "3,-10" is the machine's name for the ground, not a sentence).
+    const chipText = await page.evaluate(() => [...document.querySelectorAll('.world-challenge-chip')]
+      .map((chip) => (chip as HTMLElement).innerText.replace(/\s+/g, ' ').trim()));
+    check(`[${tag}] a chip names the player and the clock, never a cell coordinate`,
+      chipText.length >= 2 && chipText.every((text) => !/\d+\s*,\s*-?\d+/.test(text)),
+      chipText.join(' | '));
+    // The chips are REUSED across polls (world-view.ts keys them by challenge id), so the rail can
+    // animate an arrival once and a keyboard focus is never destroyed under the player. Proved on
+    // the slowest viewport only, because it costs one real 12 s poll.
+    if (tag === '320x568') {
+      await page.evaluate(() => {
+        const chip = document.querySelector('.world-challenge-chip') as HTMLElement;
+        chip.dataset.probe = 'kept';
+        chip.focus();
+      });
+      await page.waitForTimeout(13_500);
+      const survived = await page.evaluate(() => {
+        const chip = document.querySelector('.world-challenge-chip') as HTMLElement | null;
+        return { same: chip?.dataset.probe === 'kept', focused: document.activeElement === chip };
+      });
+      check(`[${tag}] a poll keeps the same chip nodes and the player's focus`, survived.same && survived.focused,
+        `same node ${survived.same}, focus kept ${survived.focused}`);
+      await page.evaluate(() => (document.querySelector('.world-challenge-chip') as HTMLElement).blur());
+    }
     const chipRings = await page.evaluate(() => [...document.querySelectorAll('.world-chip-ring-path')].map((node) => {
       const path = node as SVGPathElement;
       const d = path.getAttribute('d') ?? '';
@@ -304,6 +341,7 @@ try {
     // ---- 4. the send sheet: one primary key, and it sends -----------------------------------
     await tapCell(page, rival);
     await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await settleSheet(page);
     const sendSheet = await page.evaluate(() => {
       const sheet = document.querySelector('.world-challenge-sheet:not([hidden])') as HTMLElement;
       const primary = sheet.querySelector('.world-challenge-primary') as HTMLButtonElement;
@@ -313,17 +351,27 @@ try {
         visiblePrimary: !primary.hidden,
         primaries: sheet.querySelectorAll('.world-challenge-primary:not([hidden])').length,
         primaryHeight: primary.getBoundingClientRect().height,
+        meta: (sheet.querySelector('.world-challenge-meta') as HTMLElement).textContent ?? '',
+        // The card is a first-class interface surface: it arrives through interface-motion.ts like
+        // every other sheet in the game (owner review, 2026-10-24), not with a raw `hidden` flip.
+        surface: (sheet.querySelector('.world-challenge-card') as HTMLElement).dataset.ixSurface === '1',
+        state: (sheet.querySelector('.world-challenge-card') as HTMLElement).dataset.ixState ?? '',
         y: window.scrollY,
       };
     });
     check(`[${tag}] the send sheet names the holder and the stake`,
       sendSheet.line.includes('RYK') && sendSheet.line.includes('100'), sendSheet.line);
+    check(`[${tag}] the send sheet arrives as a shared interface surface`,
+      sendSheet.surface && (sendSheet.state === 'open' || sendSheet.state === 'opening'), sendSheet.state);
+    check(`[${tag}] the sheet's meta line carries no cell coordinate`,
+      !/\d+\s*,\s*-?\d+/.test(sendSheet.meta), sendSheet.meta);
     check(`[${tag}] the send sheet has exactly ONE primary key, CHALLENGE`,
       sendSheet.visiblePrimary && sendSheet.primaries === 1 && sendSheet.primary === 'CHALLENGE', sendSheet.primary);
     check(`[${tag}] the sheet's primary key is 44px tall`, sendSheet.primaryHeight >= 44, `${n2(sendSheet.primaryHeight)}px`);
     check(`[${tag}] the sheet does not scroll the page`, sendSheet.y === 0);
     await activate(page, '.world-challenge-sheet:not([hidden]) .world-challenge-primary');
-    await page.waitForTimeout(400);
+    // The exit choreography is 180ms (interface-motion), so the settled state is read after it.
+    await page.waitForTimeout(600);
     check(`[${tag}] CHALLENGE sends the cell with a request id`,
       sent.length === 1 && sent[0]!.cellId === rival && typeof sent[0]!.requestId === 'string' && sent[0]!.requestId!.length >= 8,
       JSON.stringify(sent[0] ?? {}));
@@ -332,6 +380,7 @@ try {
     // ---- 5. the defender sheet, and DECLINE --------------------------------------------------
     await tapCell(page, own1);
     await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await settleSheet(page);
     const defendSheet = await page.evaluate(() => {
       const sheet = document.querySelector('.world-challenge-sheet:not([hidden])') as HTMLElement;
       return {
@@ -345,14 +394,26 @@ try {
       defendSheet.line.includes('100 Seeds') && /SEEDS · .* LEFT/.test(defendSheet.meta), defendSheet.meta);
     check(`[${tag}] the defender sheet offers ACCEPT as the one primary key`,
       defendSheet.primary === 'ACCEPT' && defendSheet.secondary === 'DECLINE');
+    // DECLINE is now armed by the first press (owner review, 2026-10-24): it is the one
+    // irreversible key and it sits beside ACCEPT, so a single mis-tap must not end a neighbour's
+    // challenge. The first press posts NOTHING and says what the second press will do.
+    await activate(page, '.world-challenge-sheet:not([hidden]) .world-challenge-secondary');
+    await page.waitForTimeout(180);
+    const armed = await page.evaluate(() => {
+      const key = document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-secondary') as HTMLButtonElement;
+      return { text: key.textContent ?? '', armed: key.classList.contains('is-armed') };
+    });
+    check(`[${tag}] the first DECLINE press only arms the key`, answered.length === 0 && armed.armed && /AGAIN/i.test(armed.text),
+      `${answered.length} posted, "${armed.text}"`);
     await activate(page, '.world-challenge-sheet:not([hidden]) .world-challenge-secondary');
     await page.waitForTimeout(400);
-    check(`[${tag}] DECLINE posts the answer`, answered.length === 1 && answered[0]!.accept === false,
+    check(`[${tag}] the second DECLINE press posts the answer`, answered.length === 1 && answered[0]!.accept === false,
       JSON.stringify(answered[0] ?? {}));
 
     // ---- 6. a finished linked duel offers TAKE THE GROUND -----------------------------------
     await activate(page, '.world-challenge-chip[data-challenge-id="out-2"]');
     await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await settleSheet(page);
     const confirmSheet = await page.evaluate(() => {
       const sheet = document.querySelector('.world-challenge-sheet:not([hidden])') as HTMLElement;
       return {

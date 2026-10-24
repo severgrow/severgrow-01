@@ -6,6 +6,12 @@ import type { WorldChallengeWire } from '../../../server/src/seeds/types.js';
  */
 export const CHALLENGE_LOW_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * How many chips the Territory rail shows at once. Past this the rail says "+N MORE" rather than
+ * dropping the rest silently: the cap exists to protect the map's height, not to hide information.
+ */
+export const CHALLENGE_RAIL_MAX = 8;
+
 /** How much of the 24 h answer window is LEFT, 1 → 0. Nothing but a pending challenge has a ring. */
 export const ringFraction = (
   challenge: Pick<WorldChallengeWire, 'createdAt' | 'expiresAt' | 'status'>,
@@ -24,14 +30,18 @@ export const isLow = (challenge: Pick<WorldChallengeWire, 'expiresAt' | 'status'
   return left > 0 && left <= CHALLENGE_LOW_MS;
 };
 
-/** "43 min", "22 h", "3 d" — the one time label used on the map, the sheet and the list. */
+/** "43 min", "22 h", "3 d" — the one time label used on the map, the sheet and the list.
+ *
+ *  Floor, never round up: this is a countdown, and a label that claimed "24 h" with 23 h 01 m left
+ *  would be telling the player they have time they do not have. `0 min` is the honest floor.
+ */
 export const remainingLabel = (ms: number): string => {
   if (!(ms > 0)) return '0 min';
-  const minutes = Math.ceil(ms / 60_000);
+  const minutes = Math.floor(ms / 60_000);
   if (minutes < 60) return `${minutes} min`;
-  const hours = Math.ceil(minutes / 60);
+  const hours = Math.floor(minutes / 60);
   if (hours < 48) return `${hours} h`;
-  return `${Math.ceil(hours / 24)} d`;
+  return `${Math.floor(hours / 24)} d`;
 };
 
 /** The open challenge on a cell, if any. History never marks a cell. */

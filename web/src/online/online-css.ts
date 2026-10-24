@@ -597,12 +597,34 @@ export const ONLINE_CSS = `
 }
 .world-challenges::-webkit-scrollbar { display: none; }
 .world-challenges[hidden] { display: none; }
+/* A chip that is new to this player settles in once. The node is reused from then on (world-view.ts
+   keys the chips by challenge id), so this never re-runs on a poll. */
+.world-challenge-chip.is-arriving { animation: world-chip-arrive 480ms cubic-bezier(.22, 1, .36, 1) both; }
+@keyframes world-chip-arrive {
+  from { opacity: 0; translate: 0 4px; scale: .96; }
+  70% { opacity: 1; translate: 0 -1px; scale: 1.004; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+/* Past the rail's cap: a count, never a silent drop. Not a button — there is nothing to press. */
+.world-challenge-more {
+  flex: 0 0 auto; align-self: center; padding: 0 6px;
+  font-size: .62rem; letter-spacing: .1em; color: #e8ddbe; opacity: .62; white-space: nowrap;
+}
+/* The screen-reader line. Present to assistive tech, invisible to the eye, and empty when silent. */
+.world-live {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
 .world-challenge-chip {
   flex: 0 0 auto; min-height: 44px; box-sizing: border-box;
   display: flex; align-items: center; gap: 8px; padding: 4px 11px 4px 7px;
   color: #e8ddbe; background: #161b17cc; border: 1px solid #d5c89b40; border-radius: 9px;
   font: inherit; text-align: left; cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, scale 90ms ease;
 }
+/* The chip is a key like any other: it answers a press the way the rest of the game does. */
+.world-challenge-chip:active { scale: .975; }
+.world-challenge-chip[data-status='pending'] { border-color: #d5c89b59; }
 .world-challenge-chip:focus { outline: none; }
 .world-challenge-chip:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 .world-challenge-chip-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -625,15 +647,48 @@ export const ONLINE_CSS = `
    grained page showing through the same translucent glass, cream ink, one primary key. */
 .world-challenge-sheet[hidden] { display: none; }
 .world-challenge-card { width: min(100%, 380px); }
+/* The contested ground itself, at the head of the card: the cell's own six-point outline in the
+   holder's colour. It is the one thing on this surface that is not a word. */
+.world-challenge-head { display: flex; align-items: center; gap: 9px; }
+.world-challenge-head strong { font-size: 1.06rem; letter-spacing: .1em; }
+.world-challenge-glyph { width: 22px; height: 24px; flex: none; display: block; }
+.world-challenge-glyph path {
+  fill: none; stroke: var(--territory, #e8ddbe); stroke-width: 1.5;
+  stroke-linejoin: round; vector-effect: non-scaling-stroke;
+}
+.world-challenge-glyph.is-rock path { stroke: #e8ddbe66; }
 .world-challenge-line { font-size: .82rem; color: #eee3c6; }
 .world-challenge-meta {
   margin: -2px 0 10px; font-size: .68rem; letter-spacing: .12em; color: #cfc8ae;
 }
 .world-challenge-keys { width: 100%; display: flex; gap: 8px; }
-.world-challenge-primary { background: #3a4136; }
+/* The one primary key is the game's own amber, not a second green: this card is part of the same
+   instrument as PLAY and the pause plate, and its lead key must read as the lead key everywhere. */
+.world-challenge-primary {
+  background: var(--c-gold, #f2c14e); border-color: var(--c-gold, #f2c14e);
+  color: #14170f; font-weight: 700;
+}
 .world-challenge-secondary { background: transparent; opacity: .75; }
+/* Declining is armed, not done: the label says so and the face steps forward to be read. */
+.world-challenge-secondary.is-armed { opacity: 1; border-color: #d8cda5aa; }
+/* An in-flight key speaks the app's own busy language: calmer face, progress cursor. */
+.world-challenge-keys button[aria-busy='true'] { cursor: progress; opacity: .62; }
 .world-challenge-notice { min-height: 0; margin: 0; font-size: .7rem; line-height: 1.35; color: #d9c89a; }
 .world-challenge-notice:not(:empty) { min-height: 1.1em; }
+
+/* THE SETTLE BEAT: the ground draws its own outline once in its new owner's colour, then goes. */
+.world-settle {
+  fill: none; stroke: var(--territory, #e8ddbe); stroke-width: 1.6;
+  stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: world-settle 1250ms cubic-bezier(.22, 1, .36, 1) forwards;
+}
+@keyframes world-settle {
+  0% { stroke-dashoffset: 1; opacity: .95; }
+  38% { stroke-dashoffset: 0; opacity: .95; }
+  72% { stroke-dashoffset: 0; opacity: .5; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
 
 /* The one new continuous motion is the ring; reduced motion keeps its DRAINED LENGTH and stops both
    the breath and the smooth fill. The expiry fade is not information on its own. */
@@ -644,6 +699,9 @@ export const ONLINE_CSS = `
     transition: none; animation: none;
   }
   .world-ring.done { opacity: 0; }
+  /* A chip still appears and a settled tile still marks its new owner — it just does not move. */
+  .world-challenge-chip.is-arriving { animation: none; }
+  .world-settle { animation: none; opacity: .9; }
 }
 
 .world-invitation {

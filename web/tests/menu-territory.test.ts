@@ -59,8 +59,8 @@ const world = (owners: { cellId: string; ownerId: string }[]): World => ({
 
 describe('the two read-outs show the server wallet and the player’s OWN tiles', () => {
   it('reads Seeds from the wallet balance exactly (no rounding of a real balance)', () => {
-    expect(territoryCounts(wallet(128), world([]), 'me')).toEqual({ seeds: 128, tiles: 0, cells: 2 });
-    expect(territoryCounts(wallet(0), world([]), 'me')).toEqual({ seeds: 0, tiles: 0, cells: 2 });
+    expect(territoryCounts(wallet(128), world([]), 'me')).toEqual({ seeds: 128, tiles: 0, cells: 2, incoming: 0 });
+    expect(territoryCounts(wallet(0), world([]), 'me')).toEqual({ seeds: 0, tiles: 0, cells: 2, incoming: 0 });
   });
 
   it('counts only claims owned by this player, never every filled tile', () => {
@@ -70,9 +70,9 @@ describe('the two read-outs show the server wallet and the player’s OWN tiles'
       { cellId: 'c', ownerId: 'me' },
       { cellId: 'd', ownerId: 'someone-else' },
     ]);
-    expect(territoryCounts(wallet(40), map, 'me')).toEqual({ seeds: 40, tiles: 2, cells: 2 });
+    expect(territoryCounts(wallet(40), map, 'me')).toEqual({ seeds: 40, tiles: 2, cells: 2, incoming: 0 });
     // The same map seen by the other player is THEIR two tiles, not the world's four.
-    expect(territoryCounts(wallet(10), map, 'someone-else')).toEqual({ seeds: 10, tiles: 2, cells: 2 });
+    expect(territoryCounts(wallet(10), map, 'someone-else')).toEqual({ seeds: 10, tiles: 2, cells: 2, incoming: 0 });
   });
 
   it('counts a cell once, matching the view’s `own` set (a repeated claim cannot inflate it)', () => {
@@ -193,8 +193,9 @@ describe('the menu show pays ONE wallet read and ONE map read, never a poll', ()
     expect(lobbySource).toContain("window.addEventListener('futasaku:menu', () => { void refreshMenu(); })");
     expect(lobbySource).toMatch(/if \(menuEl\?\.hidden !== false\) return Promise\.resolve\(\)/);
     expect(lobbySource).toMatch(/if \(menuPass\) return menuPass/);
-    // One Promise.all for the pair, from the same menu pass that offers the invitation.
-    expect(lobbySource).toMatch(/Promise\.all\(\[client\.seedWallet\(id\.token\), client\.worldMap\(\)\]\)/);
+    // One Promise.all for the pair (plus the challenge count the entry's lamp reads), from the same
+    // menu pass that offers the invitation. Still ONE read of each, never a poll.
+    expect(lobbySource).toMatch(/Promise\.all\(\[\s*client\.seedWallet\(id\.token\),\s*client\.worldMap\(\),\s*[\s\S]{0,220}?client\.worldChallenges\(id\.token\)/);
     // And no timer/interval/rAF drives it.
     expect(moduleSource).not.toMatch(/setInterval|setTimeout|requestAnimationFrame/);
     expect(lobbySource.slice(lobbySource.indexOf('const refreshMenu ='), lobbySource.indexOf("window.addEventListener('futasaku:menu'"))).not.toMatch(/setInterval|setTimeout|requestAnimationFrame/);
