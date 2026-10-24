@@ -46,6 +46,7 @@ import {
   readResources,
   retainedHeap,
 } from './helpers/online-probe.js';
+import { type HeapSample, fitSlope, tailSamples } from './helpers/heap-slope.js';
 
 const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
 const PORT = Number(process.env.PREVIEW_PORT ?? 4249);
@@ -769,12 +770,36 @@ try {
   const midCp = report.checkpoints.find((c) => c.label === 'middle');
   const endCp = report.checkpoints.find((c) => c.label === 'end')!;
   const firstN = Math.max(1, Math.ceil(MATCHES / 3));
+
+  /**
+   * Least-squares slope of heap (bytes) against match number, over EVERY sample in the window.
+   *
+   * The heap is measured after every match, but this slope used to be a two-point difference
+   * (one sample at the end of the first third, one at the end) divided by the tail length. Two
+   * points carry all the measurement noise of a double-GC'd browser heap into the slope, and
+   * dividing a few MB of jitter by ten matches lands right on the 1024 KB/match guard: the
+   * 2026-10-24 release went red at 1172 KB/match and passed on the very next run with no code
+   * change. Fitting a line through the ten tail samples instead averages that noise out, and it
+   * DETECTS a real leak BETTER, because a leak is a consistent slope: the same threshold now
+   * needs a smaller total drift to be sure. This is a more sensitive estimator, not a looser one.
+   * The estimator itself lives in `helpers/heap-slope.ts` so its arithmetic is unit-tested.
+   *
+   * Falls back to the two-point difference when a short SOAK_MATCHES run leaves too few samples
+   * to fit, so a debugging run still reports something.
+   */
+  const tailOf = (seat: 'heap0' | 'heap1'): HeapSample[] =>
+    tailSamples(
+      report.matches.map((r) => ({ x: r.match, y: r[seat] })),
+      firstN,
+    );
+
   const slopeA0 = ((midCp?.seat0Heap ?? 0) - bootCp.seat0Heap) / firstN;
-  const slopeB0 = (endCp.seat0Heap - (midCp?.seat0Heap ?? 0)) / Math.max(1, MATCHES - firstN);
+  const slopeB0 = fitSlope(tailOf('heap0'));
   const slopeA1 = ((midCp?.seat1Heap ?? 0) - bootCp.seat1Heap) / firstN;
-  const slopeB1 = (endCp.seat1Heap - (midCp?.seat1Heap ?? 0)) / Math.max(1, MATCHES - firstN);
-  console.log(`retained-heap slope seat0: first third ${K(slopeA0)}/match, then ${K(slopeB0)}/match`);
-  console.log(`retained-heap slope seat1: first third ${K(slopeA1)}/match, then ${K(slopeB1)}/match`);
+  const slopeB1 = fitSlope(tailOf('heap1'));
+  const tailN = Math.max(0, MATCHES - firstN);
+  console.log(`retained-heap slope seat0: first third ${K(slopeA0)}/match, then ${K(slopeB0)}/match (fitted over ${tailN})`);
+  console.log(`retained-heap slope seat1: first third ${K(slopeA1)}/match, then ${K(slopeB1)}/match (fitted over ${tailN})`);
   console.log(`retained-heap growth over ${MATCHES} matches: seat0 ${mb(endCp.seat0Heap - bootCp.seat0Heap)} (${K((endCp.seat0Heap - bootCp.seat0Heap) / MATCHES)}/match), seat1 ${mb(endCp.seat1Heap - bootCp.seat1Heap)} (${K((endCp.seat1Heap - bootCp.seat1Heap) / MATCHES)}/match)`);
 
   // The heap settles at a CEILING (measured: ~6.2 MB after 4 matches and 5.2 MB after 15), not a
