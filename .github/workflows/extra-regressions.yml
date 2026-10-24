@@ -43,4 +43,29 @@ jobs:
       - run: npx playwright-core install --with-deps chromium
       - name: Select the pinned browser
         run: node --input-type=module -e 'import {chromium} from "playwright-core"; console.log("PW_CHROMIUM=" + chromium.executablePath())' >> "$GITHUB_ENV"
-      - run: node --import tsx web/e2e/${{ matrix.suite }}.ts
+      - name: Run the regression suite
+        run: |
+          set -o pipefail
+          node --import tsx web/e2e/${{ matrix.suite }}.ts 2>&1 | tee regression.log
+      - name: Annotate failed checks
+        if: failure()
+        run: |
+          node --input-type=module -e '
+            import { readFileSync, existsSync } from "node:fs";
+            if (existsSync("regression.log")) {
+              for (const line of readFileSync("regression.log", "utf8").split("\n")) {
+                if (/^FAIL |EXIT FAILED|AssertionError/.test(line)) {
+                  const safe = line.replaceAll("%", "%25").replaceAll("\r", "%0D");
+                  console.log("::error::" + safe);
+                }
+              }
+            }
+          '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extra-${{ matrix.suite }}
+          path: |
+            regression.log
+            docs/screens/online/soak-report.json
+          retention-days: 7
