@@ -172,7 +172,11 @@ const playTurn = async (page: Page) => {
         await card.click();
         if (await pickTarget(page)) {
           if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
-          else await page.click('#confirm-cancel').catch(() => {});
+          // A single-target move can already have played: there is then nothing to cancel.
+          // Do not spend the default 30s action timeout waiting for a control that is gone.
+          else if (await page.locator('#confirm-cancel').isVisible()) {
+            await page.locator('#confirm-cancel').click({ timeout: 2000 }).catch(() => {});
+          }
         } else await page.locator('#moves .cancel').click({ timeout: 2000 }).catch(() => {}); // the game may have moved on to Throw (auto-advance)
       } else {
         // When nothing can grow, the game moves on to the Throw step by itself (auto-advance),
