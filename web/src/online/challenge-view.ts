@@ -1,4 +1,5 @@
 import type { WorldChallengeWire } from '../../../server/src/seeds/types.js';
+import { CHALLENGE } from './challenge-copy.js';
 
 /**
  * The challenge layer's pure arithmetic and state machine. Kept out of `world-view.ts` so the ring's
@@ -85,4 +86,69 @@ export const opponentName = (challenge: WorldChallengeWire, viewerId: string): s
 export const winnerName = (challenge: WorldChallengeWire): string | null => {
   if (challenge.winnerId === null) return null;
   return challenge.winnerId === challenge.challengerId ? challenge.challengerName : challenge.defenderName;
+};
+
+/**
+ * THE CROSSED SWORDS (owner, 2026-10-24: "place 2 swords graphic on top of the tile that is being
+ * challenged... if someone clicks at it they can see who challenged it too").
+ *
+ * The glyph is drawn in the map's own SVG, but WHICH tile carries it — and what it says when a
+ * keyboard reaches it — is arithmetic, so it is asserted here instead of in a browser. The marker is
+ * the pending state and nothing else: the moment a challenge is accepted, declined, expired, stale
+ * or forfeited the data stops offering one, so the swords leave without a timer of their own. That is
+ * also exactly the lifecycle of the timer ring (`ringFraction`), so glyph and ring arrive and leave
+ * together.
+ */
+export type ChallengeMarker = {
+  /** The one challenge the marker belongs to; paint() reuses its node by this id across polls. */
+  challengeId: string;
+  cellId: string;
+  /** True when this player DEFENDS the tile (the challenge arrived), false when they sent it. */
+  incoming: boolean;
+  /** The other player's display name — the answer the tap gives. */
+  name: string;
+  /** The glyph's accessible name. Deterministic for a challenge; never contains an id. */
+  label: string;
+};
+
+/**
+ * The glyph's touch target, in the map's world units. One hex is √3·R = 17.32 units wide; at the map's
+ * 46 px cell floor that is 2.656 px per unit, so a radius of 8.4 units is 44.6 px — over the owner's
+ * 44 px minimum — while staying inside the hex's 8.66-unit inradius. It can never grow a halo over a
+ * neighbour, and it only gets larger as the map is zoomed in.
+ */
+export const SWORDS_HIT_RADIUS = 8.4;
+const HEX_WIDTH_UNITS = Math.sqrt(3) * 10;
+
+/** The marker's touch target in CSS pixels for a cell drawn `cellPixelWidth` wide. */
+export const swordsHitPx = (cellPixelWidth: number): number =>
+  (SWORDS_HIT_RADIUS * 2 / HEX_WIDTH_UNITS) * cellPixelWidth;
+
+/**
+ * The marker for one tile, or null. A pending challenge is the ONLY state with swords — an accepted
+ * one already has a sheet and a duel, and a closed one is history. If a cell somehow carries more
+ * than one pending entry, the defender's own answer outranks an outgoing one, then the sooner
+ * deadline, then the id — the same tile always draws the same marker, whatever order the list
+ * arrives in.
+ */
+export const challengeMarkerFor = (
+  challenges: readonly WorldChallengeWire[],
+  cellId: string,
+): ChallengeMarker | null => {
+  const open = challenges
+    .filter((challenge) => challenge.cellId === cellId && challenge.status === 'pending')
+    .sort((a, b) =>
+      (a.fromMe === b.fromMe ? 0 : a.fromMe ? 1 : -1) ||
+      a.expiresAt - b.expiresAt ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const challenge = open[0];
+  if (!challenge) return null;
+  const name = (challenge.fromMe ? challenge.defenderName : challenge.challengerName) ?? 'Player';
+  return {
+    challengeId: challenge.id,
+    cellId,
+    incoming: !challenge.fromMe,
+    name,
+    label: challenge.fromMe ? CHALLENGE.markerTo(name) : CHALLENGE.markerFrom(name),
+  };
 };

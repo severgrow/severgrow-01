@@ -54,6 +54,9 @@ export const CHALLENGE = Object.freeze({
   incomingAnnounceCount: (count: number) => (count === 1
     ? '1 challenge is waiting for your answer.'
     : `${count} challenges are waiting for your answer.`),
+  /** The crossed swords on a contested tile: the glyph's one spoken name, who and which side. */
+  markerFrom: (name: string) => `Challenge on this tile. ${name} challenged you.`,
+  markerTo: (name: string) => `Challenge on this tile. You challenged ${name}.`,
   noFunds: (stake: number) => `You need ${stake} Seeds to challenge.`,
   busy: 'Someone already challenged this ground.',
   sendFailed: 'The challenge did not send. No Seeds were taken.',

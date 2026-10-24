@@ -135,11 +135,19 @@ contract claims already honour. All four require a bearer token; none expose a b
 ## The screen (minimal, distinct, FUTASAKU)
 
 The map already carries the whole visual language: grained ground, hexes as coloured glass, cream
-ink, one `--territory` accent. The challenge layer adds **three** things and no new colours.
+ink, one `--territory` accent. The challenge layer adds **four** things and no new colours.
 
 - **The frontier.** When a cell of yours is selected and a rival tile touches it, that tile gains a
   hairline in `--territory` plus a small notched corner mark. Nothing else changes; the map stays a
   map. Tapping it opens the challenge sheet instead of the claim bar.
+- **The crossed swords.** The tile a challenge is waiting on carries two small swords, drawn in the
+  map's own SVG inside the timer ring's centre — white ink, a restrained red bloom, no badge. They
+  appear for the defender and for the challenger because the payload carries both lists, on the
+  refresh that follows a send, and they leave in the same frame the status stops being `pending`
+  (accepted, declined, expired, stale or forfeited): the data closes them, no local timer. Tapping
+  the swords — or the tile, which is the same tap — opens the existing challenge sheet, which already
+  says who challenged. The hit disc is 44.6 px at the map's 46 px cell floor and the glyph itself is
+  static in every motion mode, so reduced motion has nothing to switch off.
 - **The timer ring.** The signature element. A thin ring **traced along the hex's own outline**
   (the same 6-point `hexPath` the tiles use, so it is the cell's shape, not a circle stuck on top),
   draining clockwise from full to empty over the 24 h. It is `stroke-dasharray` animated on the

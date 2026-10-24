@@ -3,9 +3,12 @@ import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload } from '../../../server/src/seeds/types.js';
 import { worldNeighbours } from '../../../server/src/world.js';
 import { CHALLENGE } from './challenge-copy.js';
+import type { ChallengeMarker } from './challenge-view.js';
 import {
   CHALLENGE_RAIL_MAX,
+  SWORDS_HIT_RADIUS,
   challengeForCell as challengeOnCell,
+  challengeMarkerFor,
   isLow,
   opponentName,
   playerName,
@@ -57,6 +60,15 @@ const FIT_EDGE = 3;
  */
 const MIN_CELL_PX = 46;
 const coords = (q: number, r: number) => ({ x: X * (q + r / 2) * R, y: 1.5 * r * R });
+/**
+ * THE CROSSED SWORDS' one glyph, in the map's own units, pointing up: a tapered blade, a straight
+ * guard, a short grip and a pommel. Two copies turned ±45° about the tile's centre make the X — a
+ * drawn mark that scales with the ground it sits on, not an icon badge pasted over it. The whole
+ * glyph's radius is ~5.2 units (scaled 1.3 → ~6.8), comfortably inside the hex's 8.66-unit
+ * inradius, so it never touches the timer ring traced on the outline.
+ */
+const SWORD_PATH = 'M0,-5.1 L0.58,1.62 L-0.58,1.62 Z M-2.05,1.62 L2.05,1.62 M0,1.62 L0,3.35';
+const SWORD_SCALE = 1.3;
 const hexPath = (x: number, y: number) => {
   const points = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]];
   return points.map(([dx, dy], index) => `${index ? 'L' : 'M'}${(x + dx! * R).toFixed(2)},${(y + dy! * R).toFixed(2)}`).join(' ') + 'Z';
@@ -117,6 +129,13 @@ export class WorldView {
   /** The live ring paths, reused across polls so `stroke-dashoffset` can transition smoothly. */
   private readonly ringPaths = new Map<string, { path: SVGPathElement; challenge: WorldChallengeWire }>();
   private ringsGroup: SVGGElement | null = null;
+  /**
+   * The crossed swords on a contested tile, keyed by challenge id and REUSED across polls exactly as
+   * the ring paths are: a focused marker must survive the 12 s refresh, and removing a marker takes
+   * it off the map in the same frame the data closes the challenge.
+   */
+  private readonly markerNodes = new Map<string, { group: SVGGElement; hit: SVGCircleElement }>();
+  private swordsGroup: SVGGElement | null = null;
   private marksGroup: SVGGElement | null = null;
   /** Set by lobby-ui once `openMatch` exists, so an accepted challenge can open its duel. */
   private matchOpener: ((matchId: string) => void) | null = null;
@@ -297,8 +316,9 @@ export class WorldView {
       this.paintWallet();
       this.paintSelection();
       // The ring must keep draining even when the world revision is unchanged (a 24 h timer does not
-      // bump ownership). These two only touch attributes and the challenge strip, never the map.
+      // bump ownership). These only touch attributes, the swords and the challenge strip, never the map.
       this.paintRings();
+      this.paintSwords();
       this.paintChallenges();
     } catch {
       if (this.active) this.notice('The world could not refresh. Tap here to try again.');
@@ -434,7 +454,12 @@ export class WorldView {
     marks.classList.add('world-frontier-marks');
     const rings = document.createElementNS(NS, 'g');
     rings.classList.add('world-rings');
-    svg.append(faces, lines, marks, rings);
+    // THE SWORDS LAYER: the contested tile's marker, in the map's own coordinates. It sits ABOVE the
+    // ring (the two never overlap: the ring is the tile's outline, the glyph is in the middle) and
+    // below the selection accent, so pan and zoom move it with its tile for free — no HTML overlay.
+    const swords = document.createElementNS(NS, 'g');
+    swords.classList.add('world-swords-layer');
+    svg.append(faces, lines, marks, rings, swords);
     // The accent: ONE path, above every outline, that carries the selection highlight.
     const accentGroup = document.createElementNS(NS, 'g');
     accentGroup.classList.add('world-accent');
@@ -446,6 +471,8 @@ export class WorldView {
     this.marksGroup = marks;
     this.ringsGroup = rings;
     this.ringPaths.clear();
+    this.swordsGroup = swords;
+    this.markerNodes.clear();
     this.paintAccent();
     // THE FIT BOX carries `PAD` on all four sides, so the outermost cell can be panned clear of the
     // panel's rounded corner (see `PAD`).
@@ -469,6 +496,7 @@ export class WorldView {
     this.applyView();
     this.paintFrontier();
     this.paintRings();
+    this.paintSwords();
   }
   /**
    * The smallest view the window allows: the largest rect with the WINDOW's own aspect that fits
@@ -733,6 +761,92 @@ export class WorldView {
       entry.path.classList.toggle('low', isLow(challenge, now));
       entry.path.setAttribute('data-remaining-ms', String(Math.max(0, challenge.expiresAt - now)));
     }
+  }
+
+  /**
+   * THE CROSSED SWORDS (owner, 2026-10-24). Two white swords, red-glow, drawn at the centre of the
+   * tile a challenge is waiting on — the defender's tiles and the challenger's alike, because the
+   * payload carries both lists and `challengeMarkerFor` reads the pending state of either. The glyphs
+   * appear on the refresh that follows a send (the sheet calls `refresh(true)`), and leave in the same
+   * frame the challenge stops being pending: no local timer, no guess about acceptance.
+   *
+   * Nodes are keyed by challenge id and reused, so a marker under the player's keyboard focus is not
+   * destroyed by the 12 s poll. The marker is the tile's own tap: the SVG's nearest-cell resolution
+   * already turns a tap into `select()`, which opens the existing challenge sheet — that sheet already
+   * names the challenger, so there is no second popover to keep in step.
+   */
+  private paintSwords() {
+    const group = this.swordsGroup;
+    if (!group || !this.world) return;
+    const pending = this.allChallenges.filter((challenge) => challenge.status === 'pending');
+    const wanted = new Map<string, ChallengeMarker>();
+    for (const cellId of new Set(pending.map((challenge) => challenge.cellId))) {
+      const marker = challengeMarkerFor(pending, cellId);
+      if (marker) wanted.set(marker.challengeId, marker);
+    }
+    // Data-driven removal, before the additions: a challenge that closed this poll takes its swords
+    // with it in the same paint.
+    for (const [id, node] of [...this.markerNodes]) {
+      if (wanted.has(id)) continue;
+      node.group.remove();
+      this.markerNodes.delete(id);
+    }
+    for (const [id, marker] of wanted) {
+      const cell = this.world.cells.find((candidate) => candidate.id === marker.cellId);
+      if (!cell) continue;
+      const at = coords(cell.q, cell.r);
+      const transform = `translate(${at.x.toFixed(2)} ${at.y.toFixed(2)})`;
+      let node = this.markerNodes.get(id);
+      if (!node) {
+        node = this.makeMarker(marker);
+        group.append(node.group);
+        this.markerNodes.set(id, node);
+      }
+      // The tile never moves in world space, but keeping this write here means a marker made before a
+      // world revision still lands on its cell after a re-frame (the SVG paints in world units).
+      node.group.setAttribute('transform', transform);
+      node.group.setAttribute('data-side', marker.incoming ? 'incoming' : 'outgoing');
+      node.hit.setAttribute('aria-label', marker.label);
+    }
+  }
+
+  private makeMarker(marker: ChallengeMarker): { group: SVGGElement; hit: SVGCircleElement } {
+    const group = document.createElementNS(NS, 'g');
+    group.classList.add('world-swords');
+    group.setAttribute('data-challenge-id', marker.challengeId);
+    group.setAttribute('data-cell-id', marker.cellId);
+    // The touch target: an invisible disc inside the hex, 44.6 px at the map's 46 px cell floor
+    // (SWORDS_HIT_RADIUS) and larger at every zoom-in. It is a real button to assistive tech.
+    const hit = document.createElementNS(NS, 'circle');
+    hit.setAttribute('r', SWORDS_HIT_RADIUS.toFixed(2));
+    hit.setAttribute('role', 'button');
+    hit.setAttribute('tabindex', '0');
+    hit.setAttribute('aria-label', marker.label);
+    hit.classList.add('world-swords-hit');
+    hit.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this.select(marker.cellId);
+      }
+    });
+    const glyph = document.createElementNS(NS, 'g');
+    glyph.setAttribute('aria-hidden', 'true');
+    glyph.setAttribute('transform', `scale(${SWORD_SCALE})`);
+    glyph.classList.add('world-swords-glyph');
+    for (const turn of [45, -45]) {
+      const sword = document.createElementNS(NS, 'g');
+      sword.setAttribute('transform', `rotate(${turn})`);
+      const blade = document.createElementNS(NS, 'path');
+      blade.setAttribute('d', SWORD_PATH);
+      const pommel = document.createElementNS(NS, 'circle');
+      pommel.setAttribute('cx', '0');
+      pommel.setAttribute('cy', '3.72');
+      pommel.setAttribute('r', '.4');
+      sword.append(blade, pommel);
+      glyph.append(sword);
+    }
+    group.append(hit, glyph);
+    return { group, hit };
   }
 
   /**
