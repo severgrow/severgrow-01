@@ -11,6 +11,15 @@ export const seedBalanceLabel = (balance: number): string => `${balance} SEEDS`;
  */
 export const SEEDS_WORD = 'Seeds';
 
+/** The tutorial's last finish card (owner, 2026-10-24): level 10 pays 100 Seeds, and the card says,
+ *  in two lines, what Seeds and Territory are, then offers the way there. Kept here with the
+ *  currency's name, not in src/strings.ts, where "seed" is reserved (the retired seed mode). */
+export const SEEDS_INTRO = Object.freeze({
+  earned: `${SEEDS_WORD} are earned by winning.`,
+  spend: 'Spend 100 to claim a tile of Territory on the world map.',
+  open: 'Open Territory',
+});
+
 /** One authored icon at every Seeds size; currentColor keeps the ivory material intact. */
 export const seedIcon = (size = 20): SVGSVGElement => {
   const ns = 'http://www.w3.org/2000/svg';

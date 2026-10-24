@@ -766,7 +766,10 @@ try {
       await page.reload({ waitUntil: 'networkidle' });
       await openNextLevel(page);
       // The Bloom is explained after the draw, the moment it can be played (owner, 2026-10-22).
-      check((await hook<any>(page, 'lesson'))?.beat?.id === 'draw', `${tag}: before the draw the display only asks for the draw`);
+      // From level 2 the draw prompt is not the lesson's own step, so it waits for a quiet moment
+      // (owner, 2026-10-24); either way nothing but the draw is asked for before it.
+      const before = (await hook<any>(page, 'lesson'))?.beat?.id ?? null;
+      check(before === null || before === 'draw', `${tag}: before the draw the display asks for nothing but the draw (${before})`);
       const deck = (await litPoints(page, { t: 'deck' }))[0]!;
       await page.mouse.click(deck.x, deck.y); await idle(page);
       await page.waitForSelector('#lesson-plate:not([hidden]) .lesson-copy', { timeout: 15000 });

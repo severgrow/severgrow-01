@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { SEEDS_INTRO } from '../../src/strings.js';
+import { SEEDS_INTRO } from '../src/online/seed-icon.js';
 import { FINAL_LESSON } from '../src/lessons/final.js';
 
 const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
