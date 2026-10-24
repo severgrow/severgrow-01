@@ -54,6 +54,12 @@ describe('Bloom has its own colour', () => {
     expect(info).toMatch(/\.card\.futa04-bloom-pick \{\s*border-color: #8fd3c9;/);
     expect(main).toMatch(/b\.classList\.toggle\('futa04-bloom-pick', IS_FUTA04 && inBloom\);/);
   });
+  it('every card of the Bloom is lifted, all by the same height (owner, 2026-10-24)', () => {
+    expect(main).toMatch(/const lifted = sel\.card === c\.id \|\| picked\.has\(c\.id\) \|\| bloomPick\.includes\(c\.id\) \|\| inBloom;/);
+    expect(main).toMatch(/const liftWeight = inBloom \? BLOOM_LIFT_WEIGHT : weight;/);
+    expect(main).toMatch(/b\.style\.setProperty\('--lift', `\$\{liftOf\(liftWeight\)\.toFixed\(1\)\}px`\);/);
+    expect(main).toMatch(/const lift = THUMB\.lift \* \(liftOf\(liftWeight\) \/ 22\);/);
+  });
 });
 
 describe('a Blast reads as its target first', () => {

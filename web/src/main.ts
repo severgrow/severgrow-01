@@ -4336,6 +4336,9 @@ function cueTurnHandOff(v: View): void {
   cue.classList.add('on');
 }
 
+/** A Bloom's cards all lift as one: the height of a middle card. */
+const BLOOM_LIFT_WEIGHT = 0.5;
+
 function render() {
   const t0 = performance.now();
   applyLayout();
@@ -6864,8 +6867,13 @@ function renderHand(v: View, advice: Advice | null) {
     // Phase 1: the card's weight (0 light .. 1 heavy). Drives the press, the lift, the settle,
     // the sway and the shadow. It never changes the card's box or any action's duration.
     const weight = weightOf(c.rank);
+    // Picked toward a Bloom, or in the Bloom being painted: every one of its cards is lifted, and
+    // by the same height whatever its number (owner, 2026-10-24: "all of them should be equally
+    // lifted") — a group reads as one choice, not as one card and three stragglers.
+    const inBloom = IS_FUTA04 && (bloomPick.includes(c.id) || (!!sel.kind?.startsWith('bloom-') && !sel.kind.startsWith('bloom-mega-') && kindCards(sel.kind).includes(c.id)));
+    const liftWeight = inBloom ? BLOOM_LIFT_WEIGHT : weight;
     b.style.setProperty('--weight', weight.toFixed(3));
-    b.style.setProperty('--lift', `${liftOf(weight).toFixed(1)}px`);
+    b.style.setProperty('--lift', `${liftOf(liftWeight).toFixed(1)}px`);
     const shadow = shadowOf(weight);
     b.style.setProperty('--shadow-y', `${shadow.y.toFixed(1)}px`);
     b.style.setProperty('--shadow-blur', `${shadow.blur.toFixed(1)}px`);
@@ -6876,7 +6884,7 @@ function renderHand(v: View, advice: Advice | null) {
       b.style.setProperty('--breath-scale', (1 + breathAmpOf(weight)).toFixed(4));
     }
     const off = i - (n - 1) / 2;
-    const lifted = sel.card === c.id || picked.has(c.id) || bloomPick.includes(c.id);
+    const lifted = sel.card === c.id || picked.has(c.id) || bloomPick.includes(c.id) || inBloom;
     const playable = legal.length > 0 && usable.has(c.id);
     // v0.6: a Fruit card glows softly when it has a target now; dimmed, it says why (one line)
     const fs = c.suit === null ? fruitCardState(v, legal, c.id) : null;
@@ -6885,7 +6893,6 @@ function renderHand(v: View, advice: Advice | null) {
     if (i >= BREATH.maxCards) b.classList.add('breath-off');
     if (IS_FUTA04) {
       // Picked toward a Bloom, or in the Bloom being painted: the Bloom's own aqua, as on the board.
-      const inBloom = bloomPick.includes(c.id) || (!!sel.kind?.startsWith('bloom-') && !sel.kind.startsWith('bloom-mega-') && kindCards(sel.kind).includes(c.id));
       b.classList.toggle('futa04-bloom-pick', IS_FUTA04 && inBloom);
       b.classList.toggle('futa04-bloom-card', bloomCards.has(c.id) && !inBloom);
       b.classList.toggle('futa04-throw-picked', session!.pending?.t === 'Discard' && session!.pending.card === c.id);
@@ -6896,7 +6903,7 @@ function renderHand(v: View, advice: Advice | null) {
       // the test copy's thumb layout: each card on the arc, turned with it; picked: lifted outward.
       // A heavier card comes out a little less (the 22 px sheet lift scaled to the fan's 10 px).
       const p = fanSlots(thumbLayout, n)[i]!;
-      const lift = THUMB.lift * (liftOf(weight) / 22);
+      const lift = THUMB.lift * (liftOf(liftWeight) / 22);
       b.style.setProperty('--fx', `${p.x.toFixed(1)}px`);
       b.style.setProperty('--fy', `${p.y.toFixed(1)}px`);
       b.style.setProperty('--rot', `${p.rot.toFixed(2)}deg`);
