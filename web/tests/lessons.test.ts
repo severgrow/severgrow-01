@@ -358,7 +358,9 @@ describe('final sign-off (owner, 2026-10-22)', () => {
   it('level 2: the cut is explained on the next turn, when a cut is there to play', () => {
     const seen = walk(lessonFor(2)!);
     const strengthen = seen.find((x) => x.id === '2:idea:strengthen')!;
-    const take = seen.find((x) => x.id === '2:idea:take')!;
+    // From the second turn on, the idea's id carries its turn (owner, 2026-10-24: the sentence comes
+    // back each turn its move is lit), so the take on turn 2 is `2:idea:take@2`.
+    const take = seen.find((x) => x.id === '2:idea:take@2')!;
     expect(strengthen.turn).toBe(1);
     expect(take.turn, 'not straight after the strengthen').toBe(2);
     expect(take.phase).toBe('ACT');
@@ -437,7 +439,7 @@ describe('final sign-off (owner, 2026-10-22)', () => {
       }
       const move = suggestMove(l, s) as { card: number };
       const beat = lessonBeat(l, s, { card: move.card, placing: null, throwPending: null, seen: new Set() });
-      expect(beat?.id, `L${level}: the card is already picked`).toBe(`${level}:idea:${level === 2 ? 'take' : 'cut'}`);
+      expect(beat?.id, `L${level}: the card is already picked`).toMatch(new RegExp(`^${level}:idea:${level === 2 ? 'take' : 'cut'}(@\\d+)?$`));
       expect(beat?.lit).toEqual({ t: 'hex', key: goal.key });
     }
   });
@@ -703,9 +705,34 @@ describe('owner review 2026-10-19', () => {
     return out;
   };
 
-  it('levels 1-9 keep their hints on screen; only level 10 waits for a quiet moment', () => {
-    for (const l of LESSONS.filter((x) => x.level <= 9)) expect(beatsOf(l).some((b) => b.idleOnly), `L${l.level}`).toBe(false);
+  // Owner, 2026-10-24 (replaces the 2026-10-19 "levels 1-9 keep their hints on screen"): the
+  // lesson's own step is lit at once; every other suggestion waits for a few idle seconds. Level 1
+  // teaches the whole turn, so all of its steps stay lit; level 10 waits on every hint.
+  it('the lesson\'s own step is lit at once; any other suggestion waits for a quiet moment', () => {
+    expect(beatsOf(lessonFor(1)!).some((b) => b.idleOnly), 'L1').toBe(false);
+    for (const l of LESSONS.filter((x) => x.level >= 2 && x.level <= 9)) {
+      const actions = beatsOf(l).filter((b) => !b.explain && !b.status && !b.hello);
+      expect(actions.some((b) => !b.idleOnly), `L${l.level}: its own step is lit at once`).toBe(true);
+      expect(actions.filter((b) => b.id === 'draw' || b.id.startsWith('throw:')).every((b) => b.idleOnly), `L${l.level}: draw and throw wait`).toBe(true);
+    }
     expect(beatsOf(lessonFor(10)!).some((b) => b.idleOnly)).toBe(true);
+  });
+
+  it('level 2: without the 8, the strengthen is lit with the strongest card, never a 3', () => {
+    const l = lessonFor(2)!;
+    let s = lessonOpening(l);
+    s = apply(s, legalActions(viewFor(s, 0)).find((a) => a.t === 'Draw' && a.from === 'deck')!);
+    // The 8 goes somewhere else first.
+    const eight = s.hands[0].find((c) => c.rank === 8)!.id;
+    s = apply(s, legalActions(viewFor(s, 0)).find((a) => a.t === 'Sprout' && a.card === eight && coordKey(a.coord) !== '-1,1')!);
+    s = apply(s, legalActions(viewFor(s, 0)).find((a) => a.t === 'EndAct') ?? legalActions(viewFor(s, 0))[0]!);
+    while (s.phase !== 'GAME_OVER' && !(s.actor === 0 && s.phase === 'ACT')) s = apply(s, s.actor === 0 ? suggestMove(l, s)! : opponentMove(l, s));
+    const m = suggestMove(l, s);
+    expect(m?.t).toBe('Sprout');
+    const rank = (id: number) => s.hands[0].find((c) => c.id === id)!.rank;
+    const strongest = Math.max(...legalActions(viewFor(s, 0)).filter((a) => a.t === 'Sprout' && coordKey(a.coord) === '-1,1').map((a) => rank((a as { card: number }).card)));
+    expect(rank((m as { card: number }).card)).toBe(strongest);
+    expect(strongest).toBeGreaterThan(3);
   });
 
   it('the end-of-turn step is always an action line, never a bare » or a lone word', () => {

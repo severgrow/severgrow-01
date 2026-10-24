@@ -375,11 +375,11 @@ const plainGrow = (s: State, legal: readonly Action[], takes = true): Sprout | n
     || coordKey(a.coord).localeCompare(coordKey(b.coord)))[0]!;
 };
 
-/** A Grow onto `key`, with the lowest card that does it (or the named rank). */
-const growOnto = (s: State, legal: readonly Action[], key: string, rank?: number): Sprout | null =>
+/** A Grow onto `key`, with the lowest card that does it (or the named rank, or the strongest). */
+const growOnto = (s: State, legal: readonly Action[], key: string, rank?: number, pick: 'lowest' | 'strongest' = 'lowest'): Sprout | null =>
   [...legal.filter((a): a is Sprout => a.t === 'Sprout' && coordKey(a.coord) === key)]
     .filter((a) => rank === undefined || rankOf(s, a.card) === rank)
-    .sort((a, b) => rankOf(s, a.card) - rankOf(s, b.card) || a.card - b.card)[0] ?? null;
+    .sort((a, b) => (pick === 'strongest' ? rankOf(s, b.card) - rankOf(s, a.card) : rankOf(s, a.card) - rankOf(s, b.card)) || a.card - b.card)[0] ?? null;
 
 /** The Bloom that grows forward: three tiles toward their home, deterministic. */
 const bestBloom = (s: State, legal: readonly Action[], allowKo = false): Extract<Action, { t: 'Bloom' }> | null => {
@@ -592,7 +592,9 @@ const suggestRaw = (lesson: Lesson, s: State): Action | null => {
   };
   if (goal) {
     switch (goal.t) {
-      case 'strengthen': if (!grew) { const m = growOnto(s, legal, goal.key, goal.card) ?? growOnto(s, legal, goal.key); if (m) return m; } break;
+      // Without the lesson's own card, the strongest one: a strengthen with a 3 teaches nothing
+      // (owner, 2026-10-24: "it wasn't a strong card at all").
+      case 'strengthen': if (!grew) { const m = growOnto(s, legal, goal.key, goal.card) ?? growOnto(s, legal, goal.key, undefined, 'strongest'); if (m) return m; } break;
       case 'take': case 'cut': case 'gold': if (!grew) { const m = growOnto(s, legal, goal.key); if (m) return m; } break;
       case 'bloom': { const m = bestBloom(s, legal); if (m) return m; break; }
       case 'pileBloom': { const m = bestBloom(s, legal); if (m && s.drawnFromDiscard !== null) return m; break; }
@@ -857,15 +859,21 @@ const ideaBeat = (
     return explain(`${lesson.level}:idea:first-grow`, W.growLine, { t: 'card', id: move.card });
   if (lesson.level === 1 && s.phase === 'DISCARD' && once('first-throw') && move.t === 'Discard')
     return explain(`${lesson.level}:idea:first-throw`, W.throwLine, { t: 'card', id: move.card });
-  if (lesson.level === 2 && goal?.t === 'strengthen' && once('strengthen') && move.t === 'Sprout')
-    return explain(`${lesson.level}:idea:strengthen`, W.biggerWinsLine, { t: 'card', id: move.card });
+  // The lesson's own idea is explained every turn its move is lit, never left as a bare light: a
+  // turn that passes without it brings the sentence back with the light (owner, 2026-10-24: "a 3
+  // card twice in a row… no lesson attached to it"). One id per turn: `2:idea:strengthen`, then
+  // `2:idea:strengthen@2` on the second turn, and so on.
+  const turn = myTurns(s).length;
+  const each = (idea: string) => `${idea}${turn > 1 ? `@${turn}` : ''}`;
+  if (lesson.level === 2 && goal?.t === 'strengthen' && once(each('strengthen')) && move.t === 'Sprout')
+    return explain(`${lesson.level}:idea:${each('strengthen')}`, W.biggerWinsLine, { t: 'card', id: move.card });
   // A take or a cut is explained the turn it can be played, right before the tap (owner,
   // 2026-10-22: level 2's cut sentence came straight after the strengthen, a turn too early).
   const playsGoal = s.phase === 'ACT' && move.t === 'Sprout' && !!goal && 'key' in goal && keyOf(move.coord) === goal.key;
-  if (lesson.level === 2 && goal?.t === 'take' && playsGoal && once('take'))
-    return explain(`${lesson.level}:idea:take`, W.takeTileLine, { t: 'hex', key: goal.key });
-  if (lesson.level === 4 && goal?.t === 'cut' && playsGoal && once('cut'))
-    return explain(`${lesson.level}:idea:cut`, W.cutLinkLine, { t: 'hex', key: goal.key });
+  if (lesson.level === 2 && goal?.t === 'take' && playsGoal && once(each('take')))
+    return explain(`${lesson.level}:idea:${each('take')}`, W.takeTileLine, { t: 'hex', key: goal.key });
+  if (lesson.level === 4 && goal?.t === 'cut' && playsGoal && once(each('cut')))
+    return explain(`${lesson.level}:idea:${each('cut')}`, W.cutLinkLine, { t: 'hex', key: goal.key });
   if (lesson.level === 8 && goal?.t === 'blastGrow' && once('free-grow') && move.t === 'Sprout')
     return explain(`${lesson.level}:idea:free-grow`, W.freeGrowLine, { t: 'card', id: move.card });
   return null;
@@ -889,11 +897,30 @@ const kindForMove = (goal: Goal | null, move: Action): ActionKind | null => {
   }
 };
 
+/** Is this move the lesson's own step (the idea it teaches), rather than an ordinary suggestion? */
+const servesGoal = (goal: Goal | null, move: Action): boolean => {
+  if (!goal) return false;
+  switch (goal.t) {
+    case 'grow': return move.t === 'Sprout';
+    case 'strengthen': case 'take': case 'cut': case 'gold':
+      return move.t === 'Sprout' && keyOf(move.coord) === goal.key;
+    case 'bloom': return move.t === 'Bloom';
+    case 'pileBloom': return move.t === 'Bloom' || (move.t === 'Draw' && move.from === 'discard');
+    case 'strangle': return move.t === 'Sprout';
+    case 'bomb': return move.t === 'PlayFruit';
+    case 'blast': return move.t === 'MegaBomb';
+    case 'blastGrow': return move.t === 'MegaBomb' || move.t === 'Sprout';
+  }
+};
+
 /** The action beat: the display says what to do. No explanation lives here (the box is separate). */
 const lightFor = (lesson: Lesson, s: State, ctx: BeatCtx, move: Action, legal: readonly Action[]): Beat => {
   const goal = currentGoal(lesson, s);
-  // Only the finale waits for a quiet moment; levels 1-9 keep their hint on screen (owner, 2026-10-19).
-  const idleOnly = lesson.guide === 'idle';
+  // The lesson's own step is lit at once; every other suggestion waits for a few idle seconds
+  // (owner, 2026-10-24: "cards suggested should be after a few seconds of idle… and be actually a
+  // good move"). Level 1 teaches the whole turn, so every step there is its own. Level 10 waits
+  // for a quiet moment on every hint.
+  const idleOnly = lesson.guide === 'idle' || (lesson.level !== 1 && !servesGoal(goal, move));
   const kind = kindForMove(goal, move);
   const beat = (id: string, say: string, lit: Lit): Beat => ({
     id, say, lit, ...(idleOnly ? { idleOnly } : {}), ...(kind ? { kind } : {}),

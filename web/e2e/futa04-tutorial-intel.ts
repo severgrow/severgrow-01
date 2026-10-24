@@ -170,7 +170,7 @@ try {
       // The last guide line points at the reference that replaced the in-match "?".
       const lastLine=await page.locator('#futasaku-glass .glass-why').textContent();
       assert.match(lastLine??'',/Match Intel/i,`tutorial's final line points at Match Intel: ${lastLine}`);
-      assert.match(lastLine??'',/How to/i,`tutorial's final line names the How to reference: ${lastLine}`);
+      assert.match(lastLine??'',/Rules/,`tutorial's final line names the Rules reference (owner, 2026-10-24: Now · Tips · Rules): ${lastLine}`);
     }
     await page.evaluate(()=>(window as any).__severgrow.tutorialNext());
     await page.waitForTimeout(250);

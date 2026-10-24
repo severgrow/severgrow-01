@@ -126,7 +126,7 @@ const lessons: TutorialLesson[][] = [
     L('bloom-set-throw', 'THROW', 'Tap a card twice, or drag it to the Throw pile.', 'hand', 'Discard', {
       autoDiscard: true,
     }),
-    L('bloom-opponent', 'THEIR TURN', 'They grow on their side.', 'none', 'Opponent'),
+    L('bloom-opponent', 'WAIT', 'They grow on their side.', 'none', 'Opponent'),
   ],
   // 4 STRENGTHEN (a way to use your Grow)
   [
@@ -203,7 +203,7 @@ const lessons: TutorialLesson[][] = [
     L('final-throw', 'LAST THROW', 'Throw your last card. Then most points wins.', 'hand', 'Discard', {
       cta: 'TAP A CARD',
     }),
-    L('final-opponent', 'THEIR LAST', 'They get the same last turn.', 'none', 'Opponent'),
+    L('final-opponent', 'WAIT', 'They get the same last turn.', 'none', 'Opponent'),
   ],
   // 13 FREE
   [
@@ -261,7 +261,7 @@ export const freeTurnGuide = (s: {
   phase: State['phase']; mine: boolean; picked: boolean; grew: boolean; bloomReady: boolean;
 }): { title: string; line: string } => {
   if (s.phase === 'GAME_OVER') return { title: 'DONE', line: 'Well played.' };
-  if (!s.mine) return { title: 'THEIR TURN', line: 'Watch what they grow and throw.' };
+  if (!s.mine) return { title: 'WAIT', line: 'Watch what they grow and throw.' };
   if (s.phase === 'DRAW') return { title: 'DRAW', line: 'Tap the Draw pile, or take the top Throw pile card.' };
   if (s.phase === 'DISCARD') return { title: 'THROW', line: 'Tap a card twice, or drag it to the Throw pile.' };
   if (s.picked) return { title: 'GROW', line: 'Now tap a lit tile.' };

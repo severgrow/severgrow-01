@@ -629,7 +629,8 @@ export const ONBOARD = Object.freeze({
    * goal is stated, the window points at the opponent's landmark and names it once. After that the
    * word means something.
    */
-  theirHome: 'THEIR HOME',
+  // Owner, 2026-10-24: the display never says "their".
+  theirHome: 'OPPONENT HOME',
   theirHomeLine: 'This one. Surround it to win.',
   /**
    * What the level was teaching, said back to the player on the finish card after a win: the "you
@@ -654,7 +655,8 @@ export const ONBOARD = Object.freeze({
   throwDone: 'Tap » when you are done.',
   twoWays: 'TWO WAYS',
   twoWaysLine: 'More than one tile works. Pick one.',
-  theirTurn: 'THEIR TURN',
+  // Owner, 2026-10-24: while the opponent plays, the display just says WAIT.
+  theirTurn: 'WAIT',
   theirTurnLine: 'Watch where they grow.',
   /** The one new idea each level introduces (levels 4-10), shown once on its first turn. */
   lessons: Object.freeze({
@@ -1363,13 +1365,15 @@ export const LESSON = Object.freeze({
   tapBloom: 'TAP BLOOM',
   tapBlast: 'TAP BLOOM',
   chooseBomb: 'CHOOSE THE BOMB',
-  bombTile: 'BOMB THEIR TILE',
-  tapTheirTile: 'TAP THEIR TILE',
+  // Owner, 2026-10-24: never "their" on the display, and (2026-10-19) never a tile colour: the
+  // tile to take is the lit one.
+  bombTile: 'BOMB LIT TILE',
+  tapTheirTile: 'TAP LIT TILE',
   tapLastSide: 'TAP LAST SIDE',
   // a power's once-ever hello (the card itself glows)
   bloomHello: 'TAP TO BLOOM',
   bombHello: 'TAP THE BOMB',
-  theirTurn: 'THEIR TURN',
+  theirTurn: 'WAIT',
   lastCards: 'LAST CARDS',
   lastTurn: 'LAST TURN',
   // level 1's first three explanations: the display welcomes, it scrolls and never competes with
@@ -1384,7 +1388,8 @@ export const LESSON = Object.freeze({
   throwLine: 'Throw: swipe up, drag it to the Throw pile, or double tap to Throw a card. This ends your turn.',
   youGrewLine: 'Tiles keep the rank of the card used. Higher ranks are harder to cut.',
   biggerWinsLine: 'Strengthen: a stronger card can replace your own tile.',
-  takeTileLine: 'Cut: a higher card can take an opponent’s tile.',
+  // "Take", not "Cut": a cut is level 4's idea (breaking the chain), and the two never share a name (owner, 2026-10-24).
+  takeTileLine: 'Take: a higher card can take an opponent’s tile.',
   rocksBlockLine: 'Nothing can Grow on a rock.',
   goldDoubleLine: 'A gold tile counts double, so it is worth two points.',
   cutLinkLine: 'Cut a tile to break the chain behind it.',
@@ -1418,7 +1423,7 @@ export const LESSON = Object.freeze({
   tapLit: 'TAP THE LIT ONE',
   connect: 'CONNECT TO YOUR HOME',
   rockBlocks: 'ROCK BLOCKS THIS',
-  isTheirHome: 'THAT IS THEIR HOME',
+  isTheirHome: 'HOMES ARE SAFE',
   isYourHome: 'THAT IS YOUR HOME',
   tooWeak: (card: number, tile: number): string => `TOO WEAK: ${card} VS ${tile}`,
   ownTile: 'YOUR TILE NEEDS A HIGHER CARD',
@@ -1428,5 +1433,5 @@ export const LESSON = Object.freeze({
   oneDraw: 'ONE CARD PER TURN',
   bloomNeeds: 'THREE CARDS OR MORE',
   bloomMatch: 'SAME NUMBER, OR COUNTING UP',
-  theirTurnNow: 'THEIR TURN',
+  theirTurnNow: 'WAIT',
 });

@@ -196,7 +196,7 @@ describe('free turn guide', () => {
     const throwStep = freeTurnGuide({ ...base, phase: 'DISCARD' });
     expect(throwStep.title).toBe('THROW');
     expect(throwStep.line).toMatch(/Throw pile/);
-    expect(freeTurnGuide({ ...base, mine: false, phase: 'ACT' }).title).toBe('THEIR TURN');
+    expect(freeTurnGuide({ ...base, mine: false, phase: 'ACT' }).title).toBe('WAIT'); // owner, 2026-10-24: never "their" on the display
   });
 
   it('every line stays brief', () => {

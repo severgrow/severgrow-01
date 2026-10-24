@@ -2980,6 +2980,8 @@ let lessonAnswerTimer = 0;
 /** Counts every answer given (tests: a new answer, not one still on screen). */
 let lessonAnswerSeq = 0;
 let lessonIdle = false;
+/** The step the idle count was last started for (history length and phase of my turn). */
+let lessonIdleStep = '';
 /** 0 = no idle step, 1 = 6 s WHISPER, 2 = 12 s GUIDE, 3 = 20 s light guide. */
 let lessonIdleStage: 0 | 1 | 2 | 3 = 0;
 /** Two wrong taps on this same step raise the tier for this moment only. */
@@ -5201,7 +5203,12 @@ function renderLessonGuide(): void {
   let beat: Beat | null = stuck
     ? { id: 'restart', line: LESSON.restartLine, lit: { t: 'none' } }
     : lessonBeat(lesson, st, lessonCtx());
-  // Level 10 plays on its own: its hints wait for a quiet moment.
+  // Every new step of mine starts its own quiet count: idle time spent watching their turn (or
+  // reading the last step) never makes a waiting hint appear at once (owner, 2026-10-24).
+  const stepKey = mine ? `${st.history?.length ?? 0}|${st.phase}` : '';
+  if (stepKey && stepKey !== lessonIdleStep) { lessonIdleStep = stepKey; lessonArmIdle(); }
+  if (!mine) lessonIdleStep = '';
+  // A hint that is not the lesson's own step (and every hint on level 10) waits for a quiet moment.
   if (beat?.idleOnly && !lessonIdle) beat = null;
   // Nothing is left to do but end the Grow: the game goes on to the Throw by itself (autoAdvance),
   // so » is never lit for the moment before it does (owner, 2026-10-20).
