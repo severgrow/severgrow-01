@@ -123,7 +123,8 @@ export const REPLAY_CSS = `
 /* ---------- the controls ---------- */
 #replay .rp-scrub {
   position: relative;
-  height: 30px;
+  /* The replay's primary drag target. It was 30px tall — a thumb target only by luck. */
+  height: 44px;
   display: flex;
   align-items: center;
   cursor: pointer;
@@ -192,7 +193,7 @@ export const REPLAY_CSS = `
 /* The footer's right-hand slot holds the one mark; a share control can join it here later. */
 #replay .rp-actions { display: flex; align-items: center; gap: 8px; }
 #replay .rp-btn {
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 13px;
   border: 1px solid var(--rp-line);
   border-radius: 11px;
@@ -228,7 +229,7 @@ export const REPLAY_CSS = `
   #replay { padding-top: calc(env(safe-area-inset-top, 0px) + 5px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 5px); }
   #replay .rp-score { font-size: 18px; }
   #replay .rp-turn { display: none; }
-  #replay .rp-scrub { height: 24px; }
+  #replay .rp-scrub { height: 44px; }
 }
 
 /* Reduce motion (setting or OS): no settle, no crossfade — the board simply is the next position. */

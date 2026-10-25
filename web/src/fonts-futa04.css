@@ -26,6 +26,9 @@ html.test-typography-v2 body {
   --font-display: 'Besley', Georgia, serif;
   --font-ui: 'Fragment Mono', ui-monospace, monospace;
   --font-num: 'Futasaku Numerals', 'Fragment Mono', ui-monospace, monospace;
+  /* The fixed-advance stack the dock odometer, the Bloom count badge and the finish plate's learned
+     line ask for. Undefined until now, so those three fell back to three different faces. */
+  --font-mono: var(--font-num);
   --font: var(--font-ui);
   --w-text: 400;
   --w-num: 700;
