@@ -145,6 +145,7 @@ import {
   TUTORIAL_LEVEL_COUNT,
 } from './logic/campaign.js';
 import type { CampaignMatchKind } from './logic/campaign.js';
+import { fetchAccountHighestLevel, syncAccountProgress } from './logic/account-progress.js';
 import {
   freeTurnGuide, migrateTutorialProgress, nextTutorialChapter, previousTutorialChapter,
   tutorialAccepts, tutorialChapter, tutorialFeedback, tutorialTrackFor,
@@ -3238,6 +3239,32 @@ let pendingInstallOutcome: 'won' | 'lost' | 'draw' | null = null;
 /** The campaign progress record (level 1 open; a win unlocks the next; a loss removes nothing). */
 let campaignProgress: CampaignProgress = parseProgress(store.get(CAMPAIGN_PROGRESS_KEY));
 const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializeProgress(campaignProgress));
+/**
+ * An ACCOUNT's place lives on the server (owner report, 2026-10-25: level 35 on the phone, level 1
+ * on the desktop). Campaign progress is still device-local for a guest; for a signed-in account one
+ * authenticated read of the furthest verified clear RAISES this device's record to match. It never
+ * lowers it, never runs for a guest, and a failed read leaves the local game exactly as it was with
+ * no error shown. The reconciliation itself is pure and unit-tested (`reconcileProgress`).
+ */
+async function syncAccountLevel(): Promise<void> {
+  if (!FEATURES.campaign) return;
+  const before = campaignProgress;
+  const after = await syncAccountProgress(campaignProgress, {
+    storage: store,
+    fetchHighest: fetchAccountHighestLevel,
+  });
+  if (after === before) return;
+  campaignProgress = after;
+  saveCampaignProgress();
+  // The menu's LEVEL <n> entry is painted from progress; repaint it in place so a boot that was
+  // already showing level 1 now names the account's real level, without a reload or a replay.
+  if (shownScreen === 'menu') layoutMenu(syncMenuResume());
+  else if (shownScreen === 'campaign') renderCampaignScreen();
+  else if (shownScreen === 'levels') renderLevelGrid();
+}
+// A sign-in finishes by reloading (the accounts module's own flow), so boot covers it; this event is
+// the belt-and-braces path if that flow ever stops reloading.
+window.addEventListener('futasaku:identity', () => { void syncAccountLevel(); });
 let lastBoard: unknown = null;
 let lastOverlay = '';
 let coachWhyOpen = false;
@@ -9812,6 +9839,8 @@ let appReady = false;
     return !!p;
   },
   settings: () => ({ ...settings }),
+  /** The campaign place the page is on, as the menu's LEVEL <n> reads it (tests/screenshots). */
+  campaignLevel: () => currentLevel(campaignProgress).number,
   busy: () => busy(),
   /** Read-only sound diagnostics: the pre-rendered bank's size and the last cues played. */
   soundBank: () => sound.bankStats(),
@@ -9975,6 +10004,9 @@ else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
   startTutorial(chapter);
 } else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
+// One background read on boot: a signed-in account's place comes from the server (a guest never
+// asks). It repaints the menu if it moves; the first paint is already usable without it.
+void syncAccountLevel();
 
 // The main-menu tagline ("GROW · CONNECT · CONQUER") is NOT on the menu — the owner had it removed
 // on 2026-10-14 (it read as clutter under the wordmark). It is not in `web/index.html` at all, so
