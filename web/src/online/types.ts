@@ -56,20 +56,15 @@ export type MatchDriverSnapshot = {
   turnDeadlineAt: number | null;
   result: OnlineGameResult | null;
   /**
-   * What this seat was PAID for this duel, if the server said. Absent today: `MatchViewPayload`
-   * and `MatchSummary` both stop at `result: OnlineGameResult`, and `settleOnline`
-   * (server/src/seeds/service.ts) returns void, discarding the `RewardResult` that `store.settle`
-   * already produces.
+   * What this seat was PAID for this duel, when the server said. It IS wired end to end now:
+   * `MatchViewPayload.seeds` (server/src/protocol.ts) is filled by the finished-view path from
+   * `settleOnline`'s per-seat report (`server/src/service.ts` `payload` → `safeSettleOnline`), and
+   * `server/tests/duel-seeds-report.test.ts` proves both seats get their own figure. A resignation
+   * or a timeout settles nobody, so those payloads carry no field and the card shows no line.
    *
-   * THE ONE SERVER CHANGE that turns the finish card's Seeds line on — nothing else is needed:
-   *   1. add `seeds?: { awarded: number; reason: string | null }` to `MatchViewPayload`
-   *      (server/src/protocol.ts), meaning "what THIS seat was paid";
-   *   2. have `settleOnline` return the per-seat `RewardResult` map instead of void;
-   *   3. carry it through `safeSettleOnline` (server/src/service.ts) into the finished-view path,
-   *      so the response built for each seat includes its own award.
-   * Until then the card shows NOTHING rather than guessing — a daily cap pays 0, and a resignation
-   * or timeout pays nothing, so a client-side rate table would print money nobody received
-   * (see `duelSeedsMessage` in ui/seed-reveal.ts).
+   * The client still reads it DEFENSIVELY and never infers an amount from the mode or the outcome —
+   * a daily cap pays 0, and a resignation pays nothing, so a guessed number would print money
+   * nobody received (see `duelSeedsMessage` in ui/seed-reveal.ts).
    */
   seeds?: SettledSeeds;
   opponentName: string | null;

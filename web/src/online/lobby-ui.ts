@@ -15,8 +15,9 @@ import { installTerritoryCountUI, territoryCounts } from './menu-territory.js';
 import type { TerritoryCounts } from './menu-territory.js';
 import { cachedTerritory, registerTerritoryReader, rememberTerritory } from './territory-cache.js';
 import { seedIcon } from './seed-icon.js';
-import { flushSeedProofs } from './seed-rewards.js';
-import type { RewardResult, SeedWallet } from '../../../server/src/seeds/types.js';
+import type { SeedFlushResult } from './seed-rewards.js';
+import { settlePendingSeeds } from './seed-settle.js';
+import type { SeedWallet } from '../../../server/src/seeds/types.js';
 
 /** The Territory zoom toggle's mark: a lens and a handle, stroked in currentColor, no text. */
 export const WORLD_FIT_ICON = '<svg class="world-fit-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.4 15.4 20.5 20.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
@@ -93,7 +94,7 @@ export type OnlineLobbyController = {
    */
   rematch(finishedMatchId?: string | null): Promise<void>;
   trainingSeedTicket(botLevel: number): Promise<{ id: string; seed: number } | null>;
-  syncSeedRewards(): Promise<{ key: string; reward: RewardResult }[]>;
+  syncSeedRewards(): Promise<SeedFlushResult>;
 };
 
 export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController => {
@@ -110,7 +111,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       refreshTitle: () => undefined,
       rematch: async () => undefined,
       trainingSeedTicket: async () => null,
-      syncSeedRewards: async () => [],
+      syncSeedRewards: async () => ({ awards: [], refused: [] }),
     };
   }
 
@@ -411,12 +412,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     return status.identity;
   };
-  // Stable storage scope: browserStorage() creates a fresh adapter on every call.
-  const rewardStorage = browserStorage();
-  const syncSeedRewards = async () => {
-    const id = await ensureIdentity();
-    return id && rewardStorage ? flushSeedProofs(rewardStorage, client, id.token) : [];
-  };
+  // Seeds settle through the ONE path that also serves the finish card (online/seed-settle.ts).
+  // It owns the deadline, the retry and the identity for a payout, so the hub and a finish card can
+  // never disagree about a proof, and a player who never opens this hub is still paid.
+  const syncSeedRewards = () => settlePendingSeeds();
   const trainingSeedTicket = async (botLevel: number) => {
     const id = await ensureIdentity();
     if (!id) return null;

@@ -6,11 +6,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { SEEDS_INTRO } from '../src/online/seed-icon.js';
 import { FINAL_LESSON } from '../src/lessons/final.js';
+import { settledSeedsMessage } from '../src/ui/seed-reveal.js';
 
 const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
 const main = read('../src/main.ts');
 const html = read('../index.html');
 const rewards = read('../src/online/seed-rewards.ts');
+const settle = read('../src/online/seed-settle.ts');
 
 describe('the final lesson pays Seeds', () => {
   it('a level 10 win sends its replay as `lesson-10`; levels 1-9 send nothing', () => {
@@ -28,9 +30,46 @@ describe('the final lesson pays Seeds', () => {
     expect(rewards).toMatch(/if \(unknownLesson\) continue;/);
   });
   it('a receipt paid before never shows a second +N', () => {
-    expect(main).toMatch(/seedRewardMessage = verified\.replayed \? '' :/);
+    expect(settledSeedsMessage({ awarded: 100, reason: null, replayed: true })).toBe('');
+    expect(settledSeedsMessage({ awarded: 100, reason: null, replayed: false })).toBe('+100 Seeds');
+    expect(main).toMatch(/seedRewardMessage = settledSeedsMessage\(report\.reward\);/);
   });
 });
+
+describe('the card never rests on "Seeds pending verification" (owner report, 2026-10-25)', () => {
+  it('the string is gone from the product, and a queued proof paints nothing until it is answered', () => {
+    // The lie was the resting state: a claim on screen while no receipt existed. Nothing may write it.
+    expect(main).not.toContain('Seeds pending verification');
+    expect(reveals()).not.toContain('Seeds pending verification');
+    // A win queues its proof, clears the line, and only then asks the server.
+    const queued = main.slice(main.indexOf('if (proof) {'), main.indexOf('if (proof) {') + 900);
+    expect(queued).toContain('queueSeedProof(store, proof);');
+    expect(queued).toMatch(/seedRewardMessage = '';/);
+    expect(queued).toContain('settleSeedsForCard(key);');
+  });
+
+  it('the settle does not depend on the online lobby having mounted', () => {
+    // The old call was `onlineLobbyCtl?.syncSeedRewards()`. Optional chaining on a module that had
+    // not loaded silently did NOTHING, and the card stayed on "pending" for the session.
+    expect(main).not.toMatch(/onlineLobbyCtl\?\.syncSeedRewards/);
+    // The settle owns its own client + identity, so it runs from the finish of a game regardless.
+    expect(settle).toMatch(/export const settleSeedProof/);
+    expect(settle).toMatch(/flushSeedProofs\(seeds\.storage, seeds\.client, status\.identity\.token/);
+  });
+
+  it('a bounded deadline and retry exist, so a hung request is a retry, not a wedge', () => {
+    expect(rewards).toMatch(/export const SEED_SETTLE_TIMEOUT_MS = 5_000;/);
+    expect(rewards).toMatch(/Promise\.race/);
+    expect(rewards).toMatch(/controller\?\.abort\(\)/);
+    expect(settle).toMatch(/SEED_RETRY_DELAYS_MS/);
+    expect(settle).toMatch(/return \{ kind: 'deferred' \};/);
+  });
+});
+
+/** The reveal module's own source, so "the string is gone" covers the paint path too. */
+function reveals(): string {
+  return read('../src/ui/seed-reveal.ts');
+}
 
 describe('the won card explains Seeds and Territory', () => {
   it('in two lines, with an Open Territory key in place of the second key', () => {

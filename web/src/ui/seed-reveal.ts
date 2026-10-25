@@ -1,18 +1,21 @@
 // EARNING SEEDS, made visible (owner ask, 2026-10-16): the whole reward used to be one muted
-// sentence, so a win that paid Seeds had no moment. This gives it a small, tactile one in
-// Futasaku's own register — and stays LIGHT:
+// sentence, so a win that paid Seeds had no moment. This gives it one in Futasaku's own register —
+// and stays LIGHT:
 //
 //   * it paints into the finish card's EXISTING seed line (`#go-seeds`), so the card cannot grow;
 //     the one-screen / no-scrolling rule is untouched (see web/e2e/finish-fit.ts);
 //   * the emblem is the app's own `seedIcon()` (the world map's wallet one). No new image, no
 //     library, no canvas, no grain;
-//   * the motion is a few Web Animations on transform/opacity plus a SHORT, discrete count
-//     (five `setTimeout` steps, never a rAF loop, never per-frame JS);
+//   * the motion is a few Web Animations on transform/opacity (row arrival, one breath on the
+//     emblem, one bloom behind it, one small settle on the landing number) plus a discrete,
+//     eased count (a handful of `setTimeout` steps — never a rAF loop, never per-frame JS);
 //   * Reduce motion, and Speed off, get the same line in its static form: no count, no bloom.
 //
 // Not every game pays: only wins, daily caps apply, and the number is verified server-side AFTER
 // the finish card is already up. So there are three honest states — nothing, a calm notice, and an
-// award — and an award may replace a notice late, in the same single line, without reflowing.
+// award — and an award may replace a notice late, in the same single line, without reflowing. There
+// is deliberately NO "pending" state (owner report, 2026-10-25): a card that rests on "pending"
+// is a card that is lying about a receipt nobody has written.
 import { EASE } from '../logic/motion.js';
 import { seedIcon } from '../online/seed-icon.js';
 
@@ -59,6 +62,18 @@ export function duelSeedsMessage(settled: SettledSeeds | null | undefined): stri
   return settled.reason && /limit/.test(settled.reason) ? 'Seed limit reached today' : '';
 }
 
+/**
+ * The CAMPAIGN finish card's line, from the receipt the settle actually returned.
+ *
+ * Same rule as a duel, with one more honest state: `replayed` means this exact first clear was paid
+ * before, so the card says NOTHING rather than counting a second `+N` the wallet never received.
+ * A `0` whose reason names a cap says so in the calm wording; any other `0` is silence, never "+0".
+ */
+export function settledSeedsMessage(settled: { awarded: number; reason: string | null; replayed?: boolean }): string {
+  if (settled.replayed) return '';
+  return duelSeedsMessage(settled);
+}
+
 /** The numbers the count passes through: five steps, easing out, always landing on the amount. */
 export function seedCountValues(amount: number, steps = 5): number[] {
   const n = Math.max(1, Math.min(steps, amount));
@@ -94,6 +109,7 @@ export const SEED_REVEAL_CSS = `
   font-family: var(--font-display, inherit); font-weight: var(--w-num, 700);
   font-size: 0.95rem; letter-spacing: 0.02em; color: #e8ddbe;
   font-variant-numeric: lining-nums tabular-nums;
+  transform-origin: 50% 62%;
 }
 .seed-gain-word {
   font-family: var(--font-ui, inherit); font-weight: var(--w-ui-medium, 500);
@@ -105,9 +121,17 @@ export const SEED_REVEAL_CSS = `
 `;
 
 const STYLE_ID = 'futa04-seed-reveal-style';
-const COUNT_STEPS = 5;
-const STEP_MS = 62;
-const DELAY_MS = 96;
+/**
+ * The count (owner, 2026-10-25: "getting seeds should be slightly animated, very satisfying").
+ * Seven eased steps rather than five, over ~0.74 s, then a soft landing beat: the whole moment is
+ * about 0.9 s at normal speed — long enough to read as earned, short enough to never hold the card.
+ * The steps are explicit timeouts (no rAF), so nothing runs after the line has landed.
+ */
+const COUNT_STEPS = 7;
+const STEP_MS = 104;
+const DELAY_MS = 112;
+/** When the number lands, in ms at scale 1 — the settle beat is timed off it. */
+const landingMs = (steps: number, scale: number) => (DELAY_MS + Math.max(0, steps - 1) * STEP_MS) * scale;
 
 const ensureStyle = (): void => {
   if (document.getElementById(STYLE_ID)) return;
@@ -140,7 +164,7 @@ export function paintSeedReward(host: HTMLElement, reward: SeedReward, opts: See
   }
   host.hidden = false;
   if (reward.kind === 'notice') {
-    // Pending / capped / unavailable: the calm sentence the game already wrote, untouched (and the
+    // Capped / unavailable / not verifiable: the calm sentence the game wrote, untouched (and the
     // reveal's CSS is not even pulled in for it — a notice needs nothing).
     host.replaceChildren(document.createTextNode(reward.text));
     return;
@@ -174,20 +198,33 @@ export function paintSeedReward(host: HTMLElement, reward: SeedReward, opts: See
   if (!opts.animate) return;
 
   const timing: KeyframeAnimationOptions = { fill: 'backwards', easing: EASE.out };
-  row.animate([{ opacity: 0, transform: 'translateY(3px)' }, { opacity: 1, transform: 'translateY(0)' }],
-    { ...timing, duration: 240 * scale });
-  // The emblem settles in: one short scale/rotate beat, once the line has arrived.
+  // The length of the count is the length of the moment: everything else is timed off it.
+  const landed = landingMs(values.length, scale);
+  // The line arrives: a short rise, no bounce (the emblem does the bouncing).
+  row.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'translateY(0)' }],
+    { ...timing, duration: 280 * scale });
+  // One breath on the emblem: it settles in, then lifts again as the count lands, then rests.
   emblem.animate([
-    { transform: 'scale(.72) rotate(-9deg)', opacity: 0 },
-    { transform: 'scale(1.08) rotate(0deg)', opacity: 1, offset: 0.62 },
+    { transform: 'scale(.70) rotate(-10deg)', opacity: 0 },
+    { transform: 'scale(1.10) rotate(0deg)', opacity: 1, offset: 0.26 },
+    { transform: 'scale(1) rotate(0deg)', opacity: 1, offset: 0.40 },
+    { transform: 'scale(1.12) rotate(-2deg)', opacity: 1, offset: 0.80 },
     { transform: 'scale(1) rotate(0deg)', opacity: 1 },
-  ], { ...timing, duration: 420 * scale, delay: 60 * scale, easing: EASE.spring });
-  // One dark-glass bloom behind the line: transform + opacity, one shot, gone.
+  ], { ...timing, duration: (landed + 180 * scale), delay: 40 * scale, easing: EASE.spring });
+  // One soft bloom behind the line — transform + opacity, one shot, then gone. It peaks as the
+  // number lands, so the glow and the number are one beat, not two.
   bloom.animate([
-    { opacity: 0, transform: 'scale(.78)' },
-    { opacity: 0.85, transform: 'scale(1)', offset: 0.34 },
-    { opacity: 0, transform: 'scale(1.1)' },
-  ], { ...timing, duration: 560 * scale });
+    { opacity: 0, transform: 'scale(.74)' },
+    { opacity: 0.45, transform: 'scale(.94)', offset: 0.42 },
+    { opacity: 0.9, transform: 'scale(1.02)', offset: 0.82 },
+    { opacity: 0, transform: 'scale(1.14)' },
+  ], { ...timing, duration: (landed + 160 * scale) });
+  // The small settle: the number itself takes the landing, once, on the frame it becomes the amount.
+  num.animate([
+    { transform: 'scale(1)' },
+    { transform: 'scale(1.08)', offset: 0.34 },
+    { transform: 'scale(1)' },
+  ], { duration: 200 * scale, delay: landed, easing: EASE.spring, fill: 'backwards' });
 
   const ids: number[] = [];
   values.forEach((value, i) => {

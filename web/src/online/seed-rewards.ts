@@ -9,6 +9,19 @@ export type PendingSeedProof =
   | { kind: 'campaign'; levelId: string; actions: readonly Action[]; botVersion: string }
   | { kind: 'training'; ticketId: string; actions: readonly Action[]; botVersion: string };
 
+/**
+ * How long ONE settle attempt may take before it is treated as a retryable failure.
+ *
+ * Owner report, 2026-10-25: the finish card sat on "Seeds pending verification" forever. The
+ * mechanism was a fetch that never settles — mobile Safari does it when a tab is backgrounded
+ * mid-request, and a dead/captive connection does it everywhere — combined with the single-flight
+ * map below, whose entry was only cleared by `.finally`. A hung request never rejected, so the
+ * entry never cleared, every later call got the same dead promise back, and no proof was ever
+ * settled again for that session. The server took ~0.3 s for a real level-10 win, so five seconds
+ * is generous for the honest path and short enough that a wedge is a retry, not a hang.
+ */
+export const SEED_SETTLE_TIMEOUT_MS = 5_000;
+
 const proofKey = (p: PendingSeedProof) => p.kind === 'campaign' ? `campaign:${p.levelId}` : `training:${p.ticketId}`;
 const isPendingProof = (value: unknown): value is PendingSeedProof => {
   if (!value || typeof value !== 'object') return false;
@@ -34,20 +47,105 @@ export const queueSeedProof = (storage: KeyValue, input: PendingSeedProof): void
   write(storage, pending);
 };
 
-type Awards = { key: string; reward: RewardResult }[];
-const flushes = new WeakMap<KeyValue, Map<string, Promise<Awards>>>();
+/** What ONE pass over the queue did — including the proofs it had to give up on. */
+export type SeedFlushResult = {
+  awards: { key: string; reward: RewardResult }[];
+  /**
+   * Proofs the server refused for good (HTTP 400). They are removed from the queue, so this is the
+   * only trace they leave: the finish card must say so rather than let the Seeds vanish silently.
+   */
+  refused: { key: string; message: string }[];
+};
+
+export const emptyFlushResult = (): SeedFlushResult => ({ awards: [], refused: [] });
+
 const removeSettledProof = (storage: KeyValue, proof: PendingSeedProof) => {
   // A player may finish a newer replay of the same level while this request is in flight.
   const sent = JSON.stringify(proof);
   write(storage, read(storage).filter((current) => JSON.stringify(current) !== sent));
 };
-export const flushSeedProofs = (storage: KeyValue, client: DuelClient, token: string) => {
+
+/**
+ * One submit, bounded in TIME. The abort is what frees the connection; the race is what makes the
+ * promise settle even if the transport ignores the signal (a wedged fetch never rejects on its own).
+ * Scoped to the seed proof on purpose: other game requests keep their own transport behaviour, and
+ * a slow match read must still be allowed to finish.
+ */
+const submitWithDeadline = async (
+  client: DuelClient,
+  token: string,
+  proof: PendingSeedProof,
+  timeoutMs: number,
+): Promise<RewardResult> => {
+  const source = proof.kind === 'campaign' ? { levelId: proof.levelId } : { ticketId: proof.ticketId };
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const submit = client.submitSeedProof(token, source, proof.actions, proof.botVersion,
+    controller ? { signal: controller.signal } : {});
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      submit,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          controller?.abort();
+          reject(new DuelError('TIMEOUT', 'The Seeds request did not answer in time.', 0));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    // Whatever lost the race must never surface as an unhandled rejection later.
+    void submit.catch(() => undefined);
+  }
+};
+
+/**
+ * Single-flight per storage + account, WITHOUT the wedge. An entry remembers every proof its pass
+ * has tried (`attempted`) and whether its drain loop has exited (`drained`), which is what makes
+ * reuse safe:
+ *
+ *   * a proof queued after this pass started is not in that set, so the caller gets a fresh pass
+ *     (chained behind the running one) instead of an answer that predates its proof;
+ *   * a pass that has STOPPED draining can never be handed to a caller again, so the narrow
+ *     "was queued between the last read and the promise resolving" race has nowhere to hide;
+ *   * the entry is dropped when the pass settles, so a failed pass can never be reused;
+ *   * a pass can no longer outlive a dead connection: each submit has `SEED_SETTLE_TIMEOUT_MS`.
+ */
+type FlushEntry = { promise: Promise<SeedFlushResult>; attempted: Set<string>; drained: boolean };
+const flushes = new WeakMap<KeyValue, Map<string, FlushEntry>>();
+
+const mergeResults = (first: SeedFlushResult, second: SeedFlushResult): SeedFlushResult => {
+  const awards = new Map(first.awards.map((entry) => [entry.key, entry] as const));
+  for (const entry of second.awards) awards.set(entry.key, entry);
+  const refused = new Map(first.refused.map((entry) => [entry.key, entry] as const));
+  for (const entry of second.refused) refused.set(entry.key, entry);
+  return { awards: [...awards.values()], refused: [...refused.values()] };
+};
+
+export const flushSeedProofs = (
+  storage: KeyValue,
+  client: DuelClient,
+  token: string,
+  options: { timeoutMs?: number } = {},
+): Promise<SeedFlushResult> => {
   let accounts = flushes.get(storage);
   if (!accounts) { accounts = new Map(); flushes.set(storage, accounts); }
   const existing = accounts.get(token);
-  if (existing) return existing;
-  const flushing = (async () => {
-    const awarded: Awards = [];
+  if (existing && !existing.drained) {
+    const queued = read(storage);
+    // This pass is still draining, so it re-reads the queue after every submit: everything queued
+    // when it started is covered. Anything it has not even seen is chained behind it.
+    if (queued.every((proof) => existing.attempted.has(JSON.stringify(proof)))) return existing.promise;
+    return existing.promise.then((first) => flushSeedProofs(storage, client, token, options)
+      .then((next) => mergeResults(first, next)));
+  }
+  // No entry, or one whose loop has finished (it may not have seen a proof queued after its last
+  // read). Both cases start a fresh pass, which replaces any stale entry.
+  const attempted = new Set<string>();
+  const entry: FlushEntry = { promise: Promise.resolve(emptyFlushResult()), attempted, drained: false };
+  const timeoutMs = options.timeoutMs ?? SEED_SETTLE_TIMEOUT_MS;
+  const promise = (async (): Promise<SeedFlushResult> => {
+    const result = emptyFlushResult();
     /**
      * The queue is DRAINED, not snapshotted (owner report, 2026-10-24: "seeds pending"). A player can
      * win the next level while this very flush is still in flight; a snapshot taken once at the top
@@ -56,19 +154,19 @@ export const flushSeedProofs = (storage: KeyValue, client: DuelClient, token: st
      * each pass pays whatever arrived meanwhile, and the promise only resolves once it is empty (or
      * transiently blocked), so every caller sees its own key in the answer.
      *
-     * `tried` is the run's memory of proofs it must NOT re-attempt: a kept-but-unpayable one (the
+     * `attempted` is the run's memory of proofs it must NOT re-attempt: a kept-but-unpayable one (the
      * final lesson on a server without its verifier) would otherwise be resubmitted forever. New
      * replays are different objects, so they are still picked up.
      */
-    const tried = new Set<string>();
     for (;;) {
-      const next = read(storage).find((proof) => !tried.has(JSON.stringify(proof)));
+      const next = read(storage).find((proof) => !attempted.has(JSON.stringify(proof)));
       if (!next) break;
-      tried.add(JSON.stringify(next));
+      const sent = JSON.stringify(next);
+      attempted.add(sent);
+      const key = proofKey(next);
       try {
-        const source = next.kind === 'campaign' ? { levelId: next.levelId } : { ticketId: next.ticketId };
-        const reward = await client.submitSeedProof(token, source, next.actions, next.botVersion);
-        awarded.push({ key: proofKey(next), reward });
+        const reward = await submitWithDeadline(client, token, next, timeoutMs);
+        result.awards.push({ key, reward });
         removeSettledProof(storage, next);
       } catch (error) {
         // Invalid/expired proofs cannot become valid later; transient network errors keep the
@@ -79,14 +177,28 @@ export const flushSeedProofs = (storage: KeyValue, client: DuelClient, token: st
         const unknownLesson = error instanceof DuelError && error.status === 400 && next.kind === 'campaign'
           && next.levelId.startsWith('lesson-') && /not available/i.test(error.message);
         if (unknownLesson) continue;
-        if (error instanceof DuelError && error.status === 400) removeSettledProof(storage, next);
-        // A transient failure stops THIS run: retrying down a queue on a dead network only stacks
-        // failures. Everything stays queued for the next visit.
-        else break;
+        if (error instanceof DuelError && error.status === 400) {
+          // Final: the server will never accept this replay. Drop it, and REPORT it — a proof that
+          // disappears without a word is a player's Seeds disappearing without a word.
+          removeSettledProof(storage, next);
+          result.refused.push({ key, message: error.message });
+          continue;
+        }
+        // A transient failure (offline, deadline, 5xx) stops THIS run: retrying down a queue on a
+        // dead connection only stacks failures. Everything stays queued for the next attempt.
+        break;
       }
     }
-    return awarded;
-  })().finally(() => { accounts.delete(token); });
-  accounts.set(token, flushing);
-  return flushing;
+    // The loop has exited: from this instant the pass can no longer see anything new, so no caller
+    // may be handed it again (see `FlushEntry.drained`). Synchronous with the last read — nothing
+    // can be queued in between.
+    entry.drained = true;
+    return result;
+  })().finally(() => {
+    // Only clear OUR entry: a newer pass (chained by a caller) may own this account by now.
+    if (accounts!.get(token)?.attempted === attempted) accounts!.delete(token);
+  });
+  entry.promise = promise;
+  accounts.set(token, entry);
+  return promise;
 };

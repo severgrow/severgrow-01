@@ -233,6 +233,9 @@ import { onlineBuildEnabled } from './online/config.js';
 import { accountsConfiguredInThisBuild, paintEarlyAccountKey } from './accounts/menu-key.js';
 import { paintBetaLine } from './feedback/beta-line.js';
 import { queueSeedProof } from './online/seed-rewards.js';
+import { requestTrainingTicket, settleSeedProof } from './online/seed-settle.js';
+import { SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
+import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 
 const HUMAN: Player = 0;
@@ -1547,6 +1550,8 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   goCounted = false;
   goSeedSettled = false;
   goSeedShown = null;
+  // A new game's card must never be painted by the previous game's settle (see settleSeedsForCard).
+  goSeedsSettleRun += 1;
   replaying = false;
   coach = c ? { ...c, choice: 0 } : freshCoach(); // the coach shows only its best move
   queue = new AnimQueue(state.board);
@@ -2007,7 +2012,10 @@ async function startGame(
   let ticketId: string | null = null;
   if (difficulty && onlineBuildEnabled() && !IS_TEST) {
     const ticket = await Promise.race([
-      onlineLobbyCtl?.trainingSeedTicket(level) ?? Promise.resolve(null),
+      // Issued through the seed module, not the online lobby: a training game started before the
+      // hub had mounted (or after its chunk failed to load) used to begin with no ticket at all,
+      // which meant no proof and no payment for a game the player had already played.
+      requestTrainingTicket(level),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
     ]);
     if (generation !== startGameGeneration) return;
@@ -2784,17 +2792,14 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
             : null;
         if (proof) {
           queueSeedProof(store, proof);
-          seedRewardMessage = 'Seeds pending verification';
+          // NOTHING is claimed until the server has answered. The card used to be handed a line
+          // saying the Seeds were "pending verification", and it stayed there for the whole session
+          // when the settle could not run (a hung request, a lobby that never mounted, or a proof
+          // refused with 400). Owner report, 2026-10-25: a card must never rest on a claim nobody
+          // has written a receipt for.
+          seedRewardMessage = '';
           const key = proof.kind === 'campaign' ? `campaign:${proof.levelId}` : `training:${proof.ticketId}`;
-          void onlineLobbyCtl?.syncSeedRewards().then((results) => {
-            const verified = results.find((entry) => entry.key === key)?.reward;
-            if (!verified) return;
-            // A replayed receipt was paid before: the line says nothing rather than a second "+N".
-            seedRewardMessage = verified.replayed ? '' : verified.awarded ? `+${verified.awarded} Seeds` : 'Seed limit reached today';
-            // The reward can land while the finish card is already up: the SAME line repaints in
-            // place (no reflow), and the award gets its one moment here rather than a silent swap.
-            if (!$('gameover').hidden) paintGoSeeds();
-          }).catch(() => { /* The saved proof remains pending for the next menu visit. */ });
+          settleSeedsForCard(key);
         }
       }
     }
@@ -4331,6 +4336,11 @@ let goCounted = false;
 let goSeedSettled = false;
 /** the reward message the card's seed line is currently showing (null until this game paints it) */
 let goSeedShown: string | null = null;
+/**
+ * Which settle the card is waiting on. A new game (or a newer settle) bumps it, so an answer that
+ * arrives late can never paint itself onto a card that is no longer about that game.
+ */
+let goSeedsSettleRun = 0;
 
 /** the final-turns banner shows once per game */
 let finalShown = false;
@@ -7305,6 +7315,49 @@ function paintGoSeeds(): void {
 }
 
 /**
+ * The finish card's Seeds, settled for real (owner report, 2026-10-25).
+ *
+ * The card used to be handed a "pending" line before any receipt existed, from an optional-chained
+ * call into the online lobby. Every failure mode of that shape ended the same way — a claim with no
+ * receipt behind it, left on screen for the whole session:
+ *
+ *   * a fetch that never settles (a backgrounded mobile tab, a captured connection) wedged the
+ *     single-flight entry, so no later proof was ever settled;
+ *   * the lobby module not being mounted yet made the optional chain do nothing at all;
+ *   * a proof refused with HTTP 400 was removed from the queue and then reported as "nothing
+ *     happened", so the Seeds were lost with no word;
+ *   * a pass that had already drained did not cover a proof queued after it started.
+ *
+ * `settleSeedProof` (online/seed-settle.ts) owns those: a bounded deadline, a small retry, and a
+ * fresh pass for anything the previous one could not see. What this function owns is the TRUTH on
+ * the card: an award with its one moment, the calm limit line, an honest refusal, or NOTHING while
+ * it is still unknown. It never writes "pending", and it never guesses a number.
+ */
+function settleSeedsForCard(key: string): void {
+  const run = ++goSeedsSettleRun;
+  void settleSeedProof(key).then((report) => {
+    // A newer game has started: its card is not this one's to paint.
+    if (run !== goSeedsSettleRun) return;
+    if (report.kind === 'settled') {
+      // `replayed` means this receipt existed already: the line stays empty rather than counting a
+      // second "+N" the wallet never received.
+      seedRewardMessage = settledSeedsMessage(report.reward);
+    } else if (report.kind === 'refused') {
+      // The server will never accept this replay, so those Seeds are gone. Say so, and log why.
+      console.warn('[FUTASAKU] Seeds refused for this game:', key, report.message);
+      seedRewardMessage = SEEDS_NOT_VERIFIED;
+    } else {
+      // Still unconfirmed and still queued. The card shows NOTHING: the next menu visit (or the
+      // next time this device is online) settles it, and the wallet is the one place it is claimed.
+      seedRewardMessage = '';
+    }
+    // The reward can land while the finish card is already up: the SAME line repaints in place (no
+    // reflow), and the award gets its one moment here rather than a silent swap.
+    if (!$('gameover').hidden) paintGoSeeds();
+  });
+}
+
+/**
  * The finish plate's arrival (owner brief, 2026-10-22): the board settles and goes quiet, then the
  * plate becomes present. `wasHidden` is the state transition (not a timer): a re-render of a card
  * already on screen must not replay the entrance, while a genuinely new result always does.
@@ -9801,11 +9854,11 @@ if (SHOW_MENU_TAGLINE) {
 }
 
 // Phase 4–5: online lobby + duel on the shared board (Draw / draft / Throw / resign).
+// Seeds are NOT here: settling a finished game's proof is `online/seed-settle.ts`, because it must
+// work even when this module has not mounted (owner report, 2026-10-25 — see `settleSeedsForCard`).
 type OnlineLobbyCtl = {
   openHub(): Promise<void>;
   rematch(finishedMatchId?: string | null): Promise<void>;
-  trainingSeedTicket(level: number): Promise<{ id: string; seed: number } | null>;
-  syncSeedRewards(): Promise<{ key: string; reward: { awarded: number; replayed?: boolean } }[]>;
   /** The Territory map (the menu's own entry); the finish card of level 10 opens it too. */
   openWorld(from: 'hub' | 'menu'): void;
 };

@@ -428,7 +428,9 @@ try {
         check(`seeds static: Reduce motion shows the finished number at once`, first.number === '+50', String(first.number));
         check(`seeds static: nothing is left animating (no loop, nothing to clean up)`, first.animations === 0, `${first.animations}`);
       }
-      await page.waitForTimeout(900); // the count is over well inside this
+      // The moment is ~0.95 s end to end (the count lands at ~0.74 s, the emblem's settle and the
+      // number's landing run a little past it), so this covers it with room to spare.
+      await page.waitForTimeout(1_100); // the count and its settle are over well inside this
       const settled = await seedMeasure(page);
       check(`seeds ${label}: it lands exactly on the amount`, settled.number === '+50', String(settled.number));
       check(`seeds ${label}: nothing is still running once it lands`, settled.animations === 0, `${settled.animations}`);

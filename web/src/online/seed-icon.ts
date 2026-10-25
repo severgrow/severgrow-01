@@ -20,6 +20,14 @@ export const SEEDS_INTRO = Object.freeze({
   open: 'Open Territory',
 });
 
+/**
+ * A finished game whose replay the server refused (HTTP 400). Those Seeds are gone — the proof is
+ * dropped from the queue — so the finish card says so, calmly and once, instead of leaving the
+ * player with a line that never arrives or a line that never existed. The refusal's own message is
+ * logged with it (`seed-settle.ts`); this is the sentence the player reads.
+ */
+export const SEEDS_NOT_VERIFIED = `${SEEDS_WORD} for this game could not be verified.`;
+
 /** One authored icon at every Seeds size; currentColor keeps the ivory material intact. */
 export const seedIcon = (size = 20): SVGSVGElement => {
   const ns = 'http://www.w3.org/2000/svg';
