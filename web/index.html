@@ -239,9 +239,20 @@
           <button id="online-join-open" class="btn ghost big" type="button">Join with a code</button>
           <button id="online-world" class="btn ghost big" type="button"></button>
         </div>
-        <h3 class="online-section" id="online-matches-title">Your online matches</h3>
-        <p id="online-matches-empty" class="muted" hidden>No online matches yet.</p>
-        <ul id="online-matches" class="online-matches" aria-live="polite"></ul>
+        <!-- "Your matches" is a real disclosure (owner, 2026-10-25): collapsed by default, and the
+             red "!" rides the BUTTON so it is visible while the list is shut. The button owns
+             `aria-expanded` and the label carries the count; `#online-matches-title` stays the
+             label element other suites already look for. -->
+        <button id="online-matches-toggle" class="online-matches-toggle" type="button"
+                aria-expanded="false" aria-controls="online-matches-panel">
+          <span class="online-matches-toggle-label" id="online-matches-title">Your matches</span>
+          <span id="online-matches-attention" class="online-attention-badge" aria-hidden="true" hidden>!</span>
+          <span class="online-matches-caret" aria-hidden="true"></span>
+        </button>
+        <div id="online-matches-panel" class="online-matches-panel" hidden>
+          <p id="online-matches-empty" class="muted" hidden>No online matches yet.</p>
+          <ul id="online-matches" class="online-matches" aria-live="polite"></ul>
+        </div>
         <p id="online-hub-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>
     </section>

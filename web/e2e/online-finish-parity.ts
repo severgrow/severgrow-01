@@ -28,6 +28,7 @@ import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike } from '../../server/src/client.js';
 import { resultReason, resultTitle } from '../src/logic/log.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const CHROME = process.env.PW_CHROMIUM;
 const OUT = new URL('../../docs/screens/offline-vs-online/', import.meta.url).pathname;
@@ -144,6 +145,7 @@ const openDuel = async (page: Page, matchId: string): Promise<void> => {
   }
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
   if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
+  await expandYourMatches(page);
   const row = page.locator(`#online-matches li[data-match-id="${matchId}"]`);
   await row.waitFor({ state: 'visible', timeout: 25_000 });
   await row.click();
@@ -257,6 +259,7 @@ try {
       await openMenuEntry(d.page, 'menu-online', { timeout: 40_000 });
       await d.page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
       if (await d.page.locator('#online-first-ok').isVisible().catch(() => false)) await d.page.click('#online-first-ok');
+      await expandYourMatches(d.page);
       await d.page.locator(`#online-matches li[data-match-id="${match1.matchId}"]`).click();
       await d.page.waitForSelector('#gameover:not([hidden])', { timeout: 25_000 });
       await d.page.waitForTimeout(700);

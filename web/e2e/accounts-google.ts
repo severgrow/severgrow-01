@@ -21,6 +21,7 @@ import { MemoryIdentityLinkStore, createAccountsRouter, supabaseAuthProvider } f
 import { playerTag } from '../../src/player-tag.js';
 import { CHROME } from './helpers/local-duel.js';
 import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const PORT = 4243;
 const SHOTS = process.env.SHOTS === '1';
@@ -165,7 +166,10 @@ const createDuel = async (page: Page): Promise<string> => {
   await hubOpen(page);
   return code;
 };
-const listText = async (page: Page) => ((await page.locator('#online-matches').innerText().catch(() => '')) ?? '').trim();
+const listText = async (page: Page) => {
+  await expandYourMatches(page);
+  return ((await page.locator('#online-matches').innerText().catch(() => '')) ?? '').trim();
+};
 
 try {
   // ---- 1. a new player: the welcome, then guest play ----

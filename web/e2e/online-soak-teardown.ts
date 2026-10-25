@@ -23,6 +23,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { onlinePerspective } from '../src/online/perspective.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 import { drawMeld } from './drawing.js';
 import type { Action } from '../../src/engine/index.js';
 import {
@@ -260,6 +261,7 @@ const enterDuel = async (s: SeatSession, matchId: string): Promise<void> => {
     await sleep(100);
   }
   if (await isVisible(s, '#online-first-ok')) await clickVisible(s, '#online-first-ok');
+  await expandYourMatches(s.page);
   const row = s.page.locator(`#online-matches li[data-match-id="${matchId}"]`);
   await row.waitFor({ state: 'visible', timeout: 25_000 });
   await row.click();

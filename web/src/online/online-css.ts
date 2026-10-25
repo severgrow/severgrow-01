@@ -62,6 +62,118 @@ export const ONLINE_CSS = `
   text-transform: uppercase;
   opacity: 0.85;
 }
+/* "Your matches" disclosure (owner, 2026-10-25): collapsed by default, so the red "!" rides the
+   BUTTON too, where it is readable with the list shut. Dark glass: the same 10px radius, hairline
+   and dark mix as .online-row below, and a 44px touch target like every other lobby key. */
+.online-matches-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  margin: 0.4rem 0 0;
+  padding: 0.35rem 0.7rem;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.15;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  background: color-mix(in srgb, #1c221c 88%, #3a4a32);
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.online-matches-toggle:focus-visible {
+  outline: 2px solid #c9e4a8;
+  outline-offset: 2px;
+}
+/* The flexing label is the only part allowed to shrink/ellipsise; badge and caret keep their ink
+   at 320px, so the header never overflows. */
+.online-matches-toggle-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The badge is a STATIC mark in every motion mode (no pulse, no reveal of its own). Its spoken
+   name lives on the button (aria-label), never on this aria-hidden "!".
+   THE RED IS --c-alert. Decided in the browser, not by reading: the rule below WAS applied all
+   along; the first version painted var(--c-danger), and every palette rebinds that token to
+   #fff4dc (cream — it is the weak-spot chip's ink), so the disc measured rgb(255,244,220) and the
+   "!" disappeared. No selector change or extra specificity can fix a custom-property override, so
+   style.css now owns --c-alert / --c-alertInk (#ff6b4a on near-black, contrast 6.3:1) and no
+   palette writes them. Measured after the change: fill rgb(255,107,74), ink rgb(24,25,26). */
+.online-attention-badge {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--c-alert, #ff6b4a);
+  color: var(--c-alertInk, #18191a);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.online-attention-badge[hidden] { display: none; }
+.online-matches-caret {
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-inline-end: 2px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.7;
+  transition: transform 160ms ease;
+}
+.online-matches-toggle[aria-expanded='true'] .online-matches-caret { transform: rotate(-135deg); }
+.online-matches-panel[hidden] { display: none; }
+.online-matches-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+/* The row's mark slot: the status icon, with the same red "!" set into its corner when this match
+   waits for the player's move. The badge is decoration; the row's word ("Your turn") is the
+   signal every player can read, and the border tint is a third, quiet reinforcement. */
+.online-row-mark {
+  position: relative;
+  width: 2rem;
+  min-height: 2rem;
+  display: grid;
+  place-items: center;
+}
+.online-row-attention {
+  position: absolute;
+  inset-inline-start: -3px;
+  top: -5px;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--c-alert, #ff6b4a);
+  color: var(--c-alertInk, #18191a);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.online-row.needs-response {
+  border-color: color-mix(in srgb, var(--c-alert, #ff6b4a) 50%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .online-matches-caret { transition: none; }
+}
+.reduce-motion .online-matches-caret { transition: none; }
+
 .online-matches {
   list-style: none;
   margin: 0;
