@@ -416,7 +416,10 @@ try {
       await page.evaluate('(() => { window.__severgrow.seedReveal(50); })()');
       const first = await seedMeasure(page);
       check(`seeds ${label}: the award's line is on screen`, first.shown, JSON.stringify(first));
-      check(`seeds ${label}: the emblem and the amount are one line, never a block`, first.rowHeight !== null && first.rowHeight <= 24 && first.lines <= 26, `row ${first.rowHeight}px, host ${first.lines}px`);
+      // The owner (2026-10-25) asked for a bigger number in the game's numeral face: the row is now
+      // ~1.65rem tall, not the 0.95rem body size, so the ceiling moves with the design. The real
+      // one-screen rule is the 0 px overflow checks below, which are unchanged.
+      check(`seeds ${label}: the emblem and the amount are one line, never a block`, first.rowHeight !== null && first.rowHeight <= 34 && first.lines <= 34, `row ${first.rowHeight}px, host ${first.lines}px`);
       check(`seeds ${label}: the line is inside the viewport`, first.inside);
       check(`seeds ${label}: the reader is told the plain sentence, "+50 Seeds"`, first.label === '+50 Seeds', String(first.label));
       check(`seeds ${label}: the card still does not scroll`, (first.cardOverflow ?? 1) <= 0, `overflow ${first.cardOverflow}px`);

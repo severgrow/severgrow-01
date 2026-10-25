@@ -58,7 +58,7 @@ import type { TipId as FirstTip } from './logic/tips.js';
 import { breakdownPart, finalTurns } from './logic/endgame.js';
 import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
-import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
+import { REPLAY_BEAT_MS, REPLAY_SPEED, actorOf, involvedKeys, nudgeToward, replayDurationScale } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
 import { feel, observeLongTasks, perfStart, perfStep } from './logic/perf.js';
 import { dragExceeded, installPress, PRESS_SELECTOR, shouldSkipPress } from './logic/press.js';
@@ -318,14 +318,20 @@ if (IS_FUTA04 && store.get(SMOOTH_KEY) && settings.effects === 'low') {
   saveSettings();
 }
 /** Animation time scale (0 = no animations). */
-/** overhaul item 19: Replay plays the opponent's turn a little slower */
+/** overhaul item 19: Replay plays the opponent's turn slower than live */
 let replaying = false;
 /** overhaul item 20: after replaying the biggest cut, the result screen comes back */
 let reopenGameOver = false;
-/** Replay speed: 0.75 for the opponent's turn, 0.5 for the biggest cut (Part 2) */
+/**
+ * The replay's PLAYBACK RATE (0.6 = 60% of live speed), and the biggest cut's (half speed). The
+ * rate is turned into a duration multiplier in exactly one place (`replayDurationScale`), because
+ * `timeScale` is a DURATION scale (it multiplies every wait and animation), never a speed.
+ */
 let replaySpeed = REPLAY_SPEED;
+/** True only for the in-game replay of the enemy's turn: it gets a readable beat between actions. */
+let replayBeats = false;
 // Reduce-motion kills movement via motion(); do not also stretch wait timers.
-const timeScale = () => speedFactor(settings.speed) * (replaying ? 1 / replaySpeed : 1);
+const timeScale = () => speedFactor(settings.speed) * (replaying ? replayDurationScale(replaySpeed) : 1);
 /** The one motion gate: Reduce motion, or a zero time scale, means no movement. */
 const motionOn = () => motionAllowed(settings.reduceMotion, timeScale());
 /** How much things move (0 when motion is not allowed). */
@@ -1574,6 +1580,7 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   lastDeckSeen = -1;
   goCounted = false;
   goSeedSettled = false;
+  goSeedSlot = false;
   goSeedShown = null;
   // A new game's card must never be painted by the previous game's settle (see settleSeedsForCard).
   goSeedsSettleRun += 1;
@@ -3595,6 +3602,12 @@ let pumpWanted = false;
  * the START of the 336 ms pop), so an empty queue does not mean the board has settled.
  */
 let currentStep: Step | null = null;
+/** True while the in-game replay holds the display sign (released on the same drain). */
+let replaySignHeld = false;
+/** Steps that are an enemy ACTION: the in-game replay separates these with a quiet beat. */
+const replayActionStep = (s: Step): boolean =>
+  s.k === 'grow' || s.k === 'sever' || s.k === 'remove' || s.k === 'strengthen'
+  || s.k === 'fruit' || s.k === 'megaBomb' || s.k === 'discard' || s.k === 'draw';
 async function pump() {
   if (pumping) {
     pumpWanted = true;
@@ -3604,6 +3617,8 @@ async function pump() {
   pumping = true;
   const run = ++pumpRun;
   const my = epoch;
+  /** Actions already played in THIS pump: the first needs no leading beat. */
+  let actionsPlayed = 0;
   animLog('pump:enter', { pending: queue.pending, epoch: my });
   watchFrames();
   try {
@@ -3619,6 +3634,12 @@ async function pump() {
           return;
         }
         const step = queue.peek()!;
+        // A readable beat BETWEEN the enemy's actions (in-game replay only): a Bloom or a Blast
+        // is one thing, then the next. Reduce motion and Speed off add nothing (motionOn()).
+        if (replayBeats && !liveReveal && actionsPlayed > 0 && motionOn() && replayActionStep(step)) {
+          await wait(REPLAY_BEAT_MS * Math.max(speedFactor(settings.speed), 0.35), my);
+          if (my !== epoch) return;
+        }
         const stepStarted = performance.now();
         // Published to the result gate: the board is still changing until this returns.
         currentStep = step;
@@ -3627,6 +3648,7 @@ async function pump() {
         } finally {
           currentStep = null;
         }
+        if (replayActionStep(step)) actionsPlayed += 1;
         // Read-only timing for the motion audit (web/e2e/motion-audit.ts): what played, for how long.
         animLog('step', { k: step.k, ms: Math.round(performance.now() - stepStarted), n: step.k === 'grow' ? step.tiles.length : step.k === 'sever' || step.k === 'remove' ? step.keys.length : step.k === 'megaBomb' ? step.destroyed.length : 0, who: 'player' in step ? step.player : -1 });
       }
@@ -3656,6 +3678,11 @@ async function pump() {
       currentStep = null;
       liveReveal = false;
       replaying = false;
+      replayBeats = false;
+      if (replaySignHeld) {
+        replaySignHeld = false;
+        smartCockpit?.led(null);
+      }
       board.focus(null);
       animLog('pump:leave', {
         epoch: my,
@@ -3665,9 +3692,12 @@ async function pump() {
       });
       // The opponent's turn has fully played out (or was skipped): the player may act now.
       markTiming('replay:end', { queued: queue.pending });
+      // The "not yours" dim belongs to the REPLAY, whichever mode started it (online reveal or the
+      // in-game Replay of the bot's turn). `clear()` is idempotent, so an offline pump that never
+      // dimmed costs nothing — and a begun dim can never outlive its replay.
+      theirsDim.clear();
       if (getOnlineSession()) {
         getOnlineSession()!.endReveal();
-        theirsDim.clear();
         markTiming('input:open', { revealing: false });
         paintOnlineHudFromSession();
       }
@@ -4501,6 +4531,8 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
 let goCounted = false;
 /** the Seeds award's one moment plays once per game (a later re-render repaints it still) */
 let goSeedSettled = false;
+/** A proof is being settled for THIS card: hold the award's slot so the number lands without a jump. */
+let goSeedSlot = false;
 /** the reward message the card's seed line is currently showing (null until this game paints it) */
 let goSeedShown: string | null = null;
 /**
@@ -7512,6 +7544,10 @@ function paintGoSeeds(): void {
  */
 function settleSeedsForCard(key: string): void {
   const run = ++goSeedsSettleRun;
+  // The award's line gets its SLOT now, while the result is still animating in, so the number can
+  // land without pushing the score and the keys down (the jump the owner saw). The slot is empty
+  // until a receipt exists — it never says "pending".
+  goSeedSlot = true;
   void settleSeedProof(key).then((report) => {
     // A newer game has started: its card is not this one's to paint.
     if (run !== goSeedsSettleRun) return;
@@ -7594,7 +7630,11 @@ function hideGameOver(): void {
     go.hidden = true;
     resetSurface(go);
     const card = go.querySelector<HTMLElement>('.go-card');
-    if (card) resetSurface(card);
+    if (card) {
+      resetSurface(card);
+      card.classList.remove('seed-slot');
+    }
+    goSeedSlot = false;
   }
   document.body.classList.remove('result');
   syncVeil();
@@ -7812,6 +7852,9 @@ function renderGameOver() {
     return;
   }
   presentResult(go, wasHidden);
+  // Hold the Seeds line's slot from the card's first frame while a proof settles (see
+  // `settleSeedsForCard`): the award lands IN PLACE instead of pushing the card's content down.
+  go.querySelector<HTMLElement>('.go-card')?.classList.toggle('seed-slot', goSeedSlot);
   const r = st.result;
   const won = r.winner === HUMAN;
   const campaign = campaignLevel;
@@ -8976,6 +9019,8 @@ function replayBotTurn() {
   session.cancel();
   replaying = true;
   replaySpeed = REPLAY_SPEED;
+  // In-game replay: a readable beat between the enemy's actions.
+  replayBeats = true;
   sound.reset(); // the same steps pick the same variations as the first time
   queue.reset(turn[0]!.before.board);
   const v0 = viewFor(turn[0]!.before, HUMAN);
@@ -8986,7 +9031,23 @@ function replayBotTurn() {
   }
   const v = session.view;
   queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);
-  banner(`Replay: ${OPP.Label} turn`, 'bot');
+  // It is a REPLAY, and it is the OPPONENT'S: the product's own display (the LED sign) says so
+  // for the whole turn and its glass dims, the same way an online reveal marks "not ours".
+  // `banner()` is deliberately a no-op on the product channels, so relying on it alone left this
+  // replay with no on-screen label at all. Legacy channels keep the banner they always had.
+  if (IS_FUTA04) {
+    theirsDim.begin();
+    if (smartCockpit) {
+      // `immediate`: the board starts moving on this frame, so the sign must not wait out the
+      // display's dwell behind the step cue already on the glass. MEASURED by removing this flag:
+      // the word then appeared 856 ms into the replay (moving) / 806 ms (Reduce motion), during
+      // which the sign still read "0:1" while the board was already moving. With it: 15 ms / 14 ms.
+      smartCockpit.led('REPLAY', { immediate: true });
+      replaySignHeld = true;
+    }
+  } else {
+    banner(`Replay: ${OPP.Label} turn`, 'bot');
+  }
   render();
   void pump();
 }
