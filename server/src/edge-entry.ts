@@ -4,6 +4,9 @@
 // Auth is our own bearer tokens — Supabase JWT verification must stay OFF on this function.
 /// <reference path="./edge-deno.d.ts" />
 import postgres from 'postgres';
+import { chatNotifier } from './chat/notifier.js';
+import { createChatRouter } from './chat/router.js';
+import { postgresChatStore } from './chat/postgres.js';
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import { DEFAULT_SERVER_CONFIG, adminPlayerIdsFromEnv, productionCorsOrigins } from './config.js';
 import type { ServerConfig } from './config.js';
@@ -148,7 +151,8 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
     authenticate: (t) => service.authenticate(t),
     now: () => service.serverNow(),
   });
-  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts, createAdminRouter({ store: postgresAdminStore(pool), economy: economyStore, authenticate: (t) => service.authenticate(t), config: edgeConfig, now: () => service.serverNow(), rulesVersion: service.rulesVersion, storage: live.storage, pingDb: () => service.pingStorage(), log })) });
+  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createChatRouter({ store: postgresChatStore(pool), service, storage: live.storage,
+    ...(supaUrl && supaKey ? { notifier: chatNotifier(supaUrl, supaKey)! } : {}) }), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts, createAdminRouter({ store: postgresAdminStore(pool), economy: economyStore, authenticate: (t) => service.authenticate(t), config: edgeConfig, now: () => service.serverNow(), rulesVersion: service.rulesVersion, storage: live.storage, pingDb: () => service.pingStorage(), log })) });
   return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };
 };
 

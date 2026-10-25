@@ -23,6 +23,10 @@ import { WorldEconomyService } from './seeds/service.js';
 import { createWorldEconomyRouter } from './seeds/router.js';
 import { MemoryWorldEconomyStore } from './seeds/memory.js';
 import { postgresWorldEconomyStore } from './seeds/postgres.js';
+import { chatNotifier } from './chat/notifier.js';
+import { createChatRouter } from './chat/router.js';
+import { memoryChatStore } from './chat/memory.js';
+import { postgresChatStore } from './chat/postgres.js';
 import { adminRouterNode } from './admin/node.js';
 
 const buildStorage = (): { storage: Storage; description: string } => {
@@ -58,12 +62,16 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
     economyStore,
     note: description,
   });
+  const chatNotifications = chatNotifier(process.env.SUPABASE_URL ?? '', process.env.SUPABASE_ANON_KEY ?? '');
   const server = createHttpServer({
     service,
     config,
     logger: (line) => console.log(line),
     live: chainRouters(
       live.router(service),
+      createChatRouter({ service, storage: live.storage, ...(chatNotifications ? { notifier: chatNotifications } : {}), store: isMemory
+        ? memoryChatStore(storage as MemoryStorage, memoryFeedback!)
+        : postgresChatStore(poolFromUrl(databaseUrlFromEnv()!)) }),
       createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }),
       await feedbackRouterNode(storage, service, databaseUrlFromEnv(), memoryFeedback),
       await accountsRouterNode(storage, service, databaseUrlFromEnv(), process.env, memoryLinks),

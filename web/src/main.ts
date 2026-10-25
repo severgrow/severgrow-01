@@ -1,5 +1,6 @@
 // first: the release channel (the test copy keeps its own storage)
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
+import { mountMatchChat } from './online/chat/view.js';
 import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
 import { runRematch } from './online/rematch.js';
 // Futasaku in the browser. You (player 1) against the computer. All rules come from the
@@ -8942,7 +8943,11 @@ $('hand').addEventListener('pointerout', (e) => {
  * stops the session through here, so no route can leave the client believing a duel is still open.
  * The match itself stays on the server: leaving and returning is a resume, never a cancel.
  */
+let activeMatchChat: ReturnType<typeof mountMatchChat> | null = null;
+
 function tearDownOnlineDuel(): void {
+  activeMatchChat?.stop();
+  activeMatchChat = null;
   cancelStarterRitual();
   getOnlineSession()?.driver.stop();
   setOnlineSession(null);
@@ -9955,15 +9960,17 @@ void import('./online/lobby-ui.js').then(async (m) => {
         storage: browserStorage(),
         ...(duelRegion() ? { region: duelRegion()! } : {}),
       });
+      const matchChannel = realtimeChannelFromEnv();
       const driver = createOnlineDriver({
         client,
         token,
         matchId,
         initial: player,
-        channel: realtimeChannelFromEnv(),
+        channel: matchChannel,
         onChange: () => {
           const os = getOnlineSession();
           if (!os) return;
+          activeMatchChat?.update();
           // Both ends of the replay, read BEFORE the display state is rebuilt: the cockpit's
           // read-out for the enemy's turn needs them, exactly as the offline game does. `pending`
           // is captured here too, because `consumeCatchUp` clears the driver's buffer below.
@@ -10039,6 +10046,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
       });
       const os = new OnlineSession(driver);
       setOnlineSession(os);
+      activeMatchChat = mountMatchChat({ host: $('game'), header: $('game').querySelector<HTMLElement>('.hud')!, client, token, matchId, channel: matchChannel, snapshot: () => driver.snapshot() });
       // An online duel is not a campaign match: drop the campaign level so no campaign-only
       // surface (guidance, the tutorial window, lesson copy) can read a stale one. The save keeps
       // the campaign's own progress; this is only what THIS match is.

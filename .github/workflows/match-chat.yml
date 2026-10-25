@@ -1,0 +1,43 @@
+name: Match chat integration
+on:
+  push:
+    branches: [feature/futasaku-match-chat]
+  pull_request:
+    paths: ['server/**', 'web/src/online/**', 'web/e2e/match-chat.ts', 'web/tests/match-chat.test.ts', '.github/workflows/match-chat.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: local-chat-test-only
+          POSTGRES_DB: chat_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CHAT_TEST_DATABASE_URL: postgres://postgres:local-chat-test-only@127.0.0.1:5432/chat_test
+      SHOTS: chat-screenshots
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run server/tests/match-chat*.test.ts web/tests/match-chat.test.ts web/tests/online-realtime.test.ts
+      - run: npx playwright-core install --with-deps chromium
+      - name: Select pinned browser
+        run: node --input-type=module -e 'import {chromium} from "playwright-core"; console.log("PW_CHROMIUM=" + chromium.executablePath())' >> "$GITHUB_ENV"
+      - run: node --import tsx web/e2e/match-chat.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: match-chat-screenshots
+          path: chat-screenshots
+          retention-days: 7

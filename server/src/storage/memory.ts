@@ -64,6 +64,11 @@ export class MemoryStorage implements Storage {
   private readonly rateLimits = new Map<string, { windowStart: number; count: number }>();
   private readonly linkCodes = new Map<string, DeviceLinkCode>();
 
+  /** Synchronous copy boundary for the local chat adapter; no async gap before its write. */
+  chatAuthority(id: string): { match: MatchRecord | null; participants: Participant[] } {
+    return { match: copy(this.matches.get(id) ?? null), participants: copy(this.participants.get(id) ?? []) };
+  }
+
   // ---- players and tokens ----
 
   async createPlayer(player: PlayerRecord): Promise<void> {

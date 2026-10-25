@@ -17,6 +17,8 @@ export type FakeChannelController = {
 export const createFakeChannel = (): FakeChannelController => {
   type Handlers = {
     onPing: (ping: MatchPing) => void;
+    onChat?: () => void;
+    onReconnect?: () => void;
     onPresence: (presence: PresenceSnapshot) => void;
   };
   const subs = new Map<string, Set<Handlers>>();
@@ -126,7 +128,7 @@ const OPEN = 1;
  */
 export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchChannel => {
   const topicFor = (matchId: string): string => `realtime:${matchId}`;
-  const subs = new Map<string, Set<{ onPing: (p: MatchPing) => void; onPresence: (p: PresenceSnapshot) => void }>>();
+  const subs = new Map<string, Set<{ onPing: (p: MatchPing) => void; onPresence: (p: PresenceSnapshot) => void; onChat?: () => void; onReconnect?: () => void }>>();
   const socketCtor = options.socket ?? ((url: string) => new (globalThis as unknown as { WebSocket: new (u: string) => RealtimeSocket }).WebSocket(url));
   let socket: RealtimeSocket | null = null;
   let heartbeat: ReturnType<typeof setInterval> | null = null;
@@ -205,6 +207,11 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
       }
       if (typeof frame.topic !== 'string') return;
       for (const [matchId, handlers] of subs) {
+        if (frame.topic === topicFor(matchId)) {
+          if (frame.event === 'phx_reply' && frame.payload?.status === 'ok') for (const h of handlers) h.onReconnect?.();
+          const event = frame.event === 'broadcast' ? frame.payload?.event : frame.event;
+          if (event === 'chat') for (const h of handlers) h.onChat?.();
+        }
         const ping = pingFromFrame(frame, topicFor(matchId));
         if (ping) for (const h of handlers) h.onPing(ping);
       }
@@ -222,12 +229,13 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
   return {
     subscribe(matchId, handlers) {
       let set = subs.get(matchId);
+      const first = !set;
       if (!set) {
         set = new Set();
         subs.set(matchId, set);
       }
       set.add(handlers);
-      if (socket?.readyState === OPEN) {
+      if (socket?.readyState === OPEN && first) {
         send(topicFor(matchId), 'phx_join', {
           config: { broadcast: { ack: false, self: false }, presence: { enabled: false }, private: false },
         });
