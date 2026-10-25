@@ -71,6 +71,7 @@ export const mountMatchChat = (o: {
   const close = button('×', () => setOpen(false));
   close.setAttribute('aria-label', copy.close);
   const toolsToggle = button('···', () => {
+    setPhrases(false);
     controls.open = !controls.open;
   });
   toolsToggle.setAttribute('aria-label', copy.tools);
@@ -139,6 +140,7 @@ export const mountMatchChat = (o: {
       );
       return;
     }
+    setPhrases(false);
     void ctl.send();
   };
   let composing = false;
@@ -160,12 +162,38 @@ export const mountMatchChat = (o: {
     if (e.key === 'Enter' && (e.isComposing || composing || e.keyCode === 229))
       e.preventDefault();
   };
-  form.append(input, send);
   const phrases = document.createElement('div');
   phrases.className = 'match-chat-phrases';
+  phrases.id = 'match-chat-phrases';
+  phrases.hidden = true;
+  phrases.setAttribute('role', 'group');
+  phrases.setAttribute('aria-label', copy.quickPhrases);
+  const phraseToggle = button('', () => setPhrases(Boolean(phrases.hidden)));
+  phraseToggle.className = 'match-chat-phrase-toggle';
+  phraseToggle.setAttribute('aria-label', copy.quickPhrases);
+  phraseToggle.setAttribute('aria-expanded', 'false');
+  phraseToggle.setAttribute('aria-controls', phrases.id);
+  phraseToggle.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v11H10l-5 4V5Z"/><path d="m11 8-2 4h4l-2 4"/></svg>';
+  function setPhrases(open: boolean) {
+    phrases.hidden = !open;
+    phraseToggle.setAttribute('aria-expanded', String(open));
+    if (open) {
+      controls.open = false;
+      const first = phrases.querySelector<HTMLButtonElement>(
+        'button:not(:disabled)',
+      );
+      (first ?? phraseToggle).focus({ preventScroll: true });
+    }
+  }
+  form.append(input, phraseToggle, send);
   for (const id of Object.keys(copy.phrases) as QuickPhrase[])
     phrases.append(
-      button(copy.phrases[id], () => void ctl.send({ text: null, phrase: id })),
+      button(copy.phrases[id], () => {
+        setPhrases(false);
+        phraseToggle.focus({ preventScroll: true });
+        void ctl.send({ text: null, phrase: id });
+      }),
     );
   foot.append(status, outgoing, form, phrases);
   const controls = document.createElement('details');
@@ -384,6 +412,7 @@ export const mountMatchChat = (o: {
     block.setAttribute('aria-pressed', String(s.blockedByMe));
   }
   function setOpen(value: boolean) {
+    setPhrases(false);
     ctl.setOpen(value);
     if (value) {
       close.focus({ preventScroll: true });
@@ -398,6 +427,13 @@ export const mountMatchChat = (o: {
   }
   toggle.onclick = () => setOpen(!ctl.state().open);
   const keydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && !phrases.hidden) {
+      e.preventDefault();
+      e.stopPropagation();
+      setPhrases(false);
+      phraseToggle.focus({ preventScroll: true });
+      return;
+    }
     if (e.key === 'Escape' && ctl.state().open) {
       e.preventDefault();
       e.stopPropagation();
@@ -406,6 +442,12 @@ export const mountMatchChat = (o: {
   };
   document.addEventListener('keydown', keydown, true);
   const outside = (e: PointerEvent) => {
+    if (
+      !phrases.hidden &&
+      !phrases.contains(e.target as Node) &&
+      !phraseToggle.contains(e.target as Node)
+    )
+      setPhrases(false);
     if (
       ctl.state().open &&
       !root.contains(e.target as Node) &&
@@ -427,30 +469,18 @@ export const mountMatchChat = (o: {
   window.addEventListener('online', resume);
   window.addEventListener('focus', resume);
   const viewport = () => {
+    const followLatest =
+      log.scrollHeight - log.scrollTop - log.clientHeight < 44;
     const v = window.visualViewport;
     const height = v?.height ?? window.innerHeight;
     const keyboard = height < window.innerHeight * 0.75;
     const top = keyboard && height < 350 ? 8 : 52;
-    let available = height - top - 12;
-    const dock = o.host.querySelector<HTMLElement>('#dock, .dock');
-    // Portrait: keep the entire cockpit usable. Landscape/desktop place it beside the board.
-    if (
-      !keyboard &&
-      window.innerWidth < 600 &&
-      window.innerHeight > window.innerWidth &&
-      dock
-    ) {
-      const dockTop = dock.getBoundingClientRect().top;
-      if (dockTop > top + 180)
-        available = Math.min(available, dockTop - top - 8);
-    }
+    const available = height - top - 12;
     root.dataset.keyboard = String(keyboard);
     root.style.setProperty('--chat-top', `${(v?.offsetTop ?? 0) + top}px`);
     root.style.setProperty('--chat-height', `${Math.max(120, available)}px`);
+    if (followLatest && ctl.state().open) log.scrollTop = log.scrollHeight;
   };
-  const dockObserver = new ResizeObserver(viewport);
-  const dock = o.host.querySelector<HTMLElement>('#dock, .dock');
-  if (dock) dockObserver.observe(dock);
   window.visualViewport?.addEventListener('resize', viewport);
   window.visualViewport?.addEventListener('scroll', viewport);
   window.addEventListener('resize', viewport);
@@ -460,7 +490,6 @@ export const mountMatchChat = (o: {
     update: () => ctl.turnChanged(),
     stop() {
       ctl.stop();
-      dockObserver.disconnect();
       document.removeEventListener('keydown', keydown, true);
       if (previewTimer) clearTimeout(previewTimer);
       document.removeEventListener('pointerdown', outside);

@@ -1470,6 +1470,7 @@ export const MATCH_CHAT = {
   ready: 'Opponent is thinking · chat open', ended: 'Match ended · history only',
   placeholder: 'A few words…', send: 'Send', pending: 'Sending…', sent: 'Sent', failed: 'Not sent',
   retry: 'Retry', discard: 'Discard', older: 'Earlier messages', newer: 'New messages',
+  quickPhrases: 'Quick phrases',
   tools: 'Chat controls', mute: 'Mute previews', unmute: 'Unmute previews',
   block: 'Block chat with opponent', unblock: 'Unblock opponent', blocked: 'Chat blocked · history only',
   report: 'Report message', reportConfirm: 'Send report', reportDone: 'Report sent for review.',

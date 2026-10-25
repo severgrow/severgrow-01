@@ -21,7 +21,7 @@ All new interface copy is in `src/strings.ts` → `MATCH_CHAT`. `mountMatchChat`
 copy object for the localisation agent. Timestamps use Intl and the browser locale. No translation
 framework, dependency or localised text is persisted. Only English copy is supplied in this branch.
 
-Portrait panels stay above the cockpit; a ResizeObserver follows actual dock layout. The visual viewport controls panel height/offset without resizing the game. Font-size 16px avoids
+Updated design: portrait chat fills the available viewport over the board and cockpit; desktop grows to 480×680px. Transcript text is 18px. Quick phrases live in a compact picker behind the icon beside Send, hidden by default. Controls retain 44px hit areas with slimmer visual surfaces. The visual viewport controls panel height/offset without resizing the game. Font-size 16px avoids
 iOS focus zoom; safe areas, contained transcript scrolling and no document scroll locks. Desktop
 keyboard navigation and a quiet live region are supported. The panel is nonmodal, so it deliberately
 does not trap focus or make gameplay inert. Turn changes preserve drafts. Drafts exist only for the
@@ -87,7 +87,7 @@ focus, online event or reopen fetches the gap. Realtime outages therefore retain
 individual missed hint is not guaranteed to appear until one of those recovery events occurs.
 
 All in-flight browser requests abort on teardown; subscriptions, preview/coalescing timeouts, focus,
-visibility, keyboard and visualViewport listeners and the dock ResizeObserver are removed. A late response from a previous match
+visibility, keyboard and visualViewport listeners are removed. A late response from a previous match
 cannot enter the next transcript. There is no typing, presence, read-receipt or background render loop.
 
 Indexes cover `(match_id,sequence)` and sender/time rate checks. Migration 0017 installs an hourly,
@@ -168,7 +168,7 @@ keyboards. Simulated visualViewport keyboard checks are not a claim of physical 
   delivery, previews/unread, quick phrases, a committed-but-lost HTTP response followed by safe retry,
   untrusted text, mute/block/report, preserved drafts at turn change, reconnect, and complete teardown.
 - Screenshots/geometry inspected at **320×568, 360×640, 390×844, 844×390 and 1280×800**. Assertions
-  require a visible panel, cockpit clearance in portrait, no page overflow, 44px targets and no
+  require a visible panel, expanded reading space and 18px transcript text, no page overflow, 44px targets and no
   menu/logo collision. Visual viewport keyboard resizing and Escape focus restoration passed.
 - Existing `web/e2e/futa04-motion.ts` passed: Draw/Throw, Bloom, both cut sizes, Reduce motion and
   Mega Bomb. Existing board motion tokens/engine logic were not changed.
@@ -182,3 +182,27 @@ keyboards. Simulated visualViewport keyboard checks are not a claim of physical 
 Reviewed captures: [small phone](screens/match-chat/phone.png),
 [desktop](screens/match-chat/desktop.png), [landscape](screens/match-chat/landscape.png).
 These are test conversations, not real players or production chat data.
+
+## Expanded panel design follow-up
+
+Owner direction supersedes the original cockpit-clearance design: mobile chat may cover the board
+and cockpit. The panel now uses the available portrait viewport, and grows to 480×680px on desktop.
+The transcript uses 18px text with more line spacing. Controls have slimmer visible surfaces while
+retaining 44px touch targets. No gameplay layout is resized to accommodate the larger overlay.
+
+Quick phrases are hidden by default behind the icon beside Send. The picker closes after selection,
+outside interaction or Escape; Escape first returns focus to its trigger without closing chat.
+Its choices retain the same authoritative turn restrictions. It stays usable with the keyboard open,
+with bounded scrolling in short viewports. Chat controls and phrases use mutually exclusive drawers.
+The new `MATCH_CHAT.quickPhrases` copy key must be included when integrating translations.
+
+The redesign's two-client browser run used the local in-memory authority and simulated Realtime
+wire: **32 checks passed**, including expanded panel geometry, 18px text, hidden phrases, selection,
+Escape focus, five screen sizes and simulated keyboard resizing (including following the latest message when already at the end). Earlier Postgres/security evidence
+above remains applicable; this follow-up changes presentation only. Updated captures replace the
+original small-panel screenshots, including [the quick-phrase picker](screens/match-chat/quick-phrases.png).
+
+Follow-up validation: full `npm run check` passed **283 files / 2,902 tests**, with 1 expected failure
+and 65 optional/database skips. Focused chat/channel tests passed (16), final TypeScript checks
+passed, both production channel builds/assets checks passed, and the existing Futa04 motion suite
+passed. No backend, migration, gameplay or deployment changes were needed for this design revision.

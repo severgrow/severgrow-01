@@ -248,7 +248,31 @@ try {
     !(await receiver.locator('.match-chat-dot').isVisible()),
   );
   now += 2000;
+  check(
+    'quick phrases stay hidden until requested',
+    !(await sender.locator('.match-chat-phrases').isVisible()),
+  );
+  await sender
+    .getByRole('button', { name: 'Quick phrases', exact: true })
+    .click();
+  await sender.screenshot({ path: `${out}/quick-phrases.png` });
+  await sender.keyboard.press('Escape');
+  check(
+    'Escape closes only the phrase picker and restores its trigger',
+    (await sender.locator('.match-chat-panel').isVisible()) &&
+      !(await sender.locator('.match-chat-phrases').isVisible()) &&
+      (await sender
+        .locator('.match-chat-phrase-toggle')
+        .evaluate((e) => e === document.activeElement)),
+  );
+  await sender
+    .getByRole('button', { name: 'Quick phrases', exact: true })
+    .click();
   await sender.locator('.match-chat-phrases button').first().click();
+  check(
+    'choosing a quick phrase dismisses the picker',
+    !(await sender.locator('.match-chat-phrases').isVisible()),
+  );
   await receiver
     .locator('.match-chat-log')
     .getByText('Good luck!', { exact: true })
@@ -432,7 +456,15 @@ try {
         ),
       ].filter((b) => b.offsetWidth && b.offsetHeight);
       return {
-        cockpit: innerWidth>=600||innerHeight<=innerWidth||p.bottom<=document.querySelector('#dock, .dock')!.getBoundingClientRect().top-4,
+        reading:
+          p.height >= Math.min(500, innerHeight - 80) &&
+          parseFloat(
+            getComputedStyle(document.querySelector('.match-chat-text')!)
+              .fontSize,
+          ) >= 18,
+        phrasesHidden: (
+          document.querySelector('.match-chat-phrases') as HTMLElement
+        ).hidden,
         bounds:
           p.left >= 0 &&
           p.right <= innerWidth + 1 &&
@@ -446,8 +478,9 @@ try {
       };
     });
     check(
-      `${width}×${height}: bounded panel, no page overflow, 44px controls and no menu/logo collision`,
-      geometry.cockpit &&
+      `${width}×${height}: expanded reading panel, larger text, hidden phrases and accessible controls`,
+      geometry.reading &&
+        geometry.phrasesHidden &&
         geometry.bounds &&
         geometry.scroll &&
         geometry.menu &&
@@ -481,6 +514,13 @@ try {
         document.querySelector('.match-chat-form')!.getBoundingClientRect()
           .bottom <= 430,
     ),
+  );
+  check(
+    'keyboard resizing keeps the latest message in view when already at the end',
+    await sender.evaluate(() => {
+      const log = document.querySelector('.match-chat-log')!;
+      return log.scrollHeight - log.scrollTop - log.clientHeight < 44;
+    }),
   );
   await sender.screenshot({ path: `${out}/keyboard-resize.png` });
   await sender.keyboard.press('Escape');
