@@ -261,19 +261,26 @@ try {
   check('the duel is a real finished match with a full move log', finished.status === 'finished' && moves > 8, `${moves} moves`);
 
   // ---------- the finish card offers the replay ----------
+  // The plate now waits for the BOARD, not a clock (the final move is seen first, owner
+  // 2026-10-25). This harness commits a whole duel through the API in a couple of seconds, so the
+  // page is legitimately far behind a real two-phone pace and drains the backlog at Skip speed
+  // before the plate may rise; the budget honours that, and the wait prints what it took.
+  const cardWaited = Date.now();
   await pageA.waitForFunction(
     () => {
       const go = document.getElementById('gameover');
       return !!go && !go.hidden;
     },
-    { timeout: 45_000 },
+    undefined,
+    { timeout: 120_000 },
   );
+  console.log(`finish card after ${((Date.now() - cardWaited) / 1000).toFixed(1)}s of catch-up`);
   await dismissInstall(pageA);
   await pageB
     .waitForFunction(() => {
       const go = document.getElementById('gameover');
       return !!go && !go.hidden;
-    }, { timeout: 45_000 })
+    }, undefined, { timeout: 120_000 })
     .catch(() => undefined);
   const goTitleBefore = ((await pageA.locator('#go-title').textContent()) ?? '').trim();
   const goSeedsBefore = await pageA.evaluate(() => {
@@ -390,15 +397,19 @@ try {
   check('the end of the replay offers "Replay again"', await pageA.locator('#replay [data-rp="again"]').isVisible());
   await pageA.screenshot({ path: `${SHOTS}/replay-end-390x844.png` });
   await pageA.locator('#replay [data-rp="again"]').click();
-  await pageA.waitForTimeout(140);
-  // Pause it straight away: under load the clock can run a beat or two before this read, so the
-  // proof is an EARLY, small elapsed time, not an exact frame number.
-  await pageA.mouse.click(box.x + box.width * 0.35, box.y - 140);
-  await pageA.waitForTimeout(120);
-  const restarted = await replayNow(pageA);
+  // Restart and pause in ONE task: the clock only advances on rAF, so this reads the true first
+  // beat instead of a load-dependent time. The pause is the product's own stage handler.
+  const restarted = (await pageA.evaluate(() => {
+    document.querySelector<HTMLElement>('#replay [data-rp="again"]')?.click();
+    document.querySelector('#replay .rp-stage')?.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', clientX: 8, clientY: 8 }),
+    );
+    const hook = (window as unknown as { __severgrow?: { replay?: () => unknown } }).__severgrow;
+    return hook?.replay?.() ?? null;
+  })) as ReplayNow | null;
   check(
     'Replay again starts from the first beat',
-    !!restarted && restarted.ended === false && restarted.elapsed < 1_600 && restarted.index <= 3,
+    !!restarted && restarted.ended === false && restarted.playing === false && restarted.index === 0 && restarted.elapsed === 0,
     JSON.stringify(restarted),
   );
 
