@@ -10,6 +10,8 @@ const IS_FUTA04 = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04
 import { FRUIT } from '../../../src/strings.js';
 import { ParticleBudget } from '../logic/juice.js';
 import { EASE, MOTION, PINNED } from '../logic/motion.js';
+import { INTERFACE_MOTION } from './interface-motion.js';
+import { planBoomerang } from './throw-boomerang.js';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -246,6 +248,40 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(anim(d, frames, { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }
 
+  /**
+   * The swipe-up throw: REPLACES the ordinary flyCard for that one gesture (never stacks on it).
+   * The card lifts from the hand, settles over the board, then boomerangs back onto the real
+   * Throw pile. Returns the time it runs; with Reduce motion / Speed off it returns 0, hands the
+   * pile over immediately and never creates a flyer.
+   */
+  function throwBoomerang(
+    c: Card,
+    from: DOMRect,
+    boardPoint: { x: number; y: number },
+    to: DOMRect,
+    f: number,
+    onLand?: () => void,
+  ): number {
+    const plan = planBoomerang(from, boardPoint, to, motion() > 0 && f > 0);
+    if (!plan.duration) {
+      onLand?.();
+      return 0;
+    }
+    const d = document.createElement('div');
+    d.className = `flyer card ${suitClass(c)}`;
+    d.innerHTML = cardFace(c);
+    Object.assign(d.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
+    document.body.appendChild(d);
+    const duration = plan.duration * f;
+    if (onLand) setTimeout(onLand, plan.landMs * f);
+    removeAfter(
+      anim(d, plan.frames, { duration, easing: INTERFACE_MOTION.easeOpen, fill: 'forwards' }),
+      d,
+      duration + 40,
+    );
+    return duration;
+  }
+
   function flyBack(from: HTMLElement, to: HTMLElement, f: number) {
     if (motion() === 0) return;
     const a = from.getBoundingClientRect();
@@ -420,5 +456,5 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       particle(c, a, 900 * f);
     }
   };
-  return { flash, cutFlash, flinch, sparks, spark, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, oppDraw, oppThrow, particles };
+  return { flash, cutFlash, flinch, sparks, spark, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, throwBoomerang, flyBack, oppDraw, oppThrow, particles };
 };

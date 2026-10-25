@@ -533,8 +533,8 @@ async function finishTurn(page: Page, label: string) {
   await tapCard(page,discard.card);
   equal(await state(page),before,`${label}: first Throw tap never spends a card or advances the turn`);
   if (await page.evaluate(() => matchMedia('(pointer: coarse)').matches)) {
-    check(await picked.evaluate(el => getComputedStyle(el).touchAction === 'manipulation'),
-      `${label}: the mobile Throw card prevents double-tap browser zoom`);
+    check(await picked.evaluate(el => getComputedStyle(el).touchAction === 'none'),
+      `${label}: the mobile Throw card owns the swipe (touch-action none, no double-tap zoom)`);
   }
   const selection = await picked.evaluate(el => ({ selected:el.classList.contains('futa04-throw-picked'), filter:getComputedStyle(el).filter, transform:getComputedStyle(el).transform }));
   check(selection.selected && selection.filter === 'grayscale(1)' && selection.transform !== 'none',`${label}: Throw preview is enlarged and completely desaturated`);
@@ -544,10 +544,16 @@ async function finishTurn(page: Page, label: string) {
     equal(await state(page),before,`${label}: selecting another card changes the preview without throwing`);
     equal(await page.locator('#hand .futa04-throw-picked').getAttribute('data-card'),String(other.card),`${label}: only the new card is selected`);
     await tapCard(page,discard.card);
-    equal(await state(page),before,`${label}: returning to the first card still waits for confirmation`);
+    equal(await state(page),before,`${label}: returning to the first card still only selects it`);
+    // Owner rule (2026-10-25): the second tap on the picked card DESELECTS. It never throws.
+    await tapCard(page,discard.card);
+    equal(await state(page),before,`${label}: the second tap on the picked card deselects and never throws`);
+    check((await page.locator('#hand .futa04-throw-picked').count()) === 0,`${label}: nothing stays picked after the second tap`);
+    await tapCard(page,discard.card); // pick it again for the real throw
   }
   if (label.startsWith('360x640') && label.endsWith('turn 1')) await evidence(page,'360x640-throw-preview');
-  await tapCard(page,discard.card);
+  // The throw is the tap on the Throw pile while the card is picked (never the card tap).
+  await page.locator('#discard').click();
   await idle(page);
   if (await page.evaluate(() => matchMedia('(pointer: coarse)').matches)) {
     check(await page.evaluate(() => Math.abs((visualViewport?.scale ?? 1) - 1) < .01),

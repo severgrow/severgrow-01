@@ -51,6 +51,7 @@ import {
   paintGhost,
   paintMatch,
   paintProblem,
+  paintRetarget,
   paintTap,
   proximity,
   suggestBloom,
@@ -72,6 +73,7 @@ import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { EASE, BREATH, MOTION, PINNED, breathAmpOf, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
+import { boardHasSettled, resultHoldStalled } from './logic/result-hold.js';
 import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
 import { enterSurface, exitSurface, resetSurface } from './ui/interface-motion.js';
 import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
@@ -95,7 +97,9 @@ import {
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
-import { throwPileAction } from './logic/throw-pile.js';
+import { tapAgainPlays, throwFlight, throwPileAction } from './logic/throw-pile.js';
+import type { ThrowGesture } from './logic/throw-pile.js';
+import { undoIntent } from './logic/undo.js';
 import {
   goalReachable, lessonAllows, lessonBeat, openingDisplay, lessonFor, lessonLocked, lessonOffersBloom, lessonOpening,
   presentedLessonBeat, suggestMove, LESSONS,
@@ -149,6 +153,7 @@ import {
   TUTORIAL_LEVEL_COUNT,
 } from './logic/campaign.js';
 import type { CampaignMatchKind } from './logic/campaign.js';
+import { fetchAccountHighestLevel, syncAccountProgress } from './logic/account-progress.js';
 import {
   freeTurnGuide, migrateTutorialProgress, nextTutorialChapter, previousTutorialChapter,
   tutorialAccepts, tutorialChapter, tutorialFeedback, tutorialTrackFor,
@@ -453,6 +458,22 @@ let botBusy = false;
 let epoch = 0;
 let pumping = false;
 let cardRects = new Map<number, DOMRect>();
+/**
+ * The card whose next human discard must get the swipe-up boomerang (owner, 2026-10-25). Set by
+ * humanPlay when the gesture was a swipe and consumed by that discard step; the move itself is
+ * already committed by then. Cleared by fast-forward (a skipped flight) and by a refused play.
+ */
+let boomerangCard: number | null = null;
+/** Where the committed throw's ghost was when released (null: use the hand card's own box). */
+let dragThrowFrom: DOMRect | null = null;
+/**
+ * The Throw pile stays swollen while the throw it accepted is still in flight (owner, 2026-10-25).
+ * The class is otherwise driven by the selection, but the selection ends the moment the move
+ * commits — so the flight holds it for its own duration, and the boomerang lands on the rect the
+ * player is actually looking at, not a settled rect it never touched. Cleared on landing,
+ * fast-forward, cancel and a new game.
+ */
+let throwSwellHeld = false;
 
 /**
  * A precise, bounded timeline of the animation pump and every reveal boundary, with a
@@ -487,7 +508,7 @@ const announceTurn = (player: Player, label?: string) => {
   const tone = turnTone(player, o);
   if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
 };
-const { flash, cutFlash, flinch, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, oppDraw, oppThrow, particles } = createEffects(board, () => timeScale(), () => motion());
+const { flash, cutFlash, flinch, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, throwBoomerang, flyBack, oppDraw, oppThrow, particles } = createEffects(board, () => timeScale(), () => motion());
 
 /** Pause and dim the ambient skin loops (lava, fireflies, sway) so a cut or blast reads. */
 function quietAmbient(on: boolean) {
@@ -1548,6 +1569,8 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   perfUnsub = null;
   for (const id of ['score-you', 'score-bot']) $(id).getAnimations().forEach(animation => animation.cancel());
   pumping = false;
+  // A new match starts with a settled pile, whatever the previous one was doing.
+  releaseThrowSwell();
   session = new Session(state, HUMAN, log, base);
   bloomPick = [];
   // A lesson never offers a power before the level that teaches it (Bloom from level 5).
@@ -2263,6 +2286,7 @@ function exitTutorial() {
   releaseTutorialLock();
   store.remove(SAVE_KEY);
   coach = freshCoach();
+  releaseThrowSwell();
   session = null;
   showScreen('menu');
   // Drop tutorial query so Back / reload does not re-enter the lock.
@@ -2882,11 +2906,17 @@ function drainInstallInvite() {
   flushInstallInvite();
 }
 
-function humanPlay(a: Action, opts: { auto?: boolean } = {}) {
+function humanPlay(a: Action, opts: { auto?: boolean; throwGesture?: ThrowGesture; flightFrom?: DOMRect } = {}) {
   bloomPick = []; // a move is made: nothing stays held toward a Bloom
+  // A swipe-up throw asks for the boomerang. This is only a presentation hint; the hint is
+  // attached AFTER the move commits (below), so the animation can never gate or delay it.
+  const swipe = opts.throwGesture === 'swipe' && a.t === 'Discard';
+  // Was this throw made from the picked card? Then the Throw pile is swollen right now, and the
+  // swell belongs to the flight, not only to the selection.
+  const fromPickedPile = a.t === 'Discard' && !!session && session.pending?.t === 'Discard' && session.pending.card === a.card;
   // The » step, taken once in a lesson, is taught: from then on the game moves on by itself.
   if (isOnlineDuel()) {
-    void humanPlayOnline(a);
+    void humanPlayOnline(a, swipe, opts.flightFrom);
     return;
   }
   if (!session || (coach.tutorial && tutorialTransitionPending)) return;
@@ -2901,8 +2931,15 @@ function humanPlay(a: Action, opts: { auto?: boolean } = {}) {
   fastForward();
   const advice = currentAdvice();
   rememberCardRects();
-  const p = session.play(a, HUMAN, opts);
+  const p = session.play(a, HUMAN, opts.auto === undefined ? {} : { auto: opts.auto });
   if (!p) return;
+  // The throw is already in the engine and the log; only now does the discard step learn which
+  // flight it gets, and that it may continue from where the released ghost was.
+  if (a.t === 'Discard' && p.steps.some((step) => step.k === 'discard' && step.player === HUMAN)) {
+    if (swipe) boomerangCard = a.card;
+    if (opts.flightFrom) dragThrowFrom = opts.flightFrom;
+    if (fromPickedPile) holdThrowSwell();
+  }
   inspectKey = null;
   guideGoal = null;
   afterPlay(p, HUMAN, advice);
@@ -2917,13 +2954,18 @@ function humanPlay(a: Action, opts: { auto?: boolean } = {}) {
 }
 
 /** Online: Draw commits, Grow drafts locally, Throw sends the batch. */
-async function humanPlayOnline(a: Action) {
+async function humanPlayOnline(a: Action, swipe = false, flightFrom?: DOMRect) {
   const os = getOnlineSession();
-  if (!os || !session) return;
-  if (os.finished) return;
+  // Same affordance as offline: a throw from the picked card keeps the swollen pile it aimed at.
+  const fromPickedPile = a.t === 'Discard' && !!session && session.pending?.t === 'Discard' && session.pending.card === a.card;
+  if (!os || !session) return void (boomerangCard = null);
+  if (os.finished) return void (boomerangCard = null);
   // THE GATE. The enemy's finished turn is still being shown: nothing may be played, and — just
   // as important — nothing may fast-forward it away. Skipping is the Skip control's job alone.
-  if (os.isRevealing) return revealWaitNotice();
+  if (os.isRevealing) {
+    boomerangCard = null;
+    return revealWaitNotice();
+  }
   markTiming(
     a.t === 'Draw' ? 'draw:tap' : a.t === 'EndAct' || a.t === 'Discard' ? 'throw:tap' : 'move:tap',
     { action: a.t },
@@ -2935,6 +2977,7 @@ async function humanPlayOnline(a: Action) {
   guideGoal = null;
   const result = await os.play(a);
   if (!result.ok) {
+    boomerangCard = null; // the move did not land: its flight must not play on a later discard
     // A refused move must never be silent: the two-phone playtest read an unexplained refusal as
     // "painting is broken". Keep the painted shape on screen and say why it could not be placed
     // (the shared info line above the board), with the same shake a refused tap gets. Committing
@@ -2962,6 +3005,11 @@ async function humanPlayOnline(a: Action) {
     let displayEvent = IS_FUTA04 ? displayEventForPlay(result.played.before, result.played.after, result.played.steps, HUMAN) : null;
     log.unshift(describe(result.played.before, result.played.action, result.played.after, HUMAN));
     markMoment(result.played.steps, result.played.before);
+    if (a.t === 'Discard' && result.played.steps.some((step) => step.k === 'discard' && step.player === HUMAN)) {
+      if (swipe) boomerangCard = a.card;
+      if (flightFrom) dragThrowFrom = flightFrom;
+      if (fromPickedPile) holdThrowSwell();
+    }
     queue.push(result.played.steps);
     if (displayEvent) smartCockpit?.event(displayEvent);
   }
@@ -3242,6 +3290,32 @@ let pendingInstallOutcome: 'won' | 'lost' | 'draw' | null = null;
 /** The campaign progress record (level 1 open; a win unlocks the next; a loss removes nothing). */
 let campaignProgress: CampaignProgress = parseProgress(store.get(CAMPAIGN_PROGRESS_KEY));
 const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializeProgress(campaignProgress));
+/**
+ * An ACCOUNT's place lives on the server (owner report, 2026-10-25: level 35 on the phone, level 1
+ * on the desktop). Campaign progress is still device-local for a guest; for a signed-in account one
+ * authenticated read of the furthest verified clear RAISES this device's record to match. It never
+ * lowers it, never runs for a guest, and a failed read leaves the local game exactly as it was with
+ * no error shown. The reconciliation itself is pure and unit-tested (`reconcileProgress`).
+ */
+async function syncAccountLevel(): Promise<void> {
+  if (!FEATURES.campaign) return;
+  const before = campaignProgress;
+  const after = await syncAccountProgress(campaignProgress, {
+    storage: store,
+    fetchHighest: fetchAccountHighestLevel,
+  });
+  if (after === before) return;
+  campaignProgress = after;
+  saveCampaignProgress();
+  // The menu's LEVEL <n> entry is painted from progress; repaint it in place so a boot that was
+  // already showing level 1 now names the account's real level, without a reload or a replay.
+  if (shownScreen === 'menu') layoutMenu(syncMenuResume());
+  else if (shownScreen === 'campaign') renderCampaignScreen();
+  else if (shownScreen === 'levels') renderLevelGrid();
+}
+// A sign-in finishes by reloading (the accounts module's own flow), so boot covers it; this event is
+// the belt-and-braces path if that flow ever stops reloading.
+window.addEventListener('futasaku:identity', () => { void syncAccountLevel(); });
 let lastBoard: unknown = null;
 let lastOverlay = '';
 let coachWhyOpen = false;
@@ -3293,12 +3367,29 @@ const flushIdle = () => {
   for (const r of w) r();
 };
 
+/** Hold the swollen Throw pile for the flight its selection started. */
+function holdThrowSwell(): void {
+  if (!IS_FUTA04) return;
+  throwSwellHeld = true;
+  document.getElementById('discard')?.classList.add('futa04-throw-target');
+}
+
+/** Let the Throw pile settle again. Safe to call anywhere, any number of times. */
+function releaseThrowSwell(): void {
+  throwSwellHeld = false;
+  document.getElementById('discard')?.classList.remove('futa04-throw-target');
+}
+
 /** Shows everything still queued at once and stops running effects. */
 function fastForward() {
   if (queue.pending === 0 && !pumping) return;
   animLog('fast-forward', { pending: queue.pending, pumping, epoch });
   disarmRevealWatchdog();
   epoch++;
+  // A skipped flight never plays the boomerang; forget its hints with the animations they belonged to.
+  boomerangCard = null;
+  dragThrowFrom = null;
+  releaseThrowSwell();
   replaying = false;
   liveReveal = false;
   quietAmbient(false);
@@ -3503,6 +3594,12 @@ function smootherMode() {
  */
 let pumpRun = 0;
 let pumpWanted = false;
+/**
+ * The step the pump is playing right now (null between steps). The result gate needs it because a
+ * step can take its queue slot before its animation ends (a single-tile grow applies its slot at
+ * the START of the 336 ms pop), so an empty queue does not mean the board has settled.
+ */
+let currentStep: Step | null = null;
 async function pump() {
   if (pumping) {
     pumpWanted = true;
@@ -3528,7 +3625,13 @@ async function pump() {
         }
         const step = queue.peek()!;
         const stepStarted = performance.now();
-        await playStep(step, my);
+        // Published to the result gate: the board is still changing until this returns.
+        currentStep = step;
+        try {
+          await playStep(step, my);
+        } finally {
+          currentStep = null;
+        }
         // Read-only timing for the motion audit (web/e2e/motion-audit.ts): what played, for how long.
         animLog('step', { k: step.k, ms: Math.round(performance.now() - stepStarted), n: step.k === 'grow' ? step.tiles.length : step.k === 'sever' || step.k === 'remove' ? step.keys.length : step.k === 'megaBomb' ? step.destroyed.length : 0, who: 'player' in step ? step.player : -1 });
       }
@@ -3555,6 +3658,7 @@ async function pump() {
   } finally {
     if (pumpRun === run) {
       pumping = false;
+      currentStep = null;
       liveReveal = false;
       replaying = false;
       board.focus(null);
@@ -4107,15 +4211,48 @@ async function playStep(step: Step, my: number) {
         paintDiscardTop();
       };
       if (step.player === HUMAN) {
-        const from = cardRects.get(step.card.id);
+        // The swipe-up throw gets the boomerang INSTEAD of the ordinary flight (never both).
+        // `boomerangCard` is a hint set after the move already committed (see humanPlay), and it
+        // is consumed here so it can never leak onto a later discard.
+        const swipe = boomerangCard === step.card.id;
+        if (swipe) boomerangCard = null;
+        // A committed drag continues from the released ghost's box, never snapping back to the
+        // hand for one frame. The hint is consumed with the step.
+        let from = cardRects.get(step.card.id);
+        if (dragThrowFrom) {
+          from = dragThrowFrom;
+          dragThrowFrom = null;
+        }
+        const flight = IS_FUTA04 ? throwFlight(swipe ? 'swipe' : 'tap', motionOn()) : 'ordinary';
         if (from) {
-          flyCard(step.card, from, ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect(), f, land);
+          const to = ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect();
           const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
           if (source) source.style.visibility = 'hidden';
+          if (flight === 'boomerang') {
+            // Settle over my home: the card visits the board as if it were about to be placed.
+            let point = board.screenPoint(board.rootKey(HUMAN));
+            if (!point.x && !point.y) {
+              const r = $('board-wrap').getBoundingClientRect();
+              point = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+            }
+            await wait(throwBoomerang(step.card, from, point, to, f, land), my);
+          } else if (flight === 'ordinary') {
+            flyCard(step.card, from, to, f, land);
+            await wait(IS_FUTA04 ? PINNED.throw * f : 320 * f, my);
+          } else {
+            // Reduce motion / Speed off: no lift, no spin, no flyer — the card is simply on the pile.
+            land();
+            await wait(0, my);
+          }
+        } else {
+          await wait(320 * f, my);
         }
+        // The flight is home: let the target settle. The held swell was part of the rect the
+        // boomerang just landed on, so releasing it here cannot pull the landing out from under
+        // the card.
+        releaseThrowSwell();
         const hp = hapticFor('throw', settings);
         if (hp) vibrate(true, hp as number | number[]);
-        await wait(IS_FUTA04 && from ? PINNED.throw * f : 320 * f, my);
       } else {
         const seat = oppSeat();
         if (seat) {
@@ -6160,6 +6297,7 @@ function hintCtx(v: View): HintCtx {
       return groups.length ? Math.min(...groups.map((g) => g.cards.length)) : null;
     })(),
     throwEndsTurn: v.phase === 'DISCARD' && discardEndsTurn(v),
+    throwPicked: pending?.t === 'Discard',
     fruitReady: session!.legal.some((a) => a.t === 'PlayFruit'),
     grew: grewThisTurn(),
   };
@@ -7128,7 +7266,7 @@ function renderHand(v: View, advice: Advice | null) {
     b.classList.toggle('tutorial-target-card', tutorialCard === c.id);
     if (tutorialCard === c.id) b.style.zIndex = '100';
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
-    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}${IS_FUTA04 && session!.pending?.t === 'Discard' && session!.pending.card === c.id ? ', tap again to throw and finish your turn' : ''}`);
+    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}${IS_FUTA04 && session!.pending?.t === 'Discard' && session!.pending.card === c.id ? ', swipe up or tap the Throw pile to throw it; tap it again to put it down' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));
     const g = combos.get(c.id);
     if (g === undefined) delete b.dataset.combo;
@@ -7219,7 +7357,9 @@ function paintDiscardTop() {
 }
 
 function renderPiles(v: View, advice: Advice | null) {
-  const looks = pileStates(v.phase, myTurn(), busy(), session!.legal);
+  // The product keeps its Throw pile lit in the Throw step (owner, 2026-10-25). Classic copies
+  // pass nothing and keep the old both-piles-dimmed look.
+  const looks = pileStates(v.phase, myTurn(), busy(), session!.legal, IS_FUTA04);
   const top = shownDiscard.at(-1);
   paintDiscardTop();
   if (IS_FUTA04) renderPileMeter($('deck-count'), v.deckCount);
@@ -7250,6 +7390,9 @@ function renderPiles(v: View, advice: Advice | null) {
     b.disabled = !look.enabled && !(id === 'discard' && tossReady);
     b.classList.toggle('ready', look.glow);
     b.classList.toggle('dim', look.dim);
+    // The swell lives on the selection seam (a picked Throw card) and on the flight that follows
+    // it, so a pile never stays swollen after the throw.
+    b.classList.toggle('futa04-throw-target', IS_FUTA04 && id === 'discard' && (tossReady || throwSwellHeld));
     const coachOn = !!advice && advice.action.t === 'Draw' && advice.action.from === id && look.enabled;
     b.classList.toggle('coach-glow', IS_FUTA04 ? false : coachOn);
     $(`${id}-hint`).textContent = look.hint ?? '';
@@ -7583,24 +7726,108 @@ function paintGoTitle(text: string, split: boolean): void {
   el.replaceChildren(kicker, document.createTextNode(' '), outcome);
 }
 
+// ---------- the final move's own gate ----------
+
+/**
+ * THE RESULT WAITS FOR THE MOVE, NOT FOR A CLOCK (owner, 2026-10-25: the losing seat was getting
+ * "you lost" before the winning move landed). The decision itself is pure and unit-tested
+ * (`logic/result-hold.ts`); this is only the safety net around it.
+ *
+ * The net is a STALL timer, never a fixed delay: it measures how long the held board has been
+ * completely still (no step landed, no tile revealed, the queue unchanged). A real finish keeps
+ * landing beats, so it can never be cut short; a lost step — the one case where the plate would
+ * otherwise never arrive — is released after `RESULT_HOLD_STALL_MS`, flushing the board to its true
+ * final position first.
+ */
+let resultHoldWatch = 0;
+let resultHoldSeen = '';
+let resultHoldSince = 0;
+
+const resultHoldSignature = (): string => `${revealProgress}|${queue.pending}|${currentStep?.k ?? '-'}`;
+
+function armResultHold(): void {
+  if (resultHoldWatch) return;
+  resultHoldSeen = resultHoldSignature();
+  resultHoldSince = performance.now();
+  resultHoldWatch = window.setInterval(checkResultHold, 250);
+  animLog('result:hold', { queued: queue.pending, playing: currentStep?.k ?? '-' });
+}
+
+function disarmResultHold(): void {
+  if (!resultHoldWatch) return;
+  clearInterval(resultHoldWatch);
+  resultHoldWatch = 0;
+  resultHoldSeen = '';
+  resultHoldSince = 0;
+}
+
+function checkResultHold(): void {
+  const os = getOnlineSession();
+  if (!os?.finished || !$('gameover').hidden) {
+    disarmResultHold();
+    return;
+  }
+  // PAUSED: the player deliberately stopped the board, so silence is not a stall and cutting the
+  // finish short would be wrong — park the clock exactly as the reveal watchdog does.
+  //
+  // `document.hidden` is deliberately NOT parked. A backgrounded tab cannot let the player watch
+  // anything anyway, and parking on it made the hold wait forever for a tab nobody was looking at
+  // (which is what a second tab in a two-seat test always is). The stall window still keeps the
+  // ordinary guarantee: a lost step releases the plate, it is just measured while hidden too.
+  if (paused) {
+    resultHoldSince = performance.now();
+    resultHoldSeen = resultHoldSignature();
+    return;
+  }
+  const seen = resultHoldSignature();
+  if (seen !== resultHoldSeen) {
+    resultHoldSeen = seen;
+    resultHoldSince = performance.now();
+    return;
+  }
+  const quiet = performance.now() - resultHoldSince;
+  if (!resultHoldStalled(quiet)) return;
+  // A held board that has been silent for the whole window cannot settle on its own. Show the
+  // truth (every waiting step applied) and the card, instead of hanging on a lost step.
+  animLog('result:hold-release', { quiet: Math.round(quiet), queued: queue.pending, playing: currentStep?.k ?? '-' });
+  markTiming('result:safety', { quiet: Math.round(quiet) });
+  fastForward();
+  disarmResultHold();
+}
+
 function renderGameOver() {
   const go = $('gameover');
   if (isOnlineDuel()) {
     const os = getOnlineSession();
     const info = os?.finishInfo() ?? null;
-    // A decided match never waits on an animation. This is the symmetry rule the owner asked for:
-    // both devices get the end screen as soon as the finished view lands, one as winner and one as
-    // loser. (The last move's steps may still finish behind the overlay; the board is correct.)
+    // THE FINAL MOVE IS SEEN FIRST (owner, 2026-10-25). A decided match still does not go back to
+    // waiting on the clock: this waits on the BOARD, and only while a move is actually changing it.
+    // A timeout or a resignation carries no move at all, so its queue is empty and the card arrives
+    // at once; a reconnecting client that opens an already-finished match has nothing queued either.
     const wasHidden = !!go.hidden;
-    const show = !!info && !gameOverDismissed && !$('game').hidden;
+    const wanted = !!info && !gameOverDismissed && !$('game').hidden;
+    // `isPreparingCatchUp` covers the one render that runs INSIDE `consumeCatchUp` (its own
+    // `skipCatchUp()` emit) before the deciding move's steps reach the queue — see duel-session.ts.
+    const settled = wanted && !os?.isPreparingCatchUp && boardHasSettled({
+      waiting: queue.kinds(),
+      playing: currentStep?.k ?? null,
+      reducedMotion: settings.reduceMotion,
+    });
+    // Once the plate is up, a later render of the same match never takes it down (only `wanted`
+    // can: leaving, or the player dismissing it).
+    const show = wanted && (!wasHidden || settled);
     if (!show) {
       go.hidden = true;
       document.body.classList.remove('result');
       syncVeil();
+      if (wanted) armResultHold();
+      else disarmResultHold();
       return;
     }
+    disarmResultHold();
     if (!info || !os) return;
     go.hidden = false;
+    if (wasHidden) animLog('result:show', { queued: queue.pending, playing: currentStep?.k ?? '-', revision: os.driver.snapshot().revision });
     presentResult(go, wasHidden);
     // A duel settles its own wallet server-side, and this paragraph is SHARED by every mode — so it
     // is reset first, or the previous offline game's "+15 Seeds" would appear on a duel's card.
@@ -8145,8 +8372,10 @@ function onCardTap(id: number) {
     // Picking a Bomb from the hand remains the existing single-card action.
     if (session.sel.kind?.startsWith('bloom-mega-') && session.view.hand.some(c=>c.id===id && c.suit===null)) session.cancel();
   }
-  // the test copy: no Confirm box; tapping a card of the waiting move again places it
-  if (FEATURES.tapAgain && session.pending && (!IS_FUTA04 || (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout')) && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
+  // The classic / test copies: no Confirm box, tapping a card of the waiting move again places it.
+  // The product Throw step is NOT in this path: a second tap on the picked card deselects, and a
+  // card tap never throws (owner, 2026-10-25). Throws are the swipe, the pile drop, or a pile tap.
+  if (FEATURES.tapAgain && session.pending && tapAgainPlays(session.pending, id, IS_FUTA04)) return humanPlay(session.pending);
   sound.click();
   pickFruit(id);
   inspectKey = null;
@@ -8155,8 +8384,9 @@ function onCardTap(id: number) {
     const why = fruitCardState(session.view, session.legal, id).reason;
     if (why) caption(why, null, 'info');
   }
-  // Throw step: tapping a card throws it (only the last card asks first, per "Confirm moves").
-  if (session.view.phase === 'DISCARD' && session.pending?.t === 'Discard' && !asksConfirm(session.pending)) return humanPlay(session.pending);
+  // Classic only: tapping a card throws it directly (only the last card asks first, per "Confirm
+  // moves"). The product always selects first and throws by gesture, never by card tap.
+  if (!IS_FUTA04 && session.view.phase === 'DISCARD' && session.pending?.t === 'Discard' && !asksConfirm(session.pending)) return humanPlay(session.pending);
   // A card with just one place to grow picks it at once: one tap plays it (Undo takes it back).
   if (session.sel.card !== null && session.sel.hex === null && (!IS_FUTA04 || session.view.hand.find(c => c.id === session!.sel.card)?.suit !== null)) {
     const only = [...targetHexes(session.view, session.legal, session.sel)];
@@ -8532,7 +8762,19 @@ const drawHandlers = {  down(p: Pt, e: PointerEvent) {
       if (next.length > shape.length) {
         drawTick(next.length - 1);
         msg = null;
-      } else if (next.length === shape.length && !shape.includes(k)) msg = unavailable(session!.view, c, shape, draw.reverse).get(k) ?? msg;
+        shape = next;
+        continue;
+      }
+      // Moving onto a hex the path cannot simply extend: if it can legally BE the last tile, the
+      // tentative end follows the finger instead of needing a drag back first (owner, 2026-10-25).
+      // A refused retarget changes nothing, so the shape can never pick up a gap or an illegal end.
+      const retargeted = next.length === shape.length && !shape.includes(k) ? paintRetarget(c, shape, k, draw.reverse) : null;
+      if (retargeted) {
+        shape = retargeted;
+        msg = null;
+        continue;
+      }
+      if (next.length === shape.length && !shape.includes(k)) msg = unavailable(session!.view, c, shape, draw.reverse).get(k) ?? msg;
       shape = next;
     }
     draw = { ...draw, shape, msg };
@@ -9234,8 +9476,9 @@ bind('deck', () => {
 bind('discard', () => {
   if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
-  // The Throw step: a card already picked goes onto the pile (the same move as tapping that card
-  // again). Nothing picked, nothing thrown. Every mode, online too (humanPlay routes it).
+  // The Throw step: the picked card goes onto the pile. This is the third throw gesture (tap the
+  // pile while a card is picked); a tap on the card itself only selects/deselects. Nothing picked,
+  // nothing thrown. Every mode, online too (humanPlay routes it).
   const toss = myTurn() && session ? throwPileAction(session.view.phase, session.pending, session.legal) : null;
   if (toss) return humanPlay(toss);
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'discard') : undefined;
@@ -9283,27 +9526,22 @@ const dragLayer = mountDragLayer({
     }
     return false;
   },
-  upperBoard: (y) => {
-    // Flick throw: almost the full screen above the action / hand button row.
-    const hand = $('hand').getBoundingClientRect();
-    const actions = document.getElementById('futa04-actions')?.getBoundingClientRect();
-    const floor = Math.min(hand.top, actions?.top ?? hand.top) - 8;
-    return y < floor;
-  },
   bloomReverse: () => draw.reverse,
   setThrowZone: (on) => {
     document.getElementById('futa04-box')?.classList.toggle('drag-throw-zone', on);
   },
-  commit: (a) => {
+  commit: (a, mode, from) => {
     // A pile tap / drag draws at once. Drag/flick throw commits on release (the gesture is
-    // the confirmation); card taps still use tap-again / Confirm.
+    // the confirmation); card taps still select / deselect.
     if (a.t === 'Draw') {
       vibrate(settings.vibration, 12);
       return humanPlay(a);
     }
     if (IS_FUTA04 && a.t === 'Discard') {
       vibrate(settings.vibration, 12);
-      return humanPlay(a);
+      // Only the swipe-up gets the boomerang; a drop onto the pile keeps the ordinary flight.
+      // `from` is the released ghost's box, so the flight continues where the card was.
+      return humanPlay(a, { throwGesture: mode === 'flick' ? 'swipe' : 'tap', ...(from ? { flightFrom: from } : {}) });
     }
     if (asksConfirm(a)) {
       session?.preset(a);
@@ -9312,6 +9550,9 @@ const dragLayer = mountDragLayer({
     }
     humanPlay(a);
   },
+  // A started move shorter than SWIPE_TAP_PX is still a tap: it selects, or deselects the card
+  // the player already picked (never throws — that is what confused testers).
+  tap: (cardId) => onCardTap(cardId),
   openBloom: (cardId, key) => {
     if (!session) return;
     session.cancel();
@@ -9453,22 +9694,28 @@ bind('tool-replay', () => replayBotTurn());
 }
 bind('tool-undo', () => {
   if (!session) return;
-  // One tap: clear a waiting throw / bloom paint, else take back the last move. No confirm.
-  if (session.pending || session.presetMove) {
+  // ONE PRESS takes back the last move (owner, 2026-10-25: "undo shouldnt need 2 taps"). The
+  // decision is one pure function (logic/undo) because `session.pending` is DERIVED from the pick:
+  // asking it first spent the press clearing the pick, and only the second press reached undo().
+  const online = isOnlineDuel();
+  const intent = undoIntent({
+    // The SAME question the enable line above asks. Online the offline `session` is rebuilt after
+    // every move, so its undo stack is always empty: the draft that can be taken back lives on the
+    // OnlineSession. Reading `session.canUndo` here lit the button but never reached `undoMove()`.
+    canUndo: online ? !!getOnlineSession()?.canUndo : session.canUndo,
+    // A drawn placement waiting for Confirm, or a Bloom being painted: drawn, never played.
+    hasStagedPreview: !!session.presetMove || !!draw.shape.length || draw.desk.phase === 'live' || !!draw.ptr,
+    hasSelection: session.sel.card !== null || session.sel.hex !== null || session.sel.kind !== null,
+    online,
+  });
+  if (intent === 'undo') return undoMove();
+  if (intent === 'cancel') {
     cancelSel();
     smartCockpit?.hint('UNDONE');
     return;
   }
-  if (draw.shape.length || draw.desk.phase === 'live' || draw.ptr) {
-    cancelDraw();
-    return;
-  }
-  // The SAME question the enable line above asks. Online the offline `session` is rebuilt after
-  // every move, so its undo stack is always empty: the draft that can be taken back lives on the
-  // OnlineSession. Reading `session.canUndo` here lit the button but never reached `undoMove()`.
-  const canUndo = isOnlineDuel() ? !!getOnlineSession()?.canUndo : session.canUndo;
-  if (canUndo) undoMove();
-  else if (!isOnlineDuel() && session.canReplayOpponent) replayBotTurn();
+  // `none`: nothing was moved and nothing is waiting. Offline the same slot may be showing Replay.
+  if (!online && session.canReplayOpponent) replayBotTurn();
 });
 bind('go-rematch', () => {
   // One advance per finish card (owner brief, 2026-10-22): the leading key is the largest target on
@@ -9804,6 +10051,8 @@ let appReady = false;
   pending: () => session?.pending ?? null,
   /** The live tap selection (the same object offline uses), for interaction tests. */
   sel: () => (session?.sel ? { ...session.sel } : null),
+  /** The Bloom being painted right now (the tentative shape, the same one the ghost paints). */
+  drawShape: () => ({ shape: [...draw.shape], reverse: draw.reverse, msg: draw.msg, desk: draw.desk.phase }),
   /** The legal moves the page is offering right now (display coords), for interaction tests. */
   legal: () => (session ? [...session.legal] : []),
   // Online the source of truth is the OnlineSession's draft, not the offline Session the page
@@ -9827,6 +10076,8 @@ let appReady = false;
     return !!p;
   },
   settings: () => ({ ...settings }),
+  /** The campaign place the page is on, as the menu's LEVEL <n> reads it (tests/screenshots). */
+  campaignLevel: () => currentLevel(campaignProgress).number,
   busy: () => busy(),
   /** Read-only sound diagnostics: the pre-rendered bank's size and the last cues played. */
   soundBank: () => sound.bankStats(),
@@ -9997,6 +10248,9 @@ else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
   startTutorial(chapter);
 } else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
+// One background read on boot: a signed-in account's place comes from the server (a guest never
+// asks). It repaints the menu if it moves; the first paint is already usable without it.
+void syncAccountLevel();
 
 // The main-menu tagline ("GROW · CONNECT · CONQUER") is NOT on the menu — the owner had it removed
 // on 2026-10-14 (it read as clutter under the wordmark). It is not in `web/index.html` at all, so

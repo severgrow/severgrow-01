@@ -292,8 +292,9 @@ Second clarity pass (2026-10-17, after the objective landed):
   useless without a referent. The Draw pile haloes itself at that step, so the next touch is still
   obvious.
 - When the only thing left is to finish the turn, the window **points at the end-turn control**.
-  In the throw phase it points at the **hand**, because the line says "tap a card twice"; once a card
-  waits for its second tap the line becomes "tap the same card again".
+  In the throw phase it points at the **hand** until a card is picked, then at the **Throw pile**
+  (owner, 2026-10-25: a second tap on the picked card now deselects; the throw is a swipe up, a
+  drag to the pile, or a tap on the pile).
 - A dead tap is answered everywhere it can happen: a hex (rock, connection, wrong phase) *and* a card
   before the draw ("Draw a card first"), placed at the tapped thing.
 - A round cockpit button with no action is invisible on the guided levels instead of blank — a

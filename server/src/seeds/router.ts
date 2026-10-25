@@ -27,7 +27,15 @@ export const createWorldEconomyRouter = (deps: {
   if (req.method === 'GET' && path === '/v1/world') return ok(200, { world: await economy.world() });
   if (!path.startsWith('/v1/world') && !path.startsWith('/v1/seeds')) return null;
   const player = await deps.authenticate(bearer(req));
-  if (req.method === 'GET' && path === '/v1/seeds/wallet') return ok(200, { wallet: await economy.wallet(player) });
+  if (req.method === 'GET' && path === '/v1/seeds/wallet') {
+    // The wallet read is also the account's PLACE (owner report, 2026-10-25): the furthest Campaign
+    // level this player has a verified first-clear receipt for. It is derived from THIS player's
+    // token — there is no player id in the request — so the value can never be another account's.
+    return ok(200, {
+      wallet: await economy.wallet(player),
+      campaignHighestLevel: await economy.campaignHighestLevel(player),
+    });
+  }
   // ---- Territory challenges -------------------------------------------------
   // The list is private to the two participants (the map is public, the challenges are not), and
   // no route exposes a balance: a challenge names a stake, never a wallet.

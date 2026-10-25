@@ -135,6 +135,13 @@ export type WorldChallengesPayload = {
 
 export interface WorldEconomyStore {
   wallet(playerId: string): Promise<SeedWallet>;
+  /**
+   * The furthest Campaign level this player has a verified first-clear receipt for, read from the
+   * recorded `campaign:c<chapter>-<level>` keys; null when they have never cleared one. This is the
+   * account's place: no campaign table exists, and a paid clear is a verified win. Only the player's
+   * own id is accepted — callers pass the authenticated player, never one from the request.
+   */
+  campaignHighestLevel(playerId: string): Promise<number | null>;
   world(): Promise<WorldSnapshot>;
   claim(playerId: string, cellId: string, requestId: string, now: number): Promise<ClaimResult>;
   settle(input: RewardInput): Promise<RewardResult>;

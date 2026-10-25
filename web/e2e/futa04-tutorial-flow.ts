@@ -74,8 +74,8 @@ try {
   // With nothing left but "end", the free turn goes on to Throw by itself, as in a real game
   // (it used to stay on Grow with the hand locked).
   assert.equal(s.sproutsThisTurn, 1, 'free turn reached Throw after its Grow');
-  await tap('#hand .card');
-  await tap('#hand .card.lifted');
+  await tap('#hand .card'); // pick it (a second card tap would deselect, never throw)
+  await tap('#discard');
   // the free turn ends in the short button tour (UNDO, BULB, DISPLAY), then the menu
   for (const title of ['UNDO', 'BULB', 'DISPLAY']) {
     await page.waitForFunction(t => document.querySelector('#futasaku-glass .glass-copy')?.textContent === t, title, { timeout: 15000 });

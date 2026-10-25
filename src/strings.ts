@@ -680,8 +680,8 @@ export const ONBOARD = Object.freeze({
   grow: 'GROW',
   growLine: 'Tap a lit tile.',
   throwTitle: 'THROW',
-  throwLine: 'Tap a card twice to throw it.',
-  throwAgain: 'Tap the same card again.',
+  throwLine: 'Tap a card to pick it for the Throw.',
+  throwAgain: 'Swipe up, or tap the Throw pile.',
   throwDone: 'Tap » when you are done.',
   twoWays: 'TWO WAYS',
   twoWaysLine: 'More than one tile works. Pick one.',
@@ -1437,7 +1437,7 @@ export const LESSON = Object.freeze({
   tapDrawLine: 'Every turn has 3 steps – Draw, Grow and Throw. You start by drawing 1 card from the top of the Draw pile or the Throw pile.',
   growLine: 'Grow: drag one of your cards from your hand onto the board, or tap it to select and then place it on the board.',
   // Owner's word list (2026-10-20, "Draw pile / Throw pile"): keep the online line's wording.
-  throwLine: 'Throw: swipe up, drag it to the Throw pile, or double tap to Throw a card. This ends your turn.',
+  throwLine: 'Throw: swipe up, drag the card to the Throw pile, or tap the pile. This ends your turn.',
   youGrewLine: 'Tiles keep the rank of the card used. Higher ranks are harder to cut.',
   biggerWinsLine: 'Strengthen: a stronger card can replace your own tile.',
   // "Take", not "Cut": a cut is level 4's idea (breaking the chain), and the two never share a name (owner, 2026-10-24).

@@ -66,6 +66,18 @@ describe('the hint line', () => {
     expect(hintFor(base).arrow).toBe('down');
   });
 
+  it('after a card is picked for the Throw, it names the new gesture in one line', () => {
+    // Owner, 2026-10-25: a second card tap now puts the card down; the throw is a swipe up, a
+    // drop on the Throw pile, or a tap on the pile. The dock line is where that is said.
+    const text = hintFor({ ...base, phase: 'DISCARD', throwPicked: true }).text;
+    expect(text).toMatch(/Swipe up/);
+    expect(text).toMatch(/pile/i);
+    expect(text).not.toMatch(/tap again/i);
+    expect(text.length).toBeLessThanOrEqual(HINT_MAX);
+    // Before a card is picked, the line still just asks for a Throw.
+    expect(hintFor({ ...base, phase: 'DISCARD', throwPicked: false }).text).toMatch(/Throw 1 card/);
+  });
+
   it('explains moves that are not available', () => {
     expect(hintFor({ ...base, card: { single: true, grow: false, replace: false, strengthen: false } }).text).toMatch(/can't grow/);
     expect(hintFor({ ...base, hexWithNoMove: true }).text).toMatch(/Nothing grows there/);

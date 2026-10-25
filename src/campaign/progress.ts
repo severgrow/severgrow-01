@@ -175,3 +175,53 @@ export const currentLevel = (
   }
   return furthest;
 };
+
+/**
+ * RAISE a local record to the place an ACCOUNT already has on the server (owner report,
+ * 2026-10-25: a phone at level 35 and a desktop at level 1 for the same account).
+ *
+ * Campaign progress is otherwise device-local; the server only knows the furthest Campaign level
+ * this account has a verified first-clear receipt for (`campaignHighestLevel`). Paying a level's
+ * first clear requires a server-verified win, so a receipt at level N means levels 1..N were
+ * cleared by that account — even when an old receipt is missing (levels 4-9 are lessons and pay
+ * nothing, level 10 pays as `lesson:10`). That is why the result completes every BUILT level up
+ * to `serverHighestLevel` in level order rather than trusting a sparse receipt list.
+ *
+ * The rule is deliberately ONE-WAY:
+ *   - server ahead  → the local record is raised (never replayed from level 1);
+ *   - local ahead   → returned unchanged, object and all (no regression);
+ *   - equal         → returned unchanged (no rewrite);
+ *   - unknown/none  → returned unchanged (guest, offline, or a failed read).
+ * `best` attempts already on the device are kept. The input is never mutated.
+ */
+export const reconcileProgress = (
+  local: CampaignProgress,
+  serverHighestLevel: number | null | undefined,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): CampaignProgress => {
+  // A finite, positive integer is the only shape that means anything. Anything else is "unknown".
+  if (typeof serverHighestLevel !== 'number' || !Number.isFinite(serverHighestLevel)) return local;
+  const highest = Math.trunc(serverHighestLevel);
+  if (highest < FIRST_CAMPAIGN_LEVEL.number) return local;
+
+  const ordered = [...levels].sort((a, b) => a.number - b.number);
+  const reached = ordered.filter((level) => level.number <= highest);
+  if (reached.length === 0) return local;
+
+  const missing = reached.filter((level) => !local.completed.includes(level.id)).map((level) => level.id);
+  // All of the server's cleared levels are already known locally: the local record is equal or
+  // further ahead, and it stays exactly as it is.
+  if (missing.length === 0) return local;
+
+  const raised: CampaignProgress = {
+    version: CAMPAIGN_PROGRESS_VERSION,
+    // Derived after the fact, like every other write, so the stored counter can never disagree.
+    unlocked: 0,
+    completed: [...local.completed, ...missing],
+    best: { ...local.best },
+  };
+  raised.unlocked = unlockedThrough(raised, levels);
+  // A server answer can only ever open more. If the filled list still does not move the place
+  // (e.g. a gap below a level the account has not cleared), leave the caller's record alone.
+  return raised.unlocked > local.unlocked ? raised : local;
+};

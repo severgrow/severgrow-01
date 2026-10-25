@@ -104,7 +104,12 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   check(await throwCard.evaluate(el => el.classList.contains('futa04-throw-picked') && getComputedStyle(el).filter === 'grayscale(1)'), `${w}: Throw selection is enlarged and colorless`);
   await clickVisibleCard(page, discard.card);
   await page.waitForTimeout(100);
-  check((await state(page)).history!.some(e => e.t === 'Discard' && e.card === discard.card), `${w}: actual card throw`);
+  check(JSON.stringify(await state(page)) === JSON.stringify(before), `${w}: the second card tap deselects and never throws`);
+  check((await page.locator('#hand .futa04-throw-picked').count()) === 0, `${w}: nothing stays picked after the second tap`);
+  await clickVisibleCard(page, discard.card);
+  await page.locator('#discard').click();
+  await page.waitForTimeout(100);
+  check((await state(page)).history!.some(e => e.t === 'Discard' && e.card === discard.card), `${w}: actual pile throw`);
   await idle(page);
   const saved = await state(page);
   await page.evaluate(() => history.replaceState(null, '', location.pathname));

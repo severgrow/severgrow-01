@@ -96,7 +96,12 @@ const buildWithApi = (apiBase: string): Promise<void> =>
 /** Boot the API + the built page. Call `close()` in a finally block. */
 export const startLocalDuel = async (options: LocalDuelOptions): Promise<LocalDuel> => {
   const memory = new MemoryStorage();
-  const server = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'], turnTimeoutMs: options.turnTimeoutMs ?? 24 * 3_600_000 };
+  // `graceExtensionMs` follows the turn length, exactly as production's config does (`TURN_GRACE_MS`
+  // defaults to `TURN_TIMEOUT_MS`). Overriding only `turnTimeoutMs` left the grace at the one-day
+  // default, so a short-timeout scenario could never reach a timeout finish: the first deadline was
+  // correctly spared its grace, and the seat was then given 24 hours instead of another turn.
+  const turnTimeoutMs = options.turnTimeoutMs ?? 24 * 3_600_000;
+  const server = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'], turnTimeoutMs, graceExtensionMs: options.turnTimeoutMs ?? DEFAULT_SERVER_CONFIG.graceExtensionMs };
   // The CHANNEL=futa05 build now ships live duels (see web/src/online/live/flag.ts), so the harness
   // serves the live routes too — otherwise the live listener would log 404s and its challenge
   // inbox could never answer. These suites still exercise the online duel itself (live duels have
@@ -345,8 +350,9 @@ export const tapExposed = async (session: SeatSession, selector: string): Promis
 
 /**
  * End this seat's online turn THE WAY THE PAGE DOES: the Throw control leaves the Grow step (its
- * EndAct is batched with the local draft), then the forced card goes to the throw pile. Futa04 has
- * no Confirm box, so the same card is tapped twice ("tap again to place it").
+ * EndAct is batched with the local draft), then the forced card goes to the throw pile. Owner rule
+ * (2026-10-25): a tap picks the card; the same card tapped again DESELECTS. The throw is the tap
+ * on the Throw pile while the card is picked.
  */
 export const endTurnViaPage = async (session: SeatSession, timeout = 25_000): Promise<boolean> => {
   await waitIdle(session);
@@ -367,7 +373,10 @@ export const endTurnViaPage = async (session: SeatSession, timeout = 25_000): Pr
   )) as number | null;
   if (cardId === null) return false;
   for (let i = 0; i < 3; i++) {
-    await tapExposed(session, `#hand [data-card="${cardId}"]`);
+    await tapExposed(session, `#hand [data-card="${cardId}"]`); // pick (never throw)
+    await sleep(250);
+    if ((await statePhase(session)) !== 'DISCARD') return true;
+    await tapExposed(session, '#discard'); // the throw: tap the pile while it is picked
     await sleep(450);
     if ((await statePhase(session)) !== 'DISCARD') return true;
   }
@@ -379,9 +388,21 @@ export const waitingFlag = (session: SeatSession): Promise<boolean> =>
     .evaluate(() => document.documentElement.dataset.futa04Waiting === 'true')
     .catch(() => false);
 
-/** Touch-tap a point (a finger, not a mouse: the phone path). */
-export const touchTap = (session: SeatSession, point: { x: number; y: number }): Promise<void> =>
-  session.page.touchscreen.tap(point.x, point.y);
+/**
+ * Tap a point the way that device really taps: a FINGER on a phone, a mouse on a desktop.
+ *
+ * A touch-only helper broke the 1280x800 run outright ("touchscreen.tap: hasTouch must be enabled
+ * on the browser context"), and a crashing scenario took every scenario after it with it. Every
+ * viewport this suite uses must be drivable, because the owner's own case - the winner watches
+ * their final move land - has to be proven at a desk as well as on a phone.
+ */
+export const touchTap = async (session: SeatSession, point: { x: number; y: number }): Promise<void> => {
+  const coarse = await session.page
+    .evaluate(() => matchMedia('(pointer: coarse)').matches)
+    .catch(() => false);
+  if (coarse) return session.page.touchscreen.tap(point.x, point.y);
+  await session.page.mouse.click(point.x, point.y);
+};
 
 /** The centre of a drawn hex (screen coordinates). */
 export const hexCentre = async (session: SeatSession, key: string): Promise<{ x: number; y: number } | null> =>

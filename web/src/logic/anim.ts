@@ -157,6 +157,14 @@ export class AnimQueue {
   peek(): Step | undefined {
     return this.queue[0];
   }
+  /**
+   * The kinds still waiting, in play order, without consuming any of them. Read by the finish
+   * screen's gate (`logic/result-hold.ts`) to tell "only the outcome's own cue is left" from
+   * "the deciding move has not landed yet".
+   */
+  kinds(): Step['k'][] {
+    return this.queue.map((s) => s.k);
+  }
   /** Shows the next step; returns it (undefined when nothing is waiting). */
   next(): Step | undefined {
     const s = this.queue.shift();

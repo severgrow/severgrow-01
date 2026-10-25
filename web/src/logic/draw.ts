@@ -271,6 +271,32 @@ export const onlyPlacement = (c: Combo): Bloom | null => {
 // ---------- painting ----------
 
 /**
+ * A DRAG THAT MOVES ONTO A DIFFERENT LAST TILE (owner, 2026-10-25: "when you are at the last one and
+ * you move your finger to different last tile of bloom - it follows"). The last painted hex is still
+ * tentative while the finger is down, so a legal new end REPLACES it — no drag back to the previous
+ * tile first.
+ *
+ * `legal` is the set of hexes that may legally come next after the shape WITHOUT its last hex (the
+ * caller asks drawNext for exactly that). The shape comes back untouched when there is nothing to
+ * replace — a shape of one hex has only the START, which the drag-begin and append rules own, so a
+ * wobble onto another legal start can never move where the paint began — when the hex is already
+ * painted (a path never folds onto itself), or when the hex cannot end the shortened path: it would
+ * leave a gap or make an illegal Bloom. Refusing is silent and harmless: the shape stays exactly as
+ * it was, still completable.
+ */
+export const retargetShape = (shape: readonly string[], key: string, legal: ReadonlySet<string>): string[] => {
+  if (shape.length < 2 || shape.includes(key) || !legal.has(key)) return [...shape];
+  return [...shape.slice(0, -1), key];
+};
+
+/** The drag retarget for the painting in hand: the new shape, or null when this hex is not a retarget. */
+export const paintRetarget = (c: Combo, shape: readonly string[], key: string, reverse = false): string[] | null => {
+  if (shape.at(-1) === key) return null;
+  const next = retargetShape(shape, key, drawNext(c, shape.slice(0, -1), reverse));
+  return next.length === shape.length && next.every((k, i) => k === shape[i]) ? null : next;
+};
+
+/**
  * A drag enters a hex: a legal next hex is added; moving back onto the hex before the last
  * removes the last one; anything else (illegal, not touching, already in, the shape is
  * full) is ignored.
@@ -366,7 +392,12 @@ export const deskHover = (d: Desk, key: string): Desk => (d.phase === 'live' ? {
 export const deskTrace = (c: Combo, d: Desk, key: string, reverse = false): Desk => {
   if (d.phase !== 'live') return d;
   const trail = d.trail ?? [d.start];
-  const next = paintEnter(c,trail,key,reverse);
+  const stepped = paintEnter(c,trail,key,reverse);
+  // The mouse gets the finger's retarget too: when the pointer moves off the traced end onto
+  // another legal end, that end replaces it instead of the trail freezing (preview and the click
+  // that commits it then agree).
+  const same = stepped.length === trail.length && stepped.every((k, i) => k === trail[i]);
+  const next = same ? paintRetarget(c, trail, key, reverse) ?? stepped : stepped;
   return { ...d, hover:key, trail:next };
 };
 

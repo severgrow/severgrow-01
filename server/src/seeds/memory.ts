@@ -56,12 +56,13 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   async wallet(playerId: string): Promise<SeedWallet> { return { ...this.current(playerId) }; }
   /** Mirrors the Postgres read: each claim carries its owner's highest settled Campaign level. */
   async world(): Promise<WorldSnapshot> {
-    return {
-      revision: this.revision,
-      claims: [...this.claims.values()].map((v) => ({ ...v, ownerLevel: this.highestCampaignLevel(v.ownerId) })),
-    };
+    const claims = [];
+    for (const claim of this.claims.values()) {
+      claims.push({ ...claim, ownerLevel: await this.campaignHighestLevel(claim.ownerId) });
+    }
+    return { revision: this.revision, claims };
   }
-  private highestCampaignLevel(playerId: string): number | null {
+  async campaignHighestLevel(playerId: string): Promise<number | null> {
     let highest: number | null = null;
     for (const receipt of this.receipts.values()) {
       if (receipt.input.playerId !== playerId || receipt.input.mode !== 'campaign') continue;

@@ -74,5 +74,11 @@ export const campaignLevelOfSourceKey = (sourceKey: string): number | null => {
  * The tutorial's one payment (owner, 2026-10-24): winning level 10, the final lesson, pays 100
  * Seeds once — exactly one Territory claim. Levels 1-9 teach and pay nothing. Its receipt is
  * `lesson:10` (one per player, like a Campaign first clear).
+ *
+ * OWNER DECISION (2026-10-25), asked directly and answered: "nah 10th level pays 100 so its all
+ * good". So the amounts `campaignSeedReward` carries for levels 1-9 are NOT to be paid: those
+ * levels are the tutorial, their authored openings are not what the server replays, and level 10's
+ * 100 is the deliberate reward for finishing the teaching. Do not enable a proof for 1-9 to "close
+ * the gap" — that gap is the design.
  */
 export const LESSON_SEED_REWARD = Object.freeze({ level: 10, seeds: 100 });

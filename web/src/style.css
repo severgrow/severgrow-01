@@ -7943,3 +7943,17 @@ html.futasaku-product #sheet-settings .sheet-head {
   html.futasaku-product #sheet-settings .row { min-height: 44px; padding-block: 2px; }
   html.futasaku-product #sheet-settings .thumb-settings-last { margin-top: 0; }
 }
+/* A phone on its side, where the Tutorial row pushed the Hand side pair past the plate's bottom
+   edge (settings-visual, 844x390: content ended 27px below the plate, so the control only existed
+   inside a hidden scroll area). The space comes from the plate's inner padding and one group
+   heading — never from a 44px target. "Phone" labels a group of exactly one row, and that row
+   says "Hand side" itself, so the heading is pure overhead at this height. */
+@media (orientation: landscape) and (max-height: 470px) {
+  html.futasaku-product #sheet-settings {
+    padding-block: 2px max(10px, env(safe-area-inset-bottom));
+  }
+  /* Every row in this sheet already names itself ("Sound", "Large text", "Hand side"), so the
+     group headings are pure overhead at 390px tall. Dropping them is what makes the whole plate
+     fit without a scroll, and it takes nothing from any control. */
+  html.futasaku-product #sheet-settings h3 { display: none; }
+}

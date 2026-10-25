@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply, boardCoords, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
-import { DRAG_LED_WORDS, resolveDrag } from '../src/logic/drag.js';
+import { DRAG_LED_WORDS, SWIPE_MIN_UP_PX, SWIPE_TAP_PX, SWIPE_UP_DOMINANCE, resolveDrag } from '../src/logic/drag.js';
 import type { DragSource } from '../src/logic/drag.js';
 import { EMPTY_SEL, kindOf } from '../src/logic/interaction.js';
 import type { Sel } from '../src/logic/interaction.js';
@@ -18,7 +18,6 @@ type Opts = {
   shape?: readonly string[];
   upSpeed?: number;
   upTravel?: number;
-  upperBoard?: boolean;
   reverse?: boolean;
   sel?: Sel;
 };
@@ -35,7 +34,6 @@ const run = (state: State, source: DragSource, o: Opts = {}) =>
     shape: o.shape ?? [],
     upSpeed: o.upSpeed ?? 0,
     upTravel: o.upTravel ?? 0,
-    upperBoard: !!o.upperBoard,
     ...(o.reverse !== undefined ? { reverse: o.reverse } : {}),
   });
 
@@ -137,21 +135,72 @@ describe('place and throw', () => {
     expect(across.led).toBeNull();
   });
 
-  it('a fast upward release in the upper board is a flick, a slow one is not', () => {
+  it('a fast upward swipe is a flick wherever it is released (the release region is not the gesture)', () => {
     const st = discardPhase(tutorialChapter('strengthen'));
     const card = st.hands[0][0]!;
-    const flick = run(st, { kind: 'hand', cardId: card.id }, { upSpeed: 0.9, upperBoard: true });
+    // The swipe starts in the hand and is released in the hand on a phone: 52px is a clear
+    // upward swipe even though it never reaches the upper board.
+    const flick = run(st, { kind: 'hand', cardId: card.id }, { distance: 52, upSpeed: 0.9, upTravel: 52 });
     expect(flick.mode).toBe('flick');
     expect(flick.led).toBe('THROW');
     expect(flick.commit?.t).toBe('Discard');
+    expect(flick.asTap).toBe(false);
+  });
 
-    const travel = run(st, { kind: 'hand', cardId: card.id }, { upSpeed: 0.2, upTravel: 80, upperBoard: false });
+  it('a deliberate upward carry still throws even when the release slows down', () => {
+    const st = discardPhase(tutorialChapter('strengthen'));
+    const card = st.hands[0][0]!;
+    const travel = run(st, { kind: 'hand', cardId: card.id }, { distance: 80, upSpeed: 0.2, upTravel: 80 });
     expect(travel.mode).toBe('flick');
     expect(travel.commit?.t).toBe('Discard');
+  });
 
-    const slow = run(st, { kind: 'hand', cardId: card.id }, { upSpeed: 0.1, upTravel: 20, upperBoard: true });
-    expect(slow.mode).toBe('discard');
-    expect(slow.commit).toBeNull();
+  it('a short or ambiguous move is still a tap, never a throw', () => {
+    const st = discardPhase(tutorialChapter('strengthen'));
+    const card = st.hands[0][0]!;
+    const slop = run(st, { kind: 'hand', cardId: card.id }, { distance: SWIPE_TAP_PX - 1, upSpeed: 0.9, upTravel: SWIPE_TAP_PX - 1 });
+    expect(slop.commit).toBeNull();
+    expect(slop.asTap).toBe(true);
+
+    // A sloppy tap that drifts toward the pile must not throw either.
+    const nearPile = run(st, { kind: 'hand', cardId: card.id }, { distance: 12, overDiscardPile: true, upTravel: 12 });
+    expect(nearPile.commit).toBeNull();
+    expect(nearPile.asTap).toBe(true);
+
+    // At the tap-slop boundary a pile drop is a real drag again.
+    const dropped = run(st, { kind: 'hand', cardId: card.id }, { distance: SWIPE_TAP_PX, overDiscardPile: true });
+    expect(dropped.mode).toBe('discard');
+    expect(dropped.commit?.t).toBe('Discard');
+    expect(dropped.asTap).toBe(false);
+  });
+
+  it('the swipe must be clearly upward and long enough to throw', () => {
+    const st = discardPhase(tutorialChapter('strengthen'));
+    const card = st.hands[0][0]!;
+    // Too short vertically, however fast: no flick.
+    const short = run(st, { kind: 'hand', cardId: card.id }, { distance: SWIPE_MIN_UP_PX - 1, upSpeed: 0.9, upTravel: SWIPE_MIN_UP_PX - 1 });
+    expect(short.commit).toBeNull();
+    expect(short.asTap).toBe(false);
+
+    // Upward travel below the dominance test is a sideways drag, not a swipe up.
+    const sideways = run(st, { kind: 'hand', cardId: card.id }, { distance: 120, upSpeed: 0.9, upTravel: 60 });
+    expect(60).toBeLessThan(SWIPE_UP_DOMINANCE * 120);
+    expect(sideways.commit).toBeNull();
+    expect(sideways.mode).toBe('discard');
+
+    const upright = run(st, { kind: 'hand', cardId: card.id }, { distance: 60, upSpeed: 0.9, upTravel: 60 });
+    expect(upright.commit?.t).toBe('Discard');
+  });
+
+  it("a gesture that starts on one card belongs to that card, wherever it ends", () => {
+    const st = discardPhase(tutorialChapter('strengthen'));
+    const [first, second] = st.hands[0];
+    if (!first || !second) return;
+    // The pointer may finish over another card; the source is fixed at pointerdown.
+    const res = run(st, { kind: 'hand', cardId: first.id }, { distance: 90, upSpeed: 0.9, upTravel: 90, boardKey: null });
+    expect(res.commit).toEqual({ t: 'Discard', card: first.id });
+    const other = run(st, { kind: 'hand', cardId: second.id }, { distance: 90, upSpeed: 0.9, upTravel: 90, boardKey: null });
+    expect(other.commit).toEqual({ t: 'Discard', card: second.id });
   });
 });
 
@@ -253,7 +302,6 @@ describe('a drag can only ever commit a move that is legal right now', () => {
                 shape: next() < 0.3 ? [pick(keys), pick(keys)] : [],
                 upSpeed: next() < 0.3 ? 0.9 : 0,
                 upTravel: next() < 0.3 ? 80 : 0,
-                upperBoard: next() < 0.5,
               });
               if (res.commit) {
                 const ok = legal.some((a) => JSON.stringify(a) === JSON.stringify(res.commit));
