@@ -12,7 +12,8 @@
 // There is no jsdom in this repo, so a tiny DOM stub stands in (the pattern web/tests/tutorial-gate
 // already uses). It records child order and `animate` calls, which is all the paint path touches.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SEED_REVEAL_CSS, paintSeedReward, seedCountValues, seedReward } from '../src/ui/seed-reveal.js';
+import { SEED_REVEAL_CSS, paintSeedReward, seedCountValues, seedReward, settledSeedsMessage } from '../src/ui/seed-reveal.js';
+import { SEEDS_NOT_VERIFIED } from '../src/online/seed-icon.js';
 import type { SeedReward } from '../src/ui/seed-reveal.js';
 
 class StubEl {
@@ -113,9 +114,28 @@ describe('the reward message becomes one of three states', () => {
   });
 
   it('pending, capped and unavailable stay the calm sentences the game already wrote', () => {
-    for (const text of ['Seeds pending verification', 'Seed limit reached today', 'Seed rewards unavailable for this match']) {
+    // There is no "pending" state any more (owner report, 2026-10-25) — the notices that remain are
+    // the ones the game can actually back up. A notice is still one calm line, never a number.
+    for (const text of ['Seed limit reached today', 'Seed rewards unavailable for this match', SEEDS_NOT_VERIFIED]) {
       expect(seedReward(text)).toEqual({ kind: 'notice', text });
     }
+  });
+
+  it('the campaign card reads the receipt it actually got', () => {
+    // A real award, in the one wording the award row parses.
+    expect(settledSeedsMessage({ awarded: 100, reason: null, replayed: false })).toBe('+100 Seeds');
+    expect(seedReward(settledSeedsMessage({ awarded: 100, reason: null, replayed: false })))
+      .toEqual({ kind: 'award', amount: 100 });
+    // Paid before: silence, never a second "+N" the wallet never received.
+    expect(settledSeedsMessage({ awarded: 100, reason: null, replayed: true })).toBe('');
+    expect(settledSeedsMessage({ awarded: 15, reason: null, replayed: true })).toBe('');
+    // A cap says so, in the calm wording; no "+0", no "pending".
+    for (const reason of ['mode_daily_limit', 'opponent_daily_limit', 'global_daily_limit']) {
+      expect(settledSeedsMessage({ awarded: 0, reason, replayed: false })).toBe('Seed limit reached today');
+    }
+    // A zero that is not a limit is absence (a draw, a repeat clear): nothing to announce.
+    expect(settledSeedsMessage({ awarded: 0, reason: 'not_a_first_clear', replayed: false })).toBe('');
+    expect(settledSeedsMessage({ awarded: 0, reason: null, replayed: false })).toBe('');
   });
 });
 
@@ -191,16 +211,34 @@ describe('the award gets one moment, and only one', () => {
     expect(ticks.length).toBeGreaterThan(1);
   });
 
+  it('the moment lasts about a second, stays light, and lands exactly on the amount', () => {
+    // Owner, 2026-10-25: "getting seeds should be slightly animated, very satisfying". The whole
+    // beat is ~0.9 s: seven eased count steps landing at ~0.74 s, plus the settle on the number.
+    // Four Web Animations, all transform/opacity, and a handful of timeouts — no rAF loop.
+    paint(host, { kind: 'award', amount: 50 }, { animate: true });
+    const { row, num, bloom, emblem } = parts(host);
+    const beats = row.animations + emblem.animations + bloom.animations + num.animations;
+    expect(beats).toBe(4);
+    expect(vi.getTimerCount()).toBe(7);
+    // Halfway through it is still counting: the moment is not a snap.
+    vi.advanceTimersByTime(500);
+    expect(num.textContent).not.toBe('+50');
+    // A second later it has landed, and nothing is left scheduled.
+    vi.advanceTimersByTime(500);
+    expect(num.textContent).toBe('+50');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('a repaint cancels the running count, so a re-render cannot double-step it', () => {
     paint(host, { kind: 'award', amount: 50 }, { animate: true });
     expect(vi.getTimerCount()).toBeGreaterThan(0);
-    paint(host, { kind: 'notice', text: 'Seeds pending verification' }, { animate: true });
+    paint(host, { kind: 'notice', text: 'Seed limit reached today' }, { animate: true });
     expect(vi.getTimerCount()).toBe(0);
-    expect(host.textContent).toBe('Seeds pending verification');
+    expect(host.textContent).toBe('Seed limit reached today');
   });
 
   it('a late arrival repaints the SAME line: same host, one line either way', () => {
-    paint(host, { kind: 'notice', text: 'Seeds pending verification' }, { animate: true });
+    paint(host, { kind: 'notice', text: 'Seed limit reached today' }, { animate: true });
     const before = host.children.length;
     paint(host, { kind: 'award', amount: 15 }, { animate: true });
     expect(host.children).toHaveLength(before + 1); // the invisible label + the row, nothing else

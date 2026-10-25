@@ -15,10 +15,10 @@
 //   * a resignation or a timeout pays nothing at all, by design (`settleOnline` returns early).
 // A guessed "+15" that the wallet never received is worse than silence, so silence is the default.
 //
-// NOT reachable today: no payload the client gets carries the award. `MatchViewPayload` and
-// `MatchSummary` both stop at `result: OnlineGameResult`, and `settleOnline` returns void. So the
-// read is written against an OPTIONAL field and shows nothing in practice; the ONE server change
-// that turns it on is named on `MatchDriverSnapshot.seeds` (web/src/online/types.ts).
+// The report IS carried now: `settleOnline` returns each seat's award, `MatchViewPayload.seeds`
+// carries it through the finished view, and `server/tests/duel-seeds-report.test.ts` proves both
+// seats get their own figure. The client still reads it as an OPTIONAL field (`MatchDriverSnapshot
+// .seeds`, web/src/online/types.ts), because a payload without one means "nothing was paid".
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -27,10 +27,11 @@ import { duelSeedsMessage, seedReward } from '../src/ui/seed-reveal.js';
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const main = read('../src/main.ts');
 const snapshotTypes = read('../src/online/types.ts');
+const reveal = read('../src/ui/seed-reveal.ts');
 
 describe('a duel shows the Seeds it actually paid — and nothing it cannot know', () => {
-  it('shows NOTHING when the server reported no award (today: no payload carries one)', () => {
-    // The whole point of the guard: absent is the normal case, and absent means no line at all.
+  it('shows NOTHING when the server reported no award (a payload with no field)', () => {
+    // The whole point of the guard: absent means no line at all — never a zero, never a guess.
     expect(duelSeedsMessage(null)).toBe('');
     expect(duelSeedsMessage(undefined)).toBe('');
     expect(seedReward(duelSeedsMessage(null))).toEqual({ kind: 'none' });
@@ -66,8 +67,10 @@ describe('the shared Seeds paragraph cannot leak between modes', () => {
     // `seedRewardMessage` is module-level and shared by offline, campaign, lessons and duels. If the
     // duel branch simply left it alone, the previous offline game's "+15 Seeds" would appear on a
     // duel's card. `clearGoSeeds()` is that reset, and it must come before the paint.
-    const start = main.indexOf('if (isOnlineDuel()) {');
-    expect(start, 'the duel branch must exist').toBeGreaterThan(-1);
+    const fn = main.indexOf('function renderGameOver()');
+    const start = main.indexOf('if (isOnlineDuel()) {', fn);
+    expect(fn, 'the finish card renderer must exist').toBeGreaterThan(-1);
+    expect(start, 'the duel branch must exist').toBeGreaterThan(fn);
     const branch = main.slice(start, main.indexOf('const won = info.title === RESULT.won;', start));
     const reset = branch.indexOf('clearGoSeeds();');
     const assign = branch.indexOf('duelSeedsMessage(');
@@ -84,9 +87,11 @@ describe('the shared Seeds paragraph cannot leak between modes', () => {
     expect(main).not.toMatch(/friend:\s*\{\s*win:/);
   });
 
-  it('the optional field is the ONE server change, and it is named where the client reads it', () => {
-    expect(snapshotTypes).toMatch(/seeds\?: \{ awarded: number; reason: string \| null \}/);
-    // The doc names where the server would fill it, so the next agent does not have to rediscover it.
+  it('the field is optional, and it is named where the client reads it', () => {
+    // The snapshot's optional field, and the shape it carries (awarded plus the denial reason).
+    expect(snapshotTypes).toMatch(/seeds\?: SettledSeeds;/);
+    expect(reveal).toMatch(/export type SettledSeeds = \{ awarded: number; reason: string \| null \};/);
+    // The doc names where the server fills it, so the next agent does not have to rediscover it.
     expect(snapshotTypes).toMatch(/MatchViewPayload/);
     expect(snapshotTypes).toMatch(/settleOnline/);
   });

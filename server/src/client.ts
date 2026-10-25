@@ -40,7 +40,7 @@ export const DUEL_CLIENT_VERSION = '0.5.0';
 /** The minimal transport shape this client needs (window.fetch, undici, or a test double). */
 export type FetchLike = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body?: string },
+  init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal },
 ) => Promise<{ status: number; ok?: boolean; json(): Promise<unknown> }>;
 
 export type KeyValue = {
@@ -362,18 +362,35 @@ export class DuelClient {
     return response.ticket;
   }
 
-  async submitSeedProof(token: string, source: { levelId: string } | { ticketId: string }, actions: readonly Action[], botVersion: string): Promise<RewardResult> {
+  /**
+   * Submit one finished game's replay for payment. `options.signal` is what lets the CALLER put a
+   * deadline on it: a fetch that never settles is the mechanism behind the 2026-10-25 "Seeds
+   * pending verification" report (a backgrounded mobile tab, or a captured connection, leaves the
+   * promise pending forever). Only the seed proof takes a signal — every other request keeps the
+   * transport's own behaviour, so a slow match read is never cut short.
+   */
+  async submitSeedProof(
+    token: string,
+    source: { levelId: string } | { ticketId: string },
+    actions: readonly Action[],
+    botVersion: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<RewardResult> {
     const campaign = 'levelId' in source;
     const response = await this.request<{ reward: RewardResult }>(
       'POST', campaign ? '/v1/seeds/campaign' : '/v1/seeds/training',
-      { token, body: { ...source, actions, botVersion } },
+      { token, body: { ...source, actions, botVersion }, ...(options.signal ? { signal: options.signal } : {}) },
     );
     return response.reward;
   }
 
   // ---- transport ----
 
-  private request<T>(method: string, path: string, options: { token?: string; body?: unknown; traffic?: boolean } = {}): Promise<T> {
+  private request<T>(
+    method: string,
+    path: string,
+    options: { token?: string; body?: unknown; traffic?: boolean; signal?: AbortSignal } = {},
+  ): Promise<T> {
     return this.send<T>(method, path, options, true);
   }
 
@@ -398,7 +415,7 @@ export class DuelClient {
   private async send<T>(
     method: string,
     path: string,
-    options: { token?: string; body?: unknown; traffic?: boolean },
+    options: { token?: string; body?: unknown; traffic?: boolean; signal?: AbortSignal },
     mayRecover: boolean,
   ): Promise<T> {
     const headers: Record<string, string> = {
@@ -408,11 +425,12 @@ export class DuelClient {
     };
     if (options.traffic === true) headers['x-futasaku-traffic'] = 'test';
     if (options.token !== undefined) headers.authorization = `Bearer ${options.token}`;
-    const init: { method: string; headers: Record<string, string>; body?: string } = { method, headers };
+    const init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal } = { method, headers };
     if (options.body !== undefined) {
       headers['content-type'] = 'application/json';
       init.body = JSON.stringify(options.body);
     }
+    if (options.signal !== undefined) init.signal = options.signal;
     const response = await this.fetchImpl(this.urlFor(path), init);
     let data: unknown = null;
     try {
