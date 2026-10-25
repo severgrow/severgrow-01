@@ -515,6 +515,9 @@ export const mountMatchChat = (o: {
     const box = o.host.querySelector<HTMLElement>('#futa04-box');
     const area = box?.getBoundingClientRect();
     const key = toggle.getBoundingClientRect();
+    const cockpitTop =
+      o.host.querySelector('#smart-context')?.getBoundingClientRect().top ??
+      key.top;
     const desktopTop = Math.max(
       64,
       o.header.getBoundingClientRect().bottom + 24,
@@ -533,14 +536,14 @@ export const mountMatchChat = (o: {
       area &&
       area.width >= 280 &&
       horizontalRoom >= 260 &&
-      key.top - desktopTop - 16 >= 240;
+      cockpitTop - desktopTop - 8 >= 240;
     root.dataset.desktopDocked = String(Boolean(docked));
     if (docked && area) {
       const center = area.left + area.width / 2;
       const width = Math.min(480, area.width, horizontalRoom);
       const left = center - width / 2;
       top = desktopTop;
-      available = key.top - top - 16;
+      available = cockpitTop - top - 8;
       root.style.setProperty('--chat-left', `${left}px`);
       root.style.setProperty('--chat-width', `${width}px`);
     }

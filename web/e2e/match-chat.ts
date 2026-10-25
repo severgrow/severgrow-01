@@ -625,7 +625,7 @@ try {
           document.documentElement.dataset.layout !== 'side' ||
           (docked &&
             Math.abs((p.left + p.right - box.left - box.right) / 2) < 1 &&
-            Math.abs(t.top - p.bottom - 16) < 1 &&
+            Math.abs(context.top - p.bottom - 8) < 1 &&
             p.width <= box.width + 1),
         reading:
           p.height >= (docked ? 240 : Math.min(500, innerHeight - 80)) &&
@@ -633,6 +633,9 @@ try {
             getComputedStyle(document.querySelector('.match-chat-text')!)
               .fontSize,
           ) === 14,
+        triggerHidden:
+          getComputedStyle(document.querySelector('#match-chat-toggle')!)
+            .visibility === 'hidden',
         frameless:
           getComputedStyle(document.querySelector('.match-chat-panel')!)
             .borderTopWidth === '0px',
@@ -690,7 +693,8 @@ try {
     }
     check(
       `${width}×${height}: expanded reading panel, compact message text, hidden phrases and accessible controls`,
-      geometry.desktopAligned &&
+      geometry.triggerHidden &&
+        geometry.desktopAligned &&
         geometry.frameless &&
         geometry.reading &&
         geometry.phrasesHidden &&

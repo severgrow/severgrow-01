@@ -2,9 +2,40 @@
 
 Feature branch: `feature/futasaku-match-chat`  
 Worktree: `/workspace/futasaku-match-chat`  
-Feature implementation commit: `dd2381c`. Documentation/screenshots follow in a separate commit.
+Initial implementation commit: `dd2381c`. Integrate the **entire feature branch**, including all later UI, motion and mode-verification commits; do not take only this initial commit.
 
 Base: online commit `1c326f8` (2026-10-25). No merge, production migration or deployment performed.
+
+
+## Quick handoff for the integrating agent
+
+- Repository: `severgrow/severgrow-01`.
+- Local branch: `feature/futasaku-match-chat`; all feature changes are committed here.
+- Worktree: `/workspace/futasaku-match-chat`. The branch has **not been pushed**, merged or deployed.
+- Base: `1c326f8d498512117b4480284441ac09f412a8f2` on the online line.
+- Frontend: `web/src/online/chat/` (`view.ts`, `style.ts`, `motion.ts`, `controller.ts`, `read-cursor.ts`).
+- Backend: `server/src/chat/`; migration `server/migrations/0017_match_chat.sql`.
+- Shared integration: `web/src/main.ts`, `web/src/online/channel.ts` / `types.ts`, `server/src/client.ts`,
+  `server/src/index.ts` / `edge-entry.ts`, `src/strings.ts` → `MATCH_CHAT`.
+- Verification: `server/tests/match-chat*.test.ts`, `web/tests/match-chat.test.ts`,
+  `web/e2e/match-chat.ts`, `.github/workflows/match-chat.yml`.
+
+If sharing this Git repository/worktree set, the feature branch is already available. In a separate
+clone on this machine, fetch it with `git fetch /workspace/futasaku-match-chat feature/futasaku-match-chat`,
+then review/merge `FETCH_HEAD` into **your integration branch**, preserving your own ongoing work.
+Do not overwrite shared files wholesale. Reconcile the lifecycle/channel/localisation/router hunks;
+check migration numbering. Regenerate `supabase/functions/duel/bundle.ts` from the combined source,
+rather than resolving generated bundle conflicts by hand.
+
+Follow the detailed integration/rollout sequence below: verify the combined candidate, apply the
+additive schema, deploy the existing duel Edge function, then publish the frontend. Existing accounts,
+turn rules, deadlines and saved games must remain unchanged. Hosted rollout needs the project's
+normal secure database/Supabase deployment access; no privileged credential belongs in the browser.
+
+Latest UI: blank composer, 14px messages, quiet interruptible motion, hidden quick phrases, frameless
+panel, cockpit-mounted trigger with no bright contour. While open, the trigger disappears and desktop
+chat fills its space down to an 8px cockpit gap. It reappears on closing with focus restored. Final
+placement/visibility run: 49 browser checks passed, including resizing and active-effect teardown.
 
 ## Experience
 
@@ -21,7 +52,7 @@ All new interface copy is in `src/strings.ts` → `MATCH_CHAT`. `mountMatchChat`
 copy object for the localisation agent. Timestamps use Intl and the browser locale. No translation
 framework, dependency or localised text is persisted. Only English copy is supplied in this branch.
 
-Updated design: portrait chat fills the available viewport over the board and cockpit; desktop grows to 480×680px. Transcript text is 14px. Quick phrases live in a compact picker behind the icon beside Send, hidden by default. Controls retain 44px hit areas with slimmer visual surfaces. The visual viewport controls panel height/offset without resizing the game. Font-size 16px avoids
+Updated design: portrait chat fills the available viewport over the board and cockpit; desktop fills the space above its cockpit column (up to 480px wide). Transcript text is 14px. Quick phrases live in a compact picker behind the icon beside Send, hidden by default. Controls retain 44px hit areas with slimmer visual surfaces. The visual viewport controls panel height/offset without resizing the game. Font-size 16px avoids
 iOS focus zoom; safe areas, contained transcript scrolling and no document scroll locks. Desktop
 keyboard navigation and a quiet live region are supported. The panel is nonmodal, so it deliberately
 does not trap focus or make gameplay inert. Turn changes preserve drafts. Drafts exist only for the
@@ -279,7 +310,7 @@ checks and `git diff --check` passed; the browser suite built the production fut
 ## Desktop cockpit column
 
 Desktop chat now fills the clear space above the cockpit, centred on the actual `#futa04-box`
-column (up to 480px wide), with 16px between its lower edge and the chat key. It keeps a calm header
+column (up to 480px wide), with 8px between its lower edge and the cockpit context button. The chat trigger is hidden while the panel is open, so the panel reclaims that space. It keeps a calm header
 margin and narrows symmetrically near the viewport edge. The board and cockpit are not resized.
 Narrow/mobile layouts keep their existing overlay. Desktop docking applies only when the side
 layout has useful room for a readable panel.
