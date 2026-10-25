@@ -848,6 +848,8 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   $('levels').hidden = name !== 'levels';
   $('campaign').hidden = name !== 'campaign';
   $('game').hidden = name !== 'game';
+  // An invitation deferred out of a live match is offered here, now that a menu owns the screen.
+  if (name !== 'game') drainInstallInvite();
   // A full-screen change gets the same quiet arrival as a surface, EXCEPT the game: the board is
   // the live object and must never slide or fade under the player's finger. Hiding a screen resets
   // its surface animation, so nothing can finish on a screen the player has already left.
@@ -2847,10 +2849,32 @@ function noteFinishedForInstall(outcome: 'won' | 'lost' | 'draw', later = false)
   }
   installPrompt.noteFinished(outcome);
 }
+/**
+ * Offer the deferred invitation once the player is OUT of a match.
+ *
+ * The deferral exists so the invitation never covers a lesson's win, but a player who closes the
+ * finish card and goes straight into the next level had it open over a LIVE match: the badge stands
+ * down behind that modal (one mark per screen), so the lesson ran with no logo at all and the
+ * invitation covered the board. While a game or its finish card is on screen the outcome is kept,
+ * and `drainInstallInvite` offers it the moment the player is back on a menu.
+ */
 function flushInstallInvite() {
   const outcome = pendingInstallOutcome;
   pendingInstallOutcome = null;
-  if (outcome) window.setTimeout(() => noteFinishedForInstall(outcome, true), 900);
+  if (!outcome) return;
+  window.setTimeout(() => {
+    if (!inPlayableScreen()) { noteFinishedForInstall(outcome, true); return; }
+    pendingInstallOutcome = outcome; // offered by the next drain, on a menu
+  }, 900);
+}
+
+/** True while a match or its result owns the screen — never a place for the invitation. */
+const inPlayableScreen = (): boolean => !$('game').hidden || !$('gameover').hidden;
+
+/** Offers an invitation that was deferred out of a live match, once the player is back on a menu. */
+function drainInstallInvite() {
+  if (!pendingInstallOutcome || inPlayableScreen()) return;
+  flushInstallInvite();
 }
 
 function humanPlay(a: Action, opts: { auto?: boolean } = {}) {
