@@ -67,6 +67,7 @@ import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { EASE, BREATH, MOTION, PINNED, breathAmpOf, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
+import { boardHasSettled, resultHoldStalled } from './logic/result-hold.js';
 import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
 import { enterSurface, exitSurface, resetSurface } from './ui/interface-motion.js';
 import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
@@ -3468,6 +3469,12 @@ function smootherMode() {
  */
 let pumpRun = 0;
 let pumpWanted = false;
+/**
+ * The step the pump is playing right now (null between steps). The result gate needs it because a
+ * step can take its queue slot before its animation ends (a single-tile grow applies its slot at
+ * the START of the 336 ms pop), so an empty queue does not mean the board has settled.
+ */
+let currentStep: Step | null = null;
 async function pump() {
   if (pumping) {
     pumpWanted = true;
@@ -3493,7 +3500,13 @@ async function pump() {
         }
         const step = queue.peek()!;
         const stepStarted = performance.now();
-        await playStep(step, my);
+        // Published to the result gate: the board is still changing until this returns.
+        currentStep = step;
+        try {
+          await playStep(step, my);
+        } finally {
+          currentStep = null;
+        }
         // Read-only timing for the motion audit (web/e2e/motion-audit.ts): what played, for how long.
         animLog('step', { k: step.k, ms: Math.round(performance.now() - stepStarted), n: step.k === 'grow' ? step.tiles.length : step.k === 'sever' || step.k === 'remove' ? step.keys.length : step.k === 'megaBomb' ? step.destroyed.length : 0, who: 'player' in step ? step.player : -1 });
       }
@@ -3520,6 +3533,7 @@ async function pump() {
   } finally {
     if (pumpRun === run) {
       pumping = false;
+      currentStep = null;
       liveReveal = false;
       replaying = false;
       board.focus(null);
@@ -7438,24 +7452,108 @@ function paintGoTitle(text: string, split: boolean): void {
   el.replaceChildren(kicker, document.createTextNode(' '), outcome);
 }
 
+// ---------- the final move's own gate ----------
+
+/**
+ * THE RESULT WAITS FOR THE MOVE, NOT FOR A CLOCK (owner, 2026-10-25: the losing seat was getting
+ * "you lost" before the winning move landed). The decision itself is pure and unit-tested
+ * (`logic/result-hold.ts`); this is only the safety net around it.
+ *
+ * The net is a STALL timer, never a fixed delay: it measures how long the held board has been
+ * completely still (no step landed, no tile revealed, the queue unchanged). A real finish keeps
+ * landing beats, so it can never be cut short; a lost step — the one case where the plate would
+ * otherwise never arrive — is released after `RESULT_HOLD_STALL_MS`, flushing the board to its true
+ * final position first.
+ */
+let resultHoldWatch = 0;
+let resultHoldSeen = '';
+let resultHoldSince = 0;
+
+const resultHoldSignature = (): string => `${revealProgress}|${queue.pending}|${currentStep?.k ?? '-'}`;
+
+function armResultHold(): void {
+  if (resultHoldWatch) return;
+  resultHoldSeen = resultHoldSignature();
+  resultHoldSince = performance.now();
+  resultHoldWatch = window.setInterval(checkResultHold, 250);
+  animLog('result:hold', { queued: queue.pending, playing: currentStep?.k ?? '-' });
+}
+
+function disarmResultHold(): void {
+  if (!resultHoldWatch) return;
+  clearInterval(resultHoldWatch);
+  resultHoldWatch = 0;
+  resultHoldSeen = '';
+  resultHoldSince = 0;
+}
+
+function checkResultHold(): void {
+  const os = getOnlineSession();
+  if (!os?.finished || !$('gameover').hidden) {
+    disarmResultHold();
+    return;
+  }
+  // PAUSED: the player deliberately stopped the board, so silence is not a stall and cutting the
+  // finish short would be wrong — park the clock exactly as the reveal watchdog does.
+  //
+  // `document.hidden` is deliberately NOT parked. A backgrounded tab cannot let the player watch
+  // anything anyway, and parking on it made the hold wait forever for a tab nobody was looking at
+  // (which is what a second tab in a two-seat test always is). The stall window still keeps the
+  // ordinary guarantee: a lost step releases the plate, it is just measured while hidden too.
+  if (paused) {
+    resultHoldSince = performance.now();
+    resultHoldSeen = resultHoldSignature();
+    return;
+  }
+  const seen = resultHoldSignature();
+  if (seen !== resultHoldSeen) {
+    resultHoldSeen = seen;
+    resultHoldSince = performance.now();
+    return;
+  }
+  const quiet = performance.now() - resultHoldSince;
+  if (!resultHoldStalled(quiet)) return;
+  // A held board that has been silent for the whole window cannot settle on its own. Show the
+  // truth (every waiting step applied) and the card, instead of hanging on a lost step.
+  animLog('result:hold-release', { quiet: Math.round(quiet), queued: queue.pending, playing: currentStep?.k ?? '-' });
+  markTiming('result:safety', { quiet: Math.round(quiet) });
+  fastForward();
+  disarmResultHold();
+}
+
 function renderGameOver() {
   const go = $('gameover');
   if (isOnlineDuel()) {
     const os = getOnlineSession();
     const info = os?.finishInfo() ?? null;
-    // A decided match never waits on an animation. This is the symmetry rule the owner asked for:
-    // both devices get the end screen as soon as the finished view lands, one as winner and one as
-    // loser. (The last move's steps may still finish behind the overlay; the board is correct.)
+    // THE FINAL MOVE IS SEEN FIRST (owner, 2026-10-25). A decided match still does not go back to
+    // waiting on the clock: this waits on the BOARD, and only while a move is actually changing it.
+    // A timeout or a resignation carries no move at all, so its queue is empty and the card arrives
+    // at once; a reconnecting client that opens an already-finished match has nothing queued either.
     const wasHidden = !!go.hidden;
-    const show = !!info && !gameOverDismissed && !$('game').hidden;
+    const wanted = !!info && !gameOverDismissed && !$('game').hidden;
+    // `isPreparingCatchUp` covers the one render that runs INSIDE `consumeCatchUp` (its own
+    // `skipCatchUp()` emit) before the deciding move's steps reach the queue — see duel-session.ts.
+    const settled = wanted && !os?.isPreparingCatchUp && boardHasSettled({
+      waiting: queue.kinds(),
+      playing: currentStep?.k ?? null,
+      reducedMotion: settings.reduceMotion,
+    });
+    // Once the plate is up, a later render of the same match never takes it down (only `wanted`
+    // can: leaving, or the player dismissing it).
+    const show = wanted && (!wasHidden || settled);
     if (!show) {
       go.hidden = true;
       document.body.classList.remove('result');
       syncVeil();
+      if (wanted) armResultHold();
+      else disarmResultHold();
       return;
     }
+    disarmResultHold();
     if (!info || !os) return;
     go.hidden = false;
+    if (wasHidden) animLog('result:show', { queued: queue.pending, playing: currentStep?.k ?? '-', revision: os.driver.snapshot().revision });
     presentResult(go, wasHidden);
     // A duel settles its own wallet server-side, and this paragraph is SHARED by every mode — so it
     // is reset first, or the previous offline game's "+15 Seeds" would appear on a duel's card.

@@ -63,6 +63,15 @@ export class OnlineSession {
    */
   private revealing = false;
   /**
+   * True while `consumeCatchUp` is BUILDING the steps, and it exists because of a re-entrancy:
+   * `driver.skipCatchUp()` emits, and that emit runs a full `onChange` + `render` inside
+   * `consumeCatchUp` — before the caller has the steps in its queue. A gate that only reads the
+   * queue therefore saw an empty board at the exact moment the deciding move was arriving, which
+   * is how the loser's "you lost" plate could go up over a move it never showed (owner report,
+   * 2026-10-25). The finish screen holds while this is true.
+   */
+  private preparing = false;
+  /**
    * True when the replay now in flight is the LIVE enemy turn this device was waiting for, false
    * for a catch-up after being away. Only the live reveal gets the full, readable pace; an away
    * catch-up keeps its 2x (and its Skip).
@@ -114,6 +123,11 @@ export class OnlineSession {
     return this.boardBlocked;
   }
 
+  /** True while a catch-up's steps are being built (see the field's note: a render runs inside). */
+  get isPreparingCatchUp(): boolean {
+    return this.preparing;
+  }
+
   /** True when the reveal now in flight is the live enemy turn (not a catch-up after being away). */
   get revealIsLive(): boolean {
     return this.revealLive;
@@ -147,12 +161,16 @@ export class OnlineSession {
   /** Take catch-up steps since last consume (opponent / own committed turn). */
   consumeCatchUp(): Step[] {
     const events = [...this.driver.pendingEvents()];
+    // The re-entrant call made by `skipCatchUp`'s own emit lands here with an empty buffer. It must
+    // NOT touch `preparing`: it is the outer call that is still building the steps.
     if (!events.length) return [];
-    // Close the gate BEFORE anything else. `skipCatchUp()` fires `emit()`, which runs a full
-    // render inside this very call: if the flag were set after it, that render would see an open
-    // gate (the enemy board already swapped in) — the exact window the owner reported.
+    // Close the gates BEFORE anything else. `skipCatchUp()` fires `emit()`, which runs a full
+    // render inside this very call: if the flags were set after it, that render would see an open
+    // input gate (the enemy board already swapped in) AND an empty step queue (the finish plate
+    // over the deciding move). Both are the exact window the owner reported.
     this.revealing = true;
     this.revealLive = this.driver.pendingOrigin() === 'live';
+    this.preparing = true;
     this.driver.skipCatchUp();
     let steps: Step[];
     try {
@@ -165,9 +183,11 @@ export class OnlineSession {
       // it here — the caller still reports the failure — so a broken step is a glitch, not a lock.
       this.revealing = false;
       this.revealLive = false;
+      this.preparing = false;
       this.lastCatchUp = [];
       throw error;
     }
+    this.preparing = false;
     this.lastCatchUp = steps;
     // The page replays these through the shared AnimQueue; until it drains, input stays shut.
     return steps;
