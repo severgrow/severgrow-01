@@ -30,6 +30,7 @@ import {
 import type { DeviceProfile, Session } from './helpers/online-matrix.js';
 import { requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 requireRealProjectOptIn('offline-vs-online-audit'); // real Supabase project: opt-in only
 
 const OFFLINE_URL = process.env.OFFLINE_URL ?? 'http://127.0.0.1:4180/';
@@ -305,6 +306,7 @@ const runOnline = async (device: DeviceProfile, pool: BrowserPool): Promise<void
     await clickCenter(a.page, '#go-other');
     await a.page.waitForSelector('#online-hub:not([hidden])', { timeout: 15_000 }).catch(() => null);
     await sleep(1200);
+    await expandYourMatches(a.page);
     rec.matchListText = await screenText(a.page, '#online-matches');
     rec.matchListControls = await visibleControls(a.page);
     await shot(a, `${label}-5-matchlist`, SCREEN_DIR);

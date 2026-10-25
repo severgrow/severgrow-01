@@ -25,6 +25,13 @@
   --c-accent: #efe5cb;
   --c-accentInk: #18191a;
   --c-danger: #ff6b4a;
+  /* THE ATTENTION RED, and why it is not --c-danger. MEASURED in the running lobby: every palette
+     rebinds `danger` to #fff4dc (cream — it is the weak-spot chip's chalk ink), so a disc filled
+     with `--c-danger` came out rgb(255,244,220) and the cream "!" vanished into it. This token is
+     the product's alert red, written ONCE here and never by themes.ts, so the online lobby's "!"
+     (and any future "needs you" mark) stays the coral the game already uses for warnings. */
+  --c-alert: #ff6b4a;
+  --c-alertInk: #18191a;
   --font: system-ui, sans-serif;
   --w-text: 500;
   --w-num: 700;

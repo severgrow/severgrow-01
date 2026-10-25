@@ -20,6 +20,7 @@ import { isLocalTarget, requireRealProjectOptIn } from '../../server/scripts/rea
 import { chromium } from 'playwright-core';
 import type { BrowserContext, CDPSession, Page } from 'playwright-core';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const LIVE_APP = process.env.LIVE_APP ?? 'https://severgrow.github.io/severgrow-01/futa0.5/';
 const LIVE_API = process.env.LIVE_API ?? 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel';
@@ -248,6 +249,7 @@ try {
 
     const A = await open(a);
     await openHub(A.page);
+    await expandYourMatches(A.page);
     await A.page.waitForSelector('.online-row', { timeout: 30_000 });
     await A.page.click('.online-row');
     await A.page.waitForSelector('#online-waiting:not([hidden])', { timeout: 30_000 });

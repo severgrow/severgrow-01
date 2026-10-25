@@ -30,6 +30,7 @@ import { MemoryLiveStore } from '../../server/src/live/memory.js';
 import { createLiveRuntime } from '../../server/src/live/runtime.js';
 import { CHROME } from './helpers/local-duel.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const PORT = 4396;
 const PREFIX = 'futa05:';
@@ -144,6 +145,7 @@ const openDuel = async (s: Seat, matchId: string): Promise<void> => {
     await openMenuEntry(page, 'menu-online', { timeout: 40_000 });
     await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
     if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
+    await expandYourMatches(page);
     const row = page.locator(`#online-matches li[data-match-id="${matchId}"]`);
     if (await row.isVisible().catch(() => false)) {
       await row.click();

@@ -24,3 +24,5 @@ supabase/.temp/
 
 # The futa05 preview build output (same rule as web/dist/): generated, never committed.
 web/dist-preview/
+# The same build with an explicit --outDir (the command in the suite notes / hand-off notes).
+web/dist-futa05/

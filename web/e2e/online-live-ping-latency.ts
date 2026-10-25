@@ -16,6 +16,7 @@ import { chromium } from 'playwright-core';
 import type { BrowserContext, Page } from 'playwright-core';
 import { requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 requireRealProjectOptIn('online-live-ping-latency'); // real Supabase project: opt-in only
 
 const LIVE_APP = 'https://severgrow.github.io/severgrow-01/futa0.5/';
@@ -150,6 +151,7 @@ try {
 
   const A = await open(a, '', 'A');
   await openHub(A.page);
+  await expandYourMatches(A.page);
   await A.page.waitForSelector('.online-row', { timeout: 20_000 });
   await A.page.click('.online-row');
   await A.page.waitForSelector('#online-waiting:not([hidden])', { timeout: 20_000 });

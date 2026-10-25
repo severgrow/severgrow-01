@@ -113,6 +113,11 @@ export const ONLINE = Object.freeze({
   graceOpponentSr: 'Your opponent used their grace.',
   graceYouSr: 'You used your grace.',
   yourMatches: 'Your matches',
+  /** The disclosure label carries the count: "Your matches (3)". */
+  yourMatchesCount: (count: number) => `Your matches (${count})`,
+  /** The red badge's spoken name. Never a bare "!" — screen readers hear the sentence. */
+  matchesWaitingOne: '1 match waiting for your move',
+  matchesWaitingMany: (count: number) => `${count} matches waiting for your move`,
   create: 'Create a duel',
   join: 'Join with a code',
   joinTitle: 'Join a duel',
