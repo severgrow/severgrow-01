@@ -274,3 +274,21 @@ passed with local Postgres, including a blank composer with its screen-reader la
 at five viewport sizes. Hosted Supabase remains untested and no deployment was performed.
 The existing live-duel, reconnect and autoplay regression suites also passed: 49 checks. TypeScript
 checks and `git diff --check` passed; the browser suite built the production futa05 client.
+
+
+## Desktop cockpit column
+
+Desktop chat now fills the clear space above the cockpit, centred on the actual `#futa04-box`
+column (up to 480px wide), with 16px between its lower edge and the chat key. It keeps a calm header
+margin and narrows symmetrically near the viewport edge. The board and cockpit are not resized.
+Narrow/mobile layouts keep their existing overlay. Desktop docking applies only when the side
+layout has useful room for a readable panel.
+
+A ResizeObserver and a filtered inline-layout signature follow the existing cockpit measurements
+and `--side-dock-shift`; they schedule a single frame on layout changes, never a polling/render
+loop. Observers and scheduled frames are removed on teardown. This also handles the game's deferred
+centering pass after a window resize without editing another agent's layout implementation.
+
+Verification: 49 browser checks passed, including 1024×768, 1280×800, 1440×900 and 1920×1080 desktop
+alignment, column centering, key clearance, mobile layouts, message delivery, motion and cleanup.
+TypeScript checks passed. Updated desktop screenshot reflects the new cockpit-column placement.

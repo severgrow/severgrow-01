@@ -581,7 +581,10 @@ try {
     [360, 640],
     [390, 844],
     [844, 390],
+    [1024, 768],
     [1280, 800],
+    [1440, 900],
+    [1920, 1080],
   ]) {
     await visual.setViewportSize({ width: width!, height: height! });
     if (
@@ -610,9 +613,22 @@ try {
           '.match-chat-panel button',
         ),
       ].filter((b) => b.offsetWidth && b.offsetHeight);
+      const docked =
+        document.querySelector<HTMLElement>('.match-chat')!.dataset
+          .desktopDocked === 'true';
+      const box = document
+        .querySelector('#futa04-box')!
+        .getBoundingClientRect();
       return {
+        desktopAligned:
+          innerWidth < 1000 ||
+          document.documentElement.dataset.layout !== 'side' ||
+          (docked &&
+            Math.abs((p.left + p.right - box.left - box.right) / 2) < 1 &&
+            Math.abs(t.top - p.bottom - 16) < 1 &&
+            p.width <= box.width + 1),
         reading:
-          p.height >= Math.min(500, innerHeight - 80) &&
+          p.height >= (docked ? 240 : Math.min(500, innerHeight - 80)) &&
           parseFloat(
             getComputedStyle(document.querySelector('.match-chat-text')!)
               .fontSize,
@@ -647,9 +663,35 @@ try {
           .backgroundColor,
       };
     });
+    if (Object.values(geometry).some((v) => v === false)) {
+      console.log('CHAT_GEOMETRY', width, height, geometry);
+      await visual.screenshot({
+        path: `${out}/alignment-failure-${width}.png`,
+      });
+      console.log(
+        await visual.evaluate(() => ({
+          layout: document.documentElement.dataset.layout,
+          box: document
+            .querySelector('#futa04-box')!
+            .getBoundingClientRect()
+            .toJSON(),
+          panel: document
+            .querySelector('.match-chat-panel')!
+            .getBoundingClientRect()
+            .toJSON(),
+          key: document
+            .querySelector('#match-chat-toggle')!
+            .getBoundingClientRect()
+            .toJSON(),
+          vars: document.querySelector<HTMLElement>('.match-chat')!.style
+            .cssText,
+        })),
+      );
+    }
     check(
       `${width}×${height}: expanded reading panel, compact message text, hidden phrases and accessible controls`,
-      geometry.frameless &&
+      geometry.desktopAligned &&
+        geometry.frameless &&
         geometry.reading &&
         geometry.phrasesHidden &&
         geometry.bounds &&

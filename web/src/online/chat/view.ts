@@ -510,16 +510,78 @@ export const mountMatchChat = (o: {
     const v = window.visualViewport;
     const height = v?.height ?? window.innerHeight;
     const keyboard = height < window.innerHeight * 0.75;
-    const top = keyboard && height < 350 ? 8 : 52;
-    const available = height - top - 12;
+    let top = keyboard && height < 350 ? 8 : 52;
+    let available = height - top - 12;
+    const box = o.host.querySelector<HTMLElement>('#futa04-box');
+    const area = box?.getBoundingClientRect();
+    const key = toggle.getBoundingClientRect();
+    const desktopTop = Math.max(
+      64,
+      o.header.getBoundingClientRect().bottom + 24,
+    );
+    const horizontalRoom = area
+      ? 2 *
+        Math.min(
+          area.left + area.width / 2 - 16,
+          window.innerWidth - 16 - area.left - area.width / 2,
+        )
+      : 0;
+    const docked =
+      !keyboard &&
+      window.innerWidth >= 1000 &&
+      document.documentElement.dataset.layout === 'side' &&
+      area &&
+      area.width >= 280 &&
+      horizontalRoom >= 260 &&
+      key.top - desktopTop - 16 >= 240;
+    root.dataset.desktopDocked = String(Boolean(docked));
+    if (docked && area) {
+      const center = area.left + area.width / 2;
+      const width = Math.min(480, area.width, horizontalRoom);
+      const left = center - width / 2;
+      top = desktopTop;
+      available = key.top - top - 16;
+      root.style.setProperty('--chat-left', `${left}px`);
+      root.style.setProperty('--chat-width', `${width}px`);
+    }
     root.dataset.keyboard = String(keyboard);
     root.style.setProperty('--chat-top', `${(v?.offsetTop ?? 0) + top}px`);
     root.style.setProperty('--chat-height', `${Math.max(120, available)}px`);
     if (followLatest && ctl.state().open) log.scrollTop = log.scrollHeight;
   };
+  let layoutFrame: number | null = null;
+  const scheduleViewport = () => {
+    if (layoutFrame !== null) cancelAnimationFrame(layoutFrame);
+    layoutFrame = requestAnimationFrame(() => {
+      layoutFrame = null;
+      viewport();
+    });
+  };
+  let layoutSignature = '';
+  const placementChanges = new MutationObserver(() => {
+    const page = document.documentElement;
+    const signature = [
+      page.dataset.layout,
+      page.dataset.thumb,
+      ...['--side-dock-shift', '--dock-w', '--dock-h'].map((k) =>
+        page.style.getPropertyValue(k),
+      ),
+    ].join('|');
+    if (signature !== layoutSignature) {
+      layoutSignature = signature;
+      scheduleViewport();
+    }
+  });
+  placementChanges.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['style', 'data-layout', 'data-thumb'],
+  });
+  const cockpitLayout = new ResizeObserver(scheduleViewport);
+  const box = o.host.querySelector<HTMLElement>('#futa04-box');
+  if (box) cockpitLayout.observe(box);
   window.visualViewport?.addEventListener('resize', viewport);
   window.visualViewport?.addEventListener('scroll', viewport);
-  window.addEventListener('resize', viewport);
+  window.addEventListener('resize', scheduleViewport);
   viewport();
   ctl.start();
   return {
@@ -534,7 +596,10 @@ export const mountMatchChat = (o: {
       document.removeEventListener('visibilitychange', resume);
       window.removeEventListener('online', resume);
       window.removeEventListener('focus', resume);
-      window.removeEventListener('resize', viewport);
+      window.removeEventListener('resize', scheduleViewport);
+      cockpitLayout.disconnect();
+      placementChanges.disconnect();
+      if (layoutFrame !== null) cancelAnimationFrame(layoutFrame);
       window.visualViewport?.removeEventListener('resize', viewport);
       window.visualViewport?.removeEventListener('scroll', viewport);
       root.remove();
