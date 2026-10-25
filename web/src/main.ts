@@ -233,8 +233,8 @@ import { onlineBuildEnabled } from './online/config.js';
 import { accountsConfiguredInThisBuild, paintEarlyAccountKey } from './accounts/menu-key.js';
 import { paintBetaLine } from './feedback/beta-line.js';
 import { queueSeedProof } from './online/seed-rewards.js';
-import { requestTrainingTicket, settleSeedProof } from './online/seed-settle.js';
-import { SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
+import { requestTrainingTicket, settleQueuedSeedsOnBoot, settleSeedProof } from './online/seed-settle.js';
+import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
 import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 
@@ -7346,6 +7346,12 @@ function settleSeedsForCard(key: string): void {
       // The server will never accept this replay, so those Seeds are gone. Say so, and log why.
       console.warn('[FUTASAKU] Seeds refused for this game:', key, report.message);
       seedRewardMessage = SEEDS_NOT_VERIFIED;
+    } else if (report.kind === 'unverified') {
+      // There is no usable identity on this device. The proof is STILL QUEUED (the next pass — a
+      // sign-in, a reload, a recovered guest — pays it), but the card says so instead of staying
+      // silent, which was the old silent deferral loop (owner report, 2026-10-25).
+      console.warn('[FUTASAKU] Seeds could not be settled: no usable identity:', report.message);
+      seedRewardMessage = SEEDS_IDENTITY_UNVERIFIED;
     } else {
       // Still unconfirmed and still queued. The card shows NOTHING: the next menu visit (or the
       // next time this device is online) settles it, and the wallet is the one place it is claimed.
@@ -10132,5 +10138,11 @@ if (timingEnabled()) {
 void import('./feedback/mount.js').then((f) => f.mountFeedback()).catch(() => undefined);
 // Accounts: "Continue with Google" (docs/ACCOUNTS.md); shows nothing until Google is on in Supabase.
 void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => undefined);
+// Seeds earned while the settle could not run are QUEUED on this device, not lost. Drain them as
+// soon as the app is up (owner ask, 2026-10-25: "every level of campaign and any other game should
+// pay out seeds immediately"): a player whose proofs were stranded by the old wedge sees the balance
+// right on their next visit, without having to win another game first. Silent and fire-and-forget;
+// a device with nothing queued makes no request at all.
+void settleQueuedSeedsOnBoot();
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

@@ -28,6 +28,13 @@ export const SEEDS_INTRO = Object.freeze({
  */
 export const SEEDS_NOT_VERIFIED = `${SEEDS_WORD} for this game could not be verified.`;
 
+/**
+ * The device has no usable identity (a blocked store, a failed guest creation, or a token the server
+ * rejected and could not replace). The proof is STILL QUEUED — the player is told the truth instead
+ * of the card staying silent forever, which is what the settle used to do (owner report, 2026-10-25).
+ */
+export const SEEDS_IDENTITY_UNVERIFIED = `${SEEDS_WORD} could not be verified — sign in or try again.`;
+
 /** One authored icon at every Seeds size; currentColor keeps the ivory material intact. */
 export const seedIcon = (size = 20): SVGSVGElement => {
   const ns = 'http://www.w3.org/2000/svg';

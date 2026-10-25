@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DuelError, type DuelClient, type KeyValue } from '../../server/src/client.js';
-import { flushSeedProofs, PENDING_SEED_PROOFS_KEY, queueSeedProof } from '../src/online/seed-rewards.js';
-import { settleQueuedProof } from '../src/online/seed-settle.js';
+import { flushSeedProofs, MAX_CONSECUTIVE_TRANSIENT, PENDING_SEED_PROOFS_KEY, pendingSeedProofCount, queueSeedProof } from '../src/online/seed-rewards.js';
+import { settlePendingSeeds, settleQueuedProof } from '../src/online/seed-settle.js';
 
 const storage = (): KeyValue => {
   const data = new Map<string, string>();
@@ -142,6 +142,67 @@ describe('unpaid Seeds proofs', () => {
   });
 });
 
+describe('one unpayable proof must never hold the queue', () => {
+  // Owner report, 2026-10-25 ("I'm on level 33 and haven't been getting seeds"). The queue is drained
+  // oldest-first, and the pass used to STOP at the first failure that was not a final 400. So a single
+  // proof the server kept answering with a 5xx (the Edge runtime's 546 CPU limit is the one seen) was
+  // a wall for every Campaign first clear queued behind it: levels 12-33 were never even SENT — no
+  // request, no receipt, no Seeds, for days. The card had nothing to paint because nobody had asked.
+  // (The owner's own queue could not be read from here; the shape is pinned, not his bytes.)
+  const trainingProof = { kind: 'training' as const, ticketId: 'ticket-1', actions: [], botVersion: 'audit' };
+  const cpuLimit = () => new DuelError('HTTP_ERROR', 'Request failed with status 546.', 546);
+
+  it('steps over a proof the server keeps failing, and pays the ones behind it', async () => {
+    const store = storage();
+    queueSeedProof(store, trainingProof);
+    queueSeedProof(store, proof('c4-33'));
+    const submit = vi.fn(async (_token: string, source: unknown) => {
+      if (typeof source === 'object' && source !== null && 'ticketId' in source) throw cpuLimit();
+      return reward(20);
+    });
+    const result = await flushSeedProofs(store, clientOf(submit), 'account');
+    expect(result.awards.map((entry) => entry.key)).toEqual(['campaign:c4-33']);
+    // The unpayable proof is NOT dropped: its Seeds may still be paid once the server can replay it.
+    expect(pending(store).map((entry) => (entry as { ticketId?: string }).ticketId)).toEqual(['ticket-1']);
+  });
+
+  it('a server that ANSWERS with 546 for several proofs in a row still drains the rest', async () => {
+    // The whole queue is oldest-first. `MAX_CONSECUTIVE_TRANSIENT` exists to stop a DEAD LINE, not a
+    // server that answers: two 546s in a row must not wall off the campaign first clear behind them.
+    const store = storage();
+    queueSeedProof(store, { ...trainingProof, ticketId: 'ticket-1' });
+    queueSeedProof(store, { ...trainingProof, ticketId: 'ticket-2' });
+    queueSeedProof(store, proof('c4-33'));
+    const submit = vi.fn(async (_token: string, source: unknown) => {
+      if (typeof source === 'object' && source !== null && 'ticketId' in source) throw cpuLimit();
+      return reward(20);
+    });
+    const result = await flushSeedProofs(store, clientOf(submit), 'account');
+    expect(result.awards.map((entry) => entry.key)).toEqual(['campaign:c4-33']);
+    expect(submit).toHaveBeenCalledTimes(3);
+    expect(pending(store).map((entry) => (entry as { ticketId?: string }).ticketId)).toEqual(['ticket-1', 'ticket-2']);
+  });
+
+  it('a dead line still stops quickly instead of stacking a deadline per proof', async () => {
+    const store = storage();
+    for (const id of ['c2-12', 'c2-13', 'c2-14']) queueSeedProof(store, proof(id));
+    const submit = vi.fn(async () => { throw new Error('offline'); });
+    const result = await flushSeedProofs(store, clientOf(submit), 'account');
+    expect(result.awards).toEqual([]);
+    expect(submit).toHaveBeenCalledTimes(MAX_CONSECUTIVE_TRANSIENT);
+    expect(pending(store)).toHaveLength(3);
+  });
+
+  it('counts only real queued proofs, so a boot with nothing to settle reaches no server', () => {
+    const store = storage();
+    expect(pendingSeedProofCount(store)).toBe(0);
+    store.set(PENDING_SEED_PROOFS_KEY, JSON.stringify([{ kind: 'campaign' }]));
+    expect(pendingSeedProofCount(store)).toBe(0);
+    queueSeedProof(store, proof('c4-33'));
+    expect(pendingSeedProofCount(store)).toBe(1);
+  });
+});
+
 describe('a request that never settles cannot wedge the account', () => {
   // Owner report, 2026-10-25: the finish card rested on "Seeds pending verification" forever. A
   // fetch that never settles (a backgrounded mobile tab, a captured connection) left the
@@ -229,5 +290,84 @@ describe('the settle loop paints the truth, and only the truth', () => {
     const s = store();
     const submit = vi.fn().mockResolvedValue(reward(0, { reason: 'mode_daily_limit' }));
     expect(await deps(s, submit).run()).toEqual({ kind: 'settled', reward: reward(0, { reason: 'mode_daily_limit' }) });
+  });
+});
+
+describe('a missing identity is said out loud, never silently deferred', () => {
+  // Owner reproduction, 2026-10-25 (live Edge): when the device could not establish an identity, the
+  // settle returned an EMPTY pass without sending anything, `settleQueuedProof` reported `deferred`,
+  // and the finish card painted NOTHING — so the proof sat in the queue forever, retried silently,
+  // while the card looked like the game simply pays no Seeds. The pass now says why.
+  const identity = (over: Record<string, unknown>) => ({
+    ensure: vi.fn(), recover: vi.fn(), peek: vi.fn(), ...over,
+  });
+  const connect = (storage: KeyValue, client: DuelClient, id: unknown) =>
+    () => ({ api: 'https://duel.test/functions/v1/duel', storage, client, identity: id as never });
+
+  it('reports "unverified" (and keeps the proof) when a guest cannot be created', async () => {
+    const store = storage();
+    queueSeedProof(store, proof('c4-33'));
+    const message = 'Could not create a FUTASAKU guest. Check your connection and try again.';
+    const id = identity({ ensure: vi.fn(async () => ({ ok: false, reason: 'create_failed', message })) });
+    const submit = vi.fn();
+    const report = await settleQueuedProof('campaign:c4-33', {
+      flush: () => settlePendingSeeds(20, connect(store, clientOf(submit), id)),
+      sleep: async () => undefined,
+      delays: [0, 0],
+    });
+    expect(report).toEqual({ kind: 'unverified', message });
+    // Bounded retries, no submit, and the proof is untouched on the device.
+    expect(id.ensure).toHaveBeenCalledTimes(3);
+    expect(submit).not.toHaveBeenCalled();
+    expect(pending(store)).toHaveLength(1);
+  });
+
+  it('recovers a rejected token the way the hub does, then pays the same proof', async () => {
+    // LIVE reproduction: a stale stored token made the Campaign POST answer 401. The hub recovered by
+    // minting a guest, but the settle did not, so the proof was stranded until the next boot. The
+    // settle now performs the SAME recovery once, at the pass level, and retries the queue.
+    const store = storage();
+    queueSeedProof(store, proof('c4-33'));
+    const stale = { token: 'stale', playerId: 'p', displayName: null, kind: 'guest' as const };
+    const fresh = { token: 'fresh', playerId: 'p', displayName: null, kind: 'guest' as const };
+    const submit = vi.fn(async (token: string) => {
+      if (token === 'stale') throw new DuelError('UNAUTHORIZED', 'Sign in again.', 401);
+      return reward(20);
+    });
+    const id = identity({
+      ensure: vi.fn(async () => ({ ok: true, identity: stale })),
+      recover: vi.fn(async () => ({ ok: true, identity: fresh, replaced: true })),
+    });
+    const result = await settlePendingSeeds(50, connect(store, clientOf(submit), id));
+    expect(result.awards.map((entry) => entry.key)).toEqual(['campaign:c4-33']);
+    expect(id.recover).toHaveBeenCalledTimes(1);
+    expect(submit.mock.calls.map((call) => call[0])).toEqual(['stale', 'fresh']);
+    expect(pending(store)).toEqual([]);
+  });
+
+  it('reports "unverified" when recovery itself fails, and keeps the proof queued', async () => {
+    const store = storage();
+    queueSeedProof(store, proof('c4-33'));
+    const message = 'Could not create a FUTASAKU guest. Check your connection and try again.';
+    const submit = vi.fn(async () => { throw new DuelError('UNAUTHORIZED', 'Sign in again.', 401); });
+    const id = identity({
+      ensure: vi.fn(async () => ({ ok: true, identity: { token: 'stale', playerId: 'p', displayName: null, kind: 'guest' } })),
+      recover: vi.fn(async () => ({ ok: false, reason: 'create_failed', message })),
+    });
+    const result = await settlePendingSeeds(50, connect(store, clientOf(submit), id));
+    expect(result.awards).toEqual([]);
+    expect(result.unavailable).toEqual({ reason: 'identity', message });
+    expect(pending(store)).toHaveLength(1);
+  });
+
+  it('a 401 stops the pass at once (the account is dead; the next proof would fail identically)', async () => {
+    const store = storage();
+    queueSeedProof(store, proof('c2-12'));
+    queueSeedProof(store, proof('c4-33'));
+    const submit = vi.fn(async () => { throw new DuelError('UNAUTHORIZED', 'Sign in again.', 401); });
+    const result = await flushSeedProofs(store, clientOf(submit), 'stale');
+    expect(result.identityRejected).toBe(true);
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(pending(store)).toHaveLength(2);
   });
 });
