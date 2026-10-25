@@ -3,7 +3,7 @@
 
 import type { Action, Event, Player, View } from '../../../src/engine/index.js';
 import { DuelClient } from '../../../server/src/client.js';
-import type { MatchViewPayload } from '../../../server/src/protocol.js';
+import type { MatchViewPayload, ReplayPayload } from '../../../server/src/protocol.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { ONLINE } from '../../../src/strings.js';
 import { mark } from '../logic/timing.js';
@@ -70,6 +70,11 @@ export type OnlineDriver = {
    * highlights. Never replays or changes the live view; the caller decides when to ask.
    */
   history(): Promise<readonly Event[]>;
+  /**
+   * The finished duel's replay payload — one fetch, and the deterministic engine rebuilds every
+   * position from it. Refused by the server while the duel is still being played.
+   */
+  replay(): Promise<ReplayPayload>;
   /** Map screen taps / draft hexes back to engine coords before send. */
   toEngineAction(screenAction: Action): Action;
   /** Perspective for this seat (Me=moss, Opponent=lava). */
@@ -366,6 +371,16 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     async history() {
       const res = await options.client.getState(options.token, options.matchId);
       return res.player.events;
+    },
+
+    /**
+     * The finished duel's REPLAY payload (owner brief, 2026-10-25): rules snapshot, seed, starting
+     * seat and the ordered action log. One fetch; the engine rebuilds every position from it. The
+     * server refuses this for an unfinished match, so the finish screen is its only caller.
+     */
+    async replay() {
+      const res = await options.client.replay(options.token, options.matchId);
+      return res.replay;
     },
 
     skipCatchUp() {

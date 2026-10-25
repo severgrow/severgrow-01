@@ -2930,6 +2930,19 @@ html.futasaku-product .install-prompt-scrim {
   color: var(--fu-ink);
   box-shadow: none;
 }
+/* The replay of the whole match (owner brief, 2026-10-25): a framed row with the game's own line
+   icon, quieter than Play again and a shade more present than the ways out. The icon is drawn, not a
+   glyph, so it reads at the same weight as the label. */
+.gameover .go-buttons .btn.go-replay {
+  gap: 10px;
+  background: color-mix(in srgb, var(--fu-cream) 6%, transparent);
+}
+.gameover .go-buttons .btn.go-replay .i {
+  width: 1.3em;
+  height: 1.3em;
+  color: var(--fu-cream-70, var(--fu-cream));
+  opacity: .9;
+}
 /* The two quiet text rows (the "More" disclosure and Back to menu) take less room than a framed
    button: they are ways OUT, not the way forward, and the height they give back is what keeps the
    card on one phone screen. */

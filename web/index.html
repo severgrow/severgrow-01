@@ -810,6 +810,9 @@
         <div class="go-buttons">
           <button id="go-rematch" class="btn primary big" type="button">Play again</button>
           <button id="go-other" class="btn ghost" type="button"></button>
+          <!-- The replay of the whole match (owner brief, 2026-10-25): one tap, every mode.
+               The icon is the game's own line icon (ui/icons.ts), never a generic glyph. -->
+          <button id="go-replay" class="btn ghost go-replay" type="button" hidden><span class="i" data-icon="replay" aria-hidden="true"></span><span id="go-replay-label">Watch replay</span></button>
           <button id="go-territory-open" class="btn ghost" type="button" hidden>Open Territory</button>
           <!-- "See the board" stays on the card (not behind the disclosure): it is how a player looks
                at the final position, and it is also the documented way to put the card away. -->
