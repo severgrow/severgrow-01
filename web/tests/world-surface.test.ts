@@ -28,6 +28,7 @@ const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.met
 const styleCss = read('../src/style.css');
 const onlineCss = read('../src/online/online-css.ts');
 const worldView = read('../src/online/world-view.ts');
+const swordGlyph = read('../src/online/swords-glyph.ts');
 const atmosphereTs = read('../src/player/atmosphere.ts');
 const html = read('../index.html');
 
@@ -241,11 +242,12 @@ describe('the world map rests on the ONE shared page surface', () => {
   });
 
   it('the crossed swords are a solid heraldic mark, not a hairline outline', () => {
-    // Owner, 2026-10-24: "change the shape of the swords very close to the reference image" — two
-    // FILLED crossed swords with a wide tapered blade, a perpendicular guard, a ribbed grip and a
-    // diamond pommel. The mark started life as a 1.2px stroked outline, which is the opposite of
-    // that reference, so the fill is the thing this test protects: a future edit that goes back to
-    // stroking the glyph would silently undo the owner's one visual instruction about it.
+    // Owner, 2026-10-24: "change the shape of the swords very close to the reference image", then
+    // 2026-10-25: "i want you to trace the reference picture as it is and use that". The glyph is
+    // now a literal potrace of the reference — ONE filled composite silhouette of the whole X, not
+    // a hand-authored sword drawn twice. This test protects the facts that make it that: the fill
+    // (never a stroke), one closed subpath (no seam and no hole at the crossing), the reach inside
+    // the hex, and the single draw (no second rotated copy that would double the mark).
     const glyph = bodyOf(onlineCss, '.world-swords-glyph');
     expect(glyph, '.world-swords-glyph must exist').not.toBeNull();
     expect(glyph!.replace(/\s+/g, ''), 'the glyph is filled, not stroked').toContain('fill:#f8f2e1');
@@ -253,20 +255,39 @@ describe('the world map rests on the ONE shared page surface', () => {
     expect(glyph!, 'the challenge red bloom is what makes it a challenge marker').toContain('#ff3b2e');
     expect(glyph!, 'the glyph is information, never a tap target').toContain('pointer-events: none');
 
-    // One closed silhouette per sword: a single subpath ending in Z, so the blade meets the guard
-    // and grip with no seam at the crossing.
-    const path = /const SWORD_PATH = \[([\s\S]*?)\]\.join\(' '\)/.exec(worldView);
+    // The committed trace is one closed subpath. Its chunks join with '' (not ' '), so splitting
+    // the data across lines cannot silently insert whitespace into a number.
+    const path = /export const SWORD_PATH = \[([\s\S]*?)\]\.join\(''\)/.exec(swordGlyph);
     expect(path, 'SWORD_PATH must stay one joined array').not.toBeNull();
-    const points = [...path![1]!.matchAll(/'[ML]?(-?[\d.]+),(-?[\d.]+)'/g)].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
-    expect(points.length, 'the silhouette carries real geometry').toBeGreaterThan(20);
-    expect((path![1]!.match(/Z/g) ?? []).length, 'exactly one closed subpath, no seam').toBe(1);
+    const d = [...path![1]!.matchAll(/'([^']*)'/g)].map((m) => m[1]!).join('');
+    expect(d.startsWith('M'), 'the path starts with a move').toBe(true);
+    expect((d.match(/M/g) ?? []).length, 'exactly one subpath').toBe(1);
+    expect((d.match(/Z/g) ?? []).length, 'exactly one closed subpath, so no seam or hole at the crossing').toBe(1);
+
+    // Every command argument is an x,y pair (C takes three of them), so pairing the numbers in
+    // order recovers every on-path and control point without parsing command-specific grammar.
+    const nums = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    expect(nums.length % 2, 'the path data is a whole number of coordinate pairs').toBe(0);
+    const points = Array.from({ length: nums.length / 2 }, (_, i) => ({ x: nums[i * 2]!, y: nums[i * 2 + 1]! }));
+    expect(points.length, 'a real trace, not a handful of hand-placed corners').toBeGreaterThan(1000);
 
     // Reach must stay inside the hex so the mark never touches the timer ring on the outline
     // (hex inradius is R * sqrt(3)/2 = 8.66 map units at the 10-unit radius the world uses).
-    const scale = Number(/const SWORD_SCALE = ([\d.]+)/.exec(worldView)![1]);
-    const reach = Math.max(...points.map((p) => Math.hypot(p.x, p.y))) * scale;
+    // The trace's scale is baked in: its furthest point is 7.0 units from the centre.
+    const reach = Math.max(...points.map((p) => Math.hypot(p.x, p.y)));
     expect(reach, 'the blades must clear the ring').toBeLessThan(8.66);
     expect(reach, 'but still fill the tile, not shrink into a dot').toBeGreaterThan(6);
+    expect(reach, 'the committed trace targets 7.0 units').toBeCloseTo(7, 2);
+
+    // The reference already contains both swords crossing, so `makeMarker` draws SWORD_PATH once.
+    // A future edit that reintroduces the old rotate(45)/rotate(-45) pair would draw two Xs.
+    expect(worldView, 'the marker imports the traced path').toContain("from './swords-glyph.js'");
+    const marker = /private makeMarker\([\s\S]*?\n  \}/.exec(worldView)?.[0] ?? '';
+    expect(marker, 'makeMarker must exist').not.toBe('');
+    expect((marker.match(/createElementNS\(NS, 'path'\)/g) ?? []).length, 'the whole X is one path').toBe(1);
+    expect(marker, 'no second rotated copy of the swords').not.toMatch(/rotate\(/);
+    expect(marker, 'no per-sword rotation loop').not.toMatch(/for \(const turn of/);
+    expect(worldView, 'the size is baked into the trace, not a second scale transform').not.toContain('SWORD_SCALE');
   });
 });
 

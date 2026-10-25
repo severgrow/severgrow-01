@@ -18,6 +18,7 @@ import {
   winnerName,
 } from './challenge-view.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
+import { SWORD_PATH } from './swords-glyph.js';
 import { ownerLine } from './world-selection.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
@@ -61,35 +62,13 @@ const FIT_EDGE = 3;
 const MIN_CELL_PX = 46;
 const coords = (q: number, r: number) => ({ x: X * (q + r / 2) * R, y: 1.5 * r * R });
 /**
- * THE CROSSED SWORDS' one glyph, in the map's own units, pointing up: a long blade that tapers in a
- * straight line to a point, a perpendicular guard bar with a pointed outer end, a ribbed grip and a
- * diamond pommel. Two copies turned ±45° about the tile's centre make the X. This is the owner's
- * reference (2026-10-24): solid filled shapes with the reference's silhouette language — wide
- * tapered blade, flared guard, ribbed grip, diamond pommel — rather than the hairline outline this
- * mark started as, which read as a generic icon instead of his swords.
- *
- * The hilt detail is deliberately kept: at the phone's 46 px cell the mark is only ~14 px across, so
- * the shape has to survive being averaged. The guard bar stays a flat perpendicular block (a fin
- * that sweeps up turns to mush at that size) and the pommel is a compact wide diamond rather than a
- * long spike, because a spike just reads as a longer blade.
- *
- * Reach: tip 5.40, guard end 3.24, pommel 5.02. At SWORD_SCALE the tips land ~6.9 units from the
- * centre, inside the hex's 8.66-unit inradius, so it never touches the timer ring on the outline.
+ * THE CROSSED SWORDS are a literal vector trace of the owner's reference (2026-10-25: "i want you
+ * to trace the reference picture as it is and use that"), not a redrawing. `swords-glyph.ts` holds
+ * the one closed silhouette of the whole X — both swords, both guards, both grips and both pommels
+ * — already centred on 0,0 and scaled so its furthest point is 7.0 map units from the centre. The
+ * hex inradius is 8.66, so the mark keeps its air to the timer ring. Because the X is IN the path,
+ * `makeMarker` draws it once; it must never go back to rotating two copies into an X.
  */
-const SWORD_PATH = [
-  'M0,-5.35',                                                     // the point
-  'L0.46,-4.00', 'L0.88,-2.00', 'L1.10,1.05',                      // blade: straight taper, widest at the guard
-  'L1.95,0.86', 'L2.72,0.42', 'L2.62,1.20', 'L2.00,2.05',          // guard: flat bar, outer end swept up into a barb
-  'L0.54,2.05',                                                    //   in to the grip
-  'L0.74,2.35', 'L0.54,2.70', 'L0.74,3.05', 'L0.54,3.40',          // grip: three ribs
-  'L0.54,3.75', 'L1.02,4.20', 'L0,5.05',                           // pommel: a compact diamond
-  'L-1.02,4.20', 'L-0.54,3.75',                                    //   and back up the other side
-  'L-0.54,3.40', 'L-0.74,3.05', 'L-0.54,2.70', 'L-0.74,2.35', 'L-0.54,2.05',
-  'L-2.00,2.05', 'L-2.62,1.20', 'L-2.72,0.42', 'L-1.95,0.86',      // guard: the mirrored bar
-  'L-1.10,1.05',                                                   // blade: base, left
-  'L-0.88,-2.00', 'L-0.46,-4.00', 'Z',                             // blade: mirrored taper to the point
-].join(' ');
-const SWORD_SCALE = 1.31;
 const hexPath = (x: number, y: number) => {
   const points = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]];
   return points.map(([dx, dy], index) => `${index ? 'L' : 'M'}${(x + dx! * R).toFixed(2)},${(y + dy! * R).toFixed(2)}`).join(' ') + 'Z';
@@ -852,18 +831,12 @@ export class WorldView {
     });
     const glyph = document.createElementNS(NS, 'g');
     glyph.setAttribute('aria-hidden', 'true');
-    glyph.setAttribute('transform', `scale(${SWORD_SCALE})`);
     glyph.classList.add('world-swords-glyph');
-    for (const turn of [45, -45]) {
-      const sword = document.createElementNS(NS, 'g');
-      sword.setAttribute('transform', `rotate(${turn})`);
-      // One filled path per sword: blade, guard, grip and pommel are a single silhouette, so there
-      // is no overlap seam at the crossing and no stroke to keep in step with zoom.
-      const blade = document.createElementNS(NS, 'path');
-      blade.setAttribute('d', SWORD_PATH);
-      sword.append(blade);
-      glyph.append(sword);
-    }
+    // The trace already contains BOTH swords and the crossing block, so this is ONE filled path,
+    // not two rotated copies. A rotation loop here would draw a second X on top of the trace.
+    const blade = document.createElementNS(NS, 'path');
+    blade.setAttribute('d', SWORD_PATH);
+    glyph.append(blade);
     group.append(hit, glyph);
     return { group, hit };
   }
