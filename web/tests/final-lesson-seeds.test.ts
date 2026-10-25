@@ -62,7 +62,8 @@ describe('the card never rests on "Seeds pending verification" (owner report, 20
     expect(rewards).toMatch(/Promise\.race/);
     expect(rewards).toMatch(/controller\?\.abort\(\)/);
     expect(settle).toMatch(/SEED_RETRY_DELAYS_MS/);
-    expect(settle).toMatch(/return \{ kind: 'deferred' \};/);
+    expect(settle).toMatch(/kind: 'deferred' \}/);
+    expect(settle).toMatch(/kind: 'unverified'/);
   });
 });
 

@@ -2,13 +2,22 @@
 
 declare const __CHANNEL__: string;
 
-/** Deployed duel API base URL, or null when this build has no online endpoint. */
-export const duelApiUrl = (): string | null => {
-  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+/** The run-time env bag the bundler injects (`import.meta.env`). */
+const buildEnv = (): Record<string, string | undefined> | undefined =>
+  (import.meta as { env?: Record<string, string | undefined> }).env;
+
+/**
+ * The deployed duel API base, resolved from a build's env bag. Pure, so the resolution itself can be
+ * pinned by a unit test (the built-bundle half is checked by `web/e2e/seeds-campaign-33.ts`).
+ */
+export const duelApiUrlFrom = (env: Record<string, string | undefined> | undefined): string | null => {
   const raw = env?.VITE_DUEL_API_URL?.trim();
   if (!raw) return null;
   return raw.replace(/\/+$/, '');
 };
+
+/** Deployed duel API base URL, or null when this build has no online endpoint. */
+export const duelApiUrl = (): string | null => duelApiUrlFrom(buildEnv());
 
 export const onlineBuildEnabled = (): boolean => duelApiUrl() !== null;
 
