@@ -1,3 +1,4 @@
+import type { ChatContent, ChatResult } from './chat/types.js';
 // A small isomorphic client for the duel API. It depends only on an injected `fetch` and an
 // injected key/value store, so the same code runs in the browser (with localStorage), in a Node
 // test, or in another service. It carries no game logic: it sends semantic actions and renders
@@ -405,6 +406,19 @@ export class DuelClient {
   }
 
   // ---- transport ----
+
+  chatHistory(token: string, matchId: string, cursor: { after?: number; before?: number } = {}, signal?: AbortSignal): Promise<ChatResult> {
+    const query = cursor.after !== undefined ? `?after=${cursor.after}` : cursor.before !== undefined ? `?before=${cursor.before}` : '';
+    return this.request('GET', `/v1/matches/${encodeURIComponent(matchId)}/chat${query}`, { token, ...(signal ? { signal } : {}) });
+  }
+
+  chatSend(token: string, matchId: string, content: ChatContent, requestId: string, turnRevision: number, signal?: AbortSignal): Promise<ChatResult> {
+    return this.request('POST', `/v1/matches/${encodeURIComponent(matchId)}/chat`, { token, body: { ...content, requestId, turnRevision }, ...(signal ? { signal } : {}) });
+  }
+
+  chatAction(token: string, matchId: string, action: 'mute' | 'block' | 'report', body: { value: boolean } | { messageId: string; reason: 'abuse' | 'spam' | 'other' }, signal?: AbortSignal): Promise<ChatResult> {
+    return this.request('POST', `/v1/matches/${encodeURIComponent(matchId)}/chat/${action}`, { token, body, ...(signal ? { signal } : {}) });
+  }
 
   private request<T>(
     method: string,

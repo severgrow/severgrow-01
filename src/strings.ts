@@ -1496,3 +1496,25 @@ export const LESSON = Object.freeze({
   bloomMatch: 'SAME NUMBER, OR COUNTING UP',
   theirTurnNow: 'WAIT',
 });
+
+/** Match chat: stable phrase IDs are stored, labels are translated at render time.
+ * A localisation integration can replace this copy object; never persist translated phrases. */
+export const MATCH_CHAT = {
+  title: 'Match chat', open: 'Open match chat', close: 'Close chat', you: 'You', opponent: 'Opponent',
+  empty: 'A little company across the board.', available: 'Chat available on opponent’s turn',
+  ended: 'Match ended · history only',
+  message: 'Message', send: 'Send', pending: 'Sending…', sent: 'Sent', failed: 'Not sent',
+  retry: 'Retry', discard: 'Discard', older: 'Earlier messages', newer: 'New messages',
+  quickPhrases: 'Quick phrases', messageActions: 'Message actions',
+  reconnecting: 'Live updates reconnecting…', offline: 'Offline · draft saved',
+  opponentOnline: 'Opponent online', opponentOffline: 'Opponent offline', opponentUnknown: 'Opponent status unavailable',
+  tools: 'Chat controls', mute: 'Mute previews', unmute: 'Unmute previews',
+  block: 'Block chat with opponent', unblock: 'Unblock opponent', blocked: 'Chat blocked · history only',
+  report: 'Report message', reportConfirm: 'Send report', reportDone: 'Report sent for review.',
+  abuse: 'Abusive message', spam: 'Spam', other: 'Other', cancel: 'Cancel',
+  loading: 'Connecting chat…', unavailable: 'Chat unavailable · try again', reconnect: 'Reconnect chat',
+  error: 'Couldn’t complete that. Try again.', rate: 'Give your opponent a moment.',
+  unread: (n: number) => `${n} unread ${n === 1 ? 'message' : 'messages'}`,
+  remaining: (n: number) => `${n} characters remaining`,
+  phrases: { 'good-luck': 'Good luck!', 'nice-move': 'Nice move!', gg: 'GG' },
+};

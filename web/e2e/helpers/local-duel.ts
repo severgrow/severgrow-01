@@ -258,6 +258,10 @@ export const openDuel = async (session: SeatSession, matchId: string): Promise<v
   await openMenuEntry(page, 'menu-online', { timeout: 40_000 });
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
   if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
+  // "Your matches" is a closed disclosure by default: expand it before tapping the match row.
+  if (await page.locator('#online-matches-panel').isHidden().catch(() => false)) {
+    await page.click('#online-matches-toggle');
+  }
   const row = page.locator(`#online-matches li[data-match-id="${matchId}"]`);
   await row.waitFor({ state: 'visible', timeout: 25_000 });
   await row.click();

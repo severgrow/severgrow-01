@@ -17,6 +17,8 @@ export type FakeChannelController = {
 export const createFakeChannel = (): FakeChannelController => {
   type Handlers = {
     onPing: (ping: MatchPing) => void;
+    onChat?: () => void;
+    onReconnect?: () => void;
     onPresence: (presence: PresenceSnapshot) => void;
   };
   const subs = new Map<string, Set<Handlers>>();
@@ -126,8 +128,9 @@ const OPEN = 1;
  */
 export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchChannel => {
   const topicFor = (matchId: string): string => `realtime:${matchId}`;
-  const subs = new Map<string, Set<{ onPing: (p: MatchPing) => void; onPresence: (p: PresenceSnapshot) => void }>>();
+  const subs = new Map<string, Set<{ onPing: (p: MatchPing) => void; onPresence: (p: PresenceSnapshot) => void; onChat?: () => void; onReconnect?: () => void; onConnection?: (connected: boolean) => void }>>();
   const socketCtor = options.socket ?? ((url: string) => new (globalThis as unknown as { WebSocket: new (u: string) => RealtimeSocket }).WebSocket(url));
+  const joined = new Set<string>();
   let socket: RealtimeSocket | null = null;
   let heartbeat: ReturnType<typeof setInterval> | null = null;
   let ref = 0;
@@ -144,6 +147,9 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
   };
 
   const stopSocket = (): void => {
+    joined.clear();
+    for (const handlers of subs.values())
+      for (const h of handlers) h.onConnection?.(false);
     if (heartbeat !== null) {
       clearInterval(heartbeat);
       heartbeat = null;
@@ -184,6 +190,8 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
       next = socketCtor(options.url);
     } catch {
       socket = null;
+      for (const handlers of subs.values())
+        for (const h of handlers) h.onConnection?.(false);
       scheduleReconnect();
       return;
     }
@@ -205,6 +213,22 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
       }
       if (typeof frame.topic !== 'string') return;
       for (const [matchId, handlers] of subs) {
+        if (frame.topic === topicFor(matchId)) {
+          if (frame.event === 'phx_reply' && frame.payload?.status === 'ok') {
+            joined.add(matchId);
+            for (const h of handlers) {
+              h.onConnection?.(true);
+              h.onReconnect?.();
+            }
+          }
+          if (frame.event === 'phx_error' || frame.event === 'phx_close' ||
+              (frame.event === 'phx_reply' && frame.payload?.status === 'error')) {
+            joined.delete(matchId);
+            for (const h of handlers) h.onConnection?.(false);
+          }
+          const event = frame.event === 'broadcast' ? frame.payload?.event : frame.event;
+          if (event === 'chat') for (const h of handlers) h.onChat?.();
+        }
         const ping = pingFromFrame(frame, topicFor(matchId));
         if (ping) for (const h of handlers) h.onPing(ping);
       }
@@ -222,12 +246,14 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
   return {
     subscribe(matchId, handlers) {
       let set = subs.get(matchId);
+      const first = !set;
       if (!set) {
         set = new Set();
         subs.set(matchId, set);
       }
       set.add(handlers);
-      if (socket?.readyState === OPEN) {
+      handlers.onConnection?.(joined.has(matchId));
+      if (socket?.readyState === OPEN && first) {
         send(topicFor(matchId), 'phx_join', {
           config: { broadcast: { ack: false, self: false }, presence: { enabled: false }, private: false },
         });
@@ -240,6 +266,7 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
         current.delete(handlers);
         if (current.size === 0) {
           subs.delete(matchId);
+          joined.delete(matchId);
           if (socket?.readyState === OPEN) send(topicFor(matchId), 'phx_leave', {});
           if (subs.size === 0) {
             if (reconnectTimer !== null) {
@@ -252,7 +279,7 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
       };
     },
     track() {
-      /* presence is display-only and stays Unknown until presence is wired (options in ONLINE-SIMULATION.md) */
+      /* Presence comes from the existing live-status heartbeat. */
     },
   };
 };

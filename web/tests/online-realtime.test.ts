@@ -49,6 +49,26 @@ describe('pingFromFrame', () => {
 });
 
 describe('createRealtimeChannel', () => {
+  it('reports topic acknowledgement, late subscribers and disconnection accurately', () => {
+    const socket = new FakeSocket('wss://test');
+    const channel = createRealtimeChannel({ url: socket.url, socket: () => socket });
+    const health = vi.fn();
+    const off = channel.subscribe('match:health', { onPing() {}, onPresence() {}, onConnection: health });
+    expect(health).toHaveBeenLastCalledWith(false);
+    socket.emit('open');
+    expect(health).toHaveBeenLastCalledWith(false);
+    socket.emit('message', { data: JSON.stringify({ topic: 'realtime:match:health', event: 'phx_reply', payload: { status: 'ok' } }) });
+    expect(health).toHaveBeenLastCalledWith(true);
+    const late = vi.fn();
+    const offLate = channel.subscribe('match:health', { onPing() {}, onPresence() {}, onConnection: late });
+    expect(late).toHaveBeenLastCalledWith(true);
+    socket.emit('error');
+    expect(health).toHaveBeenLastCalledWith(false);
+    expect(late).toHaveBeenLastCalledWith(false);
+    offLate();
+    off();
+  });
+
   it('joins the match channel, delivers a ping, and leaves on unsubscribe', () => {
     const sockets: FakeSocket[] = [];
     const channel = createRealtimeChannel({

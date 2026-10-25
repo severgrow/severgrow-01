@@ -446,6 +446,10 @@ try {
   const backToMatches = pageB.locator('#go-other');
   if (await backToMatches.isVisible().catch(() => false)) await backToMatches.click();
   await pageB.waitForSelector('#online-hub:not([hidden])', { timeout: 30_000 });
+  // "Your matches" is a closed disclosure by default; open it before tapping a finished row.
+  if (await pageB.locator('#online-matches-panel').isHidden()) {
+    await pageB.locator('#online-matches-toggle').click();
+  }
   await pageB.waitForSelector('#online-matches .bucket-finished', { timeout: 30_000 });
   const finishedRow = pageB.locator('#online-matches .bucket-finished').first();
   const rowWord = ((await finishedRow.locator('.online-row-status').textContent()) ?? '').trim();

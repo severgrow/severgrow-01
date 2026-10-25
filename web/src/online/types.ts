@@ -20,6 +20,11 @@ export type MatchChannel = {
     matchId: string,
     handlers: {
       onPing: (ping: MatchPing) => void;
+      /** Content-free invalidation on the existing socket; never private message text. */
+      onChat?: () => void;
+      onReconnect?: () => void;
+      /** Joined Realtime topic health; HTTP history remains authoritative. */
+      onConnection?: (connected: boolean) => void;
       onPresence: (presence: PresenceSnapshot) => void;
     },
   ): () => void;
