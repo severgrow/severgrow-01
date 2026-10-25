@@ -24,3 +24,7 @@ supabase/.temp/
 
 # The futa05 preview build output (same rule as web/dist/): generated, never committed.
 web/dist-preview/
+# The same build, written to a second directory so a running preview cannot collide with it. The
+# suites pass `--outDir dist-futa05` for exactly that reason, so it must be ignored like its sibling
+# rather than showing up as an untracked change on every test run.
+web/dist-futa05/
