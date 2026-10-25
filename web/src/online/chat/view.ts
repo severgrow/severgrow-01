@@ -11,6 +11,7 @@ import type { MatchChannel, MatchDriverSnapshot } from '../types.js';
 import { createChatController, type ChatState } from './controller.js';
 import { CHAT_CSS } from './style.js';
 import { ICONS } from '../../ui/icons.js';
+import { createChatMotion } from './motion.js';
 
 /** Nonmodal instrument panel: board remains playable. No document scroll or focus steal on arrival. */
 export const mountMatchChat = (o: {
@@ -24,6 +25,16 @@ export const mountMatchChat = (o: {
   copy?: typeof MATCH_CHAT;
 }) => {
   const copy = o.copy ?? MATCH_CHAT;
+  const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+  const motion = createChatMotion(
+    () =>
+      motionPreference.matches ||
+      document.documentElement.classList.contains('reduce-motion'),
+  );
+  const settleMotion = () => {
+    if (motionPreference.matches) motion.settle();
+  };
+  motionPreference.addEventListener('change', settleMotion);
   if (!document.getElementById('match-chat-style')) {
     const style = document.createElement('style');
     style.id = 'match-chat-style';
@@ -54,6 +65,8 @@ export const mountMatchChat = (o: {
   panel.id = 'match-chat-panel';
   panel.className = 'match-chat-panel';
   panel.hidden = true;
+  panel.inert = true;
+  panel.setAttribute('aria-hidden', 'true');
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'false');
   panel.setAttribute('aria-labelledby', 'match-chat-title');
@@ -170,7 +183,8 @@ export const mountMatchChat = (o: {
   phrases.hidden = true;
   phrases.setAttribute('role', 'group');
   phrases.setAttribute('aria-label', copy.quickPhrases);
-  const phraseToggle = button('', () => setPhrases(Boolean(phrases.hidden)));
+  let phrasesOpen = false;
+  const phraseToggle = button('', () => setPhrases(!phrasesOpen));
   phraseToggle.className = 'match-chat-phrase-toggle';
   phraseToggle.setAttribute('aria-label', copy.quickPhrases);
   phraseToggle.setAttribute('aria-expanded', 'false');
@@ -178,7 +192,9 @@ export const mountMatchChat = (o: {
   phraseToggle.innerHTML =
     '<svg viewBox="0 0 24 24" aria-hidden="true" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5h10a3.5 3.5 0 0 1 3.5 3.5v6a3.5 3.5 0 0 1-3.5 3.5h-5.5L6 21v-3.8A3.5 3.5 0 0 1 3.5 14V8A3.5 3.5 0 0 1 7 4.5Z"/><g fill="currentColor" stroke="none"><circle cx="8" cy="11" r=".9"/><circle cx="12" cy="11" r=".9"/><circle cx="16" cy="11" r=".9"/></g></svg>';
   function setPhrases(open: boolean) {
-    phrases.hidden = !open;
+    phrasesOpen = open;
+    phrases.inert = !open;
+    motion.visible(phrases, open);
     phraseToggle.setAttribute('aria-expanded', String(open));
     if (open) {
       controls.open = false;
@@ -263,6 +279,9 @@ export const mountMatchChat = (o: {
   (cockpit ?? o.header).append(toggle, preview);
   o.host.append(root);
   let previewTimer: ReturnType<typeof setTimeout> | null = null;
+  let panelOpen = false,
+    lastUnread = 0,
+    lastSequence = 0;
   let lastPreview = '',
     lastMessages = '',
     lastAnnouncement = '',
@@ -279,9 +298,16 @@ export const mountMatchChat = (o: {
     readCursor: chatReadCursor(browserStorage(), o.matchId, o.snapshot().seat),
   });
   function render(s: ChatState) {
-    panel.hidden = !s.open;
+    if (panelOpen !== s.open) {
+      panelOpen = s.open;
+      panel.inert = !s.open;
+      panel.setAttribute('aria-hidden', String(!s.open));
+      motion.visible(panel, s.open);
+    }
     toggle.setAttribute('aria-expanded', String(s.open));
     dot.hidden = s.unread === 0 || s.muted || s.blocked;
+    if (!dot.hidden && s.unread > lastUnread && !s.open) motion.unread(dot);
+    lastUnread = s.unread;
     toggle.setAttribute(
       'aria-label',
       s.unread && !s.muted && !s.blocked
@@ -291,11 +317,11 @@ export const mountMatchChat = (o: {
     if (s.preview && s.preview.id !== lastPreview) {
       lastPreview = s.preview.id;
       preview.textContent = text(s.preview).slice(0, 100);
-      preview.hidden = false;
+      motion.visible(preview, true);
       if (previewTimer) clearTimeout(previewTimer);
       previewTimer = setTimeout(() => ctl.dismissPreview(), 4200);
     }
-    if (!s.preview) preview.hidden = true;
+    if (!s.preview) motion.visible(preview, false);
     const key = s.messages.map((m) => m.id).join(',');
     if (key !== lastMessages) {
       const previousHeight = log.scrollHeight,
@@ -308,6 +334,7 @@ export const mountMatchChat = (o: {
         ? document.activeElement?.closest<HTMLElement>('[data-message]')
             ?.dataset.message
         : undefined;
+      motion.cancelWithin(entries);
       entries.replaceChildren();
       if (!s.messages.length) entries.append(empty);
       for (const m of s.messages) {
@@ -346,6 +373,8 @@ export const mountMatchChat = (o: {
         }
         line.append(body);
         entries.append(line);
+        if (s.open && lastMessages && m.sequence > lastSequence)
+          motion.arrival(line);
       }
       if (loadingOlder)
         log.scrollTop = previousTop + log.scrollHeight - previousHeight;
@@ -364,6 +393,10 @@ export const mountMatchChat = (o: {
             `[data-message="${focusedMessage}"] button`,
           )
           ?.focus({ preventScroll: true });
+      lastSequence = Math.max(
+        lastSequence,
+        ...s.messages.map((m) => m.sequence),
+      );
       lastMessages = key;
     }
     if (s.hasNewer) newer.hidden = false;
@@ -431,7 +464,7 @@ export const mountMatchChat = (o: {
   }
   toggle.onclick = () => setOpen(!ctl.state().open);
   const keydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !phrases.hidden) {
+    if (e.key === 'Escape' && phrasesOpen) {
       e.preventDefault();
       e.stopPropagation();
       setPhrases(false);
@@ -447,7 +480,7 @@ export const mountMatchChat = (o: {
   document.addEventListener('keydown', keydown, true);
   const outside = (e: PointerEvent) => {
     if (
-      !phrases.hidden &&
+      phrasesOpen &&
       !phrases.contains(e.target as Node) &&
       !phraseToggle.contains(e.target as Node)
     )
@@ -493,6 +526,8 @@ export const mountMatchChat = (o: {
   return {
     update: () => ctl.turnChanged(),
     stop() {
+      motion.stop();
+      motionPreference.removeEventListener('change', settleMotion);
       ctl.stop();
       document.removeEventListener('keydown', keydown, true);
       if (previewTimer) clearTimeout(previewTimer);

@@ -10,8 +10,8 @@ Base: online commit `1c326f8` (2026-10-25). No merge, production migration or de
 
 A 44px communication key directly above the cockpit context button opens a nonmodal transcript over the board. It uses the
 actual `--dark-glass`, `--dark-glass-blur`, `--font-ui` and `--font` materials. Cream text, fine rules,
-small seat labels, no avatars/bubbles. No competing motion system: a 90ms/3px entry using the existing interface press/easing/travel tokens, removed for
-reduced motion. Incoming messages never open the panel or steal focus. A temporary preview and
+small seat labels, no avatars/bubbles. Finite opacity and tiny-transform transitions use the existing interface easing: 150ms open,
+100ms close, with effects skipped for reduced motion. Incoming messages never open the panel or steal focus. A temporary preview and
 small unread dot remain secondary to play. The panel closes on Escape/outside interaction; outside
 taps still reach the board. Touch controls retain 44px targets.
 
@@ -230,3 +230,26 @@ suite passed **882 checks** across phone/desktop sizes and both hand sides. Revi
 The cockpit chat key no longer draws a bright focus-outline rectangle. Its native hardware frame
 remains; keyboard focus uses the quiet existing glow. Verified in screenshots and 34 browser checks,
 including a focused-key assertion that the outline is absent while the glow remains.
+
+## Chat feel and motion
+
+Spacing is tightened without shrinking the 15px transcript or touch targets. The panel and phrase
+picker open with a 150ms opacity/4px settle and close in 100ms. New delivered transcript rows enter
+once in 160ms; historical rows do not replay their entrance. A closed chat receives a single 280ms
+unread-dot pulse, and its restrained preview fades in/out. Header keyboard focus uses a soft icon
+highlight rather than a bright rectangular contour.
+
+`chat/motion.ts` owns finite Web Animations effects with the existing interface easing. Only opacity
+and transform animate. Closing makes the panel inert, aria-hidden and click-through immediately,
+then hides it after the visual exit. A rapid reopen starts from the current rendered pose; an old
+completion cannot hide a reopened panel. In-game and operating-system reduced motion skip effects.
+Effects cancel on teardown; settled effects release their fill and references. No recurring timer,
+render loop, gameplay animation token, engine rule or Realtime subscription is added.
+
+Browser verification includes real running/paused/interrupted Web Animations, immediate input
+release, rapid reversals, phrase transitions, both reduced-motion sources, incoming message/dot/
+preview effects and exiting a match during an active closing effect. The final run passes 42 chat
+browser checks. These test local clients with the simulated Realtime wire, not the hosted provider.
+Motion pass validation: full `npm run check` passed (283 files, 2,902 tests; 1 expected failure and
+65 optional/database skips). Both production channel builds/assets checks and the existing gameplay
+motion regression passed. Final reviewed browser run: 42 checks. No merge or deployment performed.

@@ -217,6 +217,128 @@ try {
       !(document.querySelector('.match-chat-form input') as HTMLInputElement)
         .disabled,
   );
+  const motionChecks = await sender.evaluate(async () => {
+    const root = document.documentElement,
+      panel = document.querySelector<HTMLElement>('.match-chat-panel')!,
+      key = document.querySelector<HTMLButtonElement>('#match-chat-toggle')!;
+    root.classList.remove('reduce-motion');
+    key.click();
+    const exit = panel.getAnimations()[0]!;
+    const immediateRelease =
+      panel.inert &&
+      panel.getAttribute('aria-hidden') === 'true' &&
+      getComputedStyle(panel).pointerEvents === 'none' &&
+      !panel.hidden;
+    exit.pause();
+    exit.currentTime = 40;
+    const opacity = parseFloat(getComputedStyle(panel).opacity);
+    key.click();
+    const seamless =
+      Math.abs(parseFloat(getComputedStyle(panel).opacity) - opacity) < 0.04 &&
+      exit.playState === 'idle';
+    await Promise.all(panel.getAnimations().map((a) => a.finished));
+    for (let i = 0; i < 6; i++) {
+      key.click();
+      key.click();
+    }
+    await Promise.all(panel.getAnimations().map((a) => a.finished));
+    const survived =
+      !panel.hidden &&
+      !panel.inert &&
+      key.getAttribute('aria-expanded') === 'true';
+    const phrase = document.querySelector<HTMLButtonElement>(
+      '.match-chat-phrase-toggle',
+    )!;
+    phrase.click();
+    const picker = document.querySelector<HTMLElement>('.match-chat-phrases')!;
+    const pickerAnimated = picker.getAnimations().length === 1;
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await Promise.all(picker.getAnimations().map((a) => a.finished));
+    root.classList.add('reduce-motion');
+    key.click();
+    const reducedClose = panel.hidden && panel.getAnimations().length === 0;
+    key.click();
+    const reducedOpen = !panel.hidden && panel.getAnimations().length === 0;
+    return {
+      immediateRelease,
+      seamless,
+      survived,
+      pickerAnimated,
+      reducedClose,
+      reducedOpen,
+      settled:
+        document.querySelectorAll('.match-chat-line').length === 0 &&
+        panel.getAnimations().length === 0,
+    };
+  });
+  check(
+    'closing releases input immediately while the glass settles',
+    motionChecks.immediateRelease,
+  );
+  check(
+    'interrupted closing reverses without an opacity jump',
+    motionChecks.seamless,
+  );
+  check(
+    'rapid open-close sequences settle into the correct state',
+    motionChecks.survived,
+  );
+  check(
+    'quick phrases have a finite opening transition',
+    motionChecks.pickerAnimated,
+  );
+  check(
+    'reduced motion opens and closes immediately without retained effects',
+    motionChecks.reducedClose &&
+      motionChecks.reducedOpen &&
+      motionChecks.settled,
+  );
+  await sender.emulateMedia({ reducedMotion: 'reduce' });
+  const systemReduced = await sender.evaluate(() => {
+    document.documentElement.classList.remove('reduce-motion');
+    const key =
+        document.querySelector<HTMLButtonElement>('#match-chat-toggle')!,
+      panel = document.querySelector<HTMLElement>('.match-chat-panel')!;
+    key.click();
+    const closed = panel.hidden && panel.getAnimations().length === 0;
+    key.click();
+    document.documentElement.classList.add('reduce-motion');
+    return closed && !panel.hidden && panel.getAnimations().length === 0;
+  });
+  check(
+    'operating-system reduced motion also bypasses chat effects',
+    systemReduced,
+  );
+  await sender.emulateMedia({ reducedMotion: 'no-preference' });
+  await receiver.evaluate(() => {
+    document.documentElement.classList.remove('reduce-motion');
+    const seen = new Set<string>();
+    const observer = new MutationObserver(() => {
+      for (const a of document.getAnimations()) {
+        const target = (a.effect as KeyframeEffect)
+          ?.target as HTMLElement | null;
+        if (target)
+          for (const name of [
+            'match-chat-dot',
+            'match-chat-preview',
+            'match-chat-line',
+          ])
+            if (target.classList.contains(name)) seen.add(name);
+      }
+    });
+    observer.observe(document.querySelector('#game')!, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['hidden'],
+    });
+    (window as unknown as { __chatMotionProbe: unknown }).__chatMotionProbe = {
+      seen,
+      observer,
+    };
+  });
   check(
     'ready chat has no redundant availability caption',
     await sender.locator('.match-chat-status').isHidden(),
@@ -282,6 +404,23 @@ try {
     .getByText('Good luck!', { exact: true })
     .waitFor();
   check('quick phrase ID renders naturally for both clients', true);
+  const incomingMotion = await receiver.evaluate(() => {
+    const probe = (
+      window as unknown as {
+        __chatMotionProbe: { seen: Set<string>; observer: MutationObserver };
+      }
+    ).__chatMotionProbe;
+    probe.observer.disconnect();
+    document.documentElement.classList.add('reduce-motion');
+    return [...probe.seen];
+  });
+  check(
+    'new messages animate once in the transcript and cue the closed cockpit key',
+    ['match-chat-dot', 'match-chat-preview', 'match-chat-line'].every((name) =>
+      incomingMotion.includes(name),
+    ),
+  );
+
   // A committed message whose HTTP response is deliberately lost: retry must return its row.
   now += 2000;
   await sender.route('**/chat', async (route) => {
@@ -517,6 +656,7 @@ try {
     );
     await visual.screenshot({ path: `${out}/chat-${width}x${height}.png` });
     await visual.keyboard.press('Escape');
+    await visual.locator('.match-chat-panel').waitFor({ state: 'hidden' });
     if (width === 390)
       check(
         'cockpit chat focus uses a quiet glow without a bright outline',
@@ -568,7 +708,23 @@ try {
       .evaluate((e) => e === document.activeElement),
   );
   // Leave each match via the actual menu; the channel must release its last subscription/socket.
-  for (const p of [sender, receiver]) {
+  const cancelledOnExit = await sender.evaluate(() => {
+    document.documentElement.classList.remove('reduce-motion');
+    const key =
+        document.querySelector<HTMLButtonElement>('#match-chat-toggle')!,
+      panel = document.querySelector<HTMLElement>('.match-chat-panel')!;
+    key.click();
+    key.click();
+    const closing = panel.getAnimations()[0]!;
+    closing.pause();
+    document.getElementById('gm-main')!.click();
+    return (
+      closing.playState === 'idle' &&
+      !document.querySelector('#match-chat-panel')
+    );
+  });
+  check('leaving a match cancels an active closing animation', cancelledOnExit);
+  for (const p of [receiver]) {
     await p.locator('#hud-menu').click();
     await p.locator('#gm-main').click();
   }
