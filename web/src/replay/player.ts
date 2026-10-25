@@ -463,6 +463,17 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
       close();
       return;
     }
+    // The surface is `aria-modal`: Tab cycles its three controls (the bar, "Replay again" when it
+    // exists, and Close) instead of wandering into the game behind it.
+    if (key === 'Tab') {
+      const order: HTMLElement[] = [scrub, ...(again.hidden ? [] : [again]), closeBtn];
+      const at = order.indexOf(document.activeElement as HTMLElement);
+      const dir = event.shiftKey ? -1 : 1;
+      const next = at < 0 ? order[event.shiftKey ? order.length - 1 : 0]! : order[(at + dir + order.length) % order.length]!;
+      event.preventDefault();
+      next.focus({ preventScroll: true });
+      return;
+    }
     if (key === ' ' || key === 'Spacebar') {
       event.preventDefault();
       if (ended) restart();
