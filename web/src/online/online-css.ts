@@ -3,7 +3,12 @@ export const ONLINE_CSS = `
 /* The online lobby is a real full-screen VIEW, not a layer on the menu. The base .screen rule
    already makes it fixed/inset:0; give each online screen the theme background (opaque, so the
    menu can never paint through), lift it above the menu in z-order as a second safety net, and
-   centre its column exactly like the main menu / level picker so tall content scrolls. */
+   centre its column exactly like the main menu / level picker so tall content scrolls.
+   NOTE (consistency sweep, 2026-10-25): this opaque fill is the one material difference from
+   every other screen — #play-menu, #levels and the lobby's own sibling .online-world stand on the
+   shared painted surface. It is pinned on purpose by web/tests/world-surface.test.ts and
+   web/e2e/online-lobby-overlay.ts ("this change is the world map only"), so the sweep reported it
+   to the owner instead of changing it. */
 .online-hub,
 .online-waiting,
 .online-join {
@@ -233,7 +238,9 @@ export const ONLINE_CSS = `
   font-size: 1.15rem;
   letter-spacing: 0.22em;
   text-align: center;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* The one typeface, like every other label in the lobby. This was a literal system-monospace
+     stack, so the invite code was the only text in the product set in the OS's mono face. */
+  font-family: var(--font-ui);
   margin: 0;
   align-self: center;
   display: inline-flex;

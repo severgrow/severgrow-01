@@ -28,3 +28,6 @@ web/dist-preview/
 # suites pass `--outDir dist-futa05` for exactly that reason, so it must be ignored like its sibling
 # rather than showing up as an untracked change on every test run.
 web/dist-futa05/
+# The consistency sweep's own futa05 build (web/e2e/consistency-surfaces.ts). Same rule as the
+# siblings above: generated, never committed.
+web/dist-sweep/

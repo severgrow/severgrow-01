@@ -726,7 +726,12 @@ try {
             document.querySelector('#smart-context')!,
             '::before',
           ).backgroundImage,
-        targets: buttons.every((b) => b.getBoundingClientRect().height >= 43),
+        // The owner's rule is 44x44, not "about 44 tall": the quick-phrase key was 36x44 and passed
+        // this check because it only ever measured HEIGHT. Measure both sides of every chat key.
+        targets: buttons.every((b) => {
+          const r = b.getBoundingClientRect();
+          return r.width >= 44 && r.height >= 44;
+        }),
         glass: getComputedStyle(document.querySelector('.match-chat-panel')!)
           .backgroundColor,
       };

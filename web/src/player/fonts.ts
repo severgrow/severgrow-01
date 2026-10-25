@@ -36,6 +36,11 @@ ${T} body {
   --font-display: 'Besley', 'Besley Fallback', Georgia, serif;
   --font-ui: 'Fragment Mono', 'Fragment Mono Fallback', ui-monospace, monospace;
   --font-num: 'Futasaku Numerals', 'Fragment Mono', 'Fragment Mono Fallback', ui-monospace, monospace;
+  /* The fixed-advance stack the mechanical counters ask for (var(--font-mono) in the dock's
+     odometer, the Bloom count badge and the finish plate's learned line). It was referenced by
+     those three rules and defined NOWHERE, so each fell back to a different face — system
+     monospace twice and Besley (a serif) once. It is the same face as every other number. */
+  --font-mono: var(--font-num);
   --font: var(--font-ui);
   /* Fragment Mono ships only 400 — never faux-bold the UI face. */
   --w-ui-regular: 400;
