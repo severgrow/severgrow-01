@@ -2923,7 +2923,25 @@ function humanPlay(a: Action, opts: { auto?: boolean; flightFrom?: DOMRect } = {
   fastForward();
   const advice = currentAdvice();
   rememberCardRects();
-  const p = session.play(a, HUMAN, opts.auto === undefined ? {} : { auto: opts.auto });
+  let p: Played | null;
+  try {
+    p = session.play(a, HUMAN, opts.auto === undefined ? {} : { auto: opts.auto });
+  } catch (error) {
+    // A five/six-card Bloom's exact tile assignment is validated on demand by `apply`, and a
+    // half-chosen shape can reach here through a preview/commit. Painting must NEVER take the
+    // page down: refuse calmly, keep the painted shape on screen, and say why (same refusal
+    // language a rejected tap uses).
+    console.error('move refused', error);
+    board.shake(settings.reduceMotion);
+    if (settings.sound) sound.illegal();
+    if (a.t === 'Bloom') {
+      draw = { ...draw, msg: "That shape can't be placed" };
+      paintDraw();
+    } else {
+      caption("That move can't be placed", null, 'info');
+    }
+    return;
+  }
   if (!p) return;
   // The throw is already in the engine and the log; only now does the discard step learn which
   // flight it gets, and that it may continue from where the released ghost was.
@@ -8436,20 +8454,27 @@ function paintDraw() {
   updateFuta04MoveActive();
   cancelAnimationFrame(drawFrame);
   drawFrame = requestAnimationFrame(() => {
-    const c = drawCombo();
-    if (!c || !session) return;
-    const g = session.presetMove ? null : drawGhostNow(c);
-    const shape = draw.desk.phase === 'live' ? g?.tiles.map(tile=>tile.key) ?? [] : draw.shape;
-    const blocked = session.presetMove ? [] : [...unavailable(session.view, c, shape, draw.reverse).keys()];
-    board.ghost(g || blocked.length ? {
-      tiles: g?.tiles ?? [],
-      blocked: !!g && !g.action && g.tiles.length === c.n,
-      unavailable: blocked,
-      cursor: focusKey && document.activeElement === $('board') ? focusKey : null,
-    } : null);
-    renderDrawInfo(c, g);
-    // Keep next-hex wells in sync with the painted path (ghost layer alone used to lag).
-    refreshBoardDrag();
+    try {
+      const c = drawCombo();
+      if (!c || !session) return;
+      const g = session.presetMove ? null : drawGhostNow(c);
+      const shape = draw.desk.phase === 'live' ? g?.tiles.map(tile=>tile.key) ?? [] : draw.shape;
+      const blocked = session.presetMove ? [] : [...unavailable(session.view, c, shape, draw.reverse).keys()];
+      board.ghost(g || blocked.length ? {
+        tiles: g?.tiles ?? [],
+        blocked: !!g && !g.action && g.tiles.length === c.n,
+        unavailable: blocked,
+        cursor: focusKey && document.activeElement === $('board') ? focusKey : null,
+      } : null);
+      renderDrawInfo(c, g);
+      // Keep next-hex wells in sync with the painted path (ghost layer alone used to lag).
+      refreshBoardDrag();
+    } catch (error) {
+      // A preview must never take the page down. Drop the ghost and leave the paint state for the
+      // next frame; the commit path has its own calm refusal (see `humanPlay`).
+      console.error('paint preview failed', error);
+      board.ghost(null);
+    }
   });
 }
 

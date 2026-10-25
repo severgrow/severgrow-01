@@ -73,7 +73,14 @@ export const hexesAlong = (a: Pt, b: Pt, keys: ReadonlySet<string>): string[] =>
  * One card group to bloom (a kind "bloom-N-ids"): its numbers in ascending order, whether it
  * is a run (different numbers: the paint order matters), and every legal Bloom of it.
  */
-export type Combo = { kind: string; n: number; ranks: number[]; run: boolean; actions: Bloom[]; hexes: Set<string>; byKey: Map<string, Bloom>; view?: View; completion?: Map<string,boolean> };
+export type Combo = { kind: string; n: number; ranks: number[]; run: boolean; actions: Bloom[]; hexes: Set<string>; byKey: Map<string, Bloom>; view?: View; completion?: Map<string,boolean>; endpoints?: Map<string, Set<string>> };
+
+/**
+ * Cheap diagnostics for the browser regression and the unit cost tests: how many partial shapes
+ * the exhaustive completion search visits. The retarget has a hard budget (see `canComplete`), so a
+ * pointer move can never wander into an enormous combination space.
+ */
+export const searchStats = { completionNodes: 0, retargetNodes: 0, endpointNodes: 0 };
 
 /** The lookup key of a Bloom: its hexes in card order (a set: in any order, so sorted). */
 const keyOf = (hexes: readonly string[], run: boolean) => (run ? hexes.join(' ') : [...hexes].sort().join(' '));
@@ -90,7 +97,7 @@ export const comboFor = (v: View, legal: readonly Action[], sel: Sel): Combo | n
   for (const a of actions) byKey.set(keyOf(a.hexes.map(coordKey), run), a);
   return { kind, n: ranks.length, ranks, run, actions,
     hexes: new Set(ranks.length >= 5 ? boardCoords(v.config).map(coordKey) : actions.flatMap((a) => a.hexes.map(coordKey))),
-    byKey, ...(ranks.length >= 5 ? {view:v,completion:new Map<string,boolean>()} : {}) };
+    byKey, ...(ranks.length >= 5 ? {view:v,completion:new Map<string,boolean>(),endpoints:new Map<string,Set<string>>()} : {}) };
 };
 
 /** The number the i-th painted hex receives (lowest first; Reverse: highest first). */
@@ -124,14 +131,24 @@ const paintOrder = (_c: Combo, a: Bloom, reverse: boolean): string[] => {
  * run: with the number it would receive) and touches the shape. Empty shape: the legal starts.
  */
 export const drawNext = (c: Combo, shape: readonly string[], reverse = false): Set<string> => {
+  // A full shape has no next hex. The five/six-card branch MUST stop here too: without this a
+  // full Bloom made `completes` continue past its size forever (rankAt(index) is undefined,
+  // every empty neighbour stayed "claimable"), walking the whole board and locking the page —
+  // the reported 2026-10-25 freeze. Three/four-card Blooms were unaffected because the action
+  // branch below already returns at `m >= c.n`.
+  if (shape.length >= c.n) return new Set<string>();
   if (c.view) {
     const view=c.view;
     const memo=c.completion!;
+    // The memo is a cross-move cache, not a log: a long paint session must not grow it without
+    // bound (the five/six-card exhaustive search can visit a great many partial shapes).
+    if (memo.size > 50_000) memo.clear();
     const candidates=(partial:readonly string[])=>[...c.hexes].filter(key=>
       !partial.includes(key) && (partial.length===0 || touches(partial,key)) &&
       claimBlocker(view,view.player,parseKey(key),rankAt(c,partial.length,reverse))===null);
     const completes=(partial:string[]):boolean=>{
-      if (partial.length===c.n) return paintMatch(c,partial,reverse)!==null;
+      searchStats.completionNodes++;
+      if (partial.length >= c.n) return paintMatch(c,partial,reverse)!==null;
       const signature=`${reverse}:${partial.join('|')}`;
       const cached=memo.get(signature); if (cached!==undefined) return cached;
       for (const key of candidates(partial)) if (completes([...partial,key])) {memo.set(signature,true);return true;}
@@ -161,6 +178,57 @@ export const drawNext = (c: Combo, shape: readonly string[], reverse = false): S
 export const drawStarts = (c: Combo, reverse = false): Set<string> => drawNext(c, [], reverse);
 
 /**
+ * The hexes that may legally take the next number from `shape` WITHOUT asking whether a full
+ * completion exists. This is the cheap one-step predicate: empty/touching, not already painted,
+ * and claimable with the rank this paint position receives. Five/six-card Blooms use it so cost
+ * stays proportional to the board, never to the number of possible completions.
+ */
+const legalSteps = (c: Combo, shape: readonly string[], reverse: boolean): string[] => {
+  if (!c.view) return [...drawNext(c, shape, reverse)];
+  const { view } = c;
+  const rank = rankAt(c, shape.length, reverse);
+  const out: string[] = [];
+  for (const key of c.hexes) {
+    if (shape.includes(key)) continue;
+    if (shape.length && !touches(shape, key)) continue;
+    if (claimBlocker(view, view.player, parseKey(key), rank) !== null) continue;
+    out.push(key);
+  }
+  return out;
+};
+
+/** The retarget's whole search budget. A refusal is silent and safe, so exhaustion means "no". */
+export const RETARGET_NODE_BUDGET = 512;
+
+/**
+ * Can this tentative shape still become a legal Bloom? Bounded: the first completion wins and a
+ * small node budget caps the search, so a finger wobble can never walk an enormous space.
+ */
+const canComplete = (c: Combo, shape: readonly string[], reverse: boolean): boolean => {
+  if (shape.length === c.n) return paintMatch(c, shape, reverse) !== null;
+  if (!c.view) return drawNext(c, shape, reverse).size > 0;
+  let nodes = 0;
+  const visit = (partial: readonly string[]): boolean => {
+    if (partial.length === c.n) return paintMatch(c, partial, reverse) !== null;
+    for (const key of legalSteps(c, partial, reverse)) {
+      if (++nodes > RETARGET_NODE_BUDGET) return false;
+      searchStats.retargetNodes++;
+      if (visit([...partial, key])) return true;
+    }
+    return false;
+  };
+  return visit(shape);
+};
+
+/** True when this hex could legally sit on the end of the shape without its current last tile. */
+const retargetLegal = (c: Combo, prefix: readonly string[], key: string, reverse: boolean): boolean => {
+  if (!prefix.length || prefix.includes(key) || !touches(prefix, key)) return false;
+  if (!c.view) return drawNext(c, prefix, reverse).has(key);
+  if (claimBlocker(c.view, c.view.player, parseKey(key), rankAt(c, prefix.length, reverse)) !== null) return false;
+  return canComplete(c, [...prefix, key], reverse);
+};
+
+/**
  * The natural first hex for a Bloom: the only start when unique, otherwise the start
  * closest to the player's home (stable tie-break on key). Null when nothing is legal.
  */
@@ -179,16 +247,40 @@ export const naturalBloomStart = (c: Combo, homeKey: string, reverse = false): s
 /** Endpoints which finish an already-legal Bloom after its first tile. Immediate neighbours
  * stay reserved for the ordinary tap-by-tap path. */
 export const bloomEndpoints = (c: Combo, start: string, reverse = false): Set<string> => {
-  const out = new Set<string>();
-  const next = drawNext(c, [start], reverse);
   if (c.view) {
-    const visit=(shape:string[])=>{
-      if(shape.length===c.n){const end=shape.at(-1)!;if(end!==start&&!next.has(end))out.add(end);return;}
-      for(const key of drawNext(c,shape,reverse))visit([...shape,key]);
+    const cache = c.endpoints ?? (c.endpoints = new Map<string, Set<string>>());
+    const cacheKey = `${reverse}:${start}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+    // A plain walk over connected, claimable paths. The old version asked `drawNext` at every
+    // node, which re-ran the exhaustive completion search and made a six-card Bloom take seconds
+    // on EVERY frame while one tile was painted. This walk validates each leaf itself (the only
+    // extra rule beyond the one-step checks is "touches my network"), so it never searches the
+    // completion space at all. Cached per start: the endpoints cannot change while painting.
+    const { view } = c;
+    const out = new Set<string>();
+    const next = new Set(legalSteps(c, [start], reverse));
+    const mine = (key: string) => {
+      const p = parseKey(key);
+      return DIRECTIONS.some((d) => view.board[coordKey({ q: p.q + d.q, r: p.r + d.r })]?.owner === view.player);
+    };
+    const visit = (shape: string[]) => {
+      if (shape.length === c.n) {
+        const end = shape.at(-1)!;
+        if (end !== start && !next.has(end) && (!view.config.bloomMustTouchNetwork || shape.some(mine))) out.add(end);
+        return;
+      }
+      for (const key of legalSteps(c, shape, reverse)) {
+        searchStats.endpointNodes++;
+        visit([...shape, key]);
+      }
     };
     visit([start]);
+    cache.set(cacheKey, out);
     return out;
   }
+  const out = new Set<string>();
+  const next = drawNext(c, [start], reverse);
   for (const action of c.actions) {
     const keys = action.hexes.map(coordKey);
     if (!keys.includes(start)) continue;
@@ -292,8 +384,12 @@ export const retargetShape = (shape: readonly string[], key: string, legal: Read
 /** The drag retarget for the painting in hand: the new shape, or null when this hex is not a retarget. */
 export const paintRetarget = (c: Combo, shape: readonly string[], key: string, reverse = false): string[] | null => {
   if (shape.at(-1) === key) return null;
-  const next = retargetShape(shape, key, drawNext(c, shape.slice(0, -1), reverse));
-  return next.length === shape.length && next.every((k, i) => k === shape[i]) ? null : next;
+  const prefix = shape.slice(0, -1);
+  // The retarget only needs a ONE-STEP legality question (plus a small, bounded completion
+  // check for five/six-card Blooms). It must never call the exhaustive `drawNext` search on a
+  // pointer move, so its cost stays bounded however large the board is.
+  if (shape.length < 2 || !retargetLegal(c, prefix, key, reverse)) return null;
+  return [...prefix, key];
 };
 
 /**
