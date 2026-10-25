@@ -46,6 +46,7 @@ import {
   paintGhost,
   paintMatch,
   paintProblem,
+  paintRetarget,
   paintTap,
   proximity,
   suggestBloom,
@@ -91,6 +92,7 @@ import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { throwPileAction } from './logic/throw-pile.js';
+import { undoIntent } from './logic/undo.js';
 import {
   goalReachable, lessonAllows, lessonBeat, openingDisplay, lessonFor, lessonLocked, lessonOffersBloom, lessonOpening,
   presentedLessonBeat, suggestMove, LESSONS,
@@ -8421,7 +8423,19 @@ const drawHandlers = {  down(p: Pt, e: PointerEvent) {
       if (next.length > shape.length) {
         drawTick(next.length - 1);
         msg = null;
-      } else if (next.length === shape.length && !shape.includes(k)) msg = unavailable(session!.view, c, shape, draw.reverse).get(k) ?? msg;
+        shape = next;
+        continue;
+      }
+      // Moving onto a hex the path cannot simply extend: if it can legally BE the last tile, the
+      // tentative end follows the finger instead of needing a drag back first (owner, 2026-10-25).
+      // A refused retarget changes nothing, so the shape can never pick up a gap or an illegal end.
+      const retargeted = next.length === shape.length && !shape.includes(k) ? paintRetarget(c, shape, k, draw.reverse) : null;
+      if (retargeted) {
+        shape = retargeted;
+        msg = null;
+        continue;
+      }
+      if (next.length === shape.length && !shape.includes(k)) msg = unavailable(session!.view, c, shape, draw.reverse).get(k) ?? msg;
       shape = next;
     }
     draw = { ...draw, shape, msg };
@@ -9342,22 +9356,28 @@ bind('tool-replay', () => replayBotTurn());
 }
 bind('tool-undo', () => {
   if (!session) return;
-  // One tap: clear a waiting throw / bloom paint, else take back the last move. No confirm.
-  if (session.pending || session.presetMove) {
+  // ONE PRESS takes back the last move (owner, 2026-10-25: "undo shouldnt need 2 taps"). The
+  // decision is one pure function (logic/undo) because `session.pending` is DERIVED from the pick:
+  // asking it first spent the press clearing the pick, and only the second press reached undo().
+  const online = isOnlineDuel();
+  const intent = undoIntent({
+    // The SAME question the enable line above asks. Online the offline `session` is rebuilt after
+    // every move, so its undo stack is always empty: the draft that can be taken back lives on the
+    // OnlineSession. Reading `session.canUndo` here lit the button but never reached `undoMove()`.
+    canUndo: online ? !!getOnlineSession()?.canUndo : session.canUndo,
+    // A drawn placement waiting for Confirm, or a Bloom being painted: drawn, never played.
+    hasStagedPreview: !!session.presetMove || !!draw.shape.length || draw.desk.phase === 'live' || !!draw.ptr,
+    hasSelection: session.sel.card !== null || session.sel.hex !== null || session.sel.kind !== null,
+    online,
+  });
+  if (intent === 'undo') return undoMove();
+  if (intent === 'cancel') {
     cancelSel();
     smartCockpit?.hint('UNDONE');
     return;
   }
-  if (draw.shape.length || draw.desk.phase === 'live' || draw.ptr) {
-    cancelDraw();
-    return;
-  }
-  // The SAME question the enable line above asks. Online the offline `session` is rebuilt after
-  // every move, so its undo stack is always empty: the draft that can be taken back lives on the
-  // OnlineSession. Reading `session.canUndo` here lit the button but never reached `undoMove()`.
-  const canUndo = isOnlineDuel() ? !!getOnlineSession()?.canUndo : session.canUndo;
-  if (canUndo) undoMove();
-  else if (!isOnlineDuel() && session.canReplayOpponent) replayBotTurn();
+  // `none`: nothing was moved and nothing is waiting. Offline the same slot may be showing Replay.
+  if (!online && session.canReplayOpponent) replayBotTurn();
 });
 bind('go-rematch', () => {
   // One advance per finish card (owner brief, 2026-10-22): the leading key is the largest target on
@@ -9691,6 +9711,8 @@ let appReady = false;
   pending: () => session?.pending ?? null,
   /** The live tap selection (the same object offline uses), for interaction tests. */
   sel: () => (session?.sel ? { ...session.sel } : null),
+  /** The Bloom being painted right now (the tentative shape, the same one the ghost paints). */
+  drawShape: () => ({ shape: [...draw.shape], reverse: draw.reverse, msg: draw.msg, desk: draw.desk.phase }),
   /** The legal moves the page is offering right now (display coords), for interaction tests. */
   legal: () => (session ? [...session.legal] : []),
   // Online the source of truth is the OnlineSession's draft, not the offline Session the page
