@@ -4,7 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import { apply, boardCoords, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
-import { DRAG_LED_WORDS, SWIPE_MIN_UP_PX, SWIPE_TAP_PX, SWIPE_UP_DOMINANCE, resolveDrag } from '../src/logic/drag.js';
+import {
+  DRAG_LED_WORDS, FLICK_SPEED_PX_PER_MS, SWIPE_MIN_UP_PX, SWIPE_TAP_PX, SWIPE_UP_DOMINANCE, resolveDrag,
+} from '../src/logic/drag.js';
 import type { DragSource } from '../src/logic/drag.js';
 import { EMPTY_SEL, kindOf } from '../src/logic/interaction.js';
 import type { Sel } from '../src/logic/interaction.js';
@@ -153,6 +155,49 @@ describe('place and throw', () => {
     const travel = run(st, { kind: 'hand', cardId: card.id }, { distance: 80, upSpeed: 0.2, upTravel: 80 });
     expect(travel.mode).toBe('flick');
     expect(travel.commit?.t).toBe('Discard');
+  });
+
+  it('an ordinary thumb swipe throws (measured gestures, owner 2026-10-25)', () => {
+    // Speeds are what the drag layer latches over its >=36ms window during the measured swipes:
+    // 150px in 300ms, 90px in 400ms, and the small 60px flick the e2e drives.
+    const st = discardPhase(tutorialChapter('strengthen'));
+    const card = st.hands[0][0]!;
+    const gestures = [
+      { up: 150, peak: 0.5, label: '150px over 300ms' },
+      { up: 90, peak: 0.225, label: '90px over 400ms' },
+      { up: 60, peak: 0.19, label: '60px over 300ms' },
+    ];
+    for (const g of gestures) {
+      const res = run(st, { kind: 'hand', cardId: card.id }, { distance: g.up, upSpeed: g.peak, upTravel: g.up });
+      expect(res.mode, `${g.label} is a throw`).toBe('flick');
+      expect(res.commit?.t, `${g.label} commits the Discard`).toBe('Discard');
+      expect(res.asTap, `${g.label} is not a tap`).toBe(false);
+    }
+  });
+
+  it('the throw line sits at 150 px/s of upward travel', () => {
+    const st = discardPhase(tutorialChapter('strengthen'));
+    const card = st.hands[0][0]!;
+    // "A thumb swipe is 150px/s or faster" (owner): the boundary is inclusive, one step below
+    // is a drag that flies back.
+    expect(FLICK_SPEED_PX_PER_MS).toBe(0.15);
+    const atLine = run(st, { kind: 'hand', cardId: card.id }, { distance: 100, upSpeed: FLICK_SPEED_PX_PER_MS, upTravel: 100 });
+    expect(atLine.mode).toBe('flick');
+    const below = run(st, { kind: 'hand', cardId: card.id }, { distance: 100, upSpeed: FLICK_SPEED_PX_PER_MS - 0.001, upTravel: 100 });
+    expect(below.commit).toBeNull();
+    expect(below.asTap).toBe(false);
+  });
+
+  it('a deliberately slow drag off the target still flies back', () => {
+    const st = discardPhase(tutorialChapter('strengthen'));
+    const card = st.hands[0][0]!;
+    // 120px of upward travel at 120px/s (the measured 24-step, 1.3s drag): not a throw. Released
+    // away from the pile, nothing commits and the ghost returns to the hand.
+    const slow = run(st, { kind: 'hand', cardId: card.id }, { distance: 120, upSpeed: 0.12, upTravel: 120, overDiscardPile: false });
+    expect(slow.mode).toBe('discard');
+    expect(slow.commit).toBeNull();
+    expect(slow.asTap).toBe(false);
+    expect(slow.led).toBeNull();
   });
 
   it('a short or ambiguous move is still a tap, never a throw', () => {

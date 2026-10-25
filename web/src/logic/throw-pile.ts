@@ -29,14 +29,19 @@ export const tapAgainPlays = (pending: Action | null, id: number, product: boole
   (!product || (pending.t !== 'Bloom' && pending.t !== 'Sprout' && pending.t !== 'Discard')) &&
   moveCards(pending).includes(id);
 
-/** The gesture that played a throw. Only the swipe-up gets the boomerang. */
-export type ThrowGesture = 'swipe' | 'tap';
-
 /**
  * Which flight a committed throw gets. Presentation only, decided without the session: the throw
- * has already landed before this is read. `none` is Reduce motion / Speed off — the card simply
- * goes to the pile, with no lift and no spin.
+ * has already landed before this is read.
+ *
+ * OWNER, 2026-10-25: "is the boomerang thing in? dont see it at all". It was in — but only a
+ * machine-fast swipe asked for it. A drop on the Throw pile and a tap on the pile threw with the
+ * plain fly-to-pile, and those are the gestures a player actually uses, so the flourish was never
+ * seen. To a player all three are "the throw", so all three now get it; the gesture no longer
+ * reaches this decision at all.
+ *
+ * The gestures still differ in one thing: where the flight takes off. A swipe and a pile drop
+ * continue from the released ghost (`dragThrowFrom`); a pile tap starts at the card's own box in
+ * the hand. `none` is Reduce motion / Speed off — the card is simply on the pile, no lift, no spin.
  */
-export type ThrowFlight = 'boomerang' | 'ordinary' | 'none';
-export const throwFlight = (gesture: ThrowGesture, motionAllowed: boolean): ThrowFlight =>
-  !motionAllowed ? 'none' : gesture === 'swipe' ? 'boomerang' : 'ordinary';
+export type ThrowFlight = 'boomerang' | 'none';
+export const throwFlight = (motionAllowed: boolean): ThrowFlight => (motionAllowed ? 'boomerang' : 'none');

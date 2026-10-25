@@ -5,7 +5,7 @@
 // existing board painting are untouched.
 import type { Action, View } from '../../../src/engine/index.js';
 import type { Sel } from '../logic/interaction.js';
-import { DRAG_THRESHOLD_PX, resolveDrag } from '../logic/drag.js';
+import { DRAG_THRESHOLD_PX, FLICK_WINDOW_MS, resolveDrag } from '../logic/drag.js';
 import type { DragHover, DragLedWord, DragMode, DragResolution, DragSource } from '../logic/drag.js';
 
 export type DragLayerHooks = {
@@ -114,10 +114,11 @@ type Active = {
   x: number;
   y: number;
   time: number;
-  lastX: number;
-  lastY: number;
-  lastTime: number;
-  /** Peak upward speed (px/ms) seen after the drag started. */
+  /** When the pointer went down, for the "gesture shorter than the window" fallback. */
+  t0: number;
+  /** The last ~8 pointer samples (time, y): upward speed is read over a window, not one frame. */
+  samples: { t: number; y: number }[];
+  /** Peak upward speed (px/ms) measured over FLICK_WINDOW_MS or longer. */
   peakUpSpeed: number;
   shape: string[];
   started: boolean; // past the threshold
@@ -297,9 +298,24 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       if (a.source.kind === 'hand') hooks.onCardFocus?.(a.source.cardId);
     }
     if (!a.started || !ghost) return;
-    const dt = Math.max(1, a.time - a.lastTime);
-    const frameUp = Math.max(0, (a.lastY - a.y) / dt);
-    a.peakUpSpeed = Math.max(a.peakUpSpeed, frameUp);
+    // Upward speed over a window, never one frame: a slow drag with a 3px pointer jitter is not a
+    // swipe. Pairs younger than FLICK_WINDOW_MS are skipped, and the peak only latches confirmed
+    // measurements, so a single spike cannot throw a card.
+    a.samples.push({ t: a.time, y: a.y });
+    if (a.samples.length > 8) a.samples.shift();
+    let measured = false;
+    for (const sample of a.samples) {
+      const dt = a.time - sample.t;
+      if (dt < FLICK_WINDOW_MS) continue;
+      measured = true;
+      a.peakUpSpeed = Math.max(a.peakUpSpeed, Math.max(0, (sample.y - a.y) / dt));
+    }
+    // Younger than the window: read it whole. At that length it cannot be a slow drag, and a quick
+    // desktop flick must not be lost for being faster than the window.
+    if (!measured && a.time - a.t0 < FLICK_WINDOW_MS && a.samples.length > 1) {
+      const oldest = a.samples[0]!;
+      a.peakUpSpeed = Math.max(a.peakUpSpeed, Math.max(0, (oldest.y - a.y) / Math.max(1, a.time - oldest.t)));
+    }
     morphGhost(a, a.resolution.mode === 'place' || a.resolution.mode === 'bloom'
       || a.resolution.mode === 'bloom-open' || a.resolution.mode === 'mega' || !!a.resolution.hoverKey);
     // Visual aim (raised mini + chevron tip) wins when legal; finger tip is the fallback
@@ -416,9 +432,6 @@ export function mountDragLayer(hooks: DragLayerHooks) {
 
   const onMove = (event: PointerEvent) => {
     if (!active || event.pointerId !== active.pointerId) return;
-    active.lastX = active.x;
-    active.lastY = active.y;
-    active.lastTime = active.time;
     active.x = event.clientX;
     active.y = event.clientY;
     active.time = event.timeStamp || performance.now();
@@ -472,9 +485,8 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       x: event.clientX,
       y: event.clientY,
       time: event.timeStamp || performance.now(),
-      lastX: event.clientX,
-      lastY: event.clientY,
-      lastTime: event.timeStamp || performance.now(),
+      t0: event.timeStamp || performance.now(),
+      samples: [{ t: event.timeStamp || performance.now(), y: event.clientY }],
       peakUpSpeed: 0,
       shape: [],
       started: false,

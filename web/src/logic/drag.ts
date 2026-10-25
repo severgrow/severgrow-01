@@ -23,10 +23,20 @@ export const SWIPE_TAP_PX = 24;
 export const SWIPE_MIN_UP_PX = 48;
 /** The upward share of the total travel: at least this much before it is "up", not "sideways". */
 export const SWIPE_UP_DOMINANCE = 0.65;
-/** Peak upward speed (px/ms) that turns a throw drag into a flick. */
-export const FLICK_SPEED_PX_PER_MS = 0.28;
-/** Upward travel (px) that, with enough peak speed, also counts as a flick. */
-export const FLICK_TRAVEL_PX = 64;
+/**
+ * Peak upward speed (px/ms) that turns a throw drag into a swipe. 0.15 = 150 px/s.
+ *
+ * Owner, 2026-10-25 ("I don't see it at all"): the old 0.28 (280 px/s) was a brisk flick, not a
+ * considered thumb swipe, so a normal swipe fell through to "a deliberate drag that missed" and
+ * threw nothing. Measured on the real page, a 150px swipe over 300ms reads ~0.5 px/ms and a
+ * 60px flick ~0.19; a deliberately slow 120px drag over 1.3s reads ~0.12. 0.15 sits in the gap.
+ *
+ * The speed is measured over a window of at least FLICK_WINDOW_MS in `ui/drag-layer.ts`, so one
+ * jittery pointer frame cannot fake a swipe.
+ */
+export const FLICK_SPEED_PX_PER_MS = 0.15;
+/** The window (ms) the drag layer averages upward speed over before calling it a speed. */
+export const FLICK_WINDOW_MS = 36;
 /** How close (px) the pointer must come to the throw pile / cockpit throw zone. */
 export const PILE_GRAB_PX = 96;
 
@@ -64,7 +74,10 @@ export type DragInput = {
   overDiscardPile: boolean;
   /** The Bloom shape painted so far (the caller keeps it between moves). */
   shape: readonly string[];
-  /** Peak upward speed so far this gesture (px/ms, 0 when it never moved up). */
+  /**
+   * The fastest upward speed seen this gesture (px/ms, 0 when it never moved up). The page reads
+   * it over a window of at least FLICK_WINDOW_MS so a single jittery frame cannot fake a swipe.
+   */
   upSpeed: number;
   /** How far upward the pointer has travelled from the press (px, 0 when below start). */
   upTravel: number;
@@ -141,10 +154,11 @@ function resolveThrow(input: DragInput, card: Card): DragResolution {
   if (!discard) return cancel(input);
   const up = Math.max(0, input.upTravel);
   const upright = up >= SWIPE_MIN_UP_PX && up >= SWIPE_UP_DOMINANCE * Math.max(input.distance, 1);
-  // Peak speed, or a clear upward carry with a softer peak — release often decelerates, so the
-  // last frame alone used to miss flicks.
-  const flick = upright && (input.upSpeed >= FLICK_SPEED_PX_PER_MS
-    || (input.upSpeed >= FLICK_SPEED_PX_PER_MS * 0.55 && up >= FLICK_TRAVEL_PX));
+  // One rule (owner, 2026-10-25): a clearly upward swipe at 150 px/s or faster is a throw. The old
+  // second tier ("a softer peak still counts after 64px") existed because a single slow final
+  // frame could hide a flick; the speed is now read over a >=36ms window, so the last frame can no
+  // longer decide it and the extra tier would only let a deliberately slow drag throw.
+  const flick = upright && input.upSpeed >= FLICK_SPEED_PX_PER_MS;
   if (flick) return { active: true, mode: 'flick', commit: discard, hoverKey: null, hover: 'flick', shape: [], openOptions: false, led: 'THROW', asTap: false };
   // The pile is a drop target only once the move is a real drag, not a jitter inside its grab
   // radius. Under SWIPE_TAP_PX it falls through to the tap below.

@@ -93,7 +93,6 @@ import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { tapAgainPlays, throwFlight, throwPileAction } from './logic/throw-pile.js';
-import type { ThrowGesture } from './logic/throw-pile.js';
 import { undoIntent } from './logic/undo.js';
 import {
   goalReachable, lessonAllows, lessonBeat, openingDisplay, lessonFor, lessonLocked, lessonOffersBloom, lessonOpening,
@@ -459,12 +458,6 @@ let botBusy = false;
 let epoch = 0;
 let pumping = false;
 let cardRects = new Map<number, DOMRect>();
-/**
- * The card whose next human discard must get the swipe-up boomerang (owner, 2026-10-25). Set by
- * humanPlay when the gesture was a swipe and consumed by that discard step; the move itself is
- * already committed by then. Cleared by fast-forward (a skipped flight) and by a refused play.
- */
-let boomerangCard: number | null = null;
 /** Where the committed throw's ghost was when released (null: use the hand card's own box). */
 let dragThrowFrom: DOMRect | null = null;
 /**
@@ -2908,17 +2901,14 @@ function drainInstallInvite() {
   flushInstallInvite();
 }
 
-function humanPlay(a: Action, opts: { auto?: boolean; throwGesture?: ThrowGesture; flightFrom?: DOMRect } = {}) {
+function humanPlay(a: Action, opts: { auto?: boolean; flightFrom?: DOMRect } = {}) {
   bloomPick = []; // a move is made: nothing stays held toward a Bloom
-  // A swipe-up throw asks for the boomerang. This is only a presentation hint; the hint is
-  // attached AFTER the move commits (below), so the animation can never gate or delay it.
-  const swipe = opts.throwGesture === 'swipe' && a.t === 'Discard';
   // Was this throw made from the picked card? Then the Throw pile is swollen right now, and the
   // swell belongs to the flight, not only to the selection.
   const fromPickedPile = a.t === 'Discard' && !!session && session.pending?.t === 'Discard' && session.pending.card === a.card;
   // The » step, taken once in a lesson, is taught: from then on the game moves on by itself.
   if (isOnlineDuel()) {
-    void humanPlayOnline(a, swipe, opts.flightFrom);
+    void humanPlayOnline(a, opts.flightFrom);
     return;
   }
   if (!session || (coach.tutorial && tutorialTransitionPending)) return;
@@ -2938,7 +2928,6 @@ function humanPlay(a: Action, opts: { auto?: boolean; throwGesture?: ThrowGestur
   // The throw is already in the engine and the log; only now does the discard step learn which
   // flight it gets, and that it may continue from where the released ghost was.
   if (a.t === 'Discard' && p.steps.some((step) => step.k === 'discard' && step.player === HUMAN)) {
-    if (swipe) boomerangCard = a.card;
     if (opts.flightFrom) dragThrowFrom = opts.flightFrom;
     if (fromPickedPile) holdThrowSwell();
   }
@@ -2956,18 +2945,14 @@ function humanPlay(a: Action, opts: { auto?: boolean; throwGesture?: ThrowGestur
 }
 
 /** Online: Draw commits, Grow drafts locally, Throw sends the batch. */
-async function humanPlayOnline(a: Action, swipe = false, flightFrom?: DOMRect) {
+async function humanPlayOnline(a: Action, flightFrom?: DOMRect) {
   const os = getOnlineSession();
   // Same affordance as offline: a throw from the picked card keeps the swollen pile it aimed at.
   const fromPickedPile = a.t === 'Discard' && !!session && session.pending?.t === 'Discard' && session.pending.card === a.card;
-  if (!os || !session) return void (boomerangCard = null);
-  if (os.finished) return void (boomerangCard = null);
+  if (!os || !session || os.finished) return;
   // THE GATE. The enemy's finished turn is still being shown: nothing may be played, and — just
   // as important — nothing may fast-forward it away. Skipping is the Skip control's job alone.
-  if (os.isRevealing) {
-    boomerangCard = null;
-    return revealWaitNotice();
-  }
+  if (os.isRevealing) return revealWaitNotice();
   markTiming(
     a.t === 'Draw' ? 'draw:tap' : a.t === 'EndAct' || a.t === 'Discard' ? 'throw:tap' : 'move:tap',
     { action: a.t },
@@ -2979,7 +2964,6 @@ async function humanPlayOnline(a: Action, swipe = false, flightFrom?: DOMRect) {
   guideGoal = null;
   const result = await os.play(a);
   if (!result.ok) {
-    boomerangCard = null; // the move did not land: its flight must not play on a later discard
     // A refused move must never be silent: the two-phone playtest read an unexplained refusal as
     // "painting is broken". Keep the painted shape on screen and say why it could not be placed
     // (the shared info line above the board), with the same shake a refused tap gets. Committing
@@ -3008,7 +2992,6 @@ async function humanPlayOnline(a: Action, swipe = false, flightFrom?: DOMRect) {
     log.unshift(describe(result.played.before, result.played.action, result.played.after, HUMAN));
     markMoment(result.played.steps, result.played.before);
     if (a.t === 'Discard' && result.played.steps.some((step) => step.k === 'discard' && step.player === HUMAN)) {
-      if (swipe) boomerangCard = a.card;
       if (flightFrom) dragThrowFrom = flightFrom;
       if (fromPickedPile) holdThrowSwell();
     }
@@ -3388,8 +3371,7 @@ function fastForward() {
   animLog('fast-forward', { pending: queue.pending, pumping, epoch });
   disarmRevealWatchdog();
   epoch++;
-  // A skipped flight never plays the boomerang; forget its hints with the animations they belonged to.
-  boomerangCard = null;
+  // A skipped flight never plays the boomerang; forget its take-off with the animations it belonged to.
   dragThrowFrom = null;
   releaseThrowSwell();
   replaying = false;
@@ -4236,19 +4218,19 @@ async function playStep(step: Step, my: number) {
         paintDiscardTop();
       };
       if (step.player === HUMAN) {
-        // The swipe-up throw gets the boomerang INSTEAD of the ordinary flight (never both).
-        // `boomerangCard` is a hint set after the move already committed (see humanPlay), and it
-        // is consumed here so it can never leak onto a later discard.
-        const swipe = boomerangCard === step.card.id;
-        if (swipe) boomerangCard = null;
+        // EVERY human throw gets the boomerang (owner, 2026-10-25): the swipe up, the drop on the
+        // pile and the tap on the pile. It replaced the old fly-to-pile for only the swipe, which
+        // is why the owner never saw it — he throws with the pile.
+        //
         // A committed drag continues from the released ghost's box, never snapping back to the
-        // hand for one frame. The hint is consumed with the step.
+        // hand for one frame. A pile tap has no release box, so it takes off from the card's hand
+        // box: same flourish, different start. The box is consumed with the step.
         let from = cardRects.get(step.card.id);
         if (dragThrowFrom) {
           from = dragThrowFrom;
           dragThrowFrom = null;
         }
-        const flight = IS_FUTA04 ? throwFlight(swipe ? 'swipe' : 'tap', motionOn()) : 'ordinary';
+        const flight = IS_FUTA04 ? throwFlight(motionOn()) : 'ordinary';
         if (from) {
           const to = ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect();
           const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
@@ -9480,7 +9462,7 @@ const dragLayer = mountDragLayer({
   setThrowZone: (on) => {
     document.getElementById('futa04-box')?.classList.toggle('drag-throw-zone', on);
   },
-  commit: (a, mode, from) => {
+  commit: (a, _mode, from) => {
     // A pile tap / drag draws at once. Drag/flick throw commits on release (the gesture is
     // the confirmation); card taps still select / deselect.
     if (a.t === 'Draw') {
@@ -9489,9 +9471,9 @@ const dragLayer = mountDragLayer({
     }
     if (IS_FUTA04 && a.t === 'Discard') {
       vibrate(settings.vibration, 12);
-      // Only the swipe-up gets the boomerang; a drop onto the pile keeps the ordinary flight.
-      // `from` is the released ghost's box, so the flight continues where the card was.
-      return humanPlay(a, { throwGesture: mode === 'flick' ? 'swipe' : 'tap', ...(from ? { flightFrom: from } : {}) });
+      // Every throw gesture gets the boomerang now (owner, 2026-10-25): the swipe, and the drop on
+      // the pile. `from` is the released ghost's box, so the flight continues where the card was.
+      return humanPlay(a, from ? { flightFrom: from } : {});
     }
     if (asksConfirm(a)) {
       session?.preset(a);

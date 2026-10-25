@@ -75,4 +75,18 @@ describe('the swipe-up boomerang', () => {
   it('is pure: the same rects plan the same flight', () => {
     expect(planBoomerang(from, board, to, true)).toEqual(planBoomerang(from, board, to, true));
   });
+
+  it('still flies when the throw was released on the pile itself', () => {
+    // A drop onto the Throw pile takes off where the finger let go: `from` and `to` are the same
+    // box. The card still has to visit the board, or the gesture would get no flourish at all.
+    const onPile = { left: to.left, top: to.top, width: to.width, height: to.height };
+    const plan = planBoomerang(onPile, board, to, true);
+    expect(plan.duration).toBe(BOOMERANG.total);
+    const settle = plan.frames.find((frame) => frame.offset === BOOMERANG.settleAt);
+    expect(settle, 'it still settles over the board').toBeTruthy();
+    expect(String(settle!.transform)).toContain(`translate(${(board.x - (onPile.left + onPile.width / 2)).toFixed(1)}px`);
+    const last = plan.frames.at(-1)!;
+    expect(String(last.transform)).toContain('translate(0.0px, 0.0px)');
+    expect(last.opacity).toBe(0);
+  });
 });
