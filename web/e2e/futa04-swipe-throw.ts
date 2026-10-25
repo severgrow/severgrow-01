@@ -147,6 +147,43 @@ const mouseSwipe = async (p: Page, from: { x: number; y: number }, to: { x: numb
   await p.mouse.up();
 };
 
+/**
+ * A HUMAN-SPEED gesture: the moves are dispatched inside the page `gap` ms apart.
+ *
+ * The CDP touch transport costs ~130ms per step on its own (measured), so "10 steps 25ms apart"
+ * over CDP is really a 1.6s crawl — it proves the machine path, not a thumb. These are real
+ * PointerEvents delivered to the real element under the point and bubbled to the app's own
+ * listeners, so the recogniser's own clock sees the timing a person makes.
+ *
+ * A source string, not a function: tsx's esbuild `keepNames` injects a `__name` helper that does
+ * not exist inside page.evaluate.
+ */
+const HUMAN_SWIPE = `(async ({ from: a, to: b, steps: n, gap: g }) => {
+  const fire = (type, x, y) => {
+    const target = document.elementFromPoint(x, y) || document.body;
+    target.dispatchEvent(new PointerEvent(type, {
+      pointerId: 7, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true,
+      clientX: x, clientY: y, button: 0, buttons: type === 'pointerup' ? 0 : 1,
+    }));
+  };
+  const t0 = performance.now();
+  fire('pointerdown', a.x, a.y);
+  for (let i = 1; i <= n; i++) {
+    await new Promise((r) => setTimeout(r, g));
+    fire('pointermove', a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n);
+  }
+  await new Promise((r) => setTimeout(r, g));
+  fire('pointerup', b.x, b.y);
+  return Math.round(performance.now() - t0);
+})`;
+const humanSwipe = (
+  p: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  steps = 12,
+  gap = 25,
+) => p.evaluate(`(${HUMAN_SWIPE})(${JSON.stringify({ from, to, steps, gap })})`) as Promise<number>;
+
 /** The real phone path: CDP touch events, so touch-action and pull-to-refresh are actually in play. */
 const cdpFor = new WeakMap<Page, CDPSession>();
 const touchSwipe = async (p: Page, from: { x: number; y: number }, to: { x: number; y: number }, steps = 10) => {
@@ -170,6 +207,8 @@ type FlightSample = { x: number; y: number; rot: number; target: boolean; pileSc
 type FlightRecord = {
   samples: FlightSample[];
   transforms: string[];
+  /** The class of every flyer born in the window: a cancelled drag's ghost is `.flyer card back`. */
+  classes: string[];
   heldTarget: boolean;
   heldScale: number;
   landing?: { x: number; y: number; pileX: number; pileY: number };
@@ -190,12 +229,13 @@ const startFlyerTracking = (p: Page, ms = 1600): Promise<void> =>
         samples: { x: number; y: number; rot: number; target: boolean; pileScale: number; pileX: number; pileY: number }[];
         done: boolean;
         transforms: string[];
+        classes: string[];
         heldTarget: boolean;
         heldScale: number;
         landing?: { x: number; y: number; pileX: number; pileY: number };
       };
     };
-    w.__flight = { samples: [], done: false, transforms: [], heldTarget: false, heldScale: 1 };
+    w.__flight = { samples: [], done: false, transforms: [], classes: [], heldTarget: false, heldScale: 1 };
     // No named inner functions: esbuild's keepNames injects `__name` into those, and that helper
     // does not exist inside page.evaluate.
     new MutationObserver((records) => {
@@ -203,6 +243,7 @@ const startFlyerTracking = (p: Page, ms = 1600): Promise<void> =>
         for (const node of record.addedNodes) {
           if (!(node instanceof HTMLElement) || !node.classList.contains('flyer')) continue;
           const flight = w.__flight!;
+          flight.classes.push(node.className);
           const discard = document.getElementById('discard');
           if (discard) {
             flight.heldTarget = discard.classList.contains('futa04-throw-target');
@@ -286,13 +327,14 @@ const readFlyerTracking = (p: Page): Promise<FlightRecord> =>
         samples: unknown[];
         done: boolean;
         transforms: string[];
+        classes: string[];
         heldTarget: boolean;
         heldScale: number;
         landing?: { x: number; y: number; pileX: number; pileY: number };
       };
     };
     const flight = w.__flight;
-    if (!flight) return { samples: [], transforms: [], heldTarget: false, heldScale: 1, landing: undefined };
+    if (!flight) return { samples: [], transforms: [], classes: [], heldTarget: false, heldScale: 1, landing: undefined };
     const t0 = performance.now();
     while (!flight.done && performance.now() - t0 < 5000) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -307,6 +349,7 @@ const readFlyerTracking = (p: Page): Promise<FlightRecord> =>
     return {
       samples: flight.samples,
       transforms: flight.transforms,
+      classes: flight.classes,
       heldTarget: flight.heldTarget,
       heldScale: flight.heldScale,
       landing: flight.landing,
@@ -489,18 +532,27 @@ try {
     await page.screenshot({ path: `${SHOTS}/${tag}-10-after-swell.png` });
     await idle(page);
 
-    // 3. Tap the pile with a card picked: the ordinary throw, no boomerang required.
+    // 3. Tap the pile with a card picked. To a player this IS the throw, so it gets the boomerang
+    // too (owner, 2026-10-25: it used to fly plainly, which is why he never saw the flourish).
     ({ before, card } = await toThrow(page, 810002 + w));
     await tapCard(page, card, touch);
-    await page.waitForTimeout(120);
+    await page.waitForTimeout(160);
     const pile = await pilePoint(page);
+    await startFlyerTracking(page);
     if (touch) await page.touchscreen.tap(pile.x, pile.y);
     else await page.locator('#discard').click();
-    await page.waitForTimeout(120);
+    await page.waitForTimeout(90);
     s = await state(page);
     check(s.discard.length === before.discard.length + 1, `${tag}: tapping the pile throws the picked card`);
-    await page.waitForTimeout(200);
     await page.screenshot({ path: `${SHOTS}/${tag}-07-tap-pile.png` });
+    const pileFlight = await readFlyerTracking(page);
+    check(pileFlight.transforms.some((t) => /rotate\(-?[1-9][\d.]*deg\)/.test(t)),
+      `${tag}: a pile tap boomerangs (${pileFlight.transforms.length} frames)`);
+    const pileMiss = Math.hypot(
+      (pileFlight.landing?.x ?? 0) - (pileFlight.landing?.pileX ?? 0),
+      (pileFlight.landing?.y ?? 0) - (pileFlight.landing?.pileY ?? 0),
+    );
+    check(!!pileFlight.landing && pileMiss <= 10, `${tag}: the pile tap's boomerang lands on the pile (${pileMiss.toFixed(1)}px off)`);
     await idle(page);
 
     // 4. A sloppy 16px swipe is still a tap: it deselects, never throws.
@@ -533,6 +585,44 @@ try {
       check(thrown.suit === original.suit && thrown.rank === original.rank, `${tag}: it is the ORIGINAL card (${original.rank})`);
       await idle(page);
     }
+
+    // 5b. A REALISTIC swipe — 150px in ~300ms, twelve moves 25ms apart — throws AND boomerangs.
+    // The flick in step 2 is machine-speed (the e2e has been proving only that); this is the one
+    // a thumb makes, and it is what the owner could not see.
+    ({ before, card } = await toThrow(page, 810010 + w));
+    const realFrom = await visiblePoint(page, card);
+    await startFlyerTracking(page);
+    const realMs = await humanSwipe(page, realFrom, { x: realFrom.x, y: realFrom.y - 150 }, 12, 25);
+    await page.waitForTimeout(80);
+    s = await state(page);
+    check(s.discard.length === before.discard.length + 1, `${tag}: a realistic swipe throws (${realMs}ms)`);
+    check(realMs >= 250 && realMs <= 800, `${tag}: the swipe took ~300ms of wall clock, not an instant (${realMs}ms)`);
+    await page.screenshot({ path: `${SHOTS}/${tag}-15-real-swipe-midflight.png` });
+    const realFlight = await readFlyerTracking(page);
+    check(realFlight.transforms.some((t) => /rotate\(-?[1-9][\d.]*deg\)/.test(t)),
+      `${tag}: the realistic swipe boomerangs (${realFlight.transforms.length} frames)`);
+    const realMiss = Math.hypot(
+      (realFlight.landing?.x ?? 0) - (realFlight.landing?.pileX ?? 0),
+      (realFlight.landing?.y ?? 0) - (realFlight.landing?.pileY ?? 0),
+    );
+    check(!!realFlight.landing && realMiss <= 10, `${tag}: the realistic swipe's boomerang lands on the pile (${realMiss.toFixed(1)}px off)`);
+    await idle(page);
+
+    // 5c. THE ESCAPE HATCH. A deliberately slow drag that ends away from the pile is not a throw:
+    // nothing commits, and the ghost flies back to the hand with no spin. Where the line sits:
+    // 48px of upward travel at 150px/s or faster (a swipe), or any real drag into the pile's grab
+    // radius (a drop). Everything slower, and released elsewhere, comes home.
+    ({ before, card } = await toThrow(page, 810012 + w));
+    const slowFrom = await visiblePoint(page, card);
+    await startFlyerTracking(page, 1200);
+    const slowMs = await humanSwipe(page, slowFrom, { x: slowFrom.x, y: slowFrom.y + 110 }, 24, 45);
+    await page.waitForTimeout(120);
+    s = await state(page);
+    check(JSON.stringify(s) === JSON.stringify(before), `${tag}: a slow 1.1s drag away from the pile throws nothing (${slowMs}ms)`);
+    const back = await readFlyerTracking(page);
+    check(back.classes.some((c) => c.includes('back')), `${tag}: the ghost flies back to the hand (${back.classes.join(' | ')})`);
+    check(!back.transforms.some((t) => /rotate\(-?[1-9][\d.]*deg\)/.test(t)), `${tag}: a flying-back ghost never boomerangs`);
+    await idle(page);
 
     // 6. Reduce motion / Speed off: the throw lands, but there is no flyer and no spin.
     // The app patches localStorage to add its channel prefix, so a post-boot setItem can double

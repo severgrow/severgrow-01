@@ -1,6 +1,7 @@
 // The owner's Throw-step gestures (2026-10-25). A tap picks a card; the same card again puts it
 // down. A tap on a hand card NEVER throws. Throwing is a swipe up, a drag onto the Throw pile, or
 // a tap on the pile while a card is picked. Every commit is still the session's own legal Discard.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { apply, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
@@ -84,7 +85,7 @@ describe('tap the Throw pile to throw', () => {
   });
 });
 
-describe('the swipe-up throw commits first; the flight is presentation only', () => {
+describe('every throw gesture gets the boomerang, not just the swipe', () => {
   it('the session reaches the after-state before any animation is planned', () => {
     const s = discardState(7);
     const session = new Session(s);
@@ -100,9 +101,22 @@ describe('the swipe-up throw commits first; the flight is presentation only', ()
 
     // Planning the boomerang is a pure function of rects and the motion gate; it never sees the
     // session, an action or the legal list, and cannot delay the move that already landed.
-    expect(throwFlight('swipe', true)).toBe('boomerang');
-    expect(throwFlight('tap', true)).toBe('ordinary');
-    expect(throwFlight('swipe', false)).toBe('none');
-    expect(throwFlight('tap', false)).toBe('none');
+    expect(throwFlight(true)).toBe('boomerang');
+    expect(throwFlight(false)).toBe('none');
+  });
+
+  it('the gesture no longer decides whether the flourish plays (owner, 2026-10-25)', () => {
+    // THE BUG: throwFlight used to read `gesture === 'swipe'`, so only the machine-fast swipe got
+    // the boomerang and a pile drop / pile tap threw with the plain fly-to-pile. All three
+    // gestures now get it; the source must not grow that gate back.
+    const src = readFileSync(new URL('../src/logic/throw-pile.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/gesture\s*===\s*'swipe'/);
+    expect(src).not.toContain("'ordinary'");
+
+    // The only thing a gesture changes is where the flight starts: off the released ghost (swipe,
+    // pile drop) or off the card's box in the hand (pile tap).
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    expect(main).toMatch(/let from = cardRects\.get\(step\.card\.id\);/);
+    expect(main).toMatch(/if \(dragThrowFrom\) \{\n\s+from = dragThrowFrom;/);
   });
 });
