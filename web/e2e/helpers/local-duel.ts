@@ -350,8 +350,9 @@ export const tapExposed = async (session: SeatSession, selector: string): Promis
 
 /**
  * End this seat's online turn THE WAY THE PAGE DOES: the Throw control leaves the Grow step (its
- * EndAct is batched with the local draft), then the forced card goes to the throw pile. Futa04 has
- * no Confirm box, so the same card is tapped twice ("tap again to place it").
+ * EndAct is batched with the local draft), then the forced card goes to the throw pile. Owner rule
+ * (2026-10-25): a tap picks the card; the same card tapped again DESELECTS. The throw is the tap
+ * on the Throw pile while the card is picked.
  */
 export const endTurnViaPage = async (session: SeatSession, timeout = 25_000): Promise<boolean> => {
   await waitIdle(session);
@@ -372,7 +373,10 @@ export const endTurnViaPage = async (session: SeatSession, timeout = 25_000): Pr
   )) as number | null;
   if (cardId === null) return false;
   for (let i = 0; i < 3; i++) {
-    await tapExposed(session, `#hand [data-card="${cardId}"]`);
+    await tapExposed(session, `#hand [data-card="${cardId}"]`); // pick (never throw)
+    await sleep(250);
+    if ((await statePhase(session)) !== 'DISCARD') return true;
+    await tapExposed(session, '#discard'); // the throw: tap the pile while it is picked
     await sleep(450);
     if ((await statePhase(session)) !== 'DISCARD') return true;
   }

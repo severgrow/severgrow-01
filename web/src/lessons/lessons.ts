@@ -680,7 +680,7 @@ export type BeatCtx = {
   card: number | null;
   /** A Bloom / Blast is being placed (its tiles are the next touch). */
   placing: 'bloom' | 'blast' | null;
-  /** A throw is waiting for its second tap (the card id). */
+  /** A card is picked; the throw is the swipe up or the Throw pile (the card id). */
   throwPending: number | null;
   seen: ReadonlySet<string>;
   /** Bloom / Bomb / Blast hellos already shown on this device. */

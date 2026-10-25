@@ -289,8 +289,8 @@ const endGrowStep = async (session: SeatSession): Promise<{ ok: boolean; how: st
 };
 
 /**
- * Throw a card in the DISCARD step. Futa04 has no Confirm box: the first tap picks the card, a
- * second tap on the same card throws it (the "tap again to place it" rule).
+ * Throw a card in the DISCARD step. Owner rule (2026-10-25): a tap picks the card and the same
+ * card again DESELECTS, so the throw is a tap on the Throw pile while the card is picked.
  */
 const throwACard = async (session: SeatSession): Promise<{ ok: boolean; how: string }> => {
   // The engine forces ONE card into the throw pile: read it from the page's own legal list.
@@ -307,8 +307,11 @@ const throwACard = async (session: SeatSession): Promise<{ ok: boolean; how: str
   if (cardId === null) return { ok: false, how: 'no Discard was legal' };
   for (let i = 0; i < 3; i++) {
     await tapSelectorTouch(session, `#hand [data-card="${cardId}"]`);
-    await sleep(450);
+    await sleep(250);
     if ((await statePhase(session)) !== 'DISCARD') return { ok: true, how: `threw card ${cardId}` };
+    await tapSelectorTouch(session, '#discard');
+    await sleep(450);
+    if ((await statePhase(session)) !== 'DISCARD') return { ok: true, how: `threw card ${cardId} via the pile` };
   }
   const confirmVisible = await session.page
     .locator('#confirm-play')

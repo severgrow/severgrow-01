@@ -79,7 +79,8 @@ const playTurn = async (s: SeatSession): Promise<void> => {
     if (card === null) break;
     await s.page.locator(`#hand [data-card="${card}"]`).click({ force: true }).catch(() => undefined);
     await tick(250);
-    await s.page.locator(`#hand [data-card="${card}"]`).click({ force: true }).catch(() => undefined);
+    // Pick, then tap the pile: a second card tap only deselects (owner, 2026-10-25).
+    await s.page.locator('#discard').click({ force: true }).catch(() => undefined);
     await waitFor(async () => (await phase(s)) !== 'DISCARD', 4_000);
   }
 };

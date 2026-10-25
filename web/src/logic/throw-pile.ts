@@ -1,10 +1,16 @@
-// TAP THE THROW PILE TO THROW — an extra way to finish a throw, in every mode.
+// THE THROW STEP'S GESTURES (owner, 2026-10-25).
 //
-// The player picks the card first (the lifted card is the waiting move); a tap on the Throw pile
-// then throws that card, the same as tapping it again. The pile never chooses a card on its own:
-// with nothing picked it throws nothing, and outside the Throw step it keeps its old meaning
-// (draw from it, or nothing).
+// A tap on a hand card PICKS it; the same card tapped again PUTS IT DOWN. A card tap never throws
+// in the product copy: the old "tap again to throw" was the thing confusing testers. There are
+// exactly three ways to throw now, and each one still plays only a Discard the session already
+// listed as legal:
+//   1. swipe up on a hand card (the drag layer's flick);
+//   2. drag a hand card onto the Throw pile;
+//   3. tap the Throw pile while a card is picked (this file).
+// The pile never chooses a card on its own: with nothing picked it throws nothing, and outside
+// the Throw step it keeps its old meaning (draw from it, or nothing).
 import type { Action, Phase } from '../../../src/engine/index.js';
+import { moveCards } from '../../../src/playtest/names.js';
 
 /** The throw a tap on the Throw pile plays now, or null. Only ever a legal Discard already waiting. */
 export const throwPileAction = (phase: Phase, pending: Action | null, legal: readonly Action[]): Action | null => {
@@ -12,3 +18,25 @@ export const throwPileAction = (phase: Phase, pending: Action | null, legal: rea
   const card = pending.card;
   return legal.find((a) => a.t === 'Discard' && a.card === card) ?? null;
 };
+
+/**
+ * May a tap on a card of the waiting move PLAY it? This is the legacy "tap again to place it"
+ * path. The product copy (Futa04) keeps it for board moves but never for a Discard: a second tap
+ * on a picked card there deselects (the owner's rule above). The classic copies are unchanged.
+ */
+export const tapAgainPlays = (pending: Action | null, id: number, product: boolean): boolean =>
+  !!pending &&
+  (!product || (pending.t !== 'Bloom' && pending.t !== 'Sprout' && pending.t !== 'Discard')) &&
+  moveCards(pending).includes(id);
+
+/** The gesture that played a throw. Only the swipe-up gets the boomerang. */
+export type ThrowGesture = 'swipe' | 'tap';
+
+/**
+ * Which flight a committed throw gets. Presentation only, decided without the session: the throw
+ * has already landed before this is read. `none` is Reduce motion / Speed off — the card simply
+ * goes to the pile, with no lift and no spin.
+ */
+export type ThrowFlight = 'boomerang' | 'ordinary' | 'none';
+export const throwFlight = (gesture: ThrowGesture, motionAllowed: boolean): ThrowFlight =>
+  !motionAllowed ? 'none' : gesture === 'swipe' ? 'boomerang' : 'ordinary';
