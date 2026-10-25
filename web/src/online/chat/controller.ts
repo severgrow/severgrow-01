@@ -1,3 +1,4 @@
+import type { ChatDraftStore } from './draft-store.js';
 import type { DuelClient } from '../../../../server/src/client.js';
 import type {
   ChatContent,
@@ -16,6 +17,7 @@ export type ChatState = {
   outgoing: Outgoing | null;
   draft: string;
   unread: number;
+  unreadFrom: number | null;
   open: boolean;
   loading: boolean;
   error: boolean;
@@ -36,13 +38,18 @@ export const createChatController = (o: {
   channel: MatchChannel;
   snapshot: () => MatchDriverSnapshot;
   onChange: (state: ChatState) => void;
+  draftStore?: ChatDraftStore;
   readCursor?: { load: () => number; save: (sequence: number) => void };
 }) => {
+  const saved = o.draftStore?.load();
   const state: ChatState = {
     messages: [],
-    outgoing: null,
-    draft: '',
+    outgoing: saved?.outgoing
+      ? { ...saved.outgoing, state: 'failed', code: null }
+      : null,
+    draft: saved?.draft ?? '',
     unread: 0,
+    unreadFrom: null,
     open: false,
     loading: false,
     error: false,
@@ -55,6 +62,16 @@ export const createChatController = (o: {
     hasNewer: false,
     preview: null,
   };
+  const persistDraft = () =>
+    o.draftStore?.save({
+      draft: state.draft,
+      outgoing: state.outgoing
+        ? {
+            content: state.outgoing.content,
+            requestId: state.outgoing.requestId,
+          }
+        : null,
+    });
   const abort = new AbortController();
   let readThrough = o.readCursor?.load() ?? 0;
   let stopped = false,
@@ -91,9 +108,26 @@ export const createChatController = (o: {
       const incoming = fresh.filter(
         (m) => !m.mine && m.sequence > Math.max(cursor, readThrough),
       );
+      if (incoming.length && ((!state.open && state.unread === 0) || initial))
+        state.unreadFrom = incoming[0]!.sequence;
       if (!state.open) state.unread += incoming.length;
       if (!initial && incoming.length && !state.open && !r.muted && !r.blocked)
         state.preview = incoming.at(-1)!;
+    }
+    if (
+      state.outgoing &&
+      [...r.messages, ...(r.sent ? [r.sent] : [])].some(
+        (m) => m.mine && m.requestId === state.outgoing!.requestId,
+      )
+    ) {
+      if (
+        state.outgoing.content.text !== null &&
+        state.draft.trim().normalize('NFC') ===
+          state.outgoing.content.text.normalize('NFC')
+      )
+        state.draft = '';
+      state.outgoing = null;
+      persistDraft();
     }
     const combined = new Map(
       [...state.messages, ...r.messages, ...(r.sent ? [r.sent] : [])].map(
@@ -205,6 +239,7 @@ export const createChatController = (o: {
       };
     } else state.outgoing.state = 'pending';
     const outgoing = state.outgoing;
+    persistDraft();
     generation++;
     mutation = true;
     emit();
@@ -236,6 +271,7 @@ export const createChatController = (o: {
       dirty = true;
     } finally {
       mutation = false;
+      if (!stopped) persistDraft();
       emit();
       flushDirty();
     }
@@ -302,6 +338,7 @@ export const createChatController = (o: {
       state.open = value;
       state.preview = null;
       if (value) {
+        if (state.unread === 0) state.unreadFrom = null;
         state.unread = 0;
         readThrough = cursor;
         o.readCursor?.save(cursor);
@@ -311,6 +348,7 @@ export const createChatController = (o: {
     },
     draft(value: string) {
       state.draft = value;
+      persistDraft();
     },
     dismissPreview() {
       state.preview = null;
@@ -319,6 +357,7 @@ export const createChatController = (o: {
     discard() {
       if (state.outgoing?.state === 'failed') {
         state.outgoing = null;
+        persistDraft();
         emit();
       }
     },

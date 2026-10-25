@@ -1,3 +1,7 @@
+import {
+  chatDraftStore,
+  type ChatDraftStore,
+} from '../src/online/chat/draft-store.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createChatController } from '../src/online/chat/controller.js';
 import type { DuelClient } from '../../server/src/client.js';
@@ -28,7 +32,7 @@ const page = (
   blockedByMe: false,
   ...extras,
 });
-const setup = () => {
+const setup = (draftStore?: ChatDraftStore) => {
   let current = {
     status: 'active',
     serverPhase: 'DRAW',
@@ -61,6 +65,7 @@ const setup = () => {
     channel,
     snapshot: () => current,
     onChange,
+    ...(draftStore ? { draftStore } : {}),
   });
   return {
     ctl,
@@ -284,5 +289,145 @@ describe('bounded history navigation', () => {
     expect(x.ctl.state().messages.at(-1)?.sequence).toBe(200);
     expect(x.ctl.state().hasNewer).toBe(false);
     x.ctl.stop();
+  });
+});
+
+describe('draft recovery and unread boundaries', () => {
+  const store = () => {
+    const values = new Map<string, string>();
+    return {
+      get: (k: string) => values.get(k) ?? null,
+      set: (k: string, v: string) => {
+        values.set(k, v);
+      },
+      remove: (k: string) => {
+        values.delete(k);
+      },
+    };
+  };
+  it('restores an unsent draft after teardown without automatically sending', async () => {
+    const saved = chatDraftStore(store(), 'match', 0),
+      a = setup(saved);
+    a.ctl.draft('Keep this draft');
+    a.ctl.stop();
+    const b = setup(saved);
+    b.ctl.start();
+    await tick();
+    expect(b.ctl.state().draft).toBe('Keep this draft');
+    expect(b.client.chatSend).not.toHaveBeenCalled();
+    b.ctl.stop();
+  });
+  it('preserves the request ID for an ambiguous send across reload and clears it after success', async () => {
+    const saved = chatDraftStore(store(), 'match', 0),
+      a = setup(saved);
+    a.ctl.start();
+    await tick();
+    a.ctl.draft('Retry safely');
+    a.client.chatSend.mockRejectedValueOnce(new Error('Lost reply'));
+    await a.ctl.send();
+    await tick();
+    const id = a.ctl.state().outgoing!.requestId;
+    a.ctl.stop();
+    const b = setup(saved);
+    b.ctl.start();
+    await tick();
+    await b.ctl.send();
+    expect(b.client.chatSend.mock.calls[0]?.[3]).toBe(id);
+    expect(saved.load()).toEqual({ draft: '', outgoing: null });
+    b.ctl.stop();
+  });
+  it('recognises a previously committed send from history without resending it', async () => {
+    const saved = chatDraftStore(store(), 'match', 0),
+      id = crypto.randomUUID();
+    saved.save({
+      draft: 'Already sent',
+      outgoing: {
+        content: { text: 'Already sent', phrase: null },
+        requestId: id,
+      },
+    });
+    const x = setup(saved);
+    x.client.chatHistory.mockResolvedValue(
+      page([
+        { ...msg(1, true), requestId: id, text: 'Already sent', phrase: null },
+      ]),
+    );
+    x.ctl.start();
+    await tick();
+    expect(x.ctl.state().outgoing).toBeNull();
+    expect(x.ctl.state().draft).toBe('');
+    expect(x.client.chatSend).not.toHaveBeenCalled();
+    x.ctl.stop();
+  });
+  it('isolates drafts by match and seat, bounds storage and tolerates malformed local data', () => {
+    const data = store();
+    chatDraftStore(data, 'one', 0).save({
+      draft: 'Private draft',
+      outgoing: null,
+    });
+    expect(chatDraftStore(data, 'one', 1).load().draft).toBe('');
+    expect(chatDraftStore(data, 'two', 0).load().draft).toBe('');
+    for (let n = 0; n < 25; n++)
+      chatDraftStore(data, String(n), 0).save({
+        draft: 'Draft',
+        outgoing: null,
+      });
+    expect(JSON.parse(data.get('severgrow.matchChat.drafts.v1')!).length).toBe(
+      20,
+    );
+    data.set('severgrow.matchChat.drafts.v1', 'bad JSON');
+    expect(chatDraftStore(data, 'one', 0).load().draft).toBe('');
+  });
+  it('keeps the first-unread boundary through opening and live delivery, then clears it on a read-only reopen', async () => {
+    const x = setup();
+    x.ctl.start();
+    await tick();
+    x.client.chatHistory.mockResolvedValue(page([msg(1)]));
+    await x.ctl.refresh();
+    expect(x.ctl.state().unreadFrom).toBe(1);
+    x.ctl.setOpen(true);
+    await tick();
+    expect(x.ctl.state().unread).toBe(0);
+    expect(x.ctl.state().unreadFrom).toBe(1);
+    x.client.chatHistory.mockResolvedValue(page([msg(1), msg(2)]));
+    await x.ctl.refresh();
+    expect(x.ctl.state().unreadFrom).toBe(1);
+    x.ctl.setOpen(false);
+    x.ctl.setOpen(true);
+    expect(x.ctl.state().unreadFrom).toBeNull();
+    x.ctl.stop();
+  });
+});
+
+it('leaving during an in-flight send keeps its draft and idempotency key', async () => {
+  let value: import('../src/online/chat/draft-store.js').SavedChatDraft = {
+    draft: '',
+    outgoing: null,
+  };
+  const saved = {
+    load: () => structuredClone(value),
+    save: (v: typeof value) => {
+      value = structuredClone(v);
+    },
+  };
+  const x = setup(saved);
+  x.ctl.start();
+  await tick();
+  x.ctl.draft('Not lost');
+  let fail!: (e: unknown) => void;
+  x.client.chatSend.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  const send = x.ctl.send();
+  const id = x.ctl.state().outgoing!.requestId;
+  x.ctl.stop();
+  fail(new Error('Aborted'));
+  await send;
+  expect(saved.load()).toMatchObject({
+    draft: 'Not lost',
+    outgoing: { requestId: id },
   });
 });

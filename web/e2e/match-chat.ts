@@ -217,6 +217,25 @@ try {
       !(document.querySelector('.match-chat-form input') as HTMLInputElement)
         .disabled,
   );
+  await input(sender).fill('Remember after reload');
+  await sender.reload();
+  await openMenuEntry(sender, 'menu-online');
+  await sender.locator(`[data-match-id="${id}"]`).click();
+  await sender.locator('#match-chat-toggle').click();
+  await input(sender).waitFor({ state: 'visible' });
+  check(
+    'a real page reload restores the match draft without sending',
+    (await input(sender).inputValue()) === 'Remember after reload' &&
+      (
+        await chat.execute(
+          senderIdentity.player.id,
+          id,
+          { kind: 'history' },
+          now,
+        )
+      ).messages.length === 0,
+  );
+  await input(sender).fill('');
   const motionChecks = await sender.evaluate(async () => {
     const root = document.documentElement,
       panel = document.querySelector<HTMLElement>('.match-chat-panel')!,
@@ -381,6 +400,10 @@ try {
     'open chat clears unread',
     !(await receiver.locator('.match-chat-dot').isVisible()),
   );
+  check(
+    'reopening unread chat marks where new messages begin',
+    (await receiver.locator('.match-chat-unread').count()) === 1,
+  );
   now += 2000;
   check(
     'quick phrases stay hidden until requested',
@@ -412,6 +435,11 @@ try {
     .getByText('Good luck!', { exact: true })
     .waitFor();
   check('quick phrase ID renders naturally for both clients', true);
+  check(
+    'consecutive messages share one visible speaker and timestamp',
+    (await receiver.locator('.match-chat-line').count()) === 2 &&
+      (await receiver.locator('.match-chat-meta:not([hidden])').count()) === 1,
+  );
   const incomingMotion = await receiver.evaluate(() => {
     const probe = (
       window as unknown as {
@@ -440,13 +468,13 @@ try {
   });
   await input(sender).fill('Lost response, one message');
   await input(sender).press('Enter');
-  await sender.getByRole('button', { name: 'Retry', exact: true }).waitFor();
-  await sender.getByRole('button', { name: 'Retry', exact: true }).click();
-  await sender.waitForFunction(
-    () => !document.querySelector('.match-chat-outgoing button'),
-  );
+  await sender
+    .locator('.match-chat-log')
+    .getByText('Lost response, one message', { exact: true })
+    .waitFor();
+  await sender.locator('.match-chat-outgoing').waitFor({ state: 'hidden' });
   check(
-    'lost-response retry creates exactly one database message',
+    'lost-response history recovery creates exactly one database message',
     (
       await chat.execute(senderIdentity.player.id, id, { kind: 'history' }, now)
     ).messages.filter((m) => m.text === 'Lost response, one message').length ===

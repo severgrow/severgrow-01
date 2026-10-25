@@ -9,6 +9,7 @@ import { chatReadCursor } from './read-cursor.js';
 import type { DuelClient } from '../../../../server/src/client.js';
 import type { MatchChannel, MatchDriverSnapshot } from '../types.js';
 import { createChatController, type ChatState } from './controller.js';
+import { chatDraftStore } from './draft-store.js';
 import { CHAT_CSS } from './style.js';
 import { ICONS } from '../../ui/icons.js';
 import { createChatMotion } from './motion.js';
@@ -278,6 +279,7 @@ export const mountMatchChat = (o: {
   (cockpit ?? o.header).append(toggle, preview);
   o.host.append(root);
   let previewTimer: ReturnType<typeof setTimeout> | null = null;
+  let displayedUnreadBoundary: number | null = null;
   let panelOpen = false,
     lastUnread = 0,
     lastSequence = 0;
@@ -294,6 +296,7 @@ export const mountMatchChat = (o: {
   const ctl = createChatController({
     ...o,
     onChange: render,
+    draftStore: chatDraftStore(browserStorage(), o.matchId, o.snapshot().seat),
     readCursor: chatReadCursor(browserStorage(), o.matchId, o.snapshot().seat),
   });
   function render(s: ChatState) {
@@ -321,7 +324,8 @@ export const mountMatchChat = (o: {
       previewTimer = setTimeout(() => ctl.dismissPreview(), 4200);
     }
     if (!s.preview) motion.visible(preview, false);
-    const key = s.messages.map((m) => m.id).join(',');
+    const key =
+      s.messages.map((m) => m.id).join(',') + ':' + (s.unreadFrom ?? '');
     if (key !== lastMessages) {
       const previousHeight = log.scrollHeight,
         previousTop = log.scrollTop;
@@ -336,7 +340,18 @@ export const mountMatchChat = (o: {
       motion.cancelWithin(entries);
       entries.replaceChildren();
       if (!s.messages.length) entries.append(empty);
+      let previous: ChatMessage | undefined,
+        previousLine: HTMLElement | undefined;
       for (const m of s.messages) {
+        const boundary = m.sequence === s.unreadFrom;
+        if (boundary) {
+          const divider = document.createElement('p');
+          divider.className = 'match-chat-unread';
+          divider.textContent = copy.newer;
+          divider.setAttribute('role', 'separator');
+          divider.setAttribute('aria-label', copy.newer);
+          entries.append(divider);
+        }
         const line = document.createElement('article');
         line.className = 'match-chat-line';
         line.dataset.mine = String(m.mine);
@@ -352,6 +367,21 @@ export const mountMatchChat = (o: {
         stamp.textContent = time.format(m.createdAt);
         stamp.title = new Date(m.createdAt).toLocaleString();
         meta.append(who, stamp);
+        const grouped =
+          previous &&
+          previous.mine === m.mine &&
+          m.createdAt >= previous.createdAt &&
+          m.createdAt - previous.createdAt < 300000 &&
+          !boundary;
+        if (grouped) {
+          meta.hidden = true;
+          line.dataset.grouped = 'true';
+          if (previousLine) previousLine.dataset.continues = 'true';
+        }
+        line.setAttribute(
+          'aria-label',
+          `${m.mine ? copy.you : copy.opponent}, ${new Date(m.createdAt).toLocaleString()}`,
+        );
         const body = document.createElement('p');
         body.className = 'match-chat-text';
         body.textContent = text(m);
@@ -372,7 +402,9 @@ export const mountMatchChat = (o: {
         }
         line.append(body);
         entries.append(line);
-        if (s.open && lastMessages && m.sequence > lastSequence)
+        previous = m;
+        previousLine = line;
+        if (s.open && lastSequence > 0 && m.sequence > lastSequence)
           motion.arrival(line);
       }
       if (loadingOlder)
@@ -397,6 +429,16 @@ export const mountMatchChat = (o: {
         ...s.messages.map((m) => m.sequence),
       );
       lastMessages = key;
+    }
+    if (!s.open) displayedUnreadBoundary = null;
+    else if (s.unreadFrom !== displayedUnreadBoundary) {
+      displayedUnreadBoundary = s.unreadFrom;
+      const marker = entries.querySelector('.match-chat-unread');
+      if (marker)
+        log.scrollTop +=
+          marker.getBoundingClientRect().top -
+          log.getBoundingClientRect().top -
+          8;
     }
     if (s.hasNewer) newer.hidden = false;
     older.hidden = !s.hasOlder;
@@ -453,7 +495,15 @@ export const mountMatchChat = (o: {
     if (value) {
       close.focus({ preventScroll: true });
       requestAnimationFrame(() => {
-        if (ctl.state().open) log.scrollTop = log.scrollHeight;
+        if (ctl.state().open) {
+          const marker = entries.querySelector('.match-chat-unread');
+          if (marker)
+            log.scrollTop +=
+              marker.getBoundingClientRect().top -
+              log.getBoundingClientRect().top -
+              8;
+          else log.scrollTop = log.scrollHeight;
+        }
         newer.hidden = true;
       });
     } else {

@@ -13,7 +13,7 @@ Base: online commit `1c326f8` (2026-10-25). No merge, production migration or de
 - Local branch: `feature/futasaku-match-chat`; all feature changes are committed here.
 - Worktree: `/workspace/futasaku-match-chat`. The branch has **not been pushed**, merged or deployed.
 - Base: `1c326f8d498512117b4480284441ac09f412a8f2` on the online line.
-- Frontend: `web/src/online/chat/` (`view.ts`, `style.ts`, `motion.ts`, `controller.ts`, `read-cursor.ts`).
+- Frontend: `web/src/online/chat/` (`view.ts`, `style.ts`, `motion.ts`, `controller.ts`, `read-cursor.ts`, `draft-store.ts`).
 - Backend: `server/src/chat/`; migration `server/migrations/0017_match_chat.sql`.
 - Shared integration: `web/src/main.ts`, `web/src/online/channel.ts` / `types.ts`, `server/src/client.ts`,
   `server/src/index.ts` / `edge-entry.ts`, `src/strings.ts` → `MATCH_CHAT`.
@@ -55,8 +55,8 @@ framework, dependency or localised text is persisted. Only English copy is suppl
 Updated design: portrait chat fills the available viewport over the board and cockpit; desktop fills the space above its cockpit column (up to 480px wide). Transcript text is 14px. Quick phrases live in a compact picker behind the icon beside Send, hidden by default. Controls retain 44px hit areas with slimmer visual surfaces. The visual viewport controls panel height/offset without resizing the game. Font-size 16px avoids
 iOS focus zoom; safe areas, contained transcript scrolling and no document scroll locks. Desktop
 keyboard navigation and a quiet live region are supported. The panel is nonmodal, so it deliberately
-does not trap focus or make gameplay inert. Turn changes preserve drafts. Drafts exist only for the
-mounted match; leaving/reloading intentionally clears unsent text. Device-local read cursors (no
+does not trap focus or make gameplay inert. Turn changes preserve drafts. Drafts persist locally per match/seat across leaving and reloading, bounded to 20 entries; nothing
+is automatically sent. Ambiguous attempts retain their request ID for safe retry. Device-local read cursors (no
 text/tokens) persist for the latest 50 match seats; they are not synchronised across devices and
 are never exposed to the opponent as read receipts. Server-side mute/block preferences persist.
 
@@ -323,3 +323,21 @@ centering pass after a window resize without editing another agent's layout impl
 Verification: 49 browser checks passed, including 1024×768, 1280×800, 1440×900 and 1920×1080 desktop
 alignment, column centering, key clearance, mobile layouts, message delivery, motion and cleanup.
 TypeScript checks passed. Updated desktop screenshot reflects the new cockpit-column placement.
+
+
+## Final small improvements
+
+Unsent drafts now survive leaving/reloading, scoped to the match and participant seat in bounded
+local storage (20 entries). No bearer token is stored. Pending/failed attempts keep their original
+idempotency UUID; authenticated history can confirm a previous commit and clear the cached attempt
+without resending. Stopping an in-flight request does not erase the saved draft. Restricted storage
+falls back to the existing session behaviour.
+
+Consecutive messages from the same player within five minutes share one visible speaker/timestamp,
+with tighter spacing and no dividing rule inside the group. Every message retains its own accessible
+speaker/time and report action. A quiet “New messages” divider marks the first loaded unread message
+when chat is reopened, breaks grouping at the boundary, and provides a reading starting point.
+Validation for these three improvements: 22 focused tests, 52 two-client browser checks and TypeScript
+checks passed. Includes actual page reload, per-seat isolation, bounded/corrupt storage, interrupted
+send recovery with stable request IDs, confirmed-delivery reconciliation, unread boundaries and
+visual grouping. No merge or deployment performed.

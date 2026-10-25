@@ -26,7 +26,11 @@ export const CHAT_CSS = `
 .match-chat-head button {width:44px;padding:0;border:0;font-size:20px;display:grid;place-items:center;}
 .match-chat-head button svg{width:18px;height:18px;}
 .match-chat-log {flex:1;min-height:36px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:6px 18px;overflow-anchor:none;}
-.match-chat-line {padding:12px 0;border-bottom:1px solid #e8ddc50b;overflow-wrap:anywhere;}
+.match-chat-line {display:flow-root;padding:12px 0;border-bottom:1px solid #e8ddc50b;overflow-wrap:anywhere;}
+.match-chat-line[data-grouped='true']{padding-top:4px;}
+.match-chat-line[data-continues='true']{border-bottom:0;padding-bottom:3px;}
+.match-chat-unread{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#b8c8ad;display:flex;align-items:center;gap:10px;margin:14px 0 6px;}
+.match-chat-unread::before,.match-chat-unread::after{content:'';height:1px;flex:1;background:#b8c8ad38;}
 .match-chat-meta {display:flex;align-items:center;gap:8px;color:#e8ddc58c;font-size:11px;letter-spacing:.07em;text-transform:uppercase;}
 .match-chat-line[data-mine='true'] .match-chat-speaker {color:#abc3a6;}
 .match-chat-line[data-mine='false'] .match-chat-speaker {color:#d4a18c;}
