@@ -1,3 +1,4 @@
+import { publishOpponentStatus } from './opponent-status.js';
 // Live duels — the client controller, mounted once from main.ts (only when online is enabled and an
 // identity exists on this device). It reads the page through `window.__severgrow` (read-only test
 // hooks that already exist) and the online session handle; it never changes the replay gate, the
@@ -355,6 +356,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     if (!m) {
       status = null;
       statusFor = null;
+      publishOpponentStatus(null, null);
       paint();
       return;
     }
@@ -363,6 +365,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     try {
       const prev = statusFor === m ? status : null;
       const next = await api.status(m);
+      publishOpponentStatus(m, next);
       offset = next.serverNow - Date.now();
       status = next;
       statusFor = m;
@@ -375,6 +378,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
         center?.noteLive(m);
       }
     } catch {
+      publishOpponentStatus(m, null);
       /* quiet: the next poll tries again */
     } finally {
       inflight = false;

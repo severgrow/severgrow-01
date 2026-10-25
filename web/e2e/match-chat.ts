@@ -44,6 +44,7 @@ const chat = pool
   : memoryChatStore(storage as MemoryStorage, feedback);
 let now = Date.now();
 const wires = new Map<WebSocketRoute, Set<string>>();
+let opponentPresence: 'online' | 'offline' = 'online';
 let joins = 0,
   connects = 0;
 const joinedTopics: string[] = [];
@@ -153,6 +154,16 @@ const open = async (identity: typeof a) => {
       if (frame.event === 'phx_leave') wires.get(ws)?.delete(frame.topic);
     });
     ws.onClose(() => wires.delete(ws));
+  });
+  // Feed the EXISTING live-button status loop; chat must not issue another presence request.
+  await ctx.route('**/v1/matches/*/live', async route => {
+    const matchId = new URL(route.request().url()).pathname.split('/').at(-2);
+    await route.fulfill({ json: { live: {
+      matchId, status: 'active', live: false, serverNow: Date.now(),
+      opponent: { name: 'Opponent', presence: opponentPresence, inLive: false, available: true, reconnecting: false },
+      me: { liveMatchId: null, challengesEnabled: true },
+      pending: null, block: null, rematchBlock: null, limitMs: 60000,
+    } } });
   });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
@@ -514,6 +525,25 @@ try {
     .getByText('Muted message', { exact: true })
     .waitFor();
   check('muting preserves readable history', true);
+  await receiver.locator('.match-chat-presence[data-presence="online"]').waitFor();
+  check('chat reuses the real-time button status for its green opponent dot', true);
+  opponentPresence = 'offline';
+  await receiver.locator('.match-chat-presence[data-presence="away"]').waitFor();
+  check('existing heartbeat marks an offline opponent red', true);
+  opponentPresence = 'online';
+  await receiver.locator('.match-chat-presence[data-presence="online"]').waitFor();
+  check('report actions are hidden until the message menu opens',
+    !(await receiver.locator('.match-chat-report').first().isVisible()));
+  await receiver.locator('.match-chat-message-actions summary').first().click();
+  check('message menu has a comfortable touch target',
+    await receiver.locator('.match-chat-message-actions summary').first().evaluate(e => {
+      const r = e.getBoundingClientRect(); return r.width >= 44 && r.height >= 44;
+    }));
+  await receiver.keyboard.press('Escape');
+  check('Escape closes message actions without closing chat',
+    await receiver.locator('.match-chat-panel').isVisible() &&
+    !(await receiver.locator('.match-chat-report').first().isVisible()));
+  await receiver.locator('.match-chat-message-actions summary').first().click();
   await receiver.locator('.match-chat-report').first().click();
   await receiver
     .getByRole('button', { name: 'Send report', exact: true })
@@ -753,6 +783,19 @@ try {
       );
     await visual.screenshot({ path: `${out}/cockpit-${width}x${height}.png` });
   }
+  // Maximum-length unbroken text must wrap on a narrow touch viewport.
+  now += 2000;
+  const longMessage = 'あ'.repeat(280);
+  await receiver.setViewportSize({ width: 320, height: 568 });
+  await receiver.locator('#match-chat-toggle').click();
+  await input(receiver).fill(longMessage);
+  await input(receiver).press('Enter');
+  await receiver.locator('.match-chat-log').getByText(longMessage, { exact: true }).waitFor();
+  check('maximum-length Unicode message wraps without horizontal mobile scrolling',
+    await receiver.locator('.match-chat-text').last().evaluate(e =>
+      e.scrollWidth <= e.clientWidth + 1 && document.documentElement.scrollWidth <= innerWidth));
+  await receiver.screenshot({ path: `${out}/long-message-mobile.png` });
+  await receiver.keyboard.press('Escape');
   await sender.setViewportSize({ width: 390, height: 844 });
   if (
     (await sender
@@ -782,6 +825,33 @@ try {
     }),
   );
   await sender.screenshot({ path: `${out}/keyboard-resize.png` });
+  // Real browser offline/online events, preserving an existing draft; no pretend delivery.
+  await sender.context().setOffline(true);
+  await sender.getByText('Offline · draft saved', { exact: true }).waitFor();
+  check('offline status is quiet and retains the draft',
+    await input(sender).inputValue() === 'Keep this draft');
+  await sender.context().setOffline(false);
+  await sender.getByText('Offline · draft saved', { exact: true }).waitFor({ state: 'hidden' });
+  await sender.evaluate(() => {
+    const v = visualViewport!;
+    Object.defineProperty(v, 'height', { configurable: true, value: 260 });
+    Object.defineProperty(v, 'offsetTop', { configurable: true, value: 24 });
+  });
+  await sender.setViewportSize({ width: 844, height: 390 });
+  await sender.evaluate(() => visualViewport!.dispatchEvent(new Event('resize')));
+  await sender.waitForTimeout(100);
+  check('landscape keyboard and viewport offset keep composer visible without page overflow',
+    await sender.evaluate(() => {
+      const r = document.querySelector('.match-chat-form')!.getBoundingClientRect();
+      return r.top >= 24 && r.bottom <= 284 && document.documentElement.scrollWidth <= innerWidth;
+    }));
+  await sender.screenshot({ path: `${out}/keyboard-landscape.png` });
+  await sender.evaluate(() => {
+    delete (visualViewport as unknown as {height?: number}).height;
+    delete (visualViewport as unknown as {offsetTop?: number}).offsetTop;
+  });
+  await sender.setViewportSize({ width: 390, height: 844 });
+
   await sender.keyboard.press('Escape');
   check(
     'Escape restores focus to chat control',

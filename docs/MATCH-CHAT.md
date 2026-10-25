@@ -10,8 +10,8 @@ Base: online commit `1c326f8` (2026-10-25). No merge, production migration or de
 ## Quick handoff for the integrating agent
 
 - Repository: `severgrow/severgrow-01`.
-- Local branch: `feature/futasaku-match-chat`; all feature changes are committed here.
-- Worktree: `/workspace/futasaku-match-chat`. The branch has **not been pushed**, merged or deployed.
+- GitHub branch: `origin/feature/futasaku-match-chat`; fetch this whole branch for integration.
+- Worktree: `/workspace/futasaku-match-chat`. The feature branch is published for integration; it has not been merged or deployed.
 - Base: `1c326f8d498512117b4480284441ac09f412a8f2` on the online line.
 - Frontend: `web/src/online/chat/` (`view.ts`, `style.ts`, `motion.ts`, `controller.ts`, `read-cursor.ts`, `draft-store.ts`).
 - Backend: `server/src/chat/`; migration `server/migrations/0017_match_chat.sql`.
@@ -20,9 +20,8 @@ Base: online commit `1c326f8` (2026-10-25). No merge, production migration or de
 - Verification: `server/tests/match-chat*.test.ts`, `web/tests/match-chat.test.ts`,
   `web/e2e/match-chat.ts`, `.github/workflows/match-chat.yml`.
 
-If sharing this Git repository/worktree set, the feature branch is already available. In a separate
-clone on this machine, fetch it with `git fetch /workspace/futasaku-match-chat feature/futasaku-match-chat`,
-then review/merge `FETCH_HEAD` into **your integration branch**, preserving your own ongoing work.
+Fetch with `git fetch origin feature/futasaku-match-chat`, then review/merge
+`origin/feature/futasaku-match-chat` into **your integration branch**, preserving your own ongoing work.
 Do not overwrite shared files wholesale. Reconcile the lifecycle/channel/localisation/router hunks;
 check migration numbering. Regenerate `supabase/functions/duel/bundle.ts` from the combined source,
 rather than resolving generated bundle conflicts by hand.
@@ -341,3 +340,32 @@ Validation for these three improvements: 22 focused tests, 52 two-client browser
 checks passed. Includes actual page reload, per-seat isolation, bounded/corrupt storage, interrupted
 send recovery with stable request IDs, confirmed-delivery reconciliation, unread boundaries and
 visual grouping. No merge or deployment performed.
+
+
+## Final connection, message actions and shared opponent indicator
+
+- Quiet Realtime reconnection/offline feedback preserves drafts; no second channel.
+- Message actions use a compact ellipsis menu with 44px touch targets. Escape closes the menu first;
+  reporting remains a real backend action. Report controls remain usable with a mobile keyboard.
+- The tiny green/red dot beside the opponent name **reuses the existing real-time button heartbeat**
+  (`live/mount.ts` → `live/opponent-status.ts`). There are no extra presence requests, writes, sockets
+  or timers. Busy is still online; failed status reads/unknown connection show neutral, never a false
+  offline claim. Status follows the existing heartbeat and polling cadence, not instantaneous presence.
+- Integration adds four small lines to `web/src/online/live/mount.ts` plus an import. Preserve the
+  integrating agent's live-button work and publish its existing status result through this shared seam.
+- No physical iPhone/Android device is attached. Browser keyboard/offset/rotation and long-text
+  checks are emulation; real Safari/Android keyboard verification remains a release check.
+
+Latest verification: **60 two-client Chromium browser checks passed**, including the shared existing
+live-button heartbeat online/offline dot, message-action menu and real report submission, a 280-character
+Unicode message at 320px, offline/online draft preservation, and portrait/landscape keyboard viewport
+offsets. Screenshots in `docs/screens/match-chat/` were refreshed and phone/desktop inspected.
+The presence portion simulates the existing live-status API result; it does not claim hosted-device testing.
+
+Both product builds and asset-isolation checks passed (futa04: 99 assets; futa05: 100).
+The standalone futa05 validation used explicit local test configuration with the normal
+`/functions/v1/duel` path; no production build was uploaded.
+
+Final `npm run check`: TypeScript passed; **283 test files / 2,913 tests passed**,
+with 1 expected failure and 65 skipped optional tests (6 skipped files). No production migration,
+merge, Edge deployment or frontend upload was performed by this agent.

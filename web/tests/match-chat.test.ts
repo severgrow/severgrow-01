@@ -1,3 +1,5 @@
+import { publishOpponentStatus, subscribeOpponentStatus } from '../src/online/live/opponent-status.js';
+import type { LiveStatusWire } from '../src/online/live/api.js';
 import {
   chatDraftStore,
   type ChatDraftStore,
@@ -85,6 +87,23 @@ const setup = (draftStore?: ChatDraftStore) => {
   };
 };
 describe('match chat lifecycle', () => {
+  it('exposes Realtime outages without losing drafts or claiming failed delivery', async () => {
+    const x = setup();
+    x.ctl.start();
+    await tick();
+    x.ctl.draft('Keep this while reconnecting');
+    x.handlers()!.onConnection!(false);
+    expect(x.ctl.state().realtimeConnected).toBe(false);
+    expect(x.ctl.state().draft).toBe('Keep this while reconnecting');
+    expect(x.ctl.state().error).toBe(false);
+    x.handlers()!.onConnection!(true);
+    x.handlers()!.onReconnect!();
+    await tick();
+    expect(x.ctl.state().realtimeConnected).toBe(true);
+    expect(x.ctl.state().draft).toBe('Keep this while reconnecting');
+    x.ctl.stop();
+  });
+
   it('disables on your turn immediately, preserves draft, enables on the next authoritative epoch', async () => {
     const x = setup();
     x.ctl.start();
@@ -429,5 +448,28 @@ it('leaving during an in-flight send keeps its draft and idempotency key', async
   expect(saved.load()).toMatchObject({
     draft: 'Not lost',
     outgoing: { requestId: id },
+  });
+});
+
+describe('shared live-button opponent status', () => {
+  it('reuses online/busy/offline status, isolates matches, clears failed fetches and unsubscribes', () => {
+    const listener = vi.fn();
+    const off = subscribeOpponentStatus('presence-match', listener);
+    expect(listener).toHaveBeenLastCalledWith('unknown');
+    const wire = (presence: 'online' | 'busy' | 'offline') => ({ matchId: 'presence-match', opponent: { presence } }) as LiveStatusWire;
+    publishOpponentStatus('presence-match', wire('online'));
+    expect(listener).toHaveBeenLastCalledWith('online');
+    publishOpponentStatus('presence-match', wire('busy'));
+    expect(listener).toHaveBeenLastCalledWith('online');
+    publishOpponentStatus('presence-match', wire('offline'));
+    expect(listener).toHaveBeenLastCalledWith('away');
+    publishOpponentStatus('presence-match', null);
+    expect(listener).toHaveBeenLastCalledWith('unknown');
+    publishOpponentStatus('different-match', wire('online'));
+    expect(listener).toHaveBeenLastCalledWith('unknown');
+    off();
+    listener.mockClear();
+    publishOpponentStatus(null, null);
+    expect(listener).not.toHaveBeenCalled();
   });
 });

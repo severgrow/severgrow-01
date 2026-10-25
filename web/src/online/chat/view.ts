@@ -1,3 +1,4 @@
+import { subscribeOpponentStatus } from '../live/opponent-status.js';
 import { MATCH_CHAT } from '../../../../src/strings.js';
 import { CHAT_MAX_LENGTH } from '../../../../server/src/chat/rules.js';
 import type {
@@ -96,7 +97,16 @@ export const mountMatchChat = (o: {
   const headKeys = document.createElement('div');
   headKeys.className = 'match-chat-head-keys';
   headKeys.append(toolsToggle, close);
-  head.append(title, headKeys);
+  const heading = document.createElement('div');
+  const opponentName = document.createElement('span');
+  opponentName.className = 'match-chat-opponent-name';
+  opponentName.textContent = o.snapshot().opponentName || copy.opponent;
+  const presenceDot = document.createElement('span');
+  presenceDot.className = 'match-chat-presence';
+  presenceDot.setAttribute('role', 'img');
+  opponentName.append(presenceDot);
+  heading.append(title, opponentName);
+  head.append(heading, headKeys);
   const log = document.createElement('div');
   log.className = 'match-chat-log';
   log.tabIndex = 0;
@@ -132,6 +142,7 @@ export const mountMatchChat = (o: {
   foot.className = 'match-chat-foot';
   const status = document.createElement('p');
   status.className = 'match-chat-status';
+  status.setAttribute('role', 'status');
   const outgoing = document.createElement('div');
   outgoing.className = 'match-chat-outgoing';
   outgoing.hidden = true;
@@ -299,7 +310,20 @@ export const mountMatchChat = (o: {
     draftStore: chatDraftStore(browserStorage(), o.matchId, o.snapshot().seat),
     readCursor: chatReadCursor(browserStorage(), o.matchId, o.snapshot().seat),
   });
+  let opponentStatus: 'online' | 'away' | 'unknown' = 'unknown';
+  function paintPresence() {
+    const presence = navigator.onLine ? opponentStatus : 'unknown';
+    presenceDot.dataset.presence = presence;
+    const label = presence === 'online' ? copy.opponentOnline : presence === 'away' ? copy.opponentOffline : copy.opponentUnknown;
+    presenceDot.setAttribute('aria-label', label);
+    presenceDot.title = label;
+  }
+  const stopPresence = subscribeOpponentStatus(o.matchId, (value) => {
+    opponentStatus = value;
+    paintPresence();
+  });
   function render(s: ChatState) {
+    paintPresence();
     if (panelOpen !== s.open) {
       panelOpen = s.open;
       panel.inert = !s.open;
@@ -387,7 +411,19 @@ export const mountMatchChat = (o: {
         body.textContent = text(m);
         line.append(meta);
         if (!m.mine) {
-          const report = button('⚑', () => {
+          const actions = document.createElement('details');
+          actions.className = 'match-chat-message-actions';
+          const actionToggle = document.createElement('summary');
+          actionToggle.setAttribute('aria-label', copy.messageActions);
+          actionToggle.textContent = '⋯';
+          actions.append(actionToggle);
+          actions.addEventListener('toggle', () => {
+            if (actions.open)
+              for (const other of entries.querySelectorAll<HTMLDetailsElement>('.match-chat-message-actions[open]'))
+                if (other !== actions) other.open = false;
+          });
+          const report = button(copy.report, () => {
+            actions.open = false;
             reportTarget = m.id;
             reportForm.hidden = false;
             controls.open = true;
@@ -398,7 +434,8 @@ export const mountMatchChat = (o: {
             'aria-label',
             `${copy.report}: ${text(m).slice(0, 60)}`,
           );
-          line.append(report);
+          actions.append(report);
+          line.append(actions);
         }
         line.append(body);
         entries.append(line);
@@ -421,7 +458,7 @@ export const mountMatchChat = (o: {
       if (focusedMessage)
         entries
           .querySelector<HTMLElement>(
-            `[data-message="${focusedMessage}"] button`,
+            `[data-message="${focusedMessage}"] summary`,
           )
           ?.focus({ preventScroll: true });
       lastSequence = Math.max(
@@ -449,7 +486,9 @@ export const mountMatchChat = (o: {
     for (const b of phrases.querySelectorAll('button'))
       b.disabled = input.disabled;
     const snap = o.snapshot();
-    status.textContent = s.error
+    status.textContent = !navigator.onLine
+      ? copy.offline
+      : s.error
       ? copy.unavailable
       : !s.ready
         ? copy.loading
@@ -457,7 +496,9 @@ export const mountMatchChat = (o: {
           ? copy.blocked
           : snap.status === 'finished'
             ? copy.ended
-            : s.canSend
+            : !s.realtimeConnected || snap.connection !== 'online'
+              ? copy.reconnecting
+              : s.canSend
               ? ''
               : copy.available;
     status.hidden = status.textContent === '';
@@ -520,6 +561,14 @@ export const mountMatchChat = (o: {
       phraseToggle.focus({ preventScroll: true });
       return;
     }
+    const messageMenu = entries.querySelector<HTMLDetailsElement>('.match-chat-message-actions[open]');
+    if (e.key === 'Escape' && messageMenu) {
+      e.preventDefault();
+      e.stopPropagation();
+      messageMenu.open = false;
+      messageMenu.querySelector('summary')?.focus({ preventScroll: true });
+      return;
+    }
     if (e.key === 'Escape' && ctl.state().open) {
       e.preventDefault();
       e.stopPropagation();
@@ -528,6 +577,8 @@ export const mountMatchChat = (o: {
   };
   document.addEventListener('keydown', keydown, true);
   const outside = (e: PointerEvent) => {
+    for (const menu of entries.querySelectorAll<HTMLDetailsElement>('.match-chat-message-actions[open]'))
+      if (!menu.contains(e.target as Node)) menu.open = false;
     if (
       phrasesOpen &&
       !phrases.contains(e.target as Node) &&
@@ -552,7 +603,12 @@ export const mountMatchChat = (o: {
     if (!document.hidden) void ctl.refresh();
   };
   document.addEventListener('visibilitychange', resume);
-  window.addEventListener('online', resume);
+  const connectivity = () => {
+    ctl.turnChanged();
+    if (navigator.onLine) resume();
+  };
+  window.addEventListener('online', connectivity);
+  window.addEventListener('offline', connectivity);
   window.addEventListener('focus', resume);
   const viewport = () => {
     const followLatest =
@@ -642,12 +698,14 @@ export const mountMatchChat = (o: {
     stop() {
       motion.stop();
       motionPreference.removeEventListener('change', settleMotion);
+      stopPresence();
       ctl.stop();
       document.removeEventListener('keydown', keydown, true);
       if (previewTimer) clearTimeout(previewTimer);
       document.removeEventListener('pointerdown', outside);
       document.removeEventListener('visibilitychange', resume);
-      window.removeEventListener('online', resume);
+      window.removeEventListener('online', connectivity);
+      window.removeEventListener('offline', connectivity);
       window.removeEventListener('focus', resume);
       window.removeEventListener('resize', scheduleViewport);
       cockpitLayout.disconnect();

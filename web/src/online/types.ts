@@ -23,6 +23,8 @@ export type MatchChannel = {
       /** Content-free invalidation on the existing socket; never private message text. */
       onChat?: () => void;
       onReconnect?: () => void;
+      /** Joined Realtime topic health; HTTP history remains authoritative. */
+      onConnection?: (connected: boolean) => void;
       onPresence: (presence: PresenceSnapshot) => void;
     },
   ): () => void;

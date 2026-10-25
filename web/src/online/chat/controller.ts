@@ -22,6 +22,7 @@ export type ChatState = {
   loading: boolean;
   error: boolean;
   ready: boolean;
+  realtimeConnected: boolean;
   canSend: boolean;
   muted: boolean;
   blocked: boolean;
@@ -54,6 +55,7 @@ export const createChatController = (o: {
     loading: false,
     error: false,
     ready: false,
+    realtimeConnected: true,
     canSend: false,
     muted: false,
     blocked: false,
@@ -312,6 +314,10 @@ export const createChatController = (o: {
         onPing: () => undefined,
         onPresence: () => undefined,
         onChat: hint,
+        onConnection: (connected) => {
+          state.realtimeConnected = connected;
+          emit();
+        },
         onReconnect: () => void refresh(),
       });
       void refresh();
