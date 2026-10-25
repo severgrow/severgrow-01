@@ -963,9 +963,13 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
      * style, so nothing here can leak a stuck dim past the drain that clears it.
      */
     dim: (on: boolean) => { panel.classList.toggle('led-theirs', on); },
-    /** Hold a drag word (DRAW/PLACE/THROW/BLOOM/MEGA) on the sign; null clears it. Never FAST. */
-    led: (word:string|null) => {
-      if (word) machine.hold(word, word === 'THROW' ? 'red' : word === 'BLOOM' || word === 'MEGA' ? 'green' : 'amber');
+    /**
+     * Hold a drag word (DRAW/PLACE/THROW/BLOOM/MEGA) on the sign; null clears it. Never FAST.
+     * `immediate` bypasses the display dwell for a word that announces a STATE (the replay's
+     * REPLAY sign), so the sign is up on the frame the board starts moving.
+     */
+    led: (word:string|null, opts?: { immediate?: boolean }) => {
+      if (word) machine.hold(word, word === 'THROW' ? 'red' : word === 'BLOOM' || word === 'MEGA' ? 'green' : 'amber', opts);
       else machine.release();
     },
     reset: (you=0,opp=0) => machine.reset(phaseMessage(),you,opp),

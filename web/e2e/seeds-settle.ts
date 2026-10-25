@@ -466,7 +466,7 @@ const run = async (
 
     if (scenario === 'pay') {
       check(`${name}: the award is the amount the server paid`, m.spoken === `+${awarded} Seeds`, `${m.spoken} vs +${awarded}`);
-      check(`${name}: the row is one line, emblem + amount`, m.counted && (m.rowHeight ?? 99) <= 24, `row ${m.rowHeight}px`);
+      check(`${name}: the row is one line, emblem + amount`, m.counted && (m.rowHeight ?? 99) <= 34, `row ${m.rowHeight}px`);
       check(`${name}: the reader is told the plain sentence`, m.label === `+${awarded} Seeds`, String(m.label));
       check(`${name}: the moment played and then stopped`, m.animations === 0, `${m.animations}`);
       rows.push(`pay ${viewport.width}x${viewport.height} → ${m.line}`);

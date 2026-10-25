@@ -99,6 +99,21 @@ describe('match display state', () => {
     expect(frames.at(-1)).toMatchObject({ text: 'THROW', mode: 'red' });
   });
 
+  it('paints an immediate hold on the same frame, without waiting out the dwell', () => {
+    // The in-game replay's REPLAY sign (owner, 2026-10-25): the board starts moving on the click
+    // frame, so the sign must be on the glass then — not 852 ms later behind a step cue's dwell.
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW OR SKIP', 27, 12);
+    expect(frames.at(-1)).toMatchObject({ text: '27:12', mode: 'score' });
+    // No time advanced: the score still owns ~1 s of dwell.
+    sign.hold('REPLAY', 'amber', { immediate: true });
+    expect(frames.at(-1)).toMatchObject({ text: 'REPLAY', mode: 'amber' });
+    // A later frame for the same action still keeps its own dwell (the hold is not sticky).
+    sign.release();
+    expect(frames.at(-1)).toMatchObject({ text: 'REPLAY', mode: 'amber' });
+  });
+
   it('keeps idle urgency sticky like tutorial — not cleared by blank beats or the dwell queue', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));

@@ -7302,6 +7302,12 @@ body.result .corner-tools {
   text-transform: uppercase;
   color: var(--fu-cream-55);
 }
+#gameover .go-card.seed-slot #go-seeds {
+  /* The award's own slot, held while a proof is settled (main.ts `settleSeedsForCard`): the number
+     lands in place instead of pushing the score and the keys down. The height is the row's own
+     height, so a visible award and the empty slot occupy the same line. */
+  min-height: 32px;
+}
 #gameover .go-score {
   justify-content: flex-start;
   gap: 9px;

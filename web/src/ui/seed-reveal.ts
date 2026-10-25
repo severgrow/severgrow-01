@@ -95,25 +95,27 @@ export type SeedRevealOptions = {
 /** One line, in place — and a handful of transform/opacity beats. Nothing here changes layout. */
 export const SEED_REVEAL_CSS = `
 .seed-gain {
-  position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: 6px;
+  position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: 8px;
   line-height: 1; white-space: nowrap;
 }
 .seed-gain-bloom {
-  position: absolute; inset: -10px -14px; z-index: -1; border-radius: 999px; opacity: 0;
+  position: absolute; inset: -12px -16px; z-index: -1; border-radius: 999px; opacity: 0;
   pointer-events: none;
   background: radial-gradient(closest-side, color-mix(in srgb, #8fae6a 30%, transparent), transparent 76%);
 }
-.seed-gain-emblem { display: inline-flex; flex: none; width: 16px; height: 16px; color: #e8ddbe; }
-.seed-gain-emblem .seed-icon { display: block; width: 16px; height: 16px; }
+.seed-gain-emblem { display: inline-flex; flex: none; width: 20px; height: 20px; color: #e8ddbe; }
+.seed-gain-emblem .seed-icon { display: block; width: 20px; height: 20px; }
 .seed-gain-num {
-  font-family: var(--font-display, inherit); font-weight: var(--w-num, 700);
-  font-size: 0.95rem; letter-spacing: 0.02em; color: #e8ddbe;
+  /* The game's own NUMERAL face — the one every other number uses (.go-score, .tile-num, counts).
+     A clear step up from the card's body line, still below the final score. */
+  font-family: var(--font-num, var(--font-ui, inherit)); font-weight: var(--w-num, 700);
+  font-size: 1.65rem; line-height: 0.95; letter-spacing: 0.01em; color: #e8ddbe;
   font-variant-numeric: lining-nums tabular-nums;
   transform-origin: 50% 62%;
 }
 .seed-gain-word {
   font-family: var(--font-ui, inherit); font-weight: var(--w-ui-medium, 500);
-  font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase;
+  font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
   color: var(--fu-cream-62, #aaa8a3);
 }
 /* Reduce motion: the line still appears, just still. */
@@ -123,13 +125,14 @@ export const SEED_REVEAL_CSS = `
 const STYLE_ID = 'futa04-seed-reveal-style';
 /**
  * The count (owner, 2026-10-25: "getting seeds should be slightly animated, very satisfying").
- * Seven eased steps rather than five, over ~0.74 s, then a soft landing beat: the whole moment is
- * about 0.9 s at normal speed — long enough to read as earned, short enough to never hold the card.
- * The steps are explicit timeouts (no rAF), so nothing runs after the line has landed.
+ * Seven eased steps over ~0.68 s starting on the paint frame itself, then a soft landing beat: the
+ * whole moment is about 0.85 s at normal speed — long enough to read as earned, short enough to
+ * never hold the card. The steps are explicit timeouts (no rAF), so nothing runs after the line
+ * has landed.
  */
 const COUNT_STEPS = 7;
 const STEP_MS = 104;
-const DELAY_MS = 112;
+const DELAY_MS = 60;
 /** When the number lands, in ms at scale 1 — the settle beat is timed off it. */
 const landingMs = (steps: number, scale: number) => (DELAY_MS + Math.max(0, steps - 1) * STEP_MS) * scale;
 
@@ -180,7 +183,7 @@ export function paintSeedReward(host: HTMLElement, reward: SeedReward, opts: See
   bloom.className = 'seed-gain-bloom';
   const emblem = document.createElement('span');
   emblem.className = 'seed-gain-emblem';
-  emblem.append(seedIcon(16));
+  emblem.append(seedIcon(20));
   const num = document.createElement('span');
   num.className = 'seed-gain-num';
   const word = document.createElement('span');

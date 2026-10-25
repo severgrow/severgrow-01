@@ -332,8 +332,14 @@ export class DisplayMachine {
     }
   }
   hint(text: string) { if (this.quiet) return; this.event({ message: text, priority: 20, duration: 1050, mode: 'amber' }); }
-  /** Hold a word on the sign for the length of a drag; `release` restores the resting face. */
-  hold(text: string, mode: LedTone = 'amber') {
+  /**
+   * Hold a word on the sign for the length of a drag; `release` restores the resting face.
+   *
+   * `immediate` is for a word that is a STATE CHANGE, not a drag (the in-game replay's REPLAY
+   * sign): it must be on the glass in the same frame, because the board starts moving then. A
+   * drag word keeps its dwell; a lesson's action line is already forced (`quiet`).
+   */
+  hold(text: string, mode: LedTone = 'amber', opts?: { immediate?: boolean }) {
     this.held = true;
     this.urgency = false;
     this.clearTimers();
@@ -343,7 +349,7 @@ export class DisplayMachine {
     // A lesson's action line owns the sign: it never waits behind the score, a result or any
     // other message (owner, 2026-10-20: the ACTION is always first in levels 1-10). Outside a
     // lesson (a drag word) the dwell is unchanged.
-    this.emit({ text, mode, compact: text.length <= 12 }, { force: this.quiet });
+    this.emit({ text, mode, compact: text.length <= 12 }, { force: this.quiet || opts?.immediate === true });
   }
   /** Hold the score itself on the sign (the lesson that teaches the score); `release` ends it. */
   holdScore() {
