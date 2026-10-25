@@ -4266,7 +4266,14 @@ async function playStep(step: Step, my: number) {
               const r = $('board-wrap').getBoundingClientRect();
               point = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
             }
-            await wait(throwBoomerang(step.card, from, point, to, f, land), my);
+            // The flight is the card's own beat (`BOOMERANG.total` = PINNED.throwFlight); the STEP
+            // keeps its published 396 ms wait. The boomerang used to total 624 ms at interface
+            // speed and this await followed it, so every human throw held the step 634 ms instead
+            // of ~406 ms (+228 ms). max() is a floor for the flight, never a reason to stretch the
+            // beat: the unit test pins the flight inside the wait, and `futa04-motion` measures
+            // the step itself.
+            const flightMs = throwBoomerang(step.card, from, point, to, f, land);
+            await wait(Math.max(PINNED.throw * f, flightMs), my);
           } else if (flight === 'ordinary') {
             flyCard(step.card, from, to, f, land);
             await wait(IS_FUTA04 ? PINNED.throw * f : 320 * f, my);

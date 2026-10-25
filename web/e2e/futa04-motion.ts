@@ -7,6 +7,8 @@ import { allNeighbors, coordKey, legalActions, newGame, viewFor } from '../../sr
 import type { Action, Card, Player, State } from '../../src/engine/index.js';
 import { cutPosition } from './cut-positions.js';
 import { positionSave } from './position.js';
+import { PINNED } from '../src/logic/motion.js';
+import { BOOMERANG } from '../src/ui/throw-boomerang.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
 
@@ -51,11 +53,23 @@ try {
       frames:(anim?.effect as KeyframeEffect | undefined)?.getKeyframes(),duration:(anim?.effect as KeyframeEffect | undefined)?.getTiming().duration};
   },throwAction);
   assert(thrown.sourceGoneOrHidden,'the original card does not double while its copy flies');
-  // `flyCard` is the Futa04 short beat (320ms; the action wait is 396ms), with its arc apex at
-  // .48. These assertions used to pin an older 396ms/.52 flight that the product had already
-  // changed, so the suite failed on the untouched branch too; they now pin what it actually does.
-  assert.equal(thrown.duration,320,'throw flies on the Futa04 short beat, inside the action wait');
-  assert.equal((thrown.frames?.[1] as any)?.offset,.48,'throw follows a short arc');
+  // The throw is the BOOMERANG now (owner, 2026-10-25: every human throw — swipe up, pile drop,
+  // pile tap — gets the flourish). Its own flight is still the Futa04 short beat: the card's
+  // `PINNED.throwFlight` (320ms), which must finish INSIDE the step's `PINNED.throw` wait (396ms).
+  // These assertions used to pin `flyCard`'s 320ms flight and its .48 arc apex. What ships is a
+  // different animation now, so they pin the property that matters — the flight fits the wait —
+  // plus the boomerang's shape: a turn out, alignment over the board, arrival before the fade.
+  // The step's real hold is measured further down, from the pump's own log (a fast-forward below
+  // cuts this one short on purpose, so its length here would prove nothing).
+  assert.equal(thrown.duration,PINNED.throwFlight,'throw flies on the Futa04 short beat');
+  assert(thrown.duration! < PINNED.throw,`the throw finishes inside the action wait (${thrown.duration} < ${PINNED.throw})`);
+  const throwFrames = thrown.frames ?? [];
+  const rotations = throwFrames.map(f=>/rotate\((-?[\d.]+)deg\)/.exec(String(f.transform ?? ''))?.[1]);
+  assert(rotations.some(r=>r!==undefined && Math.abs(Number(r))>0),'the throw turns on its way out (the boomerang)');
+  assert(rotations.includes('0'),'it aligns over the board as if placed');
+  assert.equal(throwFrames.at(-2)?.offset,BOOMERANG.landAt,'the pile is handed the card on arrival, before the fade');
+  assert.equal(Number(throwFrames.at(-2)?.opacity),1,'the card is still visible when it reaches the pile');
+  assert.equal(Number(throwFrames.at(-1)?.opacity),0,'and fades only over the new pile top');
   await page.locator('#deck').evaluate(el=>(el as HTMLElement).click()); // existing tap-to-skip path
   await page.waitForFunction(() => !(window as any).__severgrow.busy(),undefined,{timeout:30000});
   assert.equal(await page.locator('.flyer.card').count(),0,'fast-forward removes an interrupted flight');
@@ -77,18 +91,20 @@ try {
   const throwB = await page.evaluate(() => (window as any).__severgrow.state());
   const throwB2 = legalActions(viewFor(throwB,0)).find(action=>action.t==='Discard')!;
   const sampled = await page.evaluate(async ({ action, previousId }) => {
-    const log: { t: number; face: string | null }[] = [];
+    const log: { t: number; face: string | null; flying: boolean }[] = [];
     const t0 = performance.now();
     let running = true;
     const face = () => document.getElementById('discard-top')?.dataset.faceKey ?? null;
-    const tick = () => { if (!running) return; log.push({ t: Math.round(performance.now() - t0), face: face() }); requestAnimationFrame(tick); };
+    // `flying` proves the hand-over happens while the card is still aloft (before its fade ends).
+    const flying = () => !!document.querySelector('.flyer');
+    const tick = () => { if (!running) return; log.push({ t: Math.round(performance.now() - t0), face: face(), flying: flying() }); requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
     document.querySelector<HTMLElement>(`#hand [data-card="${action.card}"]`)?.click();
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     (document.getElementById('discard') as HTMLElement).click();
     await new Promise<void>((r) => setTimeout(r, 1600));
     running = false;
-    log.push({ t: Math.round(performance.now() - t0), face: face() });
+    log.push({ t: Math.round(performance.now() - t0), face: face(), flying: flying() });
     return { log, previousId, cardId: action.card };
   }, { action: throwB2, previousId });
 
@@ -102,12 +118,31 @@ try {
   assert(faces.slice(0, firstThrown).every((f) => f === null || !f.startsWith(thrownFace)),
     'the new card is not shown before it arrives');
   assert.equal(faces.at(-1), faces[firstThrown], 'the pile top settles on the thrown card and stays there');
+  // The hand-over still happens ON ARRIVAL: the frame the new top appears is a frame where the
+  // flyer is still in the air (it fades over the identical new top). A later hand-over would let
+  // the old top show through; an earlier one would show the new card before it landed.
+  assert(sampled.log[firstThrown]!.flying === true, 'the pile turns over while the card is still aloft (before its fade ends)');
   assert(previousId === null || !faces.at(-1)!.startsWith(`${previousId}:`),
     `the settled top is not the previous card (${faces.at(-1)} vs ${previousId})`);
   // And the count agrees with what is shown.
   const shownCount = await page.evaluate(() => document.getElementById('discard-count')?.dataset.value ?? document.getElementById('discard-count')?.textContent ?? '');
   const trueCount = await page.evaluate(() => (window as any).__severgrow.state().discard.length);
   assert.equal(String(shownCount).replace(/^0+(?=\d)/, ''), String(trueCount), `the Throw pile count matches the cards it holds (${shownCount} vs ${trueCount})`);
+  // THE STEP'S LENGTH. The regression behind this suite's red job: the boomerang used to total
+  // 624ms at interface speed and the discard step awaited the whole flight, so every human throw
+  // held the turn 634ms where the ordinary throw held ~406ms (+228ms, the flight 1.6x the step,
+  // measured on the built product). The pump publishes each step's real duration — read that, not
+  // a clock in the test process.
+  const discardSteps = await page.evaluate(() => {
+    const marks = (window as any).__severgrow.animLog() as { ev: string; k?: string; ms?: number; who?: number }[];
+    return marks.filter((mark) => mark.ev === 'step' && mark.k === 'discard' && mark.who === 0);
+  });
+  const discardStep = discardSteps.at(-1);
+  assert(discardStep && typeof discardStep.ms === 'number', 'the discard step publishes its duration');
+  // Measured on the built product: 405-412 ms (the 396 ms wait plus frame overhead); the bug was
+  // 634 ms. 100 ms of headroom keeps a loaded runner from faking a red, and +228 ms still fails.
+  assert(discardStep!.ms! < PINNED.throw + 100,
+    `the discard step keeps its ${PINNED.throw}ms beat instead of waiting out the flight (${discardStep!.ms}ms)`);
 
   await page.goto(`${BASE}?seed=3`);
   await page.waitForSelector('#deck.ready');
