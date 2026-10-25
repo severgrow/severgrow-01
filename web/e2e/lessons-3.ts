@@ -580,10 +580,16 @@ try {
         check(!card.seeds, `L${level} finish card has no Seeds line`);
         check(!card.territory && !card.territoryKey, `L${level} finish card says nothing about Territory`);
       } else {
-        // Owner, 2026-10-24: level 10 pays 100 Seeds once (the server verifies it; here the CI
-        // placeholder server cannot answer, so the line is the pending one), and its won card says
-        // what Seeds and Territory are, with Open Territory.
-        check(!!card.seeds, `L10 finish card has its Seeds line (${card.seeds})`);
+        // Owner, 2026-10-24: level 10 pays 100 Seeds once, and its won card says what Seeds and
+        // Territory are, with Open Territory.
+        //
+        // Owner report, 2026-10-25 (the seeds-settle work): a finish card must NEVER rest on a claim
+        // nobody wrote a receipt for. The old expectation here was the "pending verification" line,
+        // which is the exact thing the owner asked to remove; with the CI placeholder receipt server
+        // (it cannot answer by design) the honest card now shows NO Seeds line. The payout itself,
+        // and the line when the server DOES answer, is proven end to end in web/e2e/seeds-settle.ts.
+        check(!/pending/i.test(card.seeds ?? ''), `L10 finish card never claims pending Seeds (${JSON.stringify(card.seeds)})`);
+        check(!card.seeds, `L10 finish card claims no Seeds without a receipt (${JSON.stringify(card.seeds)})`);
         check(card.territory === 'Seeds are earned by winning.Spend 100 to claim a tile of Territory on the world map.', `L10 finish card explains Seeds and Territory (${card.territory})`);
         check(card.territoryKey, 'L10 finish card offers Open Territory');
       }
