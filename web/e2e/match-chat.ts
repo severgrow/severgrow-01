@@ -517,6 +517,18 @@ try {
     );
     await visual.screenshot({ path: `${out}/chat-${width}x${height}.png` });
     await visual.keyboard.press('Escape');
+    if (width === 390)
+      check(
+        'cockpit chat focus uses a quiet glow without a bright outline',
+        await visual.locator('#match-chat-toggle').evaluate((e) => {
+          const s = getComputedStyle(e);
+          return (
+            e === document.activeElement &&
+            s.outlineStyle === 'none' &&
+            s.boxShadow !== 'none'
+          );
+        }),
+      );
     await visual.screenshot({ path: `${out}/cockpit-${width}x${height}.png` });
   }
   await sender.setViewportSize({ width: 390, height: 844 });

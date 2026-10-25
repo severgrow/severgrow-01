@@ -6,7 +6,7 @@ export const CHAT_CSS = `
 #smart-panel > #match-chat-toggle::before {content:'';position:absolute;inset:0;pointer-events:none;background:url('./hardware/button-frame-supplied.webp') center / contain no-repeat;}
 #smart-panel > #match-chat-toggle svg {position:relative;width:21px;height:21px;z-index:1;opacity:.94;}
 #smart-panel > #match-chat-toggle:is(:hover,:focus-visible,[aria-expanded='true']) {color:#fff1cf;box-shadow:0 0 9px var(--light-bloom,rgba(196,150,88,.22));}
-#smart-panel > #match-chat-toggle:focus-visible {outline:2px solid #ffe1a7;outline-offset:2px;}
+#smart-panel > #match-chat-toggle:focus-visible {outline:none;}
 #smart-panel > .match-chat-preview {position:absolute;top:auto;left:auto;right:0;bottom:calc(100% + var(--control-size,44px) + var(--control-gap,4px) + 8px);color:#e8ddc5;box-sizing:border-box;}
 #match-chat-toggle svg {width:19px;height:19px;stroke:currentColor;stroke-width:1.5;fill:none;}
 .match-chat-dot {position:absolute;right:5px;top:6px;width:6px;height:6px;border-radius:50%;background:#e8ddc5;box-shadow:0 0 0 3px rgba(8,10,10,.5);}

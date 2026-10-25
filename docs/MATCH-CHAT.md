@@ -227,3 +227,6 @@ Validation for cockpit placement: 33 match-chat browser checks passed, 16 focuse
 TypeScript and Futa04 production build/assets checks passed, and the existing cockpit regression
 suite passed **882 checks** across phone/desktop sizes and both hand sides. Reviewed closed-state
 [phone capture](screens/match-chat/cockpit.png). No merge or deployment performed.
+The cockpit chat key no longer draws a bright focus-outline rectangle. Its native hardware frame
+remains; keyboard focus uses the quiet existing glow. Verified in screenshots and 34 browser checks,
+including a focused-key assertion that the outline is absent while the glow remains.
