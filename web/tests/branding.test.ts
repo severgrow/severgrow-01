@@ -72,4 +72,19 @@ describe('one Futasaku mark, drawn once', () => {
     expect(css).toMatch(/#go-brand\s*\{[^}]*var\(--futasaku-logo-height/);
     expect(branding).toMatch(/setProperty\('--futasaku-logo-height'/);
   });
+
+  it('the badge stands down while the install invitation is open', () => {
+    // The invitation is z 13, under the badge's z 74, so without this the corner mark floats sharp
+    // over the invitation's 20px blur — the one dialog that explicitly wants to be the only thing
+    // in focus. A practice-game win offers the invitation while the finish plate is up (the badge
+    // is already down there), but the 900 ms deferred invitation for lessons 4-10 can open over a
+    // screen that DOES carry it, so this cannot rely on the finish-plate rule.
+    //
+    // Deliberately CSS-only: the mark is hidden by the invitation's own state, so it comes back by
+    // itself when the invitation closes. A JS flag would need a second sync to turn it back on, and
+    // nothing calls one on close.
+    const css = branding.slice(branding.indexOf('export const BRANDING_CSS'));
+    expect(css, 'the CSS must suppress the badge for as long as the invitation is open')
+      .toMatch(/:has\(#install-prompt:not\(\[hidden\]\)\)\s*#hud-brand\s*\{\s*display:\s*none/);
+  });
 });

@@ -262,6 +262,19 @@ for (const v of PAGE_VIEWS) {
   check(!overlap(levelMark.box as never, levelPlate), `${tag}: the difficulty mark never sits on the plate`);
   if (SHOTS) await page.screenshot({ path: join(SHOTS, `levels-${tag}.png`) });
 
+  // ---- the install invitation: the mark must stand down (owner's "nearly every page", but a
+  // modal's 20px blur is meant to be the only thing in focus, and the badge is painted at z 74
+  // ABOVE the invitation's z 13) ----
+  await page.evaluate(() => (window as unknown as { __severgrow: { showInstall: () => void } }).__severgrow.showInstall());
+  await page.waitForSelector('#install-prompt:not([hidden])', { timeout: 8_000 });
+  await page.waitForTimeout(250);
+  const inviteMark = (await page.evaluate(MARK)) as { visible: boolean };
+  check(!inviteMark.visible, `${tag}: the corner mark stands down on the install invitation`);
+  await page.click('#install-close', { timeout: 4_000 });
+  await page.waitForTimeout(350);
+  const afterInvite = (await page.evaluate(MARK)) as { visible: boolean };
+  check(afterInvite.visible, `${tag}: the corner mark returns when the invitation closes`);
+
   // ---- a real match, its pause plate, and the shield of a settings sheet ----
   await page.locator('#levels .level-tile, #levels .difficulty-tile').nth(1).click({ force: true });
   await page.waitForSelector('#game:not([hidden])', { timeout: 25_000 });

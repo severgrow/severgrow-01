@@ -221,7 +221,8 @@ describe('the world map rests on the ONE shared page surface', () => {
     // swords are the LAST of the challenge groups, so the ring is never drawn over the glyph.
     expect(worldView, 'the edge group must be appended after the fill group')
       .toMatch(/svg\.append\(faces, lines, marks, rings, swords\)/);
-    expect(worldView, 'the selection must draw last of all, above every edge').toMatch(/svg\.append\(accentGroup\)/);    // The fill layer MUST paint before the stroke layer, and a face must not swallow a tap.
+    expect(worldView, 'the selection must draw last of all, above every edge').toMatch(/svg\.append\(accentGroup\)/);
+    // The fill layer MUST paint before the stroke layer, and a face must not swallow a tap.
     const face = bodyOf(onlineCss, '.world-hex-face');
     expect(face, '.world-hex-face must exist').not.toBeNull();
     expect(face!, 'the face carries no stroke').not.toMatch(/stroke\s*:/);
