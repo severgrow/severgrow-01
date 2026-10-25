@@ -11,6 +11,7 @@ import type { Browser, Page } from 'playwright-core';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { requireLocalOrRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
 import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
 // The deployed site bakes the REAL Edge API into its bundle, so a non-loopback BASE_URL spends real
@@ -181,6 +182,7 @@ try {
   await openMenuEntry(A, 'menu-online');
   await A.waitForSelector('#online-hub:not([hidden])', { timeout: 20_000 });
   if (await A.locator('#online-first-ok').isVisible().catch(() => false)) await A.click('#online-first-ok');
+  await expandYourMatches(A);
   await shoot(A, '03-hub-desktop');
   const hubClip = await clipped(A, '#online-hub h2, #online-create, #online-find, #online-join-open, .online-row-status');
   if (hubClip.length) finding('FIX', `hub text clipped: ${hubClip.join(' | ')}`);
@@ -252,6 +254,7 @@ try {
   await A.waitForSelector('#menu:not([hidden])', { timeout: 15_000 });
   await openMenuEntry(A, 'menu-online');
   await A.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
+  await expandYourMatches(A);
   const rowTime = ((await A.locator('#online-matches .online-row-time').first().textContent().catch(() => '')) ?? '').trim();
   check('lobby: the deadline is still in the match list as a duration', /\d+\s*(d|h|m)/i.test(rowTime) && !/\d:\d\d/.test(rowTime), rowTime);
   await A.locator('#online-matches li').first().click();

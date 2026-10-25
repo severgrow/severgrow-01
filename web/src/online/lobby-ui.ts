@@ -7,6 +7,12 @@ import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
 import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
 import { createLobbyActionGuard } from './lobby-action.js';
+import {
+  countNeedingResponse,
+  needsMyResponse,
+  yourMatchesButtonName,
+  yourMatchesLabel,
+} from './match-attention.js';
 import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
@@ -174,6 +180,31 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let serverOffset = 0;
   let worldView: WorldView | null = null;
 
+  /**
+   * THE DISCLOSURE'S OWN STATE — and the guard against the list snapping shut.
+   *
+   * The hub refreshes the match list on a timer (and after joins/searches), so `renderMatches`
+   * runs many times while the player looks at the screen. It must never decide whether the list is
+   * open: it only PAINTS `matchesExpanded`. Only a click on the disclosure changes this boolean.
+   * That is the whole fix for the obvious bug ("a poll re-collapses the panel"): the renderer has
+   * no write to this state, so a poll cannot close what the player opened. The choice survives
+   * screen changes for the session because this module-scoped value is not reset on `openHub`.
+   */
+  let matchesExpanded = false;
+  /** A cheap fingerprint of the painted rows: unchanged polls do not rebuild the DOM at all. */
+  let matchesSignature = '';
+  /** One list request at a time, so a 10s poll can never stack behind a slow network. */
+  let reloadInFlight = false;
+  let hubPollTimer: ReturnType<typeof setInterval> | null = null;
+  const HUB_POLL_MS = 10_000;
+
+  const stopHubPoll = () => {
+    if (hubPollTimer) {
+      clearInterval(hubPollTimer);
+      hubPollTimer = null;
+    }
+  };
+
   // How the join screen was reached. A typed code joins straight away; a link arrival confirms
   // first (an intentional asymmetry — a forwarded link may reach the wrong person).
   let joinMode: 'typed' | 'link' = 'typed';
@@ -204,6 +235,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       pollTimer = null;
     }
     stopSearchTimer();
+    stopHubPoll();
     search = null;
     waiting = null;
   };
@@ -297,6 +329,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       clearInterval(pollTimer);
       pollTimer = null;
     }
+    // The match list only refreshes while the hub is the visible screen.
+    if (next !== 'hub') stopHubPoll();
   };
 
   const fillCopy = () => {
@@ -325,7 +359,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       fitButton.setAttribute('aria-label', ONLINE.worldFit);
       fitButton.title = ONLINE.worldFit;
     }
-    $('online-matches-title').textContent = ONLINE.yourMatches;
+    // The Your-matches label carries a COUNT, so `paintMatchesDisclosure` owns its text. Writing
+    // the count-less string here would wipe the number every time another screen calls fillCopy.
     $('online-matches-empty').textContent = ONLINE.emptyMatches;
     // The waiting TITLE is owned by `setWaitingTitle` (it carries the shared animated dots), so it
     // is deliberately not written here — writing textContent would drop the persistent dots node.
@@ -367,39 +402,119 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     document.title = pageTitleForLobby(yourTurnCount(matches));
   };
 
+  /**
+   * Paint the disclosure from `matchesExpanded`. This function is the ONLY place the button,
+   * badge and panel chrome are written, and it never ASSIGNS the open/closed choice — a render
+   * caused by the poll therefore cannot close a list the player opened.
+   */
+  const paintMatchesDisclosure = (total: number, waiting: number) => {
+    const toggle = $('online-matches-toggle') as HTMLButtonElement;
+    const label = $('online-matches-title');
+    const badge = $('online-matches-attention');
+    const panel = $('online-matches-panel');
+    label.textContent = yourMatchesLabel(total);
+    toggle.setAttribute('aria-expanded', String(matchesExpanded));
+    // The visible label plus the badge in words: a screen reader never hears a bare "!".
+    toggle.setAttribute('aria-label', yourMatchesButtonName(total, waiting));
+    badge.hidden = waiting === 0;
+    badge.textContent = '!';
+    panel.hidden = !matchesExpanded;
+  };
+
+  const setMatchesExpanded = (open: boolean) => {
+    if (matchesExpanded === open) return;
+    matchesExpanded = open;
+    const toggle = $('online-matches-toggle') as HTMLButtonElement;
+    const panel = $('online-matches-panel');
+    toggle.setAttribute('aria-expanded', String(open));
+    if (open) {
+      panel.hidden = false;
+      // The lobby's own interface beat; `enterSurface` is already gated by Reduce motion and the
+      // OS preference, and the badge itself is static (no animation to gate).
+      enterSurface(panel, { travel: 4, scale: 0.99 });
+    } else {
+      exitSurface(panel, {
+        travel: 4,
+        scale: 0.99,
+        onDone: () => {
+          // A rapid reopen cancels `exitSurface`, so `onDone` must also re-check the state.
+          if (!matchesExpanded) panel.hidden = true;
+        },
+      });
+    }
+  };
+
   const renderMatches = () => {
     const list = $('online-matches');
     const empty = $('online-matches-empty');
-    const rows = trimLobbyList(matches).map((e) => toLobbyRow(e, now(), serverOffset));
-    list.replaceChildren();
+    const shown = trimLobbyList(matches);
+    const rows = shown.map((entry) => ({ entry, row: toLobbyRow(entry, now(), serverOffset) }));
+    const waiting = countNeedingResponse(shown);
+    paintMatchesDisclosure(rows.length, waiting);
     empty.hidden = rows.length > 0;
-    for (const row of rows) {
-      const li = document.createElement('li');
-      li.className = `online-row bucket-${row.bucket}${row.warnLastTwoHours || row.atRisk ? ' warn' : ''}`;
-      li.tabIndex = 0;
-      li.setAttribute('role', 'button');
-      li.dataset.matchId = row.matchId;
-      // Grace is shown as a word next to the clock (never colour alone), plus the last-2-hours warn.
-      const warnSmall = [
-        row.graceWord ? escapeHtml(row.graceWord) : '',
-        row.warnLastTwoHours ? escapeHtml(ONLINE.warnLastTwoHours) : '',
-      ]
-        .filter(Boolean)
-        .map((t) => `<small>${t}</small>`)
-        .join('');
-      li.innerHTML = `<span class="online-row-icon" data-icon="${row.statusIcon}" aria-hidden="true"></span>
+    // Rebuild rows only when something they show actually changed. A poll that finds the same
+    // list leaves the DOM (and any keyboard focus) exactly where it was.
+    const signature = rows
+      .map(({ entry, row }) =>
+        [
+          row.matchId,
+          row.bucket,
+          row.opponentName,
+          row.statusWord,
+          row.timeLeft ?? '',
+          row.warnLastTwoHours ? 1 : 0,
+          row.graceWord ?? '',
+          needsMyResponse(entry) ? 1 : 0,
+        ].join('\u0001'),
+      )
+      .join('\u0002');
+    if (signature !== matchesSignature) {
+      matchesSignature = signature;
+      const focusedId =
+        document.activeElement instanceof HTMLElement ? document.activeElement.dataset.matchId ?? null : null;
+      list.replaceChildren();
+      for (const { entry, row } of rows) {
+        const needsResponse = needsMyResponse(entry);
+        const li = document.createElement('li');
+        li.className = `online-row bucket-${row.bucket}${row.warnLastTwoHours || row.atRisk ? ' warn' : ''}${
+          needsResponse ? ' needs-response' : ''
+        }`;
+        li.tabIndex = 0;
+        li.setAttribute('role', 'button');
+        li.dataset.matchId = row.matchId;
+        // Grace is shown as a word next to the clock (never colour alone), plus the last-2-hours warn.
+        const warnSmall = [
+          row.graceWord ? escapeHtml(row.graceWord) : '',
+          row.warnLastTwoHours ? escapeHtml(ONLINE.warnLastTwoHours) : '',
+        ]
+          .filter(Boolean)
+          .map((t) => `<small>${t}</small>`)
+          .join('');
+        // The "!" is decoration only (aria-hidden): the row's own words say "Your turn", and the
+        // disclosure button carries the count in its accessible name.
+        li.innerHTML = `<span class="online-row-mark" aria-hidden="true">
+          <span class="online-row-icon" data-icon="${row.statusIcon}"></span>
+          ${needsResponse ? '<span class="online-row-attention">!</span>' : ''}
+        </span>
         <span class="online-row-main"><b>${escapeHtml(row.opponentName)}</b>
         <span class="online-row-status">${escapeHtml(row.statusWord)}</span></span>
         <span class="online-row-time">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${warnSmall}</span>`;
-      const open = () => void openMatch(row.matchId);
-      li.addEventListener('click', open);
-      li.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter' || ev.key === ' ') {
-          ev.preventDefault();
-          open();
-        }
-      });
-      list.appendChild(li);
+        const open = () => void openMatch(row.matchId);
+        li.addEventListener('click', open);
+        li.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') {
+            ev.preventDefault();
+            open();
+          }
+        });
+        list.appendChild(li);
+      }
+      if (focusedId) {
+        const again = [...list.querySelectorAll<HTMLElement>('li[data-match-id]')].find(
+          (el) => el.dataset.matchId === focusedId,
+        );
+        again?.focus();
+      }
     }
     refreshTitle();
   };
@@ -434,18 +549,42 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   worldView.setMyLevel(() => hooks.campaignLevel?.() ?? null);
 
   const reloadMatches = async () => {
-    const id = await ensureIdentity();
-    if (!id) return;
+    // Single flight: a slow request must not let the 10s hub poll stack a second list read.
+    if (reloadInFlight) return;
+    reloadInFlight = true;
     try {
-      const res = await client.listMatches(id.token);
-      serverOffset = res.serverNow - now();
-      matches = res.matches;
-      renderMatches();
-      notice('online-hub-notice', '');
-      flashIdentityReplaced();
-    } catch (error) {
-      notice('online-hub-notice', errorMessage(error));
+      const id = await ensureIdentity();
+      if (!id) return;
+      try {
+        const res = await client.listMatches(id.token);
+        serverOffset = res.serverNow - now();
+        matches = res.matches;
+        renderMatches();
+        notice('online-hub-notice', '');
+        flashIdentityReplaced();
+      } catch (error) {
+        notice('online-hub-notice', errorMessage(error));
+      }
+    } finally {
+      reloadInFlight = false;
     }
+  };
+
+  /**
+   * A quiet list refresh while the hub is the visible screen. The red "!" lives on a COLLAPSED
+   * button, so it is only useful if it can appear without the player touching anything: an
+   * opponent's Throw (or a friend joining) must light it. Ten seconds is slower than a live duel's
+   * 2s play poll — this is the menu, not the board — and the timer stops with the screen.
+   */
+  const startHubPoll = () => {
+    stopHubPoll();
+    hubPollTimer = setInterval(() => {
+      if (hub.hidden) {
+        stopHubPoll();
+        return;
+      }
+      void reloadMatches();
+    }, HUB_POLL_MS);
   };
 
   const maybeFirstCard = () => {
@@ -479,6 +618,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const linkBlock = document.getElementById('online-link-block');
     if (linkBlock) linkBlock.hidden = false;
     await reloadMatches();
+    startHubPoll();
   };
 
   const openWaiting = (match: MatchSummary) => {
@@ -1012,6 +1152,13 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   window.addEventListener('futasaku:menu', () => { void refreshMenu(); });
   if (menuEl?.hidden === false) void refreshMenu();
   $('online-create').addEventListener('click', () => void createMatch());
+  // The "Your matches" disclosure. Opening also asks for the freshest list; the render it causes
+  // reads `matchesExpanded`, so it cannot shut the panel it just opened.
+  $('online-matches-toggle').addEventListener('click', () => {
+    const open = !matchesExpanded;
+    setMatchesExpanded(open);
+    if (open) void reloadMatches();
+  });
   document.getElementById('online-find')?.addEventListener('click', () => void findOpponent());
   $('online-join-open').addEventListener('click', () => {
     fillCopy();
