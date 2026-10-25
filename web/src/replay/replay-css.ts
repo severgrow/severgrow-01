@@ -11,8 +11,8 @@ export const REPLAY_CSS = `
   --rp-dim: rgba(240, 233, 220, .62);
   --rp-faint: rgba(240, 233, 220, .34);
   --rp-line: rgba(233, 216, 173, .16);
-  --rp-me: #b6cc8b;
-  --rp-opp: #dfa273;
+  --rp-me: var(--c-you, #7fcf8d);
+  --rp-opp: var(--c-bot, #ff6b4a);
   position: fixed;
   inset: 0;
   z-index: 64;
