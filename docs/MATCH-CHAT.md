@@ -8,7 +8,7 @@ Base: online commit `1c326f8` (2026-10-25). No merge, production migration or de
 
 ## Experience
 
-A 44px communication key beside the menu opens a nonmodal transcript over the board. It uses the
+A 44px communication key directly above the cockpit context button opens a nonmodal transcript over the board. It uses the
 actual `--dark-glass`, `--dark-glass-blur`, `--font-ui` and `--font` materials. Cream text, fine rules,
 small seat labels, no avatars/bubbles. No competing motion system: a 90ms/3px entry using the existing interface press/easing/travel tokens, removed for
 reduced motion. Incoming messages never open the panel or steal focus. A temporary preview and
@@ -216,3 +216,14 @@ caption is removed entirely, while own-turn/read-only/error explanations remain 
 Validation for this refinement: 33 two-client browser checks, 16 focused controller/channel tests,
 TypeScript checks and the browser suite's futa05 production build passed. Updated screenshots were
 visually reviewed. No deployment was performed.
+
+Cockpit integration: the chat trigger now mounts in `#smart-panel`, aligned directly above
+`#smart-context` with the same `--control-size`, `--control-gap`, ivory colour and supplied hardware
+button-frame artwork. Absolute placement adds no cockpit row or gameplay layout changes, including
+when the hand side changes. Its preview follows the same anchor, and both elements are removed on
+match teardown. Five viewport checks compare actual key alignment, dimensions, spacing and frame
+material against the context button. Header placement remains only a legacy-layout fallback.
+Validation for cockpit placement: 33 match-chat browser checks passed, 16 focused tests passed,
+TypeScript and Futa04 production build/assets checks passed, and the existing cockpit regression
+suite passed **882 checks** across phone/desktop sizes and both hand sides. Reviewed closed-state
+[phone capture](screens/match-chat/cockpit.png). No merge or deployment performed.

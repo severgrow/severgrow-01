@@ -258,8 +258,9 @@ export const mountMatchChat = (o: {
   reportForm.append(reason, reportSend, reportCancel);
   controls.append(summary, tools, reportForm);
   panel.append(head, log, newer, foot, controls, live);
-  root.append(panel, preview);
-  o.header.append(toggle);
+  root.append(panel);
+  const cockpit = o.host.querySelector<HTMLElement>('#smart-panel');
+  (cockpit ?? o.header).append(toggle, preview);
   o.host.append(root);
   let previewTimer: ReturnType<typeof setTimeout> | null = null;
   let lastPreview = '',
@@ -503,6 +504,7 @@ export const mountMatchChat = (o: {
       window.visualViewport?.removeEventListener('resize', viewport);
       window.visualViewport?.removeEventListener('scroll', viewport);
       root.remove();
+      preview.remove();
       toggle.remove();
     },
   };

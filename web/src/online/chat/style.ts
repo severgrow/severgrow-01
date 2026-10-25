@@ -1,6 +1,13 @@
 export const CHAT_CSS = `
 .match-chat { --chat-ink: #e8ddc5; color: var(--chat-ink); font-family: var(--font-ui, ui-monospace, monospace); }
 #match-chat-toggle { position:absolute;left:52px;top:2px;width:44px;height:44px;z-index:12;pointer-events:auto;display:grid;place-items:center;color:#e8ddc5; }
+/* An extra hardware key above the context slot; absolute placement leaves cockpit layout intact. */
+#smart-panel > #match-chat-toggle {left:auto;right:0;top:calc(-1 * (var(--control-size,44px) + var(--control-gap,4px)));width:var(--control-size,44px);height:var(--control-size,44px);min-width:var(--control-size,44px);min-height:var(--control-size,44px);margin:0;padding:0;box-sizing:border-box;border:0;border-radius:12px;background:#111312;color:var(--control-ivory,#f5edda);box-shadow:none;touch-action:manipulation;}
+#smart-panel > #match-chat-toggle::before {content:'';position:absolute;inset:0;pointer-events:none;background:url('./hardware/button-frame-supplied.webp') center / contain no-repeat;}
+#smart-panel > #match-chat-toggle svg {position:relative;width:21px;height:21px;z-index:1;opacity:.94;}
+#smart-panel > #match-chat-toggle:is(:hover,:focus-visible,[aria-expanded='true']) {color:#fff1cf;box-shadow:0 0 9px var(--light-bloom,rgba(196,150,88,.22));}
+#smart-panel > #match-chat-toggle:focus-visible {outline:2px solid #ffe1a7;outline-offset:2px;}
+#smart-panel > .match-chat-preview {position:absolute;top:auto;left:auto;right:0;bottom:calc(100% + var(--control-size,44px) + var(--control-gap,4px) + 8px);color:#e8ddc5;box-sizing:border-box;}
 #match-chat-toggle svg {width:19px;height:19px;stroke:currentColor;stroke-width:1.5;fill:none;}
 .match-chat-dot {position:absolute;right:5px;top:6px;width:6px;height:6px;border-radius:50%;background:#e8ddc5;box-shadow:0 0 0 3px rgba(8,10,10,.5);}
 .match-chat-panel {position:fixed;z-index:65;top:var(--chat-top,56px);left:max(8px,env(safe-area-inset-left));width:min(480px,calc(100vw - 16px - env(safe-area-inset-right) - env(safe-area-inset-left)));height:min(680px,var(--chat-height,calc(100dvh - 72px)));box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;background:var(--dark-glass,rgba(8,10,10,.42));-webkit-backdrop-filter:var(--dark-glass-blur,blur(9px) saturate(1.05));backdrop-filter:var(--dark-glass-blur,blur(9px) saturate(1.05));border:0;border-radius:12px;box-shadow:0 12px 36px #0004;animation:match-chat-in var(--ix-press,90ms) var(--ix-ease-open,ease-out);}

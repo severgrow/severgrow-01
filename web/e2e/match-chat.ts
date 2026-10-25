@@ -452,8 +452,12 @@ try {
         t = document
           .querySelector('#match-chat-toggle')!
           .getBoundingClientRect(),
-        menu = document.querySelector('#hud-menu')!.getBoundingClientRect(),
-        logo = document.querySelector('#hud-brand')?.getBoundingClientRect();
+        context = document
+          .querySelector('#smart-context')!
+          .getBoundingClientRect();
+      const gap = parseFloat(
+        getComputedStyle(document.querySelector('#smart-panel')!).rowGap,
+      );
       const buttons = [
         ...document.querySelectorAll<HTMLButtonElement>(
           '.match-chat-panel button',
@@ -477,8 +481,20 @@ try {
           p.right <= innerWidth + 1 &&
           p.bottom <= innerHeight + 1,
         scroll: document.documentElement.scrollWidth <= innerWidth,
-        menu: t.left >= menu.right - 1,
-        logo: !logo || t.right <= logo.left,
+        cockpitKey:
+          Math.abs(t.left - context.left) < 1 &&
+          Math.abs(t.width - context.width) < 1 &&
+          Math.abs(t.height - context.height) < 1 &&
+          Math.abs(context.top - t.bottom - gap) < 1,
+        hardware:
+          getComputedStyle(
+            document.querySelector('#match-chat-toggle')!,
+            '::before',
+          ).backgroundImage ===
+          getComputedStyle(
+            document.querySelector('#smart-context')!,
+            '::before',
+          ).backgroundImage,
         targets: buttons.every((b) => b.getBoundingClientRect().height >= 43),
         glass: getComputedStyle(document.querySelector('.match-chat-panel')!)
           .backgroundColor,
@@ -491,8 +507,8 @@ try {
         geometry.phrasesHidden &&
         geometry.bounds &&
         geometry.scroll &&
-        geometry.menu &&
-        geometry.logo &&
+        geometry.cockpitKey &&
+        geometry.hardware &&
         geometry.targets,
     );
     check(
@@ -501,6 +517,7 @@ try {
     );
     await visual.screenshot({ path: `${out}/chat-${width}x${height}.png` });
     await visual.keyboard.press('Escape');
+    await visual.screenshot({ path: `${out}/cockpit-${width}x${height}.png` });
   }
   await sender.setViewportSize({ width: 390, height: 844 });
   if (
