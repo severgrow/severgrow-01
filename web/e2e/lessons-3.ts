@@ -15,6 +15,7 @@ import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { SMALL_HOMES } from '../src/lessons/authored.js';
 import { LESSON } from '../../src/strings.js';
 import { LESSON_VERSION } from '../src/lessons/mastery.js';
+import { SEEDS_IDENTITY_UNVERIFIED } from '../src/online/seed-icon.js';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
 const SHOTS = process.env.SHOTS ?? '';
@@ -589,7 +590,16 @@ try {
         // (it cannot answer by design) the honest card now shows NO Seeds line. The payout itself,
         // and the line when the server DOES answer, is proven end to end in web/e2e/seeds-settle.ts.
         check(!/pending/i.test(card.seeds ?? ''), `L10 finish card never claims pending Seeds (${JSON.stringify(card.seeds)})`);
-        check(!card.seeds, `L10 finish card claims no Seeds without a receipt (${JSON.stringify(card.seeds)})`);
+        // The CI placeholder cannot issue an identity token, so the settle now reports `unverified`
+        // rather than staying silent (owner, 2026-10-25: a stranded payout must say so instead of
+        // doing nothing). That is an honest ABSENCE of a receipt, not a claim of one — so the rule is
+        // precise: the card may either say nothing, or say exactly this. It must never show a number
+        // or a pending line it cannot back with a receipt.
+        const unverifiedLine = SEEDS_IDENTITY_UNVERIFIED;
+        check(
+          !card.seeds || card.seeds.startsWith(unverifiedLine),
+          `L10 finish card shows no Seeds number without a receipt (${JSON.stringify(card.seeds)})`,
+        );
         check(card.territory === 'Seeds are earned by winning.Spend 100 to claim a tile of Territory on the world map.', `L10 finish card explains Seeds and Territory (${card.territory})`);
         check(card.territoryKey, 'L10 finish card offers Open Territory');
       }
