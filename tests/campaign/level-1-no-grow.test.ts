@@ -20,15 +20,19 @@ const growthOnTheirGround = (s: State): Action[] =>
     : false,
   );
 
-/** A full deterministic game: the human side plays as level 9, the bot as the level's own bot. */
-const play = (level = L1) => {
+/** A full deterministic game: the human side plays as level 9, the bot as the level's own bot.
+ *  EVERY one of my acting positions is enumerated, not a sample: a stronger card next to their tile
+ *  is exactly the situation the rule exists for, and sampling could step over it. */
+const play = (level = L1, withholdCheck = true) => {
   let s = campaignOpening(level);
   const actions: Action[] = [];
-  let enumerated = 0;
+  let checked = 0;
+  let offers = 0;
   while (s.phase !== 'GAME_OVER' && actions.length < 1600) {
-    // The opening, then every 8th of my acting positions: never a legal growth onto their ground.
-    if (s.phase === 'ACT' && s.actor === 0 && (actions.length === 0 || enumerated++ % 8 === 0)) {
-      expect(growthOnTheirGround(s), `level 1 turn ${s.turnNumber}`).toHaveLength(0);
+    if (s.phase === 'ACT' && s.actor === 0) {
+      checked += 1;
+      offers += growthOnTheirGround(s).length;
+      if (withholdCheck) expect(growthOnTheirGround(s), `level 1 turn ${s.turnNumber}`).toHaveLength(0);
     }
     const seatLevel = s.actor === 1 ? level.botLevel : 9;
     const action = chooseLevelAction(
@@ -39,7 +43,7 @@ const play = (level = L1) => {
     actions.push(action);
     s = apply(s, action);
   }
-  return { end: s, actions };
+  return { end: s, actions, checked, offers };
 };
 
 describe('level 1 withholds taking the opponent’s ground', () => {
@@ -56,12 +60,21 @@ describe('level 1 withholds taking the opponent’s ground', () => {
     expect(L1.intent).toContain('open');
   });
 
-  it('offers no growth onto an opponent-owned tile, from the opening onward', () => {
+  it('offers no growth onto an opponent-owned tile on ANY of my acting turns', () => {
     const opening = campaignOpening(L1);
     expect(growthOnTheirGround(opening)).toHaveLength(0);
     const game = play();
-    expect(game.actions.length).toBeGreaterThan(3);
+    // The walk must really have enumerated my turns (a previous version sampled every 8th one).
+    expect(game.checked, 'the walk must enumerate my acting turns').toBeGreaterThan(20);
+    expect(game.offers, 'no legal growth may land on their ground').toBe(0);
     expect(game.end.phase).toBe('GAME_OVER');
+  });
+
+  it('that check is not vacuous: with the rule ON the same walk finds the offer', () => {
+    // The control. Without it, this file could pass forever without ever reaching a position where
+    // Overgrow was available, and removing `allowOvergrow: false` would go unnoticed.
+    const control = play({ ...L1, config: { ...L1.config, allowOvergrow: true } }, false);
+    expect(control.offers, 'the fixture reaches positions where taking their tile is legal').toBeGreaterThan(0);
   });
 
   it('is still winnable from its own seed with its own bot', () => {

@@ -2067,12 +2067,12 @@ async function startGame(
   const playRitual = playsStarterRitual(IS_FUTA04, campaign?.number ?? null);
   // A campaign match always keeps its opening as the replay base: the save must replay under the
   // LEVEL's config (its authored board), never under the default config.
-  if (lessonNow) handSettled = false;
   beginSession(state, null, [], campaign || opponentStarts ? state : null, playRitual);
   // A lesson's stage card waits for the ritual below: the ceremony owns the screen until it
   // resolves, and level 10's send-off is the last beat before the first move. Levels 1-9 have no
   // ritual, so their stage starts here, exactly as it always has.
-  if (lessonNow && !playRitual) startLessonStage();  // beginSession freshens the generation token for THIS match; another entry starting a match now
+  if (lessonNow && !playRitual) startLessonStage();
+  // beginSession freshens the generation token for THIS match; another entry starting a match now
   // would supersede it and the checks below would stop this older start from touching that one.
   generation = startGameGeneration;
   save();
@@ -2414,7 +2414,8 @@ function ensureTutorialThrowPhase() {
     if (!session || !coach.tutorial || session.state.phase !== 'ACT' || session.state.actor !== HUMAN) return;
     const end = session.legal.find(a => a.t === 'EndAct');
     if (!end) return;
-    const played = session.play(end, HUMAN);
+    // The app skips a Grow the lesson has no use for; not a move the player made (see Session.play).
+    const played = session.play(end, HUMAN, { auto: true });
     if (played) afterPlay(played, HUMAN, null);
   };
   if (busy()) void idle().then(run);
@@ -3366,7 +3367,12 @@ function autoAdvance() {
     note({ t: 'empty', at: Date.now() });
     caption(NOTHING_TO_PLAY, null, 'info');
   }
-  humanPlay(end);
+  // `auto`: like the board tap that skips an optional Bloom, this EndAct is the APP's own move to
+  // Throw, not one the player made. Without the flag it became its own undo stop, so the first
+  // Undo after a Grow returned to the position AFTER that Grow (and the `skippedFrom` guard then
+  // stopped the auto-skip re-firing), which is exactly the owner's "Undo did nothing" report —
+  // still present on any turn where nothing but EndAct is left.
+  humanPlay(end, { auto: true });
 }
 
 // ---------- the juice budget ----------
@@ -6699,7 +6705,8 @@ function scheduleTutorialRoutineThrow(stepKey: string) {
     if (session?.state.phase === 'ACT') {
       const end = session.legal.find(action => action.t === 'EndAct');
       if (end) {
-        const played = session.play(end, HUMAN);
+        // Scripted tutorial beat: the APP throws, so it is not a stop the player can "take back".
+        const played = session.play(end, HUMAN, { auto: true });
         if (played) afterPlay(played, HUMAN, null);
       }
       await idle();
@@ -8785,8 +8792,9 @@ bind('levels-back', () => showScreen('menu'));
 bind('menu-campaign', () => enterCampaign());
 bind('campaign-back', () => showScreen('menu'));
 bind('campaign-continue', () => enterCampaign());
-// The ask sheet: only reachable when the saved match is a different level from the next one, so
-// both answers are explicit and one tap each. Resume wins the lead: the match exists already.
+// The ask sheet. Since the entry anchors on the PLACE (owner, 2026-10-24), `campaignEntry` only
+// raises it when the saved match IS the place (`next.id === saved.id`); the different-level wording
+// below is kept for a direct caller, not reachable through the entry any more.
 bind('csa-resume', () => {
   campaignAsk = null;
   sheet(null);
