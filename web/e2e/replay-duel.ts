@@ -72,40 +72,59 @@ const replayNow = async (page: Page): Promise<ReplayNow | null> =>
 
 const boardSignature = async (page: Page): Promise<string> => (await replayNow(page))?.board ?? '';
 
+type ReplayPlan = {
+  total: number;
+  names: [string, string];
+  frames: { index: number; at: number; duration: number; turn: number; boundary: boolean; kind: string; board: string }[];
+};
+
+/** The player's own frame plan: the exact beat times, seats and board signatures it will paint. */
+const replayPlan = async (page: Page): Promise<ReplayPlan | null> =>
+  (await page.evaluate(() => {
+    const hook = (window as unknown as { __severgrow?: { replayPlan?: () => unknown } }).__severgrow;
+    return hook?.replayPlan?.() ?? null;
+  })) as ReplayPlan | null;
+
 /**
- * Drag the scrub bar to successive points until the turn line changes seat, then report whether the
- * painted frame changed with it. This is the owner's "make it clear when the turn switches".
+ * THE SEEK PROOF (owner brief: "a scrub bar … it must actually seek").
+ *
+ * Pick one EXACT hand-over beat from the player's own plan, drag the bar to the middle of that
+ * beat's time slot, and then require all four things to name that same frame: the reported index,
+ * the seat whose turn it is, the visible line (with that seat's name), and the painted board (its
+ * signature must be the plan's signature for that frame — the position rebuilt from the log, not
+ * the neighbouring frame's picture).
  */
 const seekToTurnSwitch = async (page: Page): Promise<{ ok: boolean; note: string }> => {
   const box = await page.locator('#replay .rp-scrub').boundingBox();
   if (!box) return { ok: false, note: 'no scrub bar' };
-  const start = await replayNow(page);
-  if (!start) return { ok: false, note: 'no replay' };
-  for (const fraction of [0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85]) {
-    const x = box.x + box.width * fraction;
-    const y = box.y + box.height / 2;
-    // Hold the bar: `seek` runs on pointerdown and the clock stays still until pointerup, so the
-    // frame, the name and the turn line are read from ONE position (no race with playback).
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.waitForTimeout(60);
-    const at = await replayNow(page);
-    if (at && at.turn !== start.turn) {
-      // A hand-over beat changes NO tile by design (the board is the same position; only the turn
-      // moved), so the proof is the frame AND the visible line naming the seat that now moves.
-      const name = ((await page.locator(`#replay .rp-name[data-seat="${at.turn}"]`).textContent()) ?? '').trim();
-      const line = ((await page.locator('#replay .rp-turn').textContent()) ?? '').trim();
-      const lineSeat = await page.getAttribute('#replay .rp-turn', 'data-seat');
-      await page.mouse.up();
-      return {
-        ok: at.index !== start.index && name.length > 0 && line.includes(name),
-        note: `seat ${start.turn}→${at.turn}, frame ${start.index}→${at.index}, name "${name}", line "${line}", lineSeat ${lineSeat}`,
-      };
-    }
-    await page.mouse.up();
-    await page.waitForTimeout(60);
-  }
-  return { ok: false, note: 'no turn hand-over found' };
+  const plan = await replayPlan(page);
+  const handovers = plan?.frames.filter((f) => f.kind === 'turn') ?? [];
+  if (!plan || handovers.length === 0) return { ok: false, note: 'no turn hand-over in the plan' };
+  const target = handovers[Math.floor(handovers.length / 2)]!;
+  const x = box.x + box.width * ((target.at + target.duration / 2) / plan.total);
+  const y = box.y + box.height / 2;
+  // Hold the bar: `seek` runs on pointerdown and the clock stays still until pointerup, so the
+  // frame, the name and the turn line are read from ONE position (no race with playback).
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.waitForTimeout(80);
+  const at = await replayNow(page);
+  const name = ((await page.locator(`#replay .rp-name[data-seat="${target.turn}"]`).textContent()) ?? '').trim();
+  const line = ((await page.locator('#replay .rp-turn').textContent()) ?? '').trim();
+  const lineSeat = await page.getAttribute('#replay .rp-turn', 'data-seat');
+  await page.mouse.up();
+  const ok =
+    !!at &&
+    at.index === target.index &&
+    at.turn === target.turn &&
+    at.board === target.board &&
+    name.length > 0 &&
+    line.includes(name) &&
+    Number(lineSeat) === target.turn;
+  return {
+    ok,
+    note: `frame ${at?.index}/${target.index}, seat ${at?.turn}/${target.turn}, name "${name}", line "${line}", lineSeat ${lineSeat}, boardMatch ${at?.board === target.board}`,
+  };
 };
 
 /** Settings for a fast, quiet run; motion ON, so the replay's crossfade path is the one measured. */
@@ -313,7 +332,7 @@ try {
   await pageA.waitForTimeout(1200);
   await pageA.screenshot({ path: `${SHOTS}/replay-mid-390x844.png` });
   const switched = await seekToTurnSwitch(pageA);
-  check('a seek to a turn hand-over repaints that frame', switched.ok, switched.note);
+  check('a seek to a turn hand-over paints that exact frame and names the player', switched.ok, switched.note);
   await pageA.waitForTimeout(420);
   await pageA.screenshot({ path: `${SHOTS}/replay-turn-390x844.png` });
 

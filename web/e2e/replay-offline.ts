@@ -204,6 +204,53 @@ try {
     return el ? `${el.hidden ? 'hidden' : 'shown'}:${(el.textContent ?? '').trim()}` : 'missing';
   });
   check('the practice result card is untouched', titleAfter === titleBefore && seedsAfter === seedsBefore, `${titleBefore} / ${seedsBefore}`);
+
+  // ---------- Reduce motion: same pacing, the board simply is the next position ----------
+  await page.evaluate(() => {
+    const input = document.querySelector<HTMLInputElement>('input[data-setting="reduceMotion"]');
+    if (!input) throw new Error('no reduce-motion switch');
+    input.checked = true;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.locator('#go-replay').click();
+  await waitVisible(page, '#replay', 20_000);
+  await page.waitForTimeout(900);
+  const rm = await replayNow(page);
+  check(
+    'reduce motion keeps the pacing exactly in band',
+    !!rm && rm.total > 0 && Math.abs(rm.total - (now?.total ?? 0)) <= 80,
+    `${rm?.total} vs ${now?.total}`,
+  );
+  check(
+    'reduce motion paints no crossfade or flight on the replay',
+    (await page.evaluate(() => {
+      const root = document.getElementById('replay');
+      const inside = document
+        .getAnimations()
+        .filter((a) => a.playState === 'running')
+        .filter((a) => {
+          const effect = a.effect;
+          const target = effect instanceof KeyframeEffect ? effect.target : null;
+          return target instanceof Element && !!target.closest('#replay');
+        });
+      return (
+        document.documentElement.classList.contains('reduce-motion') &&
+        (root?.querySelectorAll('.hex-cell').length ?? 0) > 0 &&
+        inside.length === 0
+      );
+    })) === true,
+  );
+  const beforeAdvance = (await replayNow(page))?.index ?? -1;
+  await page.waitForTimeout(1_800);
+  const afterAdvance = await replayNow(page);
+  check(
+    'reduce motion still advances the match',
+    !!afterAdvance && afterAdvance.playing && afterAdvance.index > beforeAdvance,
+    `${beforeAdvance} → ${afterAdvance?.index}`,
+  );
+  await page.screenshot({ path: `${SHOTS}/replay-practice-reduced-390x844.png` });
+  await page.locator('#replay [data-rp="close"]').click();
+  await page.locator('#replay').waitFor({ state: 'hidden', timeout: 5_000 });
 } finally {
   await browser.close();
   await server.close();

@@ -129,6 +129,26 @@ describe('the scrub bar', () => {
     expect(end.index).toBe(model.frames.length - 1);
   });
 
+  it('a seek into every turn hand-over lands on that exact frame, its seat and its board', () => {
+    for (const { input, model } of models) {
+      const handovers = model.frames.filter((f) => f.kind === 'turn');
+      expect(handovers.length).toBeGreaterThan(0);
+      for (const frame of handovers) {
+        // The middle of the beat's own time slot, as a fraction of the bar — the same mapping the
+        // scrub bar uses, from the frame plan alone.
+        const landed = seekTo(model, (frame.at + frame.duration / 2) / model.totalMs);
+        expect(landed.index).toBe(frame.index);
+        const shown = model.frames[landed.index]!;
+        expect(shown.turn).toBe(frame.turn);
+        // The hand-over names the player who NOW moves, not the one who just moved.
+        expect(shown.turn).toBe(shown.seat);
+        // And the position rebuilt from the log is the frame's own board, not its neighbour's.
+        expect(boardAtIndex(input, model, landed.index)).toEqual(frame.board);
+        expect(scoresAtIndex(input, model, landed.index)).toEqual(frame.scores);
+      }
+    }
+  });
+
   it('progress is 0 at the first beat and never past 1', () => {
     const { model } = models[2]!;
     expect(progressOf(model, 0)).toBe(0);

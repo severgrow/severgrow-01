@@ -7612,11 +7612,12 @@ function renderGameOver() {
     // The record line counts offline games only — never leak it onto a server match.
     $('go-stats').textContent = '';
     setGoExtra('go-stats', false);
-    // A duel has no offline cut replay to offer, and no reviewable log — but it DOES have a replay
-    // of the whole match (owner brief, 2026-10-25), whenever at least one move was committed.
+    // A duel has no offline cut replay to offer, and no replayable log to review.
     setGoExtra('go-cut', false);
-    setReplayAvailable(snapshot.revision > 0);
     $('go-review').hidden = true;
+    // It DOES have a replay of the whole match (owner brief, 2026-10-25), whenever at least one
+    // move was committed — so the one entry sits on the card beside the ways forward.
+    setReplayAvailable(snapshot.revision > 0);
     if (wasHidden) closeReview();
     // The owner's ask: a REAL rematch leads the finish screen, ahead of the old "back out" that
     // used to sit in this slot. Back to matches and Menu stay, as secondary ways out
@@ -9890,6 +9891,8 @@ let appReady = false;
    * not mounted. `index` is the frame on screen, `total` the whole playback length in ms.
    */
   replay: () => replayPlayer?.now() ?? null,
+  /** Tests only: the replay's whole frame plan (times, seats, each frame's board signature). */
+  replayPlan: () => replayPlayer?.plan() ?? null,
   /** Tests/screenshots: the install invitation's memory (games counted) and a way to show it. */
   install: () => installPrompt.memory(),
   showInstall: () => installPrompt.showNow(),

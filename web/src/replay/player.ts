@@ -14,6 +14,7 @@ import { NO_OVERLAY, BoardView } from '../ui/board.js';
 import type { MaterialLook } from '../logic/materials.js';
 import type { ThemeId, ThemeStyle } from '../logic/themes.js';
 import type { Board } from '../logic/anim.js';
+import type { Player } from '../../../src/engine/index.js';
 import type { ReplayModel } from './timeline.js';
 import { boardAtIndex, frameAtTime, seekTo } from './seek.js';
 import { REPLAY_CSS } from './replay-css.js';
@@ -43,6 +44,24 @@ export type ReplayHandle = {
     ended: boolean;
     board: string;
     turn: number | null;
+  } | null;
+  /**
+   * Test/diagnostic hook: the whole frame plan (time, seat, kind) and each frame's own board
+   * signature. It never drives playback; the e2e suite uses it to name an EXACT frame — a
+   * hand-over — seek to it, and check the picture and the named seat are that frame's.
+   */
+  plan: () => {
+    total: number;
+    names: readonly [string, string];
+    frames: {
+      index: number;
+      at: number;
+      duration: number;
+      turn: number;
+      boundary: boolean;
+      kind: string;
+      board: string;
+    }[];
   } | null;
 };
 
@@ -209,6 +228,17 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     );
   };
 
+  /** The one line naming whose turn it is: the seat's name in the seat's own ink. */
+  const setTurnLine = (seat: Player): void => {
+    if (!model) return;
+    const b = document.createElement('b');
+    b.textContent = model.names[seat];
+    turn.replaceChildren(b, document.createTextNode(` ${REPLAY.moveSuffix}`));
+    turn.dataset.seat = String(seat);
+    nameMe.dataset.live = seat === 0 ? '1' : '0';
+    nameOpp.dataset.live = seat === 1 ? '1' : '0';
+  };
+
   const paintTurn = (frameIndex: number): void => {
     if (!model) return;
     const frame = model.frames[frameIndex];
@@ -221,10 +251,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
       delete turn.dataset.seat;
     } else if (turnShown !== frameIndex || turn.dataset.seat !== String(seat)) {
       // The name gets the seat's own ink; the rest of the line stays quiet.
-      const b = document.createElement('b');
-      b.textContent = model.names[seat];
-      turn.replaceChildren(b, document.createTextNode(` ${REPLAY.moveSuffix}`));
-      turn.dataset.seat = String(seat);
+      setTurnLine(seat);
     }
     // One settle per hand-over, never a loop.
     turn.dataset.change = changed && !reduce() ? '1' : '0';
@@ -427,6 +454,10 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   root.addEventListener('keydown', (event) => {
     if (!model) return;
     const key = event.key;
+    // A focused control keeps its own Space/Enter: the dialog must not swallow the press that
+    // activates "Replay again" or "Close".
+    const target = event.target as Element | null;
+    if ((key === ' ' || key === 'Spacebar') && target?.closest('button, a[href], input, [role="button"]')) return;
     if (key === 'Escape') {
       event.preventDefault();
       close();
@@ -483,6 +514,9 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     nameOpp.textContent = next.names[1];
     scoreMe.textContent = String(next.from.scores[0]);
     scoreOpp.textContent = String(next.from.scores[1]);
+    // The first paint is the OPENING position, before the staged entrance and the first beat. The
+    // turn line is set here too, so the surface never shows a blank line while it fades in.
+    setTurnLine(next.frames[0]?.turn ?? next.from.turn);
     const { style: themeStyle, id } = deps.theme();
     board.setup(next.config, next.terrain, themeStyle, deps.look(), id);
     // The removal ghosts paint above the tiles, in board coordinates (they are moved this once,
@@ -533,6 +567,22 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
             ended,
             board: painted,
             turn: model.frames[Math.max(0, index)]?.turn ?? null,
+          }
+        : null,
+    plan: () =>
+      model
+        ? {
+            total: Math.round(model.totalMs),
+            names: model.names,
+            frames: model.frames.map((frame) => ({
+              index: frame.index,
+              at: Math.round(frame.at),
+              duration: frame.duration,
+              turn: frame.turn,
+              boundary: frame.boundary,
+              kind: frame.kind,
+              board: boardSignature(frame.board),
+            })),
           }
         : null,
   };
