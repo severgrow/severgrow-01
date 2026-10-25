@@ -1467,7 +1467,7 @@ export const LESSON = Object.freeze({
 export const MATCH_CHAT = {
   title: 'Match chat', open: 'Open match chat', close: 'Close chat', you: 'You', opponent: 'Opponent',
   empty: 'A little company across the board.', available: 'Chat available on opponent’s turn',
-  ready: 'Opponent is thinking · chat open', ended: 'Match ended · history only',
+  ended: 'Match ended · history only',
   placeholder: 'A few words…', send: 'Send', pending: 'Sending…', sent: 'Sent', failed: 'Not sent',
   retry: 'Retry', discard: 'Discard', older: 'Earlier messages', newer: 'New messages',
   quickPhrases: 'Quick phrases',

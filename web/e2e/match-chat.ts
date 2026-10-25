@@ -217,6 +217,10 @@ try {
       !(document.querySelector('.match-chat-form input') as HTMLInputElement)
         .disabled,
   );
+  check(
+    'ready chat has no redundant availability caption',
+    await sender.locator('.match-chat-status').isHidden(),
+  );
   await receiver.locator('#match-chat-toggle').click();
   check(
     'own-turn composer and every quick phrase are disabled',
@@ -462,6 +466,9 @@ try {
             getComputedStyle(document.querySelector('.match-chat-text')!)
               .fontSize,
           ) === 15,
+        frameless:
+          getComputedStyle(document.querySelector('.match-chat-panel')!)
+            .borderTopWidth === '0px',
         phrasesHidden: (
           document.querySelector('.match-chat-phrases') as HTMLElement
         ).hidden,
@@ -479,7 +486,8 @@ try {
     });
     check(
       `${width}×${height}: expanded reading panel, compact message text, hidden phrases and accessible controls`,
-      geometry.reading &&
+      geometry.frameless &&
+        geometry.reading &&
         geometry.phrasesHidden &&
         geometry.bounds &&
         geometry.scroll &&

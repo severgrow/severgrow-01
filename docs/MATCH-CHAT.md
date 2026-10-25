@@ -208,3 +208,11 @@ passed, both production channel builds/assets checks passed, and the existing Fu
 passed. No backend, migration, gameplay or deployment changes were needed for this design revision.
 
 Typography refinement: message text is now 15px with 1.5 line height on mobile and desktop, following the owner’s request for smaller messages. The expanded panel and hidden quick phrases are retained.
+
+Icon/material refinement: the quick-phrase trigger uses a rounded three-dot speech glyph instead
+of the angular lightning icon. Close uses the game's shared `ICONS.close` SVG. The panel's outer
+border and inset highlight are removed; its dark-glass material remains. The redundant ready-state
+caption is removed entirely, while own-turn/read-only/error explanations remain when needed.
+Validation for this refinement: 33 two-client browser checks, 16 focused controller/channel tests,
+TypeScript checks and the browser suite's futa05 production build passed. Updated screenshots were
+visually reviewed. No deployment was performed.

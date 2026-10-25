@@ -10,6 +10,7 @@ import type { DuelClient } from '../../../../server/src/client.js';
 import type { MatchChannel, MatchDriverSnapshot } from '../types.js';
 import { createChatController, type ChatState } from './controller.js';
 import { CHAT_CSS } from './style.js';
+import { ICONS } from '../../ui/icons.js';
 
 /** Nonmodal instrument panel: board remains playable. No document scroll or focus steal on arrival. */
 export const mountMatchChat = (o: {
@@ -68,7 +69,8 @@ export const mountMatchChat = (o: {
     b.onclick = run;
     return b;
   };
-  const close = button('×', () => setOpen(false));
+  const close = button('', () => setOpen(false));
+  close.innerHTML = ICONS.close!;
   close.setAttribute('aria-label', copy.close);
   const toolsToggle = button('···', () => {
     setPhrases(false);
@@ -174,7 +176,7 @@ export const mountMatchChat = (o: {
   phraseToggle.setAttribute('aria-expanded', 'false');
   phraseToggle.setAttribute('aria-controls', phrases.id);
   phraseToggle.innerHTML =
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v11H10l-5 4V5Z"/><path d="m11 8-2 4h4l-2 4"/></svg>';
+    '<svg viewBox="0 0 24 24" aria-hidden="true" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5h10a3.5 3.5 0 0 1 3.5 3.5v6a3.5 3.5 0 0 1-3.5 3.5h-5.5L6 21v-3.8A3.5 3.5 0 0 1 3.5 14V8A3.5 3.5 0 0 1 7 4.5Z"/><g fill="currentColor" stroke="none"><circle cx="8" cy="11" r=".9"/><circle cx="12" cy="11" r=".9"/><circle cx="16" cy="11" r=".9"/></g></svg>';
   function setPhrases(open: boolean) {
     phrases.hidden = !open;
     phraseToggle.setAttribute('aria-expanded', String(open));
@@ -381,8 +383,9 @@ export const mountMatchChat = (o: {
           : snap.status === 'finished'
             ? copy.ended
             : s.canSend
-              ? copy.ready
+              ? ''
               : copy.available;
+    status.hidden = status.textContent === '';
     outgoing.replaceChildren();
     outgoing.hidden = !s.outgoing && !s.error;
     if (s.outgoing) {
