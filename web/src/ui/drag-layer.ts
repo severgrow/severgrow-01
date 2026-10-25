@@ -6,7 +6,7 @@
 import type { Action, View } from '../../../src/engine/index.js';
 import type { Sel } from '../logic/interaction.js';
 import { DRAG_THRESHOLD_PX, resolveDrag } from '../logic/drag.js';
-import type { DragHover, DragLedWord, DragResolution, DragSource } from '../logic/drag.js';
+import type { DragHover, DragLedWord, DragMode, DragResolution, DragSource } from '../logic/drag.js';
 
 export type DragLayerHooks = {
   /** True only when a drag may start at all (my turn, not busy, a game on screen). */
@@ -19,13 +19,18 @@ export type DragLayerHooks = {
   /** A hex's centre on screen, for the small snap toward it. */
   pointOf: (key: string) => { x: number; y: number } | null;
   overDiscardPile: (clientX: number, clientY: number) => boolean;
-  upperBoard: (clientY: number) => boolean;
   /** Bloom paint Reverse (kept in sync with the board's toggle). */
   bloomReverse?: () => boolean;
   /** Optional: mark the cockpit shell while a throw drop would commit. */
   setThrowZone?: (on: boolean) => void;
-  /** Plays a legal action the same way the tap path would. */
-  commit: (action: Action) => void;
+  /**
+   * Plays a legal action the same way the tap path would; `mode` says which gesture played it and
+   * `from` is the ghost's last box, so the committed flight can continue from where the card was
+   * (instead of snapping back to the hand for one frame).
+   */
+  commit: (action: Action, mode: DragMode, from?: DOMRect) => void;
+  /** A started move that stayed too short to mean a drag: run the tap it would have been. */
+  tap?: (cardId: number) => void;
   /** No group chosen: open the existing Bloom choices for this card. */
   openBloom: (cardId: number, key: string) => void;
   /** Show a word on the cockpit sign, or null to clear it. */
@@ -312,7 +317,6 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       shape: a.shape as readonly string[],
       upSpeed: a.peakUpSpeed,
       upTravel: Math.max(0, a.startY - a.y),
-      upperBoard: hooks.upperBoard(a.y),
       reverse: hooks.bloomReverse?.() ?? false,
     };
     const usable = (r: DragResolution) =>
@@ -400,8 +404,9 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     armClickGuard();
     hooks.onDragEnd?.();
     if (commit) {
-      if (res.commit) hooks.commit(res.commit);
+      if (res.commit) hooks.commit(res.commit, res.mode, from?.getBoundingClientRect());
       else if (res.openOptions && res.hoverKey && a.source.kind === 'hand') hooks.openBloom(a.source.cardId, res.hoverKey);
+      else if (res.asTap && a.source.kind === 'hand') hooks.tap?.(a.source.cardId);
       else if (from) hooks.flyBack(from, a.sourceEl);
     } else if (from) {
       hooks.flyBack(from, a.sourceEl);

@@ -325,14 +325,17 @@ try {
   check(await skipBloom.evaluate(()=>(window as any).__severgrow.playFor({t:'Sprout',card:9,coord:{q:-3,r:2}},0)),'Grow: setup move succeeds');
   await skipBloom.waitForFunction(()=>!(window as any).__severgrow.busy());
   check(await skipBloom.locator('#smart-bloom').isVisible(),'Grow: Bloom remains optional after Sprout');
-  // skip? ends optional Bloom (context slot mirrors the Skip control); then two taps confirm Throw.
+  // skip? ends optional Bloom (context slot mirrors the Skip control); then pick + tap the pile.
   await skipBloom.locator('#smart-context').click();
   check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase==='DISCARD'),'Bloom skip: skip? enters Throw');
   const throwCard=await skipBloom.locator('#hand [data-card]').first().getAttribute('data-card');
   await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
   check(await skipBloom.locator(`#hand [data-card="${throwCard}"].futa04-throw-picked`).count()===1,'Bloom skip: tapped card is selected for Throw');
   await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
-  check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase!=='DISCARD'),'Bloom skip: second card tap confirms discard');
+  check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase==='DISCARD'),'Bloom skip: second card tap deselects, never throws');
+  await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
+  await skipBloom.locator('#discard').click();
+  check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase!=='DISCARD'),'Bloom skip: tapping the Throw pile throws the picked card');
   await skipBloom.close();
   const cameraPage=await browser.newPage({viewport:{width:1280,height:800}});
   await cameraPage.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });

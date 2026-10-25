@@ -320,15 +320,54 @@ html.futa04-information #board .futa04-boink { transform-box: fill-box; transfor
 html.futa04-information[data-step='throw'] #futa04-box #deck {
   opacity: .48; filter: grayscale(.7); transition: opacity 160ms ease, filter 160ms ease;
 }
+/* The Throw pile is the target of the Throw step, so it is never dimmed there: the deck
+   recedes, the pile is the brightest thing in the cockpit. (The pile's own .dim used to apply.) */
 html.futa04-information[data-step='throw'] #futa04-box #discard {
-  filter: brightness(1.12); transition: filter 160ms ease;
+  opacity: 1;
+  filter: brightness(1.14) saturate(1.03);
+  transition: opacity 160ms ease, filter 160ms ease;
+}
+/* A picked card swells its target once, on the interface-motion vocabulary. Transform only:
+   nothing reflows, so the hand and the neighbouring deck never move. It scales about the
+   pile's own centre, never the page's. */
+html.futa04-information:not([data-step='draw']) #futa04-box #discard {
+  transform-origin: 50% 50%;
+  transition:
+    transform var(--ix-close) var(--ix-ease-close),
+    opacity var(--ix-close) var(--ix-ease-close),
+    filter var(--ix-close) var(--ix-ease-close);
+}
+html.futa04-information #futa04-box #discard.futa04-throw-target {
+  transform: scale(1.08);
+  opacity: 1;
+  filter: brightness(1.18) saturate(1.04);
+  z-index: 2;
+  transition:
+    transform var(--ix-open) var(--ix-ease-open),
+    opacity var(--ix-open) var(--ix-ease-open),
+    filter var(--ix-open) var(--ix-ease-open);
+}
+/* The existing edge light, a step stronger — never a second, invented one. */
+html.futa04-information #futa04-box #discard.futa04-throw-target .gd-halo {
+  opacity: 1;
+  box-shadow: 0 0 0 1.5px rgba(232,150,120,.55), 0 0 26px 4px rgba(190,80,60,.42);
+}
+/* Reduce motion: keep the brighter light, drop the swell. The target still reads as lit. */
+html.futa04-information.reduce-motion #futa04-box #discard.futa04-throw-target {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.futa04-information #futa04-box #discard.futa04-throw-target { transform: none; }
 }
 html.futa04-information[data-step='throw'] #discard .gd-halo {
   opacity: .62; transition: none;
   box-shadow: 0 0 0 1px rgba(218,104,80,.38), 0 0 22px 2px rgba(173,64,47,.32);
 }
 html.futa04-information[data-step='throw'] #discard .gd-ring { animation: none !important; opacity: 0; }
-html.futa04-information #hand .card { touch-action: manipulation; }
+/* The hand is a drag surface (Grow and the new swipe-up Throw): it must own the vertical gesture,
+   or the browser pans the page instead and the drag layer never sees the swipe. "none" also
+   disables double-tap zoom, which "manipulation" did. */
+html.futa04-information #hand .card { touch-action: none; }
 /* A short edge light belongs to each card, and follows its fan rotation and lift. A card picked
    toward a Bloom opts out: its edge is the Bloom's aqua (see the bloom-pick rule above), never the
    green of a plain Grow. */

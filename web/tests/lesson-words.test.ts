@@ -28,7 +28,7 @@ describe('lesson words', () => {
     expect(LESSON.tapDrawLine).toBe('Every turn has 3 steps – Draw, Grow and Throw. You start by drawing 1 card from the top of the Draw pile or the Throw pile.');
     expect(LESSON.growLine).toBe('Grow: drag one of your cards from your hand onto the board, or tap it to select and then place it on the board.');
     expect(LESSON.youGrewLine).toBe('Tiles keep the rank of the card used. Higher ranks are harder to cut.');
-    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to the Throw pile, or double tap to Throw a card. This ends your turn.');
+    expect(LESSON.throwLine).toBe('Throw: swipe up, drag the card to the Throw pile, or tap the pile. This ends your turn.');
     expect(LESSON.biggerWinsLine).toBe('Strengthen: a stronger card can replace your own tile.');
     // Owner, 2026-10-24: "Take", so the word Cut belongs to level 4 alone.
     expect(LESSON.takeTileLine).toBe('Take: a higher card can take an opponent’s tile.');
