@@ -21,7 +21,7 @@ All new interface copy is in `src/strings.ts` → `MATCH_CHAT`. `mountMatchChat`
 copy object for the localisation agent. Timestamps use Intl and the browser locale. No translation
 framework, dependency or localised text is persisted. Only English copy is supplied in this branch.
 
-Updated design: portrait chat fills the available viewport over the board and cockpit; desktop grows to 480×680px. Transcript text is 15px. Quick phrases live in a compact picker behind the icon beside Send, hidden by default. Controls retain 44px hit areas with slimmer visual surfaces. The visual viewport controls panel height/offset without resizing the game. Font-size 16px avoids
+Updated design: portrait chat fills the available viewport over the board and cockpit; desktop grows to 480×680px. Transcript text is 14px. Quick phrases live in a compact picker behind the icon beside Send, hidden by default. Controls retain 44px hit areas with slimmer visual surfaces. The visual viewport controls panel height/offset without resizing the game. Font-size 16px avoids
 iOS focus zoom; safe areas, contained transcript scrolling and no document scroll locks. Desktop
 keyboard navigation and a quiet live region are supported. The panel is nonmodal, so it deliberately
 does not trap focus or make gameplay inert. Turn changes preserve drafts. Drafts exist only for the
@@ -233,7 +233,7 @@ including a focused-key assertion that the outline is absent while the glow rema
 
 ## Chat feel and motion
 
-Spacing is tightened without shrinking the 15px transcript or touch targets. The panel and phrase
+Spacing is tightened without shrinking the transcript or touch targets. The panel and phrase
 picker open with a 150ms opacity/4px settle and close in 100ms. New delivered transcript rows enter
 once in 160ms; historical rows do not replay their entrance. A closed chat receives a single 280ms
 unread-dot pulse, and its restrained preview fades in/out. Header keyboard focus uses a soft icon
@@ -253,3 +253,24 @@ browser checks. These test local clients with the simulated Realtime wire, not t
 Motion pass validation: full `npm run check` passed (283 files, 2,902 tests; 1 expected failure and
 65 optional/database skips). Both production channel builds/assets checks and the existing gameplay
 motion regression passed. Final reviewed browser run: 42 checks. No merge or deployment performed.
+
+
+## Blank composer and live/asynchronous verification
+
+The composer has no visible placeholder. It retains the translated `MATCH_CHAT.message` accessible
+name (`Message`), replacing the old `placeholder` copy key. Message text is now 14px on both mobile
+and desktop; the input stays at 16px to avoid iOS focus zoom.
+
+Both match modes share the existing chat authority and online-session mount path. Additional tests
+exercise a real accepted live challenge using the actual live runtime and both memory/Postgres
+adapters: opponent-turn sending, rejection after the turn changes, rejection at an overdue live
+clock without chat changing it, and readable history after the live authority finishes by timeout.
+Async tests use the normal 24-hour clock, simulate 12 hours offline, then read persisted messages
+through a returning authenticated client and verify that the same turn restriction still applies.
+No gameplay timers or backend rules were changed.
+
+Validation: 49 focused checks passed with disposable local Postgres; 43 two-client browser checks
+passed with local Postgres, including a blank composer with its screen-reader label and 14px text
+at five viewport sizes. Hosted Supabase remains untested and no deployment was performed.
+The existing live-duel, reconnect and autoplay regression suites also passed: 49 checks. TypeScript
+checks and `git diff --check` passed; the browser suite built the production futa05 client.

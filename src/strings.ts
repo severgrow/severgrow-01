@@ -1468,7 +1468,7 @@ export const MATCH_CHAT = {
   title: 'Match chat', open: 'Open match chat', close: 'Close chat', you: 'You', opponent: 'Opponent',
   empty: 'A little company across the board.', available: 'Chat available on opponent’s turn',
   ended: 'Match ended · history only',
-  placeholder: 'A few words…', send: 'Send', pending: 'Sending…', sent: 'Sent', failed: 'Not sent',
+  message: 'Message', send: 'Send', pending: 'Sending…', sent: 'Sent', failed: 'Not sent',
   retry: 'Retry', discard: 'Discard', older: 'Earlier messages', newer: 'New messages',
   quickPhrases: 'Quick phrases',
   tools: 'Chat controls', mute: 'Mute previews', unmute: 'Unmute previews',

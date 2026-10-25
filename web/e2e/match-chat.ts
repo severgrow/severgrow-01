@@ -340,6 +340,14 @@ try {
     };
   });
   check(
+    'composer is visibly blank and retains an accessible name',
+    await input(sender).evaluate(
+      (e) =>
+        !(e as HTMLInputElement).placeholder &&
+        e.getAttribute('aria-label') === 'Message',
+    ),
+  );
+  check(
     'ready chat has no redundant availability caption',
     await sender.locator('.match-chat-status').isHidden(),
   );
@@ -608,7 +616,7 @@ try {
           parseFloat(
             getComputedStyle(document.querySelector('.match-chat-text')!)
               .fontSize,
-          ) === 15,
+          ) === 14,
         frameless:
           getComputedStyle(document.querySelector('.match-chat-panel')!)
             .borderTopWidth === '0px',

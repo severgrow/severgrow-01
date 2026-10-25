@@ -1,3 +1,6 @@
+import { createLiveRuntime } from '../src/live/runtime.js';
+import { MemoryLiveStore } from '../src/live/memory.js';
+import { postgresLiveStore } from '../src/live/postgres.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { Pool } from 'pg';
@@ -139,6 +142,7 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
         notifier,
         app,
         nextTurn,
+        now: () => now,
         advance: (ms: number) => {
           now += ms;
         },
@@ -252,6 +256,102 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       const r = await x.client.chatHistory(x.waiting.token, x.id);
       expect(r.canSend).toBe(false);
       expect(r.messages[0]?.text).toBe('Hello');
+      await expect(x.send()).rejects.toMatchObject({
+        code: 'MATCH_NOT_ACTIVE',
+      });
+    });
+    it('persists async messages across a 12-hour offline gap and a returning authenticated client', async () => {
+      const x = await setup();
+      const before = (await x.storage.matchById(x.id))!;
+      expect(before.liveManaged ?? false).toBe(false);
+      expect(before.turnTimeoutMs).toBe(86400000);
+      await x.send(x.waiting.token, 'See you when you return');
+      x.advance(12 * 3600000);
+      const returning = new DuelClient({
+        baseUrl: 'http://local',
+        storage: null,
+        fetch: async (url, init) => x.app(new Request(url, init)),
+      });
+      expect(
+        (await returning.chatHistory(x.actor.token, x.id)).messages[0]?.text,
+      ).toBe('See you when you return');
+      await expect(
+        returning.chatSend(
+          x.actor.token,
+          x.id,
+          { text: 'My turn', phrase: null },
+          newId(),
+          before.turnStartRevision,
+        ),
+      ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+      await returning.chatSend(
+        x.waiting.token,
+        x.id,
+        { text: 'Still your turn', phrase: null },
+        newId(),
+        before.turnStartRevision,
+      );
+      expect(
+        (await returning.chatHistory(x.actor.token, x.id)).messages,
+      ).toHaveLength(2);
+      expect(await x.storage.matchById(x.id)).toEqual(before);
+    });
+    it('works in an actual accepted live session, follows turn changes, and retains history after live timeout', async () => {
+      const x = await setup();
+      const runtime = createLiveRuntime({
+        storage: x.storage,
+        live:
+          adapter === 'memory'
+            ? new MemoryLiveStore(x.storage as MemoryStorage)
+            : postgresLiveStore(pool as unknown as PgPool),
+        server: DEFAULT_SERVER_CONFIG,
+        now: x.now,
+      });
+      const pa = await x.service.authenticate(x.a.token),
+        pb = await x.service.authenticate(x.b.token);
+      await runtime.service.presence(pa, 'idle', null);
+      await runtime.service.presence(pb, 'idle', null);
+      const invitation = await runtime.service.challenge(pa, x.id, 'live');
+      await runtime.service.accept(pb, invitation.challenge.id);
+      const started = (await x.storage.matchById(x.id))!;
+      expect(started.liveManaged).toBe(true);
+      expect(started.turnTimeoutMs).toBe(60000);
+      await x.send(x.waiting.token, 'Live hello');
+      await expect(x.send(x.actor.token)).rejects.toMatchObject({
+        code: 'STALE_REVISION',
+      });
+      expect(await x.storage.matchById(x.id)).toEqual(started);
+      await x.nextTurn();
+      const next = (await x.storage.matchById(x.id))!;
+      await expect(x.send()).rejects.toMatchObject({ code: 'STALE_REVISION' });
+      await x.client.chatSend(
+        x.actor.token,
+        x.id,
+        { text: 'Now you are thinking', phrase: null },
+        newId(),
+        next.turnStartRevision,
+      );
+      x.advance(60001);
+      await runtime.service.presence(pa, 'in_live', x.id);
+      await runtime.service.presence(pb, 'in_live', x.id);
+      const overdue = await x.storage.matchById(x.id);
+      await expect(
+        x.client.chatSend(
+          x.actor.token,
+          x.id,
+          { text: 'Too late', phrase: null },
+          newId(),
+          next.turnStartRevision,
+        ),
+      ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+      expect(await x.storage.matchById(x.id)).toEqual(overdue);
+      await runtime.service.tickMatch(x.id);
+      const history = await x.client.chatHistory(x.waiting.token, x.id);
+      expect(history.canSend).toBe(false);
+      expect(history.messages.map((m) => m.text)).toEqual([
+        'Live hello',
+        'Now you are thinking',
+      ]);
       await expect(x.send()).rejects.toMatchObject({
         code: 'MATCH_NOT_ACTIVE',
       });

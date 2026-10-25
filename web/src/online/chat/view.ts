@@ -140,8 +140,7 @@ export const mountMatchChat = (o: {
   input.type = 'text';
   input.autocomplete = 'off';
   input.maxLength = 560;
-  input.placeholder = copy.placeholder;
-  input.setAttribute('aria-label', copy.placeholder);
+  input.setAttribute('aria-label', copy.message);
   input.setAttribute('aria-describedby', 'match-chat-availability');
   status.id = 'match-chat-availability';
   const send = button(copy.send, () => undefined);
