@@ -21,7 +21,7 @@ All new interface copy is in `src/strings.ts` → `MATCH_CHAT`. `mountMatchChat`
 copy object for the localisation agent. Timestamps use Intl and the browser locale. No translation
 framework, dependency or localised text is persisted. Only English copy is supplied in this branch.
 
-Updated design: portrait chat fills the available viewport over the board and cockpit; desktop grows to 480×680px. Transcript text is 18px. Quick phrases live in a compact picker behind the icon beside Send, hidden by default. Controls retain 44px hit areas with slimmer visual surfaces. The visual viewport controls panel height/offset without resizing the game. Font-size 16px avoids
+Updated design: portrait chat fills the available viewport over the board and cockpit; desktop grows to 480×680px. Transcript text is 15px. Quick phrases live in a compact picker behind the icon beside Send, hidden by default. Controls retain 44px hit areas with slimmer visual surfaces. The visual viewport controls panel height/offset without resizing the game. Font-size 16px avoids
 iOS focus zoom; safe areas, contained transcript scrolling and no document scroll locks. Desktop
 keyboard navigation and a quiet live region are supported. The panel is nonmodal, so it deliberately
 does not trap focus or make gameplay inert. Turn changes preserve drafts. Drafts exist only for the
@@ -206,3 +206,5 @@ Follow-up validation: full `npm run check` passed **283 files / 2,902 tests**, w
 and 65 optional/database skips. Focused chat/channel tests passed (16), final TypeScript checks
 passed, both production channel builds/assets checks passed, and the existing Futa04 motion suite
 passed. No backend, migration, gameplay or deployment changes were needed for this design revision.
+
+Typography refinement: message text is now 15px with 1.5 line height on mobile and desktop, following the owner’s request for smaller messages. The expanded panel and hidden quick phrases are retained.

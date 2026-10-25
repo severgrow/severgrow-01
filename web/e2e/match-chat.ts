@@ -461,7 +461,7 @@ try {
           parseFloat(
             getComputedStyle(document.querySelector('.match-chat-text')!)
               .fontSize,
-          ) >= 18,
+          ) === 15,
         phrasesHidden: (
           document.querySelector('.match-chat-phrases') as HTMLElement
         ).hidden,
@@ -478,7 +478,7 @@ try {
       };
     });
     check(
-      `${width}×${height}: expanded reading panel, larger text, hidden phrases and accessible controls`,
+      `${width}×${height}: expanded reading panel, compact message text, hidden phrases and accessible controls`,
       geometry.reading &&
         geometry.phrasesHidden &&
         geometry.bounds &&

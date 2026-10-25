@@ -21,7 +21,7 @@ export const CHAT_CSS = `
 .match-chat-line[data-mine='true'] .match-chat-speaker {color:#abc3a6;}
 .match-chat-line[data-mine='false'] .match-chat-speaker {color:#d4a18c;}
 .match-chat-time {margin-left:auto;letter-spacing:0;}
-.match-chat-text {font-family:var(--font);font-size:18px;line-height:1.55;margin:5px 0 0;white-space:pre-wrap;}
+.match-chat-text {font-family:var(--font);font-size:15px;line-height:1.5;margin:5px 0 0;white-space:pre-wrap;}
 .match-chat-report {font-size:10px!important;min-height:44px!important;float:right;margin:0 -6px -4px 6px;padding:4px 8px!important;border:0!important;color:#e8ddc58c!important;}
 .match-chat-empty {color:#e8ddc58c;font-size:17px;line-height:1.6;padding:12px 0;}
 .match-chat-foot {position:relative;flex:none;border-top:1px solid #e8ddc51a;padding:8px 10px max(10px,env(safe-area-inset-bottom));background:#080a0a45;}
@@ -52,7 +52,7 @@ body.paused .match-chat,body.result .match-chat,body.paused #match-chat-toggle {
 .match-chat[data-keyboard='true'] .match-chat-controls {display:none;}
 @keyframes match-chat-in {from{opacity:0;transform:translateY(calc(var(--ix-travel,12px) / -4))}to{opacity:1;transform:none}}
 @media(max-height:450px) {.match-chat-panel{width:min(480px,calc(100vw - 16px));height:var(--chat-height,calc(100dvh - 60px));}.match-chat-phrases{margin-top:2px}.match-chat-controls summary{min-height:44px}.match-chat-line{padding:12px 0}.match-chat-foot{padding:5px 8px;}}
-@media(max-width:600px) {.match-chat-panel{width:calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right));height:var(--chat-height,calc(100dvh - 64px));}.match-chat-head{padding-left:18px;}.match-chat-text{font-size:18px;}.match-chat-log{padding-inline:18px;}}
+@media(max-width:600px) {.match-chat-panel{width:calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right));height:var(--chat-height,calc(100dvh - 64px));}.match-chat-head{padding-left:18px;}.match-chat-text{font-size:15px;}.match-chat-log{padding-inline:18px;}}
 @media(prefers-reduced-motion:reduce) {.match-chat-panel{animation:none}.match-chat button:active{transform:none}}
 .reduce-motion .match-chat-panel {animation:none;}
 `;
