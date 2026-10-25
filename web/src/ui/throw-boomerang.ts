@@ -11,14 +11,32 @@
 // The vocabulary is the interface-motion one (the `--ix-*` tokens, mirrored in
 // `ui/interface-motion.ts`): the outbound leg is `open`, the settle hold is `press`, the return is
 // `close`, and the short fade that hands the pile over is a fraction of `press`. No new curves.
+//
+// IT FITS THE THROW'S OWN BEAT (fix, 2026-10-25). Read at its interface length the four legs total
+// 624 ms (open 300 + press 90 + close 180 + fade 54), and the discard step awaited all of it: a
+// human throw held the turn 634 ms where the ordinary throw's beat was 396 ms (406 ms measured
+// with frame overhead), i.e. +228 ms against the game's rhythm, and the card flew 1.6x longer than
+// the step it sits in. `futa04-motion`'s contract is that the throw fits INSIDE the action wait. So
+// the segments are SCALED by a factor of the beat — the same four legs, the same proportions, the
+// same interface curves, played at the card's own flight length `PINNED.throwFlight` (320 ms)
+// instead of at a menu's opening length. Scaling (rather than inventing beat-relative fractions)
+// keeps every leg tied to the vocabulary the rest of the interface uses, so an edit to
+// `INTERFACE_MOTION` moves this flight with it.
+import { PINNED } from '../logic/motion.js';
 import { INTERFACE_MOTION } from './interface-motion.js';
 
-/** The fade tail is shorter than the acknowledgement: just enough to hand the pile over. */
-const fade = Math.round(INTERFACE_MOTION.press * 0.6);
-const out = INTERFACE_MOTION.open;
-const hold = INTERFACE_MOTION.press;
-const back = INTERFACE_MOTION.close;
+/** The authored interface length of the four legs (the move at menu speed: 624 ms). */
+const authored = INTERFACE_MOTION.open + INTERFACE_MOTION.press + INTERFACE_MOTION.close
+  + Math.round(INTERFACE_MOTION.press * 0.6);
+/** 320/624: the card's own flight beat, inside the discard step's 396 ms wait. */
+const beatScale = PINNED.throwFlight / authored;
+const out = Math.round(INTERFACE_MOTION.open * beatScale);
+const hold = Math.round(INTERFACE_MOTION.press * beatScale);
+const back = Math.round(INTERFACE_MOTION.close * beatScale);
 const land = out + hold + back;
+// The fade keeps its ~0.6-of-press share; the remainder of the beat absorbs per-leg rounding, so
+// `total` is exactly the beat even if `INTERFACE_MOTION` changes.
+const fade = PINNED.throwFlight - land;
 const total = land + fade;
 
 export const BOOMERANG = Object.freeze({
