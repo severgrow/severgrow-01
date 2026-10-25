@@ -1,8 +1,8 @@
 // Phase 4 — online menu / lobby screens. Duel play opens in Phase 5.
 
 import { DuelClient, DuelError, browserStorage } from '../../../server/src/client.js';
-import type { MatchListEntry, MatchSummary, MatchViewPayload, WorldMapPayload } from '../../../server/src/protocol.js';
-import { ONLINE } from '../../../src/strings.js';
+import type { MatchListEntry, MatchSummary, MatchViewPayload, ReplayPayload, WorldMapPayload } from '../../../server/src/protocol.js';
+import { ONLINE, REPLAY } from '../../../src/strings.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
 import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
@@ -45,6 +45,11 @@ import {
 export type LobbyUiHooks = {
   /** Return to the main menu screen. */
   showMenu: () => void;
+  /**
+   * A finished duel's replay, fetched by the lobby (it owns the identity/token) and handed to the
+   * page, which owns the player. Absent: a finished row simply re-opens the match, as before.
+   */
+  openReplay?: (payload: ReplayPayload) => void;
   /** Open the duel board. `liveJoin` is true only when the match turned ACTIVE while this player
    *  was on the screen (the waiting creator when the friend joins, or the joiner itself); it is
    *  false when the player returns to a match later. Used only to gate the one-off lottery. */
@@ -499,15 +504,15 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         <span class="online-row-main"><b>${escapeHtml(row.opponentName)}</b>
         <span class="online-row-status">${escapeHtml(row.statusWord)}</span></span>
         <span class="online-row-time">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${warnSmall}</span>`;
-        const open = () => void openMatch(row.matchId);
-        li.addEventListener('click', open);
-        li.addEventListener('keydown', (ev) => {
-          if (ev.key === 'Enter' || ev.key === ' ') {
-            ev.preventDefault();
-            open();
-          }
-        });
-        list.appendChild(li);
+      const open = () => void (row.replayable ? openReplay(row.matchId) : openMatch(row.matchId));
+      li.addEventListener('click', open);
+      li.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          open();
+        }
+      });
+      list.appendChild(li);
       }
       if (focusedId) {
         const again = [...list.querySelectorAll<HTMLElement>('li[data-match-id]')].find(
@@ -793,6 +798,24 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     flashIdentityReplaced();
     stopSearchTimer();
     searchTimer = setInterval(() => void pollSearch(), 2000);
+  };
+
+  /**
+   * A FINISHED duel's row opens its replay (owner brief, 2026-10-25): the last ten finished duels
+   * are exactly what the list already shows, so the way in is the row itself. The authorised read
+   * happens here because the lobby owns the identity and its token; the payload is handed to the
+   * page, which owns the player.
+   */
+  const openReplay = async (matchId: string) => {
+    const id = await ensureIdentity();
+    if (!id) return;
+    try {
+      const res = await client.replay(id.token, matchId);
+      serverOffset = res.serverNow - now();
+      hooks.openReplay?.(res.replay);
+    } catch {
+      notice('online-hub-notice', REPLAY.unavailable);
+    }
   };
 
   const openMatch = async (matchId: string) => {

@@ -52,7 +52,10 @@ describe('one Futasaku mark, drawn once', () => {
     const finishes = main.match(/createHudBrandMark/g)?.length ?? 0;
     expect(finishes, 'main.ts must not hand-build a second mark').toBe(0);
     const players = allSource.filter((f) => /createHudBrandMark/.test(f.text)).map((f) => f.path).sort();
-    expect(players).toEqual(['src/online/lobby-ui.ts', 'src/player/branding.ts']);
+    // Three surfaces, ONE helper: the lobby's header, the replay's footer (owner brief, 2026-10-25:
+    // "the replay shows only the board and the logo") and branding.ts that builds it. The replay
+    // asks this helper rather than drawing its own mark — which is exactly what the rule wants.
+    expect(players).toEqual(['src/online/lobby-ui.ts', 'src/player/branding.ts', 'src/replay/player.ts']);
   });
 
   it('the mark is mounted outside #game, where the veils cannot reach it', () => {

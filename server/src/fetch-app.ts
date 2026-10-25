@@ -172,7 +172,7 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return { status: 200, body: { ok: true, ...result, serverNow: service.serverNow() } };
     }
 
-    const matchRoute = /^\/v1\/matches\/([^/]+)(\/view|\/reconnect|\/actions|\/resign|\/cancel|\/rematch)?$/.exec(path);
+    const matchRoute = /^\/v1\/matches\/([^/]+)(\/view|\/reconnect|\/actions|\/resign|\/cancel|\/rematch|\/replay)?$/.exec(path);
     if (matchRoute) {
       const matchId = decodeURIComponent(matchRoute[1]!);
       const sub = matchRoute[2] ?? '';
@@ -195,6 +195,15 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
         return {
           status: 200,
           body: { ok: true, player: await service.viewPayload(player, matchId, since), serverNow: service.serverNow() },
+        };
+      }
+      if (method === 'GET' && sub === '/replay') {
+        // A FINISHED duel's whole action log, for one of its two players (403 otherwise). The
+        // client rebuilds every position from it with the deterministic engine.
+        const player = await service.authenticate(bearer(req.headers.get('authorization')));
+        return {
+          status: 200,
+          body: { ok: true, replay: await service.replayOf(player, matchId), serverNow: service.serverNow() },
         };
       }
       if (method === 'POST' && sub === '/reconnect') {

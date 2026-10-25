@@ -1,7 +1,7 @@
 // The wire format shared by the server and its TypeScript client. These are the ONLY shapes
 // that cross the network: a match summary and a player-specific view. The authoritative engine
 // `State` (deck order, both hands, seed) is never part of any payload.
-import type { Action, EndReason, Event, GameResult, Player, View } from '../../src/engine/index.js';
+import type { Action, EndReason, Event, GameResult, Player, RulesConfig, View } from '../../src/engine/index.js';
 
 export type MatchStatus = 'waiting' | 'active' | 'finished';
 
@@ -151,6 +151,33 @@ export type MatchSummaryResponse = { ok: true; match: MatchSummary; serverNow: n
 export type UpgradeResponse = { ok: true; player: PlayerSummary; serverNow: number };
 export type MeResponse = { ok: true; player: PlayerSummary; serverNow: number };
 export type MatchListResponse = { ok: true; matches: MatchListEntry[]; serverNow: number };
+
+/** One seat of a replay: who played it. Never a token, never anything private. */
+export type ReplaySeat = { seat: Player; playerId: string; displayName: string | null; tag: string | null };
+
+/**
+ * A finished duel, rebuilt from its own record: the public rules snapshot, the seed and the
+ * starting seat, and the ordered action log. No board, no hands, no deck order — the client
+ * replays it with the deterministic engine, exactly as the two devices did.
+ */
+export type ReplayPayload = {
+  matchId: string;
+  status: 'finished';
+  rulesVersion: string;
+  seed: number;
+  config: RulesConfig;
+  startingPlayer: Player;
+  /** The caller's own seat, so the board is painted from their side. */
+  seat: Player;
+  seats: ReplaySeat[];
+  /** Every committed action, in revision order (draws and throws included). */
+  actions: Action[];
+  /** Parallel to `actions`: the match revision each action produced. */
+  revisions: number[];
+  result: OnlineGameResult | null;
+  finishedAt: number | null;
+};
+export type ReplayResponse = { ok: true; replay: ReplayPayload; serverNow: number };
 export type ResignResponse = { ok: true; match: MatchSummary; player: MatchViewPayload; serverNow: number };
 export type LinkCodeResponse = { ok: true; code: string; expiresAt: number; serverNow: number };
 export type LinkRedeemResponse = { ok: true; player: PlayerSummary; token: string; serverNow: number };
@@ -160,6 +187,8 @@ export type SweepResponse = {
   expiredWaiting: number;
   deletedGuests: number;
   graceExtended: number;
+  /** Finished duels trimmed under the replay retention rule (never a player's newest ten). */
+  prunedMatches: number;
   serverNow: number;
 };
 

@@ -377,6 +377,36 @@ export const RESULT = Object.freeze({
 });
 
 /**
+ * THE REPLAY (owner brief, 2026-10-25): "at the end of every game you are able to see a replay of
+ * the whole match … only the board and the logo … make it clear when the turn switches and which
+ * player was going."
+ */
+const TO_MOVE = 'to move';
+export const REPLAY = Object.freeze({
+  /** The finish card's control. */
+  watch: 'Watch replay',
+  /** The replay screen's own name (its accessible label). */
+  title: 'Replay',
+  /** The offline player's name on a replay: the same word the finish card uses. */
+  you: 'You',
+  /** The tail of the turn line; the player's name is set in the seat's own ink beside it. */
+  moveSuffix: TO_MOVE,
+  /** Whose turn it is, as one quiet line. */
+  toMove: (name: string) => `${name} ${TO_MOVE}`,
+  /** Restart from the first move. */
+  again: 'Replay again',
+  /** Leave the replay and come back to the finish card. */
+  close: 'Close',
+  /** What a screen reader hears for the scrub bar. */
+  scrub: 'Replay position',
+  /** The online match list's word for a finished duel's row. */
+  pastRow: 'Watch replay',
+  /** Shown when a stored replay cannot be loaded (an old match, a lost connection). */
+  unavailable: 'That replay is not available.',
+  loading: 'Loading replay…',
+});
+
+/**
  * GAME REVIEW (owner, 2026-10-23): after a game the finish card can show the player's turning point
  * — the one move that fell furthest short of the best move they had — and that better move on the board.
  */

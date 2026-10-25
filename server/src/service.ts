@@ -31,6 +31,8 @@ import type {
   MatchViewPayload,
   OnlineGameResult,
   PlayerSummary,
+  ReplayPayload,
+  ReplaySeat,
   SubmitActionRequest,
   SubmitActionResponse,
 } from './protocol.js';
@@ -550,6 +552,53 @@ export class MatchService {
     return this.payload(match, seat, visibleMoves.flatMap((m) => m.events), settled?.get(player.id) ?? null);
   }
 
+  /**
+   * A FINISHED duel's replay, for one of its two players only (owner brief, 2026-10-25).
+   *
+   * The authorisation is the same one every other match read uses — `requireParticipantFresh`
+   * refuses a caller who is not in the match (`NOT_A_PARTICIPANT`, 403), and does not distinguish
+   * "wrong player" from "no such match" for anyone outside it. Nothing private is added: `config`
+   * and `rulesVersion` are already in every view, the seed and starting seat are the public facts a
+   * verifier needs, and the action log is what both devices already received as events.
+   *
+   * Why the log rather than a board per frame: the engine is deterministic, so `{seed, config,
+   * startingPlayer}` + the ordered actions rebuild every position of the match on the client — the
+   * same way the save system resumes a game. A replay therefore costs a few kilobytes, not a video.
+   */
+  async replayOf(player: PlayerRecord, matchId: string): Promise<ReplayPayload> {
+    const match = await this.requireParticipantFresh(player, matchId);
+    if (match.status !== 'finished') throw new ApiError('MATCH_NOT_FINISHED', 'This duel is still being played.');
+    this.assertRulesSupported(match.rulesVersion);
+    const seat = await this.seatOf(player, matchId);
+    const moves = await this.storage.movesOf(matchId, 0);
+    const participants = await this.storage.participantsOf(matchId);
+    const seats: ReplaySeat[] = [];
+    for (const participant of participants) {
+      const record = await this.storage.playerById(participant.playerId);
+      seats.push({
+        seat: participant.seat,
+        playerId: participant.playerId,
+        displayName: record?.displayName ?? null,
+        tag: playerTag(participant.playerId),
+      });
+    }
+    seats.sort((a, b) => a.seat - b.seat);
+    return {
+      matchId: match.id,
+      status: 'finished',
+      rulesVersion: match.rulesVersion,
+      seed: match.seed,
+      config: match.config,
+      startingPlayer: match.startingPlayer,
+      seat,
+      seats,
+      actions: moves.map((move) => move.action),
+      revisions: moves.map((move) => move.revision),
+      result: match.result,
+      finishedAt: match.finishedAt,
+    };
+  }
+
   async resign(player: PlayerRecord, matchId: string): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
     const match = await this.requireParticipantFresh(player, matchId);
     if (match.status === 'finished') throw new ApiError('MATCH_FINISHED', 'This match is over.');
@@ -566,7 +615,7 @@ export class MatchService {
   async sweep(
     clientIp: string | null = null,
     options: { internal?: boolean } = {},
-  ): Promise<{ timedOut: number; expiredWaiting: number; deletedGuests: number; graceExtended: number }> {
+  ): Promise<{ timedOut: number; expiredWaiting: number; deletedGuests: number; graceExtended: number; prunedMatches: number }> {
     // An authenticated cron/CI sweep gets its own bucket so a player's per-IP budget (or a shared
     // "unknown" bucket) can never block routine housekeeping. It is still rate limited.
     const bucket = options.internal === true ? 'sweep:internal' : `sweep:ip:${clientIp ?? 'unknown'}`;
@@ -592,12 +641,17 @@ export class MatchService {
       // Housekeeping log for operators (no secrets).
       console.info(`sweep: deleted ${result.deletedGuests} guest account(s) with no matches`);
     }
+    if ((result.prunedMatches ?? 0) > 0) {
+      // Never names a player or a match: just how much the retention rule trimmed this pass.
+      console.info(`sweep: pruned ${result.prunedMatches} finished match(es) past every player's newest ten`);
+    }
     // The wire response stays lean: the ids were only needed to fire the pings above.
     return {
       timedOut: result.timedOut,
       expiredWaiting: result.expiredWaiting,
       deletedGuests: result.deletedGuests,
       graceExtended: result.graceExtended,
+      prunedMatches: result.prunedMatches ?? 0,
     };
   }
 

@@ -14,6 +14,11 @@ import { cutLoss } from './analysis.js';
 import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, buildSteps, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
+import { buildReplay } from './replay/timeline.js';
+import type { ReplayInput, ReplayModel } from './replay/timeline.js';
+import { mountReplay } from './replay/player.js';
+import type { ReplayHandle } from './replay/player.js';
+import type { ReplayPayload } from '../../server/src/protocol.js';
 import { displayEventForPlay } from './player/display-readout.js';
 import type { DisplayEvent } from './player/display-readout.js';
 import { createTheirsDim, replayedByOpponent } from './player/replay-display.js';
@@ -219,7 +224,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, RESULT, REVIEW, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL, TUTORIAL_REPLAY } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, REPLAY, RESULT, REVIEW, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL, TUTORIAL_REPLAY } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -7641,6 +7646,106 @@ function hideGameOver(): void {
 }
 
 /**
+ * The replay of the whole match (owner brief, 2026-10-25): one tap on the finish card, every mode.
+ *
+ * The player itself is mounted once, on the first use, so the finish card's cost is one lazily-built
+ * overlay rather than a second board renderer in the boot path. Its motion gate is the game's own
+ * (`motionOn`): Reduce motion, or Speed Off, means no crossfade and no settle — the board simply is
+ * the next position, and the pacing is unchanged.
+ */
+let replayPlayer: ReplayHandle | null = null;
+
+/** The model for the match just played offline (campaign, tutorial or practice), or null. */
+function offlineReplayModel(): ReplayModel | null {
+  const st = session;
+  if (!st || !st.log.length) return null;
+  // `session.start` is the exact opening this match was dealt (a lesson's authored position
+  // included), so the replay begins on the board the player actually saw.
+  const opening = st.start;
+  const input: ReplayInput = {
+    seed: opening.seed,
+    config: opening.config,
+    startingPlayer: opening.startingPlayer ?? opening.turnPlayer,
+    base: opening,
+    actions: [...st.log],
+    names: [REPLAY.you, OPP.label],
+    me: 0,
+  };
+  return buildReplay(input);
+}
+
+/** The model for a finished ONLINE duel, from the server's replay payload. */
+function replayModelFromPayload(payload: ReplayPayload): ReplayModel | null {
+  if (!payload.actions.length) return null;
+  const nameOf = (seat: Player): string =>
+    payload.seats.find((s) => s.seat === seat)?.displayName ?? `Seat ${seat + 1}`;
+  return buildReplay({
+    seed: payload.seed,
+    rulesVersion: payload.rulesVersion,
+    config: payload.config,
+    startingPlayer: payload.startingPlayer,
+    actions: payload.actions,
+    names: [nameOf(0), nameOf(1)],
+    me: payload.seat,
+    result: payload.result
+      ? { winner: payload.result.winner, scores: payload.result.scores, reason: payload.result.reason }
+      : null,
+  });
+}
+
+/** The finish card's replay control is shown only when there is something to watch. */
+function setReplayAvailable(available: boolean): void {
+  const btn = document.getElementById('go-replay');
+  if (!btn) return;
+  btn.hidden = !available;
+  const label = document.getElementById('go-replay-label');
+  if (label) label.textContent = REPLAY.watch;
+  btn.setAttribute('aria-label', REPLAY.watch);
+}
+
+function showReplay(model: ReplayModel): void {
+  if (!replayPlayer) {
+    replayPlayer = mountReplay({
+      theme,
+      look,
+      reduceMotion: () => !motionOn(),
+      onExit: () => {
+        // The finish card was never touched: it is exactly where the player left it.
+        const anchor = document.getElementById('go-replay');
+        if (anchor && !$('gameover').hidden) anchor.focus({ preventScroll: true });
+      },
+    });
+  }
+  replayPlayer.open(model);
+}
+
+/** Open the replay for THIS finish card, in whichever mode the match was played. */
+async function openReplayForFinish(): Promise<void> {
+  const go = $('go-replay');
+  go.setAttribute('aria-busy', 'true');
+  try {
+    const os = isOnlineDuel() ? getOnlineSession() : null;
+    const model = os ? replayModelFromPayload(await os.driver.replay()) : offlineReplayModel();
+    if (model) showReplay(model);
+    else caption(REPLAY.unavailable, null, 'info');
+  } catch {
+    caption(REPLAY.unavailable, null, 'info');
+  } finally {
+    go.removeAttribute('aria-busy');
+  }
+}
+
+/**
+ * Open a PAST duel's replay from the online match list. The lobby owns the identity and the token,
+ * so IT makes the authorised read (`GET /v1/matches/:id/replay`) and hands the payload here.
+ */
+function openPastReplay(payload: ReplayPayload): void {
+  const model = replayModelFromPayload(payload);
+  if (model) showReplay(model);
+  else caption(REPLAY.unavailable, null, 'info');
+}
+
+/**
  * Paint the outcome without changing its words. A campaign win reads `Level 12 complete` exactly
  * as before (finish-fit and the screen reader see the same sentence); the two halves are only
  * wrapped so the eye sees LEVEL 12 over COMPLETE. The space between them is a real text node.
@@ -7817,6 +7922,9 @@ function renderGameOver() {
     // A duel has no offline cut replay to offer, and no replayable log to review.
     setGoExtra('go-cut', false);
     $('go-review').hidden = true;
+    // It DOES have a replay of the whole match (owner brief, 2026-10-25), whenever at least one
+    // move was committed — so the one entry sits on the card beside the ways forward.
+    setReplayAvailable(snapshot.revision > 0);
     if (wasHidden) closeReview();
     // The owner's ask: a REAL rematch leads the finish screen, ahead of the old "back out" that
     // used to sit in this slot. Back to matches and Menu stay, as secondary ways out
@@ -7966,6 +8074,9 @@ function renderGameOver() {
     scheduler.request('result-score', tick);
   }
   setGoExtra('go-cut', !!session?.biggestCut);
+  // Every offline match — practice, campaign and a tutorial replay — can be watched back from its
+  // own log in memory. There is no stored list offline (owner's decision, 2026-10-25).
+  setReplayAvailable(!!session && session.log.length > 0);
   if (wasHidden) closeReview();
   syncReview(st);
   $('go-share').textContent = RESULT.share;
@@ -9745,6 +9856,8 @@ bind('go-territory-open', () => {
   showScreen('menu');
   onlineLobbyCtl?.openWorld('menu');
 });
+// The replay of the whole match (owner brief, 2026-10-25): one tap on the finish card, any mode.
+bind('go-replay', () => void openReplayForFinish());
 bind('go-review', () => openReview());
 bind('go-review-back', () => {
   closeReview();
@@ -10133,6 +10246,13 @@ let appReady = false;
   },
   /** Boot finished: every async UI mount is attached and the first screen is shown. */
   ready: () => appReady,
+  /**
+   * Tests only: the replay player's own clock and frame (never drives it). Null when the replay is
+   * not mounted. `index` is the frame on screen, `total` the whole playback length in ms.
+   */
+  replay: () => replayPlayer?.now() ?? null,
+  /** Tests only: the replay's whole frame plan (times, seats, each frame's board signature). */
+  replayPlan: () => replayPlayer?.plan() ?? null,
   /** Tests/screenshots: the install invitation's memory (games counted) and a way to show it. */
   install: () => installPrompt.memory(),
   showInstall: () => installPrompt.showNow(),
@@ -10255,6 +10375,9 @@ void import('./online/lobby-ui.js').then(async (m) => {
       leaveOnline();
       showScreen('menu');
     },
+    // A finished duel's row opens its replay (owner brief, 2026-10-25): the lobby made the
+    // authorised read; the page owns the player.
+    openReplay: (payload) => openPastReplay(payload),
     // The honest computer fallback: a normal offline game (same engine, same save/Continue). The
     // parked online search keeps running in the lobby controller and surfaces an "Opponent found"
     // prompt if someone turns up. A local game is not a server match, so it never counts against

@@ -21,7 +21,7 @@ import {
   trimLobbyList,
   yourTurnCount,
 } from '../src/online/lobby.js';
-import { ONLINE } from '../../src/strings.js';
+import { ONLINE, REPLAY } from '../../src/strings.js';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { ApiError } from '../../server/src/errors.js';
 import { MatchService } from '../../server/src/service.js';
@@ -134,8 +134,23 @@ describe('lobby buckets and sort', () => {
     expect(formatWaitingAge(0)).toBe('1m');
   });
 
-  it('surfaces a spent grace as a word and flags your own as at-risk', () => {
-    const now = 5_000_000;
+  it('a finished duel row says it opens the replay, with the replay icon', () => {
+    const done = toLobbyRow(entry({ matchId: 'f', status: 'finished', turnPlayer: null, turnDeadlineAt: null, revision: 24 }), 0);
+    expect(done.bucket).toBe('finished');
+    expect(done.replayable).toBe(true);
+    expect(done.statusWord).toBe(REPLAY.pastRow);
+    expect(done.statusIcon).toBe('replay');
+  });
+
+  it('a finished duel with no moves has nothing to watch, so its row says Finished', () => {
+    const empty = toLobbyRow(entry({ matchId: 'f0', status: 'finished', turnPlayer: null, turnDeadlineAt: null, revision: 0 }), 0);
+    expect(empty.bucket).toBe('finished');
+    expect(empty.replayable).toBe(false);
+    expect(empty.statusWord).toBe(ONLINE.statusFinished);
+    expect(empty.statusIcon).toBe('check');
+  });
+
+  it('surfaces a spent grace as a word and flags your own as at-risk', () => {    const now = 5_000_000;
     const mine = toLobbyRow(entry({ matchId: 'g1', mySeat: 0, turnPlayer: 0, graceUsed: [1, 0] }), now);
     expect(mine.graceWord).toBe(ONLINE.graceYouUsed);
     expect(mine.atRisk).toBe(true);

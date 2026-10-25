@@ -113,14 +113,16 @@ describe('the card is one screen: the result leads, the rest waits behind "More"
     expect(RESULT.less).toBe('Less');
   });
 
-  it('there are only FOUR action rows before the disclosure: lead, secondary, board, More', () => {
+  it('the rows before the disclosure are exactly the product decision', () => {
     // The owner's rule was "six is too many". Count what is visible before anyone taps anything.
     const firstIds = [...goButtons.matchAll(/<button id="([^"]+)"([^>]*)>/g)]
       .filter((m) => !/data-go-extra/.test(m[2]!))
       .map((m) => m[1]!);
     // Game review (owner, 2026-10-23) is a key, not a row: it shares the board's row. Open Territory
     // (level 10's won card, owner 2026-10-24) is the secondary's alternate, never shown beside it.
-    expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-territory-open', 'go-board', 'go-review', 'go-more', 'go-menu']);
+    // The match replay (owner brief, 2026-10-25) is a deliberate row of its own: he asked for the
+    // control ON the end screen, so it is never behind the disclosure. The list stays an exact pin.
+    expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-replay', 'go-territory-open', 'go-board', 'go-review', 'go-more', 'go-menu']);
     expect(mainSource).toMatch(/other\.hidden = lead === 'back-to-campaign' \|\| lead === 'back-to-tutorial' \|\| territoryIntro;/);
     expect(mainSource).toMatch(/\$\('go-territory-open'\)\.hidden = !territoryIntro;/);
     const css = read('../src/style.css');

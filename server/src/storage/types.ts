@@ -3,6 +3,7 @@
 // return the original outcome without applying again.
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
 import type { MatchStatus, OnlineGameResult, PlayerSummary } from '../protocol.js';
+import type { RetentionRow } from '../retention.js';
 
 export type PlayerRecord = {
   id: string;
@@ -189,6 +190,12 @@ export type SweepResult = {
    * each device's own poll, so a device could sit on a stale board until its next fetch.
    */
   timedOutIds: string[];
+  /**
+   * Finished matches housekeeping deleted under the replay retention rule this pass (never a
+   * player's newest ten — see server/src/retention.ts). Additive: a caller that does not know the
+   * field yet is unaffected.
+   */
+  prunedMatches?: number;
 };
 
 export type MatchListRow = {
@@ -295,6 +302,22 @@ export interface Storage {
 
   /** Housekeeping: timeouts, waiting expiry, stale guest cleanup. Idempotent. */
   sweep(now: number, guestMaxAgeMs: number): Promise<SweepResult>;
+
+  /**
+   * EVERY finished match with its participant ids — the input to the one retention rule
+   * (`server/src/retention.ts`). The whole set matters, not only the old rows: a duel played
+   * yesterday still occupies one of its players' newest ten, so excluding it would make the rule
+   * protect an extra old duel. The set stays small because the rule itself trims it to about ten
+   * finished duels per player.
+   */
+  finishedMatches(): Promise<RetentionRow[]>;
+
+  /**
+   * Delete FINISHED matches by id (the cascade removes their moves and participants). The caller is
+   * the retention rule; this method itself makes no policy decision, and it refuses to touch a
+   * match that is not finished.
+   */
+  deleteFinished(ids: readonly string[]): Promise<number>;
 
   /** Postgres rate limit: increment bucket in the current window; ok=false when over max. */
   hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }>;

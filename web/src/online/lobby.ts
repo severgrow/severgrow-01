@@ -3,7 +3,7 @@
 import type { MatchListEntry, MatchStatus } from '../../../server/src/protocol.js';
 import { formatRemaining } from './clock.js';
 import { publicAppOrigin } from './config.js';
-import { ONLINE } from '../../../src/strings.js';
+import { ONLINE, REPLAY } from '../../../src/strings.js';
 
 export const FIRST_ONLINE_CARD_KEY = 'severgrow.duel.firstCard.v1';
 export const WARN_LAST_MS = 2 * 3_600_000; // last 2 hours (P-12)
@@ -25,9 +25,11 @@ export type LobbyRow = {
   /** Short status word (never colour alone). */
   statusWord: string;
   /** Icon name for status (paired with the word). */
-  statusIcon: 'play' | 'hourglass' | 'flag' | 'check';
+  statusIcon: 'play' | 'hourglass' | 'flag' | 'check' | 'replay';
   timeLeft: string | null;
   warnLastTwoHours: boolean;
+  /** A finished duel with a real move log: its row opens the replay. */
+  replayable: boolean;
   /** Timeout-grace line for the row (punchy): your spent grace, or the opponent's. */
   graceWord: string | null;
   /** True when the viewer already used their grace on a live match: their next miss loses. */
@@ -110,9 +112,15 @@ export const toLobbyRow = (
         : remaining === null
           ? null
           : formatRemaining(remaining);
+  // A finished duel's row is the way into its REPLAY (owner brief, 2026-10-25), so it says what
+  // tapping it does rather than only that it is over. A match that finished with no committed moves
+  // (an abandoned waiting room) has nothing to watch, so it keeps the plain word.
+  const replayable = bucket === 'finished' && entry.revision > 0;
   const status =
     bucket === 'finished'
-      ? { word: ONLINE.statusFinished, icon: 'check' as const }
+      ? replayable
+        ? { word: REPLAY.pastRow, icon: 'replay' as const }
+        : { word: ONLINE.statusFinished, icon: 'check' as const }
       : bucket === 'your_turn'
         ? { word: ONLINE.statusYourTurn, icon: 'play' as const }
         : entry.status === 'waiting'
@@ -137,6 +145,7 @@ export const toLobbyRow = (
     opponentName: entry.opponentName?.trim() ? (entry.opponentTag ? `${entry.opponentName.trim()} #${entry.opponentTag}` : entry.opponentName.trim()) : ONLINE.opponentFallback,
     statusWord: status.word,
     statusIcon: status.icon,
+    replayable,
     timeLeft: timeText,
     warnLastTwoHours: remaining !== null && remaining > 0 && remaining <= WARN_LAST_MS && bucket !== 'finished',
     graceWord,
