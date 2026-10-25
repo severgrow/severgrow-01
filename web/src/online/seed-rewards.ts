@@ -38,6 +38,26 @@ const read = (storage: KeyValue): PendingSeedProof[] => {
 };
 const write = (storage: KeyValue, pending: PendingSeedProof[]) => storage.set(PENDING_SEED_PROOFS_KEY, JSON.stringify(pending));
 
+/** How many real proofs this device is still owed. Zero means a boot has nothing to ask the server. */
+export const pendingSeedProofCount = (storage: KeyValue): number => read(storage).length;
+
+/**
+ * How many proofs in a row may fail WITHOUT THE SERVER ANSWERING (offline, a deadline, a dropped
+ * connection) before a pass gives up for this attempt.
+ *
+ * Owner report, 2026-10-25 ("I'm on level 33 and haven't been getting seeds"): the queue is drained
+ * oldest-first, and the pass used to stop at the FIRST transient failure — so one proof the server
+ * would not settle (measured here: a 5xx the Edge runtime answers, e.g. a 546 CPU limit, or a
+ * timeout) was a permanent wall for every first clear queued behind it. No request, no receipt, no
+ * Seeds for any of them.
+ *
+ * Only a DEAD LINE stops a pass now, and only after this many in a row: a connection that never
+ * answers must not stack a 5 s deadline per proof (up to ~22 proofs), which is what the original
+ * `break` protected. A server that ANSWERS — even with a 5xx — does not stop it; the loop steps over
+ * that proof and tries the next one. The failed proof stays queued, so it is retried on the next pass.
+ */
+export const MAX_CONSECUTIVE_TRANSIENT = 2;
+
 /** Pending is never spendable; only the server wallet can report earned Seeds. */
 export const queueSeedProof = (storage: KeyValue, input: PendingSeedProof): void => {
   const proof = { ...input, botVersion: input.botVersion || CURRENT_BOT_VERSION } as PendingSeedProof;
@@ -55,6 +75,18 @@ export type SeedFlushResult = {
    * only trace they leave: the finish card must say so rather than let the Seeds vanish silently.
    */
   refused: { key: string; message: string }[];
+  /**
+   * The stored account token was REJECTED (401) and no replacement was available. Nothing was paid,
+   * nothing was dropped; the proof is still queued. The settle reports this to the card instead of
+   * calling it "try again later forever" (owner report, 2026-10-25).
+   */
+  identityRejected?: true;
+  /**
+   * Nothing could even be ATTEMPTED because this device has no usable identity (storage blocked, or
+   * guest creation failed). Distinct from an offline line: retrying will not fix a blocked store, and
+   * the card must say so rather than stay silent.
+   */
+  unavailable?: { reason: 'identity' | 'storage'; message: string };
 };
 
 export const emptyFlushResult = (): SeedFlushResult => ({ awards: [], refused: [] });
@@ -119,7 +151,12 @@ const mergeResults = (first: SeedFlushResult, second: SeedFlushResult): SeedFlus
   for (const entry of second.awards) awards.set(entry.key, entry);
   const refused = new Map(first.refused.map((entry) => [entry.key, entry] as const));
   for (const entry of second.refused) refused.set(entry.key, entry);
-  return { awards: [...awards.values()], refused: [...refused.values()] };
+  return {
+    awards: [...awards.values()],
+    refused: [...refused.values()],
+    ...(first.identityRejected || second.identityRejected ? { identityRejected: true as const } : {}),
+    ...(first.unavailable || second.unavailable ? { unavailable: second.unavailable ?? first.unavailable } : {}),
+  };
 };
 
 export const flushSeedProofs = (
@@ -155,9 +192,15 @@ export const flushSeedProofs = (
      * transiently blocked), so every caller sees its own key in the answer.
      *
      * `attempted` is the run's memory of proofs it must NOT re-attempt: a kept-but-unpayable one (the
-     * final lesson on a server without its verifier) would otherwise be resubmitted forever. New
-     * replays are different objects, so they are still picked up.
+     * final lesson on a server without its verifier, or a replay the server's runtime keeps failing)
+     * would otherwise be resubmitted forever. New replays are different objects, so they are still
+     * picked up.
+     *
+     * A failure where the server DID answer steps over that proof (`MAX_CONSECUTIVE_TRANSIENT`); only
+     * a line that never answers stops the pass. Stopping at the first bad proof let one unpayable
+     * entry withhold every first clear queued behind it (owner report, 2026-10-25: level 33).
      */
+    let transient = 0;
     for (;;) {
       const next = read(storage).find((proof) => !attempted.has(JSON.stringify(proof)));
       if (!next) break;
@@ -168,6 +211,7 @@ export const flushSeedProofs = (
         const reward = await submitWithDeadline(client, token, next, timeoutMs);
         result.awards.push({ key, reward });
         removeSettledProof(storage, next);
+        transient = 0;
       } catch (error) {
         // Invalid/expired proofs cannot become valid later; transient network errors keep the
         // locally queued replay so the next menu visit can retry it.
@@ -177,16 +221,35 @@ export const flushSeedProofs = (
         const unknownLesson = error instanceof DuelError && error.status === 400 && next.kind === 'campaign'
           && next.levelId.startsWith('lesson-') && /not available/i.test(error.message);
         if (unknownLesson) continue;
+        // The ACCOUNT was rejected, not this replay. No identity means no proof can be settled, so
+        // the pass stops at once and reports it: the caller recovers (or the card says so) instead of
+        // retrying every queued proof against the same dead token and calling the result "deferred".
+        if (error instanceof DuelError && (error.status === 401 || error.code === 'UNAUTHORIZED')) {
+          result.identityRejected = true;
+          break;
+        }
         if (error instanceof DuelError && error.status === 400) {
           // Final: the server will never accept this replay. Drop it, and REPORT it — a proof that
           // disappears without a word is a player's Seeds disappearing without a word.
           removeSettledProof(storage, next);
           result.refused.push({ key, message: error.message });
+          transient = 0; // the server answered: the line is alive, whatever it said about this proof
           continue;
         }
-        // A transient failure (offline, deadline, 5xx) stops THIS run: retrying down a queue on a
-        // dead connection only stacks failures. Everything stays queued for the next attempt.
-        break;
+        // The server ANSWERED but did not settle this proof (a 5xx — including the Edge runtime's
+        // 546 CPU limit — a 429, or any other refusal this build does not know). The proof stays
+        // queued, and the line is alive, so the pass moves on to the NEXT one: one such proof must
+        // never withhold every first clear behind it in the oldest-first queue.
+        if (error instanceof DuelError && error.status > 0) {
+          transient = 0;
+          continue;
+        }
+        // No answer at all (offline, a deadline, a dropped connection): retrying down a queue on a
+        // dead line only stacks a 5 s deadline per proof, so stop after a couple in a row. Everything
+        // stays queued for the next attempt.
+        transient += 1;
+        if (transient >= MAX_CONSECUTIVE_TRANSIENT) break;
+        continue;
       }
     }
     // The loop has exited: from this instant the pass can no longer see anything new, so no caller

@@ -15,7 +15,8 @@
 // The card must never scroll (the one-screen rule, web/e2e/finish-fit.ts) and "pending" must never
 // appear on the line at any moment (a MutationObserver records every value it takes).
 //
-//   CHANNEL=futa05 node --import tsx web/e2e/seeds-settle.ts      (writes /tmp/seeds-settle/*.png)
+//   node --import tsx web/e2e/seeds-settle.ts      (writes /tmp/seeds-settle/*.png)
+//   (the suite sets its own CHANNEL + the online triple, so a plain shell is enough)
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -360,6 +361,19 @@ const boot = async (
 
 const portrait = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 800 };
+
+// THE SUITE OWNS ITS BUILD **AND** ITS PREVIEW, so it must supply both sides' environment. `build()`
+// below passes the online triple to its child process, but `preview()` loads web/vite.config.ts in
+// THIS process, and a `futa05` config refuses to load without it — so the documented command
+// (`CHANNEL=futa05 node --import tsx web/e2e/seeds-settle.ts`) used to die at the preview with
+// "CHANNEL=futa05 build requires VITE_DUEL_API_URL…" before a browser ever opened. Setting the same
+// values here makes the suite runnable from a plain shell, and inside a CI job that only exports
+// the Supabase pair. The API origin is a ROUTING PATTERN only: `stubSeeds` intercepts
+// `**/v1/seeds/**`, so it never has to be reachable.
+process.env.CHANNEL = 'futa05';
+process.env.VITE_DUEL_API_URL = ORIGIN;
+process.env.VITE_SUPABASE_URL ||= 'http://127.0.0.1:9';
+process.env.VITE_SUPABASE_ANON_KEY ||= 'local-e2e-anon-key';
 
 await build();
 const server = await preview({

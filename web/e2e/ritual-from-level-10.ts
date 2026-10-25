@@ -64,6 +64,44 @@ const progress = (completed: number): string =>
 
 const served = await servePreview(0, { logLevel: 'error' });
 
+/** The prefix `web/src/channel.ts` prepends to every key on THIS build.
+ *
+ *  The app patches `Storage.prototype` (channel.ts), so the page's own `localStorage.setItem('x')`
+ *  lands on `<prefix>x`. Writing one sentinel and reading back the key that was actually stored
+ *  derives the prefix from the app itself instead of keeping a second copy of the channel table in
+ *  the test. A futa04 build opened off the deployed paths reads `main2:`; a futa05 build reads
+ *  `futa05:`. Seeding the wrong one is not a loud error — the campaign simply starts FRESH, so this
+ *  suite used to open level 1 while believing it was level 10 and assert the ritual against a level
+ *  that has no ritual at all.
+ */
+const PROBE_KEY = 'severgrow.e2e.prefix-probe';
+
+const detectStoragePrefix = async (browser: Browser): Promise<string> => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.goto(served.url, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => !!(window as unknown as { __severgrow?: unknown }).__severgrow,
+      undefined,
+      { timeout: 20_000 },
+    );
+    const found = await page.evaluate((key) => {
+      localStorage.setItem(key, '1');
+      const raw = Object.keys(localStorage).find((k) => k.endsWith(key));
+      localStorage.removeItem(key);
+      return raw ? raw.slice(0, raw.length - key.length) : null;
+    }, PROBE_KEY);
+    if (found === null) throw new Error('e2e: the page installed no storage prefix; cannot seed a campaign');
+    return found;
+  } finally {
+    await context.close();
+  }
+};
+
+/** Filled once the browser is up, before any page is seeded. */
+let storagePrefix = '';
+
 const open = async (
   browser: Browser,
   viewport: { width: number; height: number },
@@ -72,9 +110,9 @@ const open = async (
 ): Promise<{ page: Page; errors: string[] }> => {
   const touch = viewport.width < 700;
   const context = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch, deviceScaleFactor: 2 });
-  await context.addInitScript(({ s, p }) => {
-    localStorage.setItem('main2:severgrow.settings.v1', s);
-    localStorage.setItem('main2:severgrow.campaign.progress.v3', p);
+  await context.addInitScript(({ s, p, prefix }) => {
+    localStorage.setItem(`${prefix}severgrow.settings.v1`, s);
+    localStorage.setItem(`${prefix}severgrow.campaign.progress.v3`, p);
     const win = window as unknown as {
       __name?: (f: unknown) => unknown;
       __ritualPhases: { phase: string; t: number }[];
@@ -108,7 +146,7 @@ const open = async (
       }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
     };
     watch();
-  }, { s: settings(over), p: progress(completed) });
+  }, { s: settings(over), p: progress(completed), prefix: storagePrefix });
   const page = await context.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -206,6 +244,9 @@ const installRitualRecorder = (page: Page): Promise<void> =>
         opponentRank: Number(el?.dataset.opponentRank),
         title: document.getElementById('lottery-title')?.textContent?.trim() ?? '',
         layers: document.querySelectorAll('#lottery-deck .ritual-deck-layer').length,
+        // The lesson window must never stand over the ceremony (or the ceremony over it).
+        plateShown: (() => { const p = document.getElementById('lesson-plate'); return !!p && !p.hidden; })(),
+        glassShown: (() => { const g = document.getElementById('futasaku-glass'); return !!g && !g.hidden; })(),
         you: box('lottery-card-you'),
         opponent: box('lottery-card-opponent'),
         deck: box('lottery-deck'),
@@ -224,6 +265,7 @@ type RitualSnap = {
   deck: { l: number; t: number; r: number; b: number; cx: number; cy: number } | null;
   youHome: { cx: number; cy: number } | null;
   opponentHome: { cx: number; cy: number } | null;
+  plateShown: boolean; glassShown: boolean;
   vw: number; vh: number;
 };
 
@@ -240,12 +282,18 @@ const waitHandSettled = (page: Page): Promise<unknown> =>
 const main = async (): Promise<void> => {
   const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
   try {
+    // Seed the keys this BUILD actually reads. A futa05 build reads `futa05:`, not `main2:`.
+    storagePrefix = await detectStoragePrefix(browser);
+    console.log(`  storage prefix: ${JSON.stringify(storagePrefix)}`);
     // ---------------------------------------------------------------- LEVEL 10 · phone 390x844
     {
       const { page, errors } = await open(browser, { width: 390, height: 844 }, 9);
+      // Install BEFORE the level opens. `arrive` is set synchronously as the ritual starts, so a
+      // recorder attached after the overlay is already visible can miss the first phase under load
+      // and report a shorter trace than the ritual actually played.
+      await installRitualRecorder(page);
       await openCampaignEntry(page, 10);
       await page.waitForSelector('#starter-lottery:not([hidden])', { timeout: 25_000 });
-      await installRitualRecorder(page);
       // The three moments, best effort for the eye: the ritual's own record below decides the facts.
       const shotDeal = (await waitLive(page, 'deal')) ? await shot(page, 'l10-390x844-1-deal') : '(deal missed)';
       const shotReveal = (await waitLive(page, 'reveal')) ? await shot(page, 'l10-390x844-2-reveal') : '(reveal missed)';
@@ -268,6 +316,9 @@ const main = async (): Promise<void> => {
         `${result?.starter} / "${result?.title}"`);
       check('L10: the higher card is the seat that starts', (result?.youRank ?? 0) > (result?.opponentRank ?? 9),
         `${result?.youRank} vs ${result?.opponentRank}`);
+      check('L10: no lesson window stands over the ceremony',
+        snaps.every((x) => !x.plateShown && !x.glassShown),
+        snaps.filter((x) => x.plateShown || x.glassShown).map((x) => x.phase).join(','));
       check('L10: the engine’s starting seat is unchanged while the cards are on screen',
         during?.startingPlayer === 0 && during?.actor === 0 && during?.phase === 'DRAW',
         `startingPlayer=${during?.startingPlayer} actor=${during?.actor} phase=${during?.phase}`);

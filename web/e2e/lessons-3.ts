@@ -15,6 +15,7 @@ import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { SMALL_HOMES } from '../src/lessons/authored.js';
 import { LESSON } from '../../src/strings.js';
 import { LESSON_VERSION } from '../src/lessons/mastery.js';
+import { SEEDS_IDENTITY_UNVERIFIED } from '../src/online/seed-icon.js';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
 const SHOTS = process.env.SHOTS ?? '';
@@ -580,10 +581,25 @@ try {
         check(!card.seeds, `L${level} finish card has no Seeds line`);
         check(!card.territory && !card.territoryKey, `L${level} finish card says nothing about Territory`);
       } else {
-        // Owner, 2026-10-24: level 10 pays 100 Seeds once (the server verifies it; here the CI
-        // placeholder server cannot answer, so the line is the pending one), and its won card says
-        // what Seeds and Territory are, with Open Territory.
-        check(!!card.seeds, `L10 finish card has its Seeds line (${card.seeds})`);
+        // Owner, 2026-10-24: level 10 pays 100 Seeds once, and its won card says what Seeds and
+        // Territory are, with Open Territory.
+        //
+        // Owner report, 2026-10-25 (the seeds-settle work): a finish card must NEVER rest on a claim
+        // nobody wrote a receipt for. The old expectation here was the "pending verification" line,
+        // which is the exact thing the owner asked to remove; with the CI placeholder receipt server
+        // (it cannot answer by design) the honest card now shows NO Seeds line. The payout itself,
+        // and the line when the server DOES answer, is proven end to end in web/e2e/seeds-settle.ts.
+        check(!/pending/i.test(card.seeds ?? ''), `L10 finish card never claims pending Seeds (${JSON.stringify(card.seeds)})`);
+        // The CI placeholder cannot issue an identity token, so the settle now reports `unverified`
+        // rather than staying silent (owner, 2026-10-25: a stranded payout must say so instead of
+        // doing nothing). That is an honest ABSENCE of a receipt, not a claim of one — so the rule is
+        // precise: the card may either say nothing, or say exactly this. It must never show a number
+        // or a pending line it cannot back with a receipt.
+        const unverifiedLine = SEEDS_IDENTITY_UNVERIFIED;
+        check(
+          !card.seeds || card.seeds.startsWith(unverifiedLine),
+          `L10 finish card shows no Seeds number without a receipt (${JSON.stringify(card.seeds)})`,
+        );
         check(card.territory === 'Seeds are earned by winning.Spend 100 to claim a tile of Territory on the world map.', `L10 finish card explains Seeds and Territory (${card.territory})`);
         check(card.territoryKey, 'L10 finish card offers Open Territory');
       }

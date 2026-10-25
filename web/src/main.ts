@@ -238,8 +238,8 @@ import { onlineBuildEnabled } from './online/config.js';
 import { accountsConfiguredInThisBuild, paintEarlyAccountKey } from './accounts/menu-key.js';
 import { paintBetaLine } from './feedback/beta-line.js';
 import { queueSeedProof } from './online/seed-rewards.js';
-import { requestTrainingTicket, settleSeedProof } from './online/seed-settle.js';
-import { SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
+import { requestTrainingTicket, settleQueuedSeedsOnBoot, settleSeedProof } from './online/seed-settle.js';
+import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
 import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 
@@ -853,6 +853,8 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   $('levels').hidden = name !== 'levels';
   $('campaign').hidden = name !== 'campaign';
   $('game').hidden = name !== 'game';
+  // An invitation deferred out of a live match is offered here, now that a menu owns the screen.
+  if (name !== 'game') drainInstallInvite();
   // A full-screen change gets the same quiet arrival as a surface, EXCEPT the game: the board is
   // the live object and must never slide or fade under the player's finger. Hiding a screen resets
   // its surface animation, so nothing can finish on a screen the player has already left.
@@ -2072,12 +2074,12 @@ async function startGame(
   const playRitual = playsStarterRitual(IS_FUTA04, campaign?.number ?? null);
   // A campaign match always keeps its opening as the replay base: the save must replay under the
   // LEVEL's config (its authored board), never under the default config.
-  if (lessonNow) handSettled = false;
   beginSession(state, null, [], campaign || opponentStarts ? state : null, playRitual);
   // A lesson's stage card waits for the ritual below: the ceremony owns the screen until it
   // resolves, and level 10's send-off is the last beat before the first move. Levels 1-9 have no
   // ritual, so their stage starts here, exactly as it always has.
-  if (lessonNow && !playRitual) startLessonStage();  // beginSession freshens the generation token for THIS match; another entry starting a match now
+  if (lessonNow && !playRitual) startLessonStage();
+  // beginSession freshens the generation token for THIS match; another entry starting a match now
   // would supersede it and the checks below would stop this older start from touching that one.
   generation = startGameGeneration;
   save();
@@ -2419,7 +2421,8 @@ function ensureTutorialThrowPhase() {
     if (!session || !coach.tutorial || session.state.phase !== 'ACT' || session.state.actor !== HUMAN) return;
     const end = session.legal.find(a => a.t === 'EndAct');
     if (!end) return;
-    const played = session.play(end, HUMAN);
+    // The app skips a Grow the lesson has no use for; not a move the player made (see Session.play).
+    const played = session.play(end, HUMAN, { auto: true });
     if (played) afterPlay(played, HUMAN, null);
   };
   if (busy()) void idle().then(run);
@@ -2851,10 +2854,32 @@ function noteFinishedForInstall(outcome: 'won' | 'lost' | 'draw', later = false)
   }
   installPrompt.noteFinished(outcome);
 }
+/**
+ * Offer the deferred invitation once the player is OUT of a match.
+ *
+ * The deferral exists so the invitation never covers a lesson's win, but a player who closes the
+ * finish card and goes straight into the next level had it open over a LIVE match: the badge stands
+ * down behind that modal (one mark per screen), so the lesson ran with no logo at all and the
+ * invitation covered the board. While a game or its finish card is on screen the outcome is kept,
+ * and `drainInstallInvite` offers it the moment the player is back on a menu.
+ */
 function flushInstallInvite() {
   const outcome = pendingInstallOutcome;
   pendingInstallOutcome = null;
-  if (outcome) window.setTimeout(() => noteFinishedForInstall(outcome, true), 900);
+  if (!outcome) return;
+  window.setTimeout(() => {
+    if (!inPlayableScreen()) { noteFinishedForInstall(outcome, true); return; }
+    pendingInstallOutcome = outcome; // offered by the next drain, on a menu
+  }, 900);
+}
+
+/** True while a match or its result owns the screen — never a place for the invitation. */
+const inPlayableScreen = (): boolean => !$('game').hidden || !$('gameover').hidden;
+
+/** Offers an invitation that was deferred out of a live match, once the player is back on a menu. */
+function drainInstallInvite() {
+  if (!pendingInstallOutcome || inPlayableScreen()) return;
+  flushInstallInvite();
 }
 
 function humanPlay(a: Action, opts: { auto?: boolean } = {}) {
@@ -3371,7 +3396,12 @@ function autoAdvance() {
     note({ t: 'empty', at: Date.now() });
     caption(NOTHING_TO_PLAY, null, 'info');
   }
-  humanPlay(end);
+  // `auto`: like the board tap that skips an optional Bloom, this EndAct is the APP's own move to
+  // Throw, not one the player made. Without the flag it became its own undo stop, so the first
+  // Undo after a Grow returned to the position AFTER that Grow (and the `skippedFrom` guard then
+  // stopped the auto-skip re-firing), which is exactly the owner's "Undo did nothing" report —
+  // still present on any turn where nothing but EndAct is left.
+  humanPlay(end, { auto: true });
 }
 
 // ---------- the juice budget ----------
@@ -5334,7 +5364,10 @@ function renderLessonGuide(): void {
   syncLessonPile(st);
   if (!glassSurface) return;
   // The header stays the menu and the logo; the words are chosen below.
-  if (guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
+  // `pregameHold`: the Who-starts ceremony owns the screen. A lesson (level 10 onwards, the only
+  // levels that have both) must not paint its window or its light over the cards — the send-off
+  // comes after the ceremony, when the hold is released and this function is repainted.
+  if (pregameHold || guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
     lessonBeatNow = null;
     lessonBreath?.clear();
     hideLessonPlate();
@@ -6701,7 +6734,8 @@ function scheduleTutorialRoutineThrow(stepKey: string) {
     if (session?.state.phase === 'ACT') {
       const end = session.legal.find(action => action.t === 'EndAct');
       if (end) {
-        const played = session.play(end, HUMAN);
+        // Scripted tutorial beat: the APP throws, so it is not a stop the player can "take back".
+        const played = session.play(end, HUMAN, { auto: true });
         if (played) afterPlay(played, HUMAN, null);
       }
       await idle();
@@ -7351,6 +7385,12 @@ function settleSeedsForCard(key: string): void {
       // The server will never accept this replay, so those Seeds are gone. Say so, and log why.
       console.warn('[FUTASAKU] Seeds refused for this game:', key, report.message);
       seedRewardMessage = SEEDS_NOT_VERIFIED;
+    } else if (report.kind === 'unverified') {
+      // There is no usable identity on this device. The proof is STILL QUEUED (the next pass — a
+      // sign-in, a reload, a recovered guest — pays it), but the card says so instead of staying
+      // silent, which was the old silent deferral loop (owner report, 2026-10-25).
+      console.warn('[FUTASAKU] Seeds could not be settled: no usable identity:', report.message);
+      seedRewardMessage = SEEDS_IDENTITY_UNVERIFIED;
     } else {
       // Still unconfirmed and still queued. The card shows NOTHING: the next menu visit (or the
       // next time this device is online) settles it, and the wallet is the one place it is claimed.
@@ -8887,8 +8927,9 @@ bind('levels-back', () => showScreen('menu'));
 bind('menu-campaign', () => enterCampaign());
 bind('campaign-back', () => showScreen('menu'));
 bind('campaign-continue', () => enterCampaign());
-// The ask sheet: only reachable when the saved match is a different level from the next one, so
-// both answers are explicit and one tap each. Resume wins the lead: the match exists already.
+// The ask sheet. Since the entry anchors on the PLACE (owner, 2026-10-24), `campaignEntry` only
+// raises it when the saved match IS the place (`next.id === saved.id`); the different-level wording
+// below is kept for a direct caller, not reachable through the entry any more.
 bind('csa-resume', () => {
   campaignAsk = null;
   sheet(null);
@@ -10255,5 +10296,11 @@ if (timingEnabled()) {
 void import('./feedback/mount.js').then((f) => f.mountFeedback()).catch(() => undefined);
 // Accounts: "Continue with Google" (docs/ACCOUNTS.md); shows nothing until Google is on in Supabase.
 void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => undefined);
+// Seeds earned while the settle could not run are QUEUED on this device, not lost. Drain them as
+// soon as the app is up (owner ask, 2026-10-25: "every level of campaign and any other game should
+// pay out seeds immediately"): a player whose proofs were stranded by the old wedge sees the balance
+// right on their next visit, without having to win another game first. Silent and fire-and-forget;
+// a device with nothing queued makes no request at all.
+void settleQueuedSeedsOnBoot();
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));
