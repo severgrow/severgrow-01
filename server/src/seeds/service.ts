@@ -61,6 +61,12 @@ export class WorldEconomyService {
 
   wallet(player: PlayerRecord) { return this.store.wallet(player.id); }
 
+  /**
+   * The signed-in account's place (owner report, 2026-10-25). Takes the AUTHENTICATED player, never
+   * an id from the request, so one account can only ever read its own progress.
+   */
+  campaignHighestLevel(player: PlayerRecord) { return this.store.campaignHighestLevel(player.id); }
+
   async claim(player: PlayerRecord, cellId: string, requestId: string) {
     if (!/^[A-Za-z0-9_-]{8,100}$/.test(requestId)) throw new ApiError('INVALID_REQUEST', 'A claim request ID is required.');
     const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;

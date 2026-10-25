@@ -311,6 +311,17 @@ export class DuelClient {
     return response.wallet;
   }
 
+  /**
+   * The account's place: the furthest Campaign level its verified first-clear receipts show. It
+   * rides the same authenticated wallet read, so no new route and no extra round trip is invented;
+   * `null` means the player has never cleared a level (or an older server did not send the field).
+   */
+  async accountCampaignLevel(token: string): Promise<number | null> {
+    const response = await this.request<{ campaignHighestLevel?: unknown }>('GET', '/v1/seeds/wallet', { token });
+    const level = response.campaignHighestLevel;
+    return typeof level === 'number' && Number.isFinite(level) && level >= 1 ? level : null;
+  }
+
   async claimWorld(token: string, cellId: string, requestId: string): Promise<ClaimResult> {
     const response = await this.request<{ claim: ClaimResult }>('POST', '/v1/world/claims', { token, body: { cellId, requestId } });
     return response.claim;

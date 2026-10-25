@@ -400,6 +400,9 @@ export const mountAccounts = async (): Promise<void> => {
             } else {
               writeIdentity(kv, identity);
               writeAccount(kv, { provider: 'google', email: typeof res.json.email === 'string' ? res.json.email : null, playerId: identity.playerId });
+              // The account's campaign place may be ahead of this device's: let the page reconcile it
+              // now (the reload below runs the same boot read, so this is only the no-reload path).
+              window.dispatchEvent(new Event('futasaku:identity'));
               try {
                 kv?.set(WELCOME_KEY, '1');
               } catch {

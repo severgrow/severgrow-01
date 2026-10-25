@@ -117,6 +117,22 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
     const { rows } = await pool.query('select * from seed_wallets where player_id = $1', [playerId]);
     return rows[0] ? walletFromRow(rows[0]) : emptyWallet();
   },
+  /**
+   * The account's place, from its OWN verified clears: the same expression the public map's lateral
+   * uses, scoped to one id. `campaign:c<chapter>-<level>` is the only key shape that counts; a
+   * `lesson:10` receipt (which pays as a campaign mode) has no ordinal and correctly contributes
+   * nothing. Null rather than 1 for a player who never cleared a level.
+   */
+  async campaignHighestLevel(playerId) {
+    const { rows } = await pool.query(
+      `select max((substring(source_key from '^campaign:c[0-9]+-([0-9]+)$'))::int) as level
+         from seed_reward_receipts
+        where player_id = $1 and mode = 'campaign'`,
+      [playerId],
+    );
+    const level = rows[0]?.level;
+    return level == null ? null : number(level);
+  },
   async world() {
     return transaction(pool, async (client) => {
       // A shared lock gives a revision and ownership list from the same committed claim state.
