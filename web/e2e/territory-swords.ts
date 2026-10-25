@@ -127,7 +127,9 @@ const markerInfo = (page: Page, cellId: string) => page.evaluate((id) => {
     tile: { w: tb.width, h: tb.height },
     dx: (hb.left + hb.width / 2) - (tb.left + tb.width / 2),
     dy: (hb.top + hb.height / 2) - (tb.top + tb.height / 2),
-    swords: group.querySelectorAll(':scope > g > g').length,
+    // The trace contains both swords in ONE path; the old two rotated <g> copies are gone. Count
+    // the drawn path so a regression that drops the glyph (or doubles it) still fails here.
+    swords: group.querySelectorAll(':scope > g.world-swords-glyph > path').length,
   };
 }, cellId);
 
@@ -237,6 +239,11 @@ try {
       viewport: { width: size.w, height: size.h }, deviceScaleFactor: 2,
       hasTouch: size.touch, isMobile: size.touch,
     });
+    // Five agents share this machine; a full-page DPR-2 screenshot of the filtered map can sit in
+    // Chromium's raster queue for longer than the 30s default while another worktree builds. The
+    // product checks above/below are not time-dependent, so give the screenshots room rather than
+    // let a noisy neighbour turn a visual receipt into a red suite.
+    page.setDefaultTimeout(180_000);
     await page.addInitScript(() => localStorage.clear());
     await page.addInitScript({ content: 'window.__name = (f) => f;' });
     await routeWorld(page);
@@ -250,8 +257,8 @@ try {
     // ---- 1. both perspectives, and the glyph is glued to its tile -----------------------------
     const defender = await markerInfo(page, own1);
     const challenger = await markerInfo(page, rival2);
-    check(`[${tag}] defender's tile carries the swords`, !!defender && defender.side === 'incoming' && defender.swords === 2);
-    check(`[${tag}] challenger's tile carries the swords`, !!challenger && challenger.side === 'outgoing' && challenger.swords === 2);
+    check(`[${tag}] defender's tile carries the traced swords`, !!defender && defender.side === 'incoming' && defender.swords === 1);
+    check(`[${tag}] challenger's tile carries the traced swords`, !!challenger && challenger.side === 'outgoing' && challenger.swords === 1);
     check(`[${tag}] the glyph is centred on the tile`, !!defender &&
       Math.abs(defender.dx) <= 1 && Math.abs(defender.dy) <= 1,
       `offset ${n2(defender?.dx ?? -99)}, ${n2(defender?.dy ?? -99)}px`);
@@ -353,13 +360,13 @@ try {
     await page.screenshot({ path: join(OUT, `panned-${tag}.png`) });
     await closeup(page, own1, join(OUT, `closeup-panned-${tag}.png`));
     check(`[${tag}] no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '));
-    await page.close();
 
     // ---- 5. reduced motion: the swords are static there too -----------------------------------
     const reduced = await browser.newPage({
       viewport: { width: size.w, height: size.h }, deviceScaleFactor: 2,
       hasTouch: size.touch, isMobile: size.touch,
     });
+    reduced.setDefaultTimeout(180_000);
     await reduced.emulateMedia({ reducedMotion: 'reduce' });
     await reduced.addInitScript(() => localStorage.clear());
     await reduced.addInitScript({ content: 'window.__name = (f) => f;' });
@@ -377,6 +384,15 @@ try {
       glyph?.animation === 'none' && glyph?.transition === '0s', JSON.stringify(glyph ?? {}));
     await reduced.screenshot({ path: join(OUT, `reduced-motion-${tag}.png`) });
     await reduced.close();
+
+    // ---- 6. FIT receipt (no checks): the smallest cell size, where the mark is ~16px -----------
+    // The framed view above is the 46px-cell shipping size. Fit is the "whole island" zoom; the
+    // trace must still read as a mark there rather than a blob, so keep the evidence.
+    await page.locator('#online-world-fit').click();
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: join(OUT, `fit-${tag}.png`) });
+    await closeup(page, own1, join(OUT, `closeup-fit-${tag}.png`));
+    await page.close();
   }
 
   await browser.close();
