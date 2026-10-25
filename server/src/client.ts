@@ -19,6 +19,7 @@ import type {
   MatchViewPayload,
   MeResponse,
   ReconnectResponse,
+  ReplayResponse,
   ResignResponse,
   SubmitActionRequest,
   SubmitActionResponse,
@@ -230,6 +231,14 @@ export class DuelClient {
   getState(token: string, matchId: string, sinceRevision?: number): Promise<GetViewResponse> {
     const query = sinceRevision === undefined ? '' : `?since=${sinceRevision}`;
     return this.request<GetViewResponse>('GET', `/v1/matches/${encodeURIComponent(matchId)}/view${query}`, { token });
+  }
+
+  /**
+   * A FINISHED duel's replay payload: the rules snapshot, the seed, the starting seat and the
+   * ordered action log. The client rebuilds every position with the deterministic engine.
+   */
+  replay(token: string, matchId: string): Promise<ReplayResponse> {
+    return this.request<ReplayResponse>('GET', `/v1/matches/${encodeURIComponent(matchId)}/replay`, { token });
   }
 
   /** Reconnect after a reload: same view, plus everything since the last revision seen. */

@@ -15,6 +15,8 @@
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
 import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
+import { prunableMatches } from '../retention.js';
+import type { RetentionRow } from '../retention.js';
 import type { MatchStatus, OnlineGameResult } from '../protocol.js';
 import type {
   CommitBatchInput,
@@ -120,6 +122,40 @@ const rowToMove = (row: PgRow): MoveRecord => ({
 const isUniqueViolation = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505';
 
+// ---- replay retention (server/src/retention.ts owns the rule; these are only its two queries) ----
+
+/** EVERY finished match with its participant ids (see `Storage.finishedMatches`). */
+const finishedRows = async (pool: PgPool): Promise<RetentionRow[]> => {
+  const { rows } = await pool.query(
+    `select m.id, m.finished_at,
+            coalesce(array_agg(p.player_id) filter (where p.player_id is not null), '{}') as players
+       from matches m
+       left join match_participants p on p.match_id = m.id
+      where m.status = 'finished' and m.finished_at is not null
+      group by m.id, m.finished_at
+      order by m.finished_at desc`,
+  );
+  return rows.map((row) => ({
+    id: asString(row.id),
+    finishedAt: asNullableNumber(row.finished_at),
+    players: Array.isArray(row.players) ? (row.players as unknown[]).map(asString) : [],
+  }));
+};
+
+/** Delete finished matches by id. Scoped to `status = 'finished'` so a stale id can never take an
+ *  active duel with it; the FK cascade removes the moves and participants. */
+const deleteFinishedRows = async (pool: PgPool, ids: readonly string[]): Promise<number> => {
+  if (ids.length === 0) return 0;
+  const { rows } = await pool.query("delete from matches where id = any($1::uuid[]) and status = 'finished' returning id", [ids]);
+  return rows.length;
+};
+
+/** One retention pass: every finished row, the rule, then the delete. */
+const pruneFinishedMatches = async (pool: PgPool, now: number): Promise<number> => {
+  const rows = await finishedRows(pool);
+  const doomed = prunableMatches(rows, now);
+  return doomed.length ? deleteFinishedRows(pool, doomed) : 0;
+};
 /**
  * True ONLY for a genuine unique violation on `matches.invite_code` — the one failure the service
  * retries with a fresh code. The column's inline `unique` constraint is named
@@ -938,7 +974,18 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       await pool.query('delete from players where id = $1', [asString(row.id)]);
       deletedGuests += 1;
     }
-    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds, timedOutIds };
+    // Housekeeping also trims finished matches — never a player's newest ten, and never one younger
+    // than the age floor (server/src/retention.ts owns the rule for both stores).
+    const prunedMatches = await pruneFinishedMatches(pool, now);
+    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds, timedOutIds, prunedMatches };
+  },
+
+  async finishedMatches(): Promise<RetentionRow[]> {
+    return finishedRows(pool);
+  },
+
+  async deleteFinished(ids: readonly string[]): Promise<number> {
+    return deleteFinishedRows(pool, ids);
   },
 
   async hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }> {

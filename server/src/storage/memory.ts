@@ -5,6 +5,8 @@
 import type { Player } from '../../../src/engine/index.js';
 import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
+import { prunableMatches } from '../retention.js';
+import type { RetentionRow } from '../retention.js';
 import type { OnlineGameResult } from '../protocol.js';
 import type {
   CommitBatchInput,
@@ -457,7 +459,57 @@ export class MemoryStorage implements Storage {
       }
       deletedGuests += 1;
     }
-    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds, timedOutIds };
+    // Housekeeping also trims finished matches — but never a player's newest ten, and never one
+    // younger than the age floor (server/src/retention.ts owns the rule).
+    const prunedMatches = await this.pruneFinished(now);
+    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds, timedOutIds, prunedMatches };
+  }
+
+  async finishedMatches(): Promise<RetentionRow[]> {
+    const rows: RetentionRow[] = [];
+    for (const match of this.matches.values()) {
+      if (match.status !== 'finished' || match.finishedAt === null) continue;
+      rows.push({
+        id: match.id,
+        finishedAt: match.finishedAt,
+        players: (this.participants.get(match.id) ?? []).map((p) => p.playerId),
+      });
+    }
+    return rows;
+  }
+
+  async deleteFinished(ids: readonly string[]): Promise<number> {
+    let deleted = 0;
+    for (const id of ids) {
+      const match = this.matches.get(id);
+      // Scoped: the retention rule only ever offers finished matches, and this refuses anything
+      // else even if a caller gets it wrong.
+      if (!match || match.status !== 'finished') continue;
+      this.matches.delete(id);
+      this.inviteIndex.delete(match.inviteCode);
+      this.participants.delete(id);
+      this.moves.delete(id);
+      deleted += 1;
+    }
+    return deleted;
+  }
+
+  /** The one retention pass, shared in shape with the Postgres adapter. */
+  private async pruneFinished(now: number): Promise<number> {
+    const rows = await this.finishedMatches();
+    const doomed = prunableMatches(rows, now);
+    return doomed.length ? this.deleteFinished(doomed) : 0;
+  }
+
+  /**
+   * TEST/e2e helper: mark a match finished at `at` without playing it out, so the retention rule can
+   * be exercised on a fifteen-match history without fifteen real games. Nothing outside tests calls
+   * it (the same shape as `setTurnDeadline` above).
+   */
+  async seedFinished(matchId: string, at: number): Promise<void> {
+    const match = this.matches.get(matchId);
+    if (!match) return;
+    this.matches.set(matchId, copy({ ...match, status: 'finished', finishedAt: at, turnDeadlineAt: null, updatedAt: at }));
   }
 
   async hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }> {
