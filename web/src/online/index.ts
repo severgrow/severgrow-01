@@ -96,9 +96,20 @@ export { duelUiFromSnapshot, playScreenAction, renderDuelHud, turnStateFrom } fr
 export type { DuelUiModel } from './duel-bridge.js';
 
 export { OnlineSession, onlineSessionFromPayload, catchUpStepsFromDriver } from './duel-session.js';
-export type { FinishInfo, OnlinePlayResult } from './duel-session.js';
+export type { FinishInfo, OnlinePlayResult, OnlineTurnReplay, TurnReplayReason } from './duel-session.js';
 
-export { stepsFromEvent, stepsFromEvents, syncStep } from './steps-from-events.js';
+export {
+  groupTurns,
+  pickOpponentTurn,
+  sameBoard,
+  boardSignature,
+  openingBoard,
+  buildOpponentTurnReplay,
+} from './opponent-turn-replay.js';
+export type { LiveTurn, OpponentTurnReplay, ReplayBuild, ReplayReason, TurnGroup } from './opponent-turn-replay.js';
+
+export { stepsFromEvent, stepsFromEvents, stepContextFor, syncStep } from './steps-from-events.js';
+export type { StepContext } from './steps-from-events.js';
 
 export { isOnlineDuel, getOnlineSession, setOnlineSession, onlinePathsActive } from './duel-runtime.js';
 
