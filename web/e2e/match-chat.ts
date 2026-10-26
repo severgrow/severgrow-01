@@ -795,6 +795,102 @@ try {
       );
     await visual.screenshot({ path: `${out}/cockpit-${width}x${height}.png` });
   }
+  // THE OWNER'S TWO CHAT-PANEL CHANGES (2026-10-26), measured on the real elements:
+  //  1. the panel's own backdrop is 18% weaker than the shared dark glass (9px → 7.4px);
+  //  2. the 44px close key can never sit under the corner badge — including a NOTCHED phone, where
+  //     the safe area pushes the HUD's menu ink down and the badge (75→97) landed on the key (54→98).
+  //     That case is the badge's own token moved to the box such a device produces, because a plain
+  //     emulated viewport has no notch; the panel must follow the badge's MEASURED box, not the inset.
+  const badgeCases = [
+    [320, 844, false],
+    [360, 640, false],
+    [390, 844, false],
+    [1280, 800, false],
+    [844, 390, false],
+    [320, 844, true],
+    [360, 640, true],
+    [390, 844, true],
+  ] as const;
+  const panelBlurs: string[] = [];
+  const sharedBlurs: string[] = [];
+  for (const [width, height, notched] of badgeCases) {
+    await visual.setViewportSize({ width, height });
+    await visual.waitForTimeout(120);
+    await visual.evaluate((down) => {
+      const id = 'chat-badge-probe';
+      document.getElementById(id)?.remove();
+      if (down) {
+        // A rule beats the inline token the branding layer re-measures, so the badge stays at the
+        // box a 59px safe area produces instead of being reset by the next resize.
+        const style = document.createElement('style');
+        style.id = id;
+        style.textContent = 'html{--futasaku-logo-top:75px !important;}';
+        document.head.append(style);
+      }
+      window.dispatchEvent(new Event('resize'));
+    }, notched);
+    await visual.waitForTimeout(200);
+    if (
+      (await visual
+        .locator('#match-chat-toggle')
+        .getAttribute('aria-expanded')) !== 'true'
+    )
+      await visual.locator('#match-chat-toggle').click();
+    await visual.locator('.match-chat-panel').waitFor({ state: 'visible' });
+    await visual.waitForTimeout(180);
+    const clearance = await visual.evaluate(() => {
+      const brand = document.querySelector<HTMLElement>('#hud-brand')!;
+      const close = document.querySelector<HTMLElement>(
+        '.match-chat-head-keys button:last-child',
+      )!;
+      const panel = document.querySelector<HTMLElement>('.match-chat-panel')!;
+      const b = brand.getBoundingClientRect();
+      const c = close.getBoundingClientRect();
+      return {
+        shown: b.width > 0 && getComputedStyle(brand).display !== 'none',
+        gap: c.top - b.bottom,
+        overlapX: Math.min(b.right, c.right) - Math.max(b.left, c.left),
+        overlapY: Math.min(b.bottom, c.bottom) - Math.max(b.top, c.top),
+        closeW: c.width,
+        closeH: c.height,
+        closeName: close.getAttribute('aria-label'),
+        panelTop: panel.getBoundingClientRect().top,
+        badgeBottom: b.bottom,
+        backdrop: getComputedStyle(panel).backdropFilter,
+        shared: getComputedStyle(
+          document.querySelector<HTMLElement>('.match-chat-phrases')!,
+        ).backdropFilter,
+      };
+    });
+    panelBlurs.push(clearance.backdrop);
+    sharedBlurs.push(clearance.shared);
+    const clear =
+      clearance.shown &&
+      (clearance.overlapX <= 0 || clearance.overlapY <= 0) &&
+      clearance.gap >= 8 &&
+      clearance.closeW === 44 &&
+      clearance.closeH === 44 &&
+      clearance.closeName === 'Close chat';
+    if (!clear) console.log('CHAT_BADGE', width, height, notched, clearance);
+    check(
+      `${width}×${height}${notched ? ' with a notched safe area' : ''}: the 44px close key clears the corner badge`,
+      clear,
+    );
+    await visual.screenshot({
+      path: `${out}/badge-clear-${width}x${height}${notched ? '-notched' : ''}.png`,
+    });
+    await visual.keyboard.press('Escape');
+    await visual.locator('.match-chat-panel').waitFor({ state: 'hidden' });
+  }
+  await visual.evaluate(() =>
+    document.getElementById('chat-badge-probe')?.remove(),
+  );
+  check(
+    "chat panel's own blur is 18% weaker than the shared dark-glass and nothing else moves",
+    panelBlurs.every((value) => value === 'blur(7.4px) saturate(1.05)') &&
+      sharedBlurs.every((value) => value === 'blur(9px) saturate(1.05)'),
+  );
+
   // Maximum-length unbroken text must wrap on a narrow touch viewport.
   now += 2000;
   const longMessage = 'あ'.repeat(280);

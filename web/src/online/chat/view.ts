@@ -653,8 +653,25 @@ export const mountMatchChat = (o: {
       root.style.setProperty('--chat-left', `${left}px`);
       root.style.setProperty('--chat-width', `${width}px`);
     }
+    // THE CORNER BADGE IS ABOVE THE PANEL (owner, 2026-10-26: on a phone "the 'x' button to close the
+    // chat clashes with the logo in the top right corner"). The panel started at a flat 52px, but the
+    // badge is fixed at the HUD menu ink's top — on a notched phone the safe area pushes that ink to
+    // ~75px, so the badge's box (75→97) landed squarely on the 44px close key (54→98). The panel now
+    // starts below the badge's MEASURED box plus the same 8px gap the cockpit uses, so it clears the
+    // mark on any device instead of guessing a phone's inset. A no-op where the panel already starts
+    // lower (desktop dock, landscape), and skipped when the badge is standing down (width 0). The
+    // panel keeps its bottom edge: it gives up exactly the height the badge takes.
+    const offset = v?.offsetTop ?? 0;
+    const brand = document.getElementById('hud-brand')?.getBoundingClientRect();
+    if (brand && brand.width > 0) {
+      const clear = brand.bottom + 8 - offset;
+      if (clear > top) {
+        available -= clear - top;
+        top = clear;
+      }
+    }
     root.dataset.keyboard = String(keyboard);
-    root.style.setProperty('--chat-top', `${(v?.offsetTop ?? 0) + top}px`);
+    root.style.setProperty('--chat-top', `${offset + top}px`);
     root.style.setProperty('--chat-height', `${Math.max(120, available)}px`);
     if (followLatest && ctl.state().open) log.scrollTop = log.scrollHeight;
   };
@@ -672,7 +689,8 @@ export const mountMatchChat = (o: {
     const signature = [
       page.dataset.layout,
       page.dataset.thumb,
-      ...['--side-dock-shift', '--dock-w', '--dock-h'].map((k) =>
+      // The corner badge's own box is part of the chat's placement now: the panel starts below it.
+      ...['--side-dock-shift', '--dock-w', '--dock-h', '--futasaku-logo-top', '--futasaku-logo-height'].map((k) =>
         page.style.getPropertyValue(k),
       ),
     ].join('|');
