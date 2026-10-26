@@ -1089,7 +1089,17 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
     if (id === 'sheet-howto') renderHowTo();
     // The backdrop only changes density; it never travels. The surface becomes present.
     enterSurface($('scrim'), { travel: 0, scale: 1, duration: 150 });
-    enterSurface(next);
+    // A PLATE (owner, 2026-10-26: "we worked on animations of opening menus ... not the
+    // settings/paused menu — did we do anything there at all?"). It did animate, and it animates on
+    // every sheet — but the shared open curve (`easeOpen`, cubic-bezier(0.22,1,0.36,1)) is so
+    // front-loaded that ~87% of the movement lands in the first ~50ms: about three frames. On a
+    // compact card like Match Intel that still reads as a breath. On a full-height plate the centre
+    // of the panel barely moves and it covers the very backdrop you would compare it against, so the
+    // eye catches only the fade and the plate looks like it was simply there.
+    // The cure stays inside the one vocabulary (open ≤ 320ms, travel ≤ 16px, scale ≥ 95%): a plate
+    // takes the STRONGEST arrival the tokens allow, so its edges move ~10px a side instead of ~7px
+    // and the size change is a clear 5%. Same one breath, just spent where a big surface can show it.
+    enterSurface(next, { duration: 300, travel: 16, scale: 0.95 });
     next.querySelector<HTMLElement>('[data-close], button:not([hidden])')?.focus();
   } else if (wasOpen) {
     // CLOSING. Pause is released NOW (the game resumes and an online clock is never "frozen" by a
