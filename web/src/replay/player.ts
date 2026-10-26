@@ -46,6 +46,15 @@ export type ReplayHandle = {
     ended: boolean;
     board: string;
     turn: number | null;
+    /** DIAGNOSTIC ONLY (perf pass): ms for the last N steps, never read by playback. */
+    perf?: {
+      paint: number[];
+      sig: number[];
+      render: number[];
+      turn: number[];
+      seek: number[];
+      rebuild: number[];
+    };
   } | null;
   /**
    * Test/diagnostic hook: the whole frame plan (time, seat, kind) and each frame's own board
@@ -235,6 +244,23 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   /** Signature of the board actually painted (a rebuild from the log differs from the frame list). */
   let painted = '';
   let sharing = false;
+  /**
+   * DIAGNOSTIC ONLY (perf pass, 2026-10-26): one timing pair per step, read through `now().perf`.
+   * Nothing in playback reads it; it exists so a measurement can name where a beat's time went
+   * instead of guessing (web/e2e/perf-replay.ts is the reader). Bounded work: a few
+   * `performance.now()` pairs and one `push` per paint.
+   */
+  const perf = {
+    paint: [] as number[],
+    sig: [] as number[],
+    render: [] as number[],
+    turn: [] as number[],
+    seek: [] as number[],
+    rebuild: [] as number[],
+  };
+  const sample = (list: number[], ms: number): void => {
+    list.push(Math.round(ms * 100) / 100);
+  };
 
   const reduce = (): boolean => deps.reduceMotion();
 
@@ -357,15 +383,20 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     if (!model) return;
     const frame = model.frames[i];
     if (!frame) return;
+    const tPaint = performance.now();
     // A rebuild from the log is a SEEK: it paints the position without replaying every beat's
     // motion between here and there (that is what a drag would otherwise look like).
     const forward = !rebuilt && i === index + 1;
     if (forward && !reduce() && frame.removed.length) captureGhosts(frame.removed);
     else clearGhosts();
     const shown = rebuilt ?? frame.board;
+    const tSig = performance.now();
     painted = boardSignature(shown);
+    sample(perf.sig, performance.now() - tSig);
+    const tRender = performance.now();
     board.render(shown, NO_OVERLAY);
     lightEmptyCells(shown);
+    sample(perf.render, performance.now() - tRender);
     if (forward && !reduce() && frame.changed.length) {
       const keys = frame.changed.slice(0, MAX_POPS);
       const stagger = keys.length > 1 ? Math.min(360, (frame.duration * 0.5) / (keys.length - 1)) : 0;
@@ -383,9 +414,12 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     index = i;
     scoreMe.textContent = String(frame.scores[0]);
     scoreOpp.textContent = String(frame.scores[1]);
+    const tTurn = performance.now();
     paintTurn(i);
+    sample(perf.turn, performance.now() - tTurn);
     paintMeta();
     syncTurnMark();
+    sample(perf.paint, performance.now() - tPaint);
   };
 
   const stop = (): void => {
@@ -473,8 +507,12 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     // THE SEEK: the position at this beat is rebuilt from the action log (engine `apply` up to the
     // beat, then the beat's own step), not merely looked up. Playback stays O(1) on `frames`, but a
     // drag is a true replay-to-index, as the owner asked ("it must actually seek").
+    const tRebuild = performance.now();
     const rebuilt = boardAtIndex(model.input, model, target);
+    sample(perf.rebuild, performance.now() - tRebuild);
+    const tSeek = performance.now();
     paint(target, rebuilt);
+    sample(perf.seek, performance.now() - tSeek);
     if (keepPlaying) {
       playing = true;
       root.dataset.paused = '0';
@@ -759,6 +797,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
             ended,
             board: painted,
             turn: model.frames[Math.max(0, index)]?.turn ?? null,
+            perf,
           }
         : null,
     plan: () =>

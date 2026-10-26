@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { apply, legalActions, mulberry32, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { CURRENT_RULES_VERSION, rulesConfig } from '../../src/engine/versions.js';
-import { REPLAY_PACING, buildReplay, screenBoard } from '../src/replay/timeline.js';
+import { REPLAY_PACING, buildReplay, openingOf, screenBoard } from '../src/replay/timeline.js';
 import type { ReplayInput, ReplayModel } from '../src/replay/timeline.js';
 import { boardAtIndex, clampIndex, frameAtTime, progressOf, scoresAtIndex, seekTo, stateAfter } from '../src/replay/seek.js';
 
@@ -93,6 +93,58 @@ describe('seeking lands on the real position', () => {
     expect(afterSprout.turnPlayer).toBe(0); // still RYK's turn: the throw has not happened
     const afterThrow = stateAfter(input, 4);
     expect(afterThrow.turnPlayer).toBe(1); // the throw handed the turn over
+  });
+});
+
+describe('the seek rebuild does not repeat work', () => {
+  /** The same answer `stateAfter` must give, computed the obvious way with no help. */
+  const truth = (input: ReplayInput, count: number): State =>
+    input.actions.slice(0, Math.max(0, count)).reduce<State>((state, action) => apply(state, action), openingOf(input));
+
+  it('every prefix asked in a scrambled order is the same state as a plain fold from the opening', () => {
+    const actions = randomGame(5);
+    const input = baseInput(actions, 5);
+    expect(actions.length).toBeGreaterThan(20);
+    // Deep first, then back to the middle, then one past the end: the order a drag really takes.
+    const counts = [actions.length, 7, actions.length - 1, 0, 19, 3, actions.length, 12];
+    for (const count of counts) expect(stateAfter(input, count)).toEqual(truth(input, count));
+  });
+
+  it('a prefix nearest the end still matches a fresh fold (the cache cannot drift)', () => {
+    const actions = randomGame(6);
+    const input = baseInput(actions, 6);
+    const middle = Math.floor(actions.length / 2);
+    // Fill shallow, then ask deep: the memo grows into the same chain the fold would build.
+    expect(stateAfter(input, 1)).toEqual(truth(input, 1));
+    expect(stateAfter(input, middle)).toEqual(truth(input, middle));
+    expect(stateAfter(input, actions.length)).toEqual(truth(input, actions.length));
+    // Asking the same prefix again is the same object state, not a second, different one.
+    expect(stateAfter(input, middle)).toEqual(truth(input, middle));
+  });
+
+  it('two different matches never share a chain', () => {
+    const a = baseInput(randomGame(7), 7);
+    const b = baseInput(randomGame(8), 8);
+    expect(stateAfter(a, a.actions.length)).toEqual(truth(a, a.actions.length));
+    expect(stateAfter(b, b.actions.length)).toEqual(truth(b, b.actions.length));
+    expect(stateAfter(a, a.actions.length).board).not.toEqual(stateAfter(b, b.actions.length).board);
+  });
+
+  it('a negative or absent count is still the opening position', () => {
+    const input = baseInput(REAL_ACTIONS, REAL_SEED);
+    expect(stateAfter(input, -4)).toEqual(openingOf(input));
+    expect(stateAfter(input, 0)).toEqual(openingOf(input));
+  });
+
+  it('a log swapped or cut short under the same input never answers from the old chain', () => {
+    const actions = randomGame(9);
+    const input = baseInput(actions, 9);
+    expect(stateAfter(input, actions.length)).toEqual(truth(input, actions.length));
+    // The same input object, given a shorter log: a stale chain would report the old position.
+    const shorter = actions.slice(0, 8);
+    (input as { actions: readonly Action[] }).actions = shorter;
+    expect(stateAfter(input, shorter.length)).toEqual(truth(input, shorter.length));
+    expect(stateAfter(input, 4)).toEqual(truth(input, 4));
   });
 });
 

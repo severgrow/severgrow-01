@@ -18,9 +18,49 @@ import type { Board } from '../logic/anim.js';
 import { mapStepToScreen, openingOf, screenBoard } from './timeline.js';
 import type { ReplayInput, ReplayModel } from './timeline.js';
 
+/**
+ * THE PREFIX CACHE: the state after the first n actions of ONE replay, filled as far as has been
+ * asked for.
+ *
+ * Why (measured, 2026-10-26): a scrub drag calls `stateAfter` once per pointer move, and every move
+ * re-applied the whole log from the opening. On a 49-beat practice replay the rebuild alone cost
+ * 0.30 ms at 2% of the bar but 4.50 ms at 98% — it grew with how far the drag had gone, and it
+ * would keep growing with the length of the match. A drag is a walk along ONE log, so the prefix
+ * that was already applied is the same prefix the next move needs: keeping it makes the rebuild
+ * O(new actions) instead of O(all actions), and the numbers no longer depend on where the bar is.
+ *
+ * Correctness: this is a pure function memoised, never a shortcut. `apply` is deterministic and the
+ * engine state is immutable, so `states[n]` IS what a fold from the opening would produce; the
+ * suite (`replay-seek.test.ts`, "the seek rebuild does not repeat work") asks in a scrambled order
+ * and compares every answer against a fresh fold. The key is the `ReplayInput` object itself, so
+ * two matches can never share a chain and a closed replay's cache is garbage-collected with it.
+ */
+type PrefixChain = { actions: readonly unknown[]; states: State[] };
+const prefixCache = new WeakMap<ReplayInput, PrefixChain>();
+
+/** An action count as a whole number inside `[0, actions.length]` (a negative or absent count is 0). */
+const prefixLength = (input: ReplayInput, count: number): number => {
+  if (!Number.isFinite(count)) return count === Number.POSITIVE_INFINITY ? input.actions.length : 0;
+  return Math.min(input.actions.length, Math.max(0, Math.trunc(count)));
+};
+
 /** The state after the first `count` actions of the match. */
-export const stateAfter = (input: ReplayInput, count: number): State =>
-  input.actions.slice(0, Math.max(0, count)).reduce<State>((state, action) => apply(state, action), openingOf(input));
+export const stateAfter = (input: ReplayInput, count: number): State => {
+  const wanted = prefixLength(input, count);
+  const cached = prefixCache.get(input);
+  // A chain is only usable while it still describes THIS log: the same array, and never longer than
+  // the log itself (an array swapped or cut short starts again from the opening).
+  const usable = cached !== undefined && cached.actions === input.actions && cached.states.length - 1 <= input.actions.length;
+  const states: State[] = cached !== undefined && usable ? cached.states : [openingOf(input)];
+  if (cached === undefined || !usable) prefixCache.set(input, { actions: input.actions, states });
+  // Grow the chain only as far as this question needs; each new step applies exactly one action.
+  let state = states[states.length - 1]!;
+  for (let i = states.length - 1; i < wanted; i++) {
+    state = apply(state, input.actions[i]!);
+    states.push(state);
+  }
+  return states[wanted]!;
+};
 
 /** [me, opponent] from an engine score pair. */
 export const scorePair = (pair: readonly [number, number], me: Player): [number, number] =>
