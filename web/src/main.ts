@@ -2,6 +2,7 @@
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { mountMatchChat } from './online/chat/view.js';
 import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
+import { TURN_REPLAY } from './online/replay-copy.js';
 import { runRematch } from './online/rematch.js';
 // Futasaku in the browser. You (player 1) against the computer. All rules come from the
 // engine in src/engine; this file only draws, animates and listens. The game state
@@ -4654,6 +4655,9 @@ const syncSessionFromOnline = (resetSelection = false) => {
   // the shown one until its discard step lands. An ordinary sync can catch the pile up now.
   const replayQueued = (os.driver.pendingEvents?.().length ?? 0) > 0;
   if (!os.isRevealing && !replayQueued) shownDiscard = [...session.view.discard];
+  // Every local mirror of the online state is rebuilt here (after a snapshot, a move, or a
+  // take-back), which is exactly when the Replay question may have a new answer. One cached read.
+  refreshOnlineTurnReplay();
 };
 
 /** Futa04's idle prompt yields for every active move, including Bloom painting without a card. */
@@ -4750,6 +4754,46 @@ function cueTurnHandOff(v: View): void {
 
 /** A Bloom's cards all lift as one: the height of a middle card. */
 const BLOOM_LIFT_WEIGHT = 0.5;
+
+// The Replay control's own words (offline, unchanged): same sentences the product has always used.
+const REPLAY_TIP = `Replay ${OPP.theirs} last turn`;
+const REPLAY_NONE = `Nothing to replay yet: ${OPP.the} hasn't moved`;
+
+/**
+ * Is there an opponent turn the Replay control may offer?
+ *
+ * Offline the session simply kept the bot's turns. Online there is no such record, so the
+ * `OnlineSession` answers from a reconstruction of the last turn that was PROVED against the live
+ * board (`prepareOpponentTurnReplay`, called where a snapshot lands — never from here, so a render
+ * can never become a fetch). It also stays quiet while a catch-up is still showing, because the
+ * board on screen is not yet the live one.
+ */
+const canReplayLastTurn = (): boolean =>
+  isOnlineDuel() ? getOnlineSession()?.canReplayOpponentTurn === true : session?.canReplayOpponent === true;
+
+/**
+ * Why the slot cannot offer Replay: the one honest distinction the online path needs. Offline
+ * keeps exactly the words it always had.
+ */
+const noReplayTip = (): string =>
+  isOnlineDuel() && getOnlineSession()?.turnReplayReason === 'unverified' ? TURN_REPLAY.unverified : REPLAY_NONE;
+
+/**
+ * Ask the online session to answer "is their last turn replayable?" for the state that just
+ * landed, and repaint when the answer arrives. The session caches the answer per match + revision +
+ * board, so this is one read per snapshot — never a read per render.
+ */
+function refreshOnlineTurnReplay(): void {
+  const os = getOnlineSession();
+  if (!os) return;
+  void os.prepareOpponentTurnReplay().then(
+    () => {
+      if (getOnlineSession() !== os) return; // the match was torn down meanwhile
+      render();
+    },
+    () => undefined,
+  );
+}
 
 function render() {
   const t0 = performance.now();
@@ -6520,14 +6564,15 @@ function renderBoard(v: View, advice: Advice | null) {
   $('tool-skip').hidden = !busy();
   // Positioning pass: the bottom-left slot always holds a tool (Skip while something animates,
   // otherwise Replay, dimmed until there is a turn to replay), so the "?" opposite is never alone
-  const noReplay = !session.canReplayOpponent;
+  const canReplay = canReplayLastTurn();
+  const noReplay = !canReplay;
   $('tool-replay').hidden = busy() || !REPLAY_BUTTON;
   $('tool-replay').classList.toggle('off', noReplay);
   $('tool-replay').setAttribute('aria-disabled', String(noReplay));
-  $('tool-replay').dataset.tip = noReplay ? REPLAY_NONE : REPLAY_TIP;
+  $('tool-replay').dataset.tip = noReplay ? noReplayTip() : REPLAY_TIP;
   // Undo (overhaul item 9): always in the same place; lit with a dot while a move can be taken back
   const undoOk = (isOnlineDuel() ? !!getOnlineSession()?.canUndo : session.canUndo) && !busy();
-  const replayOk = !isOnlineDuel() && !undoOk && !busy() && session.canReplayOpponent;
+  const replayOk = !undoOk && !busy() && canReplay;
   // Positioning pass: Undo always holds its slot (opposite Sort), dimmed and disabled until a move
   // can be taken back, so it appearing never moves anything and Sort is never alone
   $('tool-undo').hidden = false;
@@ -6541,6 +6586,9 @@ function renderBoard(v: View, advice: Advice | null) {
   }
   undoSlot.setAttribute('aria-label', replayOk ? `Replay ${OPP.theirs} last turn` : 'Undo: take back your last move');
   undoSlot.title = replayOk ? `Replay ${OPP.theirs} last turn` : 'Take back your last move (you can until you throw)';
+  // The same slot holds Replay when nothing can be undone: ONLINE its disabled tooltip must say why
+  // (the offline words stay exactly as they were).
+  if (!replayOk && noReplay && !undoOk && isOnlineDuel()) undoSlot.title = noReplayTip();
   // Step 4: the homes (tree, volcano): idle life, a calm worried state and the "sides blocked"
   // ring in danger (or when tapped), smothered or withered after a Strangle. Public information.
   {
@@ -9172,8 +9220,6 @@ function pickFruit(id: number) {
 /** The Fruit card the "any strength" note is shown for (the first one picked). */
 let anyNoteCard: number | null = null;
 
-const REPLAY_TIP = `Replay ${OPP.theirs} last turn`;
-const REPLAY_NONE = `Nothing to replay yet: ${OPP.the} hasn't moved`;
 function replayBotTurn() {
   if (!session || busy()) return;
   const turn = session.lastTurnOf(BOT);
@@ -9212,6 +9258,54 @@ function replayBotTurn() {
   }
   render();
   void pump();
+}
+
+/**
+ * The same replay, ONLINE: the opponent's last turn rebuilt from the match's public history.
+ *
+ * It goes through the SAME machinery as offline (`queue.reset(startBoard)` → its steps → a closing
+ * sync onto the live board), so the pace, the beats, Reduce motion / Speed off, Skip and the
+ * product's own REPLAY sign all behave identically. The steps are only ever produced by
+ * `OnlineSession.opponentTurnReplay`, which refuses unless the reconstruction was proved against
+ * the live board — so a wrong position can never be shown and the board always ends where the duel
+ * really is. Nothing here touches the clock, the server, the catch-up gates or the action log.
+ */
+function replayOnlineOpponentTurn() {
+  if (!session || busy()) return;
+  const os = getOnlineSession();
+  const turn = os?.opponentTurnReplay;
+  if (!turn) return;
+  // The live position, read BEFORE anything is queued: this is where the replay must end.
+  const liveBoard = session.state.board;
+  const v = session.view;
+  const liveScores: [number, number] = [v.score, v.opponentScore];
+  session.cancel();
+  replaying = true;
+  replaySpeed = REPLAY_SPEED;
+  replayBeats = true;
+  sound.reset(); // the same steps pick the same variations as the first time
+  queue.reset(turn.startBoard);
+  shownScores = [turn.scores[0], turn.scores[1]];
+  queue.push(turn.steps.filter((s) => s.k !== 'end' && s.k !== 'turn'));
+  // The closing sync: whatever the steps did, the board lands on the TRUE current position.
+  queue.push([{ k: 'sync', board: liveBoard, scores: liveScores }]);
+  if (IS_FUTA04) {
+    theirsDim.begin();
+    if (smartCockpit) {
+      smartCockpit.led('REPLAY', { immediate: true });
+      replaySignHeld = true;
+    }
+  } else {
+    banner(`Replay: ${OPP.Label} turn`, 'bot');
+  }
+  render();
+  void pump();
+}
+
+/** One entry point for the one control: online it is a rebuild, offline it is the kept turns. */
+function replayLastTurn() {
+  if (isOnlineDuel()) replayOnlineOpponentTurn();
+  else replayBotTurn();
 }
 
 const bind = (id: string, fn: () => void) =>
@@ -9765,7 +9859,7 @@ bind('tool-skip', () => {
   pill.skip();
   fastForward();
 });
-bind('tool-replay', () => replayBotTurn());
+bind('tool-replay', () => replayLastTurn());
 // Step 3 item 7: the corner tools' tooltips: hover (mouse), long-press (touch), and once
 // automatically the first time they appear (one at a time, a few seconds each)
 {
@@ -9830,8 +9924,9 @@ bind('tool-undo', () => {
     smartCockpit?.hint('UNDONE');
     return;
   }
-  // `none`: nothing was moved and nothing is waiting. Offline the same slot may be showing Replay.
-  if (!online && session.canReplayOpponent) replayBotTurn();
+  // `none`: nothing was moved and nothing is waiting. The same slot may be showing Replay — online
+  // too, where the turn is rebuilt from the match's public history instead of the kept turns.
+  if (canReplayLastTurn()) replayLastTurn();
 });
 bind('go-rematch', () => {
   // One advance per finish card (owner brief, 2026-10-22): the leading key is the largest target on
@@ -10269,8 +10364,17 @@ let appReady = false;
       pumping,
       watchdog: revealWatchdog !== 0,
       progress: revealProgress,
+      /** The opponent's last completed turn, if a verified reconstruction of it is ready. */
+      replayTurn: (() => {
+        const t = os.opponentTurnReplay;
+        return t ? { steps: t.steps.length, scores: [...t.scores] } : null;
+      })(),
+      /** Why the Replay slot is (not) offered: ok | no-turn | unverified | pending. */
+      replayReason: os.turnReplayReason,
     };
   },
+  /** Tests only: the board on the screen right now (the AnimQueue's own board, never the state). */
+  shownBoard: () => queue.board,
   /** Tests/diagnostics: the animation pump's timeline (see `animLog`). Never drives the game. */
   animLog: () => animMarks.slice(),
   clearAnimLog: () => {

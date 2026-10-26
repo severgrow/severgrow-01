@@ -11,12 +11,24 @@ import { moveSummary, resultReason, resultTitle } from '../logic/log.js';
 import type { Highlight } from '../logic/highlights.js';
 import { ONLINE, RESULT } from '../../../src/strings.js';
 import type { OnlineDriver } from './driver.js';
+import { boardSignature, buildOpponentTurnReplay, openingBoard } from './opponent-turn-replay.js';
+import type { OpponentTurnReplay, ReplayReason } from './opponent-turn-replay.js';
 import { shadowFromView } from './shadow.js';
-import { stepsFromEvents, syncStep } from './steps-from-events.js';
+import { stepContextFor, stepsFromEvents, syncStep } from './steps-from-events.js';
 
 export type OnlinePlayResult =
   | { ok: true; played: Played | null; catchUp: Step[]; finished: boolean }
   | { ok: false; message: string };
+
+/** The opponent's last completed turn, plus the scores its starting board had. */
+export type OnlineTurnReplay = OpponentTurnReplay & { scores: [number, number] };
+
+/** Why the Replay control is (not) offered: `pending` = not answered yet for this board. */
+export type TurnReplayReason = 'ok' | 'no-turn' | 'unverified' | 'pending';
+
+type TurnReplayResult =
+  | { ok: true; replay: OnlineTurnReplay }
+  | { ok: false; reason: ReplayReason | 'pending' };
 
 /**
  * Everything the finish screen shows. Deliberately the SAME shape and the same sentences offline
@@ -77,6 +89,14 @@ export class OnlineSession {
    * catch-up keeps its 2x (and its Skip).
    */
   private revealLive = false;
+  /**
+   * The last verified answer to "can this seat replay the opponent's last turn?", cached per
+   * match + server revision + board. Never fetched from a render: `prepareOpponentTurnReplay()`
+   * does the one read, the page only reads the getters below.
+   */
+  private replayCheck: { key: string; result: TurnReplayResult } | null = null;
+  /** The key of a check that is in flight (so a burst of renders cannot start a second fetch). */
+  private replayChecking: string | null = null;
 
   constructor(readonly driver: OnlineDriver) {
     this.state = this.buildDisplayState();
@@ -197,9 +217,94 @@ export class OnlineSession {
     return this.lastCatchUp;
   }
 
+  // ---------- replaying the opponent's last turn -------------------------------------------
+  //
+  // The offline game replays the bot's turn from `Session.turns`. Online that record does not
+  // exist (this class keeps only its OWN actions), so the turn is rebuilt from the match's public
+  // event history — and offered ONLY when the rebuild is proven against the live board. See
+  // `opponent-turn-replay.ts` for the grouping rule and the self-check.
+
+  /** The opponent's last completed turn, if a verified reconstruction of it is cached. */
+  get opponentTurnReplay(): OnlineTurnReplay | null {
+    const hit = this.replayCheck;
+    if (!hit || hit.key !== this.replayKey()) return null; // the board or the revision moved on
+    return hit.result.ok ? hit.result.replay : null;
+  }
+
   /**
-   * Play a UI action (display coords). Draw/Throw are async; mid-turn Grow is local draft.
+   * Why the control is (not) offered — an honest tooltip needs to tell "they have not moved yet"
+   * apart from "the board could not be verified".
    */
+  get turnReplayReason(): TurnReplayReason {
+    const hit = this.replayCheck;
+    if (!hit || hit.key !== this.replayKey()) return 'pending';
+    return hit.result.ok ? 'ok' : hit.result.reason;
+  }
+
+  /**
+   * True when the opponent's last turn can be replayed right now: a verified reconstruction exists,
+   * nothing is moving, and it is MY turn — the same two conditions the offline control has
+   * (`Session.canReplayOpponent`: `actor === viewer`, and no replay in flight). Offering it while
+   * they are moving would put a replay next to their live turn.
+   */
+  get canReplayOpponentTurn(): boolean {
+    if (this.boardBlocked || this.finished) return false;
+    const snap = this.driver.snapshot();
+    if (snap.view.actor !== snap.seat) return false;
+    return this.opponentTurnReplay !== null;
+  }
+
+  /**
+   * Answer the replay question for the current match state, at most once per match + revision +
+   * board. Deliberately NOT called from a render path: the page calls it where a snapshot lands,
+   * so a render burst can never turn into a fetch burst.
+   */
+  async prepareOpponentTurnReplay(): Promise<void> {
+    const key = this.replayKey();
+    if (this.replayCheck?.key === key || this.replayChecking === key) return;
+    this.replayChecking = key;
+    let result: TurnReplayResult;
+    try {
+      const events = await this.historySnapshot();
+      result = this.replayKey() === key ? this.buildOpponentTurn(events) : { ok: false, reason: 'pending' };
+    } catch {
+      // A refused or failed read is not an error the player must see: the control simply stays off.
+      result = { ok: false, reason: 'unverified' };
+    } finally {
+      this.replayChecking = null;
+    }
+    if (result.ok || result.reason !== 'pending') this.replayCheck = { key, result };
+  }
+
+  /** One fetch keyed on everything the answer depends on (match, revision, the board on screen). */
+  private replayKey(): string {
+    const snap = this.driver.snapshot();
+    return `${snap.matchId}|${snap.revision}|${boardSignature(this.state.board)}`;
+  }
+
+  private buildOpponentTurn(events: readonly Event[]): TurnReplayResult {
+    const snap = this.driver.snapshot();
+    if (this.finished) return { ok: false, reason: 'no-turn' };
+    const p = this.driver.perspective();
+    const built = buildOpponentTurnReplay({
+      events,
+      opponent: (1 - snap.seat) as Player,
+      live: { actor: snap.view.actor, finished: this.finished },
+      perspective: p,
+      // The match's true opening board (homes and all), already in display space: `this.state` is
+      // the display state, so its config carries the display homes. The seed is not available
+      // online and is not needed — see `openingBoard`.
+      startBoard: openingBoard(this.state.config),
+      liveBoard: this.state.board,
+      context: stepContextFor(this.view),
+    });
+    if (!built.ok) return built;
+    // The scores the turn started on, read off that board (never invented).
+    const at = viewFor({ ...this.state, board: built.replay.startBoard }, 0);
+    return { ok: true, replay: { ...built.replay, scores: [at.score, at.opponentScore] } };
+  }
+
+  /** Play a UI action (display coords). Draw/Throw are async; mid-turn Grow is local draft. */
   async play(action: Action): Promise<OnlinePlayResult> {
     if (this.revealing) {
       return { ok: false, message: ONLINE.statusRevealWait };
@@ -291,19 +396,26 @@ export class OnlineSession {
   }
 
   /**
-   * One fetch of the match's whole public event history (the server keeps every move). Used only
-   * by the finish screen, so the highlights match offline. Never replays or mutates the live view.
+   * One fetch of the match's whole public event history (the server keeps every move). Used by the
+   * finish screen (highlights) and by the opponent-turn replay. Never replays or mutates the live
+   * view.
    */
   async loadHistory(): Promise<void> {
     if (this.historyLoaded) return;
     try {
-      this.historyEvents = await this.driver.history();
-      this.historyLoaded = true;
+      await this.historySnapshot();
     } catch {
       // Offline / refused: leave the history empty; the screen hides the highlights rather than
       // showing blank rows.
       this.historyLoaded = true;
     }
+  }
+
+  /** The one full public-history read. Both callers share it, so a match is never fetched twice. */
+  private async historySnapshot(): Promise<readonly Event[]> {
+    this.historyEvents = await this.driver.history();
+    this.historyLoaded = true;
+    return this.historyEvents;
   }
 
   /** Payload for the finished screen — the same sentences and information as offline. */

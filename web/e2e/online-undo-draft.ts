@@ -57,9 +57,43 @@ const plan = (s: SeatSession): Promise<GrowPlan | null> =>
 const boardSig = (s: SeatSession): Promise<string> =>
   ev<string>(s, `(() => { const st = window.__severgrow.state(); return st ? JSON.stringify(st.board) : ''; })()`);
 
-/** The Undo control's own disabled state — the enable line under test, never the offline hook. */
-const undoDisabled = (s: SeatSession): Promise<boolean> =>
-  ev<boolean>(s, `(() => { const b = document.getElementById('tool-undo'); return !b || b.disabled === true; })()`);
+/** Diagnostics only: the first few keys that differ between two board signatures. */
+const diffBoards = (a: string, b: string): string => {
+  try {
+    const x = JSON.parse(a) as Record<string, unknown>;
+    const y = JSON.parse(b) as Record<string, unknown>;
+    const keys = [...new Set([...Object.keys(x), ...Object.keys(y)])];
+    const out = keys.filter((k) => JSON.stringify(x[k]) !== JSON.stringify(y[k])).slice(0, 4);
+    return out.length
+      ? out.map((k) => `${k}: ${JSON.stringify(x[k])} -> ${JSON.stringify(y[k])}`).join(' | ')
+      : 'same values, different order';
+  } catch {
+    return 'unparsable';
+  }
+};
+
+type Slot = { mode: string; disabled: boolean; title: string };
+
+/** Which tool the bottom-left slot is holding right now (it holds Undo OR Replay). */
+const slotOf = (s: SeatSession): Promise<Slot> =>
+  ev<Slot>(
+    s,
+    `(() => { const b = document.getElementById('tool-undo');
+      return { mode: b ? b.dataset.mode || '' : '', disabled: b ? b.disabled === true : true, title: b ? b.title : '' }; })()`,
+  );
+
+/**
+ * Does the control offer UNDO right now?
+ *
+ * Since the opponent's finished turn can be replayed online (owner report, 2026-10-26), the slot
+ * holds one of TWO tools: Replay when there is nothing to take back and their last turn can be
+ * replayed, Undo otherwise. "Undo is not offered" therefore means `data-mode` is not `undo` OR the
+ * control is disabled — not merely `disabled` (which is now false while Replay is offered).
+ */
+const undoOffered = async (s: SeatSession): Promise<boolean> => {
+  const slot = await slotOf(s);
+  return slot.mode === 'undo' && !slot.disabled;
+};
 
 const draftActions = (s: SeatSession, matchId: string): Promise<Action[] | null> =>
   s.page.evaluate((id) => {
@@ -87,12 +121,12 @@ const pressUndo = async (s: SeatSession): Promise<void> => {
   await sleep(400);
 };
 
-/** Wait for the draft to be gone AND the button dark again. */
+/** Wait for the draft to be gone AND the control to stop offering Undo. */
 const waitNoDraft = async (s: SeatSession, matchId: string, timeout = 12_000): Promise<boolean> => {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     const acts = await draftActions(s, matchId);
-    if ((!acts || acts.length === 0) && (await undoDisabled(s))) return true;
+    if ((!acts || acts.length === 0) && !(await undoOffered(s))) return true;
     await sleep(150);
   }
   return false;
@@ -205,8 +239,9 @@ const runSeat = async (duel: LocalDuel, match: LocalMatch, session: SeatSession,
   if (!reached) return;
   await waitIdle(session);
 
-  // (A) With nothing drafted the control is dark: there is nothing to take back.
-  check(`${label}: Undo is DISABLED with nothing to undo`, await undoDisabled(session));
+  // (A) With nothing drafted the control offers no take-back (it may be holding Replay instead).
+  const slotA = await slotOf(session);
+  check(`${label}: with nothing to undo the control does not offer Undo`, !(await undoOffered(session)), JSON.stringify(slotA));
   check(`${label}: the online hook also reports no undo`, (await readOnline(session))?.canUndo === false);
   const sigBefore = await boardSig(session);
 
@@ -218,7 +253,8 @@ const runSeat = async (duel: LocalDuel, match: LocalMatch, session: SeatSession,
   const acts = await draftActions(session, matchId);
   check(`${label}: the draft holds exactly the Grow`, !!acts && acts.length === 1, JSON.stringify(acts));
   check(`${label}: the draft changed the board`, (await boardSig(session)) !== sigBefore);
-  check(`${label}: Undo is LIT once a move is drafted`, !(await undoDisabled(session)));
+  const litSlot = await slotOf(session);
+  check(`${label}: the control offers Undo once a move is drafted`, await undoOffered(session), JSON.stringify(litSlot));
   check(`${label}: the online hook reports the draft can be undone`, (await readOnline(session))?.canUndo === true);
   await shot(session, `undo-draft-lit-seat${seat}`);
 
@@ -227,20 +263,26 @@ const runSeat = async (duel: LocalDuel, match: LocalMatch, session: SeatSession,
   await pressUndo(session);
   const undone = await waitNoDraft(session, matchId);
   check(`${label}: tapping Undo TAKES THE DRAFTED MOVE BACK (draft gone)`, undone);
-  check(`${label}: the board reverted exactly to its pre-draft state`, (await boardSig(session)) === sigBefore);
+  const afterUndo = await boardSig(session);
+  check(
+    `${label}: the board reverted exactly to its pre-draft state`,
+    afterUndo === sigBefore,
+    afterUndo === sigBefore ? '' : diffBoards(sigBefore, afterUndo),
+  );
   check(`${label}: taking a draft back stayed local (server revision unchanged)`, (await revision()) === revBefore, `${revBefore} -> ${await revision()}`);
   check(`${label}: the online hook reports nothing left to undo`, (await readOnline(session))?.canUndo === false);
   await waitIdle(session);
-  check(`${label}: Undo goes DARK again after the take-back`, await undoDisabled(session));
+  check(`${label}: the control stops offering Undo after the take-back`, !(await undoOffered(session)), JSON.stringify(await slotOf(session)));
   await shot(session, `undo-draft-taken-back-seat${seat}`);
 
-  // (D) Undo must not fire after the Throw: the turn is committed, so nothing can be taken back.
+  // (D) Undo must not fire after the Throw: the turn is committed, so nothing can be taken back
+  // — and while the opponent is moving the slot does not offer Replay either.
   const threw = await endTurnViaPage(session);
   check(`${label}: the turn throws through the page`, threw);
   await waitIdle(session);
-  check(`${label}: Undo is DISABLED after the Throw`, await undoDisabled(session));
+  check(`${label}: Undo is not offered after the Throw`, !(await undoOffered(session)), JSON.stringify(await slotOf(session)));
   const revAfterThrow = await revision();
-  await pressUndo(session); // a dark button must be inert
+  await pressUndo(session); // an Unlit control must be inert
   await sleep(400);
   check(
     `${label}: tapping Undo after the Throw does nothing (no draft, no POST)`,
