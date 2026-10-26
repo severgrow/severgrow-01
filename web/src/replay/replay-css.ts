@@ -397,14 +397,16 @@ export const REPLAY_CSS = `
 }
 #replay .rp-btn:focus-visible { outline: 2px solid #e8ddc9; outline-offset: 2px; }
 #replay .rp-btn[hidden] { display: none !important; }
-/* THE SIGNATURE: the 双サク mark over FUTASAKU.COM, the address in wide-tracked gold between two
-   hairlines — the same metal as the board's bonus frames, so it reads as part of the game, not a
-   footer link. Quiet enough to sit under the match, present in every screenshot of it. */
+/* THE SIGNATURE: the 双サク mark over FUTASAKU.COM, set in Besley — the menu title's own face — in
+   the game's classic cream (owner, 2026-10-26: "Besley … the classic cream colour we use", no gold,
+   no side lines). Low-key depth, the way the board's carved stones read: a thin warm edge cast one
+   pixel under each letter, and a soft shadow beneath. Quiet under the match, present in every
+   screenshot of it. */
 #replay .rp-brand {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   pointer-events: none;
 }
 #replay .rp-brand-mark {
@@ -415,30 +417,19 @@ export const REPLAY_CSS = `
   opacity: .82;
 }
 #replay .rp-brand-site {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font: 500 9.5px/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
-  letter-spacing: .38em;
-  /* the tracking adds space after the last letter too; this pulls the word back to true centre */
-  margin-right: -.38em;
+  display: block;
+  font: 800 11.5px/1 var(--font-display, 'Besley', Georgia, serif);
+  letter-spacing: .1em;
+  /* tracking also adds space after the last letter; this pulls the word back to true centre */
+  margin-right: -.1em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: #d9bd7a;
-  background: linear-gradient(180deg, #f6e5b5 0%, #d2ad62 55%, #a9843f 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--rp-ink);
+  text-shadow:
+    0 1px 0 rgba(92, 78, 56, .95),
+    0 2px 0 rgba(40, 33, 24, .7),
+    0 3px 6px rgba(0, 0, 0, .55);
 }
-#replay .rp-brand-site::before,
-#replay .rp-brand-site::after {
-  content: '';
-  width: 14px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(217, 189, 122, .6));
-}
-#replay .rp-brand-site::after { background: linear-gradient(90deg, rgba(217, 189, 122, .6), transparent); margin-left: -.38em; }
-#replay .rp-brand[hidden] { display: none !important; }
 /* Replay again: one pill over the foot of the finished board, centred. */
 #replay .rp-board .rp-again {
   position: absolute;
@@ -469,9 +460,7 @@ export const REPLAY_CSS = `
   #replay .rp-foot { gap: 6px; }
   #replay .rp-actions { gap: 4px; }
   #replay .rp-btn { min-height: 44px; padding: 0 8px; font-size: 10.5px; letter-spacing: .08em; }
-  #replay .rp-brand-site { letter-spacing: .26em; margin-right: -.26em; font-size: 8.5px; gap: 5px; }
-  #replay .rp-brand-site::before, #replay .rp-brand-site::after { width: 8px; }
-  #replay .rp-brand-site::after { margin-left: -.26em; }
+  #replay .rp-brand-site { font-size: 10.5px; letter-spacing: .07em; margin-right: -.07em; }
 }
 
 /* A phone in landscape or a short window: tighten the chrome, never the board. */

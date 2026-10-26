@@ -246,7 +246,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="12" height="12" rx="2.5"/><path d="m15 10.5 5-3v9l-5-3"/></svg>';
   // THE SIGNATURE (owner, 2026-10-26: "an elegant place to place futasaku.com"): the footer's centre
   // carries the mark and the address as one lockup — the 双サク mark above, FUTASAKU.COM below in
-  // wide-tracked gold, between two hairlines. It sits where a screenshot or a screen recording of
+  // Besley, in the game's cream, with a low carved edge. It sits where a screenshot or a screen recording of
   // the replay always catches it, and it is the one mark on this surface.
   const brand = document.createElement('div');
   brand.className = 'rp-brand';
