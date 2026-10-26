@@ -6,6 +6,7 @@ import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { verifyCampaignProof, verifyOfflineMatch } from '../src/seeds/verify.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
+import { BETA_PAYOUT_MULTIPLIER, campaignSeedReward } from '../src/seeds/config.js';
 import { WorldEconomyService } from '../src/seeds/service.js';
 import type { PlayerRecord, Storage } from '../src/storage/types.js';
 
@@ -94,15 +95,19 @@ describe('level 33 (chapter IV, the owner\'s level) pays its 20 Seeds', () => {
     expect(verifyCampaignProof('c4-33', actions, 'imaginary-bot')).toBeNull();
   });
 
-  it('pays 20 on the first clear and never twice', async () => {
+  it('pays the owner\'s 20 on the first clear and never twice', async () => {
     const player = { id: '00000000-0000-4000-8000-000000000033' } as PlayerRecord;
     const matches = { hitRateLimit: async () => ({ ok: true }) } as unknown as Storage;
     const economy = new WorldEconomyService(new MemoryWorldEconomyStore(), matches);
+    // The band's figure is 20; the BETA multiplier scales what is credited, so the two numbers are
+    // pinned separately and a revert is one constant (see `BETA_PAYOUT_MULTIPLIER`).
+    const paid = 20 * BETA_PAYOUT_MULTIPLIER;
+    expect(campaignSeedReward(33)!.firstWin).toBe(20);
     const first = await economy.campaign(player, 'c4-33', winningLine(), CURRENT_BOT_VERSION);
-    expect(first.awarded).toBe(20);
-    expect(first.wallet.balance).toBe(20);
+    expect(first.awarded).toBe(paid);
+    expect(first.wallet.balance).toBe(paid);
     const again = await economy.campaign(player, 'c4-33', winningLine(), CURRENT_BOT_VERSION);
     expect(again.replayed).toBe(true);
-    expect(again.wallet.balance).toBe(20);
+    expect(again.wallet.balance).toBe(paid);
   });
 });

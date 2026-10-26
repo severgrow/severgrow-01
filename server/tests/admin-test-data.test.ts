@@ -14,6 +14,7 @@ import { DEFAULT_SERVER_CONFIG } from '../src/config.js';
 import { MemoryStorage } from '../src/storage/memory.js';
 import { MemoryFeedbackStore } from '../src/feedback/feedback.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
+import { BETA_PAYOUT_MULTIPLIER, SEED_ECONOMY } from '../src/seeds/config.js';
 import { MemoryIdentityLinkStore } from '../src/accounts/accounts.js';
 import { memoryAdminStore } from '../src/admin/memory.js';
 import { postgresAdminStore } from '../src/admin/postgres.js';
@@ -155,7 +156,7 @@ describe('a marked player and a marked match are invisible on every admin read',
     // --- economy / ledger / campaign -----------------------------------------
     const economy = await t.store.economy(NOW);
     expect(economy.totals.wallets).toBe(1);
-    expect(economy.totals.lifetimeEarned).toBe(120);
+    expect(economy.totals.lifetimeEarned).toBe(4 * SEED_ECONOMY.online.queue.win * BETA_PAYOUT_MULTIPLIER);
     expect(economy.totals.lifetimeSpent).toBe(100);
     expect(economy.receipts.awarded).toBe(4);
     const ledger = await t.store.ledger({ limit: 200 });

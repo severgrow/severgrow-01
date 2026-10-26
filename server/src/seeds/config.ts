@@ -1,3 +1,26 @@
+/**
+ * BETA PAYOUT MULTIPLIER (owner, 2026-10-26): "temporarily until i say to revert - lets keep the
+ * same seeds payout system we have already, but make it pay double - twice as much as currently -
+ * so all beta testers are encouraged more to get involved properly in the territory side of the
+ * game. including bonuses and all".
+ *
+ * ONE number, applied at the single decision point (`planSeedReward`), so every paying path moves
+ * together and reverting is this line back to 1: campaign first-clears, chapter bonuses, level 10's
+ * 100, and every duel and training outcome.
+ *
+ * The daily CAP doubles with it. Doubling awards while leaving the cap at 600 would take the
+ * doubling back at the ceiling, and the players who play most are exactly the ones it is meant to
+ * encourage. The COUNT limits (`dailyMatches`, `pairDailyMatches`) are deliberately NOT doubled:
+ * those guard how many matches may pay at all (anti-farming), not how much each pays.
+ *
+ * PRICES ARE UNTOUCHED - a tile still costs 100 and a challenge stake is still 50. That is the
+ * whole point: the payout rises and the price does not, so Territory is reachable sooner.
+ *
+ * Receipts are idempotent and store the amount actually paid, so anything settled before this keeps
+ * its old figure and a replayed clear returns that old figure. Only NEW settlements are doubled.
+ */
+export const BETA_PAYOUT_MULTIPLIER = 2;
+
 /** Economy v1. Only the server decides an award; previously settled entries keep their amount. */
 export const SEED_ECONOMY = Object.freeze({
   version: 1,

@@ -18,7 +18,7 @@ import { MatchService } from '../src/service.js';
 import { MemoryStorage } from '../src/storage/memory.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
 import { WorldEconomyService } from '../src/seeds/service.js';
-import { SEED_ECONOMY } from '../src/seeds/config.js';
+import { BETA_PAYOUT_MULTIPLIER, SEED_ECONOMY } from '../src/seeds/config.js';
 import type { PlayerRecord } from '../src/storage/types.js';
 
 const config = (): ServerConfig => ({
@@ -92,7 +92,10 @@ describe('a finished duel reports what each seat was paid', () => {
     // Both seats are told their own figure, and the figures are the economy's own numbers rather
     // than a second table written into the payload.
     const seen = [winnerView.seeds?.awarded, loserView.seeds?.awarded].sort((x, y) => (y ?? 0) - (x ?? 0));
-    expect(seen).toEqual([SEED_ECONOMY.online.friend.win, SEED_ECONOMY.online.friend.loss]);
+    expect(seen).toEqual([
+      SEED_ECONOMY.online.friend.win * BETA_PAYOUT_MULTIPLIER,
+      SEED_ECONOMY.online.friend.loss * BETA_PAYOUT_MULTIPLIER,
+    ]);
     expect(winnerView.seeds?.reason).toBeNull();
     expect(loserView.seeds?.reason).toBeNull();
   });

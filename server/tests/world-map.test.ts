@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { WORLD_CELLS, WORLD_CELL_IDS, legacyWorldCell, worldNeighbours } from '../src/world.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
-import { SEED_ECONOMY, campaignLevelOfSourceKey, campaignSeedReward } from '../src/seeds/config.js';
+import { SEED_ECONOMY, BETA_PAYOUT_MULTIPLIER, campaignLevelOfSourceKey, campaignSeedReward } from '../src/seeds/config.js';
+
+/**
+ * The BETA multiplier scales every award at the settlement decision (`planSeedReward`), so a test
+ * that pins a credited amount must scale with it - otherwise reverting the beta would break the
+ * suite, and leaving the beta on would silently under-test the real figure. `campaignSeedReward`
+ * itself is the BASE price list and stays unscaled (the "matches all first-clear and chapter reward
+ * values" case below still pins the owner's numbers).
+ */
+const M = BETA_PAYOUT_MULTIPLIER;
+/** What ONE level-1 clear actually credits: base (50) plus its chapter bonus (0), doubled. */
+const CLEAR_1 = (campaignSeedReward(1)!.firstWin + campaignSeedReward(1)!.chapter) * M;
 
 const grant = (store: MemoryWorldEconomyStore, playerId: string, sourceKey: string, now = Date.UTC(2026, 9, 15)) =>
   store.settle({ playerId, sourceKey, mode: 'campaign', outcome: 'win', opponentId: null, campaignLevel: 1, now });
@@ -96,13 +107,15 @@ describe('Seed purchases', () => {
     const store = new MemoryWorldEconomyStore();
     await grant(store, 'a', 'campaign:1');
     await grant(store, 'a', 'campaign:2');
+    // Two clears fund the tile exactly; the tile PRICE does not scale with the beta multiplier.
+    expect(2 * CLEAR_1).toBe(SEED_ECONOMY.tileCost * 2);
     const first = await store.claim('a', '0,0', 'request-0001', 1);
-    expect(first).toMatchObject({ ok: true, cellId: '0,0', replayed: false, wallet: { balance: 0 } });
-    expect((await store.claim('a', '0,0', 'request-0001', 2))).toMatchObject({ ok: true, replayed: true, wallet: { balance: 0 } });
+    expect(first).toMatchObject({ ok: true, cellId: '0,0', replayed: false, wallet: { balance: 2 * CLEAR_1 - SEED_ECONOMY.tileCost } });
+    expect((await store.claim('a', '0,0', 'request-0001', 2))).toMatchObject({ ok: true, replayed: true, wallet: { balance: 2 * CLEAR_1 - SEED_ECONOMY.tileCost } });
     await grant(store, 'a', 'campaign:3');
     await grant(store, 'a', 'campaign:4');
     expect(await store.claim('a', '4,0', 'request-0002', 2)).toMatchObject({ ok: false, code: 'NOT_ADJACENT' });
-    expect(await store.claim('a', '1,0', 'request-0003', 2)).toMatchObject({ ok: true, wallet: { balance: 0 } });
+    expect(await store.claim('a', '1,0', 'request-0003', 2)).toMatchObject({ ok: true, wallet: { balance: 4 * CLEAR_1 - 2 * SEED_ECONOMY.tileCost } });
     expect(store.ledger.filter((x) => x.delta < 0)).toHaveLength(2);
   });
   it('two buyers cannot acquire the same tile and rejected claims never debit', async () => {
@@ -113,7 +126,8 @@ describe('Seed purchases', () => {
       store.claim('a', '0,0', 'request-a000', 1), store.claim('b', '0,0', 'request-b000', 1),
     ]);
     expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
-    expect((await store.wallet(a.ok ? 'b' : 'a')).balance).toBe(100);
+    // The loser spent nothing: two clears, minus nothing.
+    expect((await store.wallet(a.ok ? 'b' : 'a')).balance).toBe(2 * CLEAR_1);
   });
 });
 
@@ -142,21 +156,21 @@ describe('economy schedule and caps', () => {
     for (let i = 0; i < 25; i++) {
       const reward = await store.settle({ playerId: 'a', sourceKey: `duel:${i}`, mode: 'queue', outcome: 'win',
         opponentId: `opponent:${i}`, now: day });
-      expect(reward.awarded).toBe(i < 20 ? 30 : 0);
+      expect(reward.awarded).toBe(i < 20 ? SEED_ECONOMY.online.queue.win * M : 0);
     }
-    expect((await store.wallet('a')).balance).toBe(SEED_ECONOMY.utcDailyRepeatableCap);
+    expect((await store.wallet('a')).balance).toBe(SEED_ECONOMY.utcDailyRepeatableCap * M);
     expect((await store.settle({ playerId: 'a', sourceKey: 'duel:next', mode: 'queue', outcome: 'loss',
-      opponentId: 'new', now: day + 60_000 })).awarded).toBe(8);
+      opponentId: 'new', now: day + 60_000 })).awarded).toBe(SEED_ECONOMY.online.queue.loss * M);
   });
   it('never pays repeated results or an excessive friend pair', async () => {
     const store = new MemoryWorldEconomyStore();
     const input = { playerId: 'a', sourceKey: 'duel:one', mode: 'friend' as const,
       outcome: 'win' as const, opponentId: 'b', now: 1_000_000 };
-    expect((await store.settle(input)).awarded).toBe(15);
+    expect((await store.settle(input)).awarded).toBe(SEED_ECONOMY.online.friend.win * M);
     expect((await store.settle(input)).replayed).toBe(true);
     for (let i = 2; i <= 4; i++) {
       const reward = await store.settle({ ...input, sourceKey: `duel:${i}` });
-      expect(reward.awarded).toBe(i < 4 ? 15 : 0);
+      expect(reward.awarded).toBe(i < 4 ? SEED_ECONOMY.online.friend.win * M : 0);
     }
   });
 });

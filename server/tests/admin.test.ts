@@ -13,6 +13,7 @@ import { hashToken, newId, newToken } from '../src/ids.js';
 import type { PlayerRecord } from '../src/storage/types.js';
 import { MatchService } from '../src/service.js';
 import { MemoryStorage } from '../src/storage/memory.js';
+import { BETA_PAYOUT_MULTIPLIER, SEED_ECONOMY, campaignSeedReward } from '../src/seeds/config.js';
 import { createFetchApp } from '../src/fetch-app.js';
 import { MemoryFeedbackStore, chainRouters } from '../src/feedback/feedback.js';
 import { createFeedbackRouter } from '../src/feedback/feedback.js';
@@ -469,21 +470,30 @@ describe('the metric shapes report what the data supports', () => {
     const earned = ledger.rows.filter((row) => row.delta > 0).reduce((sum, row) => sum + row.delta, 0);
     const spent = ledger.rows.filter((row) => row.delta < 0).reduce((sum, row) => sum - row.delta, 0);
 
-    // 3 queue wins (30 each) + a campaign first clear (50) = 140; one tile = 100.
-    expect(earned).toBe(140);
-    expect(spent).toBe(100);
-    expect(wallet).toMatchObject({ lifetimeEarned: 140, lifetimeSpent: 100, balance: 40 });
+    // The figures below are derived, not typed: the BETA multiplier scales every award at the
+    // settlement decision, so a hardcoded total would break the moment the beta is reverted (and
+    // would under-test the live figure while it lasts). What matters here is that the dashboard
+    // RECONCILES with the wallet, which is why the sums are computed from the same config the
+    // server pays from.
+    const M = BETA_PAYOUT_MULTIPLIER;
+    const queueTotal = 3 * SEED_ECONOMY.online.queue.win * M;
+    const campaignTotal = (campaignSeedReward(1)!.firstWin + campaignSeedReward(1)!.chapter) * M;
+    const earnedExpected = queueTotal + campaignTotal;
+    const spentExpected = SEED_ECONOMY.tileCost;
+    expect(earned).toBe(earnedExpected);
+    expect(spent).toBe(spentExpected);
+    expect(wallet).toMatchObject({ lifetimeEarned: earnedExpected, lifetimeSpent: spentExpected, balance: earnedExpected - spentExpected });
     // The ledger IS the wallet's history: its deltas sum to the wallet's own lifetime totals, and
     // the newest entry's balance_after is the balance the wallet reports now.
     expect(earned - spent).toBe(wallet.balance);
     expect(ledger.rows[0]!.balanceAfter).toBe(wallet.balance);
     // The economy panel reads the same store, so it cannot disagree with either.
-    expect(economy.totals).toMatchObject({ lifetimeEarned: 140, lifetimeSpent: 100, balance: 40 });
-    expect(economy.inflationRatio).toBeCloseTo(1.4, 5);
+    expect(economy.totals).toMatchObject({ lifetimeEarned: earnedExpected, lifetimeSpent: spentExpected, balance: earnedExpected - spentExpected });
+    expect(economy.inflationRatio).toBeCloseTo(earnedExpected / spentExpected, 5);
     const categories = new Map(economy.byCategory.map((row) => [row.category, row]));
-    expect(categories.get('queue')).toMatchObject({ minted: 90, spent: 0, net: 90 });
-    expect(categories.get('campaign')).toMatchObject({ minted: 50, spent: 0, net: 50 });
-    expect(categories.get('world_claim')).toMatchObject({ minted: 0, spent: 100, net: -100 });
+    expect(categories.get('queue')).toMatchObject({ minted: queueTotal, spent: 0, net: queueTotal });
+    expect(categories.get('campaign')).toMatchObject({ minted: campaignTotal, spent: 0, net: campaignTotal });
+    expect(categories.get('world_claim')).toMatchObject({ minted: 0, spent: spentExpected, net: -spentExpected });
     // And the denial is recorded with a reason, at zero Seeds.
     expect(economy.receipts.byDenial).toContainEqual({ value: 'not_a_first_clear', n: 1 });
     // The repeat clear is NOT a denial and NOT a payment: it is the same receipt, replayed.

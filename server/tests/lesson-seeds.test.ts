@@ -8,7 +8,7 @@ import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { FINAL_LESSON, finalLessonOpening } from '../../web/src/lessons/final.js';
 import { LESSONS, lessonOpening } from '../../web/src/lessons/lessons.js';
-import { LESSON_SEED_REWARD } from '../src/seeds/config.js';
+import { BETA_PAYOUT_MULTIPLIER, LESSON_SEED_REWARD } from '../src/seeds/config.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
 import { planSeedReward } from '../src/seeds/rewards.js';
 import { WorldEconomyService } from '../src/seeds/service.js';
@@ -54,16 +54,21 @@ describe('the final lesson pays 100 Seeds once', () => {
     expect(verifyLessonProof(FINAL_LESSON.id, altered, CURRENT_BOT_VERSION)).toBeNull();
   });
 
-  it('pays exactly 100 on the first win, and never twice', async () => {
+  it('pays the owner\'s 100 on the first win, and never twice', async () => {
     const store = new MemoryWorldEconomyStore();
     const economy = new WorldEconomyService(store, matches);
     const actions = genuineWin();
     const first = await economy.campaign(player, FINAL_LESSON.id, actions, CURRENT_BOT_VERSION);
-    expect(first.awarded).toBe(100);
-    expect(first.wallet.balance).toBe(100);
+    // The owner's figure is 100; the BETA multiplier scales what is actually credited (see
+    // `BETA_PAYOUT_MULTIPLIER`). Pinning both keeps the owner's number honest while letting the
+    // temporary doubling be reverted by one constant.
+    expect(LESSON_SEED_REWARD.seeds).toBe(100);
+    const paid = 100 * BETA_PAYOUT_MULTIPLIER;
+    expect(first.awarded).toBe(paid);
+    expect(first.wallet.balance).toBe(paid);
     const again = await economy.campaign(player, FINAL_LESSON.id, actions, CURRENT_BOT_VERSION);
     expect(again.replayed).toBe(true);
-    expect((await store.wallet(player.id)).balance).toBe(100);
+    expect((await store.wallet(player.id)).balance).toBe(paid);
   });
 
   it('a loss or a made-up result is refused', async () => {
@@ -76,6 +81,7 @@ describe('the final lesson pays 100 Seeds once', () => {
     expect(LESSON_SEED_REWARD).toEqual({ level: 10, seeds: 100 });
     const base = { playerId: player.id, sourceKey: 'lesson:9', mode: 'campaign' as const, outcome: 'win' as const, opponentId: null, now: 0 };
     expect(planSeedReward({ ...base, lessonLevel: 9 }, { modePaid: 0, pairPaid: 0, totalEarned: 0 }).amount).toBe(0);
-    expect(planSeedReward({ ...base, lessonLevel: 10 }, { modePaid: 0, pairPaid: 0, totalEarned: 0 }).amount).toBe(100);
+    expect(planSeedReward({ ...base, lessonLevel: 10 }, { modePaid: 0, pairPaid: 0, totalEarned: 0 }).amount)
+      .toBe(100 * BETA_PAYOUT_MULTIPLIER);
   });
 });
