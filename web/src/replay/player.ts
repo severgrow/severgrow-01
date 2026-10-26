@@ -10,6 +10,7 @@
 // timeline computed, so a drag on the scrub bar lands on the real position at once.
 import { createHudBrandMark } from '../player/branding.js';
 import { REPLAY } from '../../../src/strings.js';
+import { IS_FUTA04 } from '../channel.js';
 import { NO_OVERLAY, BoardView } from '../ui/board.js';
 import type { MaterialLook } from '../logic/materials.js';
 import type { ThemeId, ThemeStyle } from '../logic/themes.js';
@@ -69,6 +70,17 @@ export type ReplayHandle = {
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+export type ReplayArtModule = typeof import('../ui/defaultArtBoard.js');
+
+/**
+ * The replay paints with the board the finished match painted with. On the product channel that is
+ * `DefaultArtBoardView` — the stone/marble sprite board — and the game has already imported and
+ * decoded it, so this resolves from memory. Anywhere else, or if the import fails, it resolves to
+ * null and the plain `BoardView` stays: the replay must always open. Never rejects.
+ */
+export const loadReplayArt = (): Promise<ReplayArtModule | null> =>
+  IS_FUTA04 ? import('../ui/defaultArtBoard.js').catch(() => null) : Promise.resolve(null);
+
 /** A changed tile's crossfade: one short fade, staggered across a multi-tile beat. */
 const POP_MS = 210;
 const MAX_POPS = 18;
@@ -123,6 +135,9 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   const boardBox = document.createElement('div');
   boardBox.className = 'rp-board';
   const svg = document.createElementNS(SVG_NS, 'svg');
+  // The game's own board class: it carries the layer transitions and the seed-stone geometry the
+  // live match relies on. The replay must not be a second, subtly different board.
+  svg.setAttribute('class', 'board');
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   svg.setAttribute('aria-hidden', 'true');
   boardBox.append(svg);
@@ -193,11 +208,21 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   root.append(stage);
   document.body.append(root);
 
-  const board = new BoardView(svg, { tap: () => undefined, inspect: () => undefined });
+  // THE SAME BOARD AS THE MATCH (owner, 2026-10-26: "the board should look just like in the game").
+  // The product channel paints with `DefaultArtBoardView` — the stone/marble sprites, rock clusters
+  // and sculpted homes — not the plain `BoardView`. `main.ts` already imported that module for the
+  // game, so this is a cache hit: resolving it costs a microtask, never a download. If the module
+  // or its decoded art ever fails, the replay keeps the plain board (it must always open).
+  const art = loadReplayArt();
+  const plainBoard = new BoardView(svg, { tap: () => undefined, inspect: () => undefined });
+  let artView: BoardView | null = null;
+  let board: BoardView = plainBoard;
   const ghostLayer = document.createElementNS(SVG_NS, 'g');
   ghostLayer.setAttribute('class', 'l-fx rp-ghost-layer');
 
   let model: ReplayModel | null = null;
+  /** Bumped by every `open`; an art load that lands after a newer open (or a close) is discarded. */
+  let openSeq = 0;
   let index = -1;
   let elapsed = 0;
   let playing = false;
@@ -315,6 +340,19 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     nameOpp.dataset.live = seat === 1 ? '1' : '0';
   };
 
+  /**
+   * The match lifts every empty normal hex by 15% (`#board .hex-cell.normal.futa04-empty`, set by
+   * the atmosphere) so the ground reads under the tiles. The replay's board is the same board, so it
+   * gets the same class on the same cells — otherwise its empty hexes sit a shade darker than the
+   * match's. Only the normal cells, as in the game: rock and bonus hexes keep their own look.
+   */
+  const lightEmptyCells = (shown: Board): void => {
+    for (const cell of svg.querySelectorAll<SVGGElement>('.l-base .hex-cell.normal')) {
+      const empty = !shown[cell.dataset.key ?? ''];
+      if (cell.classList.contains('futa04-empty') !== empty) cell.classList.toggle('futa04-empty', empty);
+    }
+  };
+
   const paint = (i: number, rebuilt?: Board): void => {
     if (!model) return;
     const frame = model.frames[i];
@@ -327,6 +365,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     const shown = rebuilt ?? frame.board;
     painted = boardSignature(shown);
     board.render(shown, NO_OVERLAY);
+    lightEmptyCells(shown);
     if (forward && !reduce() && frame.changed.length) {
       const keys = frame.changed.slice(0, MAX_POPS);
       const stagger = keys.length > 1 ? Math.min(360, (frame.duration * 0.5) / (keys.length - 1)) : 0;
@@ -513,7 +552,23 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     sharing = true;
     shareBtn.setAttribute('aria-busy', 'true');
     const data = posterFor(model);
-    void shareReplayPoster(data)
+    // The poster draws the board's faces from the same loaded module; a channel without it (or a
+    // failed import) passes none, and the poster keeps its flat fallback.
+    void (async () => {
+      const mod = await art;
+      await shareReplayPoster(
+        data,
+        mod
+          ? {
+              sprites: mod.DEFAULT_ART_SPRITES,
+              ground: mod.BOARD_GROUND,
+              rocks: mod.BOARD_ROCKS,
+              gold: mod.GOLD_FRAME_ATLAS,
+              goldCrop: mod.goldFrameCrop,
+            }
+          : null,
+      );
+    })()
       .catch(() => undefined)
       .finally(() => {
         sharing = false;
@@ -598,7 +653,24 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     }
   };
 
+  /** A view's static art, then the removal ghosts above it (`setup` empties the SVG). */
+  const setupView = (view: BoardView, next: ReplayModel): void => {
+    const { style: themeStyle, id } = deps.theme();
+    view.setup(next.config, next.terrain, themeStyle, deps.look(), id);
+    // The removal ghosts paint above the tiles, in board coordinates (they are moved this once,
+    // after `setup` empties the SVG).
+    svg.append(ghostLayer);
+  };
+
+  /** The opening position, painted before the staged entrance and the first beat. */
+  const paintOpening = (next: ReplayModel): void => {
+    board.render(next.from.board, NO_OVERLAY);
+    lightEmptyCells(next.from.board);
+    painted = boardSignature(next.from.board);
+  };
+
   const open = (next: ReplayModel): void => {
+    const seq = ++openSeq;
     model = next;
     index = -1;
     elapsed = 0;
@@ -608,34 +680,55 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     root.dataset.ended = '0';
     root.dataset.paused = '0';
     again.hidden = true;
+    painted = '';
     nameMe.textContent = next.names[0];
     nameOpp.textContent = next.names[1];
     scoreMe.textContent = String(next.from.scores[0]);
     scoreOpp.textContent = String(next.from.scores[1]);
-    // The first paint is the OPENING position, before the staged entrance and the first beat. The
-    // turn line is set here too, so the surface never shows a blank line while it fades in.
+    // The turn line is set here too, so the surface never shows a blank line while it fades in.
     setTurnLine(next.frames[0]?.turn ?? next.from.turn);
-    const { style: themeStyle, id } = deps.theme();
-    board.setup(next.config, next.terrain, themeStyle, deps.look(), id);
-    // The removal ghosts paint above the tiles, in board coordinates (they are moved this once,
-    // after `setup` empties the SVG).
-    svg.append(ghostLayer);
-    board.render(next.from.board, NO_OVERLAY);
-    painted = boardSignature(next.from.board);
     buildTicks();
     paintMeta();
     syncTurnMark();
     root.hidden = false;
+    closeBtn.focus({ preventScroll: true });
+    void beginMatch(seq, next);
+  };
+
+  /**
+   * The product board's art is decoded once by the game before the match, so this is a cache hit:
+   * the board is mounted and painted in the same microtask the replay appears in. If the import or
+   * the decode ever fails, the plain `BoardView` is mounted instead — a slow or broken picture can
+   * never hold the screen or keep the replay from opening. Mounting the chosen view exactly once
+   * also keeps the plain board's world-layer `warming` class out of the art board's SVG.
+   */
+  const beginMatch = async (seq: number, next: ReplayModel): Promise<void> => {
+    const mod = await art;
+    if (seq !== openSeq || model !== next) return;
+    let view: BoardView = plainBoard;
+    if (mod) {
+      try {
+        await mod.boardArtReady;
+        if (seq !== openSeq || model !== next) return;
+        artView ??= new mod.DefaultArtBoardView(svg, { tap: () => undefined, inspect: () => undefined });
+        view = artView;
+      } catch {
+        // Decoded art is a nicety; the plain board still shows the real position.
+      }
+    }
+    if (seq !== openSeq || model !== next) return;
+    board = view;
+    setupView(board, next);
+    paintOpening(next);
     // One beat for the surface to arrive, then the match plays.
     window.setTimeout(() => {
-      if (!model || root.hidden) return;
+      if (!model || root.hidden || seq !== openSeq) return;
       if (next.frames.length === 0) {
         finish();
         return;
       }
       restart();
     }, reduce() ? 0 : 180);
-    closeBtn.focus({ preventScroll: true });
   };
 
   const close = (): void => {

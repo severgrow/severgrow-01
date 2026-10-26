@@ -10,6 +10,9 @@ import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { REPLAY } from '../../../src/strings.js';
 import { fit } from '../logic/share.js';
 import type { TextBox } from '../logic/share.js';
+import { getOrient, toScreen } from '../logic/orient.js';
+import { centerOf, hash, S } from '../ui/geom.js';
+import { SEED_STONE_ATLAS, seedStoneCrop } from '../ui/seedstone.js';
 import type { ReplayModel } from './timeline.js';
 
 export const POSTER_W = 1080;
@@ -19,6 +22,65 @@ const BOARD_TOP = 392;
 const BOARD_H = 700;
 const MARK_TOP = 1204;
 const SQ3 = Math.sqrt(3);
+
+/** The board's own pictures, handed over by the player that already decoded them. */
+export type PosterArt = {
+  sprites: readonly string[];
+  ground: string;
+  rocks: readonly string[];
+  gold: string;
+  /** One bonus hex's frame crop (the atlas is a strip of three treatments). */
+  goldCrop: (key: string) => { x: number; y: number; w: number; h: number };
+};
+
+/**
+ * The poster's board is the match's board, so it carries the same art the on-screen board paints.
+ * Every one of these pictures is already decoded by the game before a match ends, so the warm-up
+ * is a cache hit and adds no download; the poster never waits on the network for a share. A
+ * picture that is missing simply leaves the flat hex underneath, so sharing cannot fail or stall.
+ */
+const posterArt = new Map<string, HTMLImageElement>();
+/** What the board painted with, handed over by the player that already loaded it. */
+let boardArt: PosterArt | null = null;
+let warming: Promise<void> | null = null;
+
+/** Decode the board's pictures once for the poster (idempotent, cached, never rejects). */
+export const warmPosterArt = (art: PosterArt | null = null): Promise<void> => {
+  if (warming) return warming;
+  boardArt = art;
+  if (typeof Image === 'undefined') {
+    warming = Promise.resolve();
+    return warming;
+  }
+  const urls = [...(art?.sprites ?? []), art?.ground ?? '', ...(art?.rocks ?? []), art?.gold ?? '', SEED_STONE_ATLAS].filter(Boolean);
+  warming = Promise.all(
+    urls.map(
+      (url) =>
+        new Promise<void>((done) => {
+          const img = new Image();
+          img.decoding = 'async';
+          img.onload = () => {
+            if (img.naturalWidth > 0) posterArt.set(url, img);
+            done();
+          };
+          img.onerror = () => done();
+          img.src = url;
+        }),
+    ),
+  ).then(() => undefined);
+  return warming;
+};
+
+const art = (url: string | undefined): HTMLImageElement | null => (url ? posterArt.get(url) ?? null : null);
+
+/** The sprite's own rotation, shared with `DefaultArtBoardView` (its visual base on the bottom). */
+const artAngle = () => {
+  const axis = toScreen(1, 0);
+  return (Math.atan2(axis.y, axis.x) * 180) / Math.PI + 120;
+};
+
+/** The same square each board sprite occupies, in board units (radius = S). */
+const artSize = (index: number) => (index >= 18 ? 68 : index < 9 ? 80 : 76);
 
 export type PosterData = {
   names: readonly [string, string];
@@ -99,24 +161,28 @@ export const posterLayout = (d: PosterData): PosterLayout => {
   };
   const mark: TextBox = { x: M, y: MARK_TOP, w: inner, h: 40, text: d.mark, size: 26, weight: 600, align: 'center' };
 
-  const coords = d.coords.map(parseKey);
-  if (coords.length === 0) return { width: POSTER_W, height: POSTER_H, names: [name(d.names[0], 'left'), name(d.names[1], 'right')], score, mark, board: { hex: 1, cells: [] } };
-  const px = coords.map((c) => SQ3 * (c.q + c.r / 2));
-  const py = coords.map((c) => 1.5 * c.r);
+  if (d.coords.length === 0) return { width: POSTER_W, height: POSTER_H, names: [name(d.names[0], 'left'), name(d.names[1], 'right')], score, mark, board: { hex: 1, cells: [] } };
+  // The SAME screen mapping the match uses (`centerOf`), so the poster's grid carries the board's
+  // real orientation (flat on the product channel) and rotation, not a second hex convention.
+  const centres = d.coords.map((key) => centerOf(key));
+  const px = centres.map((p) => p.x);
+  const py = centres.map((p) => p.y);
   const midX = (Math.min(...px) + Math.max(...px)) / 2;
   const midY = (Math.min(...py) + Math.max(...py)) / 2;
-  const unitW = Math.max(...px) - Math.min(...px) + SQ3;
-  const unitH = Math.max(...py) - Math.min(...py) + 2;
-  const hex = Math.floor(Math.min(inner / unitW, BOARD_H / unitH));
+  const flat = getOrient() === 'flat';
+  const unitW = Math.max(...px) - Math.min(...px) + (flat ? 2 : SQ3) * S;
+  const unitH = Math.max(...py) - Math.min(...py) + (flat ? SQ3 : 2) * S;
+  // `hex` is the hex radius in pixels (the board's own S = 30 units), the unit every sprite size
+  // and rotation is expressed in.
+  const hex = Math.min(inner / unitW, BOARD_H / unitH) * S;
   const cx = Math.round(POSTER_W / 2);
   const cy = Math.round(BOARD_TOP + BOARD_H / 2);
-  const cells = coords.map((c) => {
-    const key = coordKey(c);
+  const cells = d.coords.map((key, i) => {
     const tile = d.board[key] ?? null;
     return {
       key,
-      x: cx + hex * (SQ3 * (c.q + c.r / 2) - midX),
-      y: cy + hex * (1.5 * c.r - midY),
+      x: cx + hex * ((centres[i]!.x - midX) / S),
+      y: cy + hex * ((centres[i]!.y - midY) / S),
       owner: tile ? tile.owner : null,
       strength: tile ? tile.strength : 0,
       root: !!tile?.root,
@@ -193,47 +259,112 @@ export const drawReplayPoster = (d: PosterData, canvas: HTMLCanvasElement = docu
   text(L.score.opp, col.opp);
   text(L.mark, col.dim, 12);
 
+  // The game's flat hex, in screen units: the same six corners `cornerPts` uses, so the poster's
+  // grid is the board's grid rather than a rotated copy of it.
   const hexAt = (x: number, y: number, r: number) => {
     g.beginPath();
     for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i - Math.PI / 2;
-      const px = x + r * Math.cos(a);
-      const py = y + r * Math.sin(a);
-      if (i === 0) g.moveTo(px, py);
-      else g.lineTo(px, py);
+      const a = (Math.PI / 180) * (60 * i - 30);
+      const o = toScreen(r * Math.cos(a), r * Math.sin(a));
+      if (i === 0) g.moveTo(x + o.x, y + o.y);
+      else g.lineTo(x + o.x, y + o.y);
     }
     g.closePath();
   };
+  const k = L.board.hex / S;
+  const ground = art(boardArt?.ground);
+  let groundPattern: CanvasPattern | null = null;
+  if (ground) {
+    groundPattern = g.createPattern(ground, 'repeat');
+    // One ground tile is 360 board units on the live board; keep that scale here.
+    groundPattern?.setTransform?.(new DOMMatrix().scale(k, k));
+  }
+  const angle = (artAngle() * Math.PI) / 180;
+  const base = (owner: Player) => (owner === 0 ? '#315321' : '#302c2c');
   for (const cell of L.board.cells) {
-    hexAt(cell.x, cell.y, L.board.hex - 2);
-    if (cell.owner === null) {
-      g.fillStyle = cell.terrain === 'rich' ? 'rgba(233, 216, 173, .12)' : cell.terrain === 'rock' ? 'rgba(255, 255, 255, .045)' : 'rgba(255, 255, 255, .035)';
-      g.fill();
-    } else {
-      g.fillStyle = cell.owner === d.me ? col.you : col.opp;
-      g.globalAlpha = cell.root ? 1 : 0.78;
-      g.fill();
-      g.globalAlpha = 1;
+    const r = L.board.hex;
+    g.save();
+    hexAt(cell.x, cell.y, r);
+    g.clip();
+    if (groundPattern) {
+      g.fillStyle = groundPattern;
+      g.fillRect(cell.x - r, cell.y - r, r * 2, r * 2);
     }
-    g.strokeStyle = col.line;
-    g.lineWidth = 2;
-    g.stroke();
     if (cell.owner !== null) {
-      if (cell.strength > 0) {
+      // The base colour only shows through the art's own edges, exactly as on the board.
+      g.fillStyle = base(cell.owner);
+      g.fillRect(cell.x - r, cell.y - r, r * 2, r * 2);
+      const index = cell.root ? (cell.owner === 0 ? 18 : 19) : cell.owner * 9 + Math.floor(hash(`${cell.key}:default-tile`) * 9);
+      const sprite = art(boardArt?.sprites[index]);
+      if (sprite) {
+        const side = artSize(index) * k;
+        g.translate(cell.x, cell.y);
+        g.rotate(angle);
+        g.drawImage(sprite, -side / 2, -side / 2, side, side);
+      } else {
+        // No art loaded: the poster keeps its flat language rather than losing the tile.
+        g.fillStyle = cell.owner === d.me ? col.you : col.opp;
+        g.globalAlpha = cell.root ? 1 : 0.78;
+        g.fillRect(cell.x - r, cell.y - r, r * 2, r * 2);
+        g.globalAlpha = 1;
+      }
+    } else if (!groundPattern) {
+      const fill = cell.terrain === 'rich' ? 'rgba(233, 216, 173, .12)' : cell.terrain === 'rock' ? 'rgba(255, 255, 255, .045)' : 'rgba(255, 255, 255, .035)';
+      g.fillStyle = fill;
+      g.fillRect(cell.x - r, cell.y - r, r * 2, r * 2);
+    }
+    if (cell.terrain === 'rich') {
+      // A bonus hex is identified by its metal frame alone in Futasaku: without it the share image
+      // would hide the one thing that makes the hex worth playing for.
+      const gold = art(boardArt?.gold);
+      const crop = boardArt?.goldCrop(cell.key);
+      if (gold && crop) {
+        // The frame's own box is slightly wider and shorter than the cell (S*2.02 by S*√3*1.01).
+        const fw = S * 2.02 * k;
+        const fh = S * SQ3 * 1.01 * k;
+        g.drawImage(gold, crop.x, crop.y, crop.w, crop.h, cell.x - fw / 2, cell.y - fh / 2, fw, fh);
+      }
+    }
+    if (cell.terrain === 'rock') {
+      const rocks = boardArt?.rocks ?? [];
+      const rock = rocks.length ? art(rocks[Math.floor(hash(`${cell.key}:v3-rock`) * rocks.length)]) : null;
+      if (rock) {
+        const side = 54 * k;
+        g.translate(cell.x, cell.y);
+        g.rotate((-30 * Math.PI) / 180);
+        g.drawImage(rock, -side / 2, -side / 2, side, side);
+      }
+    }
+    g.restore();
+
+    // The board's quiet rim, drawn over the art (never a bright seam).
+    hexAt(cell.x, cell.y, Math.max(1, r - 1));
+    g.strokeStyle = col.line;
+    g.lineWidth = Math.max(1.5, r * 0.045);
+    g.stroke();
+
+    if (cell.owner !== null && !cell.root && cell.strength > 0) {
+      const atlas = art(SEED_STONE_ATLAS);
+      if (atlas) {
+        // The same carved counter the board places, cropped from the same atlas.
+        const crop = seedStoneCrop(cell.owner, cell.strength);
+        const stone = 21 * 0.66 * k;
+        g.drawImage(atlas, crop.x, crop.y, crop.size, crop.size, cell.x - stone / 2, cell.y - stone / 2, stone, stone);
+      } else {
         g.font = `700 ${Math.round(L.board.hex * 0.48)}px ${font}`;
         g.fillStyle = 'rgba(7, 9, 8, .84)';
         g.textAlign = 'center';
         g.textBaseline = 'middle';
         g.fillText(String(cell.strength), cell.x, cell.y + 1);
       }
-      if (cell.root) {
-        // A ring, never a disc over the number: the root tile still has to read its strength.
-        g.beginPath();
-        g.arc(cell.x, cell.y, L.board.hex * 0.27, 0, Math.PI * 2);
-        g.strokeStyle = 'rgba(240, 233, 220, .72)';
-        g.lineWidth = Math.max(2, L.board.hex * 0.045);
-        g.stroke();
-      }
+    }
+    if (cell.owner !== null && cell.root) {
+      // A ring, never a disc over the home: the root stays identifiable on the share image.
+      g.beginPath();
+      g.arc(cell.x, cell.y, L.board.hex * 0.27, 0, Math.PI * 2);
+      g.strokeStyle = 'rgba(240, 233, 220, .72)';
+      g.lineWidth = Math.max(2, L.board.hex * 0.045);
+      g.stroke();
     }
   }
   return canvas;
@@ -243,7 +374,13 @@ export const posterBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
   new Promise((ok) => canvas.toBlob(ok, 'image/png'));
 
 /** The phone's share sheet when it can take a file; otherwise a plain download. */
-export const shareReplayPoster = async (d: PosterData): Promise<'shared' | 'saved' | 'cancelled'> => {
+export const shareReplayPoster = async (
+  d: PosterData,
+  artUrls: PosterArt | null = null,
+): Promise<'shared' | 'saved' | 'cancelled'> => {
+  // The board already decoded these pictures; if it did not, the warm-up is bounded by the image
+  // cache and the poster still draws (flat fallback) rather than stalling the share.
+  await warmPosterArt(artUrls);
   const blob = await posterBlob(drawReplayPoster(d));
   if (!blob) return 'cancelled';
   const file = new File([blob], posterFileName(d), { type: 'image/png' });

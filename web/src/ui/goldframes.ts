@@ -12,6 +12,13 @@ const BOUNDS = [
   [15, 49, 707, 666],
 ] as const;
 
+/** The atlas and the exact crop one bonus hex's frame uses, shared with the replay poster. */
+export const GOLD_FRAME_ATLAS = atlasUrl;
+export const goldFrameCrop = (key: string, variant = Math.floor(hash(`${key}:gold-frame`) * BOUNDS.length)) => {
+  const [x0, y0, x1, y1] = BOUNDS[variant]!;
+  return { variant, x: variant * CELL + x0, y: y0, w: x1 - x0, h: y1 - y0 };
+};
+
 export function drawGoldFrame(parent: SVGElement, key: string, x: number, y: number, occupied: boolean) {
   const variant = Math.floor(hash(`${key}:gold-frame`) * BOUNDS.length);
   const [x0, y0, x1, y1] = BOUNDS[variant]!;

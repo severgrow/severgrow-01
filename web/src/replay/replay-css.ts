@@ -119,6 +119,16 @@ export const REPLAY_CSS = `
 /* The replay board is a picture: it takes no taps of its own. */
 #replay .rp-board svg .hex-cell { pointer-events: none; }
 #replay .rp-ghost-layer { pointer-events: none; }
+/* The game scopes a strength stone's transform box to its board id; the replay's SVG is the same
+   board (class "board") and needs the same origin, or its stone and number sit off the hex. */
+#replay .rp-board svg .seed-stone { pointer-events: none; transform-box: view-box; transform-origin: 0 0; }
+/* The same two looks the game scopes to its own board id. A bonus hex's metal frame carries a warm
+   glow (the only thing that identifies it in Futasaku), and an empty hex is lifted 15% so the ground
+   reads; without these the replay's rich and empty cells sit at a different brightness to the match's. */
+#replay .rp-board svg .gold-frame { filter: drop-shadow(0 0 1.6px rgba(231, 181, 83, .32)); }
+#replay .rp-board svg .gold-frame.empty { filter: drop-shadow(0 0 2.1px rgba(236, 187, 88, .40)); }
+#replay .rp-board svg .gold-frame.occupied .gold-frame-art { opacity: .92; }
+#replay .rp-board svg .hex-cell.normal.futa04-empty { filter: brightness(1.15); }
 
 /* ---------- the controls ---------- */
 #replay .rp-scrub-wrap { position: relative; }

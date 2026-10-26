@@ -9,6 +9,9 @@ import { drawLandmark } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
+// The replay poster paints the same faces; it takes this list from the module the board already
+// loaded, so the share image never pulls a second copy (or a second chunk) of the sprite URLs.
+export { DEFAULT_ART_SPRITES };
 // Board ground/rocks live with the game assets (V3 pack archived off this branch).
 import groundUrl from '../assets/board/empty_ground_01.webp';
 import rock1 from '../assets/board/rock_hex_01.webp';
@@ -21,6 +24,12 @@ import rock5 from '../assets/board/rock_hex_05.webp';
 // masonry/wood border inside that same cell, including its six corners.
 const artSize = (index: number) => index >= 18 ? 68 : index < 9 ? 80 : 76;
 const rockUrls = [rock1, rock2, rock3, rock4, rock5];
+// The replay poster paints the same board; it reads these URLs from the module the board already
+// loaded, so the share image pulls no second copy (or chunk) of them.
+export const BOARD_GROUND = groundUrl;
+export const BOARD_ROCKS = rockUrls;
+// A bonus hex's metal frame (its only marker in Futasaku) rides the same hand-over.
+export { GOLD_FRAME_ATLAS, goldFrameCrop } from './goldframes.js';
 
 /**
  * Board pictures that could not be loaded, so the board never asks for them again.
