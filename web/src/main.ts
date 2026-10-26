@@ -10291,6 +10291,11 @@ let appReady = false;
   replay: () => replayPlayer?.now() ?? null,
   /** Tests only: the replay's whole frame plan (times, seats, each frame's board signature). */
   replayPlan: () => replayPlayer?.plan() ?? null,
+  /**
+   * Tests/screenshots only: one frame of the exported video (a step of its plan), painted by the
+   * recorder's own painter as a PNG data URL. It never drives the replay or starts a recording.
+   */
+  replayVideoFrame: (step = -1) => replayPlayer?.videoFrame(step) ?? null,
   /** Tests/screenshots: the install invitation's memory (games counted) and a way to show it. */
   install: () => installPrompt.memory(),
   showInstall: () => installPrompt.showNow(),

@@ -401,6 +401,20 @@ export const REPLAY = Object.freeze({
   scrub: 'Replay position',
   /** The quiet control beside the footer mark: save or share the finished poster. */
   share: 'Share replay',
+  /** The footer's export control: the whole replay as a silent video file. */
+  exportVideo: 'Export video',
+  /** While recording: "Recording 12s / 50s" — the replay's own length, not the file's size. */
+  recording: (done: string, total: string) => `Recording ${done} / ${total}`,
+  /** The way out of a recording that is already running. */
+  cancel: 'Cancel',
+  /** The recording is done and being handed to the phone (share sheet, else a download). */
+  videoReady: 'Preparing the video…',
+  /** What the player sees when the file has gone through the share sheet. */
+  videoShared: 'Video shared',
+  /** What the player sees when the file went to their downloads. */
+  videoSaved: 'Video saved',
+  /** Said plainly when this browser cannot record, or the encoder stopped. */
+  videoFailed: 'Could not make the video',
   /** The notch on the scrub bar at the play that turned the match. */
   turningPoint: 'Turning point',
   /** The notch's own name, with the honest count of tiles the cut took. */

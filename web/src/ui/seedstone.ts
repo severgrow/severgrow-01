@@ -15,7 +15,7 @@ const BOUNDS: readonly [number, number, number, number][] = [
   [90,1280,331,1512], [397,1281,642,1515], [697,1285,949,1508],
 ];
 
-/** The atlas and the square crop of one strength stone, shared with the replay poster. */
+/** The atlas and the square crop of one strength stone, shared with the replay's canvas pictures. */
 export const SEED_STONE_ATLAS = atlasUrl;
 export const seedStoneCrop = (owner: Player, strength: number) => {
   const index = (owner === 0 ? 0 : 9) + Math.max(1, Math.min(9, strength)) - 1;

@@ -218,6 +218,47 @@ export const REPLAY_CSS = `
 #replay .rp-scrub:focus-visible { outline: none; }
 #replay .rp-scrub:focus-visible .rp-knob { box-shadow: 0 0 0 3px rgba(233, 216, 173, .75); }
 
+/* ---------- the recording line ---------- */
+/* THE VIDEO EXPORT (owner, 2026-10-26): progress and the way out, between the scrub bar and the
+   footer. Hidden when idle, so no control ever moves for it. */
+#replay .rp-video {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 2px;
+}
+#replay .rp-video[hidden] { display: none !important; }
+#replay .rp-video-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 10.5px/1.3 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--rp-ink);
+  font-variant-numeric: tabular-nums;
+}
+/* The one moving thing in the chrome: a quiet record dot, only while a recording can be cancelled. */
+#replay .rp-video[data-live='1'] .rp-video-text::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--rp-opp);
+  vertical-align: 1px;
+  animation: rp-rec 1.6s ease-in-out infinite;
+}
+@keyframes rp-rec { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+/* The cancel key is the plate's own button: the same 44px thumb target, no new size. */
+#replay .rp-video .rp-btn[hidden] { display: none !important; }
+#replay .rp-icon:disabled { opacity: .45; cursor: default; }
+#replay .rp-icon[aria-busy='true'] svg { animation: rp-rec 1.6s ease-in-out infinite; }
+
 #replay .rp-foot {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -310,11 +351,15 @@ export const REPLAY_CSS = `
 
 /* Reduce motion (setting or OS): no settle, no crossfade — the board simply is the next position. */
 .reduce-motion #replay .rp-turn[data-change='1'],
-.reduce-motion #replay[data-ended='1'] .rp-btn[data-rp='again'] { animation: none !important; }
+.reduce-motion #replay[data-ended='1'] .rp-btn[data-rp='again'],
+.reduce-motion #replay .rp-video[data-live='1'] .rp-video-text::before,
+.reduce-motion #replay .rp-icon[aria-busy='true'] svg { animation: none !important; }
 .reduce-motion #replay .rp-board { transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
   #replay .rp-turn[data-change='1'],
-  #replay[data-ended='1'] .rp-btn[data-rp='again'] { animation: none !important; }
+  #replay[data-ended='1'] .rp-btn[data-rp='again'],
+  #replay .rp-video[data-live='1'] .rp-video-text::before,
+  #replay .rp-icon[aria-busy='true'] svg { animation: none !important; }
   #replay .rp-board { transition: none !important; }
 }
 `;
