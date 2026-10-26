@@ -74,6 +74,29 @@ button {
   font: inherit;
   color: inherit;
 }
+/* A TEXT FIELD MUST NEVER MAKE A PHONE ZOOM (owner, 2026-10-26: the match chat "zooms in awkwardly
+   when entering text box to send a message ... should never happen on any phone", and the zoom is
+   what pushed the chat's own close key off the screen).
+   iOS Safari magnifies the whole page when a focused text field computes under 16px, and the page
+   STAYS magnified after the keyboard closes — so this is not a cosmetic detail, it is a layout
+   bug that hides controls. The floor is enforced here, once, on touch pointers only, so a future
+   component cannot reintroduce it by declaring a small font. `max(16px, 1em)` is a FLOOR and not a
+   size: a field designed larger keeps its own size (1em resolves against the parent), and a
+   component that states its own size deliberately still wins this bare-element rule — so it
+   restores the floor for an undeclared field without flattening intentional typography. The two
+   fields that DID declare a zooming size were fixed where they were declared. Checkboxes, radios,
+   ranges and file inputs are excluded — they hold no text and are sized by their own rules. */
+@media (pointer: coarse) {
+  /* `:where()` keeps this at ZERO specificity: it is a floor for fields that never declared a size
+     (it still beats inheritance), and any component that deliberately states its own size wins it.
+     That is why it cannot flatten the typography, and why the two fields that declared a zooming
+     size had to be fixed where they were declared. */
+  :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])),
+  :where(textarea),
+  :where(select) {
+    font-size: max(16px, 1em);
+  }
+}
 .num {
   font-weight: var(--w-num);
   font-variant-numeric: lining-nums tabular-nums;

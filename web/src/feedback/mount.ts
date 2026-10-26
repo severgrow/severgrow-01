@@ -140,7 +140,12 @@ ${glassBaseCss('.fb-glass')}
 .fb-glass ul { margin:0; padding-left:18px; color:#e2d4b4; line-height:1.45; display:grid; gap:4px; }
 .fb-glass .fb-small { font-size:12px; color:#b7a98a; }
 .fb-glass textarea { width:100%; box-sizing:border-box; min-height:110px; resize:vertical; border-radius:10px; padding:10px;
-  border:1px solid rgba(214,204,177,.25); background:rgba(255,255,255,.04); color:#f0e9dc; font:400 15px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
+  border:1px solid rgba(214,204,177,.25); background:rgba(255,255,255,.04); color:#f0e9dc;
+  /* 16px is a FLOOR, not a style choice (owner, 2026-10-26: chat "zooms in awkwardly when
+     entering text box ... should never happen on any phone"). iOS Safari zooms the whole page
+     when a focused text field computes under 16px, and the page then stays zoomed after the
+     keyboard closes. Every text-entry control in this app must therefore be at least 16px. */
+  font:400 16px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
 .fb-glass .fb-actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 .fb-glass .fb-actions button, .fb-glass .fb-link { min-height:44px; min-width:44px; padding:0 14px; border-radius:10px; cursor:pointer;
   border:1px solid rgba(214,204,177,.25); background:rgba(255,255,255,.04); color:#f0e9dc; font:700 14px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; }
