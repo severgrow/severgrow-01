@@ -19,6 +19,24 @@ export const dealOpening = (seed: number, config: RulesConfig): { hands: [Card[]
 };
 
 /**
+ * The opening board: every hex on the board, empty, with the two roots already placed.
+ *
+ * This is the board a match starts from, and the ONE definition of it — `newGame` deals its
+ * terrain, cards and hands on top of exactly this. Shared so a reader that rebuilds the opening
+ * (e.g. the online opponent-turn replay) can never drift from the engine's own rule. (The seed is
+ * deliberately not part of a live online payload, so a client cannot re-deal a match; it does not
+ * need to — this board depends only on the rules config.)
+ */
+export const openingBoard = (config: RulesConfig): Record<string, Tile | null> => {
+  const board: Record<string, Tile | null> = {};
+  for (const c of boardCoords(config)) board[coordKey(c)] = null;
+  for (const owner of [0, 1] as const) {
+    board[coordKey(homeCoord(owner, config))] = { owner, strength: 0, root: true };
+  }
+  return board;
+};
+
+/**
  * Setup (spec 5): terrain, cards, seeded shuffle, deal handSize to P1 then P2,
  * flip one discard, place both roots. P1 to draw on turn 1.
  */
@@ -28,11 +46,7 @@ export const newGame = (seed: number, overrides: Partial<RulesConfig> = {}): Sta
 
   const terrain = generateTerrain(seed, config);
 
-  const board: Record<string, Tile | null> = {};
-  for (const c of boardCoords(config)) board[coordKey(c)] = null;
-  for (const owner of [0, 1] as const) {
-    board[coordKey(homeCoord(owner, config))] = { owner, strength: 0, root: true };
-  }
+  const board = openingBoard(config);
 
   const deal = dealOpening(seed, config);
 
