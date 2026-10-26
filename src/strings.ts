@@ -980,6 +980,12 @@ export const LIVE = Object.freeze({
   terms: (_secs: number) => 'Same match · each turn has a countdown',
   accept: 'Accept',
   notNow: 'Not now',
+  // The SENDER's confirmation before the invite leaves the device (owner, 2026-10-26: tapping the
+  // bolt must ask first). The seconds come from the server's own `limitMs` (LIVE_TURN_MS, default
+  // 60 s, env-overridable), so the window never promises a number the match is not using.
+  duelQuestion: 'Real time duel?',
+  duelTerms: (secs: number) => `${secs} seconds on every move.`,
+  sendChallenge: 'Send challenge',
   notNowFrom: (name: string) => `${name}: Not now`,
   expired: 'No answer',
   live: 'Real time',
@@ -1525,16 +1531,28 @@ export const LESSON = Object.freeze({
  * A localisation integration can replace this copy object; never persist translated phrases. */
 export const MATCH_CHAT = {
   title: 'Match chat', open: 'Open match chat', close: 'Close chat', you: 'You', opponent: 'Opponent',
-  empty: 'A little company across the board.', available: 'Chat available on opponent’s turn',
+  empty: 'A little company across the board.',
+  // Owner, 2026-10-26: chat can be sent at any point in an active match. The old sentence promised
+  // the opponent-turn rule that no longer exists.
+  available: 'Chat is open for this match',
   ended: 'Match ended · history only',
   message: 'Message', send: 'Send', pending: 'Sending…', sent: 'Sent', failed: 'Not sent',
   retry: 'Retry', discard: 'Discard', older: 'Earlier messages', newer: 'New messages',
   quickPhrases: 'Quick phrases', messageActions: 'Message actions',
   reconnecting: 'Live updates reconnecting…', offline: 'Offline · draft saved',
   opponentOnline: 'Opponent online', opponentOffline: 'Opponent offline', opponentUnknown: 'Opponent status unavailable',
-  tools: 'Chat controls', mute: 'Mute previews', unmute: 'Unmute previews',
-  block: 'Block chat with opponent', unblock: 'Unblock opponent', blocked: 'Chat blocked · history only',
-  report: 'Report message', reportConfirm: 'Send report', reportDone: 'Report sent for review.',
+  // A direct mute key in the chat header (owner, 2026-10-26): no ··· menu any more.
+  mute: 'Mute chat', unmute: 'Unmute chat',
+  // The cockpit chat key's accessible name while this player has muted this match.
+  mutedToggle: 'Chat muted for this match',
+  // The quiet line the OTHER player reads. It states the fact only: no reason, no timestamp.
+  opponentMuted: 'Opponent muted chat for this match.',
+  block: 'Block chat with opponent', blockShort: 'Block',
+  unblock: 'Unblock opponent', unblockShort: 'Unblock',
+  blocked: 'Chat blocked · history only',
+  report: 'Report message',
+  // Reporting always mutes this match too (owner, 2026-10-26).
+  reportConfirm: 'Report and mute', reportDone: 'Report sent for review. Chat muted.',
   abuse: 'Abusive message', spam: 'Spam', other: 'Other', cancel: 'Cancel',
   loading: 'Connecting chat…', unavailable: 'Chat unavailable · try again', reconnect: 'Reconnect chat',
   error: 'Couldn’t complete that. Try again.', rate: 'Give your opponent a moment.',

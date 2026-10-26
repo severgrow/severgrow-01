@@ -180,14 +180,25 @@ export const postgresChatStore = (pool: PgPool): ChatStore => ({
             ],
           );
         }
+        // Reporting ALWAYS mutes the reporter for this match, in the same transaction as the
+        // report (owner, 2026-10-26). Server-side, so it survives a reload and a second device.
+        await c.query(
+          'insert into match_chat_preferences(match_id,player_id,muted) values($1,$2,true) on conflict(match_id,player_id) do update set muted=true',
+          [matchId, player],
+        );
       }
-      const muted =
-        (
-          await c.query(
-            'select muted from match_chat_preferences where match_id=$1 and player_id=$2',
-            [matchId, player],
-          )
-        ).rows[0]?.muted === true;
+      const preferences = (
+        await c.query(
+          'select player_id, muted from match_chat_preferences where match_id=$1 and player_id in ($2,$3)',
+          [matchId, player, other],
+        )
+      ).rows;
+      const muted = preferences.some(
+        (r) => r.player_id === player && r.muted === true,
+      );
+      const opponentMuted = preferences.some(
+        (r) => r.player_id === other && r.muted === true,
+      );
       const after = op.kind === 'history' ? op.after : undefined;
       const before = op.kind === 'history' ? op.before : undefined;
       const rows = (
@@ -217,6 +228,7 @@ export const postgresChatStore = (pool: PgPool): ChatStore => ({
         canSend,
         turnRevision: context.turnRevision,
         muted,
+        opponentMuted,
         blocked: context.blocked,
         blockedByMe,
         ...(sent ? { sent } : {}),

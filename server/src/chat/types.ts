@@ -17,6 +17,8 @@ export type ChatPage = {
   canSend: boolean;
   turnRevision: number;
   muted: boolean;
+  /** The other participant muted chat for this match. The fact only, no reason or timestamp. */
+  opponentMuted: boolean;
   blocked: boolean;
   blockedByMe: boolean;
 };

@@ -51,8 +51,9 @@ All new interface copy is in `src/strings.ts` → `MATCH_CHAT`. `mountMatchChat`
 copy object for the localisation agent. Timestamps use Intl and the browser locale. No translation
 framework, dependency or localised text is persisted. Only English copy is supplied in this branch.
 
-Updated design: portrait chat fills the available viewport over the board and cockpit; desktop fills the space above its cockpit column (up to 480px wide). Transcript text is 14px. Quick phrases live in a compact picker behind the icon beside Send, hidden by default. Controls retain 44px hit areas with slimmer visual surfaces. The visual viewport controls panel height/offset without resizing the game. Font-size 16px avoids
-iOS focus zoom; safe areas, contained transcript scrolling and no document scroll locks. Desktop
+Updated design: portrait chat fills the available viewport over the board and cockpit; desktop fills the space above its cockpit column (up to 480px wide). Transcript text is 14px. Quick phrases live in a compact picker behind the icon beside Send, hidden by default. Controls retain 44px hit areas with slimmer visual surfaces. The visual viewport controls panel height/offset without resizing the game. Font-size 17px avoids
+iOS focus zoom (16px sits exactly on Apple's threshold; the app-wide touch floor is in
+`web/src/style.css`); safe areas, contained transcript scrolling and no document scroll locks. Desktop
 keyboard navigation and a quiet live region are supported. The panel is nonmodal, so it deliberately
 does not trap focus or make gameplay inert. Turn changes preserve drafts. Drafts persist locally per match/seat across leaving and reloading, bounded to 20 entries; nothing
 is automatically sent. Ambiguous attempts retain their request ID for safe retry. Device-local read cursors (no
@@ -70,12 +71,15 @@ opponent from `match_participants`. A missing/foreign chat is the same 404. No c
 status or claimed membership is trusted. Text is rendered only with `textContent`.
 
 The Postgres adapter takes **the same `matches FOR UPDATE` lock as move batches, resignation and
-live autoplay**. It checks `matches.state.actor`, phase, status and `turn_start_revision` under that
-lock before insert. A queued request for an earlier turn cannot become a send in a later turn.
-The row is never changed by chat. A due deadline refuses new sends: existing gameplay authority
-alone can spend grace, autoplay or finish a match. No timers, engine rules, RNG, saves or deadlines
-were changed. Both live and 24-hour turns use this path; offline opponents receive persisted history
-when returning. Finished matches retain readable history and cannot accept new sends.
+live autoplay**. It reads the match row under that lock, but the send decision no longer depends on
+whose turn it is, the turn epoch or the clock: **chat can be sent at any point in an active match**
+(owner, 2026-10-26). A queued request landing after the turn changed is simply a message. The only
+refusals are a block (either side), a match that is not active, and phase `GAME_OVER`. Chat never
+changes the row: existing gameplay authority alone can spend grace, autoplay or finish a match. No
+timers, engine rules, RNG, saves or deadlines were changed. Both live and 24-hour turns use this
+path; offline opponents receive persisted history when returning. Finished matches retain readable
+history and cannot accept new sends. The wire still carries `turnRevision` for compatibility; it is
+ignored by the send decision.
 
 Idempotency is `(match_id,sender_id,request_id)`, with a conflict if the body changes. Previously
 committed sends replay even after a turn/match ends; they do not create another message. The UI
@@ -87,12 +91,17 @@ sender advisory lock serialises rate checks across matches and Edge instances. L
 match → pair → sender. Blocking is communication-only: either player's block stops both directions
 in all their matches. It does not alter existing matchmaking, account identity or gameplay.
 Unblocking your side cannot remove the opponent's block. Muting suppresses previews and alerts,
-while history remains readable. No automation is claimed for content moderation.
+while history remains readable; it does not stop either player sending messages. The other player
+can see that chat is muted for this match (a quiet factual line, no reason or timestamp). No
+automation is claimed for content moderation.
 
 Abuse/spam/other reports must identify an actual opponent message in this match. They are deduplicated
 and transactionally copied into the existing `feedback_reports` admin triage queue, including message
-evidence. An evidence insert failure rolls the report receipt back. Report evidence follows the
-existing private feedback retention/access policy; it survives chat-history cleanup.
+evidence. An evidence insert failure rolls the report receipt back. **A report also mutes the
+reporter for that match in the same transaction** (owner, 2026-10-26), so the state survives a reload
+and a second device; the action response carries it, so the UI needs no second round-trip. Report
+evidence follows the existing private feedback retention/access policy; it survives chat-history
+cleanup.
 
 Limits: 4KiB request bodies, 120 authenticated chat requests/minute/player, minimum 1s between new
 messages, at most 5/10s and 200/rolling 24h across matches, 2,000 messages/match, 10 new reports/hour.
@@ -222,8 +231,9 @@ retaining 44px touch targets. No gameplay layout is resized to accommodate the l
 
 Quick phrases are hidden by default behind the icon beside Send. The picker closes after selection,
 outside interaction or Escape; Escape first returns focus to its trigger without closing chat.
-Its choices retain the same authoritative turn restrictions. It stays usable with the keyboard open,
-with bounded scrolling in short viewports. Chat controls and phrases use mutually exclusive drawers.
+Its choices follow the same send rule as text (any point in an active match). It stays usable with the keyboard open,
+with bounded scrolling in short viewports. The phrase picker and the report band are mutually
+exclusive (2026-10-26: the chat-level controls drawer is gone).
 The new `MATCH_CHAT.quickPhrases` copy key must be included when integrating translations.
 
 The redesign's two-client browser run used the local in-memory authority and simulated Realtime
@@ -289,15 +299,17 @@ motion regression passed. Final reviewed browser run: 42 checks. No merge or dep
 
 The composer has no visible placeholder. It retains the translated `MATCH_CHAT.message` accessible
 name (`Message`), replacing the old `placeholder` copy key. Message text is now 14px on both mobile
-and desktop; the input stays at 16px to avoid iOS focus zoom.
+and desktop; the input is 17px (2026-10-26) so a focused composer can never make iOS focus-zoom the
+page; the report reason is 16px and every text field on a touch pointer has a 16px floor.
 
 Both match modes share the existing chat authority and online-session mount path. Additional tests
 exercise a real accepted live challenge using the actual live runtime and both memory/Postgres
-adapters: opponent-turn sending, rejection after the turn changes, rejection at an overdue live
-clock without chat changing it, and readable history after the live authority finishes by timeout.
-Async tests use the normal 24-hour clock, simulate 12 hours offline, then read persisted messages
-through a returning authenticated client and verify that the same turn restriction still applies.
-No gameplay timers or backend rules were changed.
+adapters: sending on either turn, accepting a stale turn epoch and an overdue live clock without
+chat changing the match, and readable history after the live authority finishes by timeout. Async
+tests use the normal 24-hour clock, simulate 12 hours offline, then read persisted messages through
+a returning authenticated client. (These were written under the old opponent-turn rule; the
+2026-10-26 section below records the rule change and the updated assertions.) No gameplay timers or
+backend rules were changed.
 
 Validation: 49 focused checks passed with disposable local Postgres; 43 two-client browser checks
 passed with local Postgres, including a blank composer with its screen-reader label and 14px text
@@ -347,6 +359,9 @@ visual grouping. No merge or deployment performed.
 - Quiet Realtime reconnection/offline feedback preserves drafts; no second channel.
 - Message actions use a compact ellipsis menu with 44px touch targets. Escape closes the menu first;
   reporting remains a real backend action. Report controls remain usable with a mobile keyboard.
+  (2026-10-26: the ellipsis remains only on a MESSAGE, to report it. The chat-level ··· drawer was
+  removed — mute is a direct header key, block is a contextual word beside the status — and the
+  report now asks for a reason and reads **Report and mute** / **Cancel**.)
 - The tiny green/red dot beside the opponent name **reuses the existing real-time button heartbeat**
   (`live/mount.ts` → `live/opponent-status.ts`). There are no extra presence requests, writes, sockets
   or timers. Busy is still online; failed status reads/unknown connection show neutral, never a false

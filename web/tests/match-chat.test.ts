@@ -30,6 +30,7 @@ const page = (
   canSend: true,
   turnRevision: 0,
   muted: false,
+  opponentMuted: false,
   blocked: false,
   blockedByMe: false,
   ...extras,
@@ -84,6 +85,10 @@ const setup = (draftStore?: ChatDraftStore) => {
       };
       ctl.turnChanged();
     },
+    snapshot: (over: Partial<MatchDriverSnapshot>) => {
+      current = { ...current, ...over };
+      ctl.turnChanged();
+    },
   };
 };
 describe('match chat lifecycle', () => {
@@ -104,21 +109,50 @@ describe('match chat lifecycle', () => {
     x.ctl.stop();
   });
 
-  it('disables on your turn immediately, preserves draft, enables on the next authoritative epoch', async () => {
+  it('keeps the composer open on your own turn, on a new epoch and on a due clock', async () => {
     const x = setup();
     x.ctl.start();
     await tick();
     expect(x.ctl.state().canSend).toBe(true);
     x.ctl.draft('Still thinking');
+    // The owner's new rule (2026-10-26): chat is not limited to the opponent's turn.
     x.turn(0, 1);
-    expect(x.ctl.state().canSend).toBe(false);
+    expect(x.ctl.state().canSend).toBe(true);
     expect(x.ctl.state().draft).toBe('Still thinking');
     await x.ctl.send();
-    expect(x.client.chatSend).not.toHaveBeenCalled();
-    x.client.chatHistory.mockResolvedValue(page([], { turnRevision: 2 }));
-    x.turn(1, 2);
-    await tick();
+    expect(x.client.chatSend).toHaveBeenCalledTimes(1);
+    x.snapshot({ remainingMs: 0 });
     expect(x.ctl.state().canSend).toBe(true);
+    x.snapshot({ turnStartRevision: 99 });
+    expect(x.ctl.state().canSend).toBe(true);
+    x.ctl.stop();
+  });
+  it('still closes the composer for a block, GAME_OVER, a finished match or an offline connection', async () => {
+    const x = setup();
+    x.ctl.start();
+    await tick();
+    x.snapshot({ serverPhase: 'GAME_OVER' });
+    expect(x.ctl.state().canSend).toBe(false);
+    x.snapshot({ serverPhase: 'ACT', status: 'finished' });
+    expect(x.ctl.state().canSend).toBe(false);
+    x.snapshot({ status: 'active', connection: 'offline' });
+    expect(x.ctl.state().canSend).toBe(false);
+    x.snapshot({ connection: 'online' });
+    x.client.chatHistory.mockResolvedValue(page([], { blocked: true }));
+    await x.ctl.refresh();
+    expect(x.ctl.state().canSend).toBe(false);
+    x.ctl.stop();
+  });
+  it('surfaces the opponent mute as a fact and clears it when they unmute', async () => {
+    const x = setup();
+    x.client.chatHistory.mockResolvedValue(page([], { opponentMuted: true }));
+    x.ctl.start();
+    await tick();
+    expect(x.ctl.state().opponentMuted).toBe(true);
+    expect(x.ctl.state().muted).toBe(false);
+    x.client.chatHistory.mockResolvedValue(page([], { opponentMuted: false }));
+    await x.ctl.refresh();
+    expect(x.ctl.state().opponentMuted).toBe(false);
     x.ctl.stop();
   });
   it('retains a stable ID and draft after a lost response, prevents rapid duplicate clicks', async () => {
@@ -197,7 +231,7 @@ describe('match chat lifecycle', () => {
     expect(x.onChange).toHaveBeenCalledTimes(1);
     expect(x.client.chatHistory.mock.calls[0]?.[3]?.aborted).toBe(true);
   });
-  it('does not enable a composer based on a stale history response', async () => {
+  it('does not re-open the composer from a history response after the match ended', async () => {
     const x = setup();
     let resolve!: (r: ChatResult) => void;
     x.client.chatHistory.mockImplementationOnce(
@@ -207,7 +241,7 @@ describe('match chat lifecycle', () => {
         }),
     );
     x.ctl.start();
-    x.turn(0, 1);
+    x.snapshot({ status: 'finished' });
     resolve(page());
     await tick();
     expect(x.ctl.state().canSend).toBe(false);

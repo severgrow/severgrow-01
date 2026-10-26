@@ -141,6 +141,9 @@ export const memoryChatStore = (
             userAgent: null,
           });
         }
+        // Reporting ALWAYS mutes the reporter for this match (owner, 2026-10-26), even if the same
+        // report was already recorded. Server-side state, independent of this device.
+        muted.add(key);
       }
       let selected = rows.filter((r) => r.matchId === matchId);
       const after = op.kind === 'history' ? op.after : undefined;
@@ -167,6 +170,7 @@ export const memoryChatStore = (
         canSend,
         turnRevision: ctx.turnRevision,
         muted: muted.has(key),
+        opponentMuted: muted.has(`${matchId}:${other}`),
         blocked: ctx.blocked,
         blockedByMe,
         ...(sent ? { sent } : {}),

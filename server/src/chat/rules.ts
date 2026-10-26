@@ -29,31 +29,36 @@ export const contentFrom = (body: Record<string, unknown>): ChatContent => {
     throw new ApiError('INVALID_REQUEST', 'Use 1–280 characters on one line.');
   return { text, phrase: null };
 };
+/**
+ * Chat is a conversation, not a move: it can be sent at ANY point in an active match, including
+ * your own turn and while a clock is due. Owner direction (2026-10-26): "remove the rule that you
+ * can send messages only when it's opp's turn — make it possible to send messages whenever."
+ *
+ * Still refused:
+ *   - either player has blocked chat (FORBIDDEN),
+ *   - the match is not active or the phase is GAME_OVER (MATCH_NOT_ACTIVE).
+ *
+ * Chat never changes the game: a due clock is neither spent nor advanced here. It simply no longer
+ * makes a message fail. The old actor / turn-revision / deadline gate is gone.
+ *
+ * `expected` and `now` stay in the signature because the wire still carries `turnRevision` and every
+ * caller already passes the server clock; they are deliberately unused now.
+ */
 export const assertSendAllowed = (
   ctx: {
     status: string;
     phase: string;
+    /** Kept for wire/caller compatibility; no longer part of the send decision. */
     actor: number;
     seat: number;
     turnRevision: number;
     deadline: number | null;
     blocked: boolean;
   },
-  expected: number,
-  now: number,
+  _expected: number,
+  _now: number,
 ): void => {
   if (ctx.blocked) throw new ApiError('FORBIDDEN', 'Chat is blocked.');
   if (ctx.status !== 'active' || ctx.phase === 'GAME_OVER')
     throw new ApiError('MATCH_NOT_ACTIVE', 'This chat is read-only.');
-  // A due clock is deliberately refused, not advanced here: only the existing live/async
-  // authority may spend grace, auto-play or finish a match. Chat never changes timers or state.
-  if (
-    ctx.actor === ctx.seat ||
-    ctx.turnRevision !== expected ||
-    (ctx.deadline != null && ctx.deadline <= now)
-  )
-    throw new ApiError(
-      'STALE_REVISION',
-      'Chat is available on the opponent’s turn.',
-    );
 };

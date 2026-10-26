@@ -24,6 +24,10 @@ export const ICONS: Record<string, string> = {
   sprout: wrap('<path d="M12 21v-9"/><path d="M12 12c0-4 3-6 7-6 0 4-3 6-7 6z"/><path d="M12 14c0-3-2.5-5-6-5 0 3.5 2.5 5 6 5z"/>'),
   throw: wrap('<rect x="5" y="9" width="10" height="12" rx="2" transform="rotate(-12 10 15)"/><path d="M14 6l5-3M15.5 9.5l5-.5"/>'),
   sound: wrap('<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>'),
+  // Match chat's direct mute key (owner, 2026-10-26): the same speaker as `sound`, crossed out.
+  // Stroke-only, in the shared 24px line vocabulary — never an emoji.
+  mute: wrap('<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/>'),
+  unmute: wrap('<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>'),
   // A territory tile: the board's own hexagon, flat and quiet. Used by the Territory menu entry
   // next to the player's tile count (owner brief, 2026-10-20); the shape is the game's tile, not a
   // new illustration.

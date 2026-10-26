@@ -390,11 +390,20 @@ try {
   );
   await receiver.locator('#match-chat-toggle').click();
   check(
-    'own-turn composer and every quick phrase are disabled',
-    (await input(receiver).isDisabled()) &&
+    'on your own turn the composer and every quick phrase stay available',
+    !(await input(receiver).isDisabled()) &&
       (await receiver.locator('.match-chat-phrases button:enabled').count()) ===
-        0,
+        3,
   );
+  // The rule the owner deleted: a message sent on the player's OWN turn must be accepted.
+  now += 2000;
+  await input(receiver).fill('Sent on my own turn');
+  await input(receiver).press('Enter');
+  await sender
+    .locator('.match-chat-log')
+    .getByText('Sent on my own turn', { exact: true })
+    .waitFor();
+  check('a message sent on your own turn is delivered to the opponent', true);
   await receiver.keyboard.press('Escape');
   await input(sender).fill('Hello across the board 🌲');
   await input(sender).press('Enter');
@@ -410,9 +419,9 @@ try {
     .getByText('Hello across the board 🌲', { exact: true })
     .waitFor();
   check(
-    'both actual authenticated clients receive persisted message',
-    (await sender.locator('.match-chat-line').count()) === 1 &&
-      (await receiver.locator('.match-chat-line').count()) === 1,
+    'both actual authenticated clients receive persisted messages',
+    (await sender.locator('.match-chat-line').count()) === 2 &&
+      (await receiver.locator('.match-chat-line').count()) === 2,
   );
   check(
     'open chat clears unread',
@@ -455,8 +464,8 @@ try {
   check('quick phrase ID renders naturally for both clients', true);
   check(
     'consecutive messages share one visible speaker and timestamp',
-    (await receiver.locator('.match-chat-line').count()) === 2 &&
-      (await receiver.locator('.match-chat-meta:not([hidden])').count()) === 1,
+    (await receiver.locator('.match-chat-line').count()) === 3 &&
+      (await receiver.locator('.match-chat-meta:not([hidden])').count()) === 2,
   );
   const incomingMotion = await receiver.evaluate(() => {
     const probe = (
@@ -510,12 +519,40 @@ try {
     'untrusted text never creates an HTML element',
     (await receiver.locator('.match-chat-log img').count()) === 0,
   );
+  // The ··· drawer is gone: the mute is a direct key in the chat header.
+  check(
+    'the chat header has a direct mute key and no ··· drawer',
+    (await receiver.locator('.match-chat-mute').count()) === 1 &&
+      (await receiver.locator('.match-chat-controls').count()) === 0,
+  );
+  check(
+    'the mute key is a full 44px target',
+    await receiver.locator('.match-chat-mute').evaluate((e) => {
+      const r = e.getBoundingClientRect();
+      return r.width >= 44 && r.height >= 44;
+    }),
+  );
   await receiver
-    .getByRole('button', { name: 'Chat controls', exact: true })
+    .getByRole('button', { name: 'Mute chat', exact: true })
     .click();
+  // The mute is a round-trip: the key flips only once the server has recorded it (it must survive a
+  // reload and a second device, so the local state follows the response, not the tap). Poll for the
+  // settled state instead of asserting on the click's own frame.
   await receiver
-    .getByRole('button', { name: 'Mute previews', exact: true })
-    .click();
+    .locator('#match-chat-toggle[data-muted="true"]')
+    .waitFor({ state: 'attached', timeout: 5_000 });
+  check(
+    'muting marks the cockpit chat key and names the state',
+    (await receiver
+      .locator('#match-chat-toggle')
+      .getAttribute('data-muted')) === 'true' &&
+      (await receiver
+        .locator('#match-chat-toggle')
+        .getAttribute('aria-label')) === 'Chat muted for this match' &&
+      (await receiver
+        .locator('.match-chat-mute')
+        .getAttribute('aria-pressed')) === 'true',
+  );
   await receiver.keyboard.press('Escape');
   now += 2000;
   await input(sender).fill('Muted message');
@@ -532,6 +569,22 @@ try {
     .getByText('Muted message', { exact: true })
     .waitFor();
   check('muting preserves readable history', true);
+  await receiver
+    .getByRole('button', { name: 'Unmute chat', exact: true })
+    .click();
+  // Same round-trip as muting: the key only clears once the server has recorded the change.
+  await receiver
+    .locator('#match-chat-toggle[data-muted="false"]')
+    .waitFor({ state: 'attached', timeout: 5_000 });
+  check(
+    'the same key unmutes and clears the cockpit mark',
+    (await receiver
+      .locator('#match-chat-toggle')
+      .getAttribute('data-muted')) === 'false' &&
+      (await receiver
+        .locator('.match-chat-mute')
+        .getAttribute('aria-pressed')) === 'false',
+  );
   await receiver.locator('.match-chat-presence[data-presence="online"]').waitFor();
   check('chat reuses the real-time button status for its green opponent dot', true);
   opponentPresence = 'offline';
@@ -552,13 +605,36 @@ try {
     !(await receiver.locator('.match-chat-report').first().isVisible()));
   await receiver.locator('.match-chat-message-actions summary').first().click();
   await receiver.locator('.match-chat-report').first().click();
+  check(
+    'reporting asks for a reason and offers Report and mute / Cancel',
+    (await receiver
+      .locator('.match-chat-report-form select')
+      .isVisible()) &&
+      (await receiver
+        .locator('.match-chat-report-form')
+        .getByRole('button', { name: 'Report and mute', exact: true })
+        .isVisible()) &&
+      (await receiver
+        .locator('.match-chat-report-form')
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .isVisible()),
+  );
   await receiver
-    .getByRole('button', { name: 'Send report', exact: true })
+    .locator('.match-chat-report-form')
+    .getByRole('button', { name: 'Report and mute', exact: true })
     .click();
   await receiver
-    .getByText('Report sent for review.', { exact: true })
+    .getByText('Report sent for review. Chat muted.', { exact: true })
     .waitFor();
-  check('real report action succeeds', true);
+  check(
+    'reporting mutes in the same response, with no second round-trip',
+    (await receiver
+      .locator('.match-chat-mute')
+      .getAttribute('aria-pressed')) === 'true' &&
+      (await receiver
+        .locator('#match-chat-toggle')
+        .getAttribute('data-muted')) === 'true',
+  );
   await receiver
     .getByRole('button', { name: 'Block chat with opponent', exact: true })
     .click();
@@ -593,20 +669,26 @@ try {
       requestId: newId(),
     });
   }
+  // The turn is now the sender's. The composer must NOT close (owner, 2026-10-26), the draft must
+  // survive, and a message sent on this own turn must arrive.
   await sender.waitForFunction(
     () =>
-      (document.querySelector('.match-chat-form input') as HTMLInputElement)
-        .disabled,
+      (
+        document.querySelector('#duel-hud [data-duel-turn]')?.textContent ?? ''
+      ).includes('Your turn'),
   );
   check(
-    'turn boundary immediately disables composer and keeps unsent draft',
-    (await input(sender).inputValue()) === 'Keep this draft',
+    'a turn change keeps the composer available and keeps the unsent draft',
+    !(await input(sender).isDisabled()) &&
+      (await input(sender).inputValue()) === 'Keep this draft',
   );
-  await receiver.waitForFunction(
-    () =>
-      !(document.querySelector('.match-chat-form input') as HTMLInputElement)
-        .disabled,
-  );
+  now += 2000;
+  await input(sender).press('Enter');
+  await receiver
+    .locator('.match-chat-log')
+    .getByText('Keep this draft', { exact: true })
+    .waitFor();
+  check('a message sent on the newly started own turn is delivered', true);
   // Reconnect the real production channel protocol path and restore missed persisted data.
   for (const ws of [...wires.keys()])
     ws.close({ code: 1001, reason: 'local reconnect test' });
@@ -638,9 +720,6 @@ try {
   await receiver.keyboard.press('Escape');
   await sender.keyboard.press('Escape');
   const visual = receiver;
-  await visual
-    .locator('.match-chat-controls')
-    .evaluate((e) => ((e as HTMLDetailsElement).open = false));
   for (const [width, height] of [
     [320, 568],
     [360, 640],
@@ -939,10 +1018,11 @@ try {
   );
   await sender.screenshot({ path: `${out}/keyboard-resize.png` });
   // Real browser offline/online events, preserving an existing draft; no pretend delivery.
+  await input(sender).fill('Offline draft');
   await sender.context().setOffline(true);
   await sender.getByText('Offline · draft saved', { exact: true }).waitFor();
   check('offline status is quiet and retains the draft',
-    await input(sender).inputValue() === 'Keep this draft');
+    await input(sender).inputValue() === 'Offline draft');
   await sender.context().setOffline(false);
   await sender.getByText('Offline · draft saved', { exact: true }).waitFor({ state: 'hidden' });
   await sender.evaluate(() => {

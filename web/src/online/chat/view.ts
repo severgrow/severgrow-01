@@ -87,16 +87,20 @@ export const mountMatchChat = (o: {
   const close = button('', () => setOpen(false));
   close.innerHTML = ICONS.close!;
   close.setAttribute('aria-label', copy.close);
-  const toolsToggle = button('···', () => {
+  // A DIRECT mute key beside the close × (owner, 2026-10-26): the ··· drawer is gone, and this is
+  // the same 44px header key and stroke vocabulary as the other icons.
+  const mute = button('', () => {
     setPhrases(false);
-    controls.open = !controls.open;
+    void ctl.action('mute', { value: !ctl.state().muted });
   });
-  toolsToggle.setAttribute('aria-label', copy.tools);
-  toolsToggle.setAttribute('aria-expanded', 'false');
-  toolsToggle.setAttribute('aria-controls', 'match-chat-controls');
+  mute.className = 'match-chat-mute';
+  mute.setAttribute('aria-pressed', 'false');
+  mute.setAttribute('aria-label', copy.mute);
+  mute.title = copy.mute;
+  mute.innerHTML = ICONS.mute!;
   const headKeys = document.createElement('div');
   headKeys.className = 'match-chat-head-keys';
-  headKeys.append(toolsToggle, close);
+  headKeys.append(mute, close);
   const heading = document.createElement('div');
   const opponentName = document.createElement('span');
   opponentName.className = 'match-chat-opponent-name';
@@ -107,6 +111,10 @@ export const mountMatchChat = (o: {
   opponentName.append(presenceDot);
   heading.append(title, opponentName);
   head.append(heading, headKeys);
+  // The other player's mute, stated as a quiet fact below the header (owner, 2026-10-26).
+  const opponentNote = document.createElement('p');
+  opponentNote.className = 'match-chat-note';
+  opponentNote.hidden = true;
   const log = document.createElement('div');
   log.className = 'match-chat-log';
   log.tabIndex = 0;
@@ -143,6 +151,18 @@ export const mountMatchChat = (o: {
   const status = document.createElement('p');
   status.className = 'match-chat-status';
   status.setAttribute('role', 'status');
+  // Block stays reachable without a ··· menu (owner did not ask to lose it). It is a discrete,
+  // contextual word in the status row and appears only once the opponent has actually written —
+  // the point at which blocking a conversation can mean anything.
+  const block = button(copy.blockShort, () =>
+    void ctl.action('block', { value: !ctl.state().blockedByMe }),
+  );
+  block.className = 'match-chat-block';
+  block.hidden = true;
+  block.setAttribute('aria-pressed', 'false');
+  const statusRow = document.createElement('div');
+  statusRow.className = 'match-chat-status-row';
+  statusRow.append(status, block);
   const outgoing = document.createElement('div');
   outgoing.className = 'match-chat-outgoing';
   outgoing.hidden = true;
@@ -208,7 +228,6 @@ export const mountMatchChat = (o: {
     motion.visible(phrases, open);
     phraseToggle.setAttribute('aria-expanded', String(open));
     if (open) {
-      controls.open = false;
       const first = phrases.querySelector<HTMLButtonElement>(
         'button:not(:disabled)',
       );
@@ -224,29 +243,16 @@ export const mountMatchChat = (o: {
         void ctl.send({ text: null, phrase: id });
       }),
     );
-  foot.append(status, outgoing, form, phrases);
-  const controls = document.createElement('details');
-  controls.className = 'match-chat-controls';
-  controls.id = 'match-chat-controls';
-  controls.addEventListener('toggle', () =>
-    toolsToggle.setAttribute('aria-expanded', String(controls.open)),
-  );
-  const summary = document.createElement('summary');
-  summary.textContent = copy.tools;
-  const tools = document.createElement('div');
-  tools.className = 'match-chat-tools';
-  const mute = button(
-    copy.mute,
-    () => void ctl.action('mute', { value: !ctl.state().muted }),
-  );
-  const block = button(
-    copy.block,
-    () => void ctl.action('block', { value: !ctl.state().blockedByMe }),
-  );
-  tools.append(mute, block);
-  const reportForm = document.createElement('div');
-  reportForm.className = 'match-chat-tools';
+  foot.append(statusRow, outgoing, form, phrases);
+  // The report reason band, in the panel's own glass. It was one of the drawer's rows before; the
+  // drawer is gone, so it opens in place, above the transcript, with the two decisions the owner
+  // named: Report and mute / Cancel.
+  const reportForm = document.createElement('section');
+  reportForm.className = 'match-chat-report-form';
   reportForm.hidden = true;
+  reportForm.setAttribute('role', 'dialog');
+  reportForm.setAttribute('aria-modal', 'false');
+  reportForm.setAttribute('aria-label', copy.report);
   const reason = document.createElement('select');
   reason.setAttribute('aria-label', copy.report);
   for (const [id, label] of [
@@ -260,6 +266,14 @@ export const mountMatchChat = (o: {
     reason.append(option);
   }
   let reportTarget: string | null = null;
+  let reportTrigger: HTMLElement | null = null;
+  const closeReport = (returnFocus: boolean) => {
+    reportForm.hidden = true;
+    reportTarget = null;
+    const trigger = reportTrigger;
+    reportTrigger = null;
+    if (returnFocus) trigger?.focus({ preventScroll: true });
+  };
   const reportSend = button(copy.reportConfirm, () => {
     if (!reportTarget) return;
     reportSend.disabled = true;
@@ -271,20 +285,16 @@ export const mountMatchChat = (o: {
       .then((ok) => {
         reportSend.disabled = false;
         if (ok) {
-          reportForm.hidden = true;
-          reportTarget = null;
+          // The server mutes the reporter in the same transaction as the report, so `apply` has
+          // already turned the muted state on; this is the only round-trip.
+          closeReport(false);
           live.textContent = copy.reportDone;
         }
       });
   });
-  const reportCancel = button(copy.cancel, () => {
-    reportForm.hidden = true;
-    reportTarget = null;
-    toolsToggle.focus();
-  });
+  const reportCancel = button(copy.cancel, () => closeReport(true));
   reportForm.append(reason, reportSend, reportCancel);
-  controls.append(summary, tools, reportForm);
-  panel.append(head, log, newer, foot, controls, live);
+  panel.append(head, opponentNote, reportForm, log, newer, foot, live);
   root.append(panel);
   const cockpit = o.host.querySelector<HTMLElement>('#smart-panel');
   (cockpit ?? o.header).append(toggle, preview);
@@ -334,12 +344,19 @@ export const mountMatchChat = (o: {
     dot.hidden = s.unread === 0 || s.muted || s.blocked;
     if (!dot.hidden && s.unread > lastUnread && !s.open) motion.unread(dot);
     lastUnread = s.unread;
+    // THE COCKPIT KEY SAYS CHAT IS MUTED FOR THIS MATCH (owner, 2026-10-26): dimmed with a slash
+    // drawn through the glyph (not colour alone), and named as muted for a screen reader.
+    toggle.dataset.muted = String(s.muted);
     toggle.setAttribute(
       'aria-label',
-      s.unread && !s.muted && !s.blocked
-        ? `${copy.open} · ${copy.unread(s.unread)}`
-        : copy.open,
+      s.muted
+        ? copy.mutedToggle
+        : s.unread && !s.blocked
+          ? `${copy.open} · ${copy.unread(s.unread)}`
+          : copy.open,
     );
+    opponentNote.hidden = !s.opponentMuted || s.blocked;
+    opponentNote.textContent = s.opponentMuted ? copy.opponentMuted : '';
     if (s.preview && s.preview.id !== lastPreview) {
       lastPreview = s.preview.id;
       preview.textContent = text(s.preview).slice(0, 100);
@@ -424,9 +441,10 @@ export const mountMatchChat = (o: {
           });
           const report = button(copy.report, () => {
             actions.open = false;
+            setPhrases(false);
             reportTarget = m.id;
+            reportTrigger = report;
             reportForm.hidden = false;
-            controls.open = true;
             reason.focus();
           });
           report.className = 'match-chat-report';
@@ -498,9 +516,11 @@ export const mountMatchChat = (o: {
             ? copy.ended
             : !s.realtimeConnected || snap.connection !== 'online'
               ? copy.reconnecting
-              : s.canSend
-              ? ''
-              : copy.available;
+              : s.muted
+                ? copy.mutedToggle
+                : s.canSend
+                  ? ''
+                  : copy.available;
     status.hidden = status.textContent === '';
     outgoing.replaceChildren();
     outgoing.hidden = !s.outgoing && !s.error;
@@ -525,10 +545,20 @@ export const mountMatchChat = (o: {
       }
     } else if (s.error)
       outgoing.append(button(copy.reconnect, () => void ctl.refresh()));
-    mute.textContent = s.muted ? copy.unmute : copy.mute;
+    mute.innerHTML = s.muted ? ICONS.unmute! : ICONS.mute!;
     mute.setAttribute('aria-pressed', String(s.muted));
-    block.textContent = s.blockedByMe ? copy.unblock : copy.block;
+    mute.setAttribute('aria-label', s.muted ? copy.unmute : copy.mute);
+    mute.title = s.muted ? copy.unmute : copy.mute;
+    // Block is contextual: it only appears once the opponent has written (or while I have blocked).
+    const hasOpponentMessage = s.messages.some((m) => !m.mine);
+    block.hidden = !(hasOpponentMessage || s.blockedByMe);
+    block.textContent = s.blockedByMe ? copy.unblockShort : copy.blockShort;
     block.setAttribute('aria-pressed', String(s.blockedByMe));
+    block.setAttribute(
+      'aria-label',
+      s.blockedByMe ? copy.unblock : copy.block,
+    );
+    statusRow.hidden = status.hidden && block.hidden;
   }
   function setOpen(value: boolean) {
     setPhrases(false);
@@ -548,12 +578,19 @@ export const mountMatchChat = (o: {
         newer.hidden = true;
       });
     } else {
+      closeReport(false);
       input.blur();
       toggle.focus({ preventScroll: true });
     }
   }
   toggle.onclick = () => setOpen(!ctl.state().open);
   const keydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && !reportForm.hidden) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeReport(true);
+      return;
+    }
     if (e.key === 'Escape' && phrasesOpen) {
       e.preventDefault();
       e.stopPropagation();

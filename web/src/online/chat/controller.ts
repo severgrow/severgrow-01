@@ -25,6 +25,8 @@ export type ChatState = {
   realtimeConnected: boolean;
   canSend: boolean;
   muted: boolean;
+  /** The opponent muted chat for this match (the fact only — never why or when). */
+  opponentMuted: boolean;
   blocked: boolean;
   blockedByMe: boolean;
   hasOlder: boolean;
@@ -58,6 +60,7 @@ export const createChatController = (o: {
     realtimeConnected: true,
     canSend: false,
     muted: false,
+    opponentMuted: false,
     blocked: false,
     blockedByMe: false,
     hasOlder: false,
@@ -90,6 +93,11 @@ export const createChatController = (o: {
   const emit = () => {
     if (!stopped) o.onChange({ ...state, messages: [...state.messages] });
   };
+  /**
+   * Chat is open at any point in an active match (owner, 2026-10-26), so this mirror no longer
+   * looks at the actor, the turn epoch or the remaining clock. Only a real block, a match that is
+   * not active/over, a chat that has not loaded, or a lost connection close the composer.
+   */
   const syncTurn = () => {
     const s = o.snapshot();
     state.canSend =
@@ -97,10 +105,7 @@ export const createChatController = (o: {
       !state.blocked &&
       s.status === 'active' &&
       s.serverPhase !== 'GAME_OVER' &&
-      s.view.actor !== s.seat &&
-      s.turnStartRevision === turnRevision &&
-      s.connection === 'online' &&
-      (s.remainingMs === null || s.remainingMs > 0);
+      s.connection === 'online';
   };
   const apply = (r: ChatResult, older = false) => {
     if (stopped) return;
@@ -151,6 +156,7 @@ export const createChatController = (o: {
     if (initial || older) state.hasOlder = r.hasMore;
     if (!older && sorted.length > 160) state.hasOlder = true;
     state.muted = r.muted;
+    state.opponentMuted = r.opponentMuted;
     state.blocked = r.blocked;
     state.blockedByMe = r.blockedByMe;
     if (r.muted || r.blocked) state.preview = null;

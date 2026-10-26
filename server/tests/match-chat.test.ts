@@ -16,7 +16,7 @@ import { MemoryFeedbackStore } from '../src/feedback/feedback.js';
 import { DuelClient, type FetchLike } from '../src/client.js';
 import { RecordingBroadcaster } from '../src/broadcast.js';
 import { newId } from '../src/ids.js';
-import { contentFrom } from '../src/chat/rules.js';
+import { assertSendAllowed, contentFrom } from '../src/chat/rules.js';
 import type { ChatStore } from '../src/chat/types.js';
 import type { Storage } from '../src/storage/types.js';
 
@@ -226,20 +226,21 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
           ).messages[0]?.text,
         ).toBe('Hello');
     });
-    it('authoritatively rejects own-turn text and phrases, irrespective of UI or claimed sender', async () => {
+    it('accepts text and phrases on your own turn, and never trusts a claimed sender', async () => {
       const x = await setup();
-      await expect(x.send(x.actor.token)).rejects.toMatchObject({
-        code: 'STALE_REVISION',
-      });
-      await expect(
-        x.client.chatSend(
-          x.actor.token,
-          x.id,
-          { text: null, phrase: 'gg' },
-          newId(),
-          x.match.turnStartRevision,
-        ),
-      ).rejects.toMatchObject({ status: 409 });
+      // Owner direction (2026-10-26): chat is no longer restricted to the opponent's turn.
+      const own = await x.send(x.actor.token);
+      expect(own.sent?.text).toBe('Hello');
+      x.advance(1100);
+      const phrase = await x.client.chatSend(
+        x.actor.token,
+        x.id,
+        { text: null, phrase: 'gg' },
+        newId(),
+        x.match.turnStartRevision,
+      );
+      expect(phrase.sent?.phrase).toBe('gg');
+      x.advance(1100);
       const r = await x.app(
         new Request(`http://local/v1/matches/${x.id}/chat`, {
           method: 'POST',
@@ -252,10 +253,12 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
           }),
         }),
       );
-      expect(r.status).toBe(409);
-      expect(
-        (await x.client.chatHistory(x.actor.token, x.id)).messages,
-      ).toHaveLength(0);
+      expect(r.status).toBe(200);
+      // The bearer is the only identity: the claimed sender is ignored, not refused.
+      const mine = await x.client.chatHistory(x.actor.token, x.id);
+      const theirs = await x.client.chatHistory(x.waiting.token, x.id);
+      expect(mine.messages.find((m) => m.text === 'spoof')?.mine).toBe(true);
+      expect(theirs.messages.find((m) => m.text === 'spoof')?.mine).toBe(false);
     });
     it('retries exactly once after an ambiguous response, even after the turn changes', async () => {
       const x = await setup(),
@@ -268,19 +271,21 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       await expect(
         x.send(x.waiting.token, 'Changed payload', requestId),
       ).rejects.toMatchObject({ code: 'REQUEST_ID_CONFLICT' });
-      await expect(x.send()).rejects.toMatchObject({ code: 'STALE_REVISION' });
+      // The turn is now theirs, and chat still works: the old turn gate is gone.
+      x.advance(1100);
+      expect((await x.send()).sent?.text).toBe('Hello');
     });
-    it('rejects stale turn epochs and safely serializes rapid duplicate sends', async () => {
+    it('accepts a queued stale turn epoch and safely serializes rapid duplicate sends', async () => {
       const x = await setup(),
         requestId = newId();
-      await expect(
-        x.send(
-          x.waiting.token,
-          'stale',
-          newId(),
-          x.match.turnStartRevision + 1,
-        ),
-      ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+      const stale = await x.send(
+        x.waiting.token,
+        'stale',
+        newId(),
+        x.match.turnStartRevision + 1,
+      );
+      expect(stale.sent?.text).toBe('stale');
+      x.advance(1100);
       const rs = await Promise.all(
         Array.from({ length: 6 }, () =>
           x.send(x.waiting.token, 'One message', requestId),
@@ -289,7 +294,7 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       expect(new Set(rs.map((r) => r.sent?.id)).size).toBe(1);
       expect(
         (await x.client.chatHistory(x.waiting.token, x.id)).messages,
-      ).toHaveLength(1);
+      ).toHaveLength(2);
     });
     it('keeps offline async history and makes finished chats read-only without changing game state', async () => {
       const x = await setup();
@@ -319,15 +324,16 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       expect(
         (await returning.chatHistory(x.actor.token, x.id)).messages[0]?.text,
       ).toBe('See you when you return');
-      await expect(
-        returning.chatSend(
-          x.actor.token,
-          x.id,
-          { text: 'My turn', phrase: null },
-          newId(),
-          before.turnStartRevision,
-        ),
-      ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+      // A 12-hour gap, a due 24-hour clock and the sender's own turn do not stop a message.
+      x.advance(1100);
+      await returning.chatSend(
+        x.actor.token,
+        x.id,
+        { text: 'My turn', phrase: null },
+        newId(),
+        before.turnStartRevision,
+      );
+      x.advance(1100);
       await returning.chatSend(
         x.waiting.token,
         x.id,
@@ -337,7 +343,7 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       );
       expect(
         (await returning.chatHistory(x.actor.token, x.id)).messages,
-      ).toHaveLength(2);
+      ).toHaveLength(3);
       expect(await x.storage.matchById(x.id)).toEqual(before);
     });
     it('works in an actual accepted live session, follows turn changes, and retains history after live timeout', async () => {
@@ -361,13 +367,15 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       expect(started.liveManaged).toBe(true);
       expect(started.turnTimeoutMs).toBe(60000);
       await x.send(x.waiting.token, 'Live hello');
-      await expect(x.send(x.actor.token)).rejects.toMatchObject({
-        code: 'STALE_REVISION',
-      });
+      // Chat on your own real-time turn is allowed (owner, 2026-10-26).
+      x.advance(1100);
+      await x.send(x.actor.token, 'Own turn hello');
       expect(await x.storage.matchById(x.id)).toEqual(started);
       await x.nextTurn();
       const next = (await x.storage.matchById(x.id))!;
-      await expect(x.send()).rejects.toMatchObject({ code: 'STALE_REVISION' });
+      x.advance(1100);
+      await x.send(x.waiting.token, 'Now my turn');
+      x.advance(1100);
       await x.client.chatSend(
         x.actor.token,
         x.id,
@@ -375,37 +383,43 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
         newId(),
         next.turnStartRevision,
       );
+      // Past the live clock but not yet advanced: chat must not fail or spend the grace.
       x.advance(60001);
       await runtime.service.presence(pa, 'in_live', x.id);
       await runtime.service.presence(pb, 'in_live', x.id);
       const overdue = await x.storage.matchById(x.id);
-      await expect(
-        x.client.chatSend(
-          x.actor.token,
-          x.id,
-          { text: 'Too late', phrase: null },
-          newId(),
-          next.turnStartRevision,
-        ),
-      ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+      await x.client.chatSend(
+        x.actor.token,
+        x.id,
+        { text: 'Too late', phrase: null },
+        newId(),
+        next.turnStartRevision,
+      );
       expect(await x.storage.matchById(x.id)).toEqual(overdue);
       await runtime.service.tickMatch(x.id);
       const history = await x.client.chatHistory(x.waiting.token, x.id);
       expect(history.canSend).toBe(false);
       expect(history.messages.map((m) => m.text)).toEqual([
         'Live hello',
+        'Own turn hello',
+        'Now my turn',
         'Now you are thinking',
+        'Too late',
       ]);
       await expect(x.send()).rejects.toMatchObject({
         code: 'MATCH_NOT_ACTIVE',
       });
     });
-    it('refuses due clocks without spending grace, changing deadlines or simulating turns', async () => {
+    it('accepts a due clock without spending grace, changing deadlines or simulating turns', async () => {
       const x = await setup();
       x.advance(x.match.turnTimeoutMs + 1);
       const before = await x.storage.matchById(x.id);
-      await expect(x.send()).rejects.toMatchObject({ code: 'STALE_REVISION' });
+      expect((await x.send()).sent?.text).toBe('Hello');
+      // Only the gameplay authority may spend grace or finish a match; chat changes nothing.
       expect(await x.storage.matchById(x.id)).toEqual(before);
+      expect((await x.client.chatHistory(x.waiting.token, x.id)).canSend).toBe(
+        true,
+      );
     });
     it('rate-limits bursts across request IDs, permits a later send, and stores stable quick phrase identifiers', async () => {
       const x = await setup();
@@ -429,6 +443,11 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       expect((await x.client.chatHistory(x.actor.token, x.id)).muted).toBe(
         true,
       );
+      // The OTHER player can tell chat is off for this match, and only that.
+      const seenByOpponent = await x.client.chatHistory(x.waiting.token, x.id);
+      expect(seenByOpponent.muted).toBe(false);
+      expect(seenByOpponent.opponentMuted).toBe(true);
+      expect(JSON.stringify(seenByOpponent)).not.toContain('preferences');
       await x.client.chatAction(x.actor.token, x.id, 'block', { value: true });
       x.advance(2000);
       await expect(x.send()).rejects.toMatchObject({ status: 403 });
@@ -463,6 +482,26 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       expect(reports[0]?.context).toMatchObject({ text: 'Hello', messageId });
       await x.client.chatAction(x.actor.token, x.id, 'block', { value: false });
       expect((await x.send()).sent?.text).toBe('Hello');
+    });
+    it('mutes the reporter as part of the report, server-side, for both players', async () => {
+      const x = await setup();
+      const r = await x.send(x.waiting.token);
+      const reported = await x.client.chatAction(x.actor.token, x.id, 'report', {
+        messageId: r.sent!.id,
+        reason: 'spam',
+      });
+      // The action response already carries the new mute: no second round-trip.
+      expect(reported.muted).toBe(true);
+      expect((await x.client.chatHistory(x.actor.token, x.id)).muted).toBe(true);
+      // Persisted, not a client flag: a fresh request (a reload / second device) still sees it.
+      expect((await x.client.chatHistory(x.actor.token, x.id)).muted).toBe(true);
+      const theirs = await x.client.chatHistory(x.waiting.token, x.id);
+      expect(theirs.muted).toBe(false);
+      expect(theirs.opponentMuted).toBe(true);
+      await x.client.chatAction(x.actor.token, x.id, 'mute', { value: false });
+      expect(
+        (await x.client.chatHistory(x.waiting.token, x.id)).opponentMuted,
+      ).toBe(false);
     });
     it('cannot read, report or send through a different match', async () => {
       const x = await setup();
@@ -534,6 +573,38 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
     });
   });
 
+// The owner's new chat rule (2026-10-26): messages may be sent at any point in an active match.
+// Turn identity, a stale turn epoch and a due clock are NOT refusals any more.
+describe('chat send policy', () => {
+  const ctx = (
+    over: Partial<Parameters<typeof assertSendAllowed>[0]> = {},
+  ): Parameters<typeof assertSendAllowed>[0] => ({
+    status: 'active',
+    phase: 'ACT',
+    actor: 0,
+    seat: 0,
+    turnRevision: 7,
+    deadline: Date.now() + 60_000,
+    blocked: false,
+    ...over,
+  });
+  it('accepts your own turn, the opponent turn, a stale epoch and a due clock', () => {
+    expect(() => assertSendAllowed(ctx({ actor: 0, seat: 0 }), 0, Date.now())).not.toThrow();
+    expect(() =>
+      assertSendAllowed(
+        ctx({ actor: 1, seat: 0, deadline: Date.now() - 5_000 }),
+        999,
+        Date.now(),
+      ),
+    ).not.toThrow();
+  });
+  it('still refuses blocked chat, a non-active match and GAME_OVER', () => {
+    expect(() => assertSendAllowed(ctx({ blocked: true }), 0, 0)).toThrowError(/blocked/);
+    expect(() => assertSendAllowed(ctx({ status: 'finished' }), 0, 0)).toThrowError(/read-only/);
+    expect(() => assertSendAllowed(ctx({ phase: 'GAME_OVER' }), 0, 0)).toThrowError(/read-only/);
+  });
+});
+
 describe('chat input boundary', () => {
   it('accepts plain untrusted text and Unicode, rejects controls, empty content and oversized messages', () => {
     expect(contentFrom({ text: ' <img onerror=alert(1)> ' })).toEqual({
@@ -550,7 +621,7 @@ describe('chat input boundary', () => {
 
 // Actual privilege/RLS checks, rollback and a turn-boundary row-lock race, not a fake SQL adapter.
 describe.skipIf(!localUrl)(
-  'Postgres chat security and turn serialization',
+  'Postgres chat security and row serialization',
   () => {
     it('denies all direct client-role reads/writes, even with granted table permissions (RLS)', async () => {
       const sample = (await pool!.query('select * from match_messages limit 1'))
@@ -670,7 +741,7 @@ describe.skipIf(!localUrl)(
         ).rows,
       ).toHaveLength(1);
     });
-    it('reads the new turn after waiting for the authoritative game row lock', async () => {
+    it('sends only after waiting for the authoritative game row lock, even if the turn moved', async () => {
       const storage = postgresStorage(pool as unknown as PgPool),
         service = new MatchService({
           storage,
@@ -715,7 +786,8 @@ describe.skipIf(!localUrl)(
           [match.id, JSON.stringify(1 - match.state.actor)],
         );
         await c.query('commit');
-        await expect(result).rejects.toMatchObject({ code: 'STALE_REVISION' });
+        // The insert is still serialized behind the game row; the moved turn no longer refuses it.
+        expect((await result).sent?.text).toBe('Boundary');
         expect(
           (
             await pool!.query(
@@ -723,7 +795,7 @@ describe.skipIf(!localUrl)(
               [match.id],
             )
           ).rows,
-        ).toHaveLength(0);
+        ).toHaveLength(1);
       } finally {
         await c.query('rollback');
         c.release();

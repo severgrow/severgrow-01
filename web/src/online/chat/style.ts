@@ -16,6 +16,10 @@ export const CHAT_CSS = `
 #smart-panel > .match-chat-preview {position:absolute;top:auto;left:auto;right:0;bottom:calc(100% + var(--control-size,44px) + var(--control-gap,4px) + 8px);color:#e8ddc5;box-sizing:border-box;}
 #match-chat-toggle[aria-expanded='true']{visibility:hidden;pointer-events:none;}
 #match-chat-toggle svg {width:19px;height:19px;stroke:currentColor;stroke-width:1.5;fill:none;}
+/* MUTED IN THE COCKPIT (owner, 2026-10-26): the key is dimmed AND carries a slash through the
+   speech glyph, so the state is a mark, not colour alone. Its accessible name says it too. */
+#match-chat-toggle[data-muted='true'] svg {opacity:.45;}
+#match-chat-toggle[data-muted='true']::after {content:'';position:absolute;left:calc(50% - 11px);top:calc(50% - 1px);width:22px;height:2px;border-radius:2px;background:currentColor;transform:rotate(-45deg);box-shadow:0 0 0 2px #111312;pointer-events:none;}
 .match-chat-dot {position:absolute;right:5px;top:6px;width:6px;height:6px;border-radius:50%;background:#e8ddc5;box-shadow:0 0 0 3px rgba(8,10,10,.5);}
 .match-chat-panel {position:fixed;z-index:65;top:var(--chat-top,56px);left:max(8px,env(safe-area-inset-left));width:min(480px,calc(100vw - 16px - env(safe-area-inset-right) - env(safe-area-inset-left)));height:min(680px,var(--chat-height,calc(100dvh - 72px)));box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;background:var(--dark-glass,rgba(8,10,10,.42));-webkit-backdrop-filter:var(--chat-glass-blur,blur(7.4px) saturate(1.05));backdrop-filter:var(--chat-glass-blur,blur(7.4px) saturate(1.05));border:0;border-radius:12px;box-shadow:0 12px 36px #0004;transform-origin:bottom right;}
 .match-chat[data-desktop-docked='true'] .match-chat-panel{left:var(--chat-left);width:var(--chat-width);height:var(--chat-height);}
@@ -56,9 +60,14 @@ export const CHAT_CSS = `
 
 .match-chat-empty {color:#e8ddc58c;font-size:17px;line-height:1.6;padding:12px 0;}
 .match-chat-foot {position:relative;flex:none;border-top:1px solid #e8ddc51a;padding:6px 10px max(10px,env(safe-area-inset-bottom));background:#080a0a45;}
-.match-chat-status {font-size:11px;line-height:1.5;letter-spacing:.035em;color:#e8ddc5b3;margin:0 2px 7px;}
+.match-chat-status {font-size:11px;line-height:1.5;letter-spacing:.035em;color:#e8ddc5b3;}
 .match-chat-form {display:flex;gap:6px;}
-.match-chat input {min-width:0;flex:1;border:1px solid #e8ddc529;border-radius:7px;background:#080a0a40;color:#e8ddc5;font-family:var(--font);font-size:16px;min-height:44px;box-sizing:border-box;padding:8px 10px;}
+/* 17px, NOT 16px (owner, 2026-10-26 on an iPhone 17: the chat "zooms in awkwardly when entering
+   text box" and the zoom hid the close key). iOS zooms the page when a focused field computes under
+   16px; 16px sits exactly ON that threshold, and the shipped composer was 16px — so the margin here
+   is deliberate, not a typographic whim. One extra pixel is invisible and removes the boundary case
+   for every iPhone. The app-wide floor lives in src/style.css. */
+.match-chat input {min-width:0;flex:1;border:1px solid #e8ddc529;border-radius:7px;background:#080a0a40;color:#e8ddc5;font-family:var(--font);font-size:17px;min-height:44px;box-sizing:border-box;padding:8px 10px;}
 .match-chat input:disabled {opacity:.45;}
 .match-chat input::placeholder {color:#e8ddc580;}
 .match-chat-send {font-size:13px!important;border:0!important;background:transparent!important;position:relative;isolation:isolate;}
@@ -69,12 +78,18 @@ export const CHAT_CSS = `
 .match-chat-phrases {position:absolute;right:12px;bottom:calc(100% + 8px);display:flex;flex-direction:column;gap:2px;width:min(240px,calc(100% - 24px));padding:6px;box-sizing:border-box;max-height:max(56px,calc(var(--chat-height,500px) - 164px));overflow:auto;overscroll-behavior:contain;background:rgba(12,15,14,.94);backdrop-filter:var(--dark-glass-blur);border:1px solid #e8ddc52b;border-radius:9px;box-shadow:0 8px 24px #0005;z-index:2;}
 
 .match-chat-phrases button {font-size:15px;text-align:left;border:0;padding:6px 12px;}
-.match-chat-controls {border-top:1px solid #e8ddc514;padding:0 10px;flex:none;max-height:40%;overflow:auto;}
-.match-chat-controls:not([open]){display:none;}
-.match-chat-controls summary {display:none!important;cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:10px;color:#e8ddc58c;}
-.match-chat-tools {display:flex;gap:5px;flex-wrap:wrap;padding-block:8px;}
-.match-chat-tools button,.match-chat-tools select {font-size:11px;flex:1;}
-.match-chat-tools select {min-width:90px;color:#e8ddc5;background:#17181a;border:1px solid #e8ddc529;border-radius:7px;min-height:44px;}
+/* The report reason window (owner, 2026-10-26): the ··· drawer that used to hold it is gone, so it
+   opens as a band directly under the chat header. A full-width reason, then the two decisions. */
+.match-chat-report-form {display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 10px;flex:none;border-bottom:1px solid #e8ddc51a;background:#080a0a5c;}
+.match-chat-report-form select {grid-column:1/-1;min-width:0;color:#e8ddc5;background:#17181a;border:1px solid #e8ddc529;border-radius:7px;min-height:44px;font-size:16px;}
+.match-chat-report-form button {font-size:11px;padding-inline:6px;white-space:nowrap;}
+/* The opponent's mute: one quiet factual line, never a reason or a time. */
+.match-chat-note {flex:none;margin:0;padding:6px 18px;border-bottom:1px solid #e8ddc514;color:#b7a98a;font-size:11px;letter-spacing:.03em;}
+.match-chat-status-row {display:flex;align-items:center;gap:8px;margin:0 0 7px;}
+.match-chat-status {flex:1;margin:0;}
+/* Block stays reachable without a menu: a quiet word beside the status, only once the opponent has
+   written something. It keeps the shared 44px touch target. */
+.match-chat-block {flex:0 0 auto;font-size:10px!important;color:#e8ddc5a6;padding:6px 10px!important;}
 .match-chat-preview {position:fixed;z-index:30;left:calc(54px + env(safe-area-inset-left));top:52px;max-width:min(240px,calc(100vw - 24px));padding:8px 11px;background:var(--dark-glass);backdrop-filter:var(--dark-glass-blur);border:1px solid #e8ddc51a;border-radius:8px;font:12px/1.4 var(--font);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none;}
 .match-chat-newer {position:absolute;top:55px;left:50%;transform:translateX(-50%);background:#171b18!important;font-size:10px!important;box-shadow:0 3px 15px #0004;}
 .match-chat-outgoing {font-size:11px;line-height:1.5;padding:6px 0;color:#e8ddc5a6;}
@@ -82,7 +97,7 @@ export const CHAT_CSS = `
 body.paused .match-chat,body.result .match-chat,body.paused #match-chat-toggle {visibility:hidden;}
 
 
-@media(max-height:450px) {.match-chat-panel{width:min(480px,calc(100vw - 16px));height:var(--chat-height,calc(100dvh - 60px));}.match-chat-phrases{margin-top:2px}.match-chat-controls summary{min-height:44px}.match-chat-line{padding:12px 0}.match-chat-foot{padding:5px 8px;}}
+@media(max-height:450px) {.match-chat-panel{width:min(480px,calc(100vw - 16px));height:var(--chat-height,calc(100dvh - 60px));}.match-chat-phrases{margin-top:2px}.match-chat-line{padding:12px 0}.match-chat-foot{padding:5px 8px;}}
 @media(max-width:600px) {.match-chat-panel{width:calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right));height:var(--chat-height,calc(100dvh - 64px));}.match-chat-head{padding-left:18px;}.match-chat-text{font-size:14px;}.match-chat-log{padding-inline:18px;}}
 @media(prefers-reduced-motion:reduce) {.match-chat button:active{transform:none}}
 .reduce-motion .match-chat button:active{transform:none;}
