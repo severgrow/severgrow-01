@@ -132,6 +132,21 @@ export type ReplayInput = {
   result?: { winner: Player | null; scores: [number, number]; reason?: string } | null;
 };
 
+/**
+ * THE TURNING POINT (owner brief, 2026-10-26): the play that cut off the most tiles, in the same
+ * words `logic/session.ts` uses for the game review (`biggestCut`). It is DATA computed from the
+ * match's own steps, never a heuristic: `tiles` is the sum of the sever steps' keys in that play,
+ * `frame` is the first cut beat of that play (the moment the eye should land on), and `seat` is the
+ * seat that made the cut in SCREEN seats. Null when the match never cut anything, or when there is
+ * only one beat to watch.
+ */
+export type ReplayTurningPoint = {
+  frame: number;
+  tiles: number;
+  seat: Player;
+  action: number;
+};
+
 export type ReplayModel = {
   frames: ReplayFrame[];
   /** The whole match's playback length, including the final hold, in ms. */
@@ -146,6 +161,11 @@ export type ReplayModel = {
   names: readonly [string, string];
   me: Player;
   result: ReplayResult | null;
+  /**
+   * The match's biggest cut (the game review's `biggestCut`, computed from the same steps), or
+   * null when nothing was cut or there is only one beat. The replay's own story.
+   */
+  turningPoint: ReplayTurningPoint | null;
   /** How long the final board rests before "Replay again". */
   endHold: number;
   /**
@@ -346,6 +366,8 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
   let state = opening;
   let turn = firstTurn;
   let actor = firstTurn;
+  /** The tiles each ACTION cut off (the same count `Session.biggestCut` keeps). */
+  const cutByAction = new Map<number, number>();
 
   input.actions.forEach((action, index) => {
     const before = state;
@@ -355,6 +377,7 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
     steps.forEach((step, stepIndex) => {
       const weight = weightOf(step);
       if (weight <= 0) return; // Draw / Discard / the per-action sync: no picture, no time
+      if (step.k === 'sever') cutByAction.set(index, (cutByAction.get(index) ?? 0) + step.keys.length);
       actor = actorOf(step, actor);
       if (step.k === 'turn') turn = step.player;
       board = applyStep(board, me === 0 ? step : mapStepToScreen(step, me));
@@ -444,6 +467,23 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
       }
     : null;
 
+  // THE TURNING POINT: the biggest cut in the match, at the beat where it lands. Ties go to the
+  // earlier play (Map iteration follows action order), exactly as `Session.biggestCut` keeps the
+  // first. A match with no cut, or a single-beat replay, has no turning point to jump to.
+  let turningPoint: ReplayTurningPoint | null = null;
+  if (frames.length > 1) {
+    let bestAction = -1;
+    let bestCut = 0;
+    for (const [action, tiles] of cutByAction) {
+      if (tiles > bestCut) {
+        bestCut = tiles;
+        bestAction = action;
+      }
+    }
+    const cutFrame = bestAction < 0 ? undefined : frames.find((frame) => frame.action === bestAction && frame.kind === 'sever');
+    if (cutFrame) turningPoint = { frame: cutFrame.index, tiles: bestCut, seat: cutFrame.seat, action: bestAction };
+  }
+
   const startScores = scores(opening);
   return {
     frames,
@@ -459,6 +499,7 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
     names: screenNames,
     me,
     result,
+    turningPoint,
     endHold: REPLAY_PACING.endHold,
     input,
   };

@@ -15,9 +15,10 @@ import type { MaterialLook } from '../logic/materials.js';
 import type { ThemeId, ThemeStyle } from '../logic/themes.js';
 import type { Board } from '../logic/anim.js';
 import type { Player } from '../../../src/engine/index.js';
-import type { ReplayModel } from './timeline.js';
+import type { ReplayModel, ReplayTurningPoint } from './timeline.js';
 import { boardAtIndex, frameAtTime, seekTo } from './seek.js';
 import { REPLAY_CSS } from './replay-css.js';
+import { posterFor, shareReplayPoster } from './poster.js';
 
 export type ReplayDeps = {
   theme: () => { style: ThemeStyle; id: ThemeId };
@@ -53,6 +54,7 @@ export type ReplayHandle = {
   plan: () => {
     total: number;
     names: readonly [string, string];
+    turningPoint: ReplayTurningPoint | null;
     frames: {
       index: number;
       at: number;
@@ -125,6 +127,8 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   svg.setAttribute('aria-hidden', 'true');
   boardBox.append(svg);
 
+  const scrubWrap = document.createElement('div');
+  scrubWrap.className = 'rp-scrub-wrap';
   const scrub = document.createElement('div');
   scrub.className = 'rp-scrub';
   scrub.dataset.rp = 'scrub';
@@ -143,6 +147,15 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   const knob = document.createElement('div');
   knob.className = 'rp-knob';
   scrub.append(track, knob);
+  // THE TURNING POINT: one small notch where the biggest cut landed (a sibling of the slider, so
+  // it is its own button and does not fight the drag). Its tick is drawn at the exact percent; the
+  // pseudo-element widens the touch target to 44px without moving the ink.
+  const turnMark = document.createElement('button');
+  turnMark.type = 'button';
+  turnMark.className = 'rp-notch';
+  turnMark.dataset.rp = 'turn';
+  turnMark.hidden = true;
+  scrubWrap.append(scrub, turnMark);
 
   const foot = document.createElement('footer');
   foot.className = 'rp-foot';
@@ -161,12 +174,22 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   closeBtn.className = 'rp-btn';
   closeBtn.dataset.rp = 'close';
   closeBtn.textContent = REPLAY.close;
+  // ONE quiet icon beside the mark: the finished poster, shared or saved. It is the same 44px
+  // target and the same ink as everything else, and it never moves the footer's existing rows.
+  const shareBtn = document.createElement('button');
+  shareBtn.type = 'button';
+  shareBtn.className = 'rp-icon';
+  shareBtn.dataset.rp = 'share';
+  shareBtn.setAttribute('aria-label', REPLAY.share);
+  shareBtn.title = REPLAY.share;
+  shareBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="m8 7 4-4 4 4"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>';
   const brand = createHudBrandMark('futasaku-replay-white');
   brand.classList.add('rp-brand');
-  actions.append(again, closeBtn);
-  foot.append(meta, actions, brand);
+  actions.append(again, closeBtn, shareBtn, brand);
+  foot.append(meta, actions);
 
-  stage.append(head, turn, boardBox, scrub, foot);
+  stage.append(head, turn, boardBox, scrubWrap, foot);
   root.append(stage);
   document.body.append(root);
 
@@ -186,6 +209,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   let turnShown = -1;
   /** Signature of the board actually painted (a rebuild from the log differs from the frame list). */
   let painted = '';
+  let sharing = false;
 
   const reduce = (): boolean => deps.reduceMotion();
 
@@ -210,6 +234,27 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
       node.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration, easing: 'ease-out', fill: 'forwards' });
     }
     window.setTimeout(clearGhosts, duration + 30);
+  };
+
+  /** Place the turning-point notch, or take it away when this match has no cut to show. */
+  const syncTurnMark = (): void => {
+    if (!model?.turningPoint || model.totalMs <= 0) {
+      turnMark.hidden = true;
+      turnMark.removeAttribute('aria-label');
+      turnMark.removeAttribute('title');
+      return;
+    }
+    const frame = model.frames[model.turningPoint.frame];
+    if (!frame) {
+      turnMark.hidden = true;
+      return;
+    }
+    turnMark.hidden = false;
+    turnMark.style.left = `${((frame.at / model.totalMs) * 100).toFixed(3)}%`;
+    turnMark.dataset.at = index === model.turningPoint.frame && !playing && !ended ? '1' : '0';
+    const label = REPLAY.turningPointLabel(model.turningPoint.tiles);
+    turnMark.setAttribute('aria-label', label);
+    turnMark.title = label;
   };
 
   const paintMeta = (): void => {
@@ -301,6 +346,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     scoreOpp.textContent = String(frame.scores[1]);
     paintTurn(i);
     paintMeta();
+    syncTurnMark();
   };
 
   const stop = (): void => {
@@ -312,6 +358,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     if (!model) return;
     playing = on;
     root.dataset.paused = on ? '0' : '1';
+    syncTurnMark();
     if (!on) {
       stop();
       return;
@@ -441,6 +488,39 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     close();
   });
 
+  // THE TURNING POINT: seek to the biggest cut and pause there, so the player is looking at the
+  // moment it turned. A second press carries on from that beat (the replay's own clock).
+  turnMark.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (!model?.turningPoint) return;
+    const frame = model.frames[model.turningPoint.frame];
+    if (!frame) return;
+    if (index === model.turningPoint.frame && !playing && !ended) {
+      setPlaying(true);
+      return;
+    }
+    setPlaying(false);
+    seek(model.totalMs > 0 ? frame.at / model.totalMs : 0, false);
+    turnMark.focus({ preventScroll: true });
+  });
+
+  // THE SHARE: the finished poster (names, score, final board, mark) through the phone's own share
+  // sheet when it takes a file, otherwise a plain download. The poster is built from the replay's
+  // data alone, so nothing hidden can ride along.
+  shareBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (!model || sharing) return;
+    sharing = true;
+    shareBtn.setAttribute('aria-busy', 'true');
+    const data = posterFor(model);
+    void shareReplayPoster(data)
+      .catch(() => undefined)
+      .finally(() => {
+        sharing = false;
+        shareBtn.removeAttribute('aria-busy');
+      });
+  });
+
   // Tap anywhere to pause, tap again to carry on. A tap on a control is not a pause.
   stage.addEventListener('pointerdown', (event) => {
     const el = event.target as Element | null;
@@ -463,10 +543,17 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
       close();
       return;
     }
-    // The surface is `aria-modal`: Tab cycles its three controls (the bar, "Replay again" when it
-    // exists, and Close) instead of wandering into the game behind it.
+    // The surface is `aria-modal`: Tab cycles its own controls (the bar, the turning-point notch
+    // when it exists, "Replay again" when it exists, Close and Share) instead of wandering into the
+    // game behind it.
     if (key === 'Tab') {
-      const order: HTMLElement[] = [scrub, ...(again.hidden ? [] : [again]), closeBtn];
+      const order: HTMLElement[] = [
+        scrub,
+        ...(turnMark.hidden ? [] : [turnMark]),
+        ...(again.hidden ? [] : [again]),
+        closeBtn,
+        shareBtn,
+      ];
       const at = order.indexOf(document.activeElement as HTMLElement);
       const dir = event.shiftKey ? -1 : 1;
       const next = at < 0 ? order[event.shiftKey ? order.length - 1 : 0]! : order[(at + dir + order.length) % order.length]!;
@@ -537,6 +624,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     painted = boardSignature(next.from.board);
     buildTicks();
     paintMeta();
+    syncTurnMark();
     root.hidden = false;
     // One beat for the surface to arrive, then the match plays.
     window.setTimeout(() => {
@@ -585,6 +673,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
         ? {
             total: Math.round(model.totalMs),
             names: model.names,
+            turningPoint: model.turningPoint,
             frames: model.frames.map((frame) => ({
               index: frame.index,
               at: Math.round(frame.at),

@@ -605,6 +605,11 @@
           </div>
         </details>
       </div>
+      <!-- The sheet scrolls when the Account group is on it (a guest sees the Google key and the
+           privacy link too). This sticky fade is the honest bottom edge: a row cut by the screen
+           disappears into it instead of looking like the last row. main.ts turns it on only while
+           there is more below. -->
+      <div class="sheet-fade" aria-hidden="true"></div>
     </section>
 
     <!-- ===== Tutorial (Settings → Tutorial) ===== -->

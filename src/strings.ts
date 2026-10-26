@@ -399,6 +399,16 @@ export const REPLAY = Object.freeze({
   close: 'Close',
   /** What a screen reader hears for the scrub bar. */
   scrub: 'Replay position',
+  /** The quiet control beside the footer mark: save or share the finished poster. */
+  share: 'Share replay',
+  /** The notch on the scrub bar at the play that turned the match. */
+  turningPoint: 'Turning point',
+  /** The notch's own name, with the honest count of tiles the cut took. */
+  turningPointLabel: (tiles: number) => `Turning point · ${tiles} tile${tiles === 1 ? '' : 's'}`,
+  /** Said only when this match never cut anything: there is no notch to press. */
+  noTurningPoint: 'No turning point in this match',
+  /** The wordmark on the poster (the only brand word the image carries). */
+  mark: 'FUTASAKU',
   /** The online match list's word for a finished duel's row. */
   pastRow: 'Watch replay',
   /** Shown when a stored replay cannot be loaded (an old match, a lost connection). */
@@ -1011,7 +1021,7 @@ export const FEEDBACK = Object.freeze({
   empty: 'Please write a few words first.',
   guideLink: 'Tester guide',
   close: 'Close',
-  betaVersion: '0.6',
+  betaVersion: '0.7',
   /**
    * The beta line on the main menu, between the wordmark and the buttons. Owner direction
    * (2026-10-23): the stamp reads "last update" and sits AFTER the sentence "beta version of an

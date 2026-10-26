@@ -51,10 +51,10 @@ describe('the beta line is a quiet version line between the wordmark and the ent
 
   it('carries the version and the link words from the one strings module', () => {
     // PINNED to the shipped value, not merely the shape: the menu line is what a player reads, so a
-    // silent drift (0.6 -> 0.7 half-deployed) must fail here rather than ship. Bump this in the same
+    // silent drift (0.7 -> 0.8 half-deployed) must fail here rather than ship. Bump this in the same
     // commit that bumps FEEDBACK.betaVersion.
-    expect(FEEDBACK.betaVersion).toBe('0.6');
-    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('(0.6)');
+    expect(FEEDBACK.betaVersion).toBe('0.7');
+    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('(0.7)');
     expect(FEEDBACK.betaLink).toBe('let us know here.');
     expect(lineSource).toContain('FEEDBACK.betaLink');
     // No second copy of the sentence in the markup or the modules.
@@ -69,11 +69,11 @@ describe('the beta line is a quiet version line between the wordmark and the ent
   // Owner, 2026-10-23: the word is "last update" — it reads as the game being kept current rather
   // than as server plumbing. The behaviour is unchanged.
   it('says when the live build was updated, in the reader\'s own time, and nothing when unknown', () => {
-    expect(FEEDBACK.betaNote('0.6', '22 Oct, 12:12')).toContain('of an evolving game, last update: 22 Oct, 12:12.');
-    expect(FEEDBACK.betaNote('0.6', null)).toContain('(0.6) of an evolving game.');
-    expect(FEEDBACK.betaNote('0.6', null)).not.toContain('last update');
+    expect(FEEDBACK.betaNote('0.7', '22 Oct, 12:12')).toContain('of an evolving game, last update: 22 Oct, 12:12.');
+    expect(FEEDBACK.betaNote('0.7', null)).toContain('(0.7) of an evolving game.');
+    expect(FEEDBACK.betaNote('0.7', null)).not.toContain('last update');
     // The stamp is a TRAILING note, never tucked inside the version bracket (owner, 2026-10-23).
-    expect(FEEDBACK.betaNote('0.6', '22 Oct, 12:12')).toContain('beta version (0.6) of an evolving game, last update:');
+    expect(FEEDBACK.betaNote('0.7', '22 Oct, 12:12')).toContain('beta version (0.7) of an evolving game, last update:');
     expect(deployLabel('2026-10-22T11:12:20Z', 'Europe/London')).toBe('22 Oct, 12:12');
     expect(deployLabel('2026-10-22T11:12:20Z', 'UTC')).toBe('22 Oct, 11:12');
     // A dev server, a test run or a garbled stamp shows no time rather than a wrong one.

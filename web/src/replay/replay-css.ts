@@ -121,6 +121,43 @@ export const REPLAY_CSS = `
 #replay .rp-ghost-layer { pointer-events: none; }
 
 /* ---------- the controls ---------- */
+#replay .rp-scrub-wrap { position: relative; }
+/* THE TURNING-POINT NOTCH: a marked beat on the bar, shaped like the existing ticks but one step
+   brighter and taller. The button is 2px of ink; its pseudo-element is the 44px touch target, so
+   the notch never shifts the bar or needs footer space on a 320px phone. */
+#replay .rp-notch {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 44px;
+  left: var(--rp-tp, 0%);
+  translate: -50% -50%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--rp-ink);
+  cursor: pointer;
+  z-index: 2;
+}
+#replay .rp-notch::after { content: ''; position: absolute; inset: 0 -21px; }
+#replay .rp-notch::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 15px;
+  translate: -50% -50%;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: .78;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .35);
+  transition: height 140ms ease, opacity 140ms ease;
+}
+#replay .rp-notch[hidden] { display: none !important; }
+#replay .rp-notch[data-at='1']::before { height: 21px; opacity: 1; }
+#replay .rp-notch:focus-visible { outline: none; }
+#replay .rp-notch:focus-visible::before { box-shadow: 0 0 0 3px rgba(233, 216, 173, .7); }
 #replay .rp-scrub {
   position: relative;
   /* The replay's primary drag target. It was 30px tall — a thumb target only by luck. */
@@ -190,8 +227,28 @@ export const REPLAY_CSS = `
   color: var(--rp-faint);
   font-variant-numeric: tabular-nums;
 }
-/* The footer's right-hand slot holds the one mark; a share control can join it here later. */
+/* The footer's right-hand slot holds the one mark; the share key sits immediately beside it. */
 #replay .rp-actions { display: flex; align-items: center; gap: 8px; }
+/* One quiet icon: the same ink and the same 44px target as the buttons, with no plate of its own. */
+#replay .rp-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: none;
+  color: var(--rp-dim);
+  cursor: pointer;
+  transition: color 160ms ease, opacity 160ms ease;
+}
+#replay .rp-icon svg { display: block; width: 17px; height: 17px; }
+#replay .rp-icon:hover { color: var(--rp-ink); }
+#replay .rp-icon:focus-visible { outline: 2px solid #e8ddc9; outline-offset: 2px; }
+#replay .rp-icon[aria-busy='true'] { opacity: .55; cursor: default; }
 #replay .rp-btn {
   min-height: 44px;
   padding: 0 13px;
@@ -223,6 +280,15 @@ export const REPLAY_CSS = `
 /* Paused: the whole picture goes quiet rather than showing a badge, and the clock line says so. */
 #replay[data-paused='1'] .rp-board { opacity: .82; transition: opacity 160ms ease; }
 #replay[data-paused='1'] .rp-meta::after { content: ' · paused'; color: var(--rp-dim); }
+
+/* The tightest portrait phone (320px): the footer keeps its one row. The share key joins the
+   mark, so the two text keys give back a little padding and tracking — never a 44px target. */
+@media (max-width: 380px) {
+  #replay .rp-foot { gap: 6px; }
+  #replay .rp-actions { gap: 4px; }
+  #replay .rp-btn { min-height: 44px; padding: 0 8px; font-size: 10.5px; letter-spacing: .08em; }
+  #replay .rp-brand { max-width: 46px; }
+}
 
 /* A phone in landscape or a short window: tighten the chrome, never the board. */
 @media (max-height: 560px) {

@@ -1381,6 +1381,30 @@ function applySettingsCopy() {
   }
 }
 
+/**
+ * The Settings plate's honest bottom edge (owner, 2026-10-26: at 320x568 the last row was cut
+ * through the middle with no cue). The fade and the visible scrollbar are shown only while there
+ * is something below the fold — never over a sheet that actually fits, and never when the player
+ * has reached the end. `sheet-settings .sheet-fade` in style.css does the painting.
+ */
+let settingsScrollBound = false;
+function syncSettingsScroll(): void {
+  const panel = $('sheet-settings');
+  const body = panel.querySelector<HTMLElement>('.sheet-body');
+  if (!body) return;
+  const more = panel.scrollHeight - panel.clientHeight - panel.scrollTop > 2;
+  panel.dataset.scroll = more ? '1' : '0';
+}
+function bindSettingsScroll(): void {
+  if (settingsScrollBound) return;
+  settingsScrollBound = true;
+  const panel = $('sheet-settings');
+  panel.addEventListener('scroll', syncSettingsScroll, { passive: true });
+  window.addEventListener('resize', syncSettingsScroll, { passive: true });
+  const body = panel.querySelector<HTMLElement>('.sheet-body');
+  if (body && typeof ResizeObserver !== 'undefined') new ResizeObserver(syncSettingsScroll).observe(body);
+}
+
 function syncSettingsForm() {
   // The Tutorial entry exists only where campaign levels do (the product channels). Hidden, not
   // removed, so the legacy sheet keeps the shape it has always had.
@@ -1420,6 +1444,8 @@ function syncSettingsForm() {
     settings.confirmPolicy = x;
   });
   renderSettingsLab();
+  bindSettingsScroll();
+  syncSettingsScroll();
 }
 
 /** The Lab edits existing settings only. Every recipe starts from the saved

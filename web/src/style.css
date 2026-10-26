@@ -7948,6 +7948,37 @@ html.futasaku-product #sheet-settings .sheet-head {
   background: rgba(8, 10, 10, 0.96);
   min-height: 44px;
 }
+/* A cut row must never read as the whole row (owner, 2026-10-26). The Account group makes the sheet
+   taller than a 320x568 screen, so the bottom edge gets a soft fade and a thin, always-drawn
+   scrollbar. The fade is a sticky child of the scroll container: it covers the last pixels of the
+   viewport and travels out of the way only when the sheet is actually at its end (main.ts sets
+   `data-scroll`). No row is hidden by it — a whole row still scrolls into view. */
+html.futasaku-product #sheet-settings .sheet-fade {
+  position: sticky;
+  bottom: calc(-1 * max(18px, env(safe-area-inset-bottom)));
+  display: block;
+  height: 34px;
+  margin-top: -34px;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(to bottom, rgba(8, 10, 10, 0), rgba(8, 10, 10, 0.96) 76%);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+html.futasaku-product #sheet-settings[data-scroll='1'] .sheet-fade { opacity: 1; }
+/* The thin scrollbar, drawn rather than left to the OS overlay: a visible thumb is the second,
+   unambiguous cue that the plate continues. */
+html.futasaku-product #sheet-settings::-webkit-scrollbar { width: 4px; }
+html.futasaku-product #sheet-settings::-webkit-scrollbar-track { background: transparent; }
+html.futasaku-product #sheet-settings::-webkit-scrollbar-thumb {
+  background: rgba(240, 233, 220, 0.24);
+  border-radius: 2px;
+}
+@media (orientation: portrait) and (max-height: 640px) {
+  /* Short portrait phone: give the rows back the group gaps and headings, never a 44px target. */
+  html.futasaku-product #sheet-settings .sheet-body.stack { gap: 6px; }
+  html.futasaku-product #sheet-settings h3 { margin: 10px 0 4px; }
+}
 /* Spend less space on group gaps when a phone is sideways; never shrink the 44px targets.
    The sheet remains scrollable for account controls, zoom and exceptionally short windows. */
 @media (orientation: landscape) and (max-height: 560px) {

@@ -177,6 +177,18 @@ try {
   await page.waitForTimeout(1400);
   await page.screenshot({ path: `${SHOTS}/replay-practice-mid-390x844.png` });
 
+  // THE TURNING-POINT NOTCH is honest about this match: when the plan has no cut there is no
+  // control at all (never one that does nothing); when it has one, the notch is present.
+  const plan = (await page.evaluate(() => (window as unknown as { __severgrow?: { replayPlan?: () => unknown } }).__severgrow?.replayPlan?.() ?? null)) as
+    | { turningPoint: { frame: number; tiles: number } | null }
+    | null;
+  const notchVisible = await page.locator('#replay [data-rp="turn"]').isVisible().catch(() => false);
+  check(
+    'the turning-point notch exists exactly when the match has a cut',
+    !!plan && (plan.turningPoint ? notchVisible : !notchVisible),
+    plan?.turningPoint ? `${plan.turningPoint.tiles} tiles at frame ${plan.turningPoint.frame}` : 'no cut',
+  );
+
   // A drag is a real seek; the displayed picture must change and come back.
   const box = await page.locator('#replay .rp-scrub').boundingBox();
   if (!box) throw new Error('no scrub bar');

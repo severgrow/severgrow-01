@@ -9,7 +9,7 @@ export const SHARE_H = 1350;
 const M = 64; // margin
 
 export type Box = { x: number; y: number; w: number; h: number };
-export type TextBox = Box & { text: string; size: number; weight: 400 | 600 | 800; align: 'left' | 'center' };
+export type TextBox = Box & { text: string; size: number; weight: 400 | 600 | 700 | 800; align: 'left' | 'center' | 'right' };
 
 export type ShareData = {
   game: string;
