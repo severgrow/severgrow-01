@@ -97,6 +97,37 @@ export const REPLAY_CSS = `
 }
 #replay .rp-score .rp-dash { font-size: 13px; color: var(--rp-faint); font-weight: 400; }
 
+/* ---------- the winner, at the end ----------
+   One settle, never a loop: the winner's score swells in their ink with a soft halo and lands; their
+   name lights up; the other side steps back. The result line below says it in words. */
+#replay .rp-pts { display: inline-block; transition: color 260ms ease, opacity 260ms ease, text-shadow 260ms ease; }
+#replay[data-ended='1'][data-winner='0'] .rp-pts[data-seat='0'],
+#replay[data-ended='1'][data-winner='1'] .rp-pts[data-seat='1'] {
+  color: var(--rp-win);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--rp-win) 45%, transparent);
+  animation: rp-win-score 520ms cubic-bezier(.2, 1.4, .36, 1) both;
+}
+#replay[data-ended='1'][data-winner='0'] { --rp-win: var(--rp-me); }
+#replay[data-ended='1'][data-winner='1'] { --rp-win: var(--rp-opp); }
+#replay[data-ended='1'][data-winner='0'] .rp-pts[data-seat='1'],
+#replay[data-ended='1'][data-winner='1'] .rp-pts[data-seat='0'],
+#replay[data-ended='1'][data-winner='0'] .rp-name[data-seat='1'],
+#replay[data-ended='1'][data-winner='1'] .rp-name[data-seat='0'] { opacity: .38; }
+#replay[data-ended='1'][data-winner='0'] .rp-name[data-seat='0'],
+#replay[data-ended='1'][data-winner='1'] .rp-name[data-seat='1'] {
+  color: var(--rp-win);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--rp-win) 40%, transparent);
+}
+@keyframes rp-win-score {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.28); }
+  100% { transform: scale(1.12); }
+}
+#replay[data-ended='1'] .rp-turn {
+  letter-spacing: .22em;
+  animation: rp-turn-in 360ms 120ms cubic-bezier(.22, .72, .24, 1) both;
+}
+
 /* ---------- the turn line: spoken, not shown; the result once the match has ended ---------- */
 #replay:not([data-ended='1']) .rp-turn {
   position: absolute !important;
@@ -351,7 +382,7 @@ export const REPLAY_CSS = `
 #replay .rp-meta {
   position: relative;
   box-sizing: content-box;
-  width: 13ch;
+  width: 14ch;
   text-align: right;
   white-space: nowrap;
   font: 400 10.5px/1.3 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
@@ -430,6 +461,77 @@ export const REPLAY_CSS = `
     0 2px 0 rgba(40, 33, 24, .7),
     0 3px 6px rgba(0, 0, 0, .55);
 }
+/* THE MOMENT CAPTION: one small glass plate over the top of the board — an eyebrow ("02 / 04", or
+   TURNING POINT in the pin's gold), then the pin's diamond, the player's name in their ink and the
+   play. Device-label type, the replay's own glass; it settles in from 6px, rests, and fades. */
+#replay .rp-caption {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  z-index: 3;
+  max-width: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 15px 9px;
+  border-radius: 12px;
+  background: rgba(14, 16, 14, .8);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 0 0 1px rgba(233, 216, 173, .14), inset 0 1px 0 rgba(255, 255, 255, .05), 0 10px 28px rgba(0, 0, 0, .5);
+  pointer-events: none;
+  opacity: 0;
+  translate: -50% -6px;
+  transition: opacity 240ms ease, translate 240ms ease;
+  --rp-mk: var(--rp-me);
+}
+#replay .rp-caption[data-seat='1'] { --rp-mk: var(--rp-opp); }
+#replay .rp-caption[data-show='1'] {
+  opacity: 1;
+  translate: -50% 0;
+  transition: opacity 220ms cubic-bezier(.22, .72, .24, 1), translate 260ms cubic-bezier(.2, 1.3, .36, 1);
+}
+#replay .rp-caption-eyebrow {
+  font: 400 9px/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  letter-spacing: .24em;
+  margin-right: -.24em;
+  text-transform: uppercase;
+  color: var(--rp-faint);
+  font-variant-numeric: tabular-nums;
+}
+#replay .rp-caption[data-turning='1'] .rp-caption-eyebrow { color: #e9cf8e; }
+#replay .rp-caption-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  font: 500 12px/1.15 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--rp-ink);
+}
+#replay .rp-caption-line i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  rotate: 45deg;
+  border-radius: 1.5px;
+  background: var(--rp-mk);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--rp-mk) 50%, transparent);
+}
+#replay .rp-caption[data-turning='1'] .rp-caption-line i { background: linear-gradient(135deg, #f7e6b4, #c9a256); }
+#replay .rp-caption-line b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--rp-mk);
+}
+#replay .rp-caption-line span { flex: none; color: var(--rp-ink); }
+
 /* Replay again: one pill over the foot of the finished board, centred. */
 #replay .rp-board .rp-again {
   position: absolute;
@@ -477,11 +579,15 @@ export const REPLAY_CSS = `
 .reduce-motion #replay .rp-video[data-live='1'] .rp-video-text::before,
 .reduce-motion #replay .rp-icon[aria-busy='true'] svg { animation: none !important; }
 .reduce-motion #replay .rp-board { transition: none !important; }
+.reduce-motion #replay .rp-caption { transition: opacity 120ms linear !important; translate: -50% 0 !important; }
+.reduce-motion #replay .rp-pts { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
   #replay .rp-turn[data-change='1'],
   #replay[data-ended='1'] .rp-btn[data-rp='again'],
   #replay .rp-video[data-live='1'] .rp-video-text::before,
   #replay .rp-icon[aria-busy='true'] svg { animation: none !important; }
   #replay .rp-board { transition: none !important; }
+  #replay .rp-caption { transition: opacity 120ms linear !important; translate: -50% 0 !important; }
+  #replay .rp-pts { animation: none !important; }
 }
 `;

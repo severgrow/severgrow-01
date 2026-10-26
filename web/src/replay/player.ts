@@ -16,7 +16,7 @@ import type { MaterialLook } from '../logic/materials.js';
 import type { ThemeId, ThemeStyle } from '../logic/themes.js';
 import type { Board } from '../logic/anim.js';
 import type { Player } from '../../../src/engine/index.js';
-import type { ReplayModel, ReplayTurningPoint } from './timeline.js';
+import type { ReplayHighlight, ReplayModel, ReplayTurningPoint } from './timeline.js';
 import { boardAtIndex, frameAtTime, seekTo } from './seek.js';
 import { REPLAY_CSS } from './replay-css.js';
 import { posterFor, shareReplayPoster } from './poster.js';
@@ -140,6 +140,10 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   dash.className = 'rp-dash';
   dash.textContent = '–';
   const scoreOpp = document.createElement('span');
+  scoreMe.className = 'rp-pts';
+  scoreMe.dataset.seat = '0';
+  scoreOpp.className = 'rp-pts';
+  scoreOpp.dataset.seat = '1';
   score.append(scoreMe, dash, scoreOpp);
   const nameOpp = document.createElement('span');
   nameOpp.className = 'rp-name';
@@ -279,7 +283,20 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   videoCancel.textContent = REPLAY.cancel;
   videoRow.append(videoText, videoCancel);
 
-  boardBox.append(again);
+  // THE MOMENT CAPTION: when the replay arrives at one of the bar's moments (by a tap on its pin, or
+  // as playback passes it), one small glass plate over the top of the board says what happened —
+  // "02 / 04" or "TURNING POINT" above, then the pin's diamond, the player's name in their ink and the
+  // play in plain words. It rests a beat and fades; it never takes a tap and never covers a control.
+  const caption = document.createElement('div');
+  caption.className = 'rp-caption';
+  caption.dataset.show = '0';
+  caption.setAttribute('aria-hidden', 'true');
+  const captionEyebrow = document.createElement('span');
+  captionEyebrow.className = 'rp-caption-eyebrow';
+  const captionLine = document.createElement('span');
+  captionLine.className = 'rp-caption-line';
+  caption.append(captionEyebrow, captionLine);
+  boardBox.append(again, caption);
   stage.append(head, turn, boardBox, bar, videoRow, foot);
   root.append(stage);
   document.body.append(root);
@@ -415,8 +432,18 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     const seat = showsResult ? null : frame.turn;
     const changed = turnShown < 0 || frame.turn !== model.frames[Math.max(0, frameIndex - 1)]?.turn || frame.boundary;
     if (seat === null) {
-      turn.textContent = model.result!.title;
-      delete turn.dataset.seat;
+      // THE RESULT: the winner's name in their own ink, the rest of the line quiet.
+      const { title, winner } = model.result!;
+      const name = winner === null ? '' : model.names[winner];
+      if (name && title.startsWith(name)) {
+        const b = document.createElement('b');
+        b.textContent = name;
+        turn.replaceChildren(b, document.createTextNode(title.slice(name.length)));
+        turn.dataset.seat = String(winner);
+      } else {
+        turn.textContent = title;
+        delete turn.dataset.seat;
+      }
     } else if (turnShown !== frameIndex || turn.dataset.seat !== String(seat)) {
       // The name gets the seat's own ink; the rest of the line stays quiet.
       setTurnLine(seat);
@@ -459,6 +486,11 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     // A rebuild from the log is a SEEK: it paints the position without replaying every beat's
     // motion between here and there (that is what a drag would otherwise look like).
     const forward = !rebuilt && i === index + 1;
+    // Playback (never a seek or a drag) passing one of the bar's moments names it.
+    if (!rebuilt && playing && i > index) {
+      const crossed = momentCrossed(index, i);
+      if (crossed) showCaption(crossed);
+    }
     if (forward && !reduce() && frame.removed.length) captureGhosts(frame.removed);
     else clearGhosts();
     const shown = rebuilt ?? frame.board;
@@ -542,6 +574,10 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     stop();
     root.dataset.ended = '1';
     root.dataset.paused = '0';
+    // THE WINNER POPS: their name and score lit in their ink, the other side quiet (CSS, on ended).
+    const winner = model.result?.winner;
+    root.dataset.winner = winner === 0 || winner === 1 ? String(winner) : 'draw';
+    hideCaption();
     again.hidden = false;
     paint(Math.max(0, model.frames.length - 1));
     paintMeta();
@@ -833,6 +869,39 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     }
   });
 
+  let captionTimer = 0;
+  const CAPTION_HOLD_MS = 2400;
+  const hideCaption = (): void => {
+    window.clearTimeout(captionTimer);
+    if (caption.dataset.show === '1') caption.dataset.show = '0';
+  };
+  const showCaption = (moment: ReplayHighlight): void => {
+    if (!model) return;
+    const order = model.highlights.indexOf(moment);
+    const turning = moment.action === model.turningPoint?.action;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    captionEyebrow.textContent = turning
+      ? REPLAY.turningPoint
+      : `${pad(order + 1)} / ${pad(model.highlights.length)}`;
+    const mark = document.createElement('i');
+    const who = document.createElement('b');
+    who.textContent = model.names[moment.seat];
+    const what = document.createElement('span');
+    what.textContent = REPLAY.momentWhat(moment.cut, moment.swing);
+    captionLine.replaceChildren(mark, who, what);
+    caption.dataset.seat = String(moment.seat);
+    caption.dataset.turning = turning ? '1' : '0';
+    // Restart the arrival even when a caption is already up (two moments close together).
+    caption.dataset.show = '0';
+    void caption.offsetWidth;
+    caption.dataset.show = '1';
+    window.clearTimeout(captionTimer);
+    captionTimer = window.setTimeout(hideCaption, CAPTION_HOLD_MS);
+  };
+  /** The moment whose first beat lies in (from, to] — what playback just passed — if any. */
+  const momentCrossed = (from: number, to: number): ReplayHighlight | null =>
+    model?.highlights.find((h) => h.frame > from && h.frame <= to) ?? null;
+
   /** The bar's marks for this match: every highlight but the turning point (that has its own control). */
   const buildMoments = (): void => {
     moments.replaceChildren();
@@ -883,6 +952,8 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     setPlaying(false);
     seek(model.totalMs > 0 ? frame.at / model.totalMs : 0, false);
     control.focus({ preventScroll: true });
+    const moment = model.highlights.find((h) => h.frame === frameIndex);
+    if (moment) showCaption(moment);
   };
 
   /** A view's static art, then the removal ghosts above it (`setup` empties the SVG). */
@@ -973,6 +1044,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     dragging = false;
     resumeAfterDrag = false;
     clearGhosts();
+    hideCaption();
     model = null;
     painted = '';
     root.hidden = true;

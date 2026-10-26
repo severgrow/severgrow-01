@@ -426,6 +426,9 @@ export const REPLAY = Object.freeze({
   /** The replay's signature under the mark (owner, 2026-10-26: "an elegant place to place futasaku.com"). */
   site: 'futasaku.com',
   /** A biggest-moment mark on the scrub bar: who made the play and what it did, in plain words. */
+  /** What a moment did, for its caption over the board (the name is set beside it, in its ink). */
+  momentWhat: (cut: number, swing: number): string =>
+    cut > 0 ? `cut ${cut} tile${cut === 1 ? '' : 's'}` : `${swing}-point swing`,
   momentLabel: (name: string, cut: number, swing: number): string =>
     cut > 0
       ? `${name} cut ${cut} tile${cut === 1 ? '' : 's'}`

@@ -18,7 +18,8 @@
 import { allCoords, coordKey, mirror, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
-import { centerOf, hash, S } from '../ui/geom.js';
+import { centerOf, hash, S, SQ3 } from '../ui/geom.js';
+import { GOLD_FRAME_ATLAS, goldFrameCrop } from '../ui/goldframes.js';
 import { SEED_STONE_ATLAS, seedStoneCrop } from '../ui/seedstone.js';
 import type { ReplayModel } from './timeline.js';
 
@@ -27,6 +28,8 @@ export type BoardArt = {
   sprites: readonly string[];
   ground: string;
   rocks: readonly string[];
+  /** The bonus hexes' metal-frame atlas (the only thing that marks a bonus hex in Futasaku). */
+  gold?: string;
 };
 
 /** The territory colours `DefaultArtBoardView` fills under its sprites. */
@@ -48,10 +51,30 @@ let source: BoardArt | null = null;
  */
 export const warmBoardArt = (art: BoardArt | null = null): Promise<void> => {
   if (art) source = art;
-  const urls = [...(source?.sprites ?? []), source?.ground ?? '', ...(source?.rocks ?? []), SEED_STONE_ATLAS].filter(
+  const urls = [
+    ...(source?.sprites ?? []),
+    source?.ground ?? '',
+    ...(source?.rocks ?? []),
+    source?.gold ?? GOLD_FRAME_ATLAS,
+    SEED_STONE_ATLAS,
+  ].filter(
     (url): url is string => !!url,
   );
-  return Promise.all(urls.map(decode)).then(() => undefined);
+  return Promise.all([...urls.map(decode), loadSignatureFont()]).then(() => undefined);
+};
+
+/**
+ * The canvas sign-off is set in Besley (the menu title's face). A canvas only draws a web font once
+ * it is loaded, so the warm-up asks for it; it never rejects, and a miss falls back to Georgia.
+ */
+export const SIGNATURE_FONT = "'Besley', 'Besley Fallback', Georgia, serif";
+const loadSignatureFont = (): Promise<void> => {
+  try {
+    const fonts = (globalThis.document as Document | undefined)?.fonts;
+    return fonts ? fonts.load(`800 30px ${SIGNATURE_FONT}`).then(() => undefined, () => undefined) : Promise.resolve();
+  } catch {
+    return Promise.resolve();
+  }
 };
 
 const decode = (url: string): Promise<void> => {
@@ -85,7 +108,7 @@ let artUrls: Promise<BoardArt | null> | null = null;
  */
 export const loadBoardArtUrls = (): Promise<BoardArt | null> => {
   artUrls ??= import('../ui/defaultArtBoard.js')
-    .then((mod) => ({ sprites: mod.DEFAULT_ART_SPRITES, ground: mod.BOARD_GROUND, rocks: mod.BOARD_ROCKS }))
+    .then((mod) => ({ sprites: mod.DEFAULT_ART_SPRITES, ground: mod.BOARD_GROUND, rocks: mod.BOARD_ROCKS, gold: GOLD_FRAME_ATLAS }))
     .catch(() => null);
   return artUrls;
 };
@@ -190,6 +213,51 @@ const hexAt = (g: CanvasRenderingContext2D, x: number, y: number, r: number) => 
   }
   g.closePath();
 };
+
+/** The live board's frame padding inside its atlas crop (`drawGoldFrame`'s `pad`). */
+export const GOLD_FRAME_PAD = 6;
+
+export type GoldFramePlacement = {
+  key: string;
+  /** The hex centre the frame sits on, in canvas pixels. */
+  x: number;
+  y: number;
+  /** The frame's box, in canvas pixels (the live board's 2.02 S by 1.01 √3 S). */
+  w: number;
+  h: number;
+  /** The atlas rectangle, padded exactly as the live board's viewBox. */
+  crop: { x: number; y: number; w: number; h: number };
+  /** Pointy boards turn the flat-top art by -30 degrees, as the live board does. */
+  rotate: number;
+  occupied: boolean;
+};
+
+/**
+ * Where the bonus hexes' metal frames go: one per rich cell, with the same size, crop and turn as
+ * `ui/goldframes.ts` draws on the live board. Pure, so a test can hold it to the board's geometry.
+ */
+export const goldFramePlacements = (L: BoardLayout): GoldFramePlacement[] => {
+  const k = L.hex / S;
+  const rotate = getOrient() === 'pointy' ? (-30 * Math.PI) / 180 : 0;
+  return L.cells
+    .filter((cell) => cell.terrain === 'rich')
+    .map((cell) => {
+      const crop = goldFrameCrop(cell.key);
+      return {
+        key: cell.key,
+        x: cell.x,
+        y: cell.y,
+        w: S * 2.02 * k,
+        h: S * SQ3 * 1.01 * k,
+        crop: { x: crop.x - GOLD_FRAME_PAD, y: crop.y - GOLD_FRAME_PAD, w: crop.w + GOLD_FRAME_PAD * 2, h: crop.h + GOLD_FRAME_PAD * 2 },
+        rotate,
+        occupied: cell.owner !== null,
+      };
+    });
+};
+
+/** The frame's warm glow on the live board (`drop-shadow` on `.gold-frame`), empty and occupied. */
+const GOLD_GLOW = { empty: 'rgba(236, 187, 88, .40)', occupied: 'rgba(231, 181, 83, .32)' };
 
 export type BoardPaint = {
   me: Player;
@@ -308,6 +376,22 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
       g.strokeStyle = 'rgba(240, 233, 220, .72)';
       g.lineWidth = Math.max(2, L.hex * 0.045);
       g.stroke();
+    }
+  }
+
+  // The bonus hexes' metal frames, over the tiles, with the live board's warm glow. They are a rim
+  // around the hex's edge, so they never cover a stone or a home.
+  const gold = picture(source?.gold ?? GOLD_FRAME_ATLAS);
+  if (gold) {
+    for (const f of goldFramePlacements(L)) {
+      g.save();
+      g.translate(f.x, f.y);
+      if (f.rotate) g.rotate(f.rotate);
+      g.globalAlpha = f.occupied ? 0.92 : 1;
+      g.shadowColor = f.occupied ? GOLD_GLOW.occupied : GOLD_GLOW.empty;
+      g.shadowBlur = (f.occupied ? 1.6 : 2.1) * 2 * k;
+      g.drawImage(gold, f.crop.x, f.crop.y, f.crop.w, f.crop.h, -f.w / 2, -f.h / 2, f.w, f.h);
+      g.restore();
     }
   }
 };

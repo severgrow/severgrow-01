@@ -267,6 +267,28 @@ try {
   check('the bar marks 2-4 biggest moments, no hand-over hairs', chrome.marks >= 2 && chrome.marks <= 4 && chrome.ticks === 0, `${chrome.marks} marks, ${chrome.ticks} hairs`);
   check('futasaku.com signs the replay once', chrome.site === 'futasaku.com' && chrome.brands === 1, `${chrome.site} ×${chrome.brands}`);
 
+  // THE MOMENT CAPTION: a tap on a pin lands on that play and names it over the board.
+  const pin = page.locator('#replay [data-rp="moment"], #replay [data-rp="turn"]:not([hidden])').first();
+  await pin.click();
+  await page.waitForTimeout(350);
+  const cap = (await page.evaluate(`(() => {
+    const c = document.querySelector('#replay .rp-caption');
+    const r = c.getBoundingClientRect();
+    const b = document.querySelector('#replay .rp-board').getBoundingClientRect();
+    return { show: c.dataset.show, opacity: getComputedStyle(c).opacity, eyebrow: c.querySelector('.rp-caption-eyebrow').textContent,
+      line: c.querySelector('.rp-caption-line').textContent, inBoard: r.top >= b.top - 1 && r.bottom <= b.bottom && r.left >= b.left - 1 && r.right <= b.right + 1,
+      taps: getComputedStyle(c).pointerEvents };
+  })()`)) as { show: string; opacity: string; eyebrow: string; line: string; inBoard: boolean; taps: string };
+  check(
+    'a tap on a moment\'s pin names the play over the board',
+    cap.show === '1' && Number(cap.opacity) > 0.9 && /(cut \d+ tiles?|\d+-point swing)/i.test(cap.line) && /^(\d\d \/ \d\d|turning point)$/i.test(cap.eyebrow.trim()),
+    `${cap.eyebrow} · ${cap.line}`,
+  );
+  check('the caption sits inside the board and takes no taps', cap.inBoard && cap.taps === 'none', JSON.stringify(cap));
+  await page.screenshot({ path: `${SHOTS}/replay-practice-moment-390x844.png` });
+  await page.waitForTimeout(2800);
+  check('the caption rests a beat, then fades', (await page.locator('#replay .rp-caption').getAttribute('data-show')) === '0');
+
   // THE END: jump near the finish and let it play out; the result is shown, and Replay again sits
   // over the foot of the finished board.
   await page.locator('#replay .rp-scrub').focus();
@@ -285,6 +307,20 @@ try {
     !!againBox && !!boardBox2 && againBox.height >= 44 && againBox.y + againBox.height <= boardBox2.y + boardBox2.height + 1 &&
       Math.abs(againBox.x + againBox.width / 2 - (boardBox2.x + boardBox2.width / 2)) <= 2,
     JSON.stringify(againBox),
+  );
+  const win = (await page.evaluate(`(() => {
+    const r = document.getElementById('replay');
+    const w = r.dataset.winner;
+    const pts = [...r.querySelectorAll('.rp-pts')].map((n) => ({ seat: n.dataset.seat, color: getComputedStyle(n).color, op: getComputedStyle(n).opacity }));
+    const names = [...r.querySelectorAll('.rp-name')].map((n) => ({ seat: n.dataset.seat, op: getComputedStyle(n).opacity }));
+    return { w, pts, names, lineSeat: r.querySelector('.rp-turn').dataset.seat ?? null };
+  })()`)) as { w: string; pts: { seat: string; color: string; op: string }[]; names: { seat: string; op: string }[]; lineSeat: string | null };
+  const loserPts = win.pts.find((p) => p.seat !== win.w);
+  const loserName = win.names.find((n) => n.seat !== win.w);
+  check(
+    'the winner pops: their side lit, the other side steps back, the result names them in their ink',
+    win.w === 'draw' || (!!loserPts && Number(loserPts.op) < 0.5 && !!loserName && Number(loserName.op) < 0.5 && win.lineSeat === win.w),
+    JSON.stringify(win),
   );
   await page.screenshot({ path: `${SHOTS}/replay-practice-end-390x844.png` });
 

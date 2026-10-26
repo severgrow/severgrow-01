@@ -16,6 +16,7 @@ import {
   layoutBoard,
   paintBoard,
   screenCoordsOf,
+  SIGNATURE_FONT,
   warmBoardArt,
 } from './board-canvas.js';
 import type { BoardArt, BoardCell, BoardLayout } from './board-canvas.js';
@@ -99,7 +100,7 @@ export const posterLayout = (d: PosterData): PosterLayout => {
     dash: { x: M + third, y: 154, w: third, h: 180, text: '–', size: 88, weight: 400 as const, align: 'center' as const },
     opp: { x: M + 2 * third, y: 154, w: third, h: 180, text: String(d.score[1]), size: 148, weight: 800 as const, align: 'center' as const },
   };
-  const mark: TextBox = { x: M, y: MARK_TOP, w: inner, h: 40, text: d.mark, size: 26, weight: 600, align: 'center' };
+  const mark: TextBox = { x: M, y: MARK_TOP, w: inner, h: 40, text: d.mark, size: 30, weight: 800, align: 'center' };
   return {
     width: POSTER_W,
     height: POSTER_H,
@@ -190,7 +191,31 @@ export const drawReplayPoster = (
   }
 
   paintBoard(g, L.board, { me: d.me, line: col.line, font });
-  text(L.mark, col.dim, 12);
+  // THE SIGN-OFF: FUTASAKU.COM in Besley and the game's cream, with the same low carved edge as the
+  // replay screen's footer (owner, 2026-10-26) — a warm edge cast under each letter, a soft shadow.
+  {
+    const t = L.mark;
+    const ctx = g as CanvasRenderingContext2D & { letterSpacing?: string };
+    g.font = `${t.weight} ${t.size}px ${SIGNATURE_FONT}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${(t.size * 0.1).toFixed(1)}px`;
+    const x = t.x + t.w / 2;
+    const y = t.y + t.h / 2;
+    const k = t.size / 11.5; // the footer's 11.5px is the reference for the edge's depth
+    g.save();
+    g.shadowColor = 'rgba(0, 0, 0, .55)';
+    g.shadowBlur = 6 * k;
+    g.shadowOffsetY = 3 * k;
+    g.fillStyle = 'rgba(40, 33, 24, .7)';
+    g.fillText(t.text, x, y + 2 * k, t.w);
+    g.restore();
+    g.fillStyle = 'rgba(92, 78, 56, .95)';
+    g.fillText(t.text, x, y + k, t.w);
+    g.fillStyle = col.ink;
+    g.fillText(t.text, x, y, t.w);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  }
   return canvas;
 };
 
