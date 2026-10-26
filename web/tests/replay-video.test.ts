@@ -9,7 +9,7 @@ import { buildReplay } from '../src/replay/timeline.js';
 import type { ReplayInput } from '../src/replay/timeline.js';
 import { posterFor, posterLayout } from '../src/replay/poster.js';
 import { videoFrameData, videoLayoutAt, videoPlan, videoTurn } from '../src/replay/frames.js';
-import { durationLabel, pickVideoMime, videoExtension, videoFileName } from '../src/replay/video.js';
+import { durationLabel, pickVideoMime, shareOrSaveVideo, videoExtension, videoFile, videoFileName } from '../src/replay/video.js';
 
 const CONFIG = rulesConfig(CURRENT_RULES_VERSION)!;
 const REAL_ACTIONS: Action[] = [
@@ -147,5 +147,44 @@ describe('the replay video', () => {
     expect(plan.steps[0]!.at + plan.steps[0]!.duration).toBe(model.totalMs);
     const data = videoFrameData(model, -1);
     expect(data.board).toEqual(model.from.board);
+  });
+
+  it('hands the phone one File, named and typed like the file it is', () => {
+    const model = buildReplay(input());
+    const file = videoFile(
+      { blob: new Blob([new Uint8Array(1024)], { type: 'video/webm;codecs=vp9' }), mime: 'video/webm;codecs=vp9', ms: 1, width: 1080, height: 1350, painted: 2 },
+      posterFor(model),
+    );
+    expect(file.name).toBe('futasaku-ryk-9-0.webm');
+    expect(file.type).toBe('video/webm;codecs=vp9');
+    expect(file.size).toBe(1024);
+  });
+
+  it('uses the share sheet when the phone takes a file, and never calls a dismissed sheet saved', async () => {
+    const model = buildReplay(input());
+    const video = { blob: new Blob([new Uint8Array(64)], { type: 'video/webm' }), mime: 'video/webm', ms: 1, width: 1080, height: 1350, painted: 2 };
+    const shared: { files?: File[]; title?: string }[] = [];
+    const nav = {
+      canShare: (x: { files: File[] }) => x.files.length === 1 && x.files[0]!.name.endsWith('.webm'),
+      share: async (x: { files?: File[]; title?: string }) => {
+        shared.push(x);
+      },
+    };
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
+    try {
+      expect(await shareOrSaveVideo(video, posterFor(model), 'FUTASAKU')).toBe('shared');
+      expect(shared).toHaveLength(1);
+      expect(shared[0]!.files![0]!.name).toBe('futasaku-ryk-9-0.webm');
+      expect(shared[0]!.files![0]!.type).toBe('video/webm');
+      expect(shared[0]!.title).toBe('FUTASAKU');
+      // A dismissed sheet is not a saved file: the caller must not tell the player it was.
+      nav.share = async () => {
+        throw new Error('AbortError');
+      };
+      expect(await shareOrSaveVideo(video, posterFor(model), 'FUTASAKU')).toBe('cancelled');
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'navigator', original);
+    }
   });
 });
