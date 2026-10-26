@@ -24,13 +24,22 @@ const number = (value: Keyframe['transform'], re: RegExp): number =>
 
 describe('the swipe-up boomerang', () => {
   it('is the interface-motion vocabulary scaled to the throw beat, not a second language', () => {
-    // Each leg keeps its share of the move (within the 1 ms that integer rounding can shift).
+    // OUT and BACK keep their share of the move (within the 1 ms that integer rounding can shift):
+    // these are the two legs that carry the card, so their ratio to the interface vocabulary is the
+    // thing that stops this being a second animation language.
     expect(BOOMERANG.out / BOOMERANG.total).toBeCloseTo(INTERFACE_MOTION.open / authored, 2);
-    expect(BOOMERANG.hold / BOOMERANG.total).toBeCloseTo(INTERFACE_MOTION.press / authored, 2);
     expect(BOOMERANG.back / BOOMERANG.total).toBeCloseTo(INTERFACE_MOTION.close / authored, 2);
-    const fadeShare = Math.round(INTERFACE_MOTION.press * 0.6) / authored;
-    expect(BOOMERANG.fade / BOOMERANG.total).toBeCloseTo(fadeShare, 2);
+    // The FADE and HOLD shares deliberately differ from the menu proportions since 2026-10-26: the
+    // owner reported the animation as invisible, and the placed moment is what the eye needs to
+    // catch. The fade is now a fixed 8 ms hand-off (the pile already turned over at `landMs`), and
+    // the hold absorbs the rest of the beat. Pinned as the new intent, not silently dropped.
+    expect(BOOMERANG.fade).toBe(8);
+    expect(BOOMERANG.hold).toBeGreaterThan(INTERFACE_MOTION.press * (PINNED.throwFlight / authored));
+    // The four legs still partition the beat exactly.
     expect(BOOMERANG.total).toBe(BOOMERANG.out + BOOMERANG.hold + BOOMERANG.back + BOOMERANG.fade);
+    // ...and the whole flight still fits inside the discard step's wait.
+    expect(BOOMERANG.total).toBe(PINNED.throwFlight);
+    expect(BOOMERANG.total).toBeLessThan(PINNED.throw);
 
     const plan = planBoomerang(from, board, to, true);
     const allowed = new Set<string>([INTERFACE_MOTION.easeOpen, INTERFACE_MOTION.easeClose]);

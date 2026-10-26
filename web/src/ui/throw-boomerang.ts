@@ -34,23 +34,29 @@ const out = Math.round(INTERFACE_MOTION.open * beatScale);
 const hold = Math.round(INTERFACE_MOTION.press * beatScale);
 const back = Math.round(INTERFACE_MOTION.close * beatScale);
 const land = out + hold + back;
-// The fade keeps its ~0.6-of-press share; the remainder of the beat absorbs per-leg rounding, so
-// `total` is exactly the beat even if `INTERFACE_MOTION` changes.
-const fade = PINNED.throwFlight - land;
-const total = land + fade;
+/**
+ * The fade is a HAND-OFF, not a leg of the flight: the pile already turned over at `landMs`, so the
+ * fade only covers the swap. It no longer takes its menu share of the beat (28 ms of a 320 ms
+ * flight), because the owner reported the animation as invisible (2026-10-26) and the placed moment
+ * — the card sitting aligned on the board — is the part the eye needs to catch. That time becomes
+ * HOLD instead: still inside the same 320 ms beat, still the same four legs, no leg invented.
+ */
+const fade = 8;
+const holdMs = hold + (PINNED.throwFlight - land - fade);
+const total = out + holdMs + back + fade;
 
 export const BOOMERANG = Object.freeze({
   out,
-  hold,
+  hold: holdMs,
   back,
   fade,
   total,
   /** Fractions of `total` (the test and the discard step read these, never repeat them). */
   settleAt: out / total,
-  holdAt: (out + hold) / total,
-  landAt: land / total,
+  holdAt: (out + holdMs) / total,
+  landAt: (out + holdMs + back) / total,
   /** How big the card is while it appears placed on the board (a near-tile size). */
-  boardScale: 0.62,
+  boardScale: 0.72,
   /** Degrees: a small turn on the way out and a smaller one on the way home. */
   spinOut: -11,
   spinBack: 7,

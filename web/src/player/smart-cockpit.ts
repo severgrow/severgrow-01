@@ -471,9 +471,17 @@ html.futa04-information.reduce-motion[data-step='draw'] :is(#deck,#discard).read
 html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-card { box-shadow:none !important; }
 html.futa04-information[data-step='draw'] :is(#deck,#discard) .gd-fx { display:none !important; }
 html.futa04-information[data-step='draw'] #discard.ready:not(.futa04-bloom-draw) .pile-top.card { border-color:var(--c-line); box-shadow:0 1px 2px rgba(0,0,0,.4); }
+/* When the Throw pile can complete a Bloom it is GOLD, not yellow (owner, 2026-10-26: "the glow
+   around discard pile when it completes a bloom looks yellow - make it look more gold than
+   yellow"). The old values were tan - rgba(209,172,105) sits at hue 42 with only .50 saturation,
+   which reads as khaki. Gold is the same hue family with a deeper base and a CREAM highlight; that
+   narrow near-neutral flash is what makes metal read as metal rather than as a lit yellow edge.
+   The values match the gold frame atlas (body hue 45), so the pile's gold and the tiles' gold are
+   the same metal. */
 html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-top.card {
-  transform:translateY(-3px); border-color:rgba(209,172,105,.8);
-  box-shadow:0 0 0 1px rgba(209,172,105,.45),0 0 7px rgba(205,162,87,.30),0 2px 4px rgba(0,0,0,.45);
+  transform:translateY(-3px); border-color:rgba(212,175,55,.85);
+  box-shadow:0 0 0 1px rgba(212,175,55,.5), 0 0 8px 1px rgba(196,152,42,.34),
+    0 0 3px rgba(255,241,205,.42), 0 2px 4px rgba(0,0,0,.45);
   transition:transform var(--dur-ack) var(--ease-standard),border-color .2s ease-out,box-shadow .2s ease-out;
 }
 /* Legal empty sockets share one warm, recessed treatment on Forest and Volcano turns. */
