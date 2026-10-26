@@ -421,8 +421,15 @@ export const REPLAY = Object.freeze({
   turningPointLabel: (tiles: number) => `Turning point · ${tiles} tile${tiles === 1 ? '' : 's'}`,
   /** Said only when this match never cut anything: there is no notch to press. */
   noTurningPoint: 'No turning point in this match',
-  /** The wordmark on the poster (the only brand word the image carries). */
-  mark: 'FUTASAKU',
+  /** The wordmark on the poster and the video (the only brand words the image carries): the address. */
+  mark: 'FUTASAKU.COM',
+  /** The replay's signature under the mark (owner, 2026-10-26: "an elegant place to place futasaku.com"). */
+  site: 'futasaku.com',
+  /** A biggest-moment mark on the scrub bar: who made the play and what it did, in plain words. */
+  momentLabel: (name: string, cut: number, swing: number): string =>
+    cut > 0
+      ? `${name} cut ${cut} tile${cut === 1 ? '' : 's'}`
+      : `${name} · ${swing} point swing`,
   /** The online match list's word for a finished duel's row. */
   pastRow: 'Watch replay',
   /** Shown when a stored replay cannot be loaded (an old match, a lost connection). */

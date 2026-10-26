@@ -241,6 +241,53 @@ try {
     `${windows.frames.length} frames, largest ${worst(windows.frames)}px vs hex ${Math.round(windows.hex)}px`,
   );
 
+  // THE CLEAN LAYOUT (owner, 2026-10-26): no "… to move" sentence on screen (whose move it is reads
+  // from the lit name and its pip), only the 2-4 biggest moments on the bar, and futasaku.com signed
+  // once in the footer. The turn line is still SPOKEN to a screen reader.
+  const chrome = (await page.evaluate(`(() => {
+    const r = document.getElementById('replay');
+    const line = r.querySelector('.rp-turn');
+    const box = line.getBoundingClientRect();
+    const visibleText = [...r.querySelectorAll('*')].filter((n) => {
+      const b = n.getBoundingClientRect();
+      return n.childElementCount === 0 && b.width > 2 && b.height > 2 && /to move/i.test(n.textContent || '');
+    }).length;
+    const marks = [...r.querySelectorAll('[data-rp="moment"], [data-rp="turn"]:not([hidden])')];
+    const live = [...r.querySelectorAll('.rp-name[data-live="1"]')].length;
+    return {
+      visibleText, spoken: /to move/i.test(line.textContent || '') && line.getAttribute('aria-live') === 'polite',
+      lineBox: Math.round(box.width * box.height),
+      marks: marks.length, ticks: r.querySelectorAll('.rp-tick').length, live,
+      site: (r.querySelector('.rp-brand-site')?.textContent || '').trim(), brands: r.querySelectorAll('.rp-brand').length,
+    };
+  })()`)) as { visibleText: number; spoken: boolean; lineBox: number; marks: number; ticks: number; live: number; site: string; brands: number };
+  check('no "to move" sentence is shown while the replay plays', chrome.visibleText === 0 && chrome.lineBox <= 1, JSON.stringify(chrome));
+  check('the turn is still spoken to a screen reader', chrome.spoken);
+  check('exactly one name is lit as the mover', chrome.live === 1, String(chrome.live));
+  check('the bar marks 2-4 biggest moments, no hand-over hairs', chrome.marks >= 2 && chrome.marks <= 4 && chrome.ticks === 0, `${chrome.marks} marks, ${chrome.ticks} hairs`);
+  check('futasaku.com signs the replay once', chrome.site === 'futasaku.com' && chrome.brands === 1, `${chrome.site} ×${chrome.brands}`);
+
+  // THE END: jump near the finish and let it play out; the result is shown, and Replay again sits
+  // over the foot of the finished board.
+  await page.locator('#replay .rp-scrub').focus();
+  await page.keyboard.press('End');
+  await page.keyboard.press('ArrowLeft');
+  if (!(await replayNow(page))?.playing) await page.keyboard.press('Space');
+  await page.waitForFunction(`(() => document.getElementById('replay')?.dataset.ended === '1')()`, undefined, { timeout: 20_000 });
+  await page.waitForTimeout(400);
+  const result = ((await page.locator('#replay .rp-turn').textContent()) ?? '').trim();
+  const resultBox = await page.locator('#replay .rp-turn').boundingBox();
+  const againBox = await page.locator('#replay [data-rp="again"]').boundingBox();
+  const boardBox2 = await page.locator('#replay .rp-board').boundingBox();
+  check('the finished replay shows the result', /wins|draw/i.test(result) && !!resultBox && resultBox.height >= 12, result);
+  check(
+    'Replay again sits over the foot of the finished board, a 44px target',
+    !!againBox && !!boardBox2 && againBox.height >= 44 && againBox.y + againBox.height <= boardBox2.y + boardBox2.height + 1 &&
+      Math.abs(againBox.x + againBox.width / 2 - (boardBox2.x + boardBox2.width / 2)) <= 2,
+    JSON.stringify(againBox),
+  );
+  await page.screenshot({ path: `${SHOTS}/replay-practice-end-390x844.png` });
+
   await page.locator('#replay [data-rp="close"]').click();
   await page.locator('#replay').waitFor({ state: 'hidden', timeout: 5_000 });
   check('leaving the practice replay returns to the result card', await page.locator('#gameover').isVisible());

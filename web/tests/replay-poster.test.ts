@@ -40,7 +40,7 @@ describe('the replay poster', () => {
     const data = posterFor(model);
     const layout = posterLayout(data);
     const texts = [layout.names[0].text, layout.names[1].text, layout.score.you.text, layout.score.dash.text, layout.score.opp.text, layout.mark.text];
-    expect(texts).toEqual(['RYK', 'JADEBADGER', '9', '–', '0', 'FUTASAKU']);
+    expect(texts).toEqual(['RYK', 'JADEBADGER', '9', '–', '0', 'FUTASAKU.COM']);
     // Six pieces of text: the names, the score pair and the mark. No title, no timestamp, no id.
     expect(texts).toHaveLength(6);
     // The board is the match's last position, not the opening one.

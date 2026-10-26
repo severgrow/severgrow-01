@@ -147,6 +147,70 @@ export type ReplayTurningPoint = {
   action: number;
 };
 
+/**
+ * THE BIGGEST MOMENTS (owner, 2026-10-26): "include 2-4 biggest actions on timeline rather than
+ * more". One play's weight in the match, measured from its own frames, never a heuristic:
+ * `swing` is how far it moved the score gap between the two players (|Δ(me − opponent)|), `cut` the
+ * tiles it cut off, and `impact` their sum. `frame` is the play's first visible beat (where a tap on
+ * the bar lands); `seat` the seat that made it, in SCREEN seats.
+ */
+export type ReplayHighlight = {
+  frame: number;
+  action: number;
+  seat: Player;
+  swing: number;
+  cut: number;
+  impact: number;
+};
+
+/** The most moments the scrub bar ever marks. */
+export const MAX_HIGHLIGHTS = 4;
+/** A play must weigh at least this share of the match's biggest play to earn a mark. */
+const HIGHLIGHT_SHARE = 0.35;
+
+/**
+ * Two to four plays, in time order. The turning point (the biggest cut) is always one of them. Plays
+ * that barely moved the match are left off even if that leaves fewer than four — but never fewer than
+ * two when two plays moved it at all, so the bar always tells a story when there is one.
+ */
+export const pickHighlights = (
+  frames: readonly ReplayFrame[],
+  from: readonly [number, number],
+  cutByAction: ReadonlyMap<number, number>,
+  turningAction: number | null,
+): ReplayHighlight[] => {
+  const byAction = new Map<number, ReplayFrame[]>();
+  for (const frame of frames) {
+    const list = byAction.get(frame.action);
+    if (list) list.push(frame);
+    else byAction.set(frame.action, [frame]);
+  }
+  const all: ReplayHighlight[] = [];
+  for (const [action, own] of byAction) {
+    const shown = own.find((f) => f.kind !== 'turn' && f.kind !== 'end');
+    if (!shown) continue;
+    const before = frames[own[0]!.index - 1]?.scores ?? from;
+    const after = own.at(-1)!.scores;
+    const swing = Math.abs(after[0] - after[1] - (before[0] - before[1]));
+    const cut = cutByAction.get(action) ?? 0;
+    const impact = swing + cut;
+    if (impact <= 0) continue;
+    all.push({ frame: shown.index, action, seat: shown.seat, swing, cut, impact });
+  }
+  // Biggest first; a tie goes to the earlier play (the same rule the turning point keeps).
+  all.sort((a, b) => b.impact - a.impact || a.frame - b.frame);
+  const top = all[0]?.impact ?? 0;
+  const picked = all.filter((h, i) => i < MAX_HIGHLIGHTS && (i < 2 || h.impact >= top * HIGHLIGHT_SHARE));
+  if (turningAction !== null && !picked.some((h) => h.action === turningAction)) {
+    const tp = all.find((h) => h.action === turningAction);
+    if (tp) {
+      if (picked.length >= MAX_HIGHLIGHTS) picked.pop();
+      picked.push(tp);
+    }
+  }
+  return picked.sort((a, b) => a.frame - b.frame);
+};
+
 export type ReplayModel = {
   frames: ReplayFrame[];
   /** The whole match's playback length, including the final hold, in ms. */
@@ -166,6 +230,8 @@ export type ReplayModel = {
    * null when nothing was cut or there is only one beat. The replay's own story.
    */
   turningPoint: ReplayTurningPoint | null;
+  /** The two to four plays that moved the match most (empty on a match too short for a story). */
+  highlights: ReplayHighlight[];
   /** How long the final board rests before "Replay again". */
   endHold: number;
   /**
@@ -485,13 +551,15 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
   }
 
   const startScores = scores(opening);
+  const fromScores: [number, number] = me === 0 ? [startScores[0], startScores[1]] : [startScores[1], startScores[0]];
+  const highlights = frames.length > 1 ? pickHighlights(frames, fromScores, cutByAction, turningPoint?.action ?? null) : [];
   return {
     frames,
     totalMs: at + REPLAY_PACING.endHold,
     scale: fitted.scale,
     from: {
       board: screenBoard(opening.board, me),
-      scores: me === 0 ? [startScores[0], startScores[1]] : [startScores[1], startScores[0]],
+      scores: fromScores,
       turn: mapSeat(firstTurn, me),
     },
     config: opening.config,
@@ -500,6 +568,7 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
     me,
     result,
     turningPoint,
+    highlights,
     endHold: REPLAY_PACING.endHold,
     input,
   };

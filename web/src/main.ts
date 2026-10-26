@@ -241,7 +241,7 @@ import type { Beats } from './logic/emptyturn.js';
 // The product menu shows the world map only when this build really has an online endpoint to read
 // it from (the same predicate the lobby uses), so the entry can never open a dead screen.
 import { onlineBuildEnabled } from './online/config.js';
-import { accountsConfiguredInThisBuild, paintEarlyAccountKey } from './accounts/menu-key.js';
+import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname } from './accounts/menu-key.js';
 import { paintBetaLine } from './feedback/beta-line.js';
 import { queueSeedProof } from './online/seed-rewards.js';
 import { requestTrainingTicket, settleQueuedSeedsOnBoot, settleSeedProof } from './online/seed-settle.js';
@@ -7760,7 +7760,9 @@ function offlineReplayModel(): ReplayModel | null {
     startingPlayer: opening.startingPlayer ?? opening.turnPlayer,
     base: opening,
     actions: [...st.log],
-    names: [REPLAY.you, OPP.label],
+    // The player's own nickname when signed in (an online duel already names both players this way);
+    // a guest stays "You".
+    names: [signedInNickname() ?? REPLAY.you, OPP.label],
     me: 0,
   };
   return buildReplay(input);

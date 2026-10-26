@@ -9,8 +9,6 @@
 //
 // The layout is a pure function of the model and a frame index, so a test can prove the frame at
 // index N carries frame N's board — and that the timing matches `ReplayModel.totalMs` exactly.
-import { REPLAY } from '../../../src/strings.js';
-import type { Player } from '../../../src/engine/index.js';
 import { drawReplayPoster, posterFor, posterLayout } from './poster.js';
 import type { PosterData, PosterLayout, PosterTurn } from './poster.js';
 import type { ReplayModel } from './timeline.js';
@@ -72,13 +70,13 @@ export const videoFrameData = (model: ReplayModel, index: number): PosterData =>
   };
 };
 
-/** The one line a video frame says: whose turn it is, or the result on the final hold. */
-export const videoTurn = (model: ReplayModel, step: VideoStep): PosterTurn => {
-  if (step.end && model.result) return { text: model.result.title, seat: null };
-  const frame = step.index >= 0 ? model.frames[step.index] : undefined;
-  const seat: Player = frame?.turn ?? model.from.turn;
-  return { text: REPLAY.toMove(model.names[seat]), seat };
-};
+/**
+ * The one line a video frame says: the result, on the final hold — and nothing before it. The video
+ * is the replay screen recorded, and that screen no longer writes "… to move" (owner, 2026-10-26):
+ * the board and the score tell the match, the result closes it.
+ */
+export const videoTurn = (model: ReplayModel, step: VideoStep): PosterTurn | undefined =>
+  step.end && model.result ? { text: model.result.title, seat: null } : undefined;
 
 /** A pure, testable description of one video frame (identical geometry to the still poster). */
 export const videoLayoutAt = (model: ReplayModel, step: VideoStep): PosterLayout => posterLayout(videoFrameData(model, step.index));

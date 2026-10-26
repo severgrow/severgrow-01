@@ -67,6 +67,26 @@ export const REPLAY_CSS = `
 #replay .rp-name[data-seat='0'] { text-align: left; color: var(--rp-me); }
 #replay .rp-name[data-seat='1'] { text-align: right; color: var(--rp-opp); }
 #replay .rp-name[data-live='1'] { color: var(--rp-ink); }
+/* WHOSE MOVE, without a sentence (owner, 2026-10-26): the mover's name is lit and carries one small
+   pip in their own ink, on the inner side, toward the score. It moves on the hand-over and nowhere else. */
+#replay .rp-name::after,
+#replay .rp-name::before { content: none; }
+#replay .rp-name[data-seat='0'][data-live='1']::after,
+#replay .rp-name[data-seat='1'][data-live='1']::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 8px;
+  border-radius: 50%;
+  vertical-align: 2px;
+  background: var(--rp-me);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--rp-me) 70%, transparent);
+}
+#replay .rp-name[data-seat='1'][data-live='1']::before {
+  background: var(--rp-opp);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--rp-opp) 70%, transparent);
+}
 #replay .rp-score {
   display: flex;
   align-items: baseline;
@@ -77,7 +97,18 @@ export const REPLAY_CSS = `
 }
 #replay .rp-score .rp-dash { font-size: 13px; color: var(--rp-faint); font-weight: 400; }
 
-/* ---------- the one quiet line that names the turn ---------- */
+/* ---------- the turn line: spoken, not shown; the result once the match has ended ---------- */
+#replay:not([data-ended='1']) .rp-turn {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
 #replay .rp-turn {
   margin: 0;
   min-height: 17px;
@@ -85,7 +116,7 @@ export const REPLAY_CSS = `
   font: 500 12px/1.2 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: var(--rp-dim);
+  color: var(--rp-ink);
   font-variant-numeric: tabular-nums;
 }
 #replay .rp-turn b { font-weight: 700; color: var(--rp-ink); }
@@ -137,43 +168,85 @@ export const REPLAY_CSS = `
 #replay .rp-board svg .hex-cell.normal.futa04-empty { filter: brightness(1.15); }
 
 /* ---------- the controls ---------- */
+/* The bar and its clock share one row: the clock is a quiet figure at the bar's right end. */
+#replay .rp-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 0 2px;
+}
 #replay .rp-scrub-wrap { position: relative; }
-/* THE TURNING-POINT NOTCH: a marked beat on the bar, shaped like the existing ticks but one step
-   brighter and taller. The button is 2px of ink; its pseudo-element is the 44px touch target, so
-   the notch never shifts the bar or needs footer space on a 320px phone. */
-#replay .rp-notch {
+/* THE BIGGEST MOMENTS: two to four small diamonds pinned just above the bar, one per play that moved
+   the match most, in the ink of the player who made it, each on a hairline down to its exact beat.
+   The turning point (the biggest cut) is the gold one, a size up. The pins live in their own lane
+   ABOVE the line: the line itself always belongs to the bar, so a press or drag there seeks exactly
+   as before, and only a press on a pin lands on its moment. */
+#replay .rp-moments { position: absolute; inset: 0; pointer-events: none; }
+#replay .rp-notch,
+#replay .rp-moment {
   position: absolute;
-  top: 50%;
-  width: 2px;
-  height: 44px;
-  left: var(--rp-tp, 0%);
-  translate: -50% -50%;
+  /* the lane: from 14px above the bar's box to 7px above its centre line */
+  top: -14px;
+  height: 29px;
+  width: 24px;
+  translate: -50% 0;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--rp-ink);
   cursor: pointer;
+  pointer-events: auto;
   z-index: 2;
+  --rp-mk: var(--rp-me);
 }
-#replay .rp-notch::after { content: ''; position: absolute; inset: 0 -21px; }
-#replay .rp-notch::before {
+#replay .rp-moment[data-seat='1'] { --rp-mk: var(--rp-opp); }
+#replay .rp-notch { left: var(--rp-tp, 0%); --rp-mk: #e9cf8e; }
+/* the pin's hairline, from the diamond down to the bar */
+#replay .rp-notch::after,
+#replay .rp-moment::after {
   content: '';
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: 2px;
-  height: 15px;
-  translate: -50% -50%;
-  border-radius: 1px;
-  background: currentColor;
-  opacity: .78;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, .35);
-  transition: height 140ms ease, opacity 140ms ease;
+  top: 100%;
+  width: 1px;
+  height: 7px;
+  translate: -50% 0;
+  background: var(--rp-mk);
+  opacity: .55;
+}
+#replay .rp-notch::before,
+#replay .rp-moment::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 7px;
+  height: 7px;
+  translate: -50% 0;
+  rotate: 45deg;
+  border-radius: 1.5px;
+  background: var(--rp-mk);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--rp-mk) 45%, transparent);
+  transition: scale 160ms ease, box-shadow 160ms ease;
+}
+#replay .rp-notch::before {
+  width: 9px;
+  height: 9px;
+  bottom: 3px;
+  background: linear-gradient(135deg, #f7e6b4, #c9a256);
+  box-shadow: 0 0 12px rgba(233, 207, 142, .55);
 }
 #replay .rp-notch[hidden] { display: none !important; }
-#replay .rp-notch[data-at='1']::before { height: 21px; opacity: 1; }
-#replay .rp-notch:focus-visible { outline: none; }
-#replay .rp-notch:focus-visible::before { box-shadow: 0 0 0 3px rgba(233, 216, 173, .7); }
+#replay .rp-notch[data-at='1']::before,
+#replay .rp-moment[data-at='1']::before,
+#replay .rp-notch:hover::before,
+#replay .rp-moment:hover::before { scale: 1.35; }
+#replay .rp-notch:focus-visible,
+#replay .rp-moment:focus-visible { outline: none; }
+#replay .rp-notch:focus-visible::before,
+#replay .rp-moment:focus-visible::before { box-shadow: 0 0 0 2px #0b0d0c, 0 0 0 4px rgba(233, 216, 173, .75); }
+/* The lane needs its room above the bar. */
+#replay .rp-bar { margin-top: 10px; }
 #replay .rp-scrub {
   position: relative;
   /* The replay's primary drag target. It was 30px tall — a thumb target only by luck. */
@@ -267,25 +340,28 @@ export const REPLAY_CSS = `
 
 #replay .rp-foot {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   padding: 0 2px;
-  min-height: 34px;
+  min-height: 48px;
 }
+/* A FIXED width (the widest "00:00 / 00:00"), so the bar beside it never changes length as the
+   clock fills in or pauses: a bar that shifts under a thumb mid-drag seeks to the wrong moment. */
 #replay .rp-meta {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  position: relative;
+  box-sizing: content-box;
+  width: 13ch;
+  text-align: right;
   white-space: nowrap;
   font: 400 10.5px/1.3 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
-  letter-spacing: .14em;
-  text-transform: uppercase;
+  letter-spacing: .1em;
   color: var(--rp-faint);
   font-variant-numeric: tabular-nums;
 }
 /* The footer's right-hand slot holds the one mark; the share key sits immediately beside it. */
-#replay .rp-actions { display: flex; align-items: center; gap: 8px; }
+#replay .rp-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+#replay .rp-actions-start { justify-content: flex-start; }
 /* One quiet icon: the same ink and the same 44px target as the buttons, with no plate of its own. */
 #replay .rp-icon {
   flex: none;
@@ -321,22 +397,71 @@ export const REPLAY_CSS = `
 }
 #replay .rp-btn:focus-visible { outline: 2px solid #e8ddc9; outline-offset: 2px; }
 #replay .rp-btn[hidden] { display: none !important; }
+/* THE SIGNATURE: the 双サク mark over FUTASAKU.COM, the address in wide-tracked gold between two
+   hairlines — the same metal as the board's bonus frames, so it reads as part of the game, not a
+   footer link. Quiet enough to sit under the match, present in every screenshot of it. */
 #replay .rp-brand {
-  display: block;
-  height: 18px;
-  width: auto;
-  max-width: 76px;
-  opacity: .72;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
   pointer-events: none;
 }
+#replay .rp-brand-mark {
+  display: block;
+  height: 15px;
+  width: auto;
+  max-width: 64px;
+  opacity: .82;
+}
+#replay .rp-brand-site {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 500 9.5px/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  letter-spacing: .38em;
+  /* the tracking adds space after the last letter too; this pulls the word back to true centre */
+  margin-right: -.38em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #d9bd7a;
+  background: linear-gradient(180deg, #f6e5b5 0%, #d2ad62 55%, #a9843f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+#replay .rp-brand-site::before,
+#replay .rp-brand-site::after {
+  content: '';
+  width: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(217, 189, 122, .6));
+}
+#replay .rp-brand-site::after { background: linear-gradient(90deg, rgba(217, 189, 122, .6), transparent); margin-left: -.38em; }
 #replay .rp-brand[hidden] { display: none !important; }
+/* Replay again: one pill over the foot of the finished board, centred. */
+#replay .rp-board .rp-again {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  translate: -50% 0;
+  z-index: 3;
+  padding: 0 22px;
+  border-color: rgba(233, 207, 142, .38);
+  background: rgba(14, 16, 14, .82);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .5);
+}
 /* Replay again arrives with the result, on the plate's own beat. */
 #replay[data-ended='1'] .rp-btn[data-rp='again'] { animation: rp-again-in 260ms cubic-bezier(.22, .72, .24, 1) both; }
 @keyframes rp-again-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
 /* Paused: the whole picture goes quiet rather than showing a badge, and the clock line says so. */
 #replay[data-paused='1'] .rp-board { opacity: .82; transition: opacity 160ms ease; }
-#replay[data-paused='1'] .rp-meta::after { content: ' · paused'; color: var(--rp-dim); }
+#replay[data-paused='1'] .rp-meta { color: var(--rp-ink); }
+/* the pause glyph sits in the clock's own box, so it never moves the bar either */
+#replay[data-paused='1'] .rp-meta::before { content: '❚❚'; position: absolute; left: 0; top: 50%; translate: 0 -50%; font-size: 8px; letter-spacing: 0; color: var(--rp-dim); }
 
 /* The tightest portrait phone (320px): the footer keeps its one row. The share key joins the
    mark, so the two text keys give back a little padding and tracking — never a 44px target. */
@@ -344,14 +469,16 @@ export const REPLAY_CSS = `
   #replay .rp-foot { gap: 6px; }
   #replay .rp-actions { gap: 4px; }
   #replay .rp-btn { min-height: 44px; padding: 0 8px; font-size: 10.5px; letter-spacing: .08em; }
-  #replay .rp-brand { max-width: 46px; }
+  #replay .rp-brand-site { letter-spacing: .26em; margin-right: -.26em; font-size: 8.5px; gap: 5px; }
+  #replay .rp-brand-site::before, #replay .rp-brand-site::after { width: 8px; }
+  #replay .rp-brand-site::after { margin-left: -.26em; }
 }
 
 /* A phone in landscape or a short window: tighten the chrome, never the board. */
 @media (max-height: 560px) {
   #replay { padding-top: calc(env(safe-area-inset-top, 0px) + 5px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 5px); }
   #replay .rp-score { font-size: 18px; }
-  #replay .rp-turn { display: none; }
+  #replay .rp-brand-mark { display: none; }
   #replay .rp-scrub { height: 44px; }
 }
 

@@ -40,6 +40,22 @@ const signedInName = (kv: KeyValue | null): string | null => {
   }
 };
 
+/**
+ * The signed-in player's own nickname, untagged ("RYK"), from this device alone — or null for a
+ * guest. The replay names the player by it, as an online duel already does (owner, 2026-10-26).
+ */
+export const signedInNickname = (): string | null => {
+  try {
+    const raw = globalThis.localStorage?.getItem(IDENTITY_KEY);
+    const id = raw ? (JSON.parse(raw) as { kind?: unknown; displayName?: unknown }) : null;
+    return id && id.kind === 'account' && typeof id.displayName === 'string' && id.displayName.trim()
+      ? id.displayName.trim()
+      : null;
+  } catch {
+    return null;
+  }
+};
+
 /** What the key should be right now, from this device alone. */
 export const accountKeyNow = (kv: KeyValue | null, configured: boolean): { show: boolean; name: string | null } => {
   if (!configured) return { show: false, name: null };

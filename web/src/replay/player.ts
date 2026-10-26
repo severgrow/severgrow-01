@@ -146,6 +146,10 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   nameOpp.dataset.seat = '1';
   head.append(nameMe, score, nameOpp);
 
+  // The turn line is SPOKEN, not shown (owner, 2026-10-26: no "… to move" on the replay). Whose
+  // move it is reads from the names (the mover's name is lit, with a pip in their ink); a screen
+  // reader still hears every hand-over. Once the match has ended the line becomes visible and
+  // carries the result ("KAT-WHAT wins").
   const turn = document.createElement('p');
   turn.className = 'rp-turn';
   turn.setAttribute('role', 'status');
@@ -189,12 +193,22 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   turnMark.className = 'rp-notch';
   turnMark.dataset.rp = 'turn';
   turnMark.hidden = true;
-  scrubWrap.append(scrub, turnMark);
+  // THE BIGGEST MOMENTS (owner, 2026-10-26: "2-4 biggest actions on timeline rather than more"):
+  // one mark per play that moved the match most, instead of a hair per hand-over. The turning point
+  // (the biggest cut) is one of them and keeps its own control above; the others are built per match.
+  const moments = document.createElement('div');
+  moments.className = 'rp-moments';
+  scrubWrap.append(scrub, moments, turnMark);
+  const bar = document.createElement('div');
+  bar.className = 'rp-bar';
 
   const foot = document.createElement('footer');
   foot.className = 'rp-foot';
   const meta = document.createElement('span');
   meta.className = 'rp-meta';
+  bar.append(scrubWrap, meta);
+  const leftActions = document.createElement('div');
+  leftActions.className = 'rp-actions rp-actions-start';
   const actions = document.createElement('div');
   actions.className = 'rp-actions';
   const again = document.createElement('button');
@@ -203,6 +217,8 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   again.dataset.rp = 'again';
   again.textContent = REPLAY.again;
   again.hidden = true;
+  // "Replay again" arrives over the foot of the finished board, centred, where the eye already is.
+  again.classList.add('rp-again');
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'rp-btn';
@@ -228,10 +244,24 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   videoBtn.title = REPLAY.exportVideo;
   videoBtn.innerHTML =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="12" height="12" rx="2.5"/><path d="m15 10.5 5-3v9l-5-3"/></svg>';
-  const brand = createHudBrandMark('futasaku-replay-white');
-  brand.classList.add('rp-brand');
-  actions.append(again, closeBtn, shareBtn, videoBtn, brand);
-  foot.append(meta, actions);
+  // THE SIGNATURE (owner, 2026-10-26: "an elegant place to place futasaku.com"): the footer's centre
+  // carries the mark and the address as one lockup — the 双サク mark above, FUTASAKU.COM below in
+  // wide-tracked gold, between two hairlines. It sits where a screenshot or a screen recording of
+  // the replay always catches it, and it is the one mark on this surface.
+  const brand = document.createElement('div');
+  brand.className = 'rp-brand';
+  brand.setAttribute('aria-label', REPLAY.site);
+  brand.setAttribute('role', 'img');
+  const brandMark = createHudBrandMark('futasaku-replay-white');
+  brandMark.classList.add('rp-brand-mark');
+  const brandSite = document.createElement('span');
+  brandSite.className = 'rp-brand-site';
+  brandSite.setAttribute('aria-hidden', 'true');
+  brandSite.textContent = REPLAY.site;
+  brand.append(brandMark, brandSite);
+  leftActions.append(closeBtn);
+  actions.append(shareBtn, videoBtn);
+  foot.append(leftActions, brand, actions);
 
   // The recording's own line: progress and the way out. It sits between the scrub bar and the
   // footer, so it never covers a control; while it is hidden nothing moves.
@@ -249,7 +279,8 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   videoCancel.textContent = REPLAY.cancel;
   videoRow.append(videoText, videoCancel);
 
-  stage.append(head, turn, boardBox, scrubWrap, videoRow, foot);
+  boardBox.append(again);
+  stage.append(head, turn, boardBox, bar, videoRow, foot);
   root.append(stage);
   document.body.append(root);
 
@@ -328,6 +359,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
 
   /** Place the turning-point notch, or take it away when this match has no cut to show. */
   const syncTurnMark = (): void => {
+    syncMoments();
     if (!model?.turningPoint || model.totalMs <= 0) {
       turnMark.hidden = true;
       turnMark.removeAttribute('aria-label');
@@ -342,6 +374,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     turnMark.hidden = false;
     turnMark.style.left = `${((frame.at / model.totalMs) * 100).toFixed(3)}%`;
     turnMark.dataset.at = index === model.turningPoint.frame && !playing && !ended ? '1' : '0';
+    turnMark.dataset.seat = String(model.turningPoint.seat);
     const label = REPLAY.turningPointLabel(model.turningPoint.tiles);
     turnMark.setAttribute('aria-label', label);
     turnMark.title = label;
@@ -609,15 +642,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   turnMark.addEventListener('click', (event) => {
     event.stopPropagation();
     if (!model?.turningPoint) return;
-    const frame = model.frames[model.turningPoint.frame];
-    if (!frame) return;
-    if (index === model.turningPoint.frame && !playing && !ended) {
-      setPlaying(true);
-      return;
-    }
-    setPlaying(false);
-    seek(model.totalMs > 0 ? frame.at / model.totalMs : 0, false);
-    turnMark.focus({ preventScroll: true });
+    jumpTo(model.turningPoint.frame, turnMark);
   });
 
   // THE SHARE: the finished poster (names, score, final board, mark) through the phone's own share
@@ -773,7 +798,9 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     if (key === 'Tab') {
       const order: HTMLElement[] = [
         scrub,
-        ...(turnMark.hidden ? [] : [turnMark]),
+        ...([...moments.children, ...(turnMark.hidden ? [] : [turnMark])] as HTMLElement[]).sort(
+          (a, b) => parseFloat(a.style.left) - parseFloat(b.style.left),
+        ),
         ...(again.hidden ? [] : [again]),
         ...(videoRow.hidden ? [] : [videoCancel]),
         closeBtn,
@@ -806,22 +833,56 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     }
   });
 
-  const buildTicks = (): void => {
+  /** The bar's marks for this match: every highlight but the turning point (that has its own control). */
+  const buildMoments = (): void => {
+    moments.replaceChildren();
     ticks.replaceChildren();
-    if (!model) return;
-    let previous = -1;
-    let shown = 0;
-    for (const frame of model.frames) {
-      if (frame.turn === previous) continue;
-      previous = frame.turn;
-      // The first hand-over is the opening position, not a tick on the bar.
-      if (shown++ === 0 || model.totalMs <= 0) continue;
-      const tick = document.createElement('span');
-      tick.className = 'rp-tick';
-      tick.dataset.seat = String(frame.turn);
-      tick.style.left = `${((frame.at / model.totalMs) * 100).toFixed(3)}%`;
-      ticks.append(tick);
+    if (!model || model.totalMs <= 0) return;
+    for (const moment of model.highlights) {
+      if (moment.action === model.turningPoint?.action) continue;
+      const frame = model.frames[moment.frame];
+      if (!frame) continue;
+      const mark = document.createElement('button');
+      mark.type = 'button';
+      mark.className = 'rp-moment';
+      mark.dataset.rp = 'moment';
+      mark.dataset.seat = String(moment.seat);
+      mark.dataset.frame = String(moment.frame);
+      mark.style.left = `${((frame.at / model.totalMs) * 100).toFixed(3)}%`;
+      const label = REPLAY.momentLabel(model.names[moment.seat], moment.cut, moment.swing);
+      mark.setAttribute('aria-label', label);
+      mark.title = label;
+      mark.addEventListener('click', (event) => {
+        event.stopPropagation();
+        jumpTo(moment.frame, mark);
+      });
+      moments.append(mark);
     }
+    syncMoments();
+  };
+
+  /** The mark of the beat on screen glows while the replay rests on it. */
+  const syncMoments = (): void => {
+    for (const mark of moments.children as HTMLCollectionOf<HTMLElement>) {
+      mark.dataset.at = Number(mark.dataset.frame) === index && !playing && !ended ? '1' : '0';
+    }
+  };
+
+  /**
+   * A mark is a door to its moment: the first press lands on that play's first beat and pauses there,
+   * so the player is looking at it; a second press carries on from it (the replay's own clock).
+   */
+  const jumpTo = (frameIndex: number, control: HTMLElement): void => {
+    if (!model) return;
+    const frame = model.frames[frameIndex];
+    if (!frame) return;
+    if (index === frameIndex && !playing && !ended) {
+      setPlaying(true);
+      return;
+    }
+    setPlaying(false);
+    seek(model.totalMs > 0 ? frame.at / model.totalMs : 0, false);
+    control.focus({ preventScroll: true });
   };
 
   /** A view's static art, then the removal ghosts above it (`setup` empties the SVG). */
@@ -860,7 +921,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     scoreOpp.textContent = String(next.from.scores[1]);
     // The turn line is set here too, so the surface never shows a blank line while it fades in.
     setTurnLine(next.frames[0]?.turn ?? next.from.turn);
-    buildTicks();
+    buildMoments();
     paintMeta();
     syncTurnMark();
     root.hidden = false;

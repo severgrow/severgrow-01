@@ -94,16 +94,16 @@ describe('the replay video', () => {
     expect(videoFrameData(model, plan.steps.at(-1)!.index).board).toEqual(posterFor(model).board);
   });
 
-  it('says whose turn each frame is, and the result on the final hold', () => {
+  // Owner, 2026-10-26: the replay no longer writes "… to move"; the video is that screen recorded.
+  it('writes no turn line while the match plays, and the result on the final hold', () => {
     const model = buildReplay(input());
     const plan = videoPlan(model);
     plan.steps.slice(0, -1).forEach((step) => {
-      const frame = model.frames[step.index]!;
-      expect(videoTurn(model, step)).toEqual({ text: `${model.names[frame.turn]} to move`, seat: frame.turn });
+      expect(videoTurn(model, step)).toBeUndefined();
     });
     const end = videoTurn(model, plan.steps.at(-1)!);
-    expect(end.seat).toBeNull();
-    expect(end.text).toBe(model.result?.title ?? `${model.names[model.from.turn]} to move`);
+    if (model.result) expect(end).toEqual({ text: model.result.title, seat: null });
+    else expect(end).toBeUndefined();
   });
 
   it('names the file after the winner and the score, with the container it actually got', () => {
