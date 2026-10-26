@@ -134,7 +134,17 @@ describe('the face keeps its palette and its tempo', () => {
     // panel, and the CSS entrance is switched off for it.
     expect(panel).toMatch(/<section id="sheet-menu"[^>]*data-ix-surface>/);
     expect(styleCss).toMatch(/\.sheet,\s*#sheet-menu,[\s\S]{0,80}?\{\s*animation: none;/);
-    expect(mainSource).toMatch(/enterSurface\(next\);/);
+    // The panel is opened by the shared layer, never by its own CSS. Options are allowed (a full
+    // plate asks for the strongest arrival the tokens permit — see the call site), but the call
+    // itself must be `enterSurface` and must never be a bespoke animation.
+    expect(mainSource).toMatch(/enterSurface\(next(?:,\s*\{[^}]*\})?\);/);
+    // Whatever it asks for stays inside the vocabulary the token test pins.
+    const call = mainSource.match(/enterSurface\(next(?:,\s*(\{[^}]*\}))?\);/);
+    if (call?.[1]) {
+      const numbers = [...call[1].matchAll(/(?:duration|travel|scale):\s*([\d.]+)/g)].map((m) => Number(m[1]));
+      expect(numbers.length).toBeGreaterThan(0);
+      for (const n of numbers) expect(n).toBeLessThanOrEqual(320); // a duration, a px travel or a scale
+    }
     expect(panelCss).not.toMatch(/\b\d+(?:\.\d+)?(?:ms|s)\b/);
     expect(panelCss).not.toMatch(/cubic-bezier|ease-in-out|ease-out|\blinear\b/);
     expect(panelCss).not.toMatch(/@keyframes[^{]*\{[^}]*transform/);
