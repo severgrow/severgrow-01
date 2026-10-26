@@ -15,11 +15,18 @@ const BOUNDS: readonly [number, number, number, number][] = [
   [90,1280,331,1512], [397,1281,642,1515], [697,1285,949,1508],
 ];
 
-const stoneViewBox = (owner: Player, strength: number) => {
+/** The atlas and the square crop of one strength stone, shared with the replay's canvas pictures. */
+export const SEED_STONE_ATLAS = atlasUrl;
+export const seedStoneCrop = (owner: Player, strength: number) => {
   const index = (owner === 0 ? 0 : 9) + Math.max(1, Math.min(9, strength)) - 1;
   const [x0,y0,x1,y1] = BOUNDS[index]!;
   const size = Math.max(x1-x0,y1-y0) + 12;
-  return `${((x0+x1-size)/2).toFixed(1)} ${((y0+y1-size)/2).toFixed(1)} ${size} ${size}`;
+  return { x: (x0+x1-size)/2, y: (y0+y1-size)/2, size };
+};
+
+const stoneViewBox = (owner: Player, strength: number) => {
+  const crop = seedStoneCrop(owner, strength);
+  return `${crop.x.toFixed(1)} ${crop.y.toFixed(1)} ${crop.size} ${crop.size}`;
 };
 
 export function setSeedStoneStrength(stone: SVGGElement | null, strength: number) {

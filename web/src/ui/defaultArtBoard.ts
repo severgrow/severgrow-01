@@ -9,6 +9,9 @@ import { drawLandmark } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
+// The replay's canvas pictures paint the same faces; they read this list from the module the board
+// already loaded, so neither the poster nor the video pulls a second copy of the sprite URLs.
+export { DEFAULT_ART_SPRITES };
 // Board ground/rocks live with the game assets (V3 pack archived off this branch).
 import groundUrl from '../assets/board/empty_ground_01.webp';
 import rock1 from '../assets/board/rock_hex_01.webp';
@@ -21,6 +24,10 @@ import rock5 from '../assets/board/rock_hex_05.webp';
 // masonry/wood border inside that same cell, including its six corners.
 const artSize = (index: number) => index >= 18 ? 68 : index < 9 ? 80 : 76;
 const rockUrls = [rock1, rock2, rock3, rock4, rock5];
+// The replay's canvas pictures paint the same board; they read these URLs from the module the board
+// already loaded, so neither the poster nor the video pulls a second copy of them.
+export const BOARD_GROUND = groundUrl;
+export const BOARD_ROCKS = rockUrls;
 
 /**
  * Board pictures that could not be loaded, so the board never asks for them again.

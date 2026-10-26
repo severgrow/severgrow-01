@@ -19,6 +19,9 @@ import type { ReplayModel, ReplayTurningPoint } from './timeline.js';
 import { boardAtIndex, frameAtTime, seekTo } from './seek.js';
 import { REPLAY_CSS } from './replay-css.js';
 import { posterFor, shareReplayPoster } from './poster.js';
+import { loadBoardArtUrls, warmBoardArt } from './board-canvas.js';
+import { paintVideoFrame, videoPlan } from './frames.js';
+import { durationLabel, recordReplayVideo, shareOrSaveVideo } from './video.js';
 
 export type ReplayDeps = {
   theme: () => { style: ThemeStyle; id: ThemeId };
@@ -65,6 +68,13 @@ export type ReplayHandle = {
       board: string;
     }[];
   } | null;
+  /**
+   * Test/diagnostic hook: one step of the video's own plan, painted on a canvas exactly as the
+   * recorder paints it — a PNG data URL, with the board's art decoded first. It never drives
+   * playback and never touches a recording; the e2e suite uses it to compare the video's board
+   * with the board on screen.
+   */
+  videoFrame: (step?: number) => Promise<string | null>;
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -184,12 +194,38 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   shareBtn.title = REPLAY.share;
   shareBtn.innerHTML =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="m8 7 4-4 4 4"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>';
+  // THE VIDEO EXPORT (owner, 2026-10-26): the whole replay as a silent file, in the footer beside
+  // the poster's share key — the same 44px target and the same ink as everything else.
+  const videoBtn = document.createElement('button');
+  videoBtn.type = 'button';
+  videoBtn.className = 'rp-icon';
+  videoBtn.dataset.rp = 'video';
+  videoBtn.setAttribute('aria-label', REPLAY.exportVideo);
+  videoBtn.title = REPLAY.exportVideo;
+  videoBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="12" height="12" rx="2.5"/><path d="m15 10.5 5-3v9l-5-3"/></svg>';
   const brand = createHudBrandMark('futasaku-replay-white');
   brand.classList.add('rp-brand');
-  actions.append(again, closeBtn, shareBtn, brand);
+  actions.append(again, closeBtn, shareBtn, videoBtn, brand);
   foot.append(meta, actions);
 
-  stage.append(head, turn, boardBox, scrubWrap, foot);
+  // The recording's own line: progress and the way out. It sits between the scrub bar and the
+  // footer, so it never covers a control; while it is hidden nothing moves.
+  const videoRow = document.createElement('div');
+  videoRow.className = 'rp-video';
+  videoRow.hidden = true;
+  videoRow.setAttribute('role', 'status');
+  videoRow.setAttribute('aria-live', 'polite');
+  const videoText = document.createElement('span');
+  videoText.className = 'rp-video-text';
+  const videoCancel = document.createElement('button');
+  videoCancel.type = 'button';
+  videoCancel.className = 'rp-btn';
+  videoCancel.dataset.rp = 'video-cancel';
+  videoCancel.textContent = REPLAY.cancel;
+  videoRow.append(videoText, videoCancel);
+
+  stage.append(head, turn, boardBox, scrubWrap, videoRow, foot);
   root.append(stage);
   document.body.append(root);
 
@@ -210,6 +246,9 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   /** Signature of the board actually painted (a rebuild from the log differs from the frame list). */
   let painted = '';
   let sharing = false;
+  /** The one recording in flight, if any. Aborted by Close, by a new match, or by Cancel. */
+  let recording: AbortController | null = null;
+  let videoTimer = 0;
 
   const reduce = (): boolean => deps.reduceMotion();
 
@@ -521,6 +560,100 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
       });
   });
 
+  // THE VIDEO EXPORT (owner, 2026-10-26): the whole replay as a silent file. The pictures are
+  // painted from the model into the recorder's own canvas, so the recording is independent of what
+  // the surface is doing: a scrub, a pause, or the end card cannot change a single recorded frame.
+  /** The recording's line: a message, and whether Cancel belongs beside it. */
+  const showVideo = (text: string, cancel: boolean): void => {
+    if (videoText.textContent !== text) videoText.textContent = text;
+    videoCancel.hidden = !cancel;
+    videoRow.dataset.live = cancel ? '1' : '0';
+    // Progress changes once a second; announcing every tick would be noise. Only the settled
+    // messages ("Video saved", "Could not make the video") are spoken.
+    videoRow.setAttribute('aria-live', cancel ? 'off' : 'polite');
+    videoRow.hidden = false;
+  };
+  /** Write progress only when the word changes: one announcement per second, not per frame. */
+  const writeVideoProgress = (text: string): void => {
+    if (!videoRow.hidden && videoText.textContent !== text) videoText.textContent = text;
+  };
+  const settleVideo = (): void => {
+    window.clearTimeout(videoTimer);
+    videoRow.hidden = true;
+    videoRow.dataset.live = '0';
+    videoCancel.hidden = true;
+    videoBtn.disabled = false;
+    videoBtn.removeAttribute('aria-busy');
+  };
+  /** The one recording in flight stops here — Close, a new match, or the Cancel key. */
+  const cancelVideo = (): void => {
+    const running = recording;
+    recording = null;
+    running?.abort();
+    settleVideo();
+  };
+
+  const startVideo = async (): Promise<void> => {
+    if (!model || recording) return;
+    const current = model;
+    const controller = new AbortController();
+    recording = controller;
+    window.clearTimeout(videoTimer);
+    videoBtn.disabled = true;
+    videoBtn.setAttribute('aria-busy', 'true');
+    showVideo(REPLAY.recording(durationLabel(0), durationLabel(current.totalMs)), true);
+    // The surface pauses while it records: the video is painted from the model, and a still screen
+    // keeps the phone cool and the encoder's own clock honest. Its controls all stay usable.
+    setPlaying(false);
+    try {
+      const art = await loadBoardArtUrls();
+      const video = await recordReplayVideo({
+        model: current,
+        art,
+        signal: controller.signal,
+        onProgress: (done, total) => writeVideoProgress(REPLAY.recording(durationLabel(done), durationLabel(total))),
+      });
+      if (!video || controller.signal.aborted) {
+        settleVideo();
+        return;
+      }
+      const data = posterFor(current);
+      showVideo(REPLAY.videoReady, false);
+      const outcome = await shareOrSaveVideo(video, data, REPLAY.mark);
+      if (outcome === 'cancelled') settleVideo();
+      else {
+        showVideo(outcome === 'shared' ? REPLAY.videoShared : REPLAY.videoSaved, false);
+        videoTimer = window.setTimeout(settleVideo, 2600);
+      }
+    } catch {
+      // The one honest line: this browser could not record, or the encoder stopped. Never a fake
+      // "saved".
+      settleVideo();
+      if (!controller.signal.aborted) {
+        showVideo(REPLAY.videoFailed, false);
+        videoTimer = window.setTimeout(settleVideo, 3000);
+      }
+    } finally {
+      // The button comes back only if no NEWER recording has taken over (a cancel followed by an
+      // immediate second press must not re-enable the control under the running one).
+      if (recording === controller) recording = null;
+      if (!recording) {
+        videoBtn.disabled = false;
+        videoBtn.removeAttribute('aria-busy');
+        videoCancel.hidden = true;
+      }
+    }
+  };
+
+  videoBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    void startVideo();
+  });
+  videoCancel.addEventListener('click', (event) => {
+    event.stopPropagation();
+    cancelVideo();
+  });
+
   // Tap anywhere to pause, tap again to carry on. A tap on a control is not a pause.
   stage.addEventListener('pointerdown', (event) => {
     const el = event.target as Element | null;
@@ -551,8 +684,10 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
         scrub,
         ...(turnMark.hidden ? [] : [turnMark]),
         ...(again.hidden ? [] : [again]),
+        ...(videoRow.hidden ? [] : [videoCancel]),
         closeBtn,
         shareBtn,
+        ...(videoBtn.disabled ? [] : [videoBtn]),
       ];
       const at = order.indexOf(document.activeElement as HTMLElement);
       const dir = event.shiftKey ? -1 : 1;
@@ -599,6 +734,8 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   };
 
   const open = (next: ReplayModel): void => {
+    // A recording of the previous match must not carry on into this one.
+    cancelVideo();
     model = next;
     index = -1;
     elapsed = 0;
@@ -639,6 +776,8 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   };
 
   const close = (): void => {
+    // A recording never outlives the surface it was started from.
+    cancelVideo();
     stop();
     playing = false;
     dragging = false;
@@ -685,5 +824,14 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
             })),
           }
         : null,
+    videoFrame: async (step = -1) => {
+      if (!model) return null;
+      const plan = videoPlan(model);
+      const at = step < 0 ? plan.steps.length - 1 : Math.min(step, plan.steps.length - 1);
+      await warmBoardArt(await loadBoardArtUrls());
+      const canvas = document.createElement('canvas');
+      paintVideoFrame(canvas, model, plan.steps[Math.max(0, at)]!);
+      return canvas.toDataURL('image/png');
+    },
   };
 };
