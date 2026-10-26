@@ -114,8 +114,8 @@ const isFrameless = (f: Frame): boolean =>
 const pillState = (s: SeatSession): Promise<string | null> =>
   ev(s, `(() => { const p = document.querySelector('[data-live="pill"]'); return p && !p.hidden ? p.dataset.state : null; })()`);
 
-/** The bolt, as the proof needs it: its box, the wordmark's box, and the board's tiles. */
-type BoltSnap = { bolt: Box | null; brand: Box | null; tilesOverlap: number; board: Box | null; words: string };
+/** The bolt, as the proof needs it: its box, the menu's, the wordmark's, and the board's tiles. */
+type BoltSnap = { bolt: Box | null; menu: Box | null; brand: Box | null; score: Box | null; tilesOverlap: number; board: Box | null; words: string };
 const BOLT_PROBE = `(() => {
   const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect();
     return { x: Math.round(r.x * 10) / 10, y: Math.round(r.y * 10) / 10, width: Math.round(r.width * 10) / 10, height: Math.round(r.height * 10) / 10 }; };
@@ -125,8 +125,23 @@ const BOLT_PROBE = `(() => {
   let ov = 0;
   if (b) for (const t of tiles) { const w = Math.min(b.right, t.right) - Math.max(b.left, t.left); const h = Math.min(b.bottom, t.bottom) - Math.max(b.top, t.top); if (w > 0.5 && h > 0.5) ov += w * h; }
   const visibleText = bolt ? [...bolt.querySelectorAll('*')].filter((n) => n.childElementCount === 0 && (n.textContent || '').trim() && n.getBoundingClientRect().width > 2).map((n) => n.textContent.trim()).join('|') : '';
-  return { bolt: rect(bolt), brand: rect(document.getElementById('hud-brand')), tilesOverlap: Math.round(ov), board: rect(document.getElementById('board-wrap')), words: visibleText };
+  return { bolt: rect(bolt), menu: rect(document.getElementById('hud-menu')), brand: rect(document.getElementById('hud-brand')), score: rect(document.querySelector('.game > .hud .score.you')), tilesOverlap: Math.round(ov), board: rect(document.getElementById('board-wrap')), words: visibleText };
 })()`;
+const noOverlap = (a: Box | null, b: Box | null): boolean =>
+  !a || !b || a.width <= 0 || b.width <= 0 ||
+  a.x + a.width <= b.x + 0.5 || b.x + b.width <= a.x + 0.5 ||
+  a.y + a.height <= b.y + 0.5 || b.y + b.height <= a.y + 0.5;
+/** Is the sender-side confirmation window on screen (as opposed to the incoming invitation)? */
+const confirmOpen = (s: SeatSession): Promise<boolean> =>
+  ev(s, `(() => { const p = document.querySelector('.live-glass[data-live="confirm"]'); return !!p && !p.hidden; })()`);
+const confirmCopy = (s: SeatSession): Promise<{ what: string; terms: string; actions: string[] }> =>
+  ev(s, `(() => { const p = document.querySelector('.live-glass[data-live="confirm"]');
+    return { what: (p.querySelector('.lg-what')?.textContent || '').trim(), terms: (p.querySelector('.lg-terms')?.textContent || '').trim(),
+      actions: [...p.querySelectorAll('.lg-actions button')].map((b) => (b.textContent || '').trim()) }; })()`);
+const tapConfirm = (s: SeatSession, which: 'send' | 'cancel'): Promise<unknown> =>
+  s.page.click(`[data-live="confirm-${which}"]`);
+const boltHasFocus = (s: SeatSession): Promise<boolean> =>
+  ev(s, `document.activeElement === document.querySelector('[data-live="pill"]')`);
 
 /** Tap the middle of the bolt with a real finger. */
 const tapBolt = async (s: SeatSession): Promise<void> => {
@@ -279,26 +294,55 @@ try {
       console.log('    [standalone] CDP display-mode emulation is unavailable here; skipped');
     }
 
-    // ---- the real-time bolt (owner, 2026-10-15) -------------------------------------------------
-    // One icon, no words, in the rail UNDER the wordmark with the right edges aligned. Filled when the
-    // opponent is here (tap = invite), breathing while the invite waits (tap = cancel).
+    // ---- the real-time bolt (owner, 2026-10-15; re-homed 2026-10-26) ---------------------------
+    // One icon, no words, in the HUD header IMMEDIATELY RIGHT OF THE HAMBURGER. Filled when the
+    // opponent is here; a tap ASKS first (the confirmation glass), and only Send challenge invites;
+    // breathing while the invite waits (tap = cancel).
     check('[bolt] the opponent is here: the bolt is lit and ready', await waitState(phone, (v) => v === 'ready'), String(await pillState(phone)));
-    for (const size of [{ w: 360, h: 640 }, { w: 390, h: 844 }, { w: 430, h: 932 }] as const) {
+    for (const size of [{ w: 360, h: 640 }, { w: 390, h: 844 }, { w: 430, h: 932 }, { w: 844, h: 390 }] as const) {
       await phone.page.setViewportSize({ width: size.w, height: size.h });
       await sleep(700);
       const b = await ev<BoltSnap>(phone, BOLT_PROBE);
-      const tag = `bolt ${size.w}px`;
+      const tag = `bolt ${size.w}x${size.h}`;
       check(`[${tag}] it is a real 44x44 target`, !!b.bolt && b.bolt.width >= 44 && b.bolt.height >= 44, JSON.stringify(b.bolt));
-      check(`[${tag}] it sits under the wordmark, right edges aligned`, !!b.bolt && !!b.brand && b.bolt.y >= b.brand.y + b.brand.height - 1 && Math.abs(b.bolt.x + b.bolt.width - (b.brand.x + b.brand.width)) <= 2, JSON.stringify({ bolt: b.bolt, brand: b.brand }));
+      check(
+        `[${tag}] it sits immediately right of the menu, on the menu's row`,
+        !!b.bolt && !!b.menu &&
+          b.bolt.x - (b.menu.x + b.menu.width) >= 0 &&
+          b.bolt.x - (b.menu.x + b.menu.width) <= 12 &&
+          Math.abs(b.bolt.y + b.bolt.height / 2 - (b.menu.y + b.menu.height / 2)) <= 4,
+        JSON.stringify({ bolt: b.bolt, menu: b.menu }),
+      );
+      check(
+        `[${tag}] it shares no pixel with the menu, the score or the wordmark`,
+        noOverlap(b.bolt, b.menu) && noOverlap(b.bolt, b.score) && noOverlap(b.bolt, b.brand),
+        JSON.stringify({ bolt: b.bolt, menu: b.menu, score: b.score, brand: b.brand }),
+      );
       check(`[${tag}] it never covers the board's tiles`, b.tilesOverlap === 0, `${b.tilesOverlap}px²`);
       check(`[${tag}] no words on screen`, b.words === '', b.words);
-      await shot(phone, `bolt-ready-${size.w}`);
+      await shot(phone, `bolt-ready-${size.w}x${size.h}`);
     }
     await phone.page.setViewportSize({ width: 390, height: 844 });
     await sleep(600);
     const boardBefore = JSON.stringify((await ev<BoltSnap>(phone, BOLT_PROBE)).board);
     await tapBolt(phone);
-    check('[bolt] a tap invites: the bolt breathes while the invite waits', await waitState(phone, (v) => v === 'waiting'), String(await pillState(phone)));
+    check('[bolt] a tap asks before anything is sent', await confirmOpen(phone) && (await pillState(phone)) === 'ready', String(await pillState(phone)));
+    const copy = await confirmCopy(phone);
+    check(
+      '[bolt] the confirmation says what it is, its terms and its two decisions',
+      copy.what === 'Real time duel?' && copy.terms === '60 seconds on every move.' && copy.actions.join('|') === 'Not now|Send challenge',
+      JSON.stringify(copy),
+    );
+    await shot(phone, 'bolt-confirm-390');
+    await tapConfirm(phone, 'cancel');
+    check(
+      '[bolt] Not now closes the question and returns focus to the bolt',
+      !(await confirmOpen(phone)) && (await pillState(phone)) === 'ready' && (await boltHasFocus(phone)),
+      String(await pillState(phone)),
+    );
+    await tapBolt(phone);
+    await tapConfirm(phone, 'send');
+    check('[bolt] Send challenge is what breathes the invite', await waitState(phone, (v) => v === 'waiting'), String(await pillState(phone)));
     await shot(phone, 'bolt-waiting-390');
     await tapBolt(phone);
     check('[bolt] a second tap cancels the invite (back to ready)', await waitState(phone, (v) => v === 'ready'), String(await pillState(phone)));

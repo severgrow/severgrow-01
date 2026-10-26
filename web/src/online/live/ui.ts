@@ -1,6 +1,5 @@
 // Live duels — the DOM pieces. Same dark glass, moss and lava, same fonts; no new visual language.
 // Everything is created here and appended to existing containers; no shared markup is edited.
-import { hudRail } from '../../ui/hud-rail.js';
 import { LIVE } from '../../../../src/strings.js';
 import { glassBaseCss } from '../../player/glass-surface.js';
 import type { ChallengeWire } from './api.js';
@@ -12,13 +11,23 @@ const MOSS_INK = '#0d100d';
 const LAVA = '#e0735c';
 const CREAM = '#f0e9dc';
 
+/**
+ * How long an INCOMING real-time challenge stays unarmed (owner, 2026-10-26: a duel started
+ * "automatically … no one requested it, no one accepted it"). Accepting is irreversible — it puts a
+ * 60-second clock on every move and makes leaving a loss — and the window can surface under a finger
+ * already travelling toward the board. 600ms is longer than any tap that was in flight when the
+ * window appeared, so a stray touch can never accept a duel; a deliberate one loses nothing.
+ * Not a motion token: this is an input-safety beat, and it runs even under Reduce motion.
+ */
+const ARM_DELAY_MS = 600;
+
 const CSS = `
 ${glassBaseCss('.live-glass')}
 ${WAIT_DOTS_CSS}
 .live-glass { z-index:90; }
 .live-glass[hidden], .live-scrim[hidden], .live-ring[hidden], .live-vignette[hidden] { display:none !important; }
 .live-scrim { position:fixed; inset:0; z-index:89; background:rgba(4,6,5,.34); touch-action:none; }
-.live-glass[data-mode='challenge'], .live-glass[data-mode='end'] { left:50%; top:max(14px, env(safe-area-inset-top, 0px)); transform:translateX(-50%);
+.live-glass[data-mode='challenge'], .live-glass[data-mode='confirm'], .live-glass[data-mode='end'] { left:50%; top:max(14px, env(safe-area-inset-top, 0px)); transform:translateX(-50%);
   width:min(360px, calc(100vw - 32px)); padding:14px 14px 12px; display:grid; grid-template-columns:44px 1fr; gap:4px 12px; align-items:center;
   background:rgba(8,10,10,.78); }
 .live-glass[data-mode='note'] { left:50%; top:max(14px, env(safe-area-inset-top, 0px)); transform:translateX(-50%); padding:10px 16px;
@@ -41,13 +50,19 @@ ${WAIT_DOTS_CSS}
   letter-spacing:.08em; cursor:pointer; border:1px solid rgba(214,204,177,.22); background:rgba(255,255,255,.04); color:${CREAM}; }
 .live-glass .lg-actions button.primary { background:${MOSS}; border-color:${MOSS}; color:${MOSS_INK}; }
 .live-glass .lg-actions button:focus-visible { outline:2px solid ${CREAM}; outline-offset:2px; }
-/* The real-time BOLT (owner, 2026-10-15): one icon, no words, in the rail under the wordmark
-   (ui/hud-rail.ts), rightmost. An outline while a real-time duel is not possible (the opponent is
-   away, busy, or has real time switched off); filled and softly glowing when the opponent is here
-   and a tap invites them; breathing while the invite waits (a tap cancels it); steady while the
-   duel is live. Its words live only in the accessible name and a visually hidden label. */
-.live-pill { order:2; width:44px; height:44px; display:grid; place-items:center end; padding:0; border:0; border-radius:10px;
+/* The real-time BOLT (owner, 2026-10-15): one icon, no words. It now lives in the HUD header,
+   IMMEDIATELY to the right of the hamburger (owner, 2026-10-26: it used to sit rightmost in the rail
+   under the wordmark, where on a phone it crowded the open chat's own ×). An outline while a
+   real-time duel is not possible (the opponent is away, busy, or has real time switched off);
+   filled and softly glowing when the opponent is here and a tap asks to confirm; breathing while the
+   invite waits (a tap cancels it); steady while the duel is live. Its words live only in the
+   accessible name and a visually hidden label. */
+.live-pill { width:44px; height:44px; display:grid; place-items:center; padding:0; border:0; border-radius:10px;
   background:transparent; color:${CREAM}; cursor:pointer; position:relative; -webkit-tap-highlight-color:transparent; }
+/* The product HUD is the slim header (main.ts adds 'slim-hud'): menu | score lane | edge. Putting the
+   bolt in the second column, start-aligned, is exactly "directly right of the menu"; it can never
+   reach the wordmark or the chat's close key in the opposite corner. */
+html.slim-hud .game > .hud > .live-pill { grid-column:2; grid-row:1; justify-self:start; align-self:center; z-index:1; }
 .live-pill svg { width:24px; height:24px; overflow:visible; }
 .live-pill svg path { fill:transparent; stroke:currentColor; stroke-width:1.5; stroke-linejoin:round; transition:fill .3s ease, filter .3s ease, opacity .3s ease; }
 .live-pill:is([data-state='away'], [data-state='disabled']) { opacity:.6; cursor:default; }
@@ -256,8 +271,30 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
   document.body.append(scrim, panel);
   let open = false;
   let raf = 0;
+  let armTimer: ReturnType<typeof setTimeout> | null = null;
   let current: ChallengeWire | null = null;
   let handlers: { accept: () => void; decline: () => void } | null = null;
+  /**
+   * Hold both keys for one deliberate beat, then hand them over. The DECLINE key is held too, so the
+   * rule is symmetric and the window cannot be dismissed by the same stray finger either — by the
+   * time the beat is over the tap that opened it has long since lifted. Focus is only moved once the
+   * keys are live, so a keyboard user cannot press Enter into an unarmed window.
+   */
+  const arm = (delay: number) => {
+    if (armTimer !== null) clearTimeout(armTimer);
+    accept.disabled = true;
+    decline.disabled = true;
+    panel.setAttribute('aria-busy', 'true');
+    armTimer = setTimeout(() => {
+      armTimer = null;
+      // The window may have been dismissed (or replaced) during the beat: never arm a closed one.
+      if (!open || panel.hidden) return;
+      accept.disabled = false;
+      decline.disabled = false;
+      panel.removeAttribute('aria-busy');
+      accept.focus({ preventScroll: true });
+    }, delay);
+  };
   accept.addEventListener('click', () => handlers?.accept());
   decline.addEventListener('click', () => handlers?.decline());
   panel.addEventListener('keydown', (e) => {
@@ -281,7 +318,15 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
       terms.textContent = LIVE.terms(Math.round(c.limitMs / 1000));
       scrim.hidden = panel.hidden = false;
       open = true;
-      accept.focus({ preventScroll: true });
+      // A STRAY TAP MUST NOT ACCEPT A DUEL WHERE LEAVING FORFEITS THE MATCH (owner, 2026-10-26).
+      // Accepting is the one irreversible choice here — it puts a 60-second clock on every move and
+      // makes leaving a loss — yet this window can appear under a finger already on its way down
+      // (the player was reaching for the board, or for the bolt beside the menu). So the window
+      // arrives with both keys inert for one deliberate beat (~600ms, longer than any tap that was
+      // already in flight) and says so: the scrim already eats board taps, and `aria-busy` keeps
+      // assistive tech from announcing a key that cannot yet be used. The countdown in the ring
+      // still runs, so the wait costs nothing.
+      arm(ARM_DELAY_MS);
       cancelAnimationFrame(raf);
       draw();
       opts.onShown?.();
@@ -289,10 +334,119 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
     hide() {
       open = false;
       cancelAnimationFrame(raf);
+      if (armTimer !== null) {
+        clearTimeout(armTimer);
+        armTimer = null;
+      }
+      accept.disabled = false;
+      decline.disabled = false;
+      panel.removeAttribute('aria-busy');
       scrim.hidden = panel.hidden = true;
       current = null;
       handlers = null;
     },
+    isOpen: () => open,
+  };
+};
+
+/**
+ * The SENDER's confirmation (owner, 2026-10-26: "after tapping lightning show window saying ... do
+ * you want to challenge them ... confirm/cancel"). Same `.live-glass` material, ring slot, name,
+ * what, terms, warn and actions as the incoming window — but it is NOT an invitation to answer: it
+ * only decides whether an invite leaves this device. It carries its own `data-mode='confirm'` so it
+ * can never be mistaken for the incoming window.
+ *
+ * The seconds are the server's own `limitMs` (LIVE_TURN_MS, default 60 s and env-overridable), so
+ * the window never promises a clock the match is not using.
+ */
+export const createChallengeConfirm = (opts: {
+  onSend: () => void;
+  onClose: () => void;
+}) => {
+  const scrim = el('div', 'live-scrim');
+  scrim.hidden = true;
+  const panel = el('section', 'live-glass');
+  // Its OWN mode, never 'challenge': both windows live in the DOM at once (the incoming popup and
+  // this sender-side confirmation), so a shared mode made `[data-mode="challenge"]` ambiguous — a
+  // query could land on the hidden confirm while the real popup was on screen. The look is shared
+  // through the CSS selector list below, not through the attribute.
+  panel.dataset.mode = 'confirm';
+  panel.dataset.live = 'confirm';
+  panel.hidden = true;
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  // The same 44px mark slot as the incoming window, carrying the bolt instead of a countdown: there
+  // is no clock to show before the invite exists.
+  const mark = document.createElementNS(SVGNS, 'svg');
+  mark.setAttribute('class', 'lg-ring');
+  mark.setAttribute('viewBox', '0 0 24 24');
+  mark.setAttribute('aria-hidden', 'true');
+  const bolt = document.createElementNS(SVGNS, 'path');
+  bolt.setAttribute('d', 'M13.4 2.5 5 13.6h6.1l-1.3 7.9 8.6-11.3h-6.2z');
+  bolt.setAttribute('fill', 'none');
+  bolt.setAttribute('stroke', MOSS);
+  bolt.setAttribute('stroke-width', '1.6');
+  bolt.setAttribute('stroke-linejoin', 'round');
+  mark.append(bolt);
+  const name = el('div', 'lg-name');
+  const what = el('div', 'lg-what');
+  const terms = el('div', 'lg-terms');
+  const warn = el('div', 'lg-warn');
+  warn.append(
+    el('span', 'lg-warn-short', LIVE.leaveWarning),
+    el('small', '', LIVE.leaveWarningHelp),
+  );
+  const actions = el('div', 'lg-actions');
+  const send = el('button', 'primary', LIVE.sendChallenge);
+  const notNow = el('button', '', LIVE.notNow);
+  send.type = notNow.type = 'button';
+  send.dataset.live = 'confirm-send';
+  notNow.dataset.live = 'confirm-cancel';
+  actions.append(notNow, send);
+  panel.append(mark, name, what, terms, warn, actions);
+  name.id = 'live-confirm-title';
+  panel.setAttribute('aria-labelledby', name.id);
+  // The game beneath ignores every tap while the window is open, exactly like the incoming one.
+  for (const type of ['pointerdown', 'pointerup', 'click', 'touchstart']) {
+    scrim.addEventListener(type, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  }
+  document.body.append(scrim, panel);
+  let open = false;
+  const hide = () => {
+    open = false;
+    scrim.hidden = panel.hidden = true;
+  };
+  send.addEventListener('click', () => {
+    if (!open) return;
+    hide();
+    opts.onSend();
+  });
+  notNow.addEventListener('click', () => {
+    if (!open) return;
+    hide();
+    opts.onClose();
+  });
+  panel.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    hide();
+    opts.onClose();
+  });
+  return {
+    element: panel,
+    show(opponent: string, secs: number) {
+      name.textContent = opponent;
+      what.textContent = LIVE.duelQuestion;
+      terms.textContent = LIVE.duelTerms(secs);
+      scrim.hidden = panel.hidden = false;
+      open = true;
+      send.focus({ preventScroll: true });
+    },
+    hide,
     isOpen: () => open,
   };
 };
@@ -324,10 +478,11 @@ export type PillModel =
 const BOLT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.4 2.5 5 13.6h6.1l-1.3 7.9 8.6-11.3h-6.2z"/></svg>';
 
 /**
- * The real-time bolt (owner, 2026-10-15): an icon-only control in the rail under the wordmark.
- * Outline = no real-time duel possible right now; filled and glowing = the opponent is here, tap to
- * invite; breathing = the invite is waiting, tap to cancel; steady = the duel is live. The state
- * words stay in a visually hidden `.label` and the accessible name, never on screen.
+ * The real-time bolt (owner, 2026-10-15): an icon-only control. It sits in the HUD header right of
+ * the hamburger, so it never competes with the chat controls in the far corner. Outline = no
+ * real-time duel possible right now; filled and glowing = the opponent is here, tap to ask for
+ * confirmation; breathing = the invite is waiting, tap to cancel; steady = the duel is live. The
+ * state words stay in a visually hidden `.label` and the accessible name, never on screen.
  */
 export const createPill = (onTap: () => void, onCancel: () => void) => {
   const pill = el('button', 'live-pill');
@@ -343,7 +498,11 @@ export const createPill = (onTap: () => void, onCancel: () => void) => {
     else if (state === 'ready') onTap();
   });
   const attach = () => {
-    if (!pill.parentElement) hudRail().append(pill);
+    if (pill.parentElement) return;
+    const menu = document.getElementById('hud-menu');
+    // Immediately right of the menu, in the header grid's own second column.
+    if (menu?.parentElement) menu.after(pill);
+    else document.getElementById('game')?.prepend(pill);
   };
   return {
     element: pill,

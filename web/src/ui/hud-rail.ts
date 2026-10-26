@@ -1,6 +1,7 @@
 // The in-game corner rail (owner, 2026-10-15): a row of icon-only controls tucked UNDER the
 // wordmark at the top right, its right edge on the wordmark's right edge. Today it holds the
-// full-screen icon (computers) and the real-time bolt (online duels); the bolt is always rightmost.
+// full-screen icon (computers only). The real-time bolt used to share this rail; it moved into the
+// HUD header beside the hamburger (owner, 2026-10-26) so it could never crowd the chat controls.
 // One rail, positioned from the wordmark's real box (re-measured whenever the wordmark settles), so
 // the controls never cover the logo whatever header the screen shows.
 

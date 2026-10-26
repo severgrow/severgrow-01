@@ -20,6 +20,7 @@ import { createReturnStore, restoreTarget } from './return-target.js';
 import type { ReturnHost, ReturnTarget } from './return-target.js';
 import {
   createAnnouncer,
+  createChallengeConfirm,
   createChallengePopup,
   createEndWindow,
   createGlassNote,
@@ -116,9 +117,13 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   };
 
   // ---- the pop-up and the listener ----
+  // The sender's confirmation is created below (it needs the pill), but the incoming window must be
+  // able to dismiss it first: the two windows never stack (owner, 2026-10-26).
+  let confirm: ReturnType<typeof createChallengeConfirm> | null = null;
   const popup = createChallengePopup({
     localDeadline: (c) => toLocal(c.expiresAt),
     onShown: () => {
+      confirm?.hide();
       syncSound();
       sound.chime(0);
       sound.chime(0.16);
@@ -165,8 +170,20 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   });
 
   // ---- match screen pieces ----
+  // A tap on a ready bolt ASKS first; only Send challenge sends the invite (owner, 2026-10-26).
+  confirm = createChallengeConfirm({
+    onSend: () => void goLive('live'),
+    onClose: () => pill.element.focus({ preventScroll: true }),
+  });
   const pill = createPill(
-    () => void goLive('live'),
+    () => {
+      const s = status && status.matchId === currentMatchId() ? status : null;
+      const model = pillModel(s);
+      // Only a genuinely available opponent opens the question. An incoming invitation owns the
+      // screen: the sender's window must never stack on top of it.
+      if (model.kind !== 'ready' || popup.isOpen()) return;
+      confirm?.show(model.name, model.secs);
+    },
     () => void cancelWaiting(),
   );
   const hud = createHud();
@@ -310,7 +327,11 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
 
   const paint = () => {
     const s = status && status.matchId === currentMatchId() ? status : null;
-    pill.render(pillModel(s));
+    const model = pillModel(s);
+    // The opponent may leave, the invite may be started elsewhere, or their own invitation may
+    // arrive: the confirmation stands down rather than showing a decision that is no longer real.
+    if (model.kind !== 'ready' && confirm?.isOpen()) confirm.hide();
+    pill.render(model);
     setLeave(!!s?.live);
     if (!s || !s.live) {
       hud.render(null);

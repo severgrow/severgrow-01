@@ -219,9 +219,9 @@ try {
       await sleep(250);
       check('[phone] the tap on the words did not leave the board or open anything', await ev<boolean>(phone, `(() => !document.getElementById('game').hidden && !!document.querySelector('#gameover[hidden]'))()`));
     }
-    // The one real control in the strip must still work: go to a real match row? The pill is only
-    // offered when a challenge is possible, so this asserts its own style instead.
-    const pillPe = await ev<string>(phone, `(() => { const p = document.querySelector('#duel-hud .live-pill'); return p ? getComputedStyle(p).pointerEvents : 'none-found'; })()`);
+    // The bolt is no longer in the strip at all (owner, 2026-10-26): it now sits beside the menu in
+    // the HUD. This asserts that whichever node exists still keeps its own taps.
+    const pillPe = await ev<string>(phone, `(() => { const p = document.querySelector('[data-live="pill"]'); return p ? getComputedStyle(p).pointerEvents : 'none-found'; })()`);
     check('[phone] the live pill keeps its taps (it is a real control)', pillPe === 'auto' || pillPe === 'none-found', pillPe);
     const menuOk = await ev<boolean>(phone, `(() => { const b = document.getElementById('hud-menu'); const r = b.getBoundingClientRect(); const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!el && (el === b || b.contains(el)); })()`);
     check('[phone] the menu button is untouched by the click-through', menuOk);

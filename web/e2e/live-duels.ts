@@ -264,7 +264,10 @@ const pillState = (s: SeatSession) => s.page.evaluate(() => {
 
 const challengeAndAccept = async (a: SeatSession, b: SeatSession, label: string) => {
   check(`${label}: Real time pill ready`, await waitFor(async () => (await pillState(a)).startsWith('ready'), 20_000), await pillState(a));
+  // The bolt ASKS first (owner, 2026-10-26): one tap opens the confirm window,
+  // the second sends. A tap alone must never start a duel.
   await a.page.locator('[data-live="pill"]').click();
+  await a.page.locator('[data-live="confirm-send"]').click();
   check(`${label}: sender waits`, await waitFor(async () => (await pillState(a)).startsWith('waiting'), 8_000), await pillState(a));
   check(`${label}: pop-up appears for the recipient`, await waitFor(() => vis(b.page, '[data-mode="challenge"]'), 15_000));
   await b.page.locator('[data-live="accept"]').click();
@@ -408,7 +411,10 @@ try {
     const boardBefore = await b.page.evaluate(() => JSON.stringify((window as unknown as { __severgrow: { state: () => { board: unknown } } }).__severgrow.state()?.board));
     // A challenges B in match 1 (B is in match 2 → presence in_match).
     await waitFor(async () => (await pillState(a)).startsWith('ready'), 20_000);
+    // The bolt ASKS first (owner, 2026-10-26): one tap opens the confirm window,
+    // the second sends. A tap alone must never start a duel.
     await a.page.locator('[data-live="pill"]').click();
+    await a.page.locator('[data-live="confirm-send"]').click();
     check('3: pop-up on B over the other match', await waitFor(() => vis(b.page, '[data-mode="challenge"]'), 15_000));
     await b.page.locator('[data-live="accept"]').click();
     check('3: B is moved to the live match', await waitFor(async () => (await currentMatch(b)) === m1.matchId, 15_000));
@@ -443,11 +449,25 @@ try {
     const m = await newMatch();
     const { a, b } = await openBoth(m);
     await waitFor(async () => (await pillState(a)).startsWith('ready'), 20_000);
+    // The bolt ASKS first (owner, 2026-10-26): one tap opens the confirm window,
+    // the second sends. A tap alone must never start a duel.
     await a.page.locator('[data-live="pill"]').click();
+    await a.page.locator('[data-live="confirm-send"]').click();
     await waitFor(() => vis(b.page, '[data-mode="challenge"]'), 15_000);
     await shot(a, '03-waiting');
-    // Owner, 2026-10-15: the control is the bolt in the rail UNDER the wordmark, right edges aligned.
-    check('5: the waiting bolt never covers the logo (it sits under it, right edges aligned)', (await a.page.evaluate(`(() => { const p = document.querySelector('[data-live="pill"]').getBoundingClientRect(); const l = document.getElementById('hud-brand'); const r = l ? l.getBoundingClientRect() : null; return !r || r.width === 0 || (p.top >= r.bottom - 1 && Math.abs(p.right - r.right) <= 2); })()`)) as boolean);
+    // Owner, 2026-10-26: the bolt now sits IMMEDIATELY RIGHT OF THE MENU in the header, so it can
+    // never fight the chat's own keys or the wordmark. Assert that, not the old rail position.
+    check('5: the waiting bolt sits beside the menu key, clear of the wordmark', (await a.page.evaluate(`(() => {
+      const p = document.querySelector('[data-live="pill"]').getBoundingClientRect();
+      const menu = document.getElementById('hud-menu').getBoundingClientRect();
+      const brand = document.getElementById('hud-brand');
+      const b = brand ? brand.getBoundingClientRect() : null;
+      const sameRow = Math.abs((p.top + p.bottom) / 2 - (menu.top + menu.bottom) / 2) <= 6;
+      const rightOfMenu = p.left >= menu.right - 1;
+      const close = p.left - menu.right <= 12;
+      const clearBrand = !b || b.width === 0 || p.right <= b.left + 1 || p.bottom <= b.top + 1;
+      return sameRow && rightOfMenu && close && clearBrand;
+    })()`)) as boolean);
     await shot(b, '04-challenge-popup');
     await b.page.locator('[data-live="decline"]').click();
     check('5: sender sees a quiet "Not now"', await waitFor(async () => (await text(a.page, '[data-mode="note"]')).includes('Not now') && (await vis(a.page, '[data-mode="note"]')), 10_000));
@@ -456,7 +476,10 @@ try {
     const m2 = await newMatch();
     const s2 = await openBoth(m2);
     await waitFor(async () => (await pillState(s2.a)).startsWith('ready'), 20_000);
+    // The bolt ASKS first (owner, 2026-10-26): one tap opens the confirm window,
+    // the second sends. A tap alone must never start a duel.
     await s2.a.page.locator('[data-live="pill"]').click();
+    await s2.a.page.locator('[data-live="confirm-send"]').click();
     await waitFor(() => vis(s2.b.page, '[data-mode="challenge"]'), 15_000);
     check('5: an unanswered challenge expires on both screens', await waitFor(async () => !(await vis(s2.b.page, '[data-mode="challenge"]')) && (await text(s2.a.page, '[data-mode="note"]')).includes('No answer'), 25_000));
     await closeAll(a, b, s2.a, s2.b);
@@ -572,7 +595,10 @@ try {
     // around the replay of that very turn.
     const turn = playTurn(actor);
     await waitFor(async () => (await phase(actor)) === 'DISCARD', 20_000);
+    // The bolt ASKS first (owner, 2026-10-26): one tap opens the confirm window,
+    // the second sends. A tap alone must never start a duel.
     await challenger.page.locator('[data-live="pill"]').click();
+    await challenger.page.locator('[data-live="confirm-send"]').click();
     check('10: actor plays a turn', await turn);
     check('10: the replay ran on the watcher', await waitFor(() => watcher.page.evaluate('window.__sawReplay') as Promise<boolean>, 15_000));
     check('10: the pop-up appears after the replay', await waitFor(() => vis(watcher.page, '[data-mode="challenge"]'), 25_000));
@@ -587,7 +613,10 @@ try {
       await openDuel(a, m.matchId);
       await openDuel(b, m.matchId);
       await waitFor(async () => (await pillState(a)).startsWith('ready'), 20_000);
+      // The bolt ASKS first (owner, 2026-10-26): one tap opens the confirm window,
+      // the second sends. A tap alone must never start a duel.
       await a.page.locator('[data-live="pill"]').click();
+      await a.page.locator('[data-live="confirm-send"]').click();
       await waitFor(() => vis(b.page, '[data-mode="challenge"]'), 15_000);
       const fit = (await b.page.evaluate(`(() => {
         const r = document.querySelector('[data-mode="challenge"]').getBoundingClientRect();
