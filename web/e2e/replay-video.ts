@@ -338,6 +338,33 @@ try {
   await page.locator('#replay').waitFor({ state: 'hidden', timeout: 5_000 });
   await page.waitForTimeout(800);
   check('closing the replay stops a recording in flight', (await page.locator('#replay .rp-video').isHidden()) && (await page.locator('#gameover').isVisible()));
+
+  // ---------- reduce motion ----------
+  // The video is a recording of the match, so it keeps the model's own pacing — but a player who
+  // asked for less motion must still get the same progress line and the same way out.
+  await page.evaluate(() => {
+    const input = document.querySelector<HTMLInputElement>('input[data-setting="reduceMotion"]');
+    if (!input) throw new Error('no reduce-motion switch');
+    input.checked = true;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForTimeout(200);
+  await page.locator('#go-replay').click();
+  await waitVisible(page, '#replay', 20_000);
+  await page.waitForTimeout(400);
+  await page.locator('#replay [data-rp="video"]').click();
+  await page.waitForSelector('#replay .rp-video:not([hidden])', { timeout: 5_000 });
+  const rmLine = ((await page.locator('#replay .rp-video-text').textContent()) ?? '').trim();
+  check(
+    'reduce motion gets the same progress line and cancel',
+    /^Recording \d+s \/ \d+s$/.test(rmLine) && (await page.locator('#replay [data-rp="video-cancel"]').isVisible()),
+    rmLine,
+  );
+  const rmBoard = await page.locator('#replay .rp-board > svg').isVisible();
+  check('the board stays on screen while it records with reduce motion', rmBoard);
+  await page.locator('#replay [data-rp="video-cancel"]').click();
+  await page.locator('#replay .rp-video').waitFor({ state: 'hidden', timeout: 5_000 });
+  check('reduce motion can cancel it too', await page.locator('#replay .rp-video').isHidden());
 } finally {
   await browser.close();
   await server.close();
