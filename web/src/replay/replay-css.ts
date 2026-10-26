@@ -108,7 +108,13 @@ export const REPLAY_CSS = `
   justify-content: center;
   margin: 2px 0 4px;
 }
-#replay .rp-board svg {
+/* ONLY the board's own outer SVG ("> svg"). The board nests small <svg> windows inside it — each
+   strength stone and each bonus hex's gold frame is a cropped window onto a sprite atlas, sized by
+   its own x/y/width/height and clipped by overflow="hidden". A descendant selector here used to
+   reach those windows too: width/height 100% blew each one up to the whole board and
+   overflow:visible un-clipped it, so the replay showed every stone 1-9 on every tile and whole
+   strips of gold frames hanging off the board (owner screenshot, 2026-10-26). */
+#replay .rp-board > svg {
   display: block;
   width: 100%;
   height: 100%;

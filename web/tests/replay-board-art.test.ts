@@ -21,3 +21,27 @@ describe('the replay board', () => {
     await expect(mod!.boardArtReady).resolves.toBeUndefined();
   });
 });
+
+import { REPLAY_CSS } from '../src/replay/replay-css.js';
+
+// THE BOARD'S SIZING RULE MUST NOT REACH ITS SPRITE WINDOWS (owner screenshot, 2026-10-26). Each
+// strength stone and gold frame is a nested <svg> that crops one picture from an atlas with its own
+// width/height and overflow="hidden". A descendant rule ("#replay .rp-board svg { width:100%;
+// overflow:visible }") overrode both on every nested window, so the replay showed whole atlases:
+// nine stones on every tile and strips of gold frames off the board.
+describe('the replay board styling', () => {
+  const rules = [...REPLAY_CSS.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({
+    selectors: m[1]!.split(',').map((s) => s.trim()),
+    body: m[2]!,
+  }));
+
+  it('sizes and un-clips only the board\'s own outer svg, never the stones and frames nested in it', () => {
+    const reaches = rules.filter(
+      (r) =>
+        /\b(width|height|overflow)\s*:/.test(r.body) &&
+        r.selectors.some((s) => /\.rp-board\s+svg\s*$/.test(s)),
+    );
+    expect(reaches.map((r) => r.selectors.join(', '))).toEqual([]);
+    expect(rules.some((r) => r.selectors.includes('#replay .rp-board > svg') && /overflow\s*:\s*visible/.test(r.body))).toBe(true);
+  });
+});

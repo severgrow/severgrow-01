@@ -207,6 +207,40 @@ try {
   check('the practice replay seeks (frame and board move)', !!early && !!late && late.index > early.index && late.board !== early.board);
   await page.screenshot({ path: `${SHOTS}/replay-practice-seek-390x844.png` });
 
+  // THE SPRITE WINDOWS STAY WINDOWS (owner screenshot, 2026-10-26): each strength stone and each
+  // bonus hex's gold frame is a small nested <svg> cropping one picture out of an atlas. A replay
+  // rule once sized and un-clipped EVERY svg on the board, so each window showed its whole atlas —
+  // all nine stones on every tile, strips of three frames hanging off the board — and every check
+  // above still passed. Measured, not eyeballed: no window is bigger than a hex, and all are clipped.
+  const windows = (await page.evaluate(`(() => {
+    const cell = document.querySelector('#replay .rp-board .hex-cell')?.getBoundingClientRect();
+    const hex = cell ? Math.max(cell.width, cell.height) : 0;
+    const measure = (sel) =>
+      [...document.querySelectorAll('#replay .rp-board ' + sel)].map((n) => {
+        // The window must keep the size its own attributes give it: CSS width/height stay 'auto'
+        // (the bug set them to 100%, i.e. the whole board) and it stays clipped. The on-screen size
+        // is then its attribute size times the screen scale. (getBoundingClientRect is no use here:
+        // it reports the whole atlas inside the window, clipped or not.)
+        const cs = getComputedStyle(n);
+        const own = cs.width === 'auto' && cs.height === 'auto';
+        const k = n.parentNode?.getScreenCTM?.()?.a ?? 1;
+        const size = own ? Math.max(n.width.animVal.value, n.height.animVal.value) * k : Infinity;
+        return { size, clipped: cs.overflow !== 'visible' };
+      });
+    return { hex, stones: measure('.seed-stone-art'), frames: measure('.gold-frame-art') };
+  })()`)) as { hex: number; stones: { size: number; clipped: boolean }[]; frames: { size: number; clipped: boolean }[] };
+  const worst = (list: { size: number }[]) => Math.round(Math.max(0, ...list.map((w) => w.size)));
+  check(
+    'every strength stone shows one number, clipped inside its hex',
+    windows.hex > 0 && windows.stones.length > 0 && windows.stones.every((w) => w.clipped && w.size < windows.hex),
+    `${windows.stones.length} stones, largest ${worst(windows.stones)}px vs hex ${Math.round(windows.hex)}px`,
+  );
+  check(
+    'every gold frame is one frame, the size of its hex',
+    windows.frames.length > 0 && windows.frames.every((w) => w.clipped && w.size <= windows.hex * 1.15),
+    `${windows.frames.length} frames, largest ${worst(windows.frames)}px vs hex ${Math.round(windows.hex)}px`,
+  );
+
   await page.locator('#replay [data-rp="close"]').click();
   await page.locator('#replay').waitFor({ state: 'hidden', timeout: 5_000 });
   check('leaving the practice replay returns to the result card', await page.locator('#gameover').isVisible());
