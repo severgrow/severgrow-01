@@ -36,7 +36,7 @@ describe('the beta line is a quiet version line between the wordmark and the ent
   });
 
   it('fills the existing slot and reveals it, on every channel', () => {
-    expect(lineSource).toMatch(/beta\.append\(document\.createTextNode\(`\$\{FEEDBACK\.betaNote\(FEEDBACK\.betaVersion, deployLabel\(DEPLOYED_AT\)\)\} `\)\)/);
+    expect(lineSource).toMatch(/beta\.append\(document\.createTextNode\(`\$\{FEEDBACK\.betaNote\(FEEDBACK\.betaVersion\)\} `\)\)/);
     expect(lineSource).toMatch(/beta\.hidden = false/);
     // Painted with the other menu keys (owner, 2026-10-22: everything on the menu appears at once),
     // and the feedback module paints through the same function if it arrives first.
@@ -63,24 +63,18 @@ describe('the beta line is a quiet version line between the wordmark and the ent
     expect(lineSource).not.toContain('This is a beta version');
   });
 
-  // Owner, 2026-10-22: "make sure any future update from any agent adds ... last deploy: <time when
-  // it was pushed to the live website>". The BUILD stamps the time (web/vite.config.ts), and the
-  // deploy workflow builds the site right before it publishes, so no agent has to remember it.
-  // Owner, 2026-10-23: the word is "last update" — it reads as the game being kept current rather
-  // than as server plumbing. The behaviour is unchanged.
-  it('says when the live build was updated, in the reader\'s own time, and nothing when unknown', () => {
-    expect(FEEDBACK.betaNote('0.7', '22 Oct, 12:12')).toContain('of an evolving game, last update: 22 Oct, 12:12.');
-    expect(FEEDBACK.betaNote('0.7', null)).toContain('(0.7) of an evolving game.');
-    expect(FEEDBACK.betaNote('0.7', null)).not.toContain('last update');
-    // The stamp is a TRAILING note, never tucked inside the version bracket (owner, 2026-10-23).
-    expect(FEEDBACK.betaNote('0.7', '22 Oct, 12:12')).toContain('beta version (0.7) of an evolving game, last update:');
-    expect(deployLabel('2026-10-22T11:12:20Z', 'Europe/London')).toBe('22 Oct, 12:12');
+  // Owner, 2026-10-27: no date or time stamp on the main menu. (It carried a "last update" stamp
+  // from 2026-10-22; the owner took it off.) The build still records when it was made — deploy.ts
+  // and vite's __DEPLOYED_AT__ are untouched — it is just no longer shown on the menu.
+  it('shows no date or time on the main menu', () => {
+    expect(FEEDBACK.betaNote('0.7')).toBe(
+      'This is a beta version (0.7) of an evolving game. If you spot any problems or have suggestions for improvement,',
+    );
+    expect(FEEDBACK.betaNote('0.7')).not.toMatch(/last update|\d{1,2}:\d{2}|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/);
+    expect(lineSource).not.toMatch(/deployLabel|DEPLOYED_AT/);
+    // the deploy stamp itself still works for anything that wants it later
     expect(deployLabel('2026-10-22T11:12:20Z', 'UTC')).toBe('22 Oct, 11:12');
-    // A dev server, a test run or a garbled stamp shows no time rather than a wrong one.
     for (const bad of ['', 'not a date', undefined, null]) expect(deployLabel(bad as never)).toBeNull();
-    const vite = read('../vite.config.ts');
-    expect(vite).toContain('__DEPLOYED_AT__');
-    expect(vite).toMatch(/command === 'build'/);
   });
 
   it('opens its sheet: the tester guide before a server, the report form once there is one', () => {

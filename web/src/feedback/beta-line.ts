@@ -3,14 +3,13 @@
 // and the link come from the one strings module; what the link OPENS is attached later by the
 // feedback module (./mount.ts), which also replays a tap made before it arrived.
 import { FEEDBACK } from '../../../src/strings.js';
-import { DEPLOYED_AT, deployLabel } from './deploy.js';
 
 /** Fill and reveal the line once; returns its link (or null when the page has no line). */
 export const paintBetaLine = (beta: HTMLElement | null): HTMLButtonElement | null => {
   if (!beta) return null;
   let link = beta.querySelector('button');
   if (!link) {
-    beta.append(document.createTextNode(`${FEEDBACK.betaNote(FEEDBACK.betaVersion, deployLabel(DEPLOYED_AT))} `));
+    beta.append(document.createTextNode(`${FEEDBACK.betaNote(FEEDBACK.betaVersion)} `));
     link = document.createElement('button');
     link.textContent = FEEDBACK.betaLink;
     link.type = 'button';
