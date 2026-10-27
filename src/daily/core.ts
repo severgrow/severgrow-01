@@ -186,20 +186,22 @@ export const solvingEndings = (space: TurnSpace, goal: DailyGoal) =>
   [...space.endings.values()].filter((e) => goalMet(goal, e.outcome));
 
 export type Proof =
-  | { ok: true; solution: Action[]; endings: number; visited: number }
+  | { ok: true; solution: Action[]; solutions: number; endings: number; visited: number }
   | { ok: false; reason: 'NO_SOLUTION' | 'SEVERAL_SOLUTIONS' | 'TOO_LARGE' | 'BAD_START'; solutions?: number };
 
 /**
- * THE PROMISE every shipped puzzle keeps: exactly ONE ending of the turn meets the goal (different
- * orders that reach the same board are the same answer). Checked by exhaustive search; a turn too
- * large to search fully proves nothing and is rejected.
+ * THE PROMISE every shipped puzzle keeps: at least one ending meets the goal, and at most
+ * `maxSolutions` do (different orders that reach the same board are the same answer; by default
+ * exactly ONE). Endings that differ only in where a spare tile went are different boards, so a
+ * puzzle whose goal is the turn's best possible result may allow a few. Checked by exhaustive
+ * search; a turn too large to search fully proves nothing and is rejected.
  */
-export const prove = (p: Pick<DailyPuzzle, 'goal' | 'start'>, cap = 50_000): Proof => {
+export const prove = (p: Pick<DailyPuzzle, 'goal' | 'start'>, cap = 50_000, maxSolutions = 1): Proof => {
   if (p.start.phase !== 'ACT' || p.start.actor !== p.start.turnPlayer) return { ok: false, reason: 'BAD_START' };
   const space = exploreTurn(p.start, cap);
   if (space.capped) return { ok: false, reason: 'TOO_LARGE' };
   const solving = solvingEndings(space, p.goal);
   if (solving.length === 0) return { ok: false, reason: 'NO_SOLUTION' };
-  if (solving.length > 1) return { ok: false, reason: 'SEVERAL_SOLUTIONS', solutions: solving.length };
-  return { ok: true, solution: solving[0]!.actions, endings: space.endings.size, visited: space.visited };
+  if (solving.length > maxSolutions) return { ok: false, reason: 'SEVERAL_SOLUTIONS', solutions: solving.length };
+  return { ok: true, solution: solving[0]!.actions, solutions: solving.length, endings: space.endings.size, visited: space.visited };
 };

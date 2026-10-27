@@ -19,6 +19,8 @@ import type { Step } from './logic/anim.js';
 import { buildReplay } from './replay/timeline.js';
 import type { ReplayInput, ReplayModel } from './replay/timeline.js';
 import { mountReplay } from './replay/player.js';
+import { mountDaily } from './daily/mount.js';
+import type { DailyController } from './daily/mount.js';
 import type { ReplayHandle } from './replay/player.js';
 import type { ReplayPayload } from '../../server/src/protocol.js';
 import { displayEventForPlay } from './player/display-readout.js';
@@ -244,7 +246,7 @@ import type { Beats } from './logic/emptyturn.js';
 import { onlineBuildEnabled } from './online/config.js';
 import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname } from './accounts/menu-key.js';
 import { paintBetaLine } from './feedback/beta-line.js';
-import { queueSeedProof } from './online/seed-rewards.js';
+import { isSeedProofQueued, queueSeedProof } from './online/seed-rewards.js';
 import { requestTrainingTicket, settleQueuedSeedsOnBoot, settleSeedProof } from './online/seed-settle.js';
 import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
 import { settledSeedsMessage } from './ui/seed-reveal.js';
@@ -460,6 +462,11 @@ let inspectKey: string | null = null;
 let focusKey: string | null = null;
 let showOpps = false;
 let gameOverDismissed = false;
+/** The Daily Puzzle owns the board (see `beginDaily`). Declared up here: boot code reads it. */
+let dailyActive = false;
+/** The Daily's answer is being shown on the board: its end is not a try. */
+let dailyAnswering = false;
+let daily: DailyController | null = null;
 /** The online match whose result has already been counted for the install invitation (once each). */
 let onlineResultNoted: string | null = null;
 let botBusy = false;
@@ -529,6 +536,9 @@ function beatHome(p: Player, my: number) {
 const save = () => {
   if (isOnlineDuel()) return; // online matches live on the server + device identity, not the offline save
   if (!session) return;
+  // A Daily Puzzle try is never saved: it must not replace the player's own game, and a reload
+  // simply starts the try again (the tries used are kept by the Daily's own record).
+  if (dailyActive) return;
   // A Tutorial replay is deliberately UNSAVED (owner, 2026-10-24): it may neither overwrite the
   // campaign's resume save nor become "the match" a reload resumes. Replaying a lesson can never
   // move the player's place, so there is nothing here worth keeping.
@@ -861,6 +871,8 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   // Any screen that is not the match itself means the ritual's moment is over. This is the last
   // safety net for a navigation route that bypasses teardown or beginSession.
   if (name !== 'game') {
+    // Leaving the board by any route ends a Daily Puzzle try with it.
+    if (dailyActive) endDaily();
     cancelStarterRitual();
     // Invalidate a startGame still waiting on the ritual, so it cannot paint into the next screen.
     startGameGeneration++;
@@ -2768,6 +2780,7 @@ function continueGame() {
 let adviceMemo: { key: string; state: State; advice: Advice | null } | null = null;
 function currentAdvice(): Advice | null {
   if (isOnlineDuel()) return null; // tutorial coach / hidden-deck hints off online
+  if (dailyActive) return null; // a puzzle's answer is never suggested
   if (!session || coach.tutorial || session.state.actor !== HUMAN || session.state.phase === 'GAME_OVER') return null;
   const key = `${coach.choice}|${coach.step}`;
   if (adviceMemo && adviceMemo.state === session.state && adviceMemo.key === key) return adviceMemo.advice;
@@ -2824,7 +2837,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
-    if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
+    if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial && !dailyActive) {
       stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
       // The install invitation counts EVERY finished game — offline here, online at the finish
@@ -2908,6 +2921,14 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   render();
   void pump();
   scheduleBot();
+  // The Daily Puzzle: the try ends with the Grow step. Its result waits for the board to settle,
+  // so the last move is seen before the sheet arrives.
+  if (dailyActive && by === HUMAN && p.before.phase === 'ACT' && p.after.phase !== 'ACT' && !dailyAnswering) {
+    const my = epoch;
+    void idle().then(() => wait(420, my)).then(() => {
+      if (my === epoch && dailyActive) daily?.onTurnEnd();
+    });
+  }
 }
 
 /** The player plays `a` (from Confirm, a single tap, or the coach). */
@@ -3165,6 +3186,7 @@ async function planBotTurn(from: State): Promise<BotPlan> {
 
 function scheduleBot() {
   if (isOnlineDuel()) return; // online: no computer opponent
+  if (dailyActive) return; // the Daily Puzzle: the opponent never moves
   if (pregameHold || isStarterRitualPlaying()) return; // the ritual is still the only thing on screen
   if (!session || botBusy || tutorialTransitionPending) return;
   const st = session.state;
@@ -6731,7 +6753,7 @@ function renderControls(v: View, advice: Advice | null) {
   moves.replaceChildren();
   $('confirm').hidden = true;
   if (!myTurn() || busy()) {
-    if (session.state.phase === 'GAME_OVER' && !busy() && gameOverDismissed) {
+    if (session.state.phase === 'GAME_OVER' && !busy() && gameOverDismissed && !dailyActive) {
       moves.append(
         button('Results', 'ghost', () => {
           gameOverDismissed = false;
@@ -8984,6 +9006,8 @@ const drawHandlers = {  down(p: Pt, e: PointerEvent) {
 /** After the one Grow, a tap above the cockpit (board) skips optional Bloom → Throw. */
 function trySkipBloomToThrow(): boolean {
   if (!IS_FUTA04 || !session || !myTurn() || busy()) return false;
+  // In the Daily Puzzle ending the Grow step uses a try: a stray tap on the board must not do it.
+  if (dailyActive) return false;
   if (session.view.phase !== 'ACT' || !grewThisTurn()) return false;
   if (draw.shape.length || draw.ptr || session.sel.kind?.startsWith('bloom-')) return false;
   if (!session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb')) return false;
@@ -9343,7 +9367,7 @@ const bind = (id: string, fn: () => void) =>
  * the offline campaign is the thing a player opens most, and it leads the column. Since 2026-10-22 it
  * also carries the cream fill (the one leader inside PLAY); Play online is a quiet ghost key.
  */
-const PLAY_MENU_ENTRIES = ['menu-campaign', 'menu-online', 'menu-new'] as const;
+const PLAY_MENU_ENTRIES = ['menu-campaign', 'menu-daily', 'menu-online', 'menu-new'] as const;
 if (FEATURES.campaign) {
   const actions = document.getElementById('play-actions');
   if (actions) for (const id of PLAY_MENU_ENTRIES) actions.append($(id));
@@ -9351,6 +9375,92 @@ if (FEATURES.campaign) {
   // column (moved, not copied). It has no id of its own in the entry list and no handler: it can
   // never become a fourth destination or enter the tab order.
   $('menu-campaign').after($('play-readout'));
+  // The Daily's caption (NEW TODAY · STREAK 6) is the same kind of detail, under its own key.
+  $('menu-daily').after($('daily-readout'));
+}
+
+// ---------- the Daily Puzzle (owner, 2026-10-27) ----------
+/**
+ * One turn a day (web/src/daily/mount.ts owns its words, sheets and record). The match code knows
+ * only `dailyActive`: while it is set the opponent never moves, nothing is saved, no move is suggested,
+ * no result is recorded, and the end of the Grow step is handed to the Daily to judge.
+ */
+function beginDaily(start: State) {
+  closeAllSheets();
+  trainingRewardTicketId = null;
+  seedRewardMessage = '';
+  watching = null;
+  gameLevel = 7;
+  gameDifficulty = null;
+  campaignLevel = null;
+  tutorialReplay = false;
+  campaignReplay = false;
+  lessonNow = null;
+  lessonSeen = new Set();
+  lessonAnswerText = '';
+  lessonShownKey = '';
+  dailyActive = true;
+  dailyAnswering = false;
+  log = ['Daily puzzle.'];
+  beginSession(start, null, [], start);
+  gameOverDismissed = true;
+  render();
+}
+function endDaily() {
+  if (!dailyActive) return;
+  dailyActive = false;
+  dailyAnswering = false;
+  epoch++; // anything still waiting on this try's board stops here
+  daily?.left();
+}
+async function playDailyAnswer(_start: State, actions: readonly Action[]) {
+  dailyAnswering = true;
+  const my = epoch;
+  try {
+    await wait(700, my);
+    for (const a of actions) {
+      if (my !== epoch || !session) return;
+      await idle();
+      await wait(380, my);
+      if (my !== epoch || !session) return;
+      humanPlay(a);
+    }
+    await idle();
+    await wait(600, my);
+  } finally {
+    if (my === epoch) dailyAnswering = false;
+  }
+}
+if (FEATURES.campaign) {
+  daily = mountDaily({
+    store: { get: (k) => store.get(k), set: (k, v) => store.set(k, v) },
+    now: () => Date.now(),
+    begin: beginDaily,
+    end: endDaily,
+    actions: () => session?.log ?? [],
+    playAnswer: playDailyAnswer,
+    // A beat after the board settles, so the step's own word (GROW) does not overwrite it.
+    led: (text) => void window.setTimeout(() => smartCockpit?.hint(text), 520),
+    sheet: (id) => sheet(id),
+    toMenu: () => {
+      showScreen('menu');
+      layoutMenu(syncMenuResume());
+      openPlayMenu();
+    },
+    territory: () => onlineBuildEnabled() && !IS_TEST,
+    openTerritory: () => {
+      showScreen('menu');
+      layoutMenu(syncMenuResume());
+      $('menu-world').click();
+    },
+    settle: async (no, actions) => {
+      if (actions) queueSeedProof(store, { kind: 'daily', no, actions: [...actions], botVersion: CURRENT_BOT_VERSION });
+      // An earlier pass (a menu visit, a reload) already settled it: the tile is in the wallet.
+      else if (!isSeedProofQueued(store, `daily:${no}`)) return 'settled';
+      const report = await settleSeedProof(`daily:${no}`);
+      return report.kind === 'settled' ? 'settled' : report.kind === 'refused' ? 'refused' : 'waiting';
+    },
+  });
 }
 
 bind('menu-play', openPlayMenu);
@@ -9655,6 +9765,7 @@ bind('gm-main', () => {
   sheet(null);
   fastForward();
   if (isOnlineDuel()) tearDownOnlineDuel();
+  if (dailyActive) endDaily();
   showScreen('menu');
 });
 bind('restart-tutorial', () => {
@@ -10302,6 +10413,8 @@ let appReady = false;
     return !!p;
   },
   settings: () => ({ ...settings }),
+  /** tests: whether a Daily Puzzle owns the board (the opponent never moves, nothing is saved). */
+  daily: () => ({ active: dailyActive, answering: dailyAnswering }),
   /** The campaign place the page is on, as the menu's LEVEL <n> reads it (tests/screenshots). */
   campaignLevel: () => currentLevel(campaignProgress).number,
   busy: () => busy(),

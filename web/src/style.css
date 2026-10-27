@@ -8032,3 +8032,102 @@ html.futasaku-product #sheet-settings::-webkit-scrollbar-thumb {
      fit without a scroll, and it takes nothing from any control. */
   html.futasaku-product #sheet-settings h3 { display: none; }
 }
+
+/* ---------- the Daily Puzzle (owner, 2026-10-27) ---------- */
+/* The header strip: the number, the goal and the tries, in the header's empty middle between the
+   menu key (left) and the logo (right) — the same lane the online duel uses, never over the board.
+   A machine read-out: no frame, no fill, not a control. */
+.daily-hud {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: calc(58px + env(safe-area-inset-left, 0px));
+  right: calc(104px + env(safe-area-inset-right, 0px));
+  z-index: 8;
+  height: var(--hud-h, 44px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  font-family: var(--font-ui);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--fu-cream-62, var(--c-muted));
+}
+.daily-hud[hidden] { display: none; }
+.daily-hud-no { color: var(--fu-cream, var(--c-text)); }
+.daily-hud-goal { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.daily-hud-tries { letter-spacing: 0.24em; font-size: 0.62rem; color: var(--fu-cream-70, var(--c-muted)); }
+
+/* The sheet: one plate for every state. Kicker (number · title), the goal in the display face, the
+   three try diamonds, one quiet line, then the keys. */
+.sheet.daily-sheet .sheet-head h2 {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+.sheet.daily-sheet .sheet-body { text-align: center; }
+.daily-kicker {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.64rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fu-cream-62, var(--c-muted));
+}
+.daily-goal {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.32rem;
+  line-height: 1.22;
+  color: var(--fu-cream, var(--c-text));
+  text-wrap: balance;
+}
+.daily-goal:empty { display: none; }
+.daily-tries {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.42em;
+  padding-left: 0.42em; /* the tracking trails the last diamond: keep the row optically centred */
+  color: var(--fu-cream-70, var(--c-muted));
+}
+.daily-tries[hidden] { display: none; }
+.daily-body { margin: 0; text-wrap: pretty; }
+.daily-body[hidden] { display: none; }
+.daily-actions { display: grid; gap: 8px; margin-top: 6px; }
+.daily-actions .btn { width: 100%; }
+
+/* The Territory screen while the Daily's tile waits to be grown. */
+.daily-place {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  /* The house dark glass (no frame, ever: owner, 2026-10-23), with Match Intel's corner and drop. */
+  background: var(--dark-glass, rgba(8, 10, 10, 0.42));
+  -webkit-backdrop-filter: var(--dark-glass-blur, blur(9px));
+  backdrop-filter: var(--dark-glass-blur, blur(9px));
+  border-radius: 15px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  text-align: center;
+  display: grid;
+  gap: 4px;
+}
+.daily-place[hidden] { display: none; }
+.daily-place-title {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fu-cream, var(--c-text));
+}
+.daily-place-line {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--fu-cream-62, var(--c-muted));
+}
+.daily-place-line[hidden] { display: none; }
+.daily-place .btn { margin-top: 6px; min-height: 46px; }
+.daily-place .btn[hidden] { display: none; }

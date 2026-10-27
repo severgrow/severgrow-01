@@ -23,6 +23,7 @@ import { ownerLine } from './world-selection.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
+import { WORLD_CLAIMED_EVENT } from './world-events.js';
 
 type Identity = { token: string; playerId: string };
 
@@ -657,6 +658,9 @@ export class WorldView {
       this.notice('A little place in the world is yours.');
       this.pendingRequest = null;
       await this.refresh(true);
+      // Told to whoever is waiting for a placement (the Daily Puzzle's PLACE IT step), without this
+      // screen knowing who that is.
+      document.dispatchEvent(new CustomEvent(WORLD_CLAIMED_EVENT, { detail: { cellId } }));
     } catch {
       this.notice('That tile may have changed. The map has refreshed; no Seeds were taken.');
       this.pendingRequest = null;

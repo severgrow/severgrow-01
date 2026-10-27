@@ -7,7 +7,9 @@ import type { RewardResult } from '../../../server/src/seeds/types.js';
 export const PENDING_SEED_PROOFS_KEY = 'severgrow.seeds.pending.v1';
 export type PendingSeedProof =
   | { kind: 'campaign'; levelId: string; actions: readonly Action[]; botVersion: string }
-  | { kind: 'training'; ticketId: string; actions: readonly Action[]; botVersion: string };
+  | { kind: 'training'; ticketId: string; actions: readonly Action[]; botVersion: string }
+  /** A Daily Puzzle solve (one turn's actions); pays one Territory tile. `botVersion` is unused. */
+  | { kind: 'daily'; no: number; actions: readonly Action[]; botVersion: string };
 
 /**
  * How long ONE settle attempt may take before it is treated as a retryable failure.
@@ -22,13 +24,15 @@ export type PendingSeedProof =
  */
 export const SEED_SETTLE_TIMEOUT_MS = 5_000;
 
-const proofKey = (p: PendingSeedProof) => p.kind === 'campaign' ? `campaign:${p.levelId}` : `training:${p.ticketId}`;
+const proofKey = (p: PendingSeedProof) =>
+  p.kind === 'campaign' ? `campaign:${p.levelId}` : p.kind === 'daily' ? `daily:${p.no}` : `training:${p.ticketId}`;
 const isPendingProof = (value: unknown): value is PendingSeedProof => {
   if (!value || typeof value !== 'object') return false;
   const proof = value as Record<string, unknown>;
   if (!Array.isArray(proof.actions)) return false;
   return (proof.kind === 'campaign' && typeof proof.levelId === 'string' && proof.levelId.length > 0)
-    || (proof.kind === 'training' && typeof proof.ticketId === 'string' && proof.ticketId.length > 0);
+    || (proof.kind === 'training' && typeof proof.ticketId === 'string' && proof.ticketId.length > 0)
+    || (proof.kind === 'daily' && Number.isInteger(proof.no) && (proof.no as number) >= 1);
 };
 const read = (storage: KeyValue): PendingSeedProof[] => {
   try {
@@ -37,6 +41,9 @@ const read = (storage: KeyValue): PendingSeedProof[] => {
   } catch { return []; }
 };
 const write = (storage: KeyValue, pending: PendingSeedProof[]) => storage.set(PENDING_SEED_PROOFS_KEY, JSON.stringify(pending));
+
+/** Whether the proof with this key (`daily:42`, `campaign:c1-4`…) is still waiting for the server. */
+export const isSeedProofQueued = (storage: KeyValue, key: string): boolean => read(storage).some((p) => proofKey(p) === key);
 
 /** How many real proofs this device is still owed. Zero means a boot has nothing to ask the server. */
 export const pendingSeedProofCount = (storage: KeyValue): number => read(storage).length;
@@ -109,10 +116,12 @@ const submitWithDeadline = async (
   proof: PendingSeedProof,
   timeoutMs: number,
 ): Promise<RewardResult> => {
-  const source = proof.kind === 'campaign' ? { levelId: proof.levelId } : { ticketId: proof.ticketId };
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  const submit = client.submitSeedProof(token, source, proof.actions, proof.botVersion,
-    controller ? { signal: controller.signal } : {});
+  const signal = controller ? { signal: controller.signal } : {};
+  const submit = proof.kind === 'daily'
+    ? client.submitDailySolve(token, proof.no, proof.actions, signal)
+    : client.submitSeedProof(token, proof.kind === 'campaign' ? { levelId: proof.levelId } : { ticketId: proof.ticketId },
+      proof.actions, proof.botVersion, signal);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([

@@ -78,6 +78,11 @@ export const createWorldEconomyRouter = (deps: {
     if (!Number.isInteger(body.botLevel)) throw new ApiError('INVALID_REQUEST', 'Invalid Training level.');
     return ok(201, { ticket: await economy.issueTraining(player, body.botLevel as number) });
   }
+  if (req.method === 'POST' && path === '/v1/seeds/daily') {
+    const body = await bodyOf(req);
+    if (!Number.isInteger(body.no) || !Array.isArray(body.actions)) throw new ApiError('INVALID_REQUEST', 'A Daily Puzzle solve is required.');
+    return ok(200, { reward: await economy.daily(player, body.no as number, body.actions as Action[]) });
+  }
   if (req.method === 'POST' && (path === '/v1/seeds/campaign' || path === '/v1/seeds/training')) {
     const body = await bodyOf(req);
     if (!Array.isArray(body.actions) || typeof body.botVersion !== 'string') throw new ApiError('INVALID_REQUEST', 'A match replay is required.');

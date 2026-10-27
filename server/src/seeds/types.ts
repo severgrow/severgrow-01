@@ -33,6 +33,8 @@ export type RewardInput = {
   lessonLevel?: number;
   /** Server-issued before a rewarded Training match starts. */
   trainingTicketId?: string;
+  /** Only for a server-verified Daily Puzzle solve (receipt `daily:<no>`): pays exactly one tile. */
+  dailyPuzzle?: number;
 };
 export type RewardResult = { awarded: number; reason: string | null; wallet: SeedWallet; replayed: boolean };
 export type ClaimResult =

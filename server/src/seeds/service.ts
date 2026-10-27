@@ -17,6 +17,10 @@ import type {
 } from './types.js';
 import { verifyCampaignProof, verifyLessonProof, verifyTrainingProof } from './verify.js';
 import { FINAL_LESSON } from '../../../web/src/lessons/final.js';
+import { DailyTurnError, goalMet, playTurn } from '../../../src/daily/core.js';
+import { puzzleNoOn } from '../../../src/daily/calendar.js';
+import { dailyPuzzle } from '../../../src/daily/puzzles.js';
+import { DAILY_EPOCH } from '../../../src/daily/schedule.js';
 
 /** A linked territory duel follows the ordinary 24-hour turn clock. */
 const TERRITORY_TURN_TIMEOUT_MS = 24 * 60 * 60 * 1000;
@@ -135,6 +139,36 @@ export class WorldEconomyService {
     return this.store.settle({
       playerId: player.id, sourceKey: `lesson:${FINAL_LESSON.level}`, mode: 'campaign', outcome: 'win',
       opponentId: null, now: this.now(), lessonLevel: FINAL_LESSON.level,
+    });
+  }
+
+  /**
+   * THE DAILY PUZZLE's tile (owner, 2026-10-27). The claimed turn is REPLAYED through the real rules
+   * from the shipped puzzle's own start (src/daily/core.ts — the same check the game shows), and it
+   * must meet the goal. Only today's puzzle pays, with yesterday's accepted as a grace for a solve
+   * sent just after midnight UTC. Paid once per puzzle per player (receipt `daily:<no>`), as exactly
+   * one tile's price, which the player spends at once by placing the tile.
+   */
+  async daily(player: PlayerRecord, no: number, actions: readonly Action[]) {
+    const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
+    if (!(await this.matches.hitRateLimit(`seeds:proof:${player.id}`, bucket, 90)).ok) {
+      throw new ApiError('RATE_LIMITED', 'Please wait before verifying another puzzle.');
+    }
+    const today = puzzleNoOn(this.now(), DAILY_EPOCH);
+    const puzzle = Number.isInteger(no) ? dailyPuzzle(no) : null;
+    if (!puzzle || today === null || (no !== today && no !== today - 1)) {
+      throw new ApiError('INVALID_REQUEST', 'That Daily Puzzle is not open.');
+    }
+    let solved = false;
+    try {
+      solved = goalMet(puzzle.goal, playTurn(puzzle.start, actions));
+    } catch (e) {
+      if (!(e instanceof DailyTurnError)) throw e;
+    }
+    if (!solved) throw new ApiError('INVALID_REQUEST', 'That Daily Puzzle solve could not be verified.');
+    return this.store.settle({
+      playerId: player.id, sourceKey: `daily:${no}`, mode: 'campaign', outcome: 'win',
+      opponentId: null, now: this.now(), dailyPuzzle: no,
     });
   }
 

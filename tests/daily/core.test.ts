@@ -110,6 +110,18 @@ describe('the daily puzzle core', () => {
     expect(solvingEndings(exploreTurn(s), { kind: 'points', n: best })).toHaveLength(1);
   });
 
+  it('allows up to maxSolutions answers when asked, and reports how many there are', () => {
+    const { start: s } = findUniqueBest();
+    const space = exploreTurn(s);
+    const goal: DailyGoal = { kind: 'points', n: 0 };
+    const count = solvingEndings(space, goal).length;
+    expect(count).toBeGreaterThan(1);
+    expect(prove({ start: s, goal }, 50_000, count - 1)).toMatchObject({ ok: false, reason: 'SEVERAL_SOLUTIONS', solutions: count });
+    const proof = prove({ start: s, goal }, 50_000, count);
+    expect(proof).toMatchObject({ ok: true, solutions: count });
+    if (proof.ok) expect(goalMet(goal, playTurn(s, proof.solution))).toBe(true);
+  });
+
   it('rejects a turn too large to search fully', () => {
     expect(prove({ start, goal: { kind: 'points', n: 1 } }, 5)).toMatchObject({ ok: false, reason: 'TOO_LARGE' });
   });
