@@ -62,7 +62,8 @@ by tests so the replacement can prove equivalence; the plan is §6.
 ## 5. Kept on purpose (reported, not deleted)
 
 - `web/src/ui/skin/SkinBoardView.ts` (816 lines) and `web/src/skins/forestVolcanoV3.ts` (123 lines):
-  imported by nothing; `AGENTS.md` says skins will return later. Owner decision.
+  imported by nothing today, but **kept: the owner confirmed on 2026-10-27 that skins are coming back
+  in the near future.** Treat them as the starting point for that work, not as dead code.
 - `web/src/logic/levels-ui.ts`, `web/src/ui/levelIcons.ts`, `web/src/logic/colorcheck.ts`: used only
   by tests (and a palette report script). Removing them means removing tests too — owner decision.
 - `main.ts`: 75 `addEventListener` vs 7 `removeEventListener`. Most bind once at boot to permanent
