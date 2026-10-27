@@ -635,6 +635,12 @@ try {
         .locator('#match-chat-toggle')
         .getAttribute('data-muted')) === 'true',
   );
+  check(
+    'no Block key under the conversation: it lives in the message menu',
+    (await receiver.locator('.match-chat-status-row button, .match-chat-foot > button').count()) === 0,
+  );
+  // Block lives in an opponent message's ⋯ menu (owner, 2026-10-27).
+  await receiver.locator('.match-chat-message-actions > summary').last().click();
   await receiver
     .getByRole('button', { name: 'Block chat with opponent', exact: true })
     .click();
@@ -644,6 +650,8 @@ try {
         .disabled,
   );
   check('block notification disables the other client', true);
+  // Block lives in an opponent message's ⋯ menu (owner, 2026-10-27).
+  await receiver.locator('.match-chat-message-actions > summary').last().click();
   await receiver
     .getByRole('button', { name: 'Unblock opponent', exact: true })
     .click();

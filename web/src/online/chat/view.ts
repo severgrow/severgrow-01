@@ -151,18 +151,16 @@ export const mountMatchChat = (o: {
   const status = document.createElement('p');
   status.className = 'match-chat-status';
   status.setAttribute('role', 'status');
-  // Block stays reachable without a ··· menu (owner did not ask to lose it). It is a discrete,
-  // contextual word in the status row and appears only once the opponent has actually written —
-  // the point at which blocking a conversation can mean anything.
-  const block = button(copy.blockShort, () =>
-    void ctl.action('block', { value: !ctl.state().blockedByMe }),
-  );
-  block.className = 'match-chat-block';
-  block.hidden = true;
-  block.setAttribute('aria-pressed', 'false');
+  // BLOCK LIVES IN THE MESSAGE'S ⋯ MENU, beside Report (owner, 2026-10-27: "remove 'block' button
+  // from bottom, muting the chat / reporting and blocking is enough"). The status row is the status.
+  const paintBlock = (b: HTMLButtonElement, blockedByMe: boolean) => {
+    b.textContent = blockedByMe ? copy.unblockShort : copy.blockShort;
+    b.setAttribute('aria-pressed', String(blockedByMe));
+    b.setAttribute('aria-label', blockedByMe ? copy.unblock : copy.block);
+  };
   const statusRow = document.createElement('div');
   statusRow.className = 'match-chat-status-row';
-  statusRow.append(status, block);
+  statusRow.append(status);
   const outgoing = document.createElement('div');
   outgoing.className = 'match-chat-outgoing';
   outgoing.hidden = true;
@@ -452,7 +450,13 @@ export const mountMatchChat = (o: {
             'aria-label',
             `${copy.report}: ${text(m).slice(0, 60)}`,
           );
-          actions.append(report);
+          const blockItem = button(copy.blockShort, () => {
+            actions.open = false;
+            void ctl.action('block', { value: !ctl.state().blockedByMe });
+          });
+          blockItem.className = 'match-chat-block-item';
+          paintBlock(blockItem, s.blockedByMe);
+          actions.append(report, blockItem);
           line.append(actions);
         }
         line.append(body);
@@ -549,16 +553,33 @@ export const mountMatchChat = (o: {
     mute.setAttribute('aria-pressed', String(s.muted));
     mute.setAttribute('aria-label', s.muted ? copy.unmute : copy.mute);
     mute.title = s.muted ? copy.unmute : copy.mute;
-    // Block is contextual: it only appears once the opponent has written (or while I have blocked).
-    const hasOpponentMessage = s.messages.some((m) => !m.mine);
-    block.hidden = !(hasOpponentMessage || s.blockedByMe);
-    block.textContent = s.blockedByMe ? copy.unblockShort : copy.blockShort;
-    block.setAttribute('aria-pressed', String(s.blockedByMe));
-    block.setAttribute(
-      'aria-label',
-      s.blockedByMe ? copy.unblock : copy.block,
-    );
-    statusRow.hidden = status.hidden && block.hidden;
+    // Every message menu's Block item follows the current state (the lines are not rebuilt on a
+    // block, only when the messages change).
+    for (const b of entries.querySelectorAll<HTMLButtonElement>('.match-chat-block-item')) paintBlock(b, s.blockedByMe);
+    statusRow.hidden = status.hidden;
+    refreshCaret();
+  }
+  /**
+   * THE STRAY CARET (owner report, 2026-10-27: a blue text cursor floating BELOW the message box).
+   * iOS WebKit draws the caret of a focused field at the position it had when it was last placed;
+   * when the panel then moves or resizes under it (the keyboard opening, the visual viewport
+   * scrolling, a row appearing above the box), the box moves and the caret does not. Re-placing the
+   * selection after layout makes WebKit draw the caret where the field actually is now.
+   */
+  let caretFrame: number | null = null;
+  function refreshCaret() {
+    if (document.activeElement !== input || caretFrame !== null) return;
+    caretFrame = requestAnimationFrame(() => {
+      caretFrame = null;
+      if (document.activeElement !== input || composing) return;
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? start;
+      try {
+        input.setSelectionRange(start, end);
+      } catch {
+        /* a field type without a selection */
+      }
+    });
   }
   function setOpen(value: boolean) {
     setPhrases(false);
@@ -711,6 +732,7 @@ export const mountMatchChat = (o: {
     root.style.setProperty('--chat-top', `${offset + top}px`);
     root.style.setProperty('--chat-height', `${Math.max(120, available)}px`);
     if (followLatest && ctl.state().open) log.scrollTop = log.scrollHeight;
+    refreshCaret();
   };
   let layoutFrame: number | null = null;
   const scheduleViewport = () => {

@@ -55,7 +55,8 @@ export const CHAT_CSS = `
 .match-chat-message-actions > summary::-webkit-details-marker{display:none;}
 .match-chat-message-actions > summary:focus-visible{outline:2px solid #e8ddc5;outline-offset:-3px;}
 .match-chat-message-actions[open] > summary{background:#e8ddc50c;}
-.match-chat-message-actions .match-chat-report {position:absolute;right:0;top:40px;z-index:3;white-space:nowrap;font-size:11px;min-height:44px;background:#151915;border:1px solid #e8ddc529;box-shadow:0 6px 16px #0005;}
+.match-chat-message-actions .match-chat-report, .match-chat-message-actions .match-chat-block-item {position:absolute;right:0;top:40px;z-index:3;min-width:9.5em;white-space:nowrap;font-size:11px;min-height:44px;background:#151915;border:1px solid #e8ddc529;box-shadow:0 6px 16px #0005;}
+.match-chat-message-actions .match-chat-block-item {top:88px;}
 .match-chat-message-actions:not([open]) > button{display:none;}
 
 .match-chat-empty {color:#e8ddc58c;font-size:17px;line-height:1.6;padding:12px 0;}
@@ -89,7 +90,6 @@ export const CHAT_CSS = `
 .match-chat-status {flex:1;margin:0;}
 /* Block stays reachable without a menu: a quiet word beside the status, only once the opponent has
    written something. It keeps the shared 44px touch target. */
-.match-chat-block {flex:0 0 auto;font-size:10px!important;color:#e8ddc5a6;padding:6px 10px!important;}
 .match-chat-preview {position:fixed;z-index:30;left:calc(54px + env(safe-area-inset-left));top:52px;max-width:min(240px,calc(100vw - 24px));padding:8px 11px;background:var(--dark-glass);backdrop-filter:var(--dark-glass-blur);border:1px solid #e8ddc51a;border-radius:8px;font:12px/1.4 var(--font);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none;}
 .match-chat-newer {position:absolute;top:55px;left:50%;transform:translateX(-50%);background:#171b18!important;font-size:10px!important;box-shadow:0 3px 15px #0004;}
 .match-chat-outgoing {font-size:11px;line-height:1.5;padding:6px 0;color:#e8ddc5a6;}
