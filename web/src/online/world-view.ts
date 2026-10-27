@@ -24,6 +24,11 @@ import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { WORLD_CLAIMED_EVENT } from './world-events.js';
+import { cellXY, fogRings, newCellIds, ownCentre, ranking, recentActivity } from './world-growth.js';
+import { ONLINE } from '../../../src/strings.js';
+
+/** Find my land: a small target, drawn in the button's own ink. */
+const WORLD_MINE_ICON = '<svg class="world-fit-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M12 3.6 19.3 7.8v8.4L12 20.4 4.7 16.2V7.8Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></svg>';
 
 type Identity = { token: string; playerId: string };
 
@@ -96,6 +101,10 @@ export class WorldView {
   /** The player's identity has resolved (to someone, or to nobody). Until then the wallet line is blank. */
   private identityKnown = false;
   private selected: string | null = null;
+  /** The cells on the map at the last paint: new ones rise in (null before the first paint). */
+  private knownCells: Set<string> | null = null;
+  /** The ranking table is dropped over the map. */
+  private rankOpen = false;
   private pendingRequest: string | null = null;
   private busy = false;
   private svg: SVGSVGElement | null = null;
@@ -185,6 +194,26 @@ export class WorldView {
     // is set from `ONLINE.worldFit` in lobby-ui.ts. Keyboard and screen readers get it for free
     // because it is a real <button>.
     document.getElementById('online-world-fit')?.addEventListener('click', () => this.setFitted(!this.fitted));
+    const mine = document.getElementById('online-world-mine');
+    if (mine) {
+      mine.innerHTML = WORLD_MINE_ICON;
+      mine.setAttribute('aria-label', ONLINE.worldMine);
+      mine.title = ONLINE.worldMine;
+      mine.addEventListener('click', () => this.flyToMine());
+    }
+    const toggle = document.getElementById('online-world-rank-toggle');
+    if (toggle) {
+      toggle.textContent = ONLINE.worldRanking;
+      toggle.addEventListener('click', () => { this.rankOpen = !this.rankOpen; this.paintBar(); });
+    }
+    // A tap anywhere outside the dropped ranking folds it away.
+    document.addEventListener('pointerdown', (event) => {
+      if (!this.rankOpen) return;
+      const target = event.target as Node | null;
+      if (target && (document.getElementById('online-world-ranking')?.contains(target) || toggle?.contains(target))) return;
+      this.rankOpen = false;
+      this.paintBar();
+    });
   }
 
   /** lobby-ui owns opening a duel; the challenge layer only knows the match id. */
@@ -315,6 +344,7 @@ export class WorldView {
         if (moving.length) this.celebrateGround(moving);
       }
       this.paintWallet();
+      this.paintBar();
       this.paintSelection();
       // The ring must keep draining even when the world revision is unchanged (a 24 h timer does not
       // bump ownership). These only touch attributes, the swords and the challenge strip, never the map.
@@ -353,7 +383,6 @@ export class WorldView {
     const container = document.getElementById('online-world-grid')!;
     const world = this.world!;
     const occupied = new Map(world.claims.map((claim) => [claim.cellId, claim]));
-    const own = new Set(world.claims.filter((claim) => claim.ownerId === this.identity?.playerId).map((claim) => claim.cellId));
     const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('role', 'group');
     svg.setAttribute('aria-label', 'Shared hexagonal world. Choose a tile to inspect it.');
@@ -398,10 +427,40 @@ export class WorldView {
     // last of all, in `world-accent`, so its highlight is never half-eaten by a neighbour's edge.
     // Each line is still the `world-hex` element (data, focus, pointer target), so nothing else
     // about the map changes.
+    // THE FOG (owner, 2026-10-27): the land underneath that nobody has uncovered yet, two faint
+    // rings beyond the coast, so the map visibly has somewhere to grow. Never a tap target.
+    const seenIds = new Set(world.cells.map((cell) => cell.id));
+    const anywhere = world.version >= 3;
+    const own = new Set(world.claims.filter((claim) => claim.ownerId === this.identity?.playerId).map((claim) => claim.cellId));
+    const fogLayer = document.createElementNS(NS, 'g');
+    fogLayer.classList.add('world-fog-layer');
+    fogLayer.setAttribute('aria-hidden', 'true');
+    for (const [id, ring] of fogRings(seenIds)) {
+      const [q, r] = id.split(',').map(Number) as [number, number];
+      const at = coords(q, r);
+      const fog = document.createElementNS(NS, 'path');
+      fog.setAttribute('d', hexPath(at.x, at.y));
+      fog.classList.add('world-fog', `ring-${ring}`);
+      fogLayer.append(fog);
+    }
+    // NEW LAND RISES IN: cells that were not on the map at the last look come up one after another,
+    // nearest the newest tile first, so an uncovering reads as the land being discovered.
+    const fresh = newCellIds(this.knownCells, world.cells.map((cell) => cell.id));
+    const newest = [...world.claims].sort((a, b) => b.claimedAt - a.claimedAt)[0];
+    const origin = newest ? world.cells.find((cell) => cell.id === newest.cellId) : undefined;
+    const from = origin ? cellXY(origin.q, origin.r) : { x: 0, y: 0 };
+    const riseOrder = new Map(fresh
+      .map((id) => { const [q, r] = id.split(',').map(Number) as [number, number]; const at = cellXY(q, r); return { id, d: Math.hypot(at.x - from.x, at.y - from.y) }; })
+      .sort((a, b) => a.d - b.d)
+      .map((entry, index) => [entry.id, index] as const));
+    if (fresh.length && !this.fromMemory) this.notice(ONLINE.worldNewLand(fresh.length));
+    this.knownCells = seenIds;
     const faces = document.createElementNS(NS, 'g');
     faces.classList.add('world-faces');
     const lines = document.createElementNS(NS, 'g');
     lines.classList.add('world-lines');
+    // The view's extent is the SEEN land only: FIT keeps its hairline margin (the fog shows in the
+    // pan gutter beyond the coast).
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const cell of world.cells) {
       const at = coords(cell.q, cell.r);
@@ -416,6 +475,11 @@ export class WorldView {
       face.setAttribute('d', d);
       face.setAttribute('data-cell-id', cell.id);
       face.classList.add('world-hex-face');
+      const rise = riseOrder.get(cell.id);
+      if (rise !== undefined) {
+        face.classList.add('rising');
+        face.style.setProperty('--rise-delay', `${Math.min(rise, 24) * 55}ms`);
+      }
       if (owner) {
         face.classList.add(mine ? 'mine' : 'held');
         face.style.fill = (mine ? mineFace : heldFace).get(owner.colour)!;
@@ -432,9 +496,12 @@ export class WorldView {
       if (owner) {
         path.classList.add(mine ? 'mine' : 'held');
         path.style.setProperty('--territory', owner.colour);
-      } else if (this.wallet && this.wallet.balance >= world.cost &&
-        (!own.size || [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
-          .some(([dq, dr]) => own.has(`${cell.q + dq!},${cell.r + dr!}`)))) path.classList.add('available');
+      } else if (this.wallet && this.wallet.balance >= world.cost && (anywhere || !own.size ||
+        [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]].some(([dq, dr]) => own.has(`${cell.q + dq!},${cell.r + dr!}`)))) {
+        // Any free tile on the seen map (owner, 2026-10-27: no longer next to your own tiles) — once
+        // the server says it plays by that rule (world v3). An older server still wants a neighbour.
+        path.classList.add('available');
+      }
       path.classList.toggle('selected', this.selected === cell.id);
       path.tabIndex = 0;
       path.setAttribute('aria-label', owner
@@ -460,6 +527,8 @@ export class WorldView {
     // below the selection accent, so pan and zoom move it with its tile for free — no HTML overlay.
     const swords = document.createElementNS(NS, 'g');
     swords.classList.add('world-swords-layer');
+    // the fog lies under every tile, so the coast always reads on top of it
+    svg.append(fogLayer);
     svg.append(faces, lines, marks, rings, swords);
     // The accent: ONE path, above every outline, that carries the selection highlight.
     const accentGroup = document.createElementNS(NS, 'g');
@@ -477,7 +546,8 @@ export class WorldView {
     this.paintAccent();
     // THE FIT BOX carries `PAD` on all four sides, so the outermost cell can be panned clear of the
     // panel's rounded corner (see `PAD`).
-    if (!this.fit) this.fit = [minX - PAD, minY - PAD, maxX - minX + 2 * PAD, maxY - minY + 2 * PAD];
+    // Re-measured on every paint: the map GROWS (owner, 2026-10-27), so its extent is not fixed.
+    this.fit = [minX - PAD, minY - PAD, maxX - minX + 2 * PAD, maxY - minY + 2 * PAD];
     // Frame the view to the WINDOW, so the map scales up to fill it. A portrait phone crops the
     // surplus width and pans to the edges; a wide screen resolves to the whole world. The DEFAULT
     // view is then the framed view capped so one cell is at least MIN_CELL_PX (see `detailFor`).
@@ -634,7 +704,7 @@ export class WorldView {
     // OWNER WORDING (2026-10-16): "when placing a tile dont say 'claim hex' say grow a tile
     // everywhere". The verb is GROW and the noun is TILE throughout this screen - it also matches
     // the game's own Grow action, so the world map and the board speak the same language.
-    label.textContent = available ? `FREE TILE · ${this.world.cost} SEEDS` : this.wallet && this.wallet.balance < this.world.cost ? `${this.world.cost} SEEDS NEEDED` : 'GROW NEXT TO YOUR TILES';
+    label.textContent = available ? `FREE TILE · ${this.world.cost} SEEDS` : this.wallet && this.wallet.balance < this.world.cost ? `${this.world.cost} SEEDS NEEDED` : `FREE TILE · ${this.world.cost} SEEDS`;
     pane.append(label);
     if (!available || this.busy) return;
     const action = document.createElement('button');
@@ -667,6 +737,110 @@ export class WorldView {
       await this.refresh(true);
     } finally { this.busy = false; this.paintSelection(); }
   }
+  // ---- the growing territory: ranking, activity, find my land (owner, 2026-10-27) -------------
+
+  /** Centre the view on a point of the map, keeping the zoom. */
+  private flyTo(x: number, y: number) {
+    if (!this.box || !this.fit) return;
+    if (this.fitted) this.setFitted(false);
+    const [, , w, h] = this.box;
+    const [fx, fy, fw, fh] = this.fit;
+    this.box = [
+      Math.max(fx, Math.min(fx + fw - w, x - w / 2)),
+      Math.max(fy, Math.min(fy + fh - h, y - h / 2)),
+      w, h,
+    ];
+    this.touched = true;
+    this.applyView(false);
+  }
+  private flyToCell(cellId: string) {
+    const cell = this.world?.cells.find((candidate) => candidate.id === cellId);
+    if (!cell) return;
+    const at = cellXY(cell.q, cell.r);
+    this.flyTo(at.x, at.y);
+    this.select(cellId);
+  }
+  private flyToMine() {
+    if (!this.world) return;
+    const centre = ownCentre(this.world.cells, this.world.claims, this.identity?.playerId ?? null);
+    if (centre) this.flyTo(centre.x, centre.y);
+  }
+  private flyToOwner(ownerId: string) {
+    if (!this.world) return;
+    const centre = ownCentre(this.world.cells, this.world.claims, ownerId);
+    if (centre) this.flyTo(centre.x, centre.y);
+  }
+
+  /** The activity strip, the RANKING key and its dropped table, and the find-my-land key. */
+  private paintBar() {
+    const bar = document.getElementById('online-world-bar');
+    const strip = document.getElementById('online-world-activity');
+    const panel = document.getElementById('online-world-ranking');
+    const toggle = document.getElementById('online-world-rank-toggle');
+    const mine = document.getElementById('online-world-mine');
+    if (!bar || !strip || !panel || !toggle || !this.world) return;
+    const me = this.identity?.playerId ?? null;
+    const claims = this.world.claims;
+    bar.hidden = claims.length === 0;
+    if (mine) mine.hidden = !me || !claims.some((claim) => claim.ownerId === me);
+    // the strip: newest first
+    const now = this.challengeNow();
+    strip.replaceChildren(...recentActivity(claims, now).map((entry) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'world-activity-chip';
+      chip.style.setProperty('--territory', entry.colour);
+      const name = document.createElement('span');
+      name.className = 'world-activity-name';
+      name.textContent = entry.ownerId === me ? ONLINE.worldMe : entry.name;
+      const ago = document.createElement('span');
+      ago.className = 'world-activity-ago';
+      ago.textContent = `+1 · ${entry.ago}`;
+      chip.append(name, ago);
+      chip.setAttribute('aria-label', `${entry.ownerId === me ? ONLINE.worldMe : entry.name} grew a tile, ${entry.ago}`);
+      chip.addEventListener('click', () => this.flyToCell(entry.cellId));
+      return chip;
+    }));
+    // the ranking
+    toggle.setAttribute('aria-expanded', String(this.rankOpen));
+    toggle.classList.toggle('open', this.rankOpen);
+    panel.hidden = !this.rankOpen;
+    if (!this.rankOpen) return;
+    const head = document.createElement('p');
+    head.className = 'world-ranking-head';
+    head.textContent = ONLINE.worldRankingTitle;
+    const list = document.createElement('ol');
+    list.className = 'world-ranking-list';
+    for (const row of ranking(claims, me)) {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `world-ranking-row${row.mine ? ' mine' : ''}`;
+      button.style.setProperty('--territory', row.colour);
+      const rank = document.createElement('span');
+      rank.className = 'world-ranking-rank';
+      rank.textContent = String(row.rank).padStart(2, '0');
+      const swatch = document.createElement('span');
+      swatch.className = 'world-ranking-swatch';
+      swatch.setAttribute('aria-hidden', 'true');
+      const name = document.createElement('span');
+      name.className = 'world-ranking-name';
+      name.textContent = row.mine ? `${row.name} · ${ONLINE.worldMe}` : row.name;
+      const tag = document.createElement('span');
+      tag.className = 'world-ranking-tag';
+      tag.textContent = `#${row.tag}`;
+      const tiles = document.createElement('span');
+      tiles.className = 'world-ranking-tiles';
+      tiles.textContent = String(row.tiles);
+      tiles.setAttribute('aria-label', ONLINE.worldTiles(row.tiles));
+      button.append(rank, swatch, name, tag, tiles);
+      button.addEventListener('click', () => { this.rankOpen = false; this.paintBar(); this.flyToOwner(row.ownerId); });
+      item.append(button);
+      list.append(item);
+    }
+    panel.replaceChildren(head, list);
+  }
+
   // ---- the challenge layer -------------------------------------------------
 
   /**

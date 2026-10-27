@@ -2,6 +2,23 @@
 
 Status: implemented on isolated `futa0.5-world-seeds` branch; **not deployed**. The existing 0.5 match engine and published preview remain authoritative until the online owner integrates this branch.
 
+## v3: the map grows (owner, 2026-10-27)
+
+- **The land underneath** is every hex within `WORLD_LIMIT` (48) of the centre. **What anyone sees** is
+  the v2 coastline plus every hex within `WORLD_REACH` (2) of a grown tile — a pure function of the
+  claims (`seenWorld` in `server/src/world.ts`), so nothing new is stored and the server and every
+  client always agree. A tile near the coast uncovers the land around it at once; no tile is ever at
+  the edge. `GET /v1/world` now sends the seen map (`version: 3`).
+- **Anywhere** (owner experiment): a tile may be grown on any free cell of the seen map; the
+  next-to-your-own rule is gone for claims (challenges still need a shared side). Land nobody can see
+  is refused as `INVALID_CELL`. A v2 server still enforces adjacency, and the page follows the
+  version it is told.
+- **On the page** (`web/src/online/world-view.ts`, helpers in `world-growth.ts`): two rings of fog
+  beyond the coast; new land rises in, nearest the newest tile first, with "N NEW TILES UNCOVERED";
+  the bar shows the last five placements (a tap flies there) and a RANKING key that drops the
+  players' table over the map (a row flies to that player); a find-my-land key beside FIT.
+  Browser check: `web/e2e/territory-growth.ts` (local, in-process server).
+
 ## Ownership and economy
 
 - The world is one versioned, frozen axial hex map. v2 (2026-10-21) is **274 cells** (21 rows, r −10…10): the 183-cell v1 landmass plus an irregular coastal growth, baked into `server/src/world.ts` by `scripts/gen-world-v2.mjs` (no runtime randomness). Its cell IDs are `q,r`. Expansions only ADD ids; every v1 id is unchanged, so an existing claim can never be orphaned — verified against the nine live claims when the coastline shape shipped (none dropped). Historical 8×8 `world_tiles` owners are copied into the central 64 positions by migration `0011_seeds_world.sql`; the historical table and migration remain intact.

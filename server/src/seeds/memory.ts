@@ -25,7 +25,7 @@ import type {
   WorldSnapshot,
 } from './types.js';
 import { emptyWallet } from './types.js';
-import { WORLD_CELL_IDS, worldNeighbours } from '../world.js';
+import { parseWorldCell, seenCellIds, worldNeighbours } from '../world.js';
 
 type Receipt = { input: RewardInput; awarded: number; reason: string | null };
 /**
@@ -77,10 +77,10 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     if (previous) return { ok: true, cellId: previous, revision: this.revision, wallet: { ...wallet }, replayed: true };
     const fail = (code: 'NO_FUNDS' | 'OCCUPIED' | 'NOT_ADJACENT' | 'INVALID_CELL'): ClaimResult =>
       ({ ok: false, code, revision: this.revision, wallet: { ...wallet } });
-    if (!WORLD_CELL_IDS.has(cellId)) return fail('INVALID_CELL');
+    // Anywhere on the SEEN map (owner, 2026-10-27: no longer next to your own tiles); land nobody can
+    // see yet is not for sale. The seen map is a pure function of the claims (server/src/world.ts).
+    if (!parseWorldCell(cellId) || !seenCellIds(this.claims.keys()).has(cellId)) return fail('INVALID_CELL');
     if (this.claims.has(cellId)) return fail('OCCUPIED');
-    const own = [...this.claims.values()].filter((claim) => claim.ownerId === playerId);
-    if (own.length && !worldNeighbours(cellId).some((id) => this.claims.get(id)?.ownerId === playerId)) return fail('NOT_ADJACENT');
     if (wallet.balance < SEED_ECONOMY.tileCost) return fail('NO_FUNDS');
     wallet.balance -= SEED_ECONOMY.tileCost;
     wallet.lifetimeSpent += SEED_ECONOMY.tileCost;
@@ -168,7 +168,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
       if (replay) return { ok: true, challenge: { ...replay }, replayed: true };
     }
     const fail = (code: Extract<ChallengeSendResult, { ok: false }>['code']): ChallengeSendResult => ({ ok: false, code });
-    if (!WORLD_CELL_IDS.has(input.cellId)) return fail('INVALID_CELL');
+    if (!parseWorldCell(input.cellId)) return fail('INVALID_CELL');
     const target = this.claims.get(input.cellId);
     if (!target) return fail('NOT_OWNED');
     if (target.ownerId === input.challengerId) return fail('OWN_TILE');
@@ -310,7 +310,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   }
 
   async adminSetCell(input: { cellId: string; ownerId: string | null; now: number }): Promise<AdminCellResult> {
-    if (!WORLD_CELL_IDS.has(input.cellId)) return { ok: false, code: 'INVALID_CELL' };
+    if (!parseWorldCell(input.cellId)) return { ok: false, code: 'INVALID_CELL' };
     const previousOwnerId = this.claims.get(input.cellId)?.ownerId ?? null;
     if (previousOwnerId === input.ownerId) {
       return { ok: true, cellId: input.cellId, previousOwnerId, ownerId: input.ownerId, changed: false, revision: this.revision, challengesClosed: 0 };

@@ -288,12 +288,22 @@
         <!-- A polite line for a player who cannot see the rail appear. The map itself never
              announces movement; this is the one sentence that says a challenge arrived. -->
         <p id="online-world-live" class="world-live" role="status" aria-live="polite"></p>
+        <!-- THE GROWING TERRITORY'S BAR (owner, 2026-10-27): the last few placements, newest first
+             (a tap flies the map there), and the RANKING key that drops the players' table over the
+             map. Painted by world-view.ts from the public world read; nothing here costs a request. -->
+        <div id="online-world-bar" class="world-bar" hidden>
+          <div id="online-world-activity" class="world-activity" aria-label="Recent tiles"></div>
+          <button id="online-world-rank-toggle" class="world-rank-toggle" type="button" aria-expanded="false" aria-controls="online-world-ranking">Ranking</button>
+        </div>
         <div id="online-world-grid" class="world-grid">
+          <div id="online-world-ranking" class="world-ranking" role="dialog" aria-label="Ranking" hidden></div>
           <!-- THE ONE MAP CONTROL (owner, 2026-10-21: "with a 'fit' toggle"). It sits on the panel's
                corner like a map control, and it is a real <button> so it is keyboard reachable and
                announces its pressed state. Its words come from `ONLINE.worldFit*` (lobby-ui.ts);
                world-view.ts only owns the state and the viewBox. -->
           <button id="online-world-fit" class="world-fit" type="button" aria-pressed="false"></button>
+          <!-- Find my land: one tap centres the map on your own tiles (they can be anywhere now). -->
+          <button id="online-world-mine" class="world-fit world-mine" type="button" hidden></button>
         </div>
         <div id="online-world-selection" class="world-selection" aria-live="polite"></div>
         <p id="online-world-notice" class="online-notice" role="status" aria-live="polite"></p>

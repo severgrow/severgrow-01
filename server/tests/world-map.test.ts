@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WORLD_CELLS, WORLD_CELL_IDS, legacyWorldCell, worldNeighbours } from '../src/world.js';
+import { WORLD_CELLS, WORLD_CELL_IDS, WORLD_LIMIT, WORLD_REACH, hexDistance, legacyWorldCell, parseWorldCell, seenCellIds, seenWorld, worldAround, worldNeighbours } from '../src/world.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
 import { SEED_ECONOMY, BETA_PAYOUT_MULTIPLIER, campaignLevelOfSourceKey, campaignSeedReward } from '../src/seeds/config.js';
 
@@ -21,11 +21,13 @@ describe('frozen shared hex world', () => {
   it('is 274 unique connected cells with no one-cell tails (v2)', () => {
     expect(WORLD_CELLS).toHaveLength(274);
     expect(WORLD_CELL_IDS.size).toBe(274);
+    // The v2 coastline's own shape: neighbours WITHIN it (v3's neighbours reach past the coast).
+    const inside = (id: string) => worldNeighbours(id).filter((n) => WORLD_CELL_IDS.has(n));
     const seen = new Set<string>([WORLD_CELLS[0]!.id]);
     const queue = [WORLD_CELLS[0]!.id];
-    while (queue.length) for (const id of worldNeighbours(queue.shift()!)) if (!seen.has(id)) { seen.add(id); queue.push(id); }
+    while (queue.length) for (const id of inside(queue.shift()!)) if (!seen.has(id)) { seen.add(id); queue.push(id); }
     expect(seen.size).toBe(274);
-    expect(WORLD_CELLS.every((c) => worldNeighbours(c.id).length >= 2)).toBe(true);
+    expect(WORLD_CELLS.every((c) => inside(c.id).length >= 2)).toBe(true);
   });
 
   it('keeps EVERY v1 cell: an existing claim can never be orphaned by the expansion', () => {
@@ -97,27 +99,83 @@ describe('frozen shared hex world', () => {
   it('every id matches its own q,r and no cell points at a missing neighbour', () => {
     for (const c of WORLD_CELLS) {
       expect(c.id).toBe(`${c.q},${c.r}`);
-      for (const id of worldNeighbours(c.id)) expect(WORLD_CELL_IDS.has(id)).toBe(true);
+      // v3: a neighbour may lie beyond the v2 coast — it is still land in the world underneath.
+      for (const id of worldNeighbours(c.id)) expect(parseWorldCell(id)).not.toBeNull();
     }
   });
 });
 
 describe('Seed purchases', () => {
-  it('first claim can be anywhere, then requires adjacency and charges exactly 100', async () => {
+  // OWNER EXPERIMENT (2026-10-27): "remove the rule of having to place a tile next to yours. So
+  // player can place a tile anywhere in the territory." Replaces the old adjacency rule.
+  it('a tile can be grown anywhere on the seen map, and charges exactly 100', async () => {
     const store = new MemoryWorldEconomyStore();
-    await grant(store, 'a', 'campaign:1');
-    await grant(store, 'a', 'campaign:2');
-    // Two clears fund the tile exactly; the tile PRICE does not scale with the beta multiplier.
-    expect(2 * CLEAR_1).toBe(SEED_ECONOMY.tileCost * 2);
+    for (let i = 1; i <= 4; i++) await grant(store, 'a', `campaign:${i}`);
     const first = await store.claim('a', '0,0', 'request-0001', 1);
-    expect(first).toMatchObject({ ok: true, cellId: '0,0', replayed: false, wallet: { balance: 2 * CLEAR_1 - SEED_ECONOMY.tileCost } });
-    expect((await store.claim('a', '0,0', 'request-0001', 2))).toMatchObject({ ok: true, replayed: true, wallet: { balance: 2 * CLEAR_1 - SEED_ECONOMY.tileCost } });
-    await grant(store, 'a', 'campaign:3');
-    await grant(store, 'a', 'campaign:4');
-    expect(await store.claim('a', '4,0', 'request-0002', 2)).toMatchObject({ ok: false, code: 'NOT_ADJACENT' });
-    expect(await store.claim('a', '1,0', 'request-0003', 2)).toMatchObject({ ok: true, wallet: { balance: 4 * CLEAR_1 - 2 * SEED_ECONOMY.tileCost } });
+    expect(first).toMatchObject({ ok: true, cellId: '0,0', replayed: false, wallet: { balance: 4 * CLEAR_1 - SEED_ECONOMY.tileCost } });
+    expect((await store.claim('a', '0,0', 'request-0001', 2))).toMatchObject({ ok: true, replayed: true });
+    // far from the first tile: no longer refused
+    expect(await store.claim('a', '6,-4', 'request-0002', 2)).toMatchObject({ ok: true, cellId: '6,-4' });
     expect(store.ledger.filter((x) => x.delta < 0)).toHaveLength(2);
   });
+  it('land nobody can see yet cannot be grown, nor anything outside the world', async () => {
+    const store = new MemoryWorldEconomyStore();
+    for (let i = 1; i <= 4; i++) await grant(store, 'a', `campaign:${i}`);
+    expect(await store.claim('a', '20,0', 'request-0003', 1)).toMatchObject({ ok: false, code: 'INVALID_CELL' });
+    expect(await store.claim('a', 'nope', 'request-0004', 1)).toMatchObject({ ok: false, code: 'INVALID_CELL' });
+    expect(await store.claim('a', `${WORLD_LIMIT + 1},0`, 'request-0005', 1)).toMatchObject({ ok: false, code: 'INVALID_CELL' });
+    expect(store.ledger.filter((x) => x.delta < 0)).toHaveLength(0);
+  });
+  it('a tile at the coast uncovers the land around it, and the next tile can go there', async () => {
+    const store = new MemoryWorldEconomyStore();
+    for (let i = 1; i <= 4; i++) await grant(store, 'a', `campaign:${i}`);
+    expect(WORLD_CELL_IDS.has('8,0')).toBe(true);
+    expect(WORLD_CELL_IDS.has('10,0')).toBe(false);
+    expect(await store.claim('a', '8,0', 'request-0006', 1)).toMatchObject({ ok: true });
+    expect(await store.claim('a', '10,0', 'request-0007', 2)).toMatchObject({ ok: true });
+    const world = await store.world();
+    const seen = seenCellIds(world.claims.map((c) => c.cellId));
+    expect(seen.has('12,0')).toBe(true);
+    expect(seen.has('13,0')).toBe(false);
+  });
+});
+
+describe('the growing map (v3)', () => {
+  it('keeps every v2 cell, so no claim is ever orphaned', () => {
+    const seen = seenCellIds([]);
+    for (const id of WORLD_CELL_IDS) expect(seen.has(id)).toBe(true);
+    expect(seen.size).toBe(WORLD_CELLS.length);
+  });
+  it('uncovers every hex within two of a tile, and no more', () => {
+    expect(WORLD_REACH).toBe(2);
+    expect(worldAround('0,0')).toHaveLength(19);
+    const seen = seenCellIds(['8,0']);
+    for (const id of ['9,0', '10,0', '10,-1', '9,1', '8,2']) expect(seen.has(id)).toBe(true);
+    expect(seen.has('11,0')).toBe(false);
+  });
+  it('a tile is never at the edge: every tile has two rings of seen land around it', () => {
+    const claims = ['8,0', '10,0', '-10,8', '3,-10'];
+    const seen = seenCellIds(claims);
+    for (const c of claims) for (const id of worldAround(c)) expect(seen.has(id)).toBe(true);
+  });
+  it('the seen map is deterministic and ordered top row first', () => {
+    const a = seenWorld(['10,0', '8,0']).map((c) => c.id);
+    const b = seenWorld(['8,0', '10,0']).map((c) => c.id);
+    expect(a).toEqual(b);
+    const cells = seenWorld(['8,0']);
+    for (let i = 1; i < cells.length; i++) {
+      const p = cells[i - 1]!, c = cells[i]!;
+      expect(p.r < c.r || (p.r === c.r && p.q < c.q)).toBe(true);
+    }
+  });
+  it('names only real land: ids are canonical, inside the world underneath', () => {
+    expect(parseWorldCell('3,-2')).toEqual({ id: '3,-2', q: 3, r: -2 });
+    for (const bad of ['03,1', '1, 2', '1,2,3', '', 'a,b', `${WORLD_LIMIT},${WORLD_LIMIT}`]) expect(parseWorldCell(bad)).toBeNull();
+    expect(hexDistance(3, -2)).toBe(3);
+  });
+});
+
+describe('Seed purchases, two buyers', () => {
   it('two buyers cannot acquire the same tile and rejected claims never debit', async () => {
     const store = new MemoryWorldEconomyStore();
     await grant(store, 'a', 'a1'); await grant(store, 'a', 'a2');

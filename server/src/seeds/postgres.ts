@@ -1,6 +1,6 @@
 import type { PgClient, PgPool } from '../storage/postgres.js';
 import { newId } from '../ids.js';
-import { WORLD_CELL_IDS, worldNeighbours } from '../world.js';
+import { parseWorldCell, seenCellIds, worldNeighbours } from '../world.js';
 import {
   SEED_ECONOMY,
   WORLD_CHALLENGE_OPEN_LIMIT,
@@ -179,11 +179,12 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
       const revision = number(meta.rows[0]?.revision);
       const fail = (code: 'NO_FUNDS' | 'OCCUPIED' | 'NOT_ADJACENT' | 'INVALID_CELL'): ClaimResult =>
         ({ ok: false, code, revision, wallet });
-      if (!WORLD_CELL_IDS.has(cellId)) return fail('INVALID_CELL');
-      const occupied = await client.query('select owner_id from world_claims where cell_id=$1', [cellId]);
-      if (occupied.rows.length) return fail('OCCUPIED');
-      const own = await client.query('select cell_id from world_claims where owner_id=$1', [playerId]);
-      if (own.rows.length && !worldNeighbours(cellId).some((id) => own.rows.some((r) => r.cell_id === id))) return fail('NOT_ADJACENT');
+      // Anywhere on the SEEN map (owner, 2026-10-27: no longer next to your own tiles); land nobody
+      // can see yet is not for sale. Read under the world lock above, so the seen map cannot move.
+      if (!parseWorldCell(cellId)) return fail('INVALID_CELL');
+      const all = await client.query('select cell_id from world_claims');
+      if (!seenCellIds(all.rows.map((r) => String(r.cell_id))).has(cellId)) return fail('INVALID_CELL');
+      if (all.rows.some((r) => String(r.cell_id) === cellId)) return fail('OCCUPIED');
       if (wallet.balance < SEED_ECONOMY.tileCost) return fail('NO_FUNDS');
       await client.query(
         `insert into world_claims(cell_id, owner_id, claimed_at, purchase_request_key, source)
@@ -293,7 +294,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
         const prior = await client.query('select * from world_challenges where challenger_id=$1 and request_key=$2', [input.challengerId, input.requestId]);
         if (prior.rows[0]) return { ok: true, challenge: challengeFromRow(prior.rows[0]), replayed: true };
         const fail = (code: Extract<ChallengeSendResult, { ok: false }>['code']): ChallengeSendResult => ({ ok: false, code });
-        if (!WORLD_CELL_IDS.has(input.cellId)) return fail('INVALID_CELL');
+        if (!parseWorldCell(input.cellId)) return fail('INVALID_CELL');
         const target = await client.query('select owner_id from world_claims where cell_id=$1', [input.cellId]);
         if (!target.rows[0]) return fail('NOT_OWNED');
         const defenderId = String(target.rows[0].owner_id);
@@ -465,7 +466,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
   },
 
   async adminSetCell(input): Promise<AdminCellResult> {
-    if (!WORLD_CELL_IDS.has(input.cellId)) return { ok: false, code: 'INVALID_CELL' };
+    if (!parseWorldCell(input.cellId)) return { ok: false, code: 'INVALID_CELL' };
     return transaction(pool, async (client) => {
       // The same serialization point every claim takes, so an edit never interleaves with a purchase.
       const meta = await client.query('select revision from world_meta where version=1 for update');

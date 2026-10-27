@@ -6,7 +6,7 @@ import { playerTag } from '../../../src/player-tag.js';
 import { ApiError } from '../errors.js';
 import { newId, newInviteCode, newSeed } from '../ids.js';
 import type { MatchRecord, PlayerRecord, Storage } from '../storage/types.js';
-import { WORLD_CELLS, WORLD_VERSION, territoryColour } from '../world.js';
+import { WORLD_VERSION, seenWorld, territoryColour } from '../world.js';
 import { SEED_ECONOMY, WORLD_CHALLENGE_LIST_WINDOW_MS } from './config.js';
 import type {
   ChallengeSendFailure,
@@ -45,7 +45,8 @@ export class WorldEconomyService {
     await this.store.expireChallenges(this.now()).catch(() => 0);
     const snapshot = await this.store.world();
     return {
-      version: WORLD_VERSION, revision: snapshot.revision, cells: WORLD_CELLS,
+      // The SEEN map: the v2 coast plus two rings around every tile (server/src/world.ts).
+      version: WORLD_VERSION, revision: snapshot.revision, cells: seenWorld(snapshot.claims.map((c) => c.cellId)),
       claims: snapshot.claims.map((claim) => ({
         cellId: claim.cellId, ownerId: claim.ownerId, ownerName: claim.ownerName,
         // Only a level NUMBER crosses the wire: no id, no email, no progress detail. `null` when the

@@ -80,6 +80,14 @@ export const ONLINE = Object.freeze({
   // THE FIT TOGGLE (owner, 2026-10-21: "keep it large and pannable in both axes, with a 'fit'
   // toggle"). Plain words for the screen reader label; the button shows a magnifying glass (2026-10-23).
   worldFit: 'Fit the whole map',
+  /** Find my land (owner, 2026-10-27). */
+  worldMine: 'Go to my tiles',
+  worldRanking: 'Ranking',
+  worldRankingTitle: 'Territory ranking',
+  worldTiles: (n: number) => `${n} ${n === 1 ? 'TILE' : 'TILES'}`,
+  worldMe: 'YOU',
+  worldActivity: 'Recent tiles',
+  worldNewLand: (n: number) => `${n} NEW ${n === 1 ? 'TILE' : 'TILES'} UNCOVERED`,
   /** the Seeds invitation card's button that opens the Territory (uppercase, like its LATER sibling) */
   worldInviteOpen: 'OPEN TERRITORY',
   playWithFriend: 'Play with a friend',

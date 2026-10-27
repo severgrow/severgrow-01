@@ -17,7 +17,8 @@ export type WorldCell = { id: string; q: number; r: number };
 //     before 2-neighbour ones: the edge grows in RUNS, not pimples. The fixed hash only breaks ties.
 // The result is verified by tests (v1 subset, connected, >=2 neighbours each, no lone teeth, a
 // coastline profile and the panel's near-square ratio).
-export const WORLD_VERSION = 2;
+/** v3 (2026-10-27): the map grows around its tiles (see `seenWorld`). v2 ids are all still land. */
+export const WORLD_VERSION = 3;
 
 /** Row r, then every q present in that row. Rows run from the top of the map to the bottom. */
 const ROWS: readonly (readonly [number, readonly number[]])[] = Object.freeze([
@@ -47,16 +48,71 @@ const ROWS: readonly (readonly [number, readonly number[]])[] = Object.freeze([
 export const WORLD_CELLS: readonly WorldCell[] = Object.freeze(ROWS.flatMap(([r, qs]) =>
   qs.map((q) => Object.freeze({ id: `${q},${r}`, q, r }))));
 
+/** The v2 coastline: the land every player saw before the map started to grow. */
 export const WORLD_CELL_IDS: ReadonlySet<string> = new Set(WORLD_CELLS.map((cell) => cell.id));
-const CELL_BY_ID = new Map(WORLD_CELLS.map((cell) => [cell.id, cell]));
-export const worldCell = (id: string): WorldCell | null => CELL_BY_ID.get(id) ?? null;
-export const worldNeighbours = (id: string): string[] => {
-  const cell = worldCell(id);
-  if (!cell) return [];
-  return [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
-    .map(([dq, dr]) => `${cell.q + dq!},${cell.r + dr!}`)
-    .filter((key) => WORLD_CELL_IDS.has(key));
+
+// ---- v3: THE MAP GROWS (owner, 2026-10-27) ---------------------------------------------------------
+//
+// "There's never a tile at the edge because the map is always expanding when someone is placing a tile
+// next to the edge ... have the map underneath it, but leave whatever you can see right now and
+// uncover parts of the map tile by tile."
+//
+// The land UNDERNEATH is every hex within WORLD_LIMIT of the centre. What anyone can SEE (and grow on)
+// is the v2 coastline plus every hex within WORLD_REACH of a grown tile. Nothing is stored: the seen
+// map is a pure function of the claims, so the server and every client always agree on it, and a new
+// tile near the coast uncovers the land around it the moment it is grown. A tile can never be grown
+// on land nobody can see, so the coast always stays WORLD_REACH hexes beyond the nearest tile.
+export const WORLD_REACH = 2;
+/** The land underneath: hex distance from the centre. Far beyond any realistic growth. */
+export const WORLD_LIMIT = 48;
+
+const DIRECTIONS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]] as const;
+export const hexDistance = (q: number, r: number): number => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+
+/** `q,r` → the cell, when it names land in the world underneath; null otherwise. */
+export const parseWorldCell = (id: string): WorldCell | null => {
+  const m = /^(-?\d{1,3}),(-?\d{1,3})$/.exec(id);
+  if (!m) return null;
+  const q = Number(m[1]), r = Number(m[2]);
+  if (`${q},${r}` !== id || hexDistance(q, r) > WORLD_LIMIT) return null;
+  return { id, q, r };
 };
+export const worldCell = (id: string): WorldCell | null => parseWorldCell(id);
+/** The neighbours of a cell, in the world underneath (seen or not). */
+export const worldNeighbours = (id: string): string[] => {
+  const cell = parseWorldCell(id);
+  if (!cell) return [];
+  return DIRECTIONS
+    .map(([dq, dr]) => `${cell.q + dq},${cell.r + dr}`)
+    .filter((key) => parseWorldCell(key) !== null);
+};
+
+/** Every hex within `reach` of a cell (the cell included), in the world underneath. */
+export const worldAround = (id: string, reach: number = WORLD_REACH): string[] => {
+  const cell = parseWorldCell(id);
+  if (!cell) return [];
+  const out: string[] = [];
+  for (let dq = -reach; dq <= reach; dq++) {
+    for (let dr = Math.max(-reach, -dq - reach); dr <= Math.min(reach, -dq + reach); dr++) {
+      const key = `${cell.q + dq},${cell.r + dr}`;
+      if (parseWorldCell(key)) out.push(key);
+    }
+  }
+  return out;
+};
+
+/** The seen map's cell ids: the v2 coastline plus WORLD_REACH around every grown tile. */
+export const seenCellIds = (claimIds: Iterable<string>): Set<string> => {
+  const seen = new Set(WORLD_CELL_IDS);
+  for (const id of claimIds) for (const key of worldAround(id)) seen.add(key);
+  return seen;
+};
+
+/** The seen map, top row first, left to right (a stable order for the wire and for drawing). */
+export const seenWorld = (claimIds: Iterable<string>): WorldCell[] =>
+  [...seenCellIds(claimIds)]
+    .map((id) => parseWorldCell(id)!)
+    .sort((a, b) => a.r - b.r || a.q - b.q);
 
 /** Stable mapping for the 64 historical automatically awarded cells. Unchanged in v2. */
 export const legacyWorldCell = (oldCell: number): string => `${oldCell % 8 - 4},${Math.floor(oldCell / 8) - 4}`;

@@ -636,7 +636,10 @@ export const ONLINE_CSS = `
    quietly lifted edge. No new colour — the owner asked to spot his own at a glance, not to be told
    by a different hue. */
 .world-hex.mine { stroke: color-mix(in srgb, var(--territory) 62%, #e8ddc5); }
-.world-hex.available { stroke: #c9c89c; stroke-width: .65; }
+/* Every free tile is open to grow now (owner, 2026-10-27), so "available" is a quiet lift, not a
+   highlight on half the map. The board's own global .available (a dashed onboarding ring with
+   pointer-events: none) must never leak onto the world: its dash and its tap block are undone here. */
+.world-hex.available { stroke: #858d7c; stroke-width: .42; stroke-dasharray: none; stroke-opacity: 1; pointer-events: all; }
 .world-hex.same-owner { stroke-width: 1.1; }
 /* THE SELECTION, drawn ONCE above every edge (the .world-accent group in world-view.ts), so no
    neighbouring tile can cover half of it. The same cream the tile highlight always used, with round
@@ -877,5 +880,91 @@ export const ONLINE_CSS = `
   opacity: .62;
 }
 
-`;
 
+/* ---------- THE GROWING TERRITORY (owner, 2026-10-27) ---------- */
+/* The fog: the land underneath nobody has uncovered, two faint rings beyond the coast. A dashed
+   hairline and a whisper of fill — the map plainly has somewhere to grow, and it never competes
+   with real ground. Never a tap target. */
+.world-fog { fill: #1b201c; stroke: #8f977f; stroke-width: .4; stroke-dasharray: 1.6 2.4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.world-fog.ring-1 { opacity: .42; }
+.world-fog.ring-2 { opacity: .16; }
+/* New land rises in, one hex after another, nearest the newest tile first. */
+@keyframes world-rise {
+  0% { opacity: 0; transform: translateY(5px) scale(.55); }
+  60% { opacity: 1; transform: translateY(-1px) scale(1.06); }
+  100% { opacity: 1; transform: none; }
+}
+.world-hex-face.rising {
+  transform-box: fill-box; transform-origin: center;
+  animation: world-rise 520ms cubic-bezier(.2, .9, .3, 1.2) both;
+  animation-delay: var(--rise-delay, 0ms);
+}
+@media (prefers-reduced-motion: reduce) { .world-hex-face.rising { animation: none; } }
+html.reduce-motion .world-hex-face.rising { animation: none; }
+
+/* Find my land: the second map control, beside FIT. */
+.world-grid > .world-mine { right: 62px; }
+
+/* The bar: the recent placements as a single line of chips (newest first), and the RANKING key. */
+.world-bar {
+  display: flex; align-items: center; gap: 8px;
+  max-width: 720px; width: 100%; min-width: 0; margin-inline: auto; min-height: 32px;
+  /* The chips must never widen the column: their width is the strip's to scroll, not the page's. */
+  contain: inline-size; overflow: hidden;
+}
+.world-bar[hidden] { display: none; }
+.world-activity {
+  flex: 1 1 0; min-width: 0; display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain;
+  scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+  mask-image: linear-gradient(90deg, #000 85%, transparent);
+}
+.world-activity::-webkit-scrollbar { display: none; }
+.world-activity-chip {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 9px 0 7px;
+  border: 0; border-radius: 7px; background: #161b17cc; color: #e8ddc5; cursor: pointer;
+  font: inherit; font-size: .62rem; letter-spacing: .12em; text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+.world-activity-chip::before {
+  content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--territory); flex: none;
+}
+.world-activity-name { max-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-activity-ago { color: #e8ddc58f; }
+.world-rank-toggle {
+  flex: none; min-height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid #d5c89b40; background: #161b17cc; color: #e8ddc5;
+  font: inherit; font-size: .64rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+}
+.world-rank-toggle::after { content: ' ▾'; display: inline-block; transition: transform 160ms ease; }
+.world-rank-toggle.open::after { transform: rotate(180deg); }
+.world-rank-toggle:focus-visible, .world-activity-chip:focus-visible, .world-ranking-row:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+
+/* The ranking, dropped over the map: a numbered machine read-out on the dark glass. */
+.world-ranking {
+  position: absolute; z-index: 4; top: 10px; left: 10px; right: 10px; max-height: calc(100% - 20px);
+  overflow: auto; overscroll-behavior: contain; touch-action: pan-y;
+  padding: 10px 8px 8px; border-radius: 15px;
+  background: rgba(12, 15, 13, .9);
+  -webkit-backdrop-filter: var(--dark-glass-blur, blur(9px)); backdrop-filter: var(--dark-glass-blur, blur(9px));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .22);
+  animation: world-drop 180ms cubic-bezier(.2, .8, .3, 1) both;
+}
+.world-ranking[hidden] { display: none; }
+@keyframes world-drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .world-ranking { animation: none; } }
+.world-ranking-head {
+  margin: 0 6px 8px; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: #e8ddc58f;
+}
+.world-ranking-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.world-ranking-row {
+  width: 100%; display: grid; grid-template-columns: 2.4ch 10px minmax(0, 1fr) auto 3.5ch; align-items: center; gap: 9px;
+  min-height: 40px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: #e8ddc5;
+  font: inherit; font-size: .74rem; text-align: left; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.world-ranking-row.mine { background: #e8ddc514; }
+.world-ranking-rank { color: #e8ddc570; letter-spacing: .08em; }
+.world-ranking-swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--territory); }
+.world-ranking-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .06em; }
+.world-ranking-tag { color: #e8ddc570; font-size: .62rem; letter-spacing: .08em; }
+.world-ranking-tiles { text-align: right; font-weight: 700; letter-spacing: .04em; }
+`;
