@@ -255,6 +255,11 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass .glass-chapter { color:#bcae8d; font:600 10px/1.1 monospace; letter-spacing:.16em; white-space:nowrap; }
 #futasaku-glass .glass-copy { font-weight:650; letter-spacing:.09em; text-wrap:balance; text-shadow:0 1px 5px rgba(0,0,0,.8); }
 #futasaku-glass[data-mode='intel'] { pointer-events:auto; display:flex; flex-direction:column; }
+/* Match Intel is a READING surface (Now / Tips / Rules), not a one-line hint over the board: at the
+   hint's 42% glass the hand's card faces showed straight through the rule rows. Same dark glass,
+   denser, with a deeper blur — the board still reads as "behind", the words read cleanly. */
+#futasaku-glass[data-mode='intel'] { background:rgba(8,10,10,.86); backdrop-filter:blur(16px) saturate(1.05); -webkit-backdrop-filter:blur(16px) saturate(1.05);
+  box-shadow:0 14px 36px rgba(0,0,0,.42), inset 0 0 0 1px rgba(233,216,173,.07); }
 #futasaku-glass .intel-bar { display:flex; align-items:center; gap:8px; padding:4px 6px 2px 12px; min-height:44px; }
 /* Match Intel: Now · Tips · Rules (owner, 2026-10-24: "pristine… easy to go through and read").
    One pattern: a serif title, short tracked capitals for labels, one plain sentence of mono text. */
@@ -300,7 +305,9 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass .intel-tip:first-child .intel-tip-text { color:#fff6e4; }
 #futasaku-glass .intel-rule { padding:0; }
 #futasaku-glass .intel-rule-head { display:grid; grid-template-columns:24px 1fr auto; align-items:center; gap:10px; min-height:46px; padding:0 12px; }
-#futasaku-glass .intel-rule-icon { font:400 15px/1 system-ui,sans-serif; color:#d8c9a6; text-align:center; }
+/* The rule glyphs (✦ ↑ ◆ ✂) in the game's face, always as plain text: on iPhone "✂" otherwise
+   renders as a colour emoji among cream icons. The renderer also appends U+FE0E (text style). */
+#futasaku-glass .intel-rule-icon { font:400 15px/1 var(--font-ui,'Fragment Mono'),ui-monospace,system-ui,sans-serif; font-variant-emoji:text; color:#d8c9a6; text-align:center; }
 #futasaku-glass .intel-rule-title { font:var(--w-display,700) 15px/1.2 var(--font-display,Besley,Georgia,serif); color:#f6ecd8; letter-spacing:.005em; }
 #futasaku-glass .intel-rule-num { font:600 9.5px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.14em; color:#a99c81; font-variant-numeric:tabular-nums; }
 #futasaku-glass .intel-rule-fold { display:grid; grid-template-rows:0fr; transition:grid-template-rows 260ms cubic-bezier(.22,.72,.24,1); }
@@ -1540,7 +1547,7 @@ export const mountGlassSurface = (onClose: () => void) => {
 
   /** RULES: the ten lessons, one line each when opened, and the full rules folded below. */
   const rulesHtml = (): string => `<ul class="intel-rules">${intelGuide.rules.map(r =>
-    `<li><button type="button" class="intel-rule" data-rule="${r.level}" aria-expanded="${ruleOpen === r.level}"><span class="intel-rule-head"><span class="intel-rule-icon" aria-hidden="true">${safe(r.icon)}</span><span class="intel-rule-title">${safe(r.title)}</span><span class="intel-rule-num">${pad(r.level)}</span></span><span class="intel-rule-fold"><span class="intel-rule-line"><span>${safe(r.line)}</span></span></span></button></li>`).join('')}</ul>`
+    `<li><button type="button" class="intel-rule" data-rule="${r.level}" aria-expanded="${ruleOpen === r.level}"><span class="intel-rule-head"><span class="intel-rule-icon" aria-hidden="true">${safe(r.icon)}\uFE0E</span><span class="intel-rule-title">${safe(r.title)}</span><span class="intel-rule-num">${pad(r.level)}</span></span><span class="intel-rule-fold"><span class="intel-rule-line"><span>${safe(r.line)}</span></span></span></button></li>`).join('')}</ul>`
     + (howToHtml ? `<details class="intel-full"${fullRules ? ' open' : ''}><summary>${safe(INTEL.fullRules)}</summary><div class="intel-howto">${howToHtml}</div></details>` : '');
 
   /** Scroll only the Match Intel body (never the page) so a lesson card is in view. */

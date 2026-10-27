@@ -1709,6 +1709,13 @@ function fillMenuStatus() {
   const turn = $('gm-turn');
   turn.className = `gm-turn ${$('turn').className}`;
   turn.innerHTML = $('turn').innerHTML;
+  // The copied pill carries the match label ("Level 1") under the turn word. In a campaign the
+  // corner read-out above "Paused" already says it (syncMenuMode runs first), so the plate showed
+  // LEVEL 1 twice. Drop the copy only when it repeats the corner word; a practice match keeps its
+  // difficulty ("Medium"), which the corner ("Practice") does not say.
+  const modeWord = document.getElementById('gm-mode')?.textContent?.trim().toLowerCase() ?? '';
+  const matchWord = turn.querySelector('small');
+  if (matchWord && modeWord && matchWord.textContent?.trim().toLowerCase() === modeWord) matchWord.remove();
   // Which level this is lives in the corner read-out, not in the heading: the heading anchors the
   // state (Paused / Match menu), and a campaign level names itself in the mode line. Owner brief,
   // 2026-10-22: a pause should read as one state, not as a page with a level title.

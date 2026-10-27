@@ -7528,11 +7528,14 @@ body.result .corner-tools {
      the pair reads as ONE entry while the next entry keeps the column's full rhythm. */
   margin: -3px 0 0;
   padding: 0 20px; /* aligns with the key's own label, not its frame */
-  color: var(--c-muted);
+  /* Readable at arm's length (2026-10-27): it was 0.56rem in the muted grey with 0.2em tracking —
+     about 9px — and read as texture rather than words. Still a quiet caption, one step down from the
+     key label, in the menu's own 62% cream. */
+  color: var(--fu-cream-62, var(--c-muted));
   font-family: var(--font-ui);
-  font-size: 0.56rem;
+  font-size: 0.68rem;
   line-height: 1.35;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
 }
@@ -7960,6 +7963,11 @@ html.futasaku-product #gameover .go-territory[hidden] { display: none; }
 
 /* Calm, legible settings glass: a lit key behind the sheet must not become a bright stripe
    through the comfort controls. Keep the shared frameless surface and its organic shadow. */
+/* The Tutorial sheet opens FROM Settings and gets the same dense glass (2026-10-27): at the shared
+   42% glass the menu's cream PLAY key smeared through as a light band behind the level numbers. */
+html.futasaku-product #sheet-tutorial {
+  background: rgba(8, 10, 10, 0.88);
+}
 html.futasaku-product #sheet-settings {
   background: rgba(8, 10, 10, 0.88);
   scrollbar-width: thin;
