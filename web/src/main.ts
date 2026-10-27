@@ -22,6 +22,7 @@ import { mountReplay } from './replay/player.js';
 import type { ReplayHandle } from './replay/player.js';
 import type { ReplayPayload } from '../../server/src/protocol.js';
 import { displayEventForPlay } from './player/display-readout.js';
+import { bloomNoRoom } from './logic/bloom-room.js';
 import type { DisplayEvent } from './player/display-readout.js';
 import { createTheirsDim, replayedByOpponent } from './player/replay-display.js';
 import { outcomeCue } from './player/outcome-light.js';
@@ -8438,6 +8439,11 @@ function onCardTap(id: number) {
     const matchingBlooms = bloomKindsForCard(id);
     const inBloomCard = matchingBlooms.length > 0;
     const sameAgain = session.sel.card === id || (bloomPick.length === 1 && bloomPick[0] === id);
+    // NO ROOM (tester report, 2026-10-27): the card is part of a set or run in the hand, but the
+    // board has no room to grow it, so no Bloom is legal and the tap is an ordinary card pick. Say
+    // why on the display instead of leaving the player to read the silence as a bug. Words only:
+    // the tap itself does exactly what it did before.
+    if (!inBloomCard && bloomNoRoom(session.view, session.legal, id) !== null) smartCockpit?.hint('NO ROOM');
     if (grewThisTurn() && hasCombo) {
       // Bloom-related card: first tap stays on Bloom; tapping the same card again
       // (or any non-Bloom card) moves to Throw select → next tap confirms.
