@@ -1,7 +1,7 @@
 // The typed client: request shape, error mapping and the local session that makes a page refresh
 // able to resume a match. Uses a fake fetch, so it runs in Node without a browser or a server.
 import { describe, expect, it } from 'vitest';
-import { DuelClient, DuelError } from '../src/client.js';
+import { DuelClient, DuelError, lastOpponentTurn } from '../src/client.js';
 import type { FetchLike, KeyValue } from '../src/client.js';
 
 type Route = { status: number; body: unknown };
@@ -101,6 +101,19 @@ describe('DuelClient', () => {
     expect(client.seenRevision('m0')).toBeUndefined();
   });
 
+  it('a match never seen on this device replays only the opponent\'s last turn', () => {
+    const events = [
+      { t: 'Draw', player: 0 }, { t: 'Sprout', player: 0 }, { t: 'Discard', player: 0 },
+      { t: 'Draw', player: 1 }, { t: 'Bloom', player: 1 }, { t: 'Sever', player: 0 }, { t: 'Discard', player: 1 },
+      { t: 'Draw', player: 0 }, { t: 'Sprout', player: 0 }, { t: 'Discard', player: 0 },
+      { t: 'Draw', player: 1 }, { t: 'Sprout', player: 1 }, { t: 'Discard', player: 1 },
+    ] as never[];
+    expect(lastOpponentTurn(events, 0)).toEqual(events.slice(10));
+    // it is the opponent's own turn now (my turn was the last one): nothing of theirs to show
+    expect(lastOpponentTurn(events.slice(0, 10), 0)).toEqual([]);
+    expect(lastOpponentTurn([], 0)).toEqual([]);
+  });
+
   it('reopening asks for the gap since the seen revision, and withholds history it cannot place', async () => {
     const view = (revision: number, events: unknown[]) => ({ status: 200, body: { ok: true, serverNow: 1, player: { matchId: 'm1', revision, seat: 0, status: 'active', events } } });
     const { fetchImpl, calls } = makeFetch({
@@ -111,6 +124,7 @@ describe('DuelClient', () => {
     const client = new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: store });
     const unknown = await client.openView('tok', 'm1');
     expect(calls.at(-1)!.url).toBe('https://api.example/v1/matches/m1/view');
+    // no Draw by the opponent in this history: nothing to place, nothing replayed
     expect(unknown.player.events).toEqual([]);
     client.saveSession({ token: 'tok', matchId: 'm1', seat: 0, revision: 12 });
     const gap = await client.openView('tok', 'm1');

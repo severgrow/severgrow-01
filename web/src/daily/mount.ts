@@ -112,8 +112,16 @@ export const mountDaily = (hooks: DailyHooks) => {
   };
 
   const loadPuzzle = async (no: number): Promise<DailyPuzzle | null> => {
-    const { dailyPuzzle } = await import('../../../src/daily/puzzles.js');
-    return dailyPuzzle(no);
+    try {
+      const { dailyPuzzle } = await import('../../../src/daily/puzzles.js');
+      return dailyPuzzle(no);
+    } catch {
+      // The puzzles could not be loaded (offline right after an update): say so under the key
+      // rather than leave it doing nothing.
+      const caption = document.getElementById('daily-readout');
+      if (caption) caption.textContent = DAILY.offline;
+      return null;
+    }
   };
 
   // ---- the PLAY submenu entry ----------------------------------------------------------------
@@ -434,6 +442,16 @@ export const mountDaily = (hooks: DailyHooks) => {
   return {
     refreshMenu,
     onTurnEnd,
+    /** The pause menu's Restart during a try: back to the puzzle's start, no try used. */
+    restartTry: () => {
+      if (!current || !playing) return;
+      hooks.begin(current.start);
+      showHud(current, dayOf(recFor(current.no), current.no).tries);
+    },
+    /** Start loading the puzzles for a tester, so DAILY opens without a wait. */
+    prefetch: () => {
+      if (hooks.tester()) void import('../../../src/daily/puzzles.js').catch(() => undefined);
+    },
     /** The match screen was left another way (the pause menu): puzzle mode ends with it. */
     left: () => {
       if (!current) return;

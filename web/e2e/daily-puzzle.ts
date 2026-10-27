@@ -127,6 +127,17 @@ try {
   await page.waitForFunction(() => document.getElementById('sheet-daily')?.hidden === true);
   const s2 = await state(page);
   check('a new try starts from the puzzle again', s2.phase === 'ACT' && JSON.stringify(s2.board) === JSON.stringify(puzzle.start.board));
+  // The pause menu's Restart mid-try goes back to the puzzle's start: still the Daily, no try used
+  // (it used to start a practice match with a frozen opponent).
+  await settle(page);
+  await play(page, proof.solution[0]!);
+  await settle(page);
+  await page.evaluate(() => document.getElementById('hud-menu')?.click());
+  await page.waitForSelector('#gm-new', { state: 'visible', timeout: 10_000 });
+  await page.click('#gm-new');
+  await page.waitForFunction((b) => JSON.stringify((window as any).__severgrow.state()?.board) === b, JSON.stringify(puzzle.start.board), { timeout: 10_000 });
+  check('Restart mid-try returns to the puzzle start and stays the Daily', (await page.evaluate(() => (window as any).__severgrow.daily())).active === true);
+  check('Restart uses no try', (await text(page, 'daily-hud-tries')) === '◆◇◇', await text(page, 'daily-hud-tries'));
   for (const a of proof.solution) {
     await settle(page);
     check(`the answer's ${a.t} is legal on the page`, await play(page, a));

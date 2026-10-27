@@ -1597,6 +1597,8 @@ export const DAILY = Object.freeze({
   overTitle: 'Not today',
   earned: 'You earned 1 tile in your Territory.',
   placeIt: 'Place it',
+  /** The puzzles could not be loaded (offline after an update). */
+  offline: 'COULD NOT LOAD · TRY AGAIN',
   /** A tester's look at a coming puzzle (nothing is recorded, no tile). */
   preview: 'PREVIEW',
   previewNote: 'Preview: nothing is recorded and no tile is earned.',

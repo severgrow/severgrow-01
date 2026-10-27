@@ -34,7 +34,7 @@ import type {
   WorldChallengeWire,
   WorldChallengesPayload,
 } from './seeds/types.js';
-import type { Action } from '../../src/engine/index.js';
+import type { Action, Event } from '../../src/engine/index.js';
 
 /** Protocol version the browser/build reports (P-5 handshake). */
 export const DUEL_CLIENT_VERSION = '0.5.0';
@@ -121,6 +121,21 @@ export type DuelClientOptions = {
 };
 
 export const DEFAULT_SESSION_KEY = 'severgrow.duel.session.v1';
+
+/**
+ * The opponent's last turn, from a public event history: everything from their last Draw, when no
+ * event of mine follows it (otherwise their turn is not the last thing that happened: nothing).
+ */
+export const lastOpponentTurn = (events: readonly Event[], seat: Player): Event[] => {
+  const opp = seat === 0 ? 1 : 0;
+  let start = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.t === 'Draw' && e.player === seat) return [];
+    if (e.t === 'Draw' && e.player === opp) { start = i; break; }
+  }
+  return start < 0 ? [] : events.slice(start);
+};
 
 /** Per-match last-seen revisions (see `seenRevision`). */
 const SEEN_KEY = 'severgrow.duel.seen.v1';
@@ -314,14 +329,14 @@ export class DuelClient {
 
   /**
    * Open a match from a list: only the events this device has NOT seen come back (the turns played
-   * while away), so the page replays exactly those. When this device has never seen the match, its
-   * history is withheld — replaying every turn ever played is worse than no animation (the same rule
-   * `resume` follows).
+   * while away), so the page replays exactly those. When this device has never seen the match, only
+   * the opponent's LAST turn is kept (when it was the last thing that happened) — never the whole
+   * game, which replayed every turn over the current board.
    */
   async openView(token: string, matchId: string): Promise<GetViewResponse> {
     const seen = this.seenRevision(matchId);
     const res = await this.getState(token, matchId, seen);
-    return seen === undefined ? { ...res, player: { ...res.player, events: [] } } : res;
+    return seen === undefined ? { ...res, player: { ...res.player, events: lastOpponentTurn(res.player.events, res.player.seat) } } : res;
   }
 
   loadSession(): DuelSession | null {

@@ -468,6 +468,8 @@ let dailyActive = false;
 /** The Daily's answer is being shown on the board: its end is not a try. */
 let dailyAnswering = false;
 let daily: DailyController | null = null;
+/** True only inside `beginDaily`'s own call to `beginSession`. */
+let beginningDaily = false;
 /** The online match whose result has already been counted for the install invitation (once each). */
 let onlineResultNoted: string | null = null;
 let botBusy = false;
@@ -707,8 +709,10 @@ function closePlayMenu() {
   syncBrandMark();
 }
 function openPlayMenu() {
-  // The Daily key follows who is signed in on this device (a tester may have just signed in).
+  // The Daily key follows who is signed in on this device (a tester may have just signed in), and
+  // its puzzles start loading now, so the press opens at once.
   daily?.refreshMenu();
+  daily?.prefetch();
   $('play-menu').hidden = false;
   $('menu').hidden = true;
   resetSurface($('menu'));
@@ -1601,6 +1605,9 @@ let startGameGeneration = 0;
 
 function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null, holdForRitual = false) {
   turnWasMine = null; // a new game never opens with a hand-off cue
+  // Any match that is not a Daily try ends the Daily's hold on the board (opponent kept still, no
+  // save): a game started by any other route must play normally.
+  if (dailyActive && !beginningDaily) endDaily();
   // A match started from anywhere supersedes a ritual belonging to an older one.
   cancelStarterRitual();
   startGameGeneration++;
@@ -9405,7 +9412,12 @@ function beginDaily(start: State) {
   dailyActive = true;
   dailyAnswering = false;
   log = ['Daily puzzle.'];
-  beginSession(start, null, [], start);
+  beginningDaily = true;
+  try {
+    beginSession(start, null, [], start);
+  } finally {
+    beginningDaily = false;
+  }
   gameOverDismissed = true;
   render();
 }
@@ -9724,6 +9736,14 @@ function restartHasConsequence(): boolean {
 
 function requestRestart(): void {
   if (!session || restarting || isOnlineDuel() || $('game').hidden) return;
+  // The Daily Puzzle: Restart takes the try back to the puzzle's start (it costs no try, like Undo).
+  // It used to start a PRACTICE match while the Daily still owned the board — the opponent then
+  // never moved and nothing could end the game.
+  if (dailyActive) {
+    closeAllSheets();
+    daily?.restartTry();
+    return;
+  }
   if (!restartHasConsequence()) {
     void restartCurrentMatch();
     return;
