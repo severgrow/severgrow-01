@@ -55,7 +55,7 @@ export type DailyHooks = {
    * Sends the solve to the server (kept in the device's proof queue until it answers) and resolves
    * with what came of it. Without `actions`, it asks again about a solve already queued.
    */
-  settle(no: number, actions?: readonly Action[]): Promise<SettleOutcome>;
+  settle(no: number, actions?: readonly Action[], options?: { quick?: boolean }): Promise<SettleOutcome>;
 };
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -292,7 +292,12 @@ export const mountDaily = (hooks: DailyHooks) => {
     const no = record.toPlace[0];
     if (no === undefined) return leave();
     // The tile is paid by the server's receipt; ask (again) if it has not answered yet.
-    if (lastSettle !== 'settled') lastSettle = await hooks.settle(no);
+    if (lastSettle !== 'settled') {
+      // The press is answered at once; the server's answer can take a moment.
+      const key = document.activeElement instanceof HTMLButtonElement && document.activeElement.closest('#daily-actions') ? document.activeElement : null;
+      if (key) { key.disabled = true; key.textContent = DAILY.checking; }
+      lastSettle = await hooks.settle(no);
+    }
     if (lastSettle === 'refused') {
       save(recordPlaced(record));
       return paint({ title: DAILY.solvedTitle, kicker: DAILY.key(no), goal: '', tries: null, body: DAILY.refused, lock: false, buttons: [backToGames] });
@@ -358,9 +363,12 @@ export const mountDaily = (hooks: DailyHooks) => {
   const open = async () => {
     // A tile still waiting comes first: it is the one thing the player owes the Territory.
     const no = today();
-    if (record.toPlace.length && hooks.territory() && (no === null || dayOf(record, no).over)) {
-      lastSettle = null;
-      return void placeIt();
+    if (record.toPlace.length && hooks.territory()) {
+      // Quick: a solve the server has not answered yet is retried in the background, never waited on.
+      lastSettle = await hooks.settle(record.toPlace[0]!, undefined, { quick: true });
+      // Ready (or refused): settle it now. Still waiting for the server: today's puzzle is not held
+      // hostage to it — the tile stays owed and the caption keeps saying so.
+      if (lastSettle !== 'waiting' || no === null || dayOf(record, no).over) return void placeIt();
     }
     if (no === null) return;
     const p = await loadPuzzle(no);

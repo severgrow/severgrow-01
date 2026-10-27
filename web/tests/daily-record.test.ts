@@ -65,7 +65,7 @@ describe('the daily words', () => {
   });
 
   it('the header strip says the goal in a few words', () => {
-    expect(hudGoal({ kind: 'win' })).toBe('SURROUND THEIR HOME');
+    expect(hudGoal({ kind: 'win' })).toBe('WIN THIS TURN');
     expect(hudGoal({ kind: 'cut', n: 3 })).toBe('CUT OFF 3 TILES');
     expect(hudGoal({ kind: 'points', n: 8 })).toBe('LEAD +8');
   });

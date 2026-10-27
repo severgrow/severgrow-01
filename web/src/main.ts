@@ -9453,10 +9453,14 @@ if (FEATURES.campaign) {
       layoutMenu(syncMenuResume());
       $('menu-world').click();
     },
-    settle: async (no, actions) => {
+    settle: async (no, actions, options) => {
       if (actions) queueSeedProof(store, { kind: 'daily', no, actions: [...actions], botVersion: CURRENT_BOT_VERSION });
       // An earlier pass (a menu visit, a reload) already settled it: the tile is in the wallet.
       else if (!isSeedProofQueued(store, `daily:${no}`)) return 'settled';
+      if (options?.quick) {
+        void settleSeedProof(`daily:${no}`);
+        return 'waiting';
+      }
       const report = await settleSeedProof(`daily:${no}`);
       return report.kind === 'settled' ? 'settled' : report.kind === 'refused' ? 'refused' : 'waiting';
     },

@@ -10,7 +10,7 @@ everyone (UTC); solving it grows one Territory tile.
 - The board is a real game frozen at the start of the player's Grow step. The opponent never moves.
 - Three tries. Undo is free inside a try; ending the Grow step ends the try.
 - The goal is always the best the turn allows: `LEAD +8` (grow the lead by 8), `CUT OFF 3 TILES`,
-  or `SURROUND THEIR HOME` (win now).
+  or `WIN THIS TURN` (surround their home).
 - Solve → "You earned 1 tile" → `PLACE IT` → Territory, lit as usual → grow it → `BACK TO GAMES`.
   Leaving first keeps the tile waiting (`1 TILE TO PLACE`).
 - Out of tries → `SHOW THE ANSWER` plays it on the board. Share copies a three-line printout.
@@ -55,3 +55,11 @@ gets fresh tries, but still at most one tile per puzzle.
 
 The candidates the first 30 came from (seeds 1-80) are not in the repo; regenerating them with the
 same seeds gives the same games.
+
+## Browser checks
+
+- `web/e2e/daily-puzzle.ts` (CI): menu entry, intro, a miss, a solve, the record, share, no save written.
+- `web/e2e/daily-tile.ts` (local, builds against an in-process server): solve → PLACE IT → the
+  server pays one tile → grow it in the Territory → BACK TO GAMES → nothing owed.
+- `web/e2e/daily-gallery.ts` (local, slow): plays every shipped puzzle's answer on the page and saves
+  before/after screens for review.

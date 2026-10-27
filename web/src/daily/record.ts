@@ -67,7 +67,7 @@ export const goalLine = (g: DailyGoal): string =>
 
 /** The goal as the header strip says it during play (short, upper case). */
 export const hudGoal = (g: DailyGoal): string =>
-  g.kind === 'win' ? 'SURROUND THEIR HOME' : g.kind === 'cut' ? `CUT OFF ${g.n} TILES` : `LEAD +${g.n}`;
+  g.kind === 'win' ? 'WIN THIS TURN' : g.kind === 'cut' ? `CUT OFF ${g.n} TILES` : `LEAD +${g.n}`;
 
 /** After a miss: how close it came. */
 export const shortfallLine = (g: DailyGoal, o: Pick<TurnOutcome, 'gain' | 'cut' | 'won'>): string =>

@@ -1597,6 +1597,8 @@ export const DAILY = Object.freeze({
   overTitle: 'Not today',
   earned: 'You earned 1 tile in your Territory.',
   placeIt: 'Place it',
+  /** PLACE IT while the server confirms the solve. */
+  checking: 'One moment…',
   tryAgain: 'Try again',
   showAnswer: 'Show the answer',
   share: 'Share',
