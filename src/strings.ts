@@ -565,7 +565,7 @@ export const BLOOM = Object.freeze({
   buttonKeep: (n: number, kept: number) => `Bloom ${n} tiles, keep the ${kept === 1 ? 'other' : `other ${kept}`}`,
   /** How to play (HTML) */
   howto:
-    ' On your Grow turn you may also <b>bloom</b> (optional add-on): 3 to 6 cards that go together — the same number in different suits (a set), or numbers in a row in one suit (a run). They grow that many tiles in any shape, as long as one touches your tiles. Each tile keeps its card\'s number.',
+    ' On your Grow turn you may also <b>bloom</b> (optional add-on): 3 to 6 cards that go together — the same number, in any suits (a set), or numbers in a row in one suit (a run). They grow that many tiles in any shape, as long as one touches your tiles. Each tile keeps its card\'s number.',
   /** the general hint */
   hint: 'Bloom on Grow: a set or a run of 3 to 6 cards.',
   /** why a held group cannot bloom right now */
@@ -896,7 +896,7 @@ export const TUTORIAL = Object.freeze({
   }),
   bloomHow: Object.freeze({
     title: 'What can bloom?',
-    set: 'A set: same number, different suits — three to six cards.',
+    set: 'A set: same number, any suits — three to six cards.',
     run: 'A run: numbers in a row, one suit — three to six cards.',
     badSuit: 'Not a run: two suits mixed.',
     badGap: 'Not a run: a gap in the numbers.',

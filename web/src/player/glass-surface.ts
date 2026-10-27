@@ -607,7 +607,7 @@ const bloomDemoRowHtml = (cards: readonly Card[]) =>
 
 const bloomDemoHtml = () =>
   `<div class="tutorial-bloom-stage" aria-hidden="true">`
-  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Same number, different suits</span>`
+  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Same number, any suits</span>`
   + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_SET)}</div></div>`
   + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Numbers in a row, one suit</span>`
   + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_RUN)}</div></div>`
