@@ -3,6 +3,13 @@
 Owner decision 2026-10-27 (design: the "Futasaku Daily Puzzle" doc). One turn a day, the same for
 everyone (UTC); solving it grows one Territory tile.
 
+## Who sees it (2026-10-27)
+
+For testing, the Daily is shown ONLY to the owner's account, RYK, matched by player id
+(`web/src/daily/access.ts`); every other player sees no key at all. The tester's sheets also offer
+`Next: #00n` / `Back: #00n` to open any puzzle up to ten days ahead as a PREVIEW (nothing recorded,
+no tile). To open it to everyone, set `DAILY_OPEN_TO_ALL = true`.
+
 ## How it plays
 
 - PLAY → `DAILY #042` (second entry, under LEVEL). Caption: `NEW TODAY · STREAK 6`,

@@ -52,11 +52,15 @@ const api = createHttpServer({
 });
 await new Promise<void>((resolve) => api.listen(0, '127.0.0.1', resolve));
 const apiBase = `http://127.0.0.1:${(api.address() as AddressInfo).port}`;
+// The Daily is shown only to testers while it is tested: this suite's own guest is made one for
+// this local build (VITE_DAILY_TESTERS), and the page starts signed in as it.
+const guest = await (await fetch(`${apiBase}/v1/guests`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).json() as { token: string; player: { id: string; displayName: string | null; kind: string } };
+const identity = JSON.stringify({ token: guest.token, playerId: guest.player.id, displayName: guest.player.displayName, kind: guest.player.kind });
 
 // ---- the product build, pointed at it ----
 await new Promise<void>((resolve, reject) => {
   const child = spawn(process.execPath, ['./node_modules/vite/bin/vite.js', 'build', '--config', 'web/vite.config.ts'], {
-    env: { ...process.env, CHANNEL: 'futa04', VITE_DUEL_API_URL: apiBase, VITE_SUPABASE_URL: 'http://127.0.0.1:9', VITE_SUPABASE_ANON_KEY: 'local-e2e-anon-key' },
+    env: { ...process.env, CHANNEL: 'futa04', VITE_DAILY_TESTERS: guest.player.id, VITE_DUEL_API_URL: apiBase, VITE_SUPABASE_URL: 'http://127.0.0.1:9', VITE_SUPABASE_ANON_KEY: 'local-e2e-anon-key' },
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   let err = '';
@@ -72,6 +76,9 @@ try {
   const page = await context.newPage();
   await page.clock.setFixedTime(noon);
   await seedSettings(page, { sound: false, music: false, coach: false, speed: 'skip', reduceMotion: true, eyeCandy: false });
+  await page.addInitScript((raw) => {
+    for (const p of ['', 'main2:', 'futa04:']) localStorage.setItem(`${p}severgrow.duel.identity.v1`, raw);
+  }, identity);
   await page.goto(origin + '/');
   await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 30_000 });
   await page.click('#menu-play');

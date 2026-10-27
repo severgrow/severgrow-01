@@ -14,6 +14,7 @@ import type { Action } from '../../src/engine/index.js';
 import { prove } from '../../src/daily/core.js';
 import { dailyPuzzle } from '../../src/daily/puzzles.js';
 import { DAILY_EPOCH } from '../../src/daily/schedule.js';
+import { DEFAULT_ADMIN_PLAYER_IDS } from '../../server/src/config.js';
 import { servePreview } from './helpers/preview-port.js';
 import { seedSettings } from './helpers/settings-seed.js';
 
@@ -30,6 +31,8 @@ const puzzle = dailyPuzzle(NO)!;
 const proof = prove(puzzle, 50_000, 6);
 if (!proof.ok) throw new Error('puzzle #2 does not prove');
 const endAct = legalActions(viewFor(puzzle.start, 0)).find((a) => a.t === 'EndAct')!;
+/** The owner's account on this device: the only one that sees the Daily while it is tested. */
+const RYK = JSON.stringify({ token: 'e2e-not-a-real-token', playerId: DEFAULT_ADMIN_PLAYER_IDS[0], displayName: 'RYK', kind: 'account' });
 const noon = Date.parse(`${DAILY_EPOCH}T12:00:00Z`) + (NO - 1) * 86_400_000;
 
 const text = (p: Page, id: string) => p.evaluate((i) => document.getElementById(i)?.textContent?.trim() ?? '', id);
@@ -63,6 +66,15 @@ try {
   await page.goto(origin + '/');
   await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 30_000 });
 
+  // Hidden for everyone else (owner, 2026-10-27): a player who is not RYK never sees the key.
+  await page.click('#menu-play');
+  await page.waitForFunction(() => !document.getElementById('play-menu')?.hidden);
+  check('another player does not see the Daily at all', !(await visible(page, 'menu-daily')) && !(await visible(page, 'daily-readout')));
+  await page.evaluate((raw) => {
+    for (const p of ['', 'main2:', 'futa04:']) localStorage.setItem(`${p}severgrow.duel.identity.v1`, raw);
+  }, RYK);
+  await page.click('#play-back');
+
   // PLAY → DAILY #002
   await page.click('#menu-play');
   await page.waitForFunction(() => !document.getElementById('play-menu')?.hidden);
@@ -80,6 +92,13 @@ try {
   await page.waitForTimeout(500);
   await shot(page, 'intro');
   check('starting is the leading key', (await keys(page))[0] === 'Start', (await keys(page)).join('|'));
+  check('the tester can step to the next puzzle and back', (await keys(page)).includes('Next: #003') && (await keys(page)).includes('Back: #001'), (await keys(page)).join('|'));
+  await press(page, 'Next: #003');
+  await page.waitForFunction(() => document.getElementById('daily-title')?.textContent?.trim() === 'DAILY #003');
+  check('a coming puzzle opens as a preview', (await text(page, 'daily-kicker')).startsWith('PREVIEW'), await text(page, 'daily-kicker'));
+  await press(page, 'Back: #002');
+  await page.waitForFunction(() => document.getElementById('daily-title')?.textContent?.trim() === 'DAILY #002');
+  check('back on today, it is not a preview', !(await text(page, 'daily-kicker')).startsWith('PREVIEW'), await text(page, 'daily-kicker'));
   await press(page, 'Start');
   await page.waitForFunction(() => document.getElementById('sheet-daily')?.hidden === true);
   check('puzzle mode owns the board', (await page.evaluate(() => (window as any).__severgrow.daily())).active === true);

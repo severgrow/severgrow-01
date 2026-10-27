@@ -10,6 +10,7 @@ import { chromium } from 'playwright-core';
 import { prove } from '../../src/daily/core.js';
 import { dailyPuzzle } from '../../src/daily/puzzles.js';
 import { DAILY_COUNT, DAILY_EPOCH } from '../../src/daily/schedule.js';
+import { DEFAULT_ADMIN_PLAYER_IDS } from '../../server/src/config.js';
 import { servePreview } from './helpers/preview-port.js';
 import { seedSettings } from './helpers/settings-seed.js';
 
@@ -30,6 +31,10 @@ try {
     const page = await context.newPage();
     await page.clock.setFixedTime(Date.parse(`${DAILY_EPOCH}T12:00:00Z`) + (no - 1) * 86_400_000);
     await seedSettings(page, { sound: false, music: false, coach: false, speed: 'skip', reduceMotion: true, eyeCandy: false });
+    // The Daily is shown only to the owner's account while it is tested.
+    await page.addInitScript((raw) => {
+      for (const p of ['', 'main2:', 'futa04:']) localStorage.setItem(`${p}severgrow.duel.identity.v1`, raw);
+    }, JSON.stringify({ token: 'e2e', playerId: DEFAULT_ADMIN_PLAYER_IDS[0], displayName: 'RYK', kind: 'account' }));
     await page.goto(origin + '/');
     await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 30_000 });
     await page.click('#menu-play');

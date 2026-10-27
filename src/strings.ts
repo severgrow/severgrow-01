@@ -1597,6 +1597,11 @@ export const DAILY = Object.freeze({
   overTitle: 'Not today',
   earned: 'You earned 1 tile in your Territory.',
   placeIt: 'Place it',
+  /** A tester's look at a coming puzzle (nothing is recorded, no tile). */
+  preview: 'PREVIEW',
+  previewNote: 'Preview: nothing is recorded and no tile is earned.',
+  nextPuzzle: (no: number) => `Next: #${String(no).padStart(3, '0')}`,
+  previousPuzzle: (no: number) => `Back: #${String(no).padStart(3, '0')}`,
   /** PLACE IT while the server confirms the solve. */
   checking: 'One moment…',
   tryAgain: 'Try again',

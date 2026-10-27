@@ -18,6 +18,7 @@ import { DAILY } from '../../../src/strings.js';
 import { WORLD_CLAIMED_EVENT } from '../online/world-events.js';
 import {
   DAILY_RECORD_KEY,
+  EMPTY_RECORD,
   dayOf,
   decodeRecord,
   encodeRecord,
@@ -30,12 +31,15 @@ import {
   shortfallLine,
 } from './record.js';
 import type { DailyRecord } from './record.js';
+import { previewRange } from './access.js';
 
 export type SettleOutcome = 'settled' | 'waiting' | 'refused';
 
 export type DailyHooks = {
   store: { get(key: string): string | null; set(key: string, value: string): void };
   now(): number;
+  /** Whether this device's account may see the Daily at all (web/src/daily/access.ts). */
+  tester(): boolean;
   /** Start one try: the puzzle's position as a fresh, unsaved offline match with no opponent. */
   begin(start: State): void;
   /** Leave puzzle mode (the match screen is being left). */
@@ -79,6 +83,17 @@ export const mountDaily = (hooks: DailyHooks) => {
     record = next;
     try { hooks.store.set(DAILY_RECORD_KEY, encodeRecord(record)); } catch { /* the day still plays */ }
   };
+  /**
+   * A tester's look at a puzzle that is not today's is a PREVIEW: it plays exactly like the day, but
+   * keeps its tries in memory only — no streak, no record, no tile (the server pays only today's).
+   */
+  let previewRecord: DailyRecord = EMPTY_RECORD;
+  const isPreview = (no: number) => no !== today();
+  const recFor = (no: number): DailyRecord => (isPreview(no) ? previewRecord : record);
+  const saveFor = (no: number, next: DailyRecord) => {
+    if (isPreview(no)) previewRecord = next;
+    else save(next);
+  };
   /** The puzzle being played, and whether a try is running on the board. */
   let current: DailyPuzzle | null = null;
   let playing = false;
@@ -107,7 +122,8 @@ export const mountDaily = (hooks: DailyHooks) => {
     const caption = document.getElementById('daily-readout');
     if (!key || !caption) return;
     const no = today();
-    key.hidden = no === null && record.toPlace.length === 0;
+    // Hidden from everyone but the testers while it is tested (owner, 2026-10-27).
+    key.hidden = !hooks.tester() || (no === null && record.toPlace.length === 0);
     caption.hidden = key.hidden;
     if (key.hidden) return;
     const shown = no ?? record.toPlace[0]!;
@@ -117,7 +133,9 @@ export const mountDaily = (hooks: DailyHooks) => {
   };
 
   // ---- the sheet -------------------------------------------------------------------------------
-  type Button = { label: string; run: () => void; kind?: 'primary' | 'ghost' };
+  /** `run` is handed the key itself: iOS Safari does not focus a tapped button, so `activeElement`
+   *  cannot say which key was pressed. */
+  type Button = { label: string; run: (key: HTMLButtonElement) => void; kind?: 'primary' | 'ghost' };
   const paint = (s: { title: string; kicker: string; goal: string; tries: number | null; body: string; buttons: Button[]; lock: boolean }) => {
     $('daily-title').textContent = s.title;
     $('daily-kicker').textContent = s.kicker;
@@ -137,7 +155,7 @@ export const mountDaily = (hooks: DailyHooks) => {
       el.type = 'button';
       el.className = `btn ${b.kind ?? 'ghost'}`;
       el.textContent = b.label;
-      el.addEventListener('click', b.run);
+      el.addEventListener('click', () => b.run(el));
       row.append(el);
     }
     locked = s.lock;
@@ -152,7 +170,7 @@ export const mountDaily = (hooks: DailyHooks) => {
   };
 
   const share = async (button: HTMLButtonElement, p: DailyPuzzle) => {
-    const day = dayOf(record, p.no);
+    const day = dayOf(recFor(p.no), p.no);
     const text = shareLine({ no: p.no, title: p.title, tries: day.tries, solved: day.solved, streak: streak() });
     try {
       if (navigator.share) {
@@ -171,18 +189,28 @@ export const mountDaily = (hooks: DailyHooks) => {
   };
   const shareButton = (p: DailyPuzzle): Button => ({
     label: DAILY.share,
-    run: () => {
-      const el = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
-      if (el) void share(el, p);
-    },
+    run: (key) => void share(key, p),
   });
 
   const backToGames: Button = { label: DAILY.backToGames, run: () => leave() };
 
+  /** DAILY #003, or PREVIEW · DAILY #005 for a tester's look ahead. */
+  const kickerOf = (p: DailyPuzzle) => (isPreview(p.no) ? `${DAILY.preview} · ${DAILY.key(p.no)}` : DAILY.key(p.no));
+  /** The tester's way through the coming puzzles: the one before, the one after (owner, 2026-10-27:
+   *  "allow me to check next 10 on my account"). Nothing for anyone else. */
+  const browse = (p: DailyPuzzle): Button[] => {
+    if (!hooks.tester()) return [];
+    const { first, last } = previewRange(today(), DAILY_COUNT);
+    return [
+      ...(p.no + 1 <= last ? [{ label: DAILY.nextPuzzle(p.no + 1), run: () => void open(p.no + 1) }] : []),
+      ...(p.no - 1 >= first ? [{ label: DAILY.previousPuzzle(p.no - 1), run: () => void open(p.no - 1) }] : []),
+    ];
+  };
+
   // ---- a try -----------------------------------------------------------------------------------
   const startTry = () => {
     if (!current) return;
-    const day = dayOf(record, current.no);
+    const day = dayOf(recFor(current.no), current.no);
     if (day.over) return void showDone(current);
     locked = false;
     hooks.sheet(null);
@@ -219,26 +247,27 @@ export const mountDaily = (hooks: DailyHooks) => {
       outcome = null;
     }
     const solved = !!outcome && goalMet(p.goal, outcome);
-    save(recordTry(record, p.no, solved));
-    const day = dayOf(record, p.no);
+    const preview = isPreview(p.no);
+    saveFor(p.no, recordTry(recFor(p.no), p.no, solved));
+    const day = dayOf(recFor(p.no), p.no);
     showHud(p, day.tries);
     if (solved) {
       hooks.led(DAILY.ledSolved);
-      void hooks.settle(p.no, actions).then((r) => { lastSettle = r; });
+      if (!preview) void hooks.settle(p.no, actions).then((r) => { lastSettle = r; });
       return showSolved(p);
     }
     hooks.led(DAILY.ledMiss);
     const miss = outcome ? shortfallLine(p.goal, outcome) : '';
     if (!day.over) {
       return paint({
-        title: DAILY.missTitle, kicker: DAILY.key(p.no), goal: goalLine(p.goal), tries: day.tries,
+        title: DAILY.missTitle, kicker: kickerOf(p), goal: goalLine(p.goal), tries: day.tries,
         body: miss, lock: true,
         buttons: [{ label: DAILY.tryAgain, kind: 'primary', run: startTry }, backToGames],
       });
     }
     paint({
-      title: DAILY.overTitle, kicker: DAILY.key(p.no), goal: goalLine(p.goal), tries: TRIES,
-      body: `${miss} ${countdown()}`.trim(), lock: true,
+      title: DAILY.overTitle, kicker: kickerOf(p), goal: goalLine(p.goal), tries: TRIES,
+      body: `${miss} ${isPreview(p.no) ? '' : countdown()}`.trim(), lock: true,
       buttons: [{ label: DAILY.showAnswer, kind: 'primary', run: () => void showAnswer(p) }, shareButton(p), backToGames],
     });
   };
@@ -246,28 +275,28 @@ export const mountDaily = (hooks: DailyHooks) => {
   let lastSettle: SettleOutcome | null = null;
 
   const showSolved = (p: DailyPuzzle) => {
-    const day = dayOf(record, p.no);
-    const owed = record.toPlace.includes(p.no);
+    const day = dayOf(recFor(p.no), p.no);
+    const owed = !isPreview(p.no) && record.toPlace.includes(p.no);
     const canPlace = owed && hooks.territory();
     paint({
-      title: DAILY.solvedTitle, kicker: `${DAILY.key(p.no)} · ${p.title.toUpperCase()}`, goal: p.note, tries: day.tries,
-      body: canPlace ? DAILY.earned : countdown(), lock: true,
+      title: DAILY.solvedTitle, kicker: `${kickerOf(p)} · ${p.title.toUpperCase()}`, goal: p.note, tries: day.tries,
+      body: canPlace ? DAILY.earned : isPreview(p.no) ? DAILY.previewNote : countdown(), lock: true,
       buttons: [
-        ...(canPlace ? [{ label: DAILY.placeIt, kind: 'primary' as const, run: () => void placeIt() }] : []),
+        ...(canPlace ? [{ label: DAILY.placeIt, kind: 'primary' as const, run: (key: HTMLButtonElement) => void placeIt(key) }] : []),
         shareButton(p),
-        ...(canPlace ? [] : [backToGames]),
+        ...(canPlace ? [] : [...browse(p), backToGames]),
       ],
     });
   };
 
   /** Today is over (solved or out of tries): the result again, with the countdown. */
   const showDone = (p: DailyPuzzle) => {
-    const day = dayOf(record, p.no);
+    const day = dayOf(recFor(p.no), p.no);
     if (day.solved) return showSolved(p);
     paint({
-      title: DAILY.overTitle, kicker: DAILY.key(p.no), goal: goalLine(p.goal), tries: TRIES,
+      title: DAILY.overTitle, kicker: kickerOf(p), goal: goalLine(p.goal), tries: TRIES,
       body: countdown(), lock: false,
-      buttons: [{ label: DAILY.showAnswer, kind: 'primary', run: () => void showAnswer(p) }, shareButton(p), backToGames],
+      buttons: [{ label: DAILY.showAnswer, kind: 'primary', run: () => void showAnswer(p) }, shareButton(p), ...browse(p), backToGames],
     });
   };
 
@@ -282,19 +311,18 @@ export const mountDaily = (hooks: DailyHooks) => {
     showHud(p, TRIES);
     await hooks.playAnswer(p.start, proof.solution);
     paint({
-      title: DAILY.overTitle, kicker: DAILY.key(p.no), goal: p.note, tries: TRIES, body: countdown(), lock: true,
-      buttons: [shareButton(p), backToGames],
+      title: DAILY.overTitle, kicker: kickerOf(p), goal: p.note, tries: TRIES, body: isPreview(p.no) ? '' : countdown(), lock: true,
+      buttons: [shareButton(p), ...browse(p), backToGames],
     });
   };
 
   // ---- the tile --------------------------------------------------------------------------------
-  const placeIt = async () => {
+  const placeIt = async (key?: HTMLButtonElement) => {
     const no = record.toPlace[0];
     if (no === undefined) return leave();
     // The tile is paid by the server's receipt; ask (again) if it has not answered yet.
     if (lastSettle !== 'settled') {
       // The press is answered at once; the server's answer can take a moment.
-      const key = document.activeElement instanceof HTMLButtonElement && document.activeElement.closest('#daily-actions') ? document.activeElement : null;
       if (key) { key.disabled = true; key.textContent = DAILY.checking; }
       lastSettle = await hooks.settle(no);
     }
@@ -360,21 +388,23 @@ export const mountDaily = (hooks: DailyHooks) => {
   };
 
   /** The PLAY submenu's DAILY key. */
-  const open = async () => {
+  const open = async (pick?: number) => {
+    if (!hooks.tester()) return;
     // A tile still waiting comes first: it is the one thing the player owes the Territory.
-    const no = today();
-    if (record.toPlace.length && hooks.territory()) {
+    const no = pick ?? today();
+    if (pick === undefined && record.toPlace.length && hooks.territory()) {
       // Quick: a solve the server has not answered yet is retried in the background, never waited on.
       lastSettle = await hooks.settle(record.toPlace[0]!, undefined, { quick: true });
       // Ready (or refused): settle it now. Still waiting for the server: today's puzzle is not held
       // hostage to it — the tile stays owed and the caption keeps saying so.
-      if (lastSettle !== 'waiting' || no === null || dayOf(record, no).over) return void placeIt();
+        if (lastSettle !== 'waiting' || no === null || dayOf(record, no).over) return void placeIt();
     }
     if (no === null) return;
     const p = await loadPuzzle(no);
     if (!p) return;
+    locked = false;
     current = p;
-    const day = dayOf(record, no);
+    const day = dayOf(recFor(no), no);
     if (day.over) {
       hooks.begin(p.start);
       showHud(p, day.tries);
@@ -384,9 +414,9 @@ export const mountDaily = (hooks: DailyHooks) => {
     showHud(p, day.tries);
     hooks.led(goalToken(p.goal));
     paint({
-      title: DAILY.key(p.no), kicker: p.title.toUpperCase(), goal: goalLine(p.goal), tries: day.tries,
-      body: DAILY.rules, lock: true,
-      buttons: [{ label: day.tries ? DAILY.ledTry(day.tries + 1) : DAILY.start, kind: 'primary', run: startTry }, backToGames],
+      title: DAILY.key(p.no), kicker: isPreview(p.no) ? `${DAILY.preview} · ${p.title.toUpperCase()}` : p.title.toUpperCase(),
+      goal: goalLine(p.goal), tries: day.tries, body: DAILY.rules, lock: true,
+      buttons: [{ label: day.tries ? DAILY.ledTry(day.tries + 1) : DAILY.start, kind: 'primary', run: startTry }, ...browse(p), backToGames],
     });
   };
 

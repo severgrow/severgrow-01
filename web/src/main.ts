@@ -20,6 +20,7 @@ import { buildReplay } from './replay/timeline.js';
 import type { ReplayInput, ReplayModel } from './replay/timeline.js';
 import { mountReplay } from './replay/player.js';
 import { mountDaily } from './daily/mount.js';
+import { DAILY_OPEN_TO_ALL, dailyTesterIn } from './daily/access.js';
 import type { DailyController } from './daily/mount.js';
 import type { ReplayHandle } from './replay/player.js';
 import type { ReplayPayload } from '../../server/src/protocol.js';
@@ -244,7 +245,7 @@ import type { Beats } from './logic/emptyturn.js';
 // The product menu shows the world map only when this build really has an online endpoint to read
 // it from (the same predicate the lobby uses), so the entry can never open a dead screen.
 import { onlineBuildEnabled } from './online/config.js';
-import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname } from './accounts/menu-key.js';
+import { IDENTITY_KEY, accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname } from './accounts/menu-key.js';
 import { paintBetaLine } from './feedback/beta-line.js';
 import { isSeedProofQueued, queueSeedProof } from './online/seed-rewards.js';
 import { requestTrainingTicket, settleQueuedSeedsOnBoot, settleSeedProof } from './online/seed-settle.js';
@@ -706,6 +707,8 @@ function closePlayMenu() {
   syncBrandMark();
 }
 function openPlayMenu() {
+  // The Daily key follows who is signed in on this device (a tester may have just signed in).
+  daily?.refreshMenu();
   $('play-menu').hidden = false;
   $('menu').hidden = true;
   resetSurface($('menu'));
@@ -9435,6 +9438,8 @@ if (FEATURES.campaign) {
   daily = mountDaily({
     store: { get: (k) => store.get(k), set: (k, v) => store.set(k, v) },
     now: () => Date.now(),
+    // Hidden from everyone but the testers for now (owner, 2026-10-27; web/src/daily/access.ts).
+    tester: () => DAILY_OPEN_TO_ALL || dailyTesterIn(store.get(IDENTITY_KEY)),
     begin: beginDaily,
     end: endDaily,
     actions: () => session?.log ?? [],
