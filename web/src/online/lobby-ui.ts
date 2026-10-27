@@ -822,7 +822,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const id = await ensureIdentity();
     if (!id) return;
     try {
-      const res = await client.getState(id.token, matchId);
+      // Only the turns this device has not seen (owner report, 2026-10-27: reopening a match
+      // replayed the whole game and flickered, not just the opponent's move made meanwhile).
+      const res = await client.openView(id.token, matchId);
       serverOffset = res.serverNow - now();
       if (res.player.status === 'waiting') {
         try {

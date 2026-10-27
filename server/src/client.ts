@@ -122,6 +122,10 @@ export type DuelClientOptions = {
 
 export const DEFAULT_SESSION_KEY = 'severgrow.duel.session.v1';
 
+/** Per-match last-seen revisions (see `seenRevision`). */
+const SEEN_KEY = 'severgrow.duel.seen.v1';
+const SEEN_LIMIT = 40;
+
 export class DuelClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: FetchLike;
@@ -268,6 +272,56 @@ export class DuelClient {
 
   saveSession(session: DuelSession): void {
     this.storage?.set(this.sessionKey, JSON.stringify(session));
+    if (typeof session.revision === 'number') this.markSeen(session.matchId, session.revision);
+  }
+
+  // ---- how far THIS device has seen each match ----
+  //
+  // OWNER REPORT (2026-10-27): reopening an online match from the list "showed more moves than the
+  // last one" and flickered. The list fetched the WHOLE history and the driver replays every event a
+  // payload carries, so the entire game replayed over the finished board. The single session above
+  // remembers only the last match opened; this remembers each match, so a reopen asks for the gap.
+
+  private seenMap(): Record<string, number> {
+    try {
+      const data = JSON.parse(this.storage?.get(SEEN_KEY) ?? '{}') as unknown;
+      return data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, number>) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private markSeen(matchId: string, revision: number): void {
+    if (!this.storage || !Number.isInteger(revision) || revision < 0) return;
+    const map = this.seenMap();
+    if ((map[matchId] ?? -1) >= revision) return; // never backwards: a late, older view
+    delete map[matchId];
+    map[matchId] = revision; // most recent last
+    const ids = Object.keys(map);
+    for (const id of ids.slice(0, Math.max(0, ids.length - SEEN_LIMIT))) delete map[id];
+    try {
+      this.storage.set(SEEN_KEY, JSON.stringify(map));
+    } catch {
+      /* storage full or blocked: a reopen simply shows no catch-up */
+    }
+  }
+
+  /** The last revision of this match this device has seen, or undefined. */
+  seenRevision(matchId: string): number | undefined {
+    const value = this.seenMap()[matchId];
+    return typeof value === 'number' && Number.isInteger(value) ? value : undefined;
+  }
+
+  /**
+   * Open a match from a list: only the events this device has NOT seen come back (the turns played
+   * while away), so the page replays exactly those. When this device has never seen the match, its
+   * history is withheld — replaying every turn ever played is worse than no animation (the same rule
+   * `resume` follows).
+   */
+  async openView(token: string, matchId: string): Promise<GetViewResponse> {
+    const seen = this.seenRevision(matchId);
+    const res = await this.getState(token, matchId, seen);
+    return seen === undefined ? { ...res, player: { ...res.player, events: [] } } : res;
   }
 
   loadSession(): DuelSession | null {

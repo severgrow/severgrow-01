@@ -74,6 +74,50 @@ describe('DuelClient', () => {
     await expect(client.submitAction('tok', 'm1', { expectedRevision: 1, requestId: 'r', action: { t: 'EndAct' } })).rejects.toBeInstanceOf(DuelError);
   });
 
+  // OWNER REPORT (2026-10-27): reopening an online match from the list replayed MORE than the
+  // opponent's last move — the whole game — and flickered. The list asked for the full history and
+  // the driver replays whatever events a payload carries. Each match now remembers how far THIS
+  // device has seen it, so a reopen asks only for the gap.
+  it('remembers how far each match was seen, per match, so a reopen asks only for the gap', async () => {
+    const store = memoryStore();
+    const client = new DuelClient({ baseUrl: 'https://api.example', fetch: makeFetch({}).fetchImpl, storage: store });
+    expect(client.seenRevision('m1')).toBeUndefined();
+    client.saveSession({ token: 'tok', matchId: 'm1', seat: 0, revision: 12 });
+    client.saveSession({ token: 'tok', matchId: 'm2', seat: 1, revision: 4 });
+    expect(client.seenRevision('m1')).toBe(12);
+    expect(client.seenRevision('m2')).toBe(4);
+    // a fresh client on the same storage (a reload) still knows
+    const again = new DuelClient({ baseUrl: 'https://api.example', fetch: makeFetch({}).fetchImpl, storage: store });
+    expect(again.seenRevision('m1')).toBe(12);
+    // never goes backwards (an older view arriving late)
+    again.saveSession({ token: 'tok', matchId: 'm1', seat: 0, revision: 10 });
+    expect(again.seenRevision('m1')).toBe(12);
+  });
+
+  it('keeps the seen list small (the most recent matches only)', () => {
+    const client = new DuelClient({ baseUrl: 'https://api.example', fetch: makeFetch({}).fetchImpl, storage: memoryStore() });
+    for (let i = 0; i < 80; i++) client.saveSession({ token: 'tok', matchId: `m${i}`, seat: 0, revision: i + 1 });
+    expect(client.seenRevision('m79')).toBe(80);
+    expect(client.seenRevision('m0')).toBeUndefined();
+  });
+
+  it('reopening asks for the gap since the seen revision, and withholds history it cannot place', async () => {
+    const view = (revision: number, events: unknown[]) => ({ status: 200, body: { ok: true, serverNow: 1, player: { matchId: 'm1', revision, seat: 0, status: 'active', events } } });
+    const { fetchImpl, calls } = makeFetch({
+      'GET /v1/matches/m1/view?since=12': view(14, [{ t: 'EndAct' }]),
+      'GET /v1/matches/m1/view': view(14, [{ t: 'A' }, { t: 'B' }, { t: 'EndAct' }]),
+    });
+    const store = memoryStore();
+    const client = new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: store });
+    const unknown = await client.openView('tok', 'm1');
+    expect(calls.at(-1)!.url).toBe('https://api.example/v1/matches/m1/view');
+    expect(unknown.player.events).toEqual([]);
+    client.saveSession({ token: 'tok', matchId: 'm1', seat: 0, revision: 12 });
+    const gap = await client.openView('tok', 'm1');
+    expect(calls.at(-1)!.url).toBe('https://api.example/v1/matches/m1/view?since=12');
+    expect(gap.player.events).toEqual([{ t: 'EndAct' }]);
+  });
+
   it('round-trips the session so a refresh can resume, and clears it on demand', async () => {
     const store = memoryStore();
     const { fetchImpl } = makeFetch({
