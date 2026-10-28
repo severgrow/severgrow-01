@@ -933,11 +933,11 @@ export const ONLINE_CSS = `
   background: rgba(10, 13, 11, .66);
   -webkit-backdrop-filter: blur(6px) saturate(1.05); backdrop-filter: blur(6px) saturate(1.05);
   box-shadow: inset 0 1px 0 #e8ddc514, 0 14px 34px rgba(0, 0, 0, .28);
-  animation: world-panel-in 200ms cubic-bezier(.2, .8, .3, 1) both;
+  animation: world-panel-in var(--ix-open) var(--ix-ease-open) both;
 }
 .world-panel[hidden] { display: none; }
-@keyframes world-panel-corner { from { opacity: 0; translate: 0 -6px; } to { opacity: 1; translate: 0 0; } }
-@keyframes world-panel-in { from { opacity: 0; translate: -50% -6px; } to { opacity: 1; translate: -50% 0; } }
+@keyframes world-panel-corner { from { opacity: 0; translate: 0 -4px; } to { opacity: 1; translate: 0 0; } }
+@keyframes world-panel-in { from { opacity: 0; translate: -50% -4px; } to { opacity: 1; translate: -50% 0; } }
 @media (prefers-reduced-motion: reduce) { .world-panel { animation: none; } }
 .world-panel-head {
   display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center;
@@ -1076,7 +1076,7 @@ export const ONLINE_CSS = `
   border-radius: 15px; color: #e8ddc5; background: rgba(10, 13, 11, .62);
   -webkit-backdrop-filter: blur(6px) saturate(1.05); backdrop-filter: blur(6px) saturate(1.05);
   box-shadow: inset 0 1px 0 #e8ddc514, 0 14px 34px rgba(0, 0, 0, .28);
-  animation: world-chat-in 200ms cubic-bezier(.2, .8, .3, 1) both;
+
 }
 .world-chat[hidden] { display: none; }
 @keyframes world-chat-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
@@ -1142,14 +1142,14 @@ html.reduce-motion .world-chat { animation: none; }
 .world-hex-face.mine.rising { animation: world-rise 520ms cubic-bezier(.2, .9, .3, 1.2) both; }
 @keyframes world-glint { 0%, 82%, 100% { filter: none; } 91% { filter: brightness(1.24); } }
 /* ---- fresh ground glows from underneath for six hours (a blurred halo; the edge stays crisp) ---- */
-.world-halo { fill: none; stroke: color-mix(in srgb, var(--territory) 60%, #fff4d6); stroke-width: 2.2; opacity: .18; pointer-events: none;
+.world-halo { fill: none; stroke: color-mix(in srgb, var(--territory) 60%, #fff4d6); stroke-width: 2.2; opacity: .13; pointer-events: none;
   animation: world-halo 3.6s ease-in-out infinite; animation-delay: var(--halo-delay, 0s); }
-@keyframes world-halo { 50% { opacity: .5; } }
+@keyframes world-halo { 50% { opacity: .28; } }
 /* ---- the outline of your land: a soft glow under a fine edge, breathing very slowly ---- */
 .world-border path { fill: none; pointer-events: none; stroke-linecap: round; }
-.world-border-edge { stroke: color-mix(in srgb, var(--territory, #cfc6ac) 40%, #fff4d6); stroke-width: .7; stroke-opacity: .7; }
-.world-border-glow { stroke: color-mix(in srgb, var(--territory, #cfc6ac) 70%, #fff4d6); stroke-width: 2.6; opacity: .32; animation: world-border 7s ease-in-out infinite; }
-@keyframes world-border { 50% { opacity: .16; } }
+.world-border-edge { stroke: color-mix(in srgb, var(--territory, #cfc6ac) 40%, #fff4d6); stroke-width: .8; stroke-opacity: .8; }
+.world-border-glow { stroke: color-mix(in srgb, var(--territory, #cfc6ac) 70%, #fff4d6); stroke-width: 2; opacity: .22; animation: world-border 7s ease-in-out infinite; }
+@keyframes world-border { 50% { opacity: .12; } }
 /* ---- the grow ripple: two soft rings leave the new tile ---- */
 .world-ripple { fill: none; stroke: color-mix(in srgb, var(--territory, #cfc6ac) 50%, #fff4d6); stroke-width: 1.2; opacity: 0; pointer-events: none;
   transform-box: fill-box; transform-origin: center; animation: world-ripple 1.2s cubic-bezier(.15, .7, .3, 1) both; animation-delay: var(--ripple-delay, 0ms); }
@@ -1227,4 +1227,26 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
 /* Every free tile is open to grow now, so "available" is a quiet lift; the board's own global
    .available (a dashed onboarding ring with pointer-events: none) must never leak onto the world. */
 .world-hex.available { stroke: #858d7c; stroke-width: .42; stroke-dasharray: none; stroke-opacity: 1; pointer-events: all; }
+
+/* One map control, all utilities inside its existing glass window. */
+.world-menu-tools {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:4px 0 12px;border-bottom:1px solid #e8ddc51a;margin-bottom:12px;}
+.world-menu-tools button {position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:0;min-height:64px;border:0;border-radius:9px;background:#e8ddc508;color:#e8ddc5;font:inherit;font-size:.6875rem;cursor:pointer;touch-action:manipulation;}
+.world-menu-tools button svg {width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;}
+.world-menu-tools button:disabled {opacity:.35;cursor:default;}
+.world-menu-tools button:focus-visible {outline:2px solid #e8ddc5;outline-offset:-3px;}
+.world-chat-head {display:flex;align-items:center;gap:12px;padding-bottom:7px;border-bottom:1px solid #e8ddc51a;font-size:.6875rem;letter-spacing:.08em;}
+.world-chat-head button {min-height:44px;border:0;background:#e8ddc50a;border-radius:8px;color:inherit;padding:0 12px;font:inherit;cursor:pointer;}
+.online-world .world-chat {left:auto;right:10px;top:10px;bottom:auto;max-height:calc(100% - 20px);}
+@media(min-width:960px) and (min-height:560px) and (min-aspect-ratio:5/4) { .online-world .world-chat {right:14px;top:14px;bottom:auto;max-height:calc(100% - 28px);} }
+/* Your land has a distinct ivory rim, independent of player colour, with a quiet glow underneath. */
+.world-border-edge {stroke:#f2e5c5;stroke-width:1.15;stroke-opacity:.9;}
+.world-border-glow {stroke-width:2.8;opacity:.26;}
+
+/* Tile actions belong to this same drawer; no separate toolbar floats over the map. */
+.online-world .world-panel #online-world-selection {position:static;inset:auto;grid-area:auto;transform:none;translate:none;align-self:stretch;margin:0 0 12px;padding:10px;display:flex;flex-wrap:wrap;gap:8px;min-height:0;border-radius:9px;background:#e8ddc508;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;text-align:left;font-size:.75rem;}
+.online-world .world-panel #online-world-selection[hidden] {display:none;}
+.online-world .world-panel #online-world-selection button {min-height:44px;width:100%;flex:1 1 100%;}
+
+.online-world .world-chat.keyboard {position:fixed;left:max(8px,env(safe-area-inset-left));right:auto;width:min(400px,calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)));z-index:70;}
+.world-menu-tools .world-mine[data-patch]:not([data-patch=''])::after {content:attr(data-patch);position:absolute;right:6px;top:5px;font-size:.55rem;color:#e8ddc58c;}
 `;

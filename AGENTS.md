@@ -44,3 +44,12 @@ For UI changes also run the relevant `web/e2e/futa04-*.ts` suite with Chromium. 
   prefer `browserStorage()` (`KeyValue`) for new code. Contract: `web/tests/storage-prefix-contract.test.ts`.
 - No runtime import cycles (`web/tests/import-cycles.test.ts`). The 2026-10-26 hygiene audit and the
   deferred plans (splitting `main.ts`, replacing the storage patch) are in `docs/HYGIENE-PASS-2026-10-26.md`.
+
+
+## Visual consistency for future work
+
+Read `docs/VISUAL-CONVENTIONS.md` before adding or changing game UI. Reuse `web/src/ui/instrument.css`,
+the existing dark-glass tokens and `INTERFACE_MOTION`; extend the owning feature's scoped CSS rather
+than creating another button/motion/palette system. Preserve focus indicators, 44px touch targets,
+reduced-motion behavior and the existing gameplay motion budget. New interface effects must finish;
+do not introduce idle render loops, extra blur layers, subscriptions or dependencies for decoration.

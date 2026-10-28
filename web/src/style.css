@@ -1,4 +1,5 @@
 @import "./fonts.css";
+@import "./ui/instrument.css";
 /* Futasaku page styles. Every colour comes from the theme tokens (--c-*), set by
    main.ts from web/src/logic/themes.ts. Theme-only details sit at the end. */
 
@@ -3567,14 +3568,14 @@ html.futasaku-product #campaign .campaign-chapters {
      the game (sheets, pause face, finish plate, confirmations, overlays). These are deliberately
      NOT `--dur-*` tokens: `web/src/logic/motion.ts` owns the board's two tempo tokens and a test
      closes that vocabulary. `web/src/ui/interface-motion.ts` is the source of these numbers and a
-     test keeps this block in sync. A surface becomes present in 200ms with 8px of travel at 99%
-     scale; it leaves in 150ms; a press answers in 90ms. */
-  --ix-open: 300ms;
-  --ix-close: 180ms;
+     test keeps this block in sync. A surface becomes present in 150ms with 4px of travel at 99.6%
+     scale; it leaves in 100ms; a press answers in 90ms. */
+  --ix-open: 150ms;
+  --ix-close: 100ms;
   --ix-press: 90ms;
-  --ix-travel: 12px;
-  --ix-scale: 0.965;
-  --ix-settle: 1.006;
+  --ix-travel: 4px;
+  --ix-scale: 0.996;
+  --ix-settle: 1.0005;
   --ix-ease-open: cubic-bezier(0.22, 1, 0.36, 1);
   --ix-ease-close: cubic-bezier(0.4, 0, 1, 1);
 }

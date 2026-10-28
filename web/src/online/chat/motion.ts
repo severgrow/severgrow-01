@@ -1,3 +1,4 @@
+import { INTERFACE_MOTION } from '../../ui/interface-motion.js';
 /** Finite compositor-only chat motion. No timers, polling or animation loops. */
 export const createChatMotion = (reduced: () => boolean) => {
   const running = new Map<HTMLElement, Animation>();
@@ -63,7 +64,7 @@ export const createChatMotion = (reduced: () => boolean) => {
             transform: visible ? 'none' : 'translateY(3px) scale(.998)',
           },
         ],
-        visible ? 150 : 100,
+        visible ? INTERFACE_MOTION.open : INTERFACE_MOTION.close,
         () => {
           element.hidden = !visible;
         },

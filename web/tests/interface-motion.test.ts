@@ -19,12 +19,12 @@ const declarations = (prefix: string): string[] =>
 describe('one interface vocabulary', () => {
   it('has the eight tokens the owner set and nothing else (2026-10-23: "alive and organic")', () => {
     expect(INTERFACE_MOTION).toEqual({
-      open: 300,
-      close: 180,
+      open: 150,
+      close: 100,
       press: 90,
-      travel: 12,
-      scale: 0.965,
-      settle: 1.006,
+      travel: 4,
+      scale: 0.996,
+      settle: 1.0005,
       easeOpen: 'cubic-bezier(0.22, 1, 0.36, 1)',
       easeClose: 'cubic-bezier(0.4, 0, 1, 1)',
     });
@@ -81,7 +81,7 @@ describe('one interface vocabulary', () => {
   });
 
   it('is documented, with tokens, adoption and the no-animation rule', () => {
-    for (const phrase of ['--ix-open', '300ms', '180ms', '90ms', '--ix-settle', 'enterSurface', 'exitSurface', 'data-ix-surface', 'reduced']) {
+    for (const phrase of ['--ix-open', '150ms', '100ms', '90ms', '--ix-settle', 'enterSurface', 'exitSurface', 'data-ix-surface', 'reduced']) {
       expect(doc.toLowerCase()).toContain(phrase.toLowerCase());
     }
   });

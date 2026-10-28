@@ -89,7 +89,8 @@ export const ONLINE = Object.freeze({
   worldLatest: 'Latest',
   worldNoChallenges: 'No open challenges.',
   worldNoHistory: 'No past challenges yet.',
-  worldMenu: 'Challenges and ranking',
+  worldMenu: 'Territory menu',
+  worldMenuBack: 'Menu', worldMineShort: 'My land', worldFitShort: 'Fit map', worldChatShort: 'Chat',
   /** Territory chat (owner, 2026-10-28): one shared channel, newest 30 messages. */
   worldChat: 'Territory chat',
   worldChatPlaceholder: 'Say something',

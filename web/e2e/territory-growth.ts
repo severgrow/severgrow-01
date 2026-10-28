@@ -67,6 +67,11 @@ const web = await preview({ configFile: 'web/vite.config.ts', preview: { host: '
 const origin = web.resolvedUrls?.local?.[0]?.replace(/\/$/, '') ?? '';
 
 const count = (p: Page, sel: string) => p.evaluate((s) => document.querySelectorAll(s).length, sel);
+const openTools = async (p: Page) => {
+  if (await p.isVisible('#online-world-chat-panel')) { await p.click('#world-chat-back'); }
+  if (!(await p.isVisible('#online-world-panel'))) await p.click('#online-world-menu');
+  await p.waitForSelector('#online-world-panel:not([hidden])');
+};
 const grow = async (p: Page, cellId: string) => {
   await p.focus(`.world-hex[data-cell-id="${cellId}"]`);
   await p.keyboard.press('Enter');
@@ -104,19 +109,10 @@ try {
       menuH: k.height, fitH: f.height, gridL: g.left, gridR: innerWidth - g.right };
   });
   check('the map window is centred on the screen', Math.abs(sym.gridL - sym.gridR) <= 1, JSON.stringify(sym));
-  const corners = await page.evaluate(() => {
-    const g = document.getElementById('online-world-grid')!.getBoundingClientRect();
-    return ['online-world-mine', 'online-world-menu', 'online-world-fit', 'online-world-chat'].map((id) => {
-      const r = document.getElementById(id)!.getBoundingClientRect();
-      return { id, w: r.width, h: r.height, top: r.top - g.top, left: r.left - g.left, right: g.right - r.right, bottom: g.bottom - r.bottom,
-        frame: getComputedStyle(document.getElementById(id)!, '::before').backgroundImage.includes('button-frame-supplied') };
-    });
-  });
-  const [tl, tr, br, bl] = corners;
-  check('four corner keys: tiles, menu, zoom, chat — one size, the cockpit frame, one edge',
-    corners.every((c) => c.w === 44 && c.h === 44 && c.frame) &&
-    tl!.top === tl!.left && tr!.top === tr!.right && br!.bottom === br!.right && bl!.bottom === bl!.left && tl!.top === br!.bottom,
-    JSON.stringify(corners.map((c) => [c.id.replace('online-world-', ''), c.w, c.top, c.left, c.right, c.bottom, c.frame])));
+  check('only one navigation key remains on the map', await page.locator('.world-grid > button').count()===1);
+  await openTools(page);
+  check('menu contains labelled My land, Fit map and Chat tools', await page.locator('.world-menu-tools button').count()===3 && await page.locator('#online-world-fit').isVisible());
+  await page.click('#world-panel-close');
   check('the coordinates read-out is gone', (await count(page, '#online-world-coord')) === 0);
   const overflow = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, win: window.innerWidth, col: document.querySelector('.online-world .online-inner')!.getBoundingClientRect().right }));
   check('the strip never widens the screen (no sideways scroll)', overflow.doc <= overflow.win && overflow.col <= overflow.win, JSON.stringify(overflow));
@@ -146,7 +142,7 @@ try {
   const rippled = await page.evaluate(() => document.querySelectorAll('.world-ripple').length);
   check('growing a tile sends a ripple out over the land', rippled > 0, `${rippled} rings`);
   check('my land carries one soft outline', (await count(page, '.world-border-edge')) === 1 && (await count(page, '.world-border-glow')) === 1);
-  await page.click('#online-world-menu');
+  await openTools(page);
   await page.waitForSelector('#online-world-panel:not([hidden])');
   await page.click('#world-tab-ranking');
   const place = (await page.textContent('#world-standing')) ?? '';
@@ -165,17 +161,19 @@ try {
   // find my land and the activity strip
   check('find my land wakes once I hold tiles', await page.isEnabled('#online-world-mine'));
   const vb0 = await page.getAttribute('.world-map-svg', 'viewBox');
-  await page.click('#online-world-menu');
+  await openTools(page);
   check('the window reopens on the tab it was left on', (await page.getAttribute('#online-world-panel', 'data-tab')) === 'ranking');
   await page.click('.world-activity-chip:nth-child(5)');
   await page.waitForTimeout(200);
   const vb1 = await page.getAttribute('.world-map-svg', 'viewBox');
   check('an activity chip flies the map to that tile', vb0 !== vb1, `${vb0} → ${vb1}`);
+  await openTools(page);
   await page.click('#online-world-mine');
   await page.waitForTimeout(200);
   check('find my land moves the map back to my tiles', (await page.getAttribute('.world-map-svg', 'viewBox')) !== vb1);
   // land in several places: each press shows the next patch (owner, 2026-10-28)
   const vbA = await page.getAttribute('.world-map-svg', 'viewBox');
+  await openTools(page);
   await page.click('#online-world-mine');
   await page.waitForTimeout(200);
   const vbB = await page.getAttribute('.world-map-svg', 'viewBox');
@@ -196,7 +194,7 @@ try {
   check('the server freed it', !(await store.world()).claims.some((c) => c.cellId === '10,0'));
 
   // challenges: CURRENT and HISTORY are two sections of one tab, each with an honest empty line
-  await page.click('#online-world-menu');
+  await openTools(page);
   await page.click('#world-tab-challenges');
   await page.waitForSelector('#online-world-panel[data-tab="challenges"]:not([hidden])');
   check('no open challenges says so', (await page.textContent('#world-challenges-empty'))?.trim() === 'No open challenges.');
@@ -216,6 +214,7 @@ try {
   check('a few motes drift off the land', (await count(page, '.world-spore')) > 0);
 
   // TERRITORY CHAT (owner, 2026-10-28): one shared channel, from the bottom-left key
+  await openTools(page);
   await page.click('#online-world-chat');
   await page.waitForSelector('#online-world-chat-panel:not([hidden])');
   check('an empty chat says so', (await page.textContent('#world-chat-empty'))?.includes('Say hello') === true);
@@ -230,8 +229,7 @@ try {
   await say('hi from the north');
   await page.waitForSelector('.world-chat-line:not(.mine)', { timeout: 10_000 });
   check("another player's message arrives while the chat is open", /hi from the north/.test((await page.textContent('.world-chat-line:not(.mine)')) ?? ''));
-  const chatBox = await page.evaluate(() => { const c = document.getElementById('online-world-chat-panel')!.getBoundingClientRect(); const g = document.getElementById('online-world-grid')!.getBoundingClientRect(); const k = document.getElementById('online-world-chat')!.getBoundingClientRect(); return { left: c.left - g.left, keyLeft: k.left - g.left, above: k.top - c.bottom }; });
-  check('the chat rises from its corner, on the key\'s edge', chatBox.left === chatBox.keyLeft && chatBox.above > 0 && chatBox.above < 16, JSON.stringify(chatBox));
+  check('chat has a clear return to the menu', await page.locator('#world-chat-back').isVisible());
   await page.screenshot({ path: `${SHOTS}/territory-chat-390x844.png` });
   await page.click('.world-chat-line:not(.mine)');
   check('tapping their message offers Block and Report', (await page.$$eval('.world-chat-mod button', (b) => b.map((x) => x.textContent))).join('|') === 'Block|Report');
@@ -244,7 +242,8 @@ try {
   await page.click('.world-chat-mod button:first-child');
   await page.waitForFunction(() => !document.querySelector('.world-chat-line:not(.mine)'));
   check("a blocked player's messages disappear", true);
-  await page.click('#online-world-menu');
+  await openTools(page);
+  await page.locator('#online-world-chat-panel').waitFor({ state: 'hidden' });
   check('opening the menu shuts the chat (one window at a time)', await page.isHidden('#online-world-chat-panel') && await page.isVisible('#online-world-panel'));
   await page.waitForTimeout(350); // the window's 200 ms arrival
   const covered = await page.evaluate(() => { const p = document.getElementById('online-world-panel')!.getBoundingClientRect(); const k = document.getElementById('online-world-menu')!.getBoundingClientRect(); return { pTop: p.top, kTop: k.top, pRight: p.right, kRight: k.right }; });

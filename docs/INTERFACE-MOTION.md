@@ -16,10 +16,10 @@ The pass uses a restrained blend of both, because that is what the codebase alre
 cockpit, the display and the board are the instrument; a pause or a result is a *part of that
 instrument moving*, not a new page arriving. Concretely:
 
-- a surface **becomes present**: 12 px of travel from 96.5 % scale over 300 ms, easing a hair past
-  rest (100.6 %, 1 px up) and settling — one breath, never a bounce (owner, 2026-10-23: "make opening
+- a surface **becomes present**: 4 px of travel from 99.6 % scale over 150 ms, easing a hair past
+  rest (100.05 %, 1 px up) and settling — one breath, never a bounce (owner, 2026-10-23: "make opening
   the menus and closing a bit alive and organic");
-- it **leaves** quicker than it arrived: 180 ms, sinking a little (to 98 %) as it fades;
+- it **leaves** quicker than it arrived: 100 ms, sinking a little (to 99.8 %) as it fades;
 - a **press** answers in 90 ms with a 1.5 % compress and a whisper of light change;
 - the board is never animated by this layer, and a live game is never delayed by it.
 
@@ -32,12 +32,12 @@ The numbers live in one JavaScript object and one block of CSS custom properties
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `--ix-open` | `300ms` | a surface arrives |
-| `--ix-close` | `180ms` | a surface leaves |
+| `--ix-open` | `150ms` | a surface arrives |
+| `--ix-close` | `100ms` | a surface leaves |
 | `--ix-press` | `90ms` | press / hover acknowledgement |
-| `--ix-travel` | `12px` | the distance a surface moves while arriving |
-| `--ix-scale` | `0.965` | the scale it grows from |
-| `--ix-settle` | `1.006` | the hair past rest it eases through before settling |
+| `--ix-travel` | `4px` | the distance a surface moves while arriving |
+| `--ix-scale` | `0.996` | the scale it grows from |
+| `--ix-settle` | `1.0005` | the hair past rest it eases through before settling |
 | `--ix-ease-open` | `cubic-bezier(0.2, 0.7, 0.2, 1)` | decelerate into rest |
 | `--ix-ease-close` | `cubic-bezier(0.4, 0, 1, 1)` | accelerate away |
 
@@ -48,7 +48,7 @@ tokens (`ack`, `consequence`); interface motion is a separate, quieter family.
 
 | Moment | Transition |
 | --- | --- |
-| Sheet, pause face, finish plate, confirmation, install invitation, matched card | `enterSurface` / `exitSurface`, 300 / 180 ms |
+| Sheet, pause face, finish plate, confirmation, install invitation, matched card | `enterSurface` / `exitSurface`, 300 / 100 ms |
 | Pause confirmation chained over the pause face | same primitives; closing the confirmation returns to the pause face |
 | Screen to screen (menu, PLAY, levels, campaign, online hub) | `enterSurface`, 6 px travel; the game screen never moves |
 | Backdrop / scrim | opacity only, 150 ms, no travel |

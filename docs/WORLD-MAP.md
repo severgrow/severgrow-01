@@ -77,6 +77,19 @@ Status: implemented on isolated `futa0.5-world-seeds` branch; **not deployed**. 
 - **Rollout order**: run `server/migrations/0018_territory_chat.sql` once (Supabase SQL editor), then
   deploy the `duel` function, then the site. Until then the chat says it is not reachable.
 
+## v3.4: one Territory menu (owner, 2026-10-28)
+
+Supersedes the four-corner navigation above. Only MENU remains on the map. Its glass drawer contains
+labelled My land, Fit map and Chat tools, plus the existing Challenges/Ranking tabs. My land retains
+patch cycling; Fit is a one-tap whole-map reset and closes the drawer. Pinch or wheel zoom can start
+from that fitted view. A pinch's release never counts as a tile tap; horizontal-only wheel input is
+ignored. Tile selection opens grow/sell information in the same drawer, while challenge offers retain
+the existing guarded modal. Chat opens from the drawer and has an explicit Menu return control.
+
+Your land keeps its stable player hue and gains a stronger ivory perimeter with the existing glow.
+No extra map overlay nodes, animation loops, subscriptions, game rules or server changes are needed.
+The existing 0018 migration/Edge deployment requirement for Territory chat is unchanged.
+
 ## Ownership and economy
 
 - The world is one versioned, frozen axial hex map. v2 (2026-10-21) is **274 cells** (21 rows, r −10…10): the 183-cell v1 landmass plus an irregular coastal growth, baked into `server/src/world.ts` by `scripts/gen-world-v2.mjs` (no runtime randomness). Its cell IDs are `q,r`. Expansions only ADD ids; every v1 id is unchanged, so an existing claim can never be orphaned — verified against the nine live claims when the coastline shape shipped (none dropped). Historical 8×8 `world_tiles` owners are copied into the central 64 positions by migration `0011_seeds_world.sql`; the historical table and migration remain intact.

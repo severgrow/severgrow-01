@@ -6,8 +6,8 @@
 //
 // The rule is one sentence: an element simply BECOMES PRESENT, with a little physical movement.
 // Owner direction (2026-10-23): "make opening the menus and closing a bit alive and organic". So a
-// surface rises 12px from 96.5% scale over 300ms, eases a hair past rest (100.6%) and settles, the
-// way a sheet of glass set down on a table settles; it leaves in 180ms, sinking a little as it
+// surface rises 4px from 99.6% scale over 150ms, eases a hair past rest (100.05%) and settles, the
+// way a sheet of glass set down on a table settles; it leaves in 100ms, sinking a little as it
 // fades. Still no bounce and no big slides: one breath, then stillness. Presses answer in 90ms.
 //
 // This layer is deliberately small and dependency-free: two durations, two easings, one travel
@@ -21,18 +21,18 @@
 
 /** The whole vocabulary. The CSS custom properties of the same names are kept in sync by a test. */
 export const INTERFACE_MOTION = Object.freeze({
-  /** A surface arrives: 300ms, long enough to read as one breath, short enough to never wait on. */
-  open: 300,
-  /** A surface leaves: 180ms, deliberately quicker than its arrival. */
-  close: 180,
+  /** A surface arrives: 150ms, long enough to read as one breath, short enough to never wait on. */
+  open: 150,
+  /** A surface leaves: 100ms, deliberately quicker than its arrival. */
+  close: 100,
   /** A press or a hover-sized acknowledgement: 90ms (70–130ms). */
   press: 90,
-  /** How far a surface travels while it arrives: 12px. */
-  travel: 12,
-  /** The scale it grows from: 96.5%. */
-  scale: 0.965,
+  /** How far a surface travels while it arrives: 4px. */
+  travel: 4,
+  /** The scale it grows from: 99.6%. */
+  scale: 0.996,
   /** The hair past rest it eases through before it settles (one breath, never a bounce). */
-  settle: 1.006,
+  settle: 1.0005,
   /** Decelerate into rest. */
   easeOpen: 'cubic-bezier(0.22, 1, 0.36, 1)',
   /** Accelerate away. The exact reverse feeling, not a new personality. */
@@ -162,7 +162,7 @@ export function exitSurface(el: HTMLElement | null | undefined, options: Surface
     return null;
   }
   const travel = options.travel ?? Math.round(INTERFACE_MOTION.travel * 0.6);
-  const scale = options.scale ?? 0.98;
+  const scale = options.scale ?? 0.998;
   el.classList.add('ix-closing');
   el.setAttribute('inert', '');
   const a = el.animate(

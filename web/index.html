@@ -287,7 +287,7 @@
         <div id="online-world-grid" class="world-grid">
           <!-- THE ONE WINDOW (owner, 2026-10-28: "challenges and ranking should be in 1 menu, with
                sections like current match intel, so there is not too much text in the main
-               territory view"). One key at the map's foot opens it; two tabs inside, like Match Intel.
+               territory view"). One key at the map's top-right opens it; two tabs inside, like Match Intel.
                Centred over the map on a light glass, so the land stays visible behind it. -->
           <section id="online-world-panel" class="world-panel" role="dialog" aria-modal="false" aria-label="Territory" hidden>
             <header class="world-panel-head">
@@ -299,6 +299,12 @@
               <button id="world-panel-close" class="world-panel-close" type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
             </header>
             <div class="world-panel-body">
+              <div id="online-world-selection" class="world-selection" aria-live="polite" hidden></div>
+              <nav class="world-menu-tools" aria-label="Map tools">
+                <button id="online-world-mine" class="world-fit world-mine" type="button" disabled></button>
+                <button id="online-world-fit" class="world-fit" type="button" aria-pressed="false"></button>
+                <button id="online-world-chat" class="world-chat-key" type="button" aria-expanded="false" aria-controls="online-world-chat-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v11H10l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></svg></button>
+              </nav>
               <div class="world-pane" data-pane="challenges">
                 <p class="world-pane-label" id="world-current-label"></p>
                 <!-- The challenge lists (world-view.ts): each chip carries a small copy of the map's
@@ -318,16 +324,15 @@
               </div>
             </div>
           </section>
-          <!-- THE FOUR CORNERS (owner, 2026-10-28: "4 corners symmetrically aligned with YOUR TILES,
-               MENU, ZOOM, CHAT, all the same size and design as the in-game cockpit buttons"). Each is
-               the cockpit's 44px hardware key (the supplied button frame), on one shared edge. -->
-          <button id="online-world-mine" class="world-fit world-mine world-corner" type="button" disabled></button>
+          <!-- One map key; navigation tools and contextual actions live in its drawer. -->
+
           <button id="online-world-menu" class="world-menu-key world-corner" type="button" aria-expanded="false" aria-controls="online-world-panel"><span class="world-menu-glyph" aria-hidden="true"><i></i><i></i><i></i></span><span class="world-deck-count" hidden></span></button>
-          <button id="online-world-fit" class="world-fit world-corner" type="button" aria-pressed="false"></button>
-          <button id="online-world-chat" class="world-chat-key world-corner" type="button" aria-expanded="false" aria-controls="online-world-chat-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v11H10l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></svg></button>
+
+
           <!-- TERRITORY CHAT: one shared channel for everyone here (web/src/online/territory-chat.ts).
                It rises from the chat key's corner on the same dark glass as the menu window. -->
           <section id="online-world-chat-panel" class="world-chat" aria-label="Territory chat" hidden>
+            <header class="world-chat-head"><button id="world-chat-back" type="button"></button><span id="world-chat-heading"></span></header>
             <ol id="world-chat-list" class="world-chat-list" aria-live="polite"></ol>
             <p id="world-chat-empty" class="world-chat-empty" hidden></p>
             <form id="world-chat-form" class="world-chat-form" autocomplete="off">
@@ -337,7 +342,7 @@
             <p id="world-chat-status" class="world-chat-status" role="status"></p>
           </section>
         </div>
-        <div id="online-world-selection" class="world-selection" aria-live="polite"></div>
+
         <p id="online-world-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>
     </section>

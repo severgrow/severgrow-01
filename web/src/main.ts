@@ -1121,7 +1121,7 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
     // The cure stays inside the one vocabulary (open ≤ 320ms, travel ≤ 16px, scale ≥ 95%): a plate
     // takes the STRONGEST arrival the tokens allow, so its edges move ~10px a side instead of ~7px
     // and the size change is a clear 5%. Same one breath, just spent where a big surface can show it.
-    enterSurface(next, { duration: 300, travel: 16, scale: 0.95 });
+    enterSurface(next);
     next.querySelector<HTMLElement>('[data-close], button:not([hidden])')?.focus();
   } else if (wasOpen) {
     // CLOSING. Pause is released NOW (the game resumes and an online clock is never "frozen" by a

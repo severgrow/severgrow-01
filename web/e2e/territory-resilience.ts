@@ -95,19 +95,7 @@ try {
       menuH: k.height, fitH: f.height, gridL: g.left, gridR: innerWidth - g.right };
   });
   check('the map window is centred on the screen', Math.abs(sym.gridL - sym.gridR) <= 1, JSON.stringify(sym));
-  const corners = await page.evaluate(() => {
-    const g = document.getElementById('online-world-grid')!.getBoundingClientRect();
-    return ['online-world-mine', 'online-world-menu', 'online-world-fit', 'online-world-chat'].map((id) => {
-      const r = document.getElementById(id)!.getBoundingClientRect();
-      return { id, w: r.width, h: r.height, top: r.top - g.top, left: r.left - g.left, right: g.right - r.right, bottom: g.bottom - r.bottom,
-        frame: getComputedStyle(document.getElementById(id)!, '::before').backgroundImage.includes('button-frame-supplied') };
-    });
-  });
-  const [tl, tr, br, bl] = corners;
-  check('four corner keys: tiles, menu, zoom, chat — one size, the cockpit frame, one edge',
-    corners.every((c) => c.w === 44 && c.h === 44 && c.frame) &&
-    tl!.top === tl!.left && tr!.top === tr!.right && br!.bottom === br!.right && bl!.bottom === bl!.left && tl!.top === br!.bottom,
-    JSON.stringify(corners.map((c) => [c.id.replace('online-world-', ''), c.w, c.top, c.left, c.right, c.bottom, c.frame])));
+  check('only one map navigation key remains', await page.locator('.world-grid > button').count() === 1);
   check('the coordinates read-out is gone', (await count(page, '#online-world-coord')) === 0);
   const overflow = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, win: window.innerWidth, col: document.querySelector('.online-world .online-inner')!.getBoundingClientRect().right }));
   check('the strip never widens the screen (no sideways scroll)', overflow.doc <= overflow.win && overflow.col <= overflow.win, JSON.stringify(overflow));
@@ -116,6 +104,7 @@ try {
   await page.screenshot({ path: `${SHOTS}/territory-open-390x844.png` });
 
   // Fresh local review probes; never production.
+  await page.click('#online-world-menu');
   await page.click('#online-world-chat');
   await page.waitForSelector('#online-world-chat-panel:not([hidden])');
   const other=others[0]!;

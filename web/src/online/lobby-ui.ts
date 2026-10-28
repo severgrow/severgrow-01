@@ -361,6 +361,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (fitButton) {
       // A simple magnifying glass, drawn in the button's own ink (owner, 2026-10-23: no "FIT" word).
       fitButton.innerHTML = WORLD_FIT_ICON;
+      const label = document.createElement('span'); label.textContent = ONLINE.worldFitShort; fitButton.append(label);
       fitButton.setAttribute('aria-label', ONLINE.worldFit);
       fitButton.title = ONLINE.worldFit;
     }

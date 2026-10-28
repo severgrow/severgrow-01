@@ -148,6 +148,7 @@ export class WorldView {
   private observer: ResizeObserver | null = null;
   private pointers = new Map<number, { x: number; y: number }>();
   private dragged = false;
+  private multiGesture = false;
 
   // ---- Territory challenges -------------------------------------------------
   /** The authenticated challenge lists. Empty for a guest until identity resolves. */
@@ -211,19 +212,23 @@ export class WorldView {
 
   constructor(private readonly client: DuelClient, private readonly ensureIdentity: () => Promise<Identity | null>) {
     document.addEventListener('visibilitychange', () => { if (this.active && !document.hidden) void this.refresh(); });
-    // ONE quiet control (see `fitted`). A toggle button: aria-pressed carries the state, the label
+    // One reset inside the menu (see `fitted`): aria-pressed reflects the current fit state; its label
     // is set from `ONLINE.worldFit` in lobby-ui.ts. Keyboard and screen readers get it for free
     // because it is a real <button>.
-    document.getElementById('online-world-fit')?.addEventListener('click', () => { this.fitChosen = true; this.setFitted(!this.fitted); });
+    document.getElementById('online-world-fit')?.addEventListener('click', () => { this.fitChosen = true; this.setFitted(true); this.setPanel(false); });
     const mine = document.getElementById('online-world-mine');
     if (mine) {
       mine.innerHTML = WORLD_MINE_ICON;
+      const label = document.createElement('span'); label.textContent = ONLINE.worldMineShort; mine.append(label);
       mine.setAttribute('aria-label', ONLINE.worldMine);
       mine.title = ONLINE.worldMine;
-      mine.addEventListener('click', () => this.flyToMine());
+      mine.addEventListener('click', () => { this.flyToMine(); this.setPanel(false); });
     }
     // ONE WINDOW AT A TIME: the chat shuts the menu window, and the menu window shuts the chat.
-    this.chat = new TerritoryChat(client, () => this.identity?.token ?? null, () => this.setPanel(false));
+    this.chat = new TerritoryChat(client, () => this.identity?.token ?? null, () => this.setPanel(false), () => this.setPanel(true));
+    const chatLabel = document.createElement('span'); chatLabel.textContent = ONLINE.worldChatShort;
+    document.getElementById('online-world-chat')?.append(chatLabel);
+    document.querySelector('.world-menu-tools')?.setAttribute('aria-label', ONLINE.worldMenu);
     // THE MENU KEY opens the one window; pressing it again (or close, or Escape) shuts it.
     const menu = document.getElementById('online-world-menu');
     if (menu) {
@@ -456,7 +461,7 @@ export class WorldView {
     // SOFT FOCUS (owner, 2026-10-28: "blur it slightly, so everything looks natural and organic
     // rather than rendered 2d basic stuff"). One Gaussian per depth, in map units, shared by every
     // living layer: mist, motes, halos, the outline's glow and the grow ripple.
-    for (const [id, sd] of [['world-blur-mist', 0.9], ['world-blur-mote', 0.45], ['world-blur-glow', 1.5]] as const) {
+    for (const [id, sd] of [['world-blur-mist', 0.9], ['world-blur-mote', 0.45], ['world-blur-glow', 1.1]] as const) {
       const filter = document.createElementNS(NS, 'filter');
       filter.id = id;
       for (const [k, v] of [['x', '-60%'], ['y', '-60%'], ['width', '220%'], ['height', '220%'], ['color-interpolation-filters', 'sRGB']]) filter.setAttribute(k!, v!);
@@ -813,11 +818,13 @@ export class WorldView {
     // offer. Everything else keeps the claim bar, so the map's original behaviour is unchanged.
     const challenge = challengeOnCell(this.allChallenges, cellId);
     if (challenge) return this.openChallengeSheet(challenge);
-    if (this.isFrontier(cellId)) this.openSendSheet(cellId);
+    if (this.isFrontier(cellId)) return this.openSendSheet(cellId);
+    this.setPanel(true);
   }
   private paintSelection(confirm = false) {
     const pane = document.getElementById('online-world-selection')!;
     pane.replaceChildren();
+    pane.hidden = !this.world || !this.selected;
     if (!this.world || !this.selected) {
       pane.textContent = 'Choose a tile to see who holds it.';
       return;
@@ -980,6 +987,8 @@ export class WorldView {
     this.panelOpen = open;
     this.sellArmed = null;
     this.paintPanel();
+    if (open) (document.querySelector<HTMLElement>('#online-world-selection button') ?? document.getElementById('world-panel-close'))?.focus({preventScroll:true});
+    else document.getElementById('online-world-menu')?.focus({preventScroll:true});
   }
 
   /** The menu key's lamp, the window's tabs, and its open pane. */
@@ -989,7 +998,7 @@ export class WorldView {
     if (!panel || !this.world) return;
     const me = this.identity?.playerId ?? null;
     const claims = this.world.claims;
-    // A corner is never empty: with no land yet, find-my-land is there but quiet.
+    // My land remains in the drawer but is disabled until the player owns a tile.
     if (mine) (mine as HTMLButtonElement).disabled = !me || !claims.some((claim) => claim.ownerId === me);
     const isOpen = (c: WorldChallengeWire) => c.status === 'pending' || c.status === 'accepted';
     const open = this.allChallenges.filter(isOpen);
@@ -1848,7 +1857,13 @@ export class WorldView {
       this.applyView(false);
     };
     const zoom = (scale: number, x: number, y: number) => {
-      if (!this.box || !this.fit || this.fitted) return;
+      if (!this.box || !this.fit) return;
+      if (this.fitted) {
+        const shown = (svg.getAttribute('viewBox') ?? '').split(/[ ,]+/).map(Number);
+        if (shown.length !== 4 || shown.some(v => !Number.isFinite(v))) return;
+        this.box = [shown[0]!, shown[1]!, shown[2]!, shown[3]!];
+        this.setFitted(false);
+      }
       const [bx, by, bw, bh] = this.box;
       const rect = svg.getBoundingClientRect();
       const fx = (x - rect.left) / rect.width, fy = (y - rect.top) / rect.height;
@@ -1890,11 +1905,13 @@ export class WorldView {
       if (best) this.select(best);
     };
     svg.addEventListener('wheel', (event) => {
-      event.preventDefault(); zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX, event.clientY);
+      if (Math.abs(event.deltaY) < .01) return;
+      event.preventDefault(); zoom(Math.exp(-Math.max(-100, Math.min(100, event.deltaY * (event.deltaMode === 1 ? 16 : 1))) * .002), event.clientX, event.clientY);
     }, { passive: false });
     svg.addEventListener('pointerdown', (event) => {
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      this.dragged = false;
+      if (this.pointers.size > 1) { this.multiGesture = true; this.dragged = true; }
+      else { this.dragged = false; this.multiGesture = false; }
     });
     svg.addEventListener('pointermove', (event) => {
       const old = this.pointers.get(event.pointerId);
@@ -1911,7 +1928,7 @@ export class WorldView {
           if (!svg.hasPointerCapture(event.pointerId)) svg.setPointerCapture(event.pointerId);
         }
       }
-      if (this.fitted) {
+      if (this.fitted && this.pointers.size < 2) {
         this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
         return;
       }
@@ -1923,7 +1940,7 @@ export class WorldView {
         if (other) {
           const before = Math.hypot(old.x - other.x, old.y - other.y);
           const after = Math.hypot(event.clientX - other.x, event.clientY - other.y);
-          if (before > 0) zoom(after / before, (event.clientX + other.x) / 2, (event.clientY + other.y) / 2);
+          if (before > 0 && Math.abs(after - before) >= 1) zoom(after / before, (event.clientX + other.x) / 2, (event.clientY + other.y) / 2);
         }
       }
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -1933,8 +1950,8 @@ export class WorldView {
       end(event);
       // A tap, not the end of a pan: select the nearest cell. (Mouse's right/middle buttons and a
       // second finger are not taps.)
-      if (!this.dragged && event.button === 0) tapAt(event);
-      this.dragged = false;
+      if (!this.dragged && !this.multiGesture && event.button === 0) tapAt(event);
+      if (!this.pointers.size) { this.dragged = false; this.multiGesture = false; }
     });
     svg.addEventListener('pointercancel', (event) => { end(event); this.dragged = false; });
     // Re-frame when the WINDOW changes shape (a phone rotating, the on-screen keyboard, a notice line

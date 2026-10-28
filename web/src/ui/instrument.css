@@ -1,0 +1,30 @@
+/* Shared instrument finish. Adopt these tokens; do not copy new local palettes/timings. */
+:root {
+  --instrument-label-size: .6875rem;
+  --instrument-tracking: .08em;
+  --instrument-muted: #e8ddc5b3;
+  --instrument-selection: #f2e5c5;
+}
+/* Match the existing native keys' finite press; never change a control's hit box. */
+html.futasaku-product :is(.acct-btn,.world-corner,.world-menu-tools button,.world-chat-send,.world-chat-mod button,.match-chat button) {
+  transition: transform var(--ix-press) var(--ix-ease-open), filter var(--ix-press) var(--ix-ease-open);
+}
+html.futasaku-product :is(.acct-btn,.world-corner,.world-menu-tools button,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) {
+  transform: scale(.985);
+  filter: brightness(.96);
+}
+html.futasaku-product :is(.world-chat-who,.match-chat-meta,.match-chat-status,.world-chat-status) {
+  font-size: var(--instrument-label-size);
+  letter-spacing: var(--instrument-tracking);
+  color: var(--instrument-muted);
+}
+/* Preserve the fan, lift and tutorial cues; selected cards already carry .lifted. */
+html.futasaku-product #hand:has(.card.lifted) .card:not(.lifted):not(.dim):not(.tutorial-target-card) { opacity: .82; }
+html.futasaku-product #hand .card.lifted:not(:focus-visible) {
+  outline: 1px solid var(--instrument-selection);
+  outline-offset: 1px;
+}
+html.reduce-motion :is(.acct-btn,.world-corner,.world-menu-tools button,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) { transform: none; }
+@media(prefers-reduced-motion:reduce) {
+  html.futasaku-product :is(.acct-btn,.world-corner,.world-menu-tools button,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) { transform:none; }
+}

@@ -1,3 +1,4 @@
+import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 // Accounts — the DOM side, mounted once from main.ts (docs/ACCOUNTS.md). Adds "Continue with Google"
 // where it helps: a one-time welcome before the first online visit, a line in the online hub for
 // guests, and an Account block in Settings (sign out, delete my account). Offline play never sees
@@ -141,7 +142,8 @@ const sheet = (id: string, label: string) => {
   const close = () => {
     if (panel.hidden) return;
     locked = false;
-    scrim.hidden = panel.hidden = true;
+    scrim.hidden = true;
+    exitSurface(panel, { onDone: () => { panel.hidden = true; } });
     const f = onClose;
     onClose = null;
     trigger?.focus({ preventScroll: true });
@@ -165,6 +167,7 @@ const sheet = (id: string, label: string) => {
       onClose = then ?? null;
       locked = options.locked === true;
       scrim.hidden = panel.hidden = false;
+      enterSurface(panel);
       (panel.querySelector('button') as HTMLButtonElement | null)?.focus({ preventScroll: true });
     },
     close,
