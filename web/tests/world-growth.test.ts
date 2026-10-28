@@ -2,7 +2,7 @@
 // recent-activity strip, "find my land", and which cells are new since the last look.
 import { describe, expect, it } from 'vitest';
 import { seenCellIds } from '../../server/src/world.js';
-import { agoLabel, borderSegments, fogRings, newCellIds, ownCentre, ownPatches, ranking, recentActivity, standing } from '../src/online/world-growth.js';
+import { agoLabel, borderSegments, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ownPatches, ranking, recentActivity, standing } from '../src/online/world-growth.js';
 
 type Claim = { cellId: string; ownerId: string; ownerName: string | null; ownerTag: string; colour: string; claimedAt: number };
 const claim = (cellId: string, ownerId: string, claimedAt: number, ownerName: string | null = ownerId.toUpperCase()): Claim =>
@@ -60,6 +60,80 @@ describe('new land since the last look', () => {
   it('names the cells that were not there before (nothing on the first look)', () => {
     expect(newCellIds(null, ['a', 'b'])).toEqual([]);
     expect(newCellIds(new Set(['a']), ['a', 'b', 'c'])).toEqual(['b', 'c']);
+  });
+});
+
+// Owner, 2026-10-28: "the way the empty tiles around the 'discovered' is changing colors, shading
+// ... make it smooth more transition like rather than sudden changes". The mist's own before/after:
+// the map is REBUILT on every paint, so only a remembered diff can carry the hand-off across it.
+describe('the mist changing between two looks', () => {
+  const fog = (entries: [string, 1 | 2][]) => new Map(entries);
+  const empty = { lift: [], deepen: [], arrive: [] };
+
+  it('splits the diff: mist that lifts off new land, mist that deepens, mist that arrives', () => {
+    const before = fog([['a', 1], ['b', 1], ['c', 2]]);
+    const after = fog([['b', 2], ['c', 2], ['d', 1]]);
+    expect(fogShift(before, after)).toEqual({
+      lift: [{ id: 'a', ring: 1 }],
+      deepen: [{ id: 'b', from: 1, to: 2 }],
+      arrive: [{ id: 'd', ring: 1 }],
+    });
+  });
+
+  it('leaves an unchanged look completely alone (and the first look has nothing to transition from)', () => {
+    const look = fog([['a', 1], ['b', 2]]);
+    expect(fogShift(look, fog([['a', 1], ['b', 2]]))).toEqual(empty);
+    expect(fogShift(null, look)).toEqual(empty);
+  });
+
+  it('never animates a cell the map cannot see, and only marks what actually changed', () => {
+    const before = fog([['a', 1]]);
+    const after = fog([['a', 1], ['b', 1], ['c', 2]]);
+    const shift = fogShift(before, after);
+    expect(shift.lift).toEqual([]);
+    expect(shift.deepen).toEqual([]);
+    expect(shift.arrive).toEqual([{ id: 'b', ring: 1 }, { id: 'c', ring: 2 }]);
+  });
+
+  it('is skipped entirely under Reduce motion, so the land simply appears', () => {
+    const before = fog([['a', 1], ['b', 2]]);
+    const after = fog([['b', 1], ['c', 2]]);
+    expect(fogShift(before, after, false)).toEqual(empty);
+  });
+
+  // The map is rebuilt wholesale, so a second paint inside the hand-off must be able to re-derive
+  // the SAME transition from data alone — otherwise the mist jumps back to full or snaps settled.
+  it('a repaint mid-hand-off re-derives exactly the same lift, deepen and arrive', () => {
+    const first = fogShift(fog([['a', 1], ['b', 1]]), fog([['b', 2], ['c', 1]]));
+    expect(first).toEqual({
+      lift: [{ id: 'a', ring: 1 }],
+      deepen: [{ id: 'b', from: 1, to: 2 }],
+      arrive: [{ id: 'c', ring: 1 }],
+    });
+    const settled = fog([['b', 2], ['c', 1]]);          // what the next paint calls `fogCells`
+    const again = fogShift(fogAtLastLook(settled, first), settled);
+    expect(again, 'the same three cells are still in flight').toEqual(first);
+  });
+
+  it('with no hand-off in flight, the last look is just the settled fog', () => {
+    const settled = fog([['b', 2]]);
+    expect(fogAtLastLook(settled, null)).toEqual(settled);
+    expect(fogAtLastLook(null, null)).toBeNull();
+  });
+});
+
+// A rebuilt map must not restart the fog's slow breath at full strength: that reset was itself a
+// sudden shading change every time anyone grew a tile.
+describe('keeping a loop where it was across a rebuild', () => {
+  it('turns elapsed time into a negative delay, wrapped to the loop', () => {
+    expect(loopPhase(0, 9000)).toBe('-0.00s');
+    expect(loopPhase(4500, 9000)).toBe('-4.50s');
+    expect(loopPhase(9000, 9000)).toBe('-0.00s');
+    expect(loopPhase(10_250, 9000)).toBe('-1.25s');
+  });
+  it('never returns a positive delay (a loop is only ever moved forward)', () => {
+    expect(loopPhase(-500, 9000)).toBe('-8.50s');
+    expect(loopPhase(Number.NaN, 9000)).toBe('-0.00s');
   });
 });
 
