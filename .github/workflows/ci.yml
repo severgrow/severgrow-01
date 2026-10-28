@@ -30,7 +30,11 @@ jobs:
         # futa04-* suites, cut-severe and daily-puzzle build the product channel; lessons-3 (levels 1-10, the
         # tutorial) builds futa05; the rest build the historic live channel.
         suite: [smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass, futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock, futa04-motion, cut-severe, daily-puzzle, lessons-3, territory-menu]
-    runs-on: ubuntu-latest
+    # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
+    # Playwright 1.56.1 refuses it ("Playwright does not support chromium on ubuntu26.04-x64"),
+    # which failed EVERY browser job at `playwright-core install` before a single test ran. Pin the
+    # last image the pinned Playwright supports; unpin when Playwright ships 26.04 support.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4

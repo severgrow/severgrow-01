@@ -9,7 +9,11 @@ permissions:
   contents: read
 jobs:
   chat:
-    runs-on: ubuntu-latest
+    # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
+    # Playwright 1.56.1 refuses it ("Playwright does not support chromium on ubuntu26.04-x64"),
+    # which failed EVERY browser job at `playwright-core install` before a single test ran. Pin the
+    # last image the pinned Playwright supports; unpin when Playwright ships 26.04 support.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
