@@ -82,6 +82,16 @@ export class WorldEconomyService {
     return result;
   }
 
+  /** Sell one of your own tiles back for its price (owner, 2026-10-27). */
+  async sell(player: PlayerRecord, cellId: string, requestId: string) {
+    if (!/^[A-Za-z0-9_-]{8,100}$/.test(requestId)) throw new ApiError('INVALID_REQUEST', 'A sale request ID is required.');
+    const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
+    if (!(await this.matches.hitRateLimit(`seeds:sell:${player.id}`, bucket, 120)).ok) {
+      throw new ApiError('RATE_LIMITED', 'Please wait before selling again.');
+    }
+    return this.store.sell(player.id, cellId, requestId, this.now());
+  }
+
   async acknowledge(player: PlayerRecord): Promise<void> { await this.store.acknowledgeInvitation(player.id); }
 
   async settleOnline(match: MatchRecord): Promise<Map<string, { awarded: number; reason: string | null }>> {

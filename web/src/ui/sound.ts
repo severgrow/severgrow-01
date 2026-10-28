@@ -33,6 +33,9 @@ const MOTION_ONLY: ReadonlySet<string> = new Set(['rustle', 'sparks', 'chime']);
 /** The three interaction layers, quietest first. Weight only ever moves within the top layer. */
 const LAYER_GAIN: Readonly<Record<string, number>> = Object.freeze({ tick: 0.55, click: 1, body: 1, thud: 1.45 });
 
+/** Owner, 2026-10-27: "for now, remove the sound completely from the game". Flip to bring it back. */
+export const SOUND_REMOVED = true;
+
 export class Sound {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -41,7 +44,19 @@ export class Sound {
   private musicBus: GainNode | null = null;
   private bank: SoundBank | null = null;
   private mix: Mix = { sound: true, music: false, sfxVolume: 80, musicVolume: 60 };
-  enabled = true;
+  /**
+   * SOUND IS REMOVED FOR NOW (owner, 2026-10-27). Every play path and `unlock` reads this one gate,
+   * so forcing it off is the whole switch: nothing plays and no AudioContext is ever built.
+   */
+  private wanted = true;
+  /** The page passes SOUND_REMOVED; a bare engine (its own tests) plays as it always has. */
+  constructor(private readonly removed = false) {}
+  get enabled(): boolean {
+    return !this.removed && this.wanted;
+  }
+  set enabled(on: boolean) {
+    this.wanted = on;
+  }
   /** Effects level: Low may drop the faint flourishes (sparks, rustle, chime). */
   effects: Effects = 'normal';
   /** Reduce motion keeps functional cues and drops the motion flourishes. */

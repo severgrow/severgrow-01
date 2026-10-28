@@ -636,10 +636,7 @@ export const ONLINE_CSS = `
    quietly lifted edge. No new colour — the owner asked to spot his own at a glance, not to be told
    by a different hue. */
 .world-hex.mine { stroke: color-mix(in srgb, var(--territory) 62%, #e8ddc5); }
-/* Every free tile is open to grow now (owner, 2026-10-27), so "available" is a quiet lift, not a
-   highlight on half the map. The board's own global .available (a dashed onboarding ring with
-   pointer-events: none) must never leak onto the world: its dash and its tap block are undone here. */
-.world-hex.available { stroke: #858d7c; stroke-width: .42; stroke-dasharray: none; stroke-opacity: 1; pointer-events: all; }
+
 .world-hex.same-owner { stroke-width: 1.1; }
 /* THE SELECTION, drawn ONCE above every edge (the .world-accent group in world-view.ts), so no
    neighbouring tile can cover half of it. The same cream the tile highlight always used, with round
@@ -881,90 +878,217 @@ export const ONLINE_CSS = `
 }
 
 
-/* ---------- THE GROWING TERRITORY (owner, 2026-10-27) ---------- */
-/* The fog: the land underneath nobody has uncovered, two faint rings beyond the coast. A dashed
-   hairline and a whisper of fill — the map plainly has somewhere to grow, and it never competes
-   with real ground. Never a tap target. */
-.world-fog { fill: #1b201c; stroke: #8f977f; stroke-width: .4; stroke-dasharray: 1.6 2.4; vector-effect: non-scaling-stroke; pointer-events: none; }
-.world-fog.ring-1 { opacity: .42; }
-.world-fog.ring-2 { opacity: .16; }
-/* New land rises in, one hex after another, nearest the newest tile first. */
-@keyframes world-rise {
-  0% { opacity: 0; transform: translateY(5px) scale(.55); }
-  60% { opacity: 1; transform: translateY(-1px) scale(1.06); }
-  100% { opacity: 1; transform: none; }
-}
-.world-hex-face.rising {
-  transform-box: fill-box; transform-origin: center;
-  animation: world-rise 520ms cubic-bezier(.2, .9, .3, 1.2) both;
-  animation-delay: var(--rise-delay, 0ms);
-}
-@media (prefers-reduced-motion: reduce) { .world-hex-face.rising { animation: none; } }
-html.reduce-motion .world-hex-face.rising { animation: none; }
+/* ================= THE TERRITORY, ITS OWN WORLD (owner, 2026-10-27) =================
+   "Symmetric, elegant, functional, tactile hardware". One centred axis; every control a physical key
+   (a 1px top highlight, a darker lip, a press that sinks); one window for every menu. */
 
-/* Find my land: the second map control, beside FIT. */
-.world-grid > .world-mine { right: 62px; }
+/* The column never grows past the screen: a strip or a long name scrolls inside its own box. */
+.online-world .online-inner { min-width: 0; max-width: 100vw; overflow: hidden; }
+.online-world .online-inner > * { min-width: 0; }
+/* ONE WIDTH FOR THE WHOLE COLUMN, so header, wallet, deck, window and selection share both edges:
+   on a phone the full column; on a desktop a bigger, still perfectly centred window. */
+.online-world { --world-w: min(100%, 1240px, max(388px, calc((100dvh - 262px) * 1.32))); }
+.online-world .online-head,
+.online-world .world-wallet,
+.online-world .world-deck,
+.online-world .world-selection,
+.online-world .online-notice { width: var(--world-w); max-width: var(--world-w); margin-inline: auto; }
+.online-world .world-grid { width: var(--world-w); max-width: var(--world-w); }
+/* A lowkey world of its own: faint survey contours under everything, centred on the map. */
+.online-world::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    repeating-radial-gradient(ellipse 120% 90% at 50% 55%, transparent 0 46px, rgba(232, 221, 197, .028) 46px 47px),
+    radial-gradient(ellipse 70% 55% at 50% 50%, rgba(127, 191, 77, .035), transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 52%, #000 40%, transparent 85%);
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 52%, #000 40%, transparent 85%);
+}
+.online-world .online-inner { position: relative; z-index: 1; }
 
-/* The bar: the recent placements as a single line of chips (newest first), and the RANKING key. */
-.world-bar {
-  display: flex; align-items: center; gap: 8px;
-  max-width: 720px; width: 100%; min-width: 0; margin-inline: auto; min-height: 32px;
-  /* The chips must never widen the column: their width is the strip's to scroll, not the page's. */
-  contain: inline-size; overflow: hidden;
+/* ---- the deck: three equal keys, one row, centred ---- */
+.world-deck {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
+  padding: 4px; border-radius: 13px;
+  background: linear-gradient(#0d100e, #121613);
+  box-shadow: inset 0 1px 0 #000a, inset 0 0 0 1px #e8ddc50d, 0 1px 0 #e8ddc50a;
 }
-.world-bar[hidden] { display: none; }
-.world-activity {
-  flex: 1 1 0; min-width: 0; display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain;
-  scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
-  mask-image: linear-gradient(90deg, #000 85%, transparent);
-}
-.world-activity::-webkit-scrollbar { display: none; }
-.world-activity-chip {
-  flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 9px 0 7px;
-  border: 0; border-radius: 7px; background: #161b17cc; color: #e8ddc5; cursor: pointer;
-  font: inherit; font-size: .62rem; letter-spacing: .12em; text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-}
-.world-activity-chip::before {
-  content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--territory); flex: none;
-}
-.world-activity-name { max-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.world-activity-ago { color: #e8ddc58f; }
-.world-rank-toggle {
-  flex: none; min-height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer;
-  border: 1px solid #d5c89b40; background: #161b17cc; color: #e8ddc5;
+.world-deck-key {
+  position: relative; min-height: 40px; min-width: 0; padding: 0 8px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  border: 0; border-radius: 9px; cursor: pointer; color: #cfc6ac;
+  background: linear-gradient(#1f241f, #191d19);
+  box-shadow: inset 0 1px 0 #e8ddc51f, inset 0 -2px 0 #00000059, 0 1px 2px #0007;
   font: inherit; font-size: .64rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+  transition: transform 90ms ease, box-shadow 90ms ease, color 140ms ease, background 140ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
-.world-rank-toggle::after { content: ' ▾'; display: inline-block; transition: transform 160ms ease; }
-.world-rank-toggle.open::after { transform: rotate(180deg); }
-.world-rank-toggle:focus-visible, .world-activity-chip:focus-visible, .world-ranking-row:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+.world-deck-key:active { transform: translateY(1px); box-shadow: inset 0 1px 0 #e8ddc512, inset 0 -1px 0 #00000059; }
+.world-deck-key.on {
+  color: #f2e7cb; background: linear-gradient(#2a3029, #232822);
+  box-shadow: inset 0 1px 0 #e8ddc52e, inset 0 -1px 0 #0000004d, inset 0 0 0 1px #d5c89b52;
+}
+.world-deck-key:focus { outline: none; }
+.world-deck-key:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+.world-deck-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-deck-count {
+  min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px;
+  display: inline-grid; place-items: center; font-size: .6rem; letter-spacing: 0;
+  color: #0f1210; background: #cfc6ac; font-variant-numeric: tabular-nums;
+}
+.world-deck-count[hidden] { display: none; }
+/* A challenge waiting for YOUR answer: the count lamp glows (the menu's Territory lamp, same red). */
+.world-deck-count.waiting { background: #e07a5f; color: #160b08; box-shadow: 0 0 10px #e07a5f8c; animation: world-lamp 2.4s ease-in-out infinite; }
+@keyframes world-lamp { 50% { box-shadow: 0 0 3px #e07a5f4d; } }
 
-/* The ranking, dropped over the map: a numbered machine read-out on the dark glass. */
-.world-ranking {
-  position: absolute; z-index: 4; top: 10px; left: 10px; right: 10px; max-height: calc(100% - 20px);
-  overflow: auto; overscroll-behavior: contain; touch-action: pan-y;
-  padding: 10px 8px 8px; border-radius: 15px;
-  background: rgba(12, 15, 13, .9);
-  -webkit-backdrop-filter: var(--dark-glass-blur, blur(9px)); backdrop-filter: var(--dark-glass-blur, blur(9px));
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .22);
-  animation: world-drop 180ms cubic-bezier(.2, .8, .3, 1) both;
+/* ---- the one window: centred over the map, light enough to see the land through ---- */
+.world-panel {
+  position: absolute; z-index: 4; left: 50%; top: 12px; translate: -50% 0;
+  width: min(calc(100% - 24px), 460px); max-height: calc(100% - 24px);
+  display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 15px; color: #e8ddc5;
+  background: rgba(10, 13, 11, .66);
+  -webkit-backdrop-filter: blur(6px) saturate(1.05); backdrop-filter: blur(6px) saturate(1.05);
+  box-shadow: inset 0 1px 0 #e8ddc514, 0 14px 34px rgba(0, 0, 0, .28);
+  animation: world-panel-in 200ms cubic-bezier(.2, .8, .3, 1) both;
 }
-.world-ranking[hidden] { display: none; }
-@keyframes world-drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .world-ranking { animation: none; } }
-.world-ranking-head {
-  margin: 0 6px 8px; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: #e8ddc58f;
+.world-panel[hidden] { display: none; }
+@keyframes world-panel-in { from { opacity: 0; translate: -50% -6px; } to { opacity: 1; translate: -50% 0; } }
+@media (prefers-reduced-motion: reduce) { .world-panel { animation: none; } }
+.world-panel-head {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center;
+  min-height: 44px; padding: 0 2px; border-bottom: 1px solid #e8ddc512;
 }
+/* The window's tiny status LED (left) balances the close key (right): the title stays centred. */
+.world-panel-led { justify-self: center; width: 6px; height: 6px; border-radius: 50%; background: #9fd27a; box-shadow: 0 0 6px #9fd27aa6; }
+.world-panel-title {
+  margin: 0; text-align: center; font-size: .66rem; font-weight: 700; letter-spacing: .2em;
+  text-transform: uppercase; color: #e8ddc5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.world-panel-close {
+  justify-self: center; width: 44px; height: 44px; display: grid; place-items: center;
+  border: 0; background: none; color: #cfc6ac; cursor: pointer; border-radius: 9px;
+}
+.world-panel-close:focus-visible { outline: 2px solid #f2e5c5; outline-offset: -4px; }
+.world-panel-body { overflow: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 10px; }
+.world-pane { display: none; flex-direction: column; gap: 8px; }
+.world-panel[data-tab='challenges'] .world-pane[data-pane='challenges'],
+.world-panel[data-tab='ranking'] .world-pane[data-pane='ranking'],
+.world-panel[data-tab='actions'] .world-pane[data-pane='actions'] { display: flex; }
+.world-pane-label { margin: 4px 4px 0; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: #e8ddc58f; text-align: center; }
+.world-pane-empty { margin: 10px 0; text-align: center; font-size: .74rem; color: #e8ddc5a6; }
+.world-pane-empty[hidden] { display: none; }
+
+/* the CURRENT / HISTORY switch: a two-position hardware slider */
+.world-seg {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 10px;
+  background: #0a0d0b; box-shadow: inset 0 1px 0 #000a, inset 0 0 0 1px #e8ddc50d;
+}
+.world-seg-key {
+  min-height: 34px; border: 0; border-radius: 8px; cursor: pointer; background: transparent; color: #cfc6ac99;
+  font: inherit; font-size: .62rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+}
+.world-seg-key.on { color: #f2e7cb; background: linear-gradient(#252a24, #1e231e); box-shadow: inset 0 1px 0 #e8ddc51f, 0 1px 2px #0007; }
+.world-seg-key:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+
+/* the challenge chips, stacked in the window instead of a sideways rail */
+.world-panel .world-challenges {
+  display: flex; flex-direction: column; gap: 6px; width: 100%; overflow: visible; padding: 0;
+}
+.world-panel .world-challenges[hidden] { display: flex; }
+.world-panel .world-challenge-chip { width: 100%; box-sizing: border-box; }
+.world-panel[data-scope='current'] .world-challenge-chip:not([data-status='pending']):not([data-status='accepted']),
+.world-panel[data-scope='history'] .world-challenge-chip:is([data-status='pending'], [data-status='accepted']) { display: none; }
+.world-panel .world-challenge-more { align-self: center; }
+
+/* the ranking */
 .world-ranking-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .world-ranking-row {
   width: 100%; display: grid; grid-template-columns: 2.4ch 10px minmax(0, 1fr) auto 3.5ch; align-items: center; gap: 9px;
   min-height: 40px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: #e8ddc5;
   font: inherit; font-size: .74rem; text-align: left; cursor: pointer; font-variant-numeric: tabular-nums;
 }
-.world-ranking-row.mine { background: #e8ddc514; }
+.world-ranking-row:active { background: #e8ddc50d; }
+.world-ranking-row.mine { background: #e8ddc514; box-shadow: inset 0 0 0 1px #e8ddc51f; }
 .world-ranking-rank { color: #e8ddc570; letter-spacing: .08em; }
-.world-ranking-swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--territory); }
+.world-ranking-swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--territory); box-shadow: 0 0 6px color-mix(in srgb, var(--territory) 50%, transparent); }
 .world-ranking-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .06em; }
 .world-ranking-tag { color: #e8ddc570; font-size: .62rem; letter-spacing: .08em; }
 .world-ranking-tiles { text-align: right; font-weight: 700; letter-spacing: .04em; }
+.world-ranking-row:focus-visible, .world-activity-chip:focus-visible, .world-action-key:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+/* the latest placements: two even columns of chips */
+.world-activity { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.world-activity-chip {
+  min-width: 0; display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 9px;
+  border: 0; border-radius: 8px; background: #161b17b3; color: #e8ddc5; cursor: pointer;
+  box-shadow: inset 0 1px 0 #e8ddc50f;
+  font: inherit; font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; font-variant-numeric: tabular-nums;
+}
+.world-activity-chip::before { content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--territory); flex: none; }
+.world-activity-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-activity-ago { margin-left: auto; color: #e8ddc58f; white-space: nowrap; }
+
+/* the actions: full-width hardware keys, the tile's own action leading */
+.world-action-keys { display: grid; gap: 6px; }
+.world-action-key {
+  min-height: 44px; border: 0; border-radius: 9px; cursor: pointer; color: #e8ddc5;
+  background: linear-gradient(#1f241f, #191d19);
+  box-shadow: inset 0 1px 0 #e8ddc51f, inset 0 -2px 0 #00000059, 0 1px 2px #0007;
+  font: inherit; font-size: .68rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  transition: transform 90ms ease;
+}
+.world-action-key:active { transform: translateY(1px); }
+.world-action-key.lead { color: #161a16; background: linear-gradient(#efe4c8, #ddd1b2); box-shadow: inset 0 1px 0 #fff8, inset 0 -2px 0 #0000002e, 0 1px 2px #0007; }
+
+/* the map's two corner keys, mirrored: find-my-land top-left, FIT top-right */
+.world-grid > .world-mine { right: auto; left: 10px; }
+/* the selected tile's coordinates: a quiet read-out centred on the window's foot */
+.world-coord {
+  position: absolute; z-index: 2; left: 50%; bottom: 10px; translate: -50% 0; margin: 0; pointer-events: none;
+  padding: 3px 9px; border-radius: 6px; background: #0b0e0cb3; color: #cfc6acb3;
+  font-size: .58rem; letter-spacing: .2em; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.world-coord:empty { display: none; }
+/* the selection bar and the notice: one centred axis, like everything else on this screen */
+.online-world .world-selection { justify-content: center; text-align: center; flex-wrap: wrap; }
+.online-world .online-notice { text-align: center; }
+.online-world .world-claim-button { text-transform: uppercase; }
+
+/* ---- the fog, alive: two rings breathing at different paces ---- */
+.world-fog { fill: #1b201c; stroke: #8f977f; stroke-width: .4; stroke-dasharray: 1.6 2.4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.world-fog-ring.ring-1 { opacity: .42; animation: world-mist 9s ease-in-out infinite; }
+.world-fog-ring.ring-2 { opacity: .16; animation: world-mist-far 13s ease-in-out infinite; }
+@keyframes world-mist { 50% { opacity: .26; } }
+@keyframes world-mist-far { 50% { opacity: .07; } }
+/* ---- new land rises in ---- */
+@keyframes world-rise {
+  0% { opacity: 0; transform: translateY(5px) scale(.55); }
+  60% { opacity: 1; transform: translateY(-1px) scale(1.06); }
+  100% { opacity: 1; transform: none; }
+}
+.world-hex-face.rising { transform-box: fill-box; transform-origin: center; animation: world-rise 520ms cubic-bezier(.2, .9, .3, 1.2) both; animation-delay: var(--rise-delay, 0ms); }
+/* ---- your tiles catch the light, one after another ---- */
+.world-hex-face.mine { animation: world-glint 11s ease-in-out infinite; animation-delay: var(--glint-delay, 0s); }
+.world-hex-face.mine.rising { animation: world-rise 520ms cubic-bezier(.2, .9, .3, 1.2) both; }
+@keyframes world-glint { 0%, 86%, 100% { filter: none; } 92% { filter: brightness(1.32); } }
+/* ---- fresh ground keeps a slow halo for six hours ---- */
+.world-hex.fresh { animation: world-fresh 3.6s ease-in-out infinite; }
+@keyframes world-fresh { 50% { stroke-width: 1.3; stroke: color-mix(in srgb, var(--territory) 55%, #fff4d6); } }
+/* ---- spores drift off held ground ---- */
+.world-spore { fill: #e8ddc5; opacity: 0; pointer-events: none; animation: world-spore 12s ease-in-out infinite; animation-delay: var(--spore-delay, 0s); transform-box: fill-box; }
+@keyframes world-spore {
+  0% { opacity: 0; transform: translate(0, 0); }
+  15% { opacity: .55; }
+  70% { opacity: .2; }
+  100% { opacity: 0; transform: translate(3px, -16px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .world-fog-ring, .world-hex-face.mine, .world-hex.fresh, .world-spore, .world-hex-face.rising, .world-deck-count.waiting { animation: none; }
+  .world-spore { display: none; }
+}
+html.reduce-motion :is(.world-fog-ring, .world-hex-face.mine, .world-hex.fresh, .world-spore, .world-hex-face.rising, .world-deck-count.waiting) { animation: none; }
+html.reduce-motion .world-spore { display: none; }
+
+/* Every free tile is open to grow now, so "available" is a quiet lift; the board's own global
+   .available (a dashed onboarding ring with pointer-events: none) must never leak onto the world. */
+.world-hex.available { stroke: #858d7c; stroke-width: .42; stroke-dasharray: none; stroke-opacity: 1; pointer-events: all; }
 `;

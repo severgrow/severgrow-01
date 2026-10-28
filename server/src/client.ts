@@ -29,6 +29,7 @@ import type {
 } from './protocol.js';
 import type {
   ClaimResult,
+  SellResult,
   RewardResult,
   SeedWallet,
   WorldChallengeWire,
@@ -404,6 +405,12 @@ export class DuelClient {
   async claimWorld(token: string, cellId: string, requestId: string): Promise<ClaimResult> {
     const response = await this.request<{ claim: ClaimResult }>('POST', '/v1/world/claims', { token, body: { cellId, requestId } });
     return response.claim;
+  }
+
+  /** Sell one of your own tiles back for its price. A refusal throws a DuelError with its code. */
+  async sellWorld(token: string, cellId: string, requestId: string): Promise<SellResult> {
+    const response = await this.request<{ sale: SellResult }>('POST', '/v1/world/sales', { token, body: { cellId, requestId } });
+    return response.sale;
   }
 
   async acknowledgeWorldInvitation(token: string): Promise<void> {

@@ -92,7 +92,15 @@ try {
   const before = await count(page, '.world-hex');
   check('the map opens at the v2 coast plus the land around the tiles', before >= WORLD_CELL_IDS.size, `${before} cells`);
   check('the fog shows land beyond the coast', (await count(page, '.world-fog.ring-1')) > 0 && (await count(page, '.world-fog.ring-2')) > 0);
-  check('the bar shows the latest placements', (await count(page, '.world-activity-chip')) === 5);
+  // THE DECK (owner, 2026-10-27): three equal keys, one centred row.
+  const deck = await page.$$eval('#online-world-deck .world-deck-key', (els) => els.map((e) => { const r = e.getBoundingClientRect(); return { w: Math.round(r.width), l: r.left, r: r.right, t: e.textContent?.trim() }; }));
+  check('the deck is three equal keys', deck.length === 3 && new Set(deck.map((d) => d.w)).size === 1, deck.map((d) => `${d.t}:${d.w}`).join(' '));
+  const sym = await page.evaluate(() => {
+    const d = document.getElementById('online-world-deck')!.getBoundingClientRect();
+    const g = document.getElementById('online-world-grid')!.getBoundingClientRect();
+    return { deckL: d.left, deckR: innerWidth - d.right, gridL: g.left, gridR: innerWidth - g.right };
+  });
+  check('the deck and the map window are centred on the screen', Math.abs(sym.deckL - sym.deckR) <= 1 && Math.abs(sym.gridL - sym.gridR) <= 1, JSON.stringify(sym));
   const overflow = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, win: window.innerWidth, col: document.querySelector('.online-world .online-inner')!.getBoundingClientRect().right }));
   check('the strip never widens the screen (no sideways scroll)', overflow.doc <= overflow.win && overflow.col <= overflow.win, JSON.stringify(overflow));
   const dash = await page.evaluate(() => { const el = document.querySelector('.world-hex.available'); return el ? getComputedStyle(el).strokeDasharray : 'none'; });
@@ -117,20 +125,24 @@ try {
   await grow(page, '10,0');
   check('the uncovered land can be grown on', true);
 
-  // the ranking
-  await page.click('#online-world-rank-toggle');
-  await page.waitForSelector('#online-world-ranking:not([hidden])');
+  // the ranking, in the one window
+  await page.click('#world-tab-ranking');
+  await page.waitForSelector('#online-world-panel:not([hidden])');
+  check('the latest placements are listed under the ranking', (await count(page, '.world-activity-chip')) === 5);
+  const panel = await page.evaluate(() => { const p = document.getElementById('online-world-panel')!.getBoundingClientRect(); const g = document.getElementById('online-world-grid')!.getBoundingClientRect(); return { l: p.left - g.left, r: g.right - p.right }; });
+  check('the window is centred over the map', Math.abs(panel.l - panel.r) <= 1, JSON.stringify(panel));
   const rows = await page.$$eval('.world-ranking-row', (els) => els.map((e) => ({ text: e.textContent ?? '', mine: e.classList.contains('mine') })));
   check('the ranking lists every player, most tiles first', rows.length === 4 && /3$/.test(rows[0]!.text), rows.map((r) => r.text).join(' | '));
   check('my row is marked', rows.some((r) => r.mine && r.text.includes('YOU')));
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${SHOTS}/territory-ranking-390x844.png` });
   await page.click('.world-ranking-list li:last-child .world-ranking-row');
-  check('picking a row folds the ranking away', await page.evaluate(() => document.getElementById('online-world-ranking')!.hidden === true));
+  check('picking a row closes the window', await page.evaluate(() => document.getElementById('online-world-panel')!.hidden === true));
 
   // find my land and the activity strip
   check('find my land shows once I hold tiles', await page.isVisible('#online-world-mine'));
   const vb0 = await page.getAttribute('.world-map-svg', 'viewBox');
+  await page.click('#world-tab-ranking');
   await page.click('.world-activity-chip:nth-child(5)');
   await page.waitForTimeout(200);
   const vb1 = await page.getAttribute('.world-map-svg', 'viewBox');
@@ -138,6 +150,45 @@ try {
   await page.click('#online-world-mine');
   await page.waitForTimeout(200);
   check('find my land moves the map back to my tiles', (await page.getAttribute('.world-map-svg', 'viewBox')) !== vb1);
+
+  // selling a tile (owner, 2026-10-27): my tile at 10,0, from the ACTIONS window
+  const walletBefore = await page.textContent('#online-world-wallet');
+  await page.focus('.world-hex[data-cell-id="10,0"]');
+  await page.keyboard.press('Enter');
+  await page.click('#world-tab-actions');
+  await page.waitForSelector('#online-world-panel[data-tab="actions"]:not([hidden])');
+  const actionKeys = await page.$$eval('.world-action-key', (els) => els.map((e) => e.textContent?.trim() ?? ''));
+  check('the actions offer to sell my selected tile', actionKeys[0] === 'Sell this tile · +100', actionKeys.join(' | '));
+  await page.screenshot({ path: `${SHOTS}/territory-actions-390x844.png` });
+  await page.click('.world-action-key.lead');
+  await page.waitForFunction(() => document.querySelector('.world-action-key.lead')?.textContent?.trim() === 'Confirm sell');
+  await page.click('.world-action-key.lead');
+  await page.waitForSelector('.world-hex[data-cell-id="10,0"]:not(.mine)', { timeout: 20_000 });
+  const walletAfter = await page.textContent('#online-world-wallet');
+  check('selling gives back 100 and frees the tile', /100/.test(walletAfter ?? '') && walletBefore !== walletAfter, `${walletBefore} → ${walletAfter}`);
+  check('the server freed it', !(await store.world()).claims.some((c) => c.cellId === '10,0'));
+
+  // challenges: the current / history switch is there, with an honest empty line
+  await page.click('#world-tab-challenges');
+  await page.waitForSelector('#online-world-panel[data-tab="challenges"]:not([hidden])');
+  check('no open challenges says so', (await page.textContent('#world-challenges-empty'))?.trim() === 'No open challenges.');
+  await page.click('#world-scope-history');
+  check('the history switch says so too', (await page.textContent('#world-challenges-empty'))?.trim() === 'No past challenges yet.');
+  await page.screenshot({ path: `${SHOTS}/territory-challenges-390x844.png` });
+  await page.click('#world-panel-close');
+
+  // the ambient life: own tiles glint, fresh tiles halo, fog breathes, motes drift
+  check('my tiles carry the glint', (await count(page, '.world-hex-face.mine')) > 0);
+  check('fresh tiles keep a halo', (await count(page, '.world-hex.fresh')) > 0);
+  check('the fog breathes in two rings', (await count(page, '.world-fog-ring')) === 2);
+  check('a few motes drift off the land', (await count(page, '.world-spore')) > 0);
+
+  // the desktop view: bigger, and still centred
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(500);
+  const desk = await page.evaluate(() => { const g = document.getElementById('online-world-grid')!.getBoundingClientRect(); return { w: g.width, l: g.left, r: innerWidth - g.right }; });
+  check('on a desktop the map window is large and centred', desk.w >= 700 && Math.abs(desk.l - desk.r) <= 1, JSON.stringify(desk));
+  await page.screenshot({ path: `${SHOTS}/territory-desktop-1440x900.png` });
   await context.close();
 } finally {
   await browser.close();

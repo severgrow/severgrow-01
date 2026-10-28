@@ -40,6 +40,10 @@ export type RewardResult = { awarded: number; reason: string | null; wallet: See
 export type ClaimResult =
   | { ok: true; cellId: string; revision: number; wallet: SeedWallet; replayed: boolean }
   | { ok: false; code: 'NO_FUNDS' | 'OCCUPIED' | 'NOT_ADJACENT' | 'INVALID_CELL'; revision: number; wallet: SeedWallet };
+/** Selling a tile back (owner, 2026-10-27): the tile price returns, the tile is free again. */
+export type SellResult =
+  | { ok: true; cellId: string; revision: number; wallet: SeedWallet; replayed: boolean }
+  | { ok: false; code: 'NOT_OWNED' | 'CELL_BUSY' | 'INVALID_CELL'; revision: number; wallet: SeedWallet };
 export type TrainingTicket = { id: string; playerId: string; seed: number; botLevel: number; createdAt: number; expiresAt: number; usedAt: number | null };
 
 /**
@@ -146,6 +150,8 @@ export interface WorldEconomyStore {
   campaignHighestLevel(playerId: string): Promise<number | null>;
   world(): Promise<WorldSnapshot>;
   claim(playerId: string, cellId: string, requestId: string, now: number): Promise<ClaimResult>;
+  /** Sell one of the player's own tiles back for `SEED_ECONOMY.tileSaleReturn`; idempotent by request. */
+  sell(playerId: string, cellId: string, requestId: string, now: number): Promise<SellResult>;
   settle(input: RewardInput): Promise<RewardResult>;
   acknowledgeInvitation(playerId: string): Promise<void>;
   issueTrainingTicket(ticket: TrainingTicket): Promise<void>;

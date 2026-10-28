@@ -19,6 +19,25 @@ Status: implemented on isolated `futa0.5-world-seeds` branch; **not deployed**. 
   players' table over the map (a row flies to that player); a find-my-land key beside FIT.
   Browser check: `web/e2e/territory-growth.ts` (local, in-process server).
 
+## v3.1: one window, selling, a living map (owner, 2026-10-28)
+
+- **One deck, one window.** Three equal hardware keys under the wallet — CHALLENGES, RANKING,
+  ACTIONS — open the same centred, see-through window over the map (`#online-world-panel`, dark
+  glass at ~66% so the land shows through). Challenges has a CURRENT / HISTORY switch; Ranking holds
+  the players' table and the latest placements; Actions holds what you can do with the selected
+  tile (grow, sell, challenge) plus go-to-my-tiles and fit. Escape or the close key shuts it.
+- **Selling a tile** (owner, "for now"): `POST /v1/world/sales {cellId, requestId}` gives back
+  `SEED_ECONOMY.tileSaleReturn` (100) and frees the cell. Owner only; refused as `CELL_BUSY` while a
+  challenge on it is open. Idempotent by `requestId` (ledger `world_sale`, source `world-sale:<id>`).
+  Needs the server redeploy; the page offers it only on a v3 world and confirms with a second tap.
+- **A living map, kept quiet**: the fog rings breathe slowly; new land rises in; your own tiles catch
+  a rare glint; tiles grown in the last six hours carry a soft halo; a few spores drift across.
+  All of it stops under reduced motion.
+- **Desktop**: the column (header, wallet, deck, window, selection) shares one width,
+  `--world-w`, up to 1240px, sized by the screen height and always centred.
+- **Sound** is switched off across the whole game for now (`SOUND_REMOVED` in `web/src/ui/sound.ts`);
+  its settings rows are hidden. Vibration stays.
+
 ## Ownership and economy
 
 - The world is one versioned, frozen axial hex map. v2 (2026-10-21) is **274 cells** (21 rows, r −10…10): the 183-cell v1 landmass plus an irregular coastal growth, baked into `server/src/world.ts` by `scripts/gen-world-v2.mjs` (no runtime randomness). Its cell IDs are `q,r`. Expansions only ADD ids; every v1 id is unchanged, so an existing claim can never be orphaned — verified against the nine live claims when the coastline shape shipped (none dropped). Historical 8×8 `world_tiles` owners are copied into the central 64 positions by migration `0011_seeds_world.sql`; the historical table and migration remain intact.

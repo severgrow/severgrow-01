@@ -7,7 +7,7 @@ import { coordKey, homeCoord } from '../../../../src/engine/index.js';
 import type { Player } from '../../../../src/engine/index.js';
 import { LIVE } from '../../../../src/strings.js';
 import { browserStorage } from '../../../../server/src/client.js';
-import { Sound } from '../../ui/sound.js';
+import { SOUND_REMOVED, Sound } from '../../ui/sound.js';
 import { duelApiUrl, duelRegion, onlineBuildEnabled } from '../config.js';
 import { getOnlineSession } from '../duel-runtime.js';
 import { IDENTITY_STORAGE_KEY } from '../identity.js';
@@ -84,7 +84,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   const returns = createReturnStore(browserStorage());
   const announce = createAnnouncer();
   const note = createGlassNote();
-  const sound = new Sound();
+  const sound = new Sound(SOUND_REMOVED); // sound is removed for now (owner, 2026-10-27)
   let offset = 0; // server clock minus local clock
   const toLocal = (serverMs: number) => serverMs - offset;
   const settings = () => page().settings?.();

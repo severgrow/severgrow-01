@@ -16,6 +16,7 @@ import type {
   ChallengeSendResult,
   ChallengeSettleResult,
   ClaimResult,
+  SellResult,
   RewardInput,
   RewardResult,
   SeedWallet,
@@ -200,6 +201,40 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
         `insert into seed_ledger(id,player_id,delta,balance_after,category,source_key,economy_version,created_at)
          values($1,$2,$3,$4,'world_claim',$5,$6,$7)`,
         [newId(), playerId, -SEED_ECONOMY.tileCost, next.balance, `world:${requestId}`, SEED_ECONOMY.version, now],
+      );
+      await client.query('update world_meta set revision=revision+1 where version=1', []);
+      return { ok: true, cellId, revision: revision + 1, wallet: next, replayed: false };
+    });
+  },
+  async sell(playerId, cellId, requestId, now): Promise<SellResult> {
+    return transaction(pool, async (client) => {
+      const wallet = await lockedWallet(client, playerId);
+      const sourceKey = `world-sale:${requestId}`;
+      // Idempotent by request: the ledger row IS the receipt.
+      const prior = await client.query('select 1 from seed_ledger where player_id=$1 and source_key=$2', [playerId, sourceKey]);
+      if (prior.rows[0]) {
+        const meta = await client.query('select revision from world_meta where version=1');
+        return { ok: true, cellId, revision: number(meta.rows[0]?.revision), wallet, replayed: true };
+      }
+      // The same serialization point every claim takes.
+      const meta = await client.query('select revision from world_meta where version=1 for update');
+      const revision = number(meta.rows[0]?.revision);
+      const fail = (code: 'NOT_OWNED' | 'CELL_BUSY' | 'INVALID_CELL'): SellResult => ({ ok: false, code, revision, wallet });
+      if (!parseWorldCell(cellId)) return fail('INVALID_CELL');
+      const held = await client.query('select owner_id from world_claims where cell_id=$1', [cellId]);
+      if (String(held.rows[0]?.owner_id ?? '') !== playerId) return fail('NOT_OWNED');
+      const busy = await client.query("select 1 from world_challenges where cell_id=$1 and status in ('pending','accepted')", [cellId]);
+      if (busy.rows.length) return fail('CELL_BUSY');
+      await client.query('delete from world_claims where cell_id=$1 and owner_id=$2', [cellId, playerId]);
+      const updated = await client.query(
+        'update seed_wallets set balance=balance+$2 where player_id=$1 returning *', [playerId, SEED_ECONOMY.tileSaleReturn],
+      );
+      if (!updated.rows[0]) throw new Error('Wallet credit failed for a tile sale.');
+      const next = walletFromRow(updated.rows[0]);
+      await client.query(
+        `insert into seed_ledger(id,player_id,delta,balance_after,category,source_key,economy_version,created_at)
+         values($1,$2,$3,$4,'world_sale',$5,$6,$7)`,
+        [newId(), playerId, SEED_ECONOMY.tileSaleReturn, next.balance, sourceKey, SEED_ECONOMY.version, now],
       );
       await client.query('update world_meta set revision=revision+1 where version=1', []);
       return { ok: true, cellId, revision: revision + 1, wallet: next, replayed: false };

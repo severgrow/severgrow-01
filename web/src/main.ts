@@ -227,7 +227,7 @@ import { fillIcons, ICONS } from './ui/icons.js';
 import { getPixelGrid, setPixelGrid } from './ui/geom.js';
 import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
 import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './logic/orient.js';
-import { Sound, vibrate } from './ui/sound.js';
+import { SOUND_REMOVED, Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
 import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, REPLAY, RESULT, REVIEW, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL, TUTORIAL_REPLAY } from '../../src/strings.js';
@@ -506,7 +506,8 @@ window.addEventListener('unhandledrejection', (e) =>
   animLog('window:unhandledrejection', { reason: String((e as PromiseRejectionEvent).reason).slice(0, 300) }),
 );
 
-const sound = new Sound();
+// Sound is removed for now (owner, 2026-10-27): the one switch is SOUND_REMOVED in ui/sound.ts.
+const sound = new Sound(SOUND_REMOVED);
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
 const boardSvg = $('board') as unknown as SVGSVGElement;
 const board = defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)

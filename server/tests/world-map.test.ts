@@ -286,3 +286,39 @@ describe('the world read carries each owner’s highest settled Campaign level',
     expect(await levelOf(reverse, 'veteran')).toBe(22);
   });
 });
+
+// SELLING A TILE (owner, 2026-10-27: "add option of selling your tile for 100 seeds").
+describe('selling a tile', () => {
+  const funded = async () => {
+    const store = new MemoryWorldEconomyStore();
+    for (let i = 1; i <= 4; i++) await grant(store, 'a', `campaign:${i}`);
+    await store.claim('a', '0,0', 'request-buy-1', 1);
+    return store;
+  };
+  it('gives back exactly the tile price and frees the tile', async () => {
+    const store = await funded();
+    const before = (await store.wallet('a')).balance;
+    const sold = await store.sell('a', '0,0', 'request-sell-1', 2);
+    expect(sold).toMatchObject({ ok: true, cellId: '0,0', replayed: false, wallet: { balance: before + SEED_ECONOMY.tileSaleReturn } });
+    expect(SEED_ECONOMY.tileSaleReturn).toBe(SEED_ECONOMY.tileCost);
+    expect((await store.world()).claims.some((c) => c.cellId === '0,0')).toBe(false);
+    // the same request again pays nothing more
+    expect(await store.sell('a', '0,0', 'request-sell-1', 3)).toMatchObject({ ok: true, replayed: true, wallet: { balance: before + SEED_ECONOMY.tileSaleReturn } });
+    // and the tile can be grown again
+    expect(await store.claim('a', '0,0', 'request-buy-2', 4)).toMatchObject({ ok: true });
+  });
+  it('only the owner can sell, and only a tile that is held', async () => {
+    const store = await funded();
+    expect(await store.sell('b', '0,0', 'request-sell-2', 2)).toMatchObject({ ok: false, code: 'NOT_OWNED' });
+    expect(await store.sell('a', '1,0', 'request-sell-3', 2)).toMatchObject({ ok: false, code: 'NOT_OWNED' });
+    expect(await store.sell('a', 'nope', 'request-sell-4', 2)).toMatchObject({ ok: false, code: 'INVALID_CELL' });
+  });
+  it('a tile under an open challenge cannot be sold', async () => {
+    const store = await funded();
+    for (let i = 1; i <= 4; i++) await grant(store, 'b', `campaign:${i}`);
+    await store.claim('b', '1,0', 'request-buy-b', 2);
+    const sent = await store.sendChallenge({ challengerId: 'b', cellId: '0,0', requestId: 'challenge-1', stake: SEED_ECONOMY.challengeStake, now: 3 });
+    expect(sent.ok).toBe(true);
+    expect(await store.sell('a', '0,0', 'request-sell-5', 4)).toMatchObject({ ok: false, code: 'CELL_BUSY' });
+  });
+});

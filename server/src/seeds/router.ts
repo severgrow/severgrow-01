@@ -68,6 +68,12 @@ export const createWorldEconomyRouter = (deps: {
     const result = await economy.claim(player, body.cellId, body.requestId);
     return { status: result.ok ? 200 : 409, body: result.ok ? { ok: true, claim: result } : result };
   }
+  if (req.method === 'POST' && path === '/v1/world/sales') {
+    const body = await bodyOf(req);
+    if (typeof body.cellId !== 'string' || typeof body.requestId !== 'string') throw new ApiError('INVALID_REQUEST', 'Choose one of your tiles.');
+    const result = await economy.sell(player, body.cellId, body.requestId);
+    return { status: result.ok ? 200 : 409, body: result.ok ? { ok: true, sale: result } : result };
+  }
   if (req.method === 'POST' && path === '/v1/world/invitation') {
     await bodyOf(req);
     await economy.acknowledge(player);

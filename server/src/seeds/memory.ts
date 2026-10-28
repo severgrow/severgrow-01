@@ -15,6 +15,7 @@ import type {
   ChallengeSendResult,
   ChallengeSettleResult,
   ClaimResult,
+  SellResult,
   RewardInput,
   RewardResult,
   SeedWallet,
@@ -87,6 +88,20 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     this.ledger.push({ id: newId(), playerId, delta: -SEED_ECONOMY.tileCost, category: 'world_claim', sourceKey: `world:${requestId}`, balanceAfter: wallet.balance, createdAt: now });
     this.claims.set(cellId, { cellId, ownerId: playerId, ownerName: null, ownerLevel: null, claimedAt: now });
     this.purchases.set(`${playerId}:${requestId}`, cellId);
+    return { ok: true, cellId, revision: ++this.revision, wallet: { ...wallet }, replayed: false };
+  }
+  async sell(playerId: string, cellId: string, requestId: string, now: number): Promise<SellResult> {
+    const wallet = this.current(playerId);
+    const prior = this.purchases.get(`sale:${playerId}:${requestId}`);
+    if (prior) return { ok: true, cellId: prior, revision: this.revision, wallet: { ...wallet }, replayed: true };
+    const fail = (code: 'NOT_OWNED' | 'CELL_BUSY' | 'INVALID_CELL'): SellResult => ({ ok: false, code, revision: this.revision, wallet: { ...wallet } });
+    if (!parseWorldCell(cellId)) return fail('INVALID_CELL');
+    if (this.claims.get(cellId)?.ownerId !== playerId) return fail('NOT_OWNED');
+    if (this.openChallenges().some((c) => c.cellId === cellId)) return fail('CELL_BUSY');
+    this.claims.delete(cellId);
+    wallet.balance += SEED_ECONOMY.tileSaleReturn;
+    this.ledger.push({ id: newId(), playerId, delta: SEED_ECONOMY.tileSaleReturn, category: 'world_sale', sourceKey: `world-sale:${requestId}`, balanceAfter: wallet.balance, createdAt: now });
+    this.purchases.set(`sale:${playerId}:${requestId}`, cellId);
     return { ok: true, cellId, revision: ++this.revision, wallet: { ...wallet }, replayed: false };
   }
   async settle(input: RewardInput): Promise<RewardResult> {

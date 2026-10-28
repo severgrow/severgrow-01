@@ -25,6 +25,8 @@ export const BETA_PAYOUT_MULTIPLIER = 2;
 export const SEED_ECONOMY = Object.freeze({
   version: 1,
   tileCost: 100,
+  /** What selling a tile back returns (owner, 2026-10-27: "selling your tile for 100 seeds"). */
+  tileSaleReturn: 100,
   /**
    * What a Territory challenge costs to send (owner, 2026-10-24: "make it cost 50 seeds no 100").
    * Deliberately NOT `tileCost`: growing a tile and disputing someone else's are different

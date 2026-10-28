@@ -224,8 +224,8 @@ try {
         brandHref: brand?.querySelector('image')?.getAttribute('href') ?? '',
         head: box('.online-world .online-head'),
         wallet: box('#online-world-wallet'),
-        // The activity/RANKING bar (owner, 2026-10-27) is a column item of its own when shown.
-        bar: (document.getElementById('online-world-bar') as HTMLElement | null)?.hidden ? null : box('#online-world-bar'),
+        // The deck (owner, 2026-10-27: CHALLENGES · RANKING · ACTIONS) is a column item of its own.
+        bar: box('#online-world-deck'),
         grid: box('#online-world-grid'),
         selection: box('#online-world-selection'),
         notice: box('#online-world-notice'),
@@ -392,7 +392,7 @@ try {
     //    from the window is whatever the viewport leaves and is measured by the bottom-anchor check
     //    below, not by this rhythm. An empty notice leaves no dead row at the very bottom.
     const bottom = (b: Box | null) => (b ? b.y + b.height : 0);
-    // The activity/RANKING bar (owner, 2026-10-27), when shown, is one more item in the same rhythm.
+    // The deck (owner, 2026-10-27) is one more item in the same rhythm.
     const steps = m.bar
       ? [(m.wallet?.y ?? 0) - bottom(m.head), m.bar.y - bottom(m.wallet), (m.grid?.y ?? 0) - bottom(m.bar)]
       : [(m.wallet?.y ?? 0) - bottom(m.head), (m.grid?.y ?? 0) - bottom(m.wallet)];
