@@ -899,10 +899,14 @@ html.reduce-motion .world-selection { animation: none; }
 /* three grille slots, the key's only marking; while its row is out they fold into a close mark */
 .world-menu-glyph { display: grid; gap: 3px; width: 18px; }
 .world-menu-glyph i { display: block; height: 2px; border-radius: 1px; background: currentColor; opacity: .85;
-  transition: transform var(--ix-open) var(--ix-ease-open), opacity var(--ix-close) ease, width var(--ix-open) var(--ix-ease-open); }
+  /* The middle bar folds with SCALE, not width: a width animation would relayout the MENU key on
+     every frame of the row's roll-out, and the glyph is part of that same gesture. The glyph shares
+     the row's one vocabulary: it folds away with --ix-close and unfolds with --ix-open. */
+  transition: transform var(--ix-close) var(--ix-ease-close), opacity var(--ix-close) var(--ix-ease-close), scale var(--ix-close) var(--ix-ease-close); }
 .world-menu-glyph i:nth-child(2) { width: 70%; justify-self: center; }
+.world-menu-key[aria-expanded='true'] .world-menu-glyph i { transition-duration: var(--ix-open); transition-timing-function: var(--ix-ease-open); }
 .world-menu-key[aria-expanded='true'] .world-menu-glyph i:nth-child(1) { transform: translateY(5px) rotate(45deg); }
-.world-menu-key[aria-expanded='true'] .world-menu-glyph i:nth-child(2) { opacity: 0; width: 0; }
+.world-menu-key[aria-expanded='true'] .world-menu-glyph i:nth-child(2) { opacity: 0; scale: 0 1; }
 .world-menu-key[aria-expanded='true'] .world-menu-glyph i:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
 /* the row's challenges key carries the lamp while the row is out, so MENU's own lamp steps aside */
 .world-menu-key[aria-expanded='true'] .world-deck-count { opacity: 0; }
@@ -1047,26 +1051,59 @@ html.reduce-motion .world-selection { animation: none; }
 .world-key-icon .fill { fill: currentColor; }
 .world-key-icon text { fill: currentColor; font: 700 5.6px/1 system-ui, sans-serif; }
 .world-key .world-deck-count { position: absolute; z-index: 2; top: -6px; right: -6px; }
-/* THE ROW: four keys to MENU's left, on the same 10px edge, 8px apart. At rest they are tucked
-   behind MENU (transparent, inert); MENU slides them out one after another, nearest first, on the
-   compositor only (transform + opacity), and folds them back in reverse. */
+/* THE ROW: the keys to MENU's left, on the same 10px edge, 8px apart. At rest they are tucked
+   behind MENU (transparent, inert); MENU rolls them out one after another, nearest first, on the
+   compositor only (transform + opacity), and folds them back with the SAME gesture mirrored.
+   ONE motion, from the interface vocabulary: the arrival is --ix-open / --ix-ease-open, the fold
+   is --ix-close / --ix-ease-close, and BOTH directions share ONE stagger formula
+   (--key-order * --key-stagger) whose order the view stamps onto each key. The keys are small,
+   so the gesture lands in ~190ms (150ms of travel + two 18ms waves): fast enough to never be
+   waited on, long enough to read as a roll-out rather than a pop. */
 .world-keys {
   position: absolute; z-index: 3; top: 10px; right: 62px;
   display: flex; gap: 8px; pointer-events: none;
+  /* The wave's gap: a fifth of a press, so it is derived from the vocabulary, not a new duration. */
+  --key-stagger: calc(var(--ix-press) / 5);
+  /* A folded row leaves quicker than an open one arrives (the vocabulary's own asymmetry). */
+  --key-move: var(--ix-close);
+  --key-ease: var(--ix-ease-close);
+}
+.world-keys.open {
+  pointer-events: auto;
+  --key-move: var(--ix-open);
+  --key-ease: var(--ix-ease-open);
 }
 .world-keys .world-key {
-  position: relative; opacity: 0; transform: translateX(calc(var(--i) * 52px + 52px)) scale(.86);
-  transition: transform 180ms var(--ix-ease-open), opacity 120ms ease, scale var(--ix-press) ease, translate var(--ix-press) ease;
-  transition-delay: calc((2 - var(--i)) * 18ms);
+  /* The travel order, stamped from the live row (WorldView): 0 is the key nearest MENU. Closed it
+     is the MIRROR of the open order, so the fold is the same gesture played back, and the fallbacks
+     keep a row sane if it were ever built without the stamp. */
+  --key-order: calc(var(--key-count, 1) - 1 - var(--key-i, 0));
+  --key-wave: calc(var(--key-order) * var(--key-stagger));
+  position: relative; opacity: 0; transform: translateX(calc(var(--key-i, 0) * 52px + 52px)) scale(.86);
+  /* ONE transition list, three jobs: transform/opacity roll the key out, scale/translate answer the
+     press, colour and the lamp ease. This is the fix for the old "random speed": two transition
+     shorthands used to fight on this element, the later one dropped the other's properties, and its
+     stagger ALSO delayed the press - by a different amount per key and per state. Now the wave sits
+     on the two roll-out properties only; the press is always --ix-press, undelayed. */
+  transition-property: transform, opacity, scale, translate, box-shadow, color;
+  transition-duration: var(--key-move), var(--key-move), var(--ix-press), var(--ix-press), var(--ix-press), var(--ix-press);
+  transition-timing-function: var(--key-ease), var(--key-ease), var(--ix-ease-open), var(--ix-ease-open), var(--ix-ease-open), var(--ix-ease-open);
+  transition-delay: var(--key-wave), var(--key-wave), 0ms, 0ms, 0ms, 0ms;
+  /* Ready before the tap: the layer exists at rest, so opening needs no rasterisation on frame one. */
+  will-change: transform, opacity;
 }
-.world-keys .world-key:nth-last-child(1) { --i: 0; }
-.world-keys .world-key:nth-last-child(2) { --i: 1; }
-.world-keys .world-key:nth-last-child(3) { --i: 2; }
-.world-keys.open { pointer-events: auto; }
-.world-keys.open .world-key { opacity: 1; transform: none; transition-delay: calc(var(--i) * 28ms); }
+.world-keys.open .world-key {
+  /* Opening leads with the key nearest MENU; the rest follow outward. */
+  --key-order: var(--key-i, 0);
+  opacity: 1; transform: translateX(0) scale(1);
+}
 .world-keys:not(.open) .world-key { pointer-events: none; }
-@media (prefers-reduced-motion: reduce) { .world-keys .world-key, .world-menu-glyph i { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .world-keys .world-key, .world-menu-glyph i { transition: none; }
+  .world-keys .world-key { will-change: auto; }
+}
 html.reduce-motion :is(.world-keys .world-key, .world-menu-glyph i) { transition: none; }
+html.reduce-motion .world-keys .world-key { will-change: auto; }
 
 /* ---- TERRITORY CHAT: hangs from the key row like the other windows, on the same glass ---- */
 .world-chat {
