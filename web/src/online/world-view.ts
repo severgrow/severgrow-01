@@ -78,6 +78,12 @@ const DOUBLE_TAP_MS = 280;
 const DOUBLE_TAP_SLOP = 30;
 const DOUBLE_TAP_IN = 2.2;
 const DOUBLE_TAP_OUT = 0.46;
+/**
+ * How long a released finger is remembered for (see `lastRelease`). A finger that the browser
+ * reported gone but keeps moving comes back within a frame or two; anything longer is a genuinely
+ * finished gesture and must not be resurrected by a later move.
+ */
+const RESUME_MS = 700;
 
 type Identity = { token: string; playerId: string };
 
@@ -197,6 +203,21 @@ export class WorldView {
   private gestureStart: { x: number; y: number } | null = null;
   /** Removes the gesture's window-level listeners when the map is repainted (see installPanZoom). */
   private gestureCleanup: (() => void) | null = null;
+  /**
+   * THE RELEASE THE FINGER DISAGREED WITH (owner, 2026-10-28 on an iPhone: "it selects a tile but
+   * dragging doesn't move the map and zooming stops working too").
+   *
+   * iOS can report the END of a gesture — a `pointercancel` dispatched at the document, a release
+   * that lands on the browser's own chrome — and then keep sending moves for the SAME finger under
+   * the same `pointerId`. A gesture that is cleared on that report and then ignores those moves is
+   * a map that is dead until the finger lifts: no pan, no pinch, while a tap (which needs no move)
+   * still selects. That is exactly the symptom the owner saw.
+   *
+   * This is the position the finger had when the map was told it was gone, kept for `RESUME_MS`:
+   * if a move for that finger arrives with it still down, the gesture is taken back AT that
+   * position, so the pan continues from where it was instead of jumping or being lost.
+   */
+  private lastRelease: { id: number; x: number; y: number; at: number } | null = null;
 
   // ---- Territory challenges -------------------------------------------------
   /** The authenticated challenge lists. Empty for a guest until identity resolves. */
@@ -2083,12 +2104,48 @@ export class WorldView {
     svg.addEventListener('pointerdown', (event) => {
       this.stopGlide();
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      // A finger that comes down again is a NEW gesture: an older release for the same id must not
+      // be able to move it (see `lastRelease`).
+      if (this.lastRelease?.id === event.pointerId) this.lastRelease = null;
       frameRect = svg.getBoundingClientRect();
       if (this.pointers.size > 1) { this.multiGesture = true; this.dragged = true; this.lastTap = null; this.setMoving(true); }
       else { this.dragged = false; this.multiGesture = false; this.gestureStart = { x: event.clientX, y: event.clientY }; }
     });
+    /**
+     * THE BROWSER SAID THE FINGER WAS GONE AND THEN KEPT MOVING IT (owner, 2026-10-28 on an iPhone:
+     * "it selects a tile but dragging doesn't move the map and zooming stops working too").
+     *
+     * A move for a pointer the map is not tracking means the map was told that finger had ended —
+     * `finish` above ran — while the finger itself is still down and still moving. iOS does exactly
+     * this: it can dispatch the end of a touch at the DOCUMENT (a `pointercancel` when the browser
+     * takes the gesture for, say, a page scroll, or a release that lands on its own chrome) and then
+     * keep sending pointer moves for that same `pointerId`. Ignoring those moves is a map that is
+     * frozen until the finger lifts: no pan, no pinch — while a tap, which needs no move, still
+     * selects. That is precisely the regression the owner reported.
+     *
+     * `buttons` (or a touch pointer, which only exists while it is down) is the honest answer to
+     * "is this finger really still there?", and it contradicts the release. So the gesture is taken
+     * back AT THE POSITION IT HAD WHEN IT WAS RELEASED, not at this event's position: a pan picks up
+     * where it left off, with no jump and no lost distance.
+     */
+    const recapture = (event: PointerEvent): boolean => {
+      if (!event.buttons && event.pointerType !== 'touch') return false;
+      const gone = this.lastRelease;
+      const remembered = gone && gone.id === event.pointerId && Date.now() - gone.at <= RESUME_MS ? gone : null;
+      const from = remembered ?? { x: event.clientX, y: event.clientY };
+      this.lastRelease = null;
+      this.pointers.set(event.pointerId, { x: from.x, y: from.y });
+      // Same two branches as a second finger arriving: two fingers are a pinch (never a tap), one
+      // finger is a pan again — but a pan still has to pass the tap slop, so a twitchy tap that a
+      // stray release interrupted is not turned into a nudge of the view.
+      if (this.pointers.size > 1) { this.multiGesture = true; this.dragged = true; this.lastTap = null; this.setMoving(true); }
+      else { this.dragged = false; this.multiGesture = false; this.gestureStart = { x: from.x, y: from.y }; }
+      return true;
+    };
     svg.addEventListener('pointermove', (event) => {
-      const old = this.pointers.get(event.pointerId);
+      let old = this.pointers.get(event.pointerId);
+      if (!old && !recapture(event)) return;
+      old = this.pointers.get(event.pointerId);
       if (!old || !this.box) return;
       const dx = event.clientX - old.x, dy = event.clientY - old.y;
       // A finger that has not yet travelled TAP_SLOP is still a tap: the map stays put, so a tap can
@@ -2121,14 +2178,21 @@ export class WorldView {
       }
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     });
-    const end = (event: PointerEvent) => { this.pointers.delete(event.pointerId); };
+    const end = (event: PointerEvent) => {
+      // Remember where this finger was: if the browser is wrong about it having gone, the gesture
+      // resumes from here (see `recapture`).
+      const held = this.pointers.get(event.pointerId);
+      if (held) this.lastRelease = { id: event.pointerId, x: held.x, y: held.y, at: Date.now() };
+      this.pointers.delete(event.pointerId);
+    };
     /** The one place a gesture finishes: shared by the map and by the window (see below). */
     const finish = (event: PointerEvent) => {
       const wasSingle = this.pointers.size === 1;
       end(event);
       // A tap, not the end of a pan: hand it to the double-tap arbiter. (Mouse's right/middle
-      // buttons and a second finger are not taps.)
-      if (wasSingle && !this.dragged && !this.multiGesture && event.button === 0) finishTap(event.clientX, event.clientY);
+      // buttons, a second finger, and a CANCELLED touch are not taps — a cancel means the browser
+      // took the gesture, so it can never select a tile.)
+      if (wasSingle && !this.dragged && !this.multiGesture && event.type === 'pointerup' && event.button === 0) finishTap(event.clientX, event.clientY);
       if (!this.pointers.size) {
         this.dragged = false;
         this.multiGesture = false;
