@@ -208,8 +208,8 @@ export class WorldView {
    * THE RELEASE THE FINGER DISAGREED WITH (owner, 2026-10-28 on an iPhone: "it selects a tile but
    * dragging doesn't move the map and zooming stops working too").
    *
-   * iOS can report the END of a gesture — a `pointercancel` dispatched at the document, a release
-   * that lands on the browser's own chrome — and then keep sending moves for the SAME finger under
+   * iOS can report the END of a gesture — a release that lands on the browser's own chrome, or a
+   * `pointerup` dispatched at the document — and then keep sending moves for the SAME finger under
    * the same `pointerId`. A gesture that is cleared on that report and then ignores those moves is
    * a map that is dead until the finger lifts: no pan, no pinch, while a tap (which needs no move)
    * still selects. That is exactly the symptom the owner saw.
@@ -217,6 +217,10 @@ export class WorldView {
    * This is the position the finger had when the map was told it was gone, kept for `RESUME_MS`:
    * if a move for that finger arrives with it still down, the gesture is taken back AT that
    * position, so the pan continues from where it was instead of jumping or being lost.
+   *
+   * ONLY a `pointerup` is remembered. A `pointercancel` means the browser has taken the gesture, so
+   * it is a hard end (see `end`): nothing of a cancelled gesture may be resumed, or a stray move
+   * could drag the map by the distance that gesture had already spent.
    */
   private lastRelease: { id: number; x: number; y: number; at: number } | null = null;
 
@@ -2192,10 +2196,14 @@ export class WorldView {
     }, { passive: false });
     svg.addEventListener('pointerdown', (event) => {
       this.stopGlide();
-      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      // A finger that comes down again is a NEW gesture: an older release for the same id must not
-      // be able to move it (see `lastRelease`).
+      // A FINGER THAT COMES DOWN IS A NEW GESTURE FOR THIS id, whatever the machine was left in by
+      // the one before it. The id's tracking and its remembered release are scrubbed BEFORE this
+      // gesture's own origin is written, so a cancelled (or phantom-ended) gesture can never lend
+      // the new one its last coordinate — which is the residue that made a first drag move the map
+      // by the dead gesture's distance as well as its own.
+      this.pointers.delete(event.pointerId);
       if (this.lastRelease?.id === event.pointerId) this.lastRelease = null;
+      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       frameRect = svg.getBoundingClientRect();
       if (this.pointers.size > 1) { this.multiGesture = true; this.dragged = true; this.lastTap = null; this.setMoving(true); }
       else { this.dragged = false; this.multiGesture = false; this.gestureStart = { x: event.clientX, y: event.clientY }; }
@@ -2268,10 +2276,19 @@ export class WorldView {
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     });
     const end = (event: PointerEvent) => {
-      // Remember where this finger was: if the browser is wrong about it having gone, the gesture
-      // resumes from here (see `recapture`).
+      // Remember where this finger was ONLY when the browser says it was RELEASED: if that report
+      // was a lie, the gesture resumes from here (see `recapture`).
+      //
+      // A CANCEL is not a release the finger might disagree with — it means the browser has taken
+      // the gesture — so it must not arm the resume. Keeping the cancelled gesture's last position
+      // here is the one way a dead gesture's distance could still be re-applied: a move that
+      // arrives for that finger afterwards (a queued frame of moves, or iOS being late with the
+      // cancel) would be anchored at the DEAD position and drag the map by the gap the cancelled
+      // gesture had already spent. Without it, such a move re-anchors at the finger's current
+      // position and applies nothing, so the next drag moves the map by exactly its own distance.
       const held = this.pointers.get(event.pointerId);
-      if (held) this.lastRelease = { id: event.pointerId, x: held.x, y: held.y, at: Date.now() };
+      if (held && event.type === 'pointerup') this.lastRelease = { id: event.pointerId, x: held.x, y: held.y, at: Date.now() };
+      else if (this.lastRelease?.id === event.pointerId) this.lastRelease = null;
       this.pointers.delete(event.pointerId);
     };
     /** The one place a gesture finishes: shared by the map and by the window (see below). */
@@ -2287,6 +2304,16 @@ export class WorldView {
         this.multiGesture = false;
         this.gestureStart = null;
         this.setMoving(false);
+        // THE LAST VIEW IS WRITTEN NOW, NOT ON THE NEXT FRAME (owner, 2026-10-28). `queueView`
+        // defers every write to a `requestAnimationFrame`, which is right while a finger is down: a
+        // phone delivers several moves per frame and they must land as ONE write. At the end of a
+        // gesture there is nothing left to coalesce, and WebKit does not run frames while the page
+        // sits idle between touches — so a deferred write can leave the svg showing the position
+        // from before the gesture that just ended (one whole gesture behind) until the next touch
+        // makes it paint. Flushing here keeps `viewBox` equal to the map's own box the instant the
+        // finger lifts: whichever frame comes next, the gesture has already been written.
+        if (this.viewFrame) { cancelAnimationFrame(this.viewFrame); this.viewFrame = 0; }
+        this.applyView(false);
       }
     };
     svg.addEventListener('pointerup', finish);

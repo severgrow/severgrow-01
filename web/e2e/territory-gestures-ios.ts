@@ -166,11 +166,23 @@ try {
   const selected = () =>
     page.evaluate(`(() => { const el = document.querySelector('.world-hex.selected'); return el ? el.getAttribute('data-cell-id') : null; })()`) as Promise<string | null>;
   /**
-   * The view writes once per animation frame (see `queueView`). WebKit throttles frames when the
-   * page is not composited, so a measured view can trail the gesture by a frame or two — wait for
-   * the attribute to stop moving rather than for a fixed time, or the numbers read a stale view.
+   * The view writes once per animation frame (see `queueView`), and WebKit does not run frames
+   * while the page sits idle between trusted touches — so a read taken straight after a gesture can
+   * still see the frame BEFORE it. Ask for a frame explicitly (bounded, so a page that never paints
+   * cannot hang the suite), then wait for the attribute to stop moving rather than for a fixed time.
+   *
+   * The first FAILURE this suite reported — "moved 16.42, expected ~8.96" — was this, not the map:
+   * the cancelled gesture's own 50 px pan was read one frame late, so it was credited to the next
+   * drag's 60 px. (Behind it was a second, real residue: a cancelled gesture could still be resumed
+   * and re-apply its own distance — see the section 6 checks.)
    */
   const settle = async () => {
+    await page.evaluate(`new Promise((done) => {
+      let settled = false;
+      const finish = () => { if (!settled) { settled = true; done(true); } };
+      requestAnimationFrame(() => requestAnimationFrame(finish));
+      setTimeout(finish, 250);
+    })`);
     let last = '';
     for (let i = 0; i < 30; i++) {
       const now = (await page.evaluate(`document.querySelector('.world-map-svg')?.getAttribute('viewBox') ?? ''`)) as string;
@@ -311,6 +323,8 @@ try {
   check('...and the pan continues by the full finger distance, with no jump', Math.abs(-strayDx - strayExpected) < strayExpected * 0.15, `moved ${(-strayDx).toFixed(2)}, expected ~${strayExpected.toFixed(2)}`);
 
   // ---- 6. a genuinely cancelled gesture leaves nothing behind --------------------------------
+  await settle();
+  const beforeCancel = await view();
   await touch('touchStart', [{ x: cx, y: cy, id: 1 }]);
   for (let i = 1; i <= 5; i++) {
     await touch('touchMove', [{ x: cx - i * 10, y: cy, id: 1 }]);
@@ -319,13 +333,42 @@ try {
   await touch('touchCancel', [{ x: cx - 50, y: cy, id: 1 }]);
   await page.waitForTimeout(150);
   await settle();
+  const afterCancel = await view();
+  const cancelPerPx = await unitsPerPx();
+  const cancelDx = afterCancel && beforeCancel ? afterCancel[0]! - beforeCancel[0]! : 0;
+  // The cancelled gesture really did pan its own 50 px while the finger was down, so the checks
+  // below measure the NEXT gesture against a map this one has already moved — not a frozen one.
+  check('a cancelled gesture panned while the finger was down', Math.abs(cancelDx - 50 * cancelPerPx) < 3 * cancelPerPx, `moved ${cancelDx.toFixed(2)}, expected ~${(50 * cancelPerPx).toFixed(2)}`);
+  // A move can still arrive for a finger the browser has already cancelled (a queued frame of
+  // moves, or iOS delivering the cancel late). It has to re-anchor where the finger is NOW: the
+  // position the dead gesture ended on is the residue that gets re-applied to the next gesture.
+  await page.evaluate(
+    `document.querySelector('.world-map-svg').dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, pointerType: 'touch', isPrimary: true, bubbles: true, clientX: ${cx - 70}, clientY: ${cy} }))`,
+  );
+  await page.waitForTimeout(150);
+  await settle();
+  const afterDeadMove = await view();
+  const deadDx = afterDeadMove && afterCancel ? afterDeadMove[0]! - afterCancel[0]! : 99;
+  check('a move for an already-cancelled finger does not back-fill the dead gesture', Math.abs(deadDx) < 3 * cancelPerPx, `moved ${deadDx.toFixed(2)}, expected 0`);
   before = await view();
   await drag({ x: cx, y: cy }, { x: cx - 60, y: cy });
   after = await view();
   const nextPerPx = await unitsPerPx();
   const nextDx = after && before ? after[0]! - before[0]! : 0;
   check('a drag after a cancelled gesture still pans', Math.abs(nextDx) > 0.3, `viewBox x ${fmt(before?.[0])} -> ${fmt(after?.[0])}`);
-  check('...and it is not offset by a ghost pointer', Math.abs(nextDx - 60 * nextPerPx) < 60 * nextPerPx * 0.2, `moved ${nextDx.toFixed(2)}, expected ~${(60 * nextPerPx).toFixed(2)}`);
+  // EXACTLY the new gesture's distance, in the new gesture's own pixels: 3 CSS px of slack is the
+  // viewBox's own rounding, and nothing else. The cancelled 50 px cannot hide in it (it used to read
+  // 16.42 against an expected 8.96 because the snapshot was one frame — one gesture — behind).
+  check(
+    '...and it is not offset by a ghost pointer',
+    Math.abs(nextDx - 60 * nextPerPx) < 3 * nextPerPx,
+    `moved ${nextDx.toFixed(2)}, expected ~${(60 * nextPerPx).toFixed(2)}`,
+  );
+  // The whole episode, from before the cancelled gesture to after the next drag: exactly the two
+  // gestures' finger travel (50 px + 60 px), with nothing re-applied in between.
+  const episodeDx = after && beforeCancel ? after[0]! - beforeCancel[0]! : 0;
+  const episodeExpected = 110 * nextPerPx;
+  check('the cancelled gesture and the drag after it move the map by only their own distances', Math.abs(episodeDx - episodeExpected) < 3 * nextPerPx, `moved ${episodeDx.toFixed(2)}, expected ~${episodeExpected.toFixed(2)}`);
 
   // ---- 7. no page exceptions ------------------------------------------------------------------
   check('no browser page exceptions', errors.length === 0, errors.slice(0, 3).join(' | '));
