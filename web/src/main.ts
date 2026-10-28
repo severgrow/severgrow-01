@@ -2,6 +2,7 @@
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { mountMatchChat } from './online/chat/view.js';
 import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
+import { hideLobbySurfaces } from './online/lobby-exit.js';
 import { TURN_REPLAY } from './online/replay-copy.js';
 import { runRematch } from './online/rematch.js';
 // Futasaku in the browser. You (player 1) against the computer. All rules come from the
@@ -908,10 +909,12 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   }
   // The plate is fixed to the viewport (not inside #game), so leaving the board must take it too.
   if (name !== 'game') hideLessonPlate();
-  for (const id of ['online-hub', 'online-waiting', 'online-join']) {
-    const el = document.getElementById(id);
-    if (el) el.hidden = true;
-  }
+  // EVERY lobby screen leaves with any screen change, the Territory map included (owner report,
+  // 2026-10-28: accepting a challenge left the map painted over the duel). This is the safety net:
+  // it knows the same one list the lobby uses, so no entry point — present or future — can leave a
+  // lobby screen stacked on the board. The visible screen's own exit beat is started by
+  // `leaveForMatch()` before this runs, and `hideLobbySurfaces` lets a closing screen finish it.
+  hideLobbySurfaces();
   if (name === 'levels') {
     renderLevelGrid();
   }
@@ -10659,6 +10662,8 @@ type OnlineLobbyCtl = {
   rematch(finishedMatchId?: string | null): Promise<void>;
   /** The Territory map (the menu's own entry); the finish card of level 10 opens it too. */
   openWorld(from: 'hub' | 'menu'): void;
+  /** Leave the lobby for a match: the one transition every entry point uses. */
+  leaveForMatch(): void;
 };
 let onlineLobbyCtl: OnlineLobbyCtl | null = null;
 /** Set while an online duel is open; the pause menu's Resign calls it (one confirm). */
@@ -10845,6 +10850,14 @@ void import('./online/lobby-ui.js').then(async (m) => {
       syncResignMenu();
       // Board first: the duel board is already visible before the lottery. Who starts is said once
       // by that reveal — there is no permanent chip any more.
+      //
+      // ONE DELIBERATE MOMENT (owner, 2026-10-28: "opening a duel from territory is taking you to
+      // that duel in a cool way, small animation or effect"). Every lobby entry point funnels
+      // through here: a match row, a friend joining, a join code, a Territory challenge. The lobby
+      // screen the player is on tears its view down and leaves on the interface's own 100 ms beat;
+      // the board is never animated, it is revealed underneath. `showScreen` then hides every lobby
+      // screen via the same shared list, so even a route that forgets this call cannot stack them.
+      onlineLobbyCtl?.leaveForMatch();
       showScreen('game');
       // The lottery animation is a one-off courtesy. It plays exactly once per player per match,
       // and only at the live-join moment: the waiting creator when the friend joins, or the joiner

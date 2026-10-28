@@ -16,6 +16,7 @@ import {
 import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
+import { leaveLobbyForMatch } from './lobby-exit.js';
 import { WorldView } from './world-view.js';
 import { installTerritoryCountUI, territoryCounts } from './menu-territory.js';
 import type { TerritoryCounts } from './menu-territory.js';
@@ -92,6 +93,13 @@ export type OnlineLobbyController = {
    * main menu never bounces a player into the online hub.
    */
   openWorld(from: 'hub' | 'menu'): void;
+  /**
+   * Leave the lobby for a match: the one transition every entry point uses (a match row, a friend
+   * joining, a join code, a Territory challenge). Tears the Territory view down and gives the
+   * visible lobby screen the interface's own exit beat before `#game` is shown. `showScreen` hides
+   * every lobby screen regardless, so this is the transition, not the guarantee.
+   */
+  leaveForMatch(): void;
   handleBootHash(): Promise<void>;
   refreshTitle(): void;
   /** Live duels: open one of my matches by id (web/src/online/live/). */
@@ -116,6 +124,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       enabled: false,
       openHub: async () => undefined,
       openWorld: () => undefined,
+      leaveForMatch: () => undefined,
       handleBootHash: async () => undefined,
       refreshTitle: () => undefined,
       rematch: async () => undefined,
@@ -334,6 +343,20 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     // The match list only refreshes while the hub is the visible screen.
     if (next !== 'hub') stopHubPoll();
+  };
+
+  /**
+   * THE ONE WAY OUT OF THE LOBBY FOR A MATCH (owner report, 2026-10-28: "accepting challenge in
+   * territory opens the duel screen under it ... everything on top of eachother — can never happen").
+   *
+   * Hiding the screens is `showScreen`'s job (it calls the same shared list, so it can never be
+   * skipped); this is the deliberate part: the Territory view is torn down whole — the challenge
+   * sheet lives on `<body>`, outside the screen that is leaving, so it goes now rather than fading
+   * over the board — and the screen the player is looking at leaves on the interface's own beat
+   * (`leaveLobbyForMatch`). The game screen itself is never animated: it is only revealed.
+   */
+  const leaveForMatch = (): void => {
+    leaveLobbyForMatch({ teardown: () => worldView?.close(true) });
   };
 
   const fillCopy = () => {
@@ -1304,7 +1327,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     ($('online-join-code') as HTMLInputElement).focus();
   };
 
-  return { enabled: true, openHub, openWorld, handleBootHash, refreshTitle, openMatch, rematch, trainingSeedTicket, syncSeedRewards };
+  return { enabled: true, openHub, openWorld, leaveForMatch, handleBootHash, refreshTitle, openMatch, rematch, trainingSeedTicket, syncSeedRewards };
 };
 
 const escapeHtml = (s: string) =>
