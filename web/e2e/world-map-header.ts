@@ -224,8 +224,9 @@ try {
         brandHref: brand?.querySelector('image')?.getAttribute('href') ?? '',
         head: box('.online-world .online-head'),
         wallet: box('#online-world-wallet'),
-        // The deck (owner, 2026-10-27: CHALLENGES · RANKING · ACTIONS) is a column item of its own.
-        bar: box('#online-world-deck'),
+        // No bar between the wallet and the map any more (owner, 2026-10-28: one menu key on the
+        // map's foot); a bar, if one ever returns, is one more item in the same rhythm.
+        bar: box('#online-world-bar'),
         grid: box('#online-world-grid'),
         selection: box('#online-world-selection'),
         notice: box('#online-world-notice'),
@@ -295,6 +296,7 @@ try {
               const r = one.getBoundingClientRect();
               return r.height > 0 ? r.width / r.height : 0;
             })(),
+            hexWidth: (w.querySelector('.world-hex') as Element | null)?.getBoundingClientRect().width ?? 0,
             // The margin between the drawn map and its window, on the axis the letterboxing showed on.
             bandTop: top - wr.top,
             bandBottom: wr.bottom - bottom,
@@ -392,14 +394,29 @@ try {
     //    from the window is whatever the viewport leaves and is measured by the bottom-anchor check
     //    below, not by this rhythm. An empty notice leaves no dead row at the very bottom.
     const bottom = (b: Box | null) => (b ? b.y + b.height : 0);
-    // The deck (owner, 2026-10-27) is one more item in the same rhythm.
+    // THE DESKTOP STAGE (owner, 2026-10-28: "make the map bigger, use the space better"): on a wide
+    // screen the map fills everything under the header and the words float over it as centred pills,
+    // so the column checks below become stage checks there.
+    const stage = m.vw >= 960 && m.vh >= 560 && m.vw / m.vh >= 1.25;
+    const centredIn = (b: Box | null, outer: Box | null) => !!b && !!outer &&
+      Math.abs((b.x - outer.x) - (outer.x + outer.width - b.x - b.width)) <= 1.5;
+    const inside = (b: Box | null, outer: Box | null) => !!b && !!outer &&
+      b.y >= outer.y - 0.5 && b.y + b.height <= outer.y + outer.height + 0.5;
+    if (stage) {
+      check(`[${tag}] the stage starts one step under the header`, Math.abs((m.grid?.y ?? 0) - bottom(m.head) - m.gap) <= 1.5,
+        `header ends ${bottom(m.head).toFixed(1)}, stage starts ${m.grid?.y.toFixed(1)} (gap ${m.gap})`);
+      check(`[${tag}] Seeds float over the stage's top, centred`, inside(m.wallet, m.grid) && centredIn(m.wallet, m.grid) &&
+        (m.wallet?.y ?? 0) - (m.grid?.y ?? 0) <= 24, `wallet ${rect(m.wallet)} in ${rect(m.grid)}`);
+      check(`[${tag}] the selected tile floats over the stage's foot, centred`, inside(m.selection, m.grid) && centredIn(m.selection, m.grid) &&
+        bottom(m.grid) - bottom(m.selection) <= 90, `selection ${rect(m.selection)} in ${rect(m.grid)}`);
+    }
     const steps = m.bar
       ? [(m.wallet?.y ?? 0) - bottom(m.head), m.bar.y - bottom(m.wallet), (m.grid?.y ?? 0) - bottom(m.bar)]
       : [(m.wallet?.y ?? 0) - bottom(m.head), (m.grid?.y ?? 0) - bottom(m.wallet)];
     const stepSpread = Math.max(...steps) - Math.min(...steps);
-    check(`[${tag}] the header → Seeds → map steps are ONE rhythm`, stepSpread <= 1,
+    if (!stage) check(`[${tag}] the header → Seeds → map steps are ONE rhythm`, stepSpread <= 1,
       `steps=${steps.map((s) => s.toFixed(1)).join(', ')} column gap=${m.gap}`);
-    check(`[${tag}] the controls sit below the map window`, (m.selection?.y ?? 0) >= bottom(m.grid),
+    if (!stage) check(`[${tag}] the controls sit below the map window`, (m.selection?.y ?? 0) >= bottom(m.grid),
       `selection y=${m.selection?.y?.toFixed(1)} window ends ${bottom(m.grid).toFixed(1)}`);
     check(`[${tag}] an empty notice leaves no dead row`, (m.notice?.height ?? 0) === 0,
       `notice ${m.notice?.height ?? 0}x${m.notice?.width ?? 0}`);
@@ -420,7 +437,8 @@ try {
       m.texture ? `z=${m.texture.z} grain=${m.texture.grain} opacity=${m.texture.grainOpacity}` : 'missing #futa04-film-grain');
     check(`[${tag}] the surface behind the window is GRAINED, not flat`, worldPatch.sd >= 1.5,
       `world patch sd=${worldPatch.sd} (flat would be <0.5)`);
-    check(`[${tag}] that grain is the MENU's grain (same patch, same surface)`,
+    // (on the stage that patch is map, not page: the grain check above still holds the surface)
+    if (!stage) check(`[${tag}] that grain is the MENU's grain (same patch, same surface)`,
       menuPatch.sd > 0 && worldPatch.sd / menuPatch.sd >= 0.5 && Math.abs(worldPatch.mean - menuPatch.mean) <= 2,
       `world sd=${worldPatch.sd}/mean=${worldPatch.mean} vs menu sd=${menuPatch.sd}/mean=${menuPatch.mean} (ratio ${(worldPatch.sd / menuPatch.sd).toFixed(2)})`);
 
@@ -435,16 +453,19 @@ try {
       `viewBox ${extra.viewBoxAspect.toFixed(4)} vs window ${extra.windowAspect.toFixed(4)}`);
     const topBand = fit ? fit.bandTop / (m.grid?.height ?? 1) : 1;
     const bottomBand = fit ? fit.bandBottom / (m.grid?.height ?? 1) : 1;
-    check(`[${tag}] there is NO letterbox band above or below the map`, topBand <= 0.04 && bottomBand <= 0.04,
+    if (!stage) check(`[${tag}] there is NO letterbox band above or below the map`, topBand <= 0.04 && bottomBand <= 0.04,
       `top ${(topBand * 100).toFixed(1)}% (${fit?.bandTop.toFixed(1)}px), bottom ${(bottomBand * 100).toFixed(1)}% (${fit?.bandBottom.toFixed(1)}px)`);
-    check(`[${tag}] the remaining margin is SYMMETRIC (a frame, not a band)`, !!fit && Math.abs(fit.bandTop - fit.bandBottom) <= 1.5,
+    if (!stage) check(`[${tag}] the remaining margin is SYMMETRIC (a frame, not a band)`, !!fit && Math.abs(fit.bandTop - fit.bandBottom) <= 1.5,
       fit ? `top ${fit.bandTop.toFixed(1)}px vs bottom ${fit.bandBottom.toFixed(1)}px` : 'n/a');
     // The crop's successor to the old "fills the window's width too". On a wide screen the view IS
     // the whole world's fit box, so the only margin is that box's own symmetric 6-unit pad (~2.2% of
     // the window); on a phone the map is wider than the window and the margins go negative. So the
     // rule is: never more margin than the shared pad, always symmetric, whichever way it resolves.
     const sidePad = Math.max(fit?.bandLeft ?? 1, fit?.bandRight ?? 1) / (m.grid?.width ?? 1);
-    check(`[${tag}] the map covers the window's width (spanned, or cropped by it)`,
+    // The stage opens close enough to read every tile, and shows a region, not a handful.
+    if (stage) check(`[${tag}] the stage opens at a readable tile size (about 54px)`,
+      !!fit && fit.hexWidth >= 48 && fit.hexWidth <= 60, fit ? `hex ${fit.hexWidth.toFixed(1)}px wide` : 'n/a');
+    if (!stage) check(`[${tag}] the map covers the window's width (spanned, or cropped by it)`,
       !!fit && m.grid !== null && sidePad <= 0.03 && Math.abs(fit.bandLeft - fit.bandRight) <= 1.5,
       fit && m.grid ? `map ${fit.inkWidth.toFixed(1)}px over window ${m.grid.width.toFixed(1)}px, margins left ${fit.bandLeft.toFixed(1)} (${(fit.bandLeft / m.grid.width * 100).toFixed(1)}%) / right ${fit.bandRight.toFixed(1)}` : 'n/a');
     // Uniform only: the hexes keep their true shape. A regular pointy-top hexagon is sqrt(3)/2 as
@@ -491,14 +512,16 @@ try {
     const gx = m.grid?.x ?? 0;
     const gw = m.grid?.width ?? 0;
     const rightMargin = m.vw - (gx + gw);
-    check(`[${tag}] the map renders at the column's full width`, !!fit && m.grid !== null && fit.inkWidth >= m.grid.width * 0.9,
+    if (!stage) check(`[${tag}] the map renders at the column's full width`, !!fit && m.grid !== null && fit.inkWidth >= m.grid.width * 0.9,
       fit && m.grid ? `map ${fit.inkWidth.toFixed(1)} of column ${m.grid.width.toFixed(1)} (${((fit.inkWidth / m.grid.width) * 100).toFixed(1)}%)` : 'n/a');
     const spansColumn = gw >= m.vw - 32 - 1;
     check(`[${tag}] the window either spans the column or is centred in it`,
       spansColumn ? Math.abs(gx - 16) <= 1 && Math.abs(rightMargin - 16) <= 1 : Math.abs(gx - rightMargin) <= 1,
       spansColumn ? `width-limited: ${gw.toFixed(1)} = the column (gutters ${gx.toFixed(1)}/${rightMargin.toFixed(1)})`
         : `framed narrower: ${gw.toFixed(1)} wide, centred (margins ${gx.toFixed(1)}/${rightMargin.toFixed(1)})`);
-    check(`[${tag}] the column reaches its bottom edge (no dead band)`, viewportGap >= 0 && viewportGap <= 32,
+    if (stage) check(`[${tag}] the stage reaches the screen's bottom edge (no dead band)`, m.vh - bottom(m.grid) >= 0 && m.vh - bottom(m.grid) <= 32,
+      `${(m.vh - bottom(m.grid)).toFixed(1)}px below the stage`);
+    else check(`[${tag}] the column reaches its bottom edge (no dead band)`, viewportGap >= 0 && viewportGap <= 32,
       `${viewportGap.toFixed(1)}px below the last column element`);
     // The dvh cap is a documented constant, so prove the window can never spill past the viewport —
     // on the widest screen in the matrix and on a landscape phone, where the chrome is a big share.
@@ -526,7 +549,7 @@ try {
 
     // 9. The map keeps its CONTAINED window (owner: "let's keep as it is").
     check(`[${tag}] the map window keeps its own bounded surface`,
-      m.window.radius === '14px' && m.window.image === 'gradient' && m.window.shadow === 'shadow',
+      m.window.radius === (stage ? '20px' : '14px') && m.window.image === 'gradient' && m.window.shadow === 'shadow',
       JSON.stringify(m.window));
 
     // 10. A NOTICE LINE. It adds ~28px of chrome below the controls — the one case that could clamp
@@ -553,7 +576,7 @@ try {
         noticeHeight: notice.height,
       };
     });
-    check(`[${tag}] with a notice line the map still fills its window (no band)`,
+    if (!stage) check(`[${tag}] with a notice line the map still fills its window (no band)`,
       Math.abs(noticed.viewBoxAspect - noticed.windowAspect) <= 0.01 &&
       noticed.bandTop / noticed.windowH <= 0.04 && noticed.bandBottom / noticed.windowH <= 0.04,
       `notice ${noticed.noticeHeight.toFixed(0)}px, window ${noticed.windowH.toFixed(1)}px, band ${noticed.bandTop.toFixed(1)}/${noticed.bandBottom.toFixed(1)}px`);

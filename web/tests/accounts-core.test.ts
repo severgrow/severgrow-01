@@ -17,6 +17,8 @@ import {
   readCallback,
   redirectTarget,
   savePending,
+  clearNicknamePrompt,
+  pendingNicknamePrompt,
   setNicknamePrompt,
   takeNicknamePrompt,
   takePending,
@@ -108,5 +110,21 @@ describe('device records', () => {
     m.set(NICKNAME_KEY, '{nonsense');
     expect(takeNicknamePrompt(kv)).toBeNull();
     expect(takeNicknamePrompt(null)).toBeNull();
+  });
+
+  // Owner, 2026-10-28: "if someone creates an account they have to type in their nickname". The
+  // invitation now STAYS until a name is saved, so a reload cannot slip past it.
+  it('a new account\'s name step stays pending until a name is saved', () => {
+    const { m, kv } = memory();
+    expect(pendingNicknamePrompt(kv)).toBeNull();
+    setNicknamePrompt(kv, 'p1');
+    expect(pendingNicknamePrompt(kv)).toBe('p1');
+    expect(pendingNicknamePrompt(kv)).toBe('p1');
+    clearNicknamePrompt(kv);
+    expect(m.has(NICKNAME_KEY)).toBe(false);
+    expect(pendingNicknamePrompt(kv)).toBeNull();
+    m.set(NICKNAME_KEY, '{nonsense');
+    expect(pendingNicknamePrompt(kv)).toBeNull();
+    expect(pendingNicknamePrompt(null)).toBeNull();
   });
 });

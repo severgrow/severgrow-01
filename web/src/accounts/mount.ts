@@ -35,7 +35,8 @@ import {
   setFlash,
   setNicknamePrompt,
   takeFlash,
-  takeNicknamePrompt,
+  pendingNicknamePrompt,
+  clearNicknamePrompt,
   takePending,
   writeAccount,
 } from './core.js';
@@ -126,21 +127,26 @@ const sheet = (id: string, label: string) => {
   scrim.hidden = panel.hidden = true;
   document.body.append(scrim, panel);
   let onClose: (() => void) | null = null;
+  // A LOCKED sheet asks for something that must be given (a new account's name): the scrim and
+  // Escape do not dismiss it; only the sheet's own action closes it.
+  let locked = false;
   const close = () => {
     if (panel.hidden) return;
+    locked = false;
     scrim.hidden = panel.hidden = true;
     const f = onClose;
     onClose = null;
     f?.();
   };
-  scrim.addEventListener('click', close);
+  scrim.addEventListener('click', () => { if (!locked) close(); });
   panel.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') close();
+    if (e.key === 'Escape' && !locked) close();
   });
   return {
     panel,
-    open: (then?: () => void) => {
+    open: (then?: () => void, options: { locked?: boolean } = {}) => {
       onClose = then ?? null;
+      locked = options.locked === true;
       scrim.hidden = panel.hidden = false;
       (panel.querySelector('button') as HTMLButtonElement | null)?.focus({ preventScroll: true });
     },
@@ -651,12 +657,13 @@ export const mountAccounts = async (): Promise<void> => {
     });
 
   /**
-   * Choose a name — one clear screen, shown once after the sign-in that FORMED the account and again
-   * from Settings. Deliberately NOT a gate: the scrim, Escape and "Skip for now" all close it and
-   * leave the generated nature name in place, so a player who does not care is never blocked from
-   * playing. The server re-checks the name (server/src/display-name.ts); this only reports.
+   * Choose a name. AFTER THE SIGN-IN THAT FORMED THE ACCOUNT it is required (owner, 2026-10-28: "if
+   * someone creates an account they have to type in their nickname" — the generated nature names
+   * are for guests): the box starts empty, there is no skip, the scrim and Escape do not close it,
+   * and it comes back after a reload until a name is saved. FROM SETTINGS it is the old, optional
+   * rename, prefilled. The server re-checks the name (server/src/display-name.ts); this only reports.
    */
-  const submitNickname = async (input: HTMLInputElement, status: HTMLElement, save: HTMLButtonElement, skip: HTMLButtonElement) => {
+  const submitNickname = async (input: HTMLInputElement, status: HTMLElement, save: HTMLButtonElement, skip: HTMLButtonElement | null) => {
     const s = signedIn();
     if (!s) return;
     if (input.value.trim().length === 0) {
@@ -665,7 +672,8 @@ export const mountAccounts = async (): Promise<void> => {
       input.focus({ preventScroll: true });
       return;
     }
-    save.disabled = skip.disabled = true;
+    save.disabled = true;
+    if (skip) skip.disabled = true;
     status.textContent = ACCOUNT.working;
     status.dataset.tone = '';
     try {
@@ -675,17 +683,19 @@ export const mountAccounts = async (): Promise<void> => {
       // Keep this device's identity honest, so Settings and the lobby show the NEW name at once.
       // The #tag is derived from the player id, so it is untouched and stays exactly as it was.
       writeIdentity(kv, { ...s.identity, displayName: player.displayName });
+      clearNicknamePrompt(kv);
       nickSheet.close();
       renderSettings();
       say(ACCOUNT.nicknameSaved);
     } catch {
       status.textContent = navigator.onLine ? ACCOUNT.nicknameError : ACCOUNT.offline;
       status.dataset.tone = 'bad';
-      save.disabled = skip.disabled = false;
+      save.disabled = false;
+      if (skip) skip.disabled = false;
     }
   };
 
-  const openNickname = () => {
+  const openNickname = (required = false) => {
     const s = signedIn();
     if (!s) return;
     nickSheet.panel.textContent = '';
@@ -694,17 +704,19 @@ export const mountAccounts = async (): Promise<void> => {
     const input = el('input', 'acct-input');
     input.type = 'text';
     input.maxLength = 40;
-    input.value = s.identity.displayName ?? '';
+    // A new account types its own name: the generated guest name is never offered as a suggestion.
+    input.value = required ? '' : s.identity.displayName ?? '';
     input.placeholder = ACCOUNT.nicknamePlaceholder;
     input.setAttribute('autocomplete', 'off');
     input.setAttribute('spellcheck', 'false');
     input.setAttribute('aria-label', ACCOUNT.nicknamePlaceholder);
     const save = button('acct-btn', ACCOUNT.nicknameSave, 'nickname-save');
-    const skip = button('acct-btn', ACCOUNT.nicknameSkip, 'nickname-skip');
+    const skip = required ? null : button('acct-btn', ACCOUNT.nicknameSkip, 'nickname-skip');
     const actions = el('div', 'acct-actions row');
-    actions.append(skip, save);
-    nickSheet.panel.append(el('h2', '', ACCOUNT.nicknameTitle), el('p', '', ACCOUNT.nicknameBody), input, status, actions);
-    skip.addEventListener('click', () => nickSheet.close());
+    if (skip) actions.append(skip);
+    actions.append(save);
+    nickSheet.panel.append(el('h2', '', ACCOUNT.nicknameTitle), el('p', '', required ? ACCOUNT.nicknameRequiredBody : ACCOUNT.nicknameBody), input, status, actions);
+    skip?.addEventListener('click', () => nickSheet.close());
     save.addEventListener('click', () => void submitNickname(input, status, save, skip));
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -712,7 +724,7 @@ export const mountAccounts = async (): Promise<void> => {
         void submitNickname(input, status, save, skip);
       }
     });
-    nickSheet.open();
+    nickSheet.open(undefined, { locked: required });
     // `open` focuses the first button, which would make "Skip for now" feel like the primary action.
     input.focus({ preventScroll: true });
   };
@@ -778,12 +790,13 @@ export const mountAccounts = async (): Promise<void> => {
     delete menuLogin.dataset.earlyClick;
     menuLogin.click();
   }
-  // ---- 6. the one-time nickname step, right after the sign-in that formed this account ----
-  // Consumed here (single use), so it is asked exactly once: skipping leaves the generated nature
-  // name in place and never nags again. A later sign-in on another device is 'signed-in' and sets
-  // no invitation at all.
-  const pendingNickname = takeNicknamePrompt(kv);
-  if (pendingNickname && signedIn()?.identity.playerId === pendingNickname) openNickname();
+  // ---- 6. the new account's name step, right after the sign-in that formed this account ----
+  // Owed until a name is saved (owner, 2026-10-28): a reload brings it back, and it cannot be skipped.
+  // A later sign-in on another device is 'signed-in' and never sets the invitation, so an existing
+  // account is never asked again.
+  const pendingNickname = pendingNicknamePrompt(kv);
+  if (pendingNickname && signedIn()?.identity.playerId === pendingNickname) openNickname(true);
+  else if (pendingNickname && !signedIn()) clearNicknamePrompt(kv);
   // The lobby rewrites identity (first guest, link codes, a 401 reset); keep both views honest.
   for (const id of ['menu-settings', 'gm-settings']) document.getElementById(id)?.addEventListener('click', () => setTimeout(renderSettings, 0));
   document.getElementById('menu-online')?.addEventListener('click', () => setTimeout(refresh, 0));

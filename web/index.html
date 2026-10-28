@@ -284,42 +284,37 @@
         <!-- A polite line for a player who cannot see the rail appear. The map itself never
              announces movement; this is the one sentence that says a challenge arrived. -->
         <p id="online-world-live" class="world-live" role="status" aria-live="polite"></p>
-        <!-- THE DECK (owner, 2026-10-27: "a menu with challenges — current/history, ranking, actions
-             on the map — all using one interface and centered"). Three equal keys, one row, centred.
-             Each opens the SAME window over the map (#online-world-panel), on a lighter glass so the
-             map stays visible behind it. Painted by world-view.ts. -->
-        <nav id="online-world-deck" class="world-deck" aria-label="Territory">
-          <button id="world-tab-challenges" class="world-deck-key" type="button" data-tab="challenges" aria-expanded="false" aria-controls="online-world-panel"><span class="world-deck-label">Challenges</span><span class="world-deck-count" hidden></span></button>
-          <button id="world-tab-ranking" class="world-deck-key" type="button" data-tab="ranking" aria-expanded="false" aria-controls="online-world-panel"><span class="world-deck-label">Ranking</span></button>
-          <button id="world-tab-actions" class="world-deck-key" type="button" data-tab="actions" aria-expanded="false" aria-controls="online-world-panel"><span class="world-deck-label">Actions</span></button>
-        </nav>
         <div id="online-world-grid" class="world-grid">
-          <!-- THE ONE WINDOW: challenges, ranking and actions all open here, centred over the map. -->
-          <section id="online-world-panel" class="world-panel" role="dialog" aria-modal="false" aria-labelledby="world-panel-title" hidden>
+          <!-- THE ONE WINDOW (owner, 2026-10-28: "challenges and ranking should be in 1 menu, with
+               sections like current match intel, so there is not too much text in the main
+               territory view"). One key at the map's foot opens it; two tabs inside, like Match Intel.
+               Centred over the map on a light glass, so the land stays visible behind it. -->
+          <section id="online-world-panel" class="world-panel" role="dialog" aria-modal="false" aria-label="Territory" hidden>
             <header class="world-panel-head">
               <span class="world-panel-led" aria-hidden="true"></span>
-              <h3 id="world-panel-title" class="world-panel-title"></h3>
+              <div class="world-seg world-tabs" role="tablist" aria-label="Territory">
+                <button id="world-tab-challenges" class="world-seg-key" type="button" role="tab" data-tab="challenges" aria-selected="true"><span class="world-seg-label"></span><span class="world-deck-count" hidden></span></button>
+                <button id="world-tab-ranking" class="world-seg-key" type="button" role="tab" data-tab="ranking" aria-selected="false"><span class="world-seg-label"></span></button>
+              </div>
               <button id="world-panel-close" class="world-panel-close" type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
             </header>
             <div class="world-panel-body">
               <div class="world-pane" data-pane="challenges">
-                <div class="world-seg" role="tablist" aria-label="Challenges">
-                  <button id="world-scope-current" class="world-seg-key" type="button" role="tab" data-scope="current" aria-selected="true">Current</button>
-                  <button id="world-scope-history" class="world-seg-key" type="button" role="tab" data-scope="history" aria-selected="false">History</button>
-                </div>
-                <!-- The challenge list (world-view.ts): each chip carries a small copy of the map's
+                <p class="world-pane-label" id="world-current-label"></p>
+                <!-- The challenge lists (world-view.ts): each chip carries a small copy of the map's
                      timer ring, so one shape means one thing on both surfaces. -->
-                <div id="online-world-challenges" class="world-challenges" aria-label="Challenges"></div>
+                <div id="online-world-challenges" class="world-challenges" aria-labelledby="world-current-label"></div>
                 <p id="world-challenges-empty" class="world-pane-empty" hidden></p>
+                <p class="world-pane-label" id="world-history-label"></p>
+                <div id="online-world-history" class="world-challenges" aria-labelledby="world-history-label"></div>
+                <p id="world-history-empty" class="world-pane-empty" hidden></p>
               </div>
               <div class="world-pane" data-pane="ranking">
+                <!-- Where you stand, and who is next to pass. -->
+                <div id="world-standing" class="world-standing" hidden></div>
                 <ol id="online-world-ranking" class="world-ranking-list" aria-label="Ranking"></ol>
                 <p class="world-pane-label" id="world-latest-label"></p>
                 <div id="online-world-activity" class="world-activity" aria-labelledby="world-latest-label"></div>
-              </div>
-              <div class="world-pane" data-pane="actions">
-                <p id="world-action-tile" class="world-pane-label"></p>
-                <div id="world-action-keys" class="world-action-keys"></div>
               </div>
             </div>
           </section>
@@ -331,8 +326,11 @@
           <!-- Find my land: one tap centres the map on your own tiles (they can be anywhere now). It
                mirrors FIT in the opposite corner, so the window's controls are symmetric. -->
           <button id="online-world-mine" class="world-fit world-mine" type="button" hidden></button>
-          <!-- The selected tile's coordinates, a quiet machine read-out centred on the window's foot. -->
+          <!-- The selected tile's coordinates, a quiet machine read-out between the two corner keys. -->
           <p id="online-world-coord" class="world-coord" aria-hidden="true"></p>
+          <!-- THE MENU KEY: one hardware key at the window's foot, centred. Its lamp counts the open
+               challenges (red when one is waiting for your answer). -->
+          <button id="online-world-menu" class="world-menu-key" type="button" aria-expanded="false" aria-controls="online-world-panel"><span class="world-menu-glyph" aria-hidden="true"><i></i><i></i><i></i></span><span class="world-deck-count" hidden></span></button>
         </div>
         <div id="online-world-selection" class="world-selection" aria-live="polite"></div>
         <p id="online-world-notice" class="online-notice" role="status" aria-live="polite"></p>

@@ -134,6 +134,14 @@ export const takeNicknamePrompt = (kv: KeyValue | null): string | null => {
   return p && typeof p.playerId === 'string' ? p.playerId : null;
 };
 
+/** The new account's name step, still owed (read WITHOUT removing): it is asked until a name is saved. */
+export const pendingNicknamePrompt = (kv: KeyValue | null): string | null => {
+  const p = readJson<{ playerId?: unknown }>(kv, NICKNAME_KEY);
+  return p && typeof p.playerId === 'string' ? p.playerId : null;
+};
+/** A name was saved: the step is settled. */
+export const clearNicknamePrompt = (kv: KeyValue | null): void => { drop(kv, NICKNAME_KEY); };
+
 /** GET /auth/v1/settings → is the Google provider switched on in the Supabase dashboard? */
 export const googleEnabled = (settings: unknown): boolean => {
   const ext = (settings as { external?: Record<string, unknown> } | null)?.external;

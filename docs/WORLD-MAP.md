@@ -38,6 +38,28 @@ Status: implemented on isolated `futa0.5-world-seeds` branch; **not deployed**. 
 - **Sound** is switched off across the whole game for now (`SOUND_REMOVED` in `web/src/ui/sound.ts`);
   its settings rows are hidden. Vibration stays.
 
+## v3.2: one menu, a living stage (owner, 2026-10-28)
+
+- **One menu, four corners.** The row of keys is gone. The map window has four mirrored corner keys
+  on one edge: find-my-land top-left, the MENU key top-right (with the open-challenge lamp), FIT
+  (the magnifier) bottom-right, and the selected tile's coordinates bottom-left. The menu opens one
+  centred see-through window with two tabs, like Match Intel: CHALLENGES (Current and History
+  sections) and RANKING (your standing, the table, the latest placements). Selling and growing
+  live on the selection bar; challenging opens by tapping a rival tile next to yours.
+- **Your standing**: "#2 of 14 · 3 tiles to pass Kat" with a meter (`standing` in `world-growth.ts`).
+- **Your land's outline**: one soft line around every piece of your land (`borderSegments`).
+- **Grow ripple**: two blurred rings leave a tile you just grew.
+- **Soft focus**: mist, motes, halos, the outline glow and the ripple are drawn through SVG Gaussian
+  blurs (`world-blur-*`), so they read as light, not as flat shapes. Reduced motion stops them all.
+- **The desktop stage** (wide screens, `desktopStage()`): the map fills everything under the header,
+  and Seeds, the notice and the selected tile float over it as glass pills. It opens at a readable
+  tile size (54px) centred on your own land; zoomed out, it shows the whole world with sea
+  around it. A later global chat can cover this one surface with its dark glass.
+- **Challenge offer fix**: the sheet ignores presses for its first 450 ms, so the tap that opened it
+  can no longer land on NOT NOW and shut it ("blinking"). Check: `web/e2e/territory-challenge-tap.ts`.
+- **Ops**: `docs/ops/return-challenged-tiles.sql` hands back tiles one player took from another by
+  challenge (Supabase SQL editor; look first, then change).
+
 ## Ownership and economy
 
 - The world is one versioned, frozen axial hex map. v2 (2026-10-21) is **274 cells** (21 rows, r −10…10): the 183-cell v1 landmass plus an irregular coastal growth, baked into `server/src/world.ts` by `scripts/gen-world-v2.mjs` (no runtime randomness). Its cell IDs are `q,r`. Expansions only ADD ids; every v1 id is unchanged, so an existing claim can never be orphaned — verified against the nine live claims when the coastline shape shipped (none dropped). Historical 8×8 `world_tiles` owners are copied into the central 64 positions by migration `0011_seeds_world.sql`; the historical table and migration remain intact.

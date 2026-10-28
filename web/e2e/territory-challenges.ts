@@ -326,7 +326,8 @@ try {
     await activate(page, '#menu-world');
     await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 20_000 });
     await page.locator('.world-hex').first().waitFor({ state: 'attached', timeout: 45_000 });
-    await page.waitForSelector('.world-challenge-chip', { timeout: 20_000 });
+    // The challenge list lives in the one window now (owner, 2026-10-28), opened below.
+    await page.waitForSelector('.world-challenge-chip', { state: 'attached', timeout: 20_000 });
     await page.waitForTimeout(300);
 
     // ---- 0. THE OWNER'S OWN GROUND SHOWS WHERE THEY ACTUALLY ARE (2026-10-24) ------------------
@@ -341,6 +342,11 @@ try {
     const rivalLine = await page.evaluate(() => (document.getElementById('online-world-selection')?.textContent ?? '').trim());
     check(`[${tag}] a neighbour's line is untouched: no local level leaks onto it`,
       rivalLine.includes('RYK') && !rivalLine.includes('LEVEL'), rivalLine);
+    // the rival tap opened the challenge offer; shut it, then open the one window's list
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => (document.querySelector('.world-challenge-sheet') as HTMLElement | null)?.hidden !== false);
+    await page.click('#online-world-menu');
+    await page.waitForSelector('.world-challenge-chip', { timeout: 10_000 });
 
     // ---- 1. no page scroll, with the rail on screen ------------------------------------------
     const scroll = await scrollState(page);
@@ -399,6 +405,8 @@ try {
       chipRings.length >= 2 && !!chipLow && chipLow.pathLength === '1' && chipLow.commands === 5 &&
       chipLow.closed && Math.abs(chipLow.offset - 0.75) < 0.02,
       `${chipRings.length} rings, low offset ${n2(chipLow?.offset ?? -1)}`);
+    // the list is read; shut the window so the map's own marks are what the next checks touch
+    await page.click('#world-panel-close');
 
     // ---- 2. the ring is the cell's own hex, draining by fraction -----------------------------
     const incoming = await ringData(page, 'in-1');
@@ -457,6 +465,7 @@ try {
     // Tapping the SWORDS opens the existing challenge sheet, which already answers "who challenged".
     await tapSwords(page, own1);
     await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await page.waitForTimeout(500); // a fresh sheet ignores presses for its first 450 ms (the opening tap is spent)
     await settleSheet(page);
     const swordsSheet = await page.evaluate(() =>
       (document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-line') as HTMLElement | null)?.textContent ?? '');
@@ -479,6 +488,7 @@ try {
     // ---- 4. the send sheet: one primary key, and it sends -----------------------------------
     await tapCell(page, rival);
     await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await page.waitForTimeout(500); // a fresh sheet ignores presses for its first 450 ms (the opening tap is spent)
     await settleSheet(page);
     const sendSheet = await page.evaluate(() => {
       const sheet = document.querySelector('.world-challenge-sheet:not([hidden])') as HTMLElement;
@@ -518,6 +528,7 @@ try {
     // ---- 5. the defender sheet, and DECLINE --------------------------------------------------
     await tapCell(page, own1);
     await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await page.waitForTimeout(500); // a fresh sheet ignores presses for its first 450 ms (the opening tap is spent)
     await settleSheet(page);
     const defendSheet = await page.evaluate(() => {
       const sheet = document.querySelector('.world-challenge-sheet:not([hidden])') as HTMLElement;
@@ -562,8 +573,11 @@ try {
       JSON.stringify(afterDecline));
 
     // ---- 6. a finished linked duel offers TAKE THE GROUND -----------------------------------
+    // the chip lives in the one window: open it first (owner, 2026-10-28)
+    if (await page.isHidden('#online-world-panel')) await page.click('#online-world-menu');
     await activate(page, '.world-challenge-chip[data-challenge-id="out-2"]');
     await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await page.waitForTimeout(500); // a fresh sheet ignores presses for its first 450 ms (the opening tap is spent)
     await settleSheet(page);
     const confirmSheet = await page.evaluate(() => {
       const sheet = document.querySelector('.world-challenge-sheet:not([hidden])') as HTMLElement;

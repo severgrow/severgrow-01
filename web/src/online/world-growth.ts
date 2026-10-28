@@ -81,3 +81,40 @@ export const ownCentre = (cells: readonly Cell[], claims: readonly Claim[], me: 
 /** Cells that were not on the map at the last look (none on the first look). */
 export const newCellIds = (before: ReadonlySet<string> | null, now: readonly string[]): string[] =>
   before ? now.filter((id) => !before.has(id)) : [];
+
+export type Standing = { rank: number; tiles: number; players: number; next: { name: string; tiles: number; gap: number } | null };
+
+/** Where the viewer stands, and how many more tiles pass the player just above (a tie keeps the earlier one ahead). */
+export const standing = (rows: readonly RankRow[]): Standing | null => {
+  const at = rows.findIndex((row) => row.mine);
+  if (at < 0) return null;
+  const me = rows[at]!;
+  const above = at > 0 ? rows[at - 1]! : null;
+  return {
+    rank: me.rank,
+    tiles: me.tiles,
+    players: rows.length,
+    next: above ? { name: above.name, tiles: above.tiles, gap: above.tiles - me.tiles + 1 } : null,
+  };
+};
+
+/** The six corners of a pointy hex (unit radius), clockwise from the top — world-view's `hexPath`. */
+const CORNERS = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]] as const;
+/** The neighbour across side i (corner i → corner i+1). */
+const ACROSS = [[1, -1], [1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1]] as const;
+
+/** The outline of a set of tiles: every side that does not face another tile of the set. */
+export const borderSegments = (cells: readonly { q: number; r: number }[]): [number, number, number, number][] => {
+  const own = new Set(cells.map((cell) => `${cell.q},${cell.r}`));
+  const out: [number, number, number, number][] = [];
+  for (const cell of cells) {
+    const { x, y } = cellXY(cell.q, cell.r);
+    for (let i = 0; i < 6; i++) {
+      const [dq, dr] = ACROSS[i]!;
+      if (own.has(`${cell.q + dq},${cell.r + dr}`)) continue;
+      const a = CORNERS[i]!, b = CORNERS[(i + 1) % 6]!;
+      out.push([x + a[0] * R, y + a[1] * R, x + b[0] * R, y + b[1] * R]);
+    }
+  }
+  return out;
+};

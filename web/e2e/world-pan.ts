@@ -341,7 +341,8 @@ try {
         panel: { width: pr.width, height: pr.height, top: pr.top, right: pr.right },
         svg: { width: sr.width, height: sr.height },
         viewAspect: vb[2]! / vb[3]!,
-        buttonInCorner: br.top - pr.top < 20 && pr.right - br.right < 20,
+        // FIT lives in the BOTTOM-right corner (owner, 2026-10-28: the menu key took the top-right).
+        buttonInCorner: pr.bottom - br.bottom < 20 && pr.right - br.right < 20,
       };
     });
     check(`[${tag}] a pressed FIT control stays absolutely positioned in the map's corner`,

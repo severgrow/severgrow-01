@@ -24,11 +24,18 @@ import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { WORLD_CLAIMED_EVENT } from './world-events.js';
-import { cellXY, fogRings, newCellIds, ownCentre, ranking, recentActivity } from './world-growth.js';
+import { borderSegments, cellXY, fogRings, newCellIds, ownCentre, ranking, recentActivity, standing } from './world-growth.js';
 import { ONLINE } from '../../../src/strings.js';
 
 /** A tile grown this recently keeps its halo (the map shows where the world is moving). */
 const FRESH_MS = 6 * 60 * 60 * 1000;
+/** The wide-screen layout (online-css.ts, THE DESKTOP STAGE): the same media query. */
+/** One cell's width on the stage at rest: big enough to read, small enough to see a region. */
+const STAGE_CELL_PX = 54;
+const desktopStage = (): boolean =>
+  typeof matchMedia === 'function' && matchMedia('(min-width: 960px) and (min-height: 560px) and (min-aspect-ratio: 5/4)').matches;
+/** How long a freshly opened challenge sheet ignores presses: longer than a tap's own click, shorter than a deliberate answer. */
+const SHEET_GUARD_MS = 450;
 /** Motes drifting off held ground: few on purpose (they are atmosphere, not effects). */
 const SPORE_COUNT = 7;
 /** Find my land: a small target, drawn in the button's own ink. */
@@ -107,11 +114,11 @@ export class WorldView {
   private selected: string | null = null;
   /** The cells on the map at the last paint: new ones rise in (null before the first paint). */
   private knownCells: Set<string> | null = null;
-  /** The ranking table is dropped over the map. */
-  /** THE ONE WINDOW (owner, 2026-10-27): which deck key has it open, or null. */
-  private tab: 'challenges' | 'ranking' | 'actions' | null = null;
-  /** The challenges pane's scope. */
-  private scope: 'current' | 'history' = 'current';
+  /** THE ONE WINDOW (owner, 2026-10-28): open or shut, and which of its two tabs is showing. */
+  private panelOpen = false;
+  /** The player pressed FIT themselves this session: their choice beats the desktop default. */
+  private fitChosen = false;
+  private tab: 'challenges' | 'ranking' = 'challenges';
   /** The sell key asks once more before it sells (the grow key's own two-tap pattern). */
   private sellArmed: string | null = null;
   private pendingRequest: string | null = null;
@@ -175,6 +182,8 @@ export class WorldView {
   private sheetRequestId: string | null = null;
   private sheetBusy = false;
   private sheetReturnFocus: HTMLElement | null = null;
+  /** When the sheet last appeared: the tap that opened it must not also press a key on it. */
+  private sheetShownAt = -Infinity;
   private readonly onSheetKey = (event: KeyboardEvent): void => {
     const sheet = this.sheet;
     if (!sheet || sheet.root.hidden) return;
@@ -202,7 +211,7 @@ export class WorldView {
     // ONE quiet control (see `fitted`). A toggle button: aria-pressed carries the state, the label
     // is set from `ONLINE.worldFit` in lobby-ui.ts. Keyboard and screen readers get it for free
     // because it is a real <button>.
-    document.getElementById('online-world-fit')?.addEventListener('click', () => this.setFitted(!this.fitted));
+    document.getElementById('online-world-fit')?.addEventListener('click', () => { this.fitChosen = true; this.setFitted(!this.fitted); });
     const mine = document.getElementById('online-world-mine');
     if (mine) {
       mine.innerHTML = WORLD_MINE_ICON;
@@ -210,22 +219,24 @@ export class WorldView {
       mine.title = ONLINE.worldMine;
       mine.addEventListener('click', () => this.flyToMine());
     }
-    // THE DECK: three keys, one window. Pressing the open key again closes it.
-    for (const key of document.querySelectorAll<HTMLButtonElement>('#online-world-deck .world-deck-key')) {
-      const tab = key.dataset.tab as 'challenges' | 'ranking' | 'actions';
-      const label = key.querySelector('.world-deck-label');
-      if (label) label.textContent = { challenges: ONLINE.worldChallenges, ranking: ONLINE.worldRanking, actions: ONLINE.worldActions }[tab];
-      key.addEventListener('click', () => this.openTab(this.tab === tab ? null : tab));
+    // THE MENU KEY opens the one window; pressing it again (or close, or Escape) shuts it.
+    const menu = document.getElementById('online-world-menu');
+    if (menu) {
+      menu.setAttribute('aria-label', ONLINE.worldMenu);
+      menu.title = ONLINE.worldMenu;
+      menu.addEventListener('click', () => this.setPanel(!this.panelOpen));
     }
-    document.getElementById('world-panel-close')?.addEventListener('click', () => this.openTab(null));
-    for (const key of document.querySelectorAll<HTMLButtonElement>('.world-seg-key')) {
-      key.textContent = key.dataset.scope === 'history' ? ONLINE.worldHistory : ONLINE.worldCurrent;
-      key.addEventListener('click', () => { this.scope = key.dataset.scope === 'history' ? 'history' : 'current'; this.paintPanel(); });
+    document.getElementById('world-panel-close')?.addEventListener('click', () => this.setPanel(false));
+    for (const key of document.querySelectorAll<HTMLButtonElement>('.world-tabs .world-seg-key')) {
+      const tab = key.dataset.tab === 'ranking' ? 'ranking' : 'challenges';
+      const label = key.querySelector('.world-seg-label');
+      if (label) label.textContent = tab === 'ranking' ? ONLINE.worldRanking : ONLINE.worldChallenges;
+      key.addEventListener('click', () => { this.tab = tab; this.paintPanel(); });
     }
-    const latest = document.getElementById('world-latest-label');
-    if (latest) latest.textContent = ONLINE.worldLatest;
+    const labels: [string, string][] = [['world-current-label', ONLINE.worldCurrent], ['world-history-label', ONLINE.worldHistory], ['world-latest-label', ONLINE.worldLatest]];
+    for (const [id, text] of labels) { const node = document.getElementById(id); if (node) node.textContent = text; }
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && this.active && this.tab) { this.openTab(null); event.stopPropagation(); }
+      if (event.key === 'Escape' && this.active && this.panelOpen) { this.setPanel(false); event.stopPropagation(); }
     });
   }
 
@@ -273,6 +284,10 @@ export class WorldView {
     this.touched = false;
     this.box = null;
     this.notice('');
+    // THE DESKTOP STAGE opens on the whole world (owner, 2026-10-28: "make the map bigger, use the
+    // space better"): a wide screen has the room to show every tile at a comfortable size. A scroll
+    // in drops into the large view; a phone keeps the large view.
+    if (!this.fitChosen && this.fitted) this.setFitted(false);
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
     if (!this.world) {
@@ -432,6 +447,18 @@ export class WorldView {
       if (!mineFace.has(claim.colour)) mineFace.set(claim.colour, face(shade(claim.colour, 71), shade(claim.colour, 57), shade(claim.colour, 40)));
     }
     svg.append(defs);
+    // SOFT FOCUS (owner, 2026-10-28: "blur it slightly, so everything looks natural and organic
+    // rather than rendered 2d basic stuff"). One Gaussian per depth, in map units, shared by every
+    // living layer: mist, motes, halos, the outline's glow and the grow ripple.
+    for (const [id, sd] of [['world-blur-mist', 0.9], ['world-blur-mote', 0.45], ['world-blur-glow', 1.5]] as const) {
+      const filter = document.createElementNS(NS, 'filter');
+      filter.id = id;
+      for (const [k, v] of [['x', '-60%'], ['y', '-60%'], ['width', '220%'], ['height', '220%'], ['color-interpolation-filters', 'sRGB']]) filter.setAttribute(k!, v!);
+      const blur = document.createElementNS(NS, 'feGaussianBlur');
+      blur.setAttribute('stdDeviation', String(sd));
+      filter.append(blur);
+      defs.append(filter);
+    }
     // TWO LAYERS, so a stroke is never buried by a neighbour's fill — the cause of the owner's
     // uneven highlight (2026-10-16: a cream edge only on the sides facing open ground, and no line
     // at all between two highlighted tiles). Every FILL goes in `faces` and paints first; every
@@ -448,6 +475,7 @@ export class WorldView {
     const fogLayer = document.createElementNS(NS, 'g');
     fogLayer.classList.add('world-fog-layer');
     fogLayer.setAttribute('aria-hidden', 'true');
+    fogLayer.setAttribute('filter', 'url(#world-blur-mist)');
     // Two groups, one per ring, so the mist can breathe as TWO animations, not one per hex.
     const fogRing = [1, 2].map((ring) => {
       const g = document.createElementNS(NS, 'g');
@@ -484,6 +512,11 @@ export class WorldView {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     const now = this.challengeNow();
     let glint = 0;
+    // HALOS: fresh ground glows from underneath, blurred, so the tile's own edge stays crisp.
+    const halos = document.createElementNS(NS, 'g');
+    halos.classList.add('world-halos');
+    halos.setAttribute('aria-hidden', 'true');
+    halos.setAttribute('filter', 'url(#world-blur-glow)');
     for (const cell of world.cells) {
       const at = coords(cell.q, cell.r);
       const d = hexPath(at.x, at.y);
@@ -522,7 +555,15 @@ export class WorldView {
         path.style.setProperty('--territory', owner.colour);
         // FRESH GROUND: a tile grown in the last six hours keeps a slow halo, so the map shows
         // where the world is moving.
-        if (now - owner.claimedAt < FRESH_MS) path.classList.add('fresh');
+        if (now - owner.claimedAt < FRESH_MS) {
+          path.classList.add('fresh');
+          const halo = document.createElementNS(NS, 'path');
+          halo.setAttribute('d', d);
+          halo.classList.add('world-halo');
+          halo.style.setProperty('--territory', owner.colour);
+          halo.style.setProperty('--halo-delay', `${-((halos.childElementCount * 0.9) % 3.6).toFixed(1)}s`);
+          halos.append(halo);
+        }
       } else if (this.wallet && this.wallet.balance >= world.cost && (anywhere || !own.size ||
         [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]].some(([dq, dr]) => own.has(`${cell.q + dq!},${cell.r + dr!}`)))) {
         // Any free tile on the seen map (owner, 2026-10-27: no longer next to your own tiles) — once
@@ -560,6 +601,7 @@ export class WorldView {
     const spores = document.createElementNS(NS, 'g');
     spores.classList.add('world-spores');
     spores.setAttribute('aria-hidden', 'true');
+    spores.setAttribute('filter', 'url(#world-blur-mote)');
     const held = world.claims.length ? world.claims : world.cells.slice(0, 1).map((cell) => ({ cellId: cell.id }));
     for (let i = 0; i < SPORE_COUNT; i++) {
       const pick = held[(i * 7 + world.revision) % held.length];
@@ -575,6 +617,26 @@ export class WorldView {
       spores.append(mote);
     }
     svg.append(faces, lines, marks, rings, swords);
+    // THE OUTLINE OF YOUR LAND: one soft line around every piece of it, so your tiles read as one
+    // country rather than scattered cells. A blurred glow under a fine crisp edge.
+    const border = document.createElementNS(NS, 'g');
+    border.classList.add('world-border');
+    border.setAttribute('aria-hidden', 'true');
+    const ownCells = world.cells.filter((cell) => own.has(cell.id));
+    if (ownCells.length) {
+      const d = borderSegments(ownCells).map(([x1, y1, x2, y2]) => `M${x1.toFixed(2)},${y1.toFixed(2)}L${x2.toFixed(2)},${y2.toFixed(2)}`).join('');
+      const colour = world.claims.find((claim) => own.has(claim.cellId))?.colour;
+      for (const kind of ['glow', 'edge'] as const) {
+        const line = document.createElementNS(NS, 'path');
+        line.setAttribute('d', d);
+        line.classList.add(`world-border-${kind}`);
+        if (kind === 'glow') line.setAttribute('filter', 'url(#world-blur-glow)');
+        if (colour) line.style.setProperty('--territory', colour);
+        border.append(line);
+      }
+    }
+    svg.insertBefore(halos, lines);
+    svg.insertBefore(border, marks);
     svg.append(spores);
     // The accent: ONE path, above every outline, that carries the selection highlight.
     const accentGroup = document.createElementNS(NS, 'g');
@@ -625,6 +687,8 @@ export class WorldView {
    */
   private boundsFor(aspect: number): [number, number, number, number] | null {
     if (!this.fit || !Number.isFinite(aspect) || aspect <= 0) return null;
+    // THE STAGE's widest view is the whole world with sea around it (its pills float over the sea).
+    if (desktopStage()) return this.containFor(aspect);
     const inset = PAD - FIT_EDGE;
     const [fx, fy, fw, fh] = [this.fit[0] + inset, this.fit[1] + inset, this.fit[2] - 2 * inset, this.fit[3] - 2 * inset];
     let w = fh * aspect, h = fh;
@@ -641,6 +705,15 @@ export class WorldView {
     const frame = this.boundsFor(aspect);
     if (!frame || !(pixelWidth > 0)) return frame;
     const [fx, fy, fw, fh] = frame;
+    if (desktopStage()) {
+      // THE STAGE AT REST: close enough to read every tile (one cell STAGE_CELL_PX wide), and
+      // centred on the player's own land when they have some — the first thing you see is yours.
+      const width = Math.min(fw, pixelWidth * (X * R) / STAGE_CELL_PX);
+      const height = width / aspect;
+      const home = this.world ? ownCentre(this.world.cells, this.world.claims, this.identity?.playerId ?? null) : null;
+      const cx = home ? home.x : fx + fw / 2, cy = home ? home.y : fy + fh / 2;
+      return this.clampBox([cx - width / 2, cy - height / 2, width, height]);
+    }
     const width = Math.min(fw, pixelWidth * (X * R) / MIN_CELL_PX);
     const height = width / aspect;
     return [fx + (fw - width) / 2, fy + (fh - height) / 2, width, height];
@@ -664,6 +737,10 @@ export class WorldView {
     const [fx, fy, fw, fh] = [this.fit[0] + inset, this.fit[1] + inset, this.fit[2] - 2 * inset, this.fit[3] - 2 * inset];
     let w = fw, h = fh;
     if (fw / fh > aspect) h = fw / aspect; else w = fh * aspect;
+    // THE DESKTOP STAGE floats its pills over the map (Seeds on top; notice, selection and the menu
+    // key at the foot), so the whole-world view leaves them a band of sea above and below.
+    // The foot carries more than the top, so the island sits a touch above the stage's centre.
+    if (desktopStage()) { w *= 1.24; h *= 1.24; return [fx + (fw - w) / 2, fy + (fh - h) / 2 + h * 0.035, w, h]; }
     return [fx + (fw - w) / 2, fy + (fh - h) / 2, w, h];
   }
   /**
@@ -727,7 +804,6 @@ export class WorldView {
     this.paintAccent();
     this.paintSelection();
     this.paintCoord();
-    if (this.tab === 'actions') this.paintPanel();
     // A challenged tile opens the challenge sheet; a rival tile on my frontier opens the challenge
     // offer. Everything else keeps the claim bar, so the map's original behaviour is unchanged.
     const challenge = challengeOnCell(this.allChallenges, cellId);
@@ -781,6 +857,7 @@ export class WorldView {
       this.notice('A little place in the world is yours.');
       this.pendingRequest = null;
       await this.refresh(true);
+      this.ripple(cellId);
       // Told to whoever is waiting for a placement (the Daily Puzzle's PLACE IT step), without this
       // screen knowing who that is.
       document.dispatchEvent(new CustomEvent(WORLD_CLAIMED_EVENT, { detail: { cellId } }));
@@ -790,19 +867,48 @@ export class WorldView {
       await this.refresh(true);
     } finally { this.busy = false; this.paintSelection(); }
   }
+  /** THE GROW RIPPLE: the new tile sends two soft rings out over the land around it. */
+  private ripple(cellId: string) {
+    const svg = this.svg;
+    const cell = this.world?.cells.find((candidate) => candidate.id === cellId);
+    if (!svg || !cell) return;
+    const at = coords(cell.q, cell.r);
+    const colour = this.world?.claims.find((claim) => claim.cellId === cellId)?.colour;
+    const group = document.createElementNS(NS, 'g');
+    group.classList.add('world-ripples');
+    group.setAttribute('aria-hidden', 'true');
+    group.setAttribute('filter', 'url(#world-blur-mote)');
+    for (const wave of [0, 1]) {
+      const ring = document.createElementNS(NS, 'path');
+      ring.setAttribute('d', hexPath(at.x, at.y));
+      ring.classList.add('world-ripple');
+      ring.style.setProperty('--ripple-delay', `${wave * 180}ms`);
+      if (colour) ring.style.setProperty('--territory', colour);
+      group.append(ring);
+    }
+    svg.append(group);
+    window.setTimeout(() => group.remove(), 1600);
+  }
+
   // ---- the growing territory: ranking, activity, find my land (owner, 2026-10-27) -------------
 
   /** Centre the view on a point of the map, keeping the zoom. */
+  /** Keep a view on the world: inside the fit box, or centred on it when it is the larger. */
+  private clampBox(box: [number, number, number, number]): [number, number, number, number] {
+    if (!this.fit) return box;
+    const [fx, fy, fw, fh] = this.fit;
+    const [x, y, w, h] = box;
+    return [
+      w >= fw ? fx + (fw - w) / 2 : Math.max(fx, Math.min(fx + fw - w, x)),
+      h >= fh ? fy + (fh - h) / 2 : Math.max(fy, Math.min(fy + fh - h, y)),
+      w, h,
+    ];
+  }
   private flyTo(x: number, y: number) {
     if (!this.box || !this.fit) return;
     if (this.fitted) this.setFitted(false);
     const [, , w, h] = this.box;
-    const [fx, fy, fw, fh] = this.fit;
-    this.box = [
-      Math.max(fx, Math.min(fx + fw - w, x - w / 2)),
-      Math.max(fy, Math.min(fy + fh - h, y - h / 2)),
-      w, h,
-    ];
+    this.box = this.clampBox([x - w / 2, y - h / 2, w, h]);
     this.touched = true;
     this.applyView(false);
   }
@@ -832,7 +938,7 @@ export class WorldView {
     const armed = this.sellArmed === cellId;
     key.textContent = armed ? ONLINE.worldSellConfirm : ONLINE.worldSell(this.world?.cost ?? 100);
     key.addEventListener('click', () => {
-      if (!armed) { this.sellArmed = cellId; this.paintSelection(); if (this.tab === 'actions') this.paintPanel(); return; }
+      if (!armed) { this.sellArmed = cellId; this.paintSelection(); return; }
       void this.sell(cellId);
     });
     return key;
@@ -865,14 +971,14 @@ export class WorldView {
     node.textContent = cell ? `Q ${cell.q} · R ${cell.r}`.replace(/-/g, '−') : '';
   }
 
-  /** Open one deck key's window (or close it with null). */
-  private openTab(tab: 'challenges' | 'ranking' | 'actions' | null) {
-    this.tab = tab;
+  /** Open or shut the one window. */
+  private setPanel(open: boolean) {
+    this.panelOpen = open;
     this.sellArmed = null;
     this.paintPanel();
   }
 
-  /** The deck, its counts, and the one window's open pane. */
+  /** The menu key's lamp, the window's tabs, and its open pane. */
   private paintPanel() {
     const panel = document.getElementById('online-world-panel');
     const mine = document.getElementById('online-world-mine');
@@ -880,41 +986,33 @@ export class WorldView {
     const me = this.identity?.playerId ?? null;
     const claims = this.world.claims;
     if (mine) mine.hidden = !me || !claims.some((claim) => claim.ownerId === me);
-    // the deck
-    const open = this.allChallenges.filter((c) => c.status === 'pending' || c.status === 'accepted');
+    const isOpen = (c: WorldChallengeWire) => c.status === 'pending' || c.status === 'accepted';
+    const open = this.allChallenges.filter(isOpen);
     const waiting = this.allChallenges.some((c) => c.status === 'pending' && !c.fromMe);
-    for (const key of document.querySelectorAll<HTMLButtonElement>('#online-world-deck .world-deck-key')) {
-      const on = key.dataset.tab === this.tab;
-      key.setAttribute('aria-expanded', String(on));
-      key.classList.toggle('on', on);
-    }
-    const count = document.querySelector<HTMLElement>('#world-tab-challenges .world-deck-count');
-    if (count) {
+    const menu = document.getElementById('online-world-menu');
+    menu?.setAttribute('aria-expanded', String(this.panelOpen));
+    menu?.classList.toggle('on', this.panelOpen);
+    for (const count of document.querySelectorAll<HTMLElement>('#online-world-menu .world-deck-count, #world-tab-challenges .world-deck-count')) {
       count.hidden = open.length === 0;
       count.textContent = String(open.length);
       count.classList.toggle('waiting', waiting);
     }
-    panel.hidden = this.tab === null;
-    panel.dataset.tab = this.tab ?? '';
-    panel.dataset.scope = this.scope;
-    if (!this.tab) return;
-    const title = document.getElementById('world-panel-title');
-    if (title) title.textContent = { challenges: ONLINE.worldChallenges, ranking: ONLINE.worldRankingTitle, actions: ONLINE.worldActions }[this.tab];
+    panel.hidden = !this.panelOpen;
+    panel.dataset.tab = this.tab;
+    if (!this.panelOpen) return;
+    for (const key of document.querySelectorAll<HTMLButtonElement>('.world-tabs .world-seg-key')) {
+      const on = key.dataset.tab === this.tab;
+      key.setAttribute('aria-selected', String(on));
+      key.classList.toggle('on', on);
+    }
     if (this.tab === 'challenges') {
-      for (const key of document.querySelectorAll<HTMLButtonElement>('.world-seg-key')) {
-        const on = key.dataset.scope === this.scope;
-        key.setAttribute('aria-selected', String(on));
-        key.classList.toggle('on', on);
-      }
-      const shown = this.allChallenges.filter((c) => (c.status === 'pending' || c.status === 'accepted') === (this.scope === 'current'));
+      const history = this.allChallenges.filter((c) => !isOpen(c));
       const empty = document.getElementById('world-challenges-empty');
-      if (empty) {
-        empty.hidden = shown.length > 0;
-        empty.textContent = this.scope === 'current' ? ONLINE.worldNoChallenges : ONLINE.worldNoHistory;
-      }
+      if (empty) { empty.hidden = open.length > 0; empty.textContent = ONLINE.worldNoChallenges; }
+      const past = document.getElementById('world-history-empty');
+      if (past) { past.hidden = history.length > 0; past.textContent = ONLINE.worldNoHistory; }
     }
     if (this.tab === 'ranking') this.paintRanking(me);
-    if (this.tab === 'actions') this.paintActions(me);
   }
 
   private paintRanking(me: string | null) {
@@ -922,7 +1020,9 @@ export class WorldView {
     const strip = document.getElementById('online-world-activity');
     if (!list || !strip || !this.world) return;
     const claims = this.world.claims;
-    list.replaceChildren(...ranking(claims, me).map((row) => {
+    const rows = ranking(claims, me);
+    this.paintStanding(rows);
+    list.replaceChildren(...rows.map((row) => {
       const item = document.createElement('li');
       const button = document.createElement('button');
       button.type = 'button';
@@ -945,7 +1045,7 @@ export class WorldView {
       tiles.textContent = String(row.tiles);
       tiles.setAttribute('aria-label', ONLINE.worldTiles(row.tiles));
       button.append(rank, swatch, name, tag, tiles);
-      button.addEventListener('click', () => { this.openTab(null); this.flyToOwner(row.ownerId); });
+      button.addEventListener('click', () => { this.setPanel(false); this.flyToOwner(row.ownerId); });
       item.append(button);
       return item;
     }));
@@ -963,39 +1063,44 @@ export class WorldView {
       ago.textContent = `+1 · ${entry.ago}`;
       chip.append(name, ago);
       chip.setAttribute('aria-label', `${entry.ownerId === me ? ONLINE.worldMe : entry.name} grew a tile, ${entry.ago}`);
-      chip.addEventListener('click', () => { this.openTab(null); this.flyToCell(entry.cellId); });
+      chip.addEventListener('click', () => { this.setPanel(false); this.flyToCell(entry.cellId); });
       return chip;
     }));
   }
 
-  /** The map's actions: the selected tile's own action first, then the map's. */
-  private paintActions(me: string | null) {
-    const label = document.getElementById('world-action-tile');
-    const keys = document.getElementById('world-action-keys');
-    if (!label || !keys || !this.world) return;
-    const world = this.world;
-    const key = (text: string, run: () => void, lead = false) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = `world-action-key${lead ? ' lead' : ''}`;
-      b.textContent = text;
-      b.addEventListener('click', run);
-      return b;
-    };
-    const out: HTMLButtonElement[] = [];
-    const cell = this.selected ? world.cells.find((c) => c.id === this.selected) : null;
-    const tile = cell ? world.claims.find((claim) => claim.cellId === cell.id) : null;
-    if (!cell) label.textContent = ONLINE.worldPickTile;
-    else if (!tile) label.textContent = `${ONLINE.worldFreeTile} · Q ${cell.q} · R ${cell.r}`.replace(/-/g, '−');
-    else label.textContent = `${tile.ownerId === me ? ONLINE.worldMe : (tile.ownerName ?? 'Player')} · Q ${cell.q} · R ${cell.r}`.replace(/-/g, '−');
-    if (cell && !tile && this.svg?.querySelector(`.world-hex[data-cell-id="${cell.id}"]`)?.classList.contains('available')) {
-      out.push(key(ONLINE.worldGrowHere(world.cost), () => { this.openTab(null); this.paintSelection(true); }, true));
+  /** YOUR STANDING: rank, tiles, and the next player to pass — the one number to chase. */
+  private paintStanding(rows: ReturnType<typeof ranking>) {
+    const card = document.getElementById('world-standing');
+    if (!card) return;
+    card.hidden = !this.identity;
+    if (!this.identity) return;
+    const at = standing(rows);
+    const mineRow = rows.find((row) => row.mine);
+    if (mineRow) card.style.setProperty('--territory', mineRow.colour);
+    else card.style.removeProperty('--territory');
+    const big = document.createElement('strong');
+    big.className = 'world-standing-place';
+    const line = document.createElement('span');
+    line.className = 'world-standing-line';
+    const meter = document.createElement('span');
+    meter.className = 'world-standing-meter';
+    meter.setAttribute('aria-hidden', 'true');
+    const fill = document.createElement('i');
+    meter.append(fill);
+    if (!at) {
+      big.textContent = '—';
+      line.textContent = ONLINE.worldNoStanding;
+      fill.style.width = '0%';
+    } else {
+      big.textContent = ONLINE.worldPlace(at.rank, at.players);
+      line.textContent = at.next ? ONLINE.worldToPass(at.next.gap, at.next.name) : ONLINE.worldLeading;
+      // the meter: how close you are to the player above (full when you lead)
+      fill.style.width = `${at.next ? Math.max(6, Math.round(100 * at.tiles / (at.next.tiles + 1))) : 100}%`;
     }
-    if (cell && tile && tile.ownerId === me && world.version >= 3) out.push(this.sellKey(cell.id, 'world-action-key lead'));
-    if (cell && tile && this.isFrontier(cell.id)) out.push(key(ONLINE.worldChallengeHere, () => { this.openTab(null); this.openSendSheet(cell.id); }, true));
-    if (me && world.claims.some((claim) => claim.ownerId === me)) out.push(key(ONLINE.worldMine, () => { this.openTab(null); this.flyToMine(); }));
-    out.push(key(this.fitted ? ONLINE.worldUnfit : ONLINE.worldFit, () => { this.openTab(null); this.setFitted(!this.fitted); }));
-    keys.replaceChildren(...out);
+    const tiles = document.createElement('span');
+    tiles.className = 'world-standing-tiles';
+    tiles.textContent = ONLINE.worldTiles(at?.tiles ?? 0);
+    card.replaceChildren(big, tiles, line, meter);
   }
 
   // ---- the challenge layer -------------------------------------------------
@@ -1224,12 +1329,12 @@ export class WorldView {
   }>();
 
   private paintChallenges() {
+    // TWO SECTIONS of one window (owner, 2026-10-28): what is open now, and what is settled.
     const strip = document.getElementById('online-world-challenges');
-    if (!strip) return;
-    strip.setAttribute('aria-label', CHALLENGE.listLabel);
+    const past = document.getElementById('online-world-history');
+    if (!strip || !past) return;
     const all = this.allChallenges;
     const rows = all.slice(0, CHALLENGE_RAIL_MAX);
-    strip.hidden = rows.length === 0;
     if (rows.length === 0) {
       for (const [id, node] of this.chipNodes) {
         node.chip.remove();
@@ -1245,7 +1350,7 @@ export class WorldView {
       node.chip.remove();
       this.chipNodes.delete(id);
     }
-    let index = 0;
+    const index = new Map<HTMLElement, number>([[strip, 0], [past, 0]]);
     for (const challenge of rows) {
       let node = this.chipNodes.get(challenge.id);
       if (!node) {
@@ -1283,22 +1388,24 @@ export class WorldView {
       if (claim) node.ring.style.setProperty('--territory', claim.colour);
       // Keep the DOM order equal to the list order without moving (and possibly blurring) a chip
       // that is already in place.
-      const at = strip.children[index];
-      if (at !== node.chip) strip.insertBefore(node.chip, at ?? null);
-      index += 1;
+      const into = challenge.status === 'pending' || challenge.status === 'accepted' ? strip : past;
+      const n = index.get(into)!;
+      const at = into.children[n];
+      if (at !== node.chip) into.insertBefore(node.chip, at ?? null);
+      index.set(into, n + 1);
     }
     // Anything past the cap is counted, never silently dropped.
     const rest = all.length - rows.length;
-    let more = strip.querySelector<HTMLElement>('.world-challenge-more');
+    let more = past.querySelector<HTMLElement>('.world-challenge-more');
     if (rest > 0) {
       if (!more) {
         more = document.createElement('span');
         more.className = 'world-challenge-more';
-        strip.append(more);
+        past.append(more);
       }
       more.textContent = CHALLENGE.more(rest);
       more.hidden = false;
-      strip.append(more);
+      past.append(more);
     } else if (more) {
       more.remove();
     }
@@ -1416,9 +1523,13 @@ export class WorldView {
     // Dismiss on POINTERDOWN, not click: the tap that opens the sheet is followed by a synthetic
     // click whose target is now this overlay, and a click listener would close it in the same
     // gesture. A pointerdown can only belong to a new touch.
-    root.addEventListener('pointerdown', (event) => { if (event.target === root) this.closeSheet(); });
-    primary.addEventListener('click', () => void this.sheetPrimary());
-    secondary.addEventListener('click', () => void this.sheetSecondary());
+    // THE OPENING TAP IS SPENT (owner, 2026-10-28: "it closes in half a second, just blinking"). The
+    // sheet opens on the map's pointerup, so the same tap's synthetic click — or a quick second tap
+    // on the tile — lands on whatever key is now under the finger (usually NOT NOW). For a short
+    // moment after the sheet appears, neither the keys nor the scrim answer.
+    root.addEventListener('pointerdown', (event) => { if (event.target === root && this.sheetSettled()) this.closeSheet(); });
+    primary.addEventListener('click', () => { if (this.sheetSettled()) void this.sheetPrimary(); });
+    secondary.addEventListener('click', () => { if (this.sheetSettled()) void this.sheetSecondary(); });
     this.sheet = { root, card, glyph, glyphPath, line, meta, primary, secondary, notice };
     return this.sheet;
   }
@@ -1461,8 +1572,13 @@ export class WorldView {
     sheet.glyph.classList.toggle('is-rock', !colour);
   }
 
+  private sheetSettled(): boolean {
+    return performance.now() - this.sheetShownAt >= SHEET_GUARD_MS;
+  }
+
   private showSheet() {
     const sheet = this.ensureSheet();
+    this.sheetShownAt = performance.now();
     sheet.root.hidden = false;
     // The same two-part arrival every other surface in the game uses: the scrim only changes
     // density (no travel, no scale), and the card becomes present — it is never a hard cut.
@@ -1720,8 +1836,9 @@ export class WorldView {
       this.box[3] = this.box[2] / aspect;
       // Panning clamps to the FIT BOX, which carries `PAD` on every side: the outermost column/row
       // can therefore come fully inside the panel, clear of its rounded corner, on both axes.
-      this.box[0] = Math.max(fx, Math.min(fx + fw - this.box[2], this.box[0]));
-      this.box[1] = Math.max(fy, Math.min(fy + fh - this.box[3], this.box[1]));
+      // A view wider (or taller) than the world — the stage zoomed out — stays centred on it.
+      this.box[0] = this.box[2] >= fw ? fx + (fw - this.box[2]) / 2 : Math.max(fx, Math.min(fx + fw - this.box[2], this.box[0]));
+      this.box[1] = this.box[3] >= fh ? fy + (fh - this.box[3]) / 2 : Math.max(fy, Math.min(fy + fh - this.box[3], this.box[1]));
       // A pan never re-measures: `this.aspect` is kept by the ResizeObserver (and by open/repaint).
       this.applyView(false);
     };

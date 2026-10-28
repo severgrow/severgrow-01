@@ -890,7 +890,6 @@ export const ONLINE_CSS = `
 .online-world { --world-w: min(100%, 1240px, max(388px, calc((100dvh - 262px) * 1.32))); }
 .online-world .online-head,
 .online-world .world-wallet,
-.online-world .world-deck,
 .online-world .world-selection,
 .online-world .online-notice { width: var(--world-w); max-width: var(--world-w); margin-inline: auto; }
 .online-world .world-grid { width: var(--world-w); max-width: var(--world-w); }
@@ -905,38 +904,33 @@ export const ONLINE_CSS = `
 }
 .online-world .online-inner { position: relative; z-index: 1; }
 
-/* ---- the deck: three equal keys, one row, centred ---- */
-.world-deck {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
-  padding: 4px; border-radius: 13px;
-  background: linear-gradient(#0d100e, #121613);
-  box-shadow: inset 0 1px 0 #000a, inset 0 0 0 1px #e8ddc50d, 0 1px 0 #e8ddc50a;
-}
-.world-deck-key {
-  position: relative; min-height: 40px; min-width: 0; padding: 0 8px;
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  border: 0; border-radius: 9px; cursor: pointer; color: #cfc6ac;
-  background: linear-gradient(#1f241f, #191d19);
-  box-shadow: inset 0 1px 0 #e8ddc51f, inset 0 -2px 0 #00000059, 0 1px 2px #0007;
-  font: inherit; font-size: .64rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
-  transition: transform 90ms ease, box-shadow 90ms ease, color 140ms ease, background 140ms ease;
+/* ---- THE MENU KEY: one hardware key at the window's foot, centred (owner, 2026-10-28) ---- */
+/* .world-grid > for the same reason as FIT: the press layer's position: relative must not win. */
+.world-grid > .world-menu-key {
+  position: absolute; z-index: 3; top: 10px; right: 10px;
+  width: 64px; height: 44px; box-sizing: border-box; padding: 0; border: 0; border-radius: 10px; cursor: pointer;
+  display: grid; place-items: center; color: #cfc6ac;
+  background: linear-gradient(#232822, #1a1e1a);
+  box-shadow: inset 0 1px 0 #e8ddc524, inset 0 -2px 0 #00000066, 0 2px 8px #0008, 0 0 0 1px #00000040;
+  transition: transform 90ms ease, box-shadow 90ms ease, color 140ms ease;
   -webkit-tap-highlight-color: transparent;
 }
-.world-deck-key:active { transform: translateY(1px); box-shadow: inset 0 1px 0 #e8ddc512, inset 0 -1px 0 #00000059; }
-.world-deck-key.on {
-  color: #f2e7cb; background: linear-gradient(#2a3029, #232822);
-  box-shadow: inset 0 1px 0 #e8ddc52e, inset 0 -1px 0 #0000004d, inset 0 0 0 1px #d5c89b52;
-}
-.world-deck-key:focus { outline: none; }
-.world-deck-key:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
-.world-deck-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-grid > .world-menu-key:active { transform: translateY(1px); box-shadow: inset 0 1px 0 #e8ddc512, inset 0 -1px 0 #00000059, 0 1px 4px #0008; }
+.world-grid > .world-menu-key.on { color: #f2e7cb; box-shadow: inset 0 1px 0 #e8ddc52e, inset 0 -1px 0 #0000004d, inset 0 0 0 1px #d5c89b52, 0 2px 8px #0008; }
+.world-menu-key:focus { outline: none; }
+.world-menu-key:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+/* three grille slots, the key's only marking */
+.world-menu-glyph { display: grid; gap: 3px; width: 18px; }
+.world-menu-glyph i { display: block; height: 2px; border-radius: 1px; background: currentColor; opacity: .85; }
+.world-menu-glyph i:nth-child(2) { width: 70%; justify-self: center; }
+.world-menu-key .world-deck-count { position: absolute; top: -6px; right: -6px; }
 .world-deck-count {
   min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px;
-  display: inline-grid; place-items: center; font-size: .6rem; letter-spacing: 0;
+  display: inline-grid; place-items: center; font-size: .6rem; font-weight: 700; letter-spacing: 0;
   color: #0f1210; background: #cfc6ac; font-variant-numeric: tabular-nums;
 }
 .world-deck-count[hidden] { display: none; }
-/* A challenge waiting for YOUR answer: the count lamp glows (the menu's Territory lamp, same red). */
+/* A challenge waiting for YOUR answer: the lamp glows (the menu's Territory lamp, same red). */
 .world-deck-count.waiting { background: #e07a5f; color: #160b08; box-shadow: 0 0 10px #e07a5f8c; animation: world-lamp 2.4s ease-in-out infinite; }
 @keyframes world-lamp { 50% { box-shadow: 0 0 3px #e07a5f4d; } }
 
@@ -955,9 +949,11 @@ export const ONLINE_CSS = `
 @keyframes world-panel-in { from { opacity: 0; translate: -50% -6px; } to { opacity: 1; translate: -50% 0; } }
 @media (prefers-reduced-motion: reduce) { .world-panel { animation: none; } }
 .world-panel-head {
-  display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center;
-  min-height: 44px; padding: 0 2px; border-bottom: 1px solid #e8ddc512;
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center;
+  min-height: 50px; padding: 4px 2px; border-bottom: 1px solid #e8ddc512;
 }
+.world-tabs .world-seg-key { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.world-tabs .world-deck-count { min-width: 16px; height: 16px; font-size: .56rem; }
 /* The window's tiny status LED (left) balances the close key (right): the title stays centred. */
 .world-panel-led { justify-self: center; width: 6px; height: 6px; border-radius: 50%; background: #9fd27a; box-shadow: 0 0 6px #9fd27aa6; }
 .world-panel-title {
@@ -965,17 +961,17 @@ export const ONLINE_CSS = `
   text-transform: uppercase; color: #e8ddc5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .world-panel-close {
-  justify-self: center; width: 44px; height: 44px; display: grid; place-items: center;
+  justify-self: center; width: 40px; height: 40px; display: grid; place-items: center;
   border: 0; background: none; color: #cfc6ac; cursor: pointer; border-radius: 9px;
 }
 .world-panel-close:focus-visible { outline: 2px solid #f2e5c5; outline-offset: -4px; }
 .world-panel-body { overflow: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 10px; }
 .world-pane { display: none; flex-direction: column; gap: 8px; }
 .world-panel[data-tab='challenges'] .world-pane[data-pane='challenges'],
-.world-panel[data-tab='ranking'] .world-pane[data-pane='ranking'],
-.world-panel[data-tab='actions'] .world-pane[data-pane='actions'] { display: flex; }
+.world-panel[data-tab='ranking'] .world-pane[data-pane='ranking'] { display: flex; }
+.world-pane > .world-pane-label:first-child { margin-top: 0; }
 .world-pane-label { margin: 4px 4px 0; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: #e8ddc58f; text-align: center; }
-.world-pane-empty { margin: 10px 0; text-align: center; font-size: .74rem; color: #e8ddc5a6; }
+.world-pane-empty { margin: 2px 0 6px; text-align: center; font-size: .74rem; color: #e8ddc5a6; }
 .world-pane-empty[hidden] { display: none; }
 
 /* the CURRENT / HISTORY switch: a two-position hardware slider */
@@ -995,11 +991,29 @@ export const ONLINE_CSS = `
   display: flex; flex-direction: column; gap: 6px; width: 100%; overflow: visible; padding: 0;
 }
 .world-panel .world-challenges[hidden] { display: flex; }
+.world-panel .world-challenges:empty { display: none; }
 .world-panel .world-challenge-chip { width: 100%; box-sizing: border-box; }
-.world-panel[data-scope='current'] .world-challenge-chip:not([data-status='pending']):not([data-status='accepted']),
-.world-panel[data-scope='history'] .world-challenge-chip:is([data-status='pending'], [data-status='accepted']) { display: none; }
+#online-world-history .world-challenge-chip { opacity: .78; }
 .world-panel .world-challenge-more { align-self: center; }
 
+/* YOUR STANDING: the one number to chase, on a recessed plate */
+.world-standing {
+  display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 10px; row-gap: 6px;
+  padding: 11px 13px 12px; border-radius: 11px;
+  background: linear-gradient(#0c0f0dcc, #111512cc);
+  box-shadow: inset 0 1px 0 #000a, inset 0 0 0 1px #e8ddc50f;
+}
+.world-standing[hidden] { display: none; }
+.world-standing-place { font-size: 1.15rem; letter-spacing: .1em; color: #f2e7cb; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.world-standing-tiles { justify-self: end; font-size: .62rem; letter-spacing: .18em; color: #e8ddc5a6; }
+.world-standing-line { grid-column: 1 / -1; font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; color: #cfc6ac; }
+.world-standing-meter { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: #e8ddc514; overflow: hidden; }
+.world-standing-meter i {
+  display: block; height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--territory, #cfc6ac) 70%, #000), var(--territory, #cfc6ac));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--territory, #cfc6ac) 60%, transparent);
+  transition: width 600ms cubic-bezier(.2, .8, .3, 1);
+}
 /* the ranking */
 .world-ranking-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .world-ranking-row {
@@ -1014,7 +1028,7 @@ export const ONLINE_CSS = `
 .world-ranking-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .06em; }
 .world-ranking-tag { color: #e8ddc570; font-size: .62rem; letter-spacing: .08em; }
 .world-ranking-tiles { text-align: right; font-weight: 700; letter-spacing: .04em; }
-.world-ranking-row:focus-visible, .world-activity-chip:focus-visible, .world-action-key:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+.world-ranking-row:focus-visible, .world-activity-chip:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 /* the latest placements: two even columns of chips */
 .world-activity { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .world-activity-chip {
@@ -1027,24 +1041,16 @@ export const ONLINE_CSS = `
 .world-activity-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .world-activity-ago { margin-left: auto; color: #e8ddc58f; white-space: nowrap; }
 
-/* the actions: full-width hardware keys, the tile's own action leading */
-.world-action-keys { display: grid; gap: 6px; }
-.world-action-key {
-  min-height: 44px; border: 0; border-radius: 9px; cursor: pointer; color: #e8ddc5;
-  background: linear-gradient(#1f241f, #191d19);
-  box-shadow: inset 0 1px 0 #e8ddc51f, inset 0 -2px 0 #00000059, 0 1px 2px #0007;
-  font: inherit; font-size: .68rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
-  transition: transform 90ms ease;
-}
-.world-action-key:active { transform: translateY(1px); }
-.world-action-key.lead { color: #161a16; background: linear-gradient(#efe4c8, #ddd1b2); box-shadow: inset 0 1px 0 #fff8, inset 0 -2px 0 #0000002e, 0 1px 2px #0007; }
-
-/* the map's two corner keys, mirrored: find-my-land top-left, FIT top-right */
+/* THE FOUR CORNERS, mirrored (owner, 2026-10-28: "super aligned and symmetrical … contained and
+   clean"): find-my-land top-left, the MENU key top-right, FIT (the magnifier) bottom-right, and the
+   coordinates read-out bottom-left. Every one sits on the same 10px edge and is 44px tall, so the
+   menu key's right edge is FIT's right edge and the four make one frame. */
 .world-grid > .world-mine { right: auto; left: 10px; }
-/* the selected tile's coordinates: a quiet read-out centred on the window's foot */
+.world-grid > #online-world-fit { top: auto; bottom: 10px; right: 10px; }
 .world-coord {
-  position: absolute; z-index: 2; left: 50%; bottom: 10px; translate: -50% 0; margin: 0; pointer-events: none;
-  padding: 3px 9px; border-radius: 6px; background: #0b0e0cb3; color: #cfc6acb3;
+  position: absolute; z-index: 2; left: 10px; bottom: 10px; margin: 0; pointer-events: none;
+  height: 44px; box-sizing: border-box; display: flex; align-items: center; padding: 0 12px; border-radius: 9px;
+  background: #0b0e0cb3; color: #cfc6acb3; box-shadow: inset 0 0 0 1px #d5c89b1f;
   font-size: .58rem; letter-spacing: .2em; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .world-coord:empty { display: none; }
@@ -1069,24 +1075,87 @@ export const ONLINE_CSS = `
 /* ---- your tiles catch the light, one after another ---- */
 .world-hex-face.mine { animation: world-glint 11s ease-in-out infinite; animation-delay: var(--glint-delay, 0s); }
 .world-hex-face.mine.rising { animation: world-rise 520ms cubic-bezier(.2, .9, .3, 1.2) both; }
-@keyframes world-glint { 0%, 86%, 100% { filter: none; } 92% { filter: brightness(1.32); } }
-/* ---- fresh ground keeps a slow halo for six hours ---- */
-.world-hex.fresh { animation: world-fresh 3.6s ease-in-out infinite; }
-@keyframes world-fresh { 50% { stroke-width: 1.3; stroke: color-mix(in srgb, var(--territory) 55%, #fff4d6); } }
+@keyframes world-glint { 0%, 82%, 100% { filter: none; } 91% { filter: brightness(1.24); } }
+/* ---- fresh ground glows from underneath for six hours (a blurred halo; the edge stays crisp) ---- */
+.world-halo { fill: none; stroke: color-mix(in srgb, var(--territory) 60%, #fff4d6); stroke-width: 2.2; opacity: .18; pointer-events: none;
+  animation: world-halo 3.6s ease-in-out infinite; animation-delay: var(--halo-delay, 0s); }
+@keyframes world-halo { 50% { opacity: .5; } }
+/* ---- the outline of your land: a soft glow under a fine edge, breathing very slowly ---- */
+.world-border path { fill: none; pointer-events: none; stroke-linecap: round; }
+.world-border-edge { stroke: color-mix(in srgb, var(--territory, #cfc6ac) 40%, #fff4d6); stroke-width: .7; stroke-opacity: .7; }
+.world-border-glow { stroke: color-mix(in srgb, var(--territory, #cfc6ac) 70%, #fff4d6); stroke-width: 2.6; opacity: .32; animation: world-border 7s ease-in-out infinite; }
+@keyframes world-border { 50% { opacity: .16; } }
+/* ---- the grow ripple: two soft rings leave the new tile ---- */
+.world-ripple { fill: none; stroke: color-mix(in srgb, var(--territory, #cfc6ac) 50%, #fff4d6); stroke-width: 1.2; opacity: 0; pointer-events: none;
+  transform-box: fill-box; transform-origin: center; animation: world-ripple 1.2s cubic-bezier(.15, .7, .3, 1) both; animation-delay: var(--ripple-delay, 0ms); }
+@keyframes world-ripple { 0% { opacity: .85; transform: scale(1); } 100% { opacity: 0; transform: scale(3.2); stroke-width: .3; } }
 /* ---- spores drift off held ground ---- */
 .world-spore { fill: #e8ddc5; opacity: 0; pointer-events: none; animation: world-spore 12s ease-in-out infinite; animation-delay: var(--spore-delay, 0s); transform-box: fill-box; }
 @keyframes world-spore {
   0% { opacity: 0; transform: translate(0, 0); }
-  15% { opacity: .55; }
-  70% { opacity: .2; }
+  15% { opacity: .6; }
+  70% { opacity: .22; }
   100% { opacity: 0; transform: translate(3px, -16px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .world-fog-ring, .world-hex-face.mine, .world-hex.fresh, .world-spore, .world-hex-face.rising, .world-deck-count.waiting { animation: none; }
-  .world-spore { display: none; }
+  .world-fog-ring, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-hex-face.rising, .world-deck-count.waiting { animation: none; }
+  .world-spore, .world-ripples { display: none; }
 }
-html.reduce-motion :is(.world-fog-ring, .world-hex-face.mine, .world-hex.fresh, .world-spore, .world-hex-face.rising, .world-deck-count.waiting) { animation: none; }
-html.reduce-motion .world-spore { display: none; }
+html.reduce-motion :is(.world-fog-ring, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-hex-face.rising, .world-deck-count.waiting) { animation: none; }
+html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
+
+/* ================= THE DESKTOP STAGE (owner, 2026-10-28: "make the map bigger, use the space
+   better … SICK but elegant"; a global chat will later lay dark glass over the whole map).
+   On a wide screen the map is no longer a box in a column: it is the STAGE, filling everything
+   under the header, and the screen's few words float over it as glass pills on one centred axis —
+   Seeds and the coordinates on top, the notice, the selected tile and the menu key at the foot.
+   One surface, so the chat's glass can cover it whole. Phones keep the column. */
+@media (min-width: 960px) and (min-height: 560px) and (min-aspect-ratio: 5/4) {
+  .online-world { --world-w: min(100%, 1720px); }
+  .online-world .online-inner {
+    display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+    row-gap: 10px; justify-items: center; align-items: start;
+  }
+  .online-world .online-inner > * { grid-column: 1; }
+  .online-world .online-head { grid-row: 1; width: var(--world-w); max-width: var(--world-w); }
+  .online-world .world-grid {
+    grid-row: 2; align-self: stretch; height: auto; max-height: none; margin: 0;
+    width: var(--world-w); max-width: var(--world-w); border-radius: 20px;
+    box-shadow: inset 0 0 0 1px rgba(232, 221, 190, .05), inset 0 30px 90px #090c0b80, 0 30px 80px #0006;
+  }
+  /* a deeper vignette: the stage's edges fall away into the dark, the centre holds the light */
+  .online-world .world-grid::after { background: radial-gradient(ellipse 72% 70% at 50% 48%, transparent 46%, #060807d9 100%); }
+  /* the floating HUD: every pill sits in the stage's own cell, above the map */
+  .online-world :is(#online-world-wallet, #daily-place, #online-world-live, #online-world-selection, #online-world-notice) {
+    grid-row: 2; position: relative; z-index: 5; width: auto; max-width: min(680px, calc(var(--world-w) - 200px)); margin: 0;
+  }
+  .online-world #online-world-live { position: absolute; }
+  .online-world #online-world-wallet {
+    align-self: start; margin-top: 14px; min-height: 38px; padding: 0 18px; border-radius: 19px;
+    background: rgba(10, 13, 11, .56); -webkit-backdrop-filter: blur(10px) saturate(1.1); backdrop-filter: blur(10px) saturate(1.1);
+    box-shadow: inset 0 1px 0 #e8ddc514, 0 8px 22px #0005;
+  }
+  .online-world #daily-place { align-self: start; margin-top: 92px; }
+  .online-world #online-world-selection {
+    align-self: end; margin-bottom: 14px; min-height: 52px; padding: 5px 6px 5px 20px; gap: 14px; flex-wrap: nowrap;
+    border-radius: 15px; background: rgba(10, 13, 11, .62);
+    -webkit-backdrop-filter: blur(10px) saturate(1.1); backdrop-filter: blur(10px) saturate(1.1);
+    box-shadow: inset 0 1px 0 #e8ddc514, 0 10px 26px #0006;
+  }
+  .online-world #online-world-selection:not(:has(button)) { padding: 5px 20px; }
+  .online-world #online-world-notice {
+    align-self: end; margin-bottom: 78px; min-height: 0; padding: 7px 14px; border-radius: 10px;
+    background: rgba(10, 13, 11, .5); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  }
+  .online-world #online-world-notice:empty { display: none; }
+  /* the four corners sit in a little from the stage's rounded corners, on one 14px edge */
+  .online-world .world-grid > .world-mine { top: 14px; left: 14px; right: auto; }
+  .online-world .world-grid > .world-menu-key { top: 14px; right: 14px; width: 72px; }
+  .online-world .world-grid > #online-world-fit { bottom: 14px; right: 14px; }
+  .online-world .world-coord { left: 14px; bottom: 14px; }
+  /* the window opens under the top row and clear of the foot, a little wider */
+  .online-world .world-panel { top: 72px; width: min(calc(100% - 48px), 520px); max-height: calc(100% - 160px); }
+}
 
 /* Every free tile is open to grow now, so "available" is a quiet lift; the board's own global
    .available (a dashed onboarding ring with pointer-events: none) must never leak onto the world. */
