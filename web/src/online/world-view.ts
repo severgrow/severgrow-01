@@ -57,6 +57,27 @@ type Pane = 'ranking' | 'challenges';
 const GLIDE_MS = 380;
 /** The soft-focus layers stay off this long after a gesture ends, so a quick second flick never re-blurs mid-motion. */
 const SETTLE_MS = 140;
+/**
+ * TAP, DRAG AND DOUBLE TAP (owner, 2026-10-28: "it should be possible to 'scroll' around the map
+ * always when holding and dragging finger. quick double tap should zoom out / zoom in, right now
+ * all of this is a bit buggy and glitchy").
+ *
+ * The map had no double tap at all, and its drag threshold was 3 CSS pixels — so a finger that
+ * jittered 4px while tapping panned the map and swallowed the selection instead. These are the
+ * numbers the gestures now share, in CSS pixels and milliseconds:
+ *
+ * - `TAP_SLOP`: how far a finger may travel and still be a TAP. The map does not move at all below
+ *   it, so a tap can never nudge the view, and a slightly unsteady tap still selects.
+ * - `DOUBLE_TAP_MS` / `DOUBLE_TAP_SLOP`: two taps inside both are ONE double tap (a zoom toggle).
+ *   A slower second tap, or one further away, is two ordinary taps and selects twice.
+ * - `DOUBLE_TAP_IN` / `DOUBLE_TAP_OUT`: the toggle's two factors. `set()` clamps either way, so the
+ *   "in" level can never pass a quarter of the framed view.
+ */
+const TAP_SLOP = 6;
+const DOUBLE_TAP_MS = 280;
+const DOUBLE_TAP_SLOP = 30;
+const DOUBLE_TAP_IN = 2.2;
+const DOUBLE_TAP_OUT = 0.46;
 
 type Identity = { token: string; playerId: string };
 
@@ -170,6 +191,12 @@ export class WorldView {
   private pointers = new Map<number, { x: number; y: number }>();
   private dragged = false;
   private multiGesture = false;
+  /** The tap that just landed, waiting to find out whether a second one makes it a double tap. */
+  private lastTap: { at: number; x: number; y: number } | null = null;
+  /** Where the gesture began, in client coordinates, in this gesture's own scratch space. */
+  private gestureStart: { x: number; y: number } | null = null;
+  /** Removes the gesture's window-level listeners when the map is repainted (see installPanZoom). */
+  private gestureCleanup: (() => void) | null = null;
 
   // ---- Territory challenges -------------------------------------------------
   /** The authenticated challenge lists. Empty for a guest until identity resolves. */
@@ -1167,14 +1194,18 @@ export class WorldView {
       const name = document.createElement('span');
       name.className = 'world-ranking-name';
       name.textContent = row.mine ? `${row.name} · ${ONLINE.worldMe}` : row.name;
-      const tag = document.createElement('span');
-      tag.className = 'world-ranking-tag';
-      tag.textContent = `#${row.tag}`;
+      // THE TAG IS NOT SHOWN (owner, 2026-10-28: "dont show tag id of players, only their name").
+      // It stays on the row as its accessible name and its tooltip, because names are not unique —
+      // two players called the same thing are still tellable apart without putting `#1234` in the
+      // list the player reads. The row's own data-owner is unchanged, so nothing that identifies a
+      // player by tag ever broke.
+      button.setAttribute('aria-label', `${row.name}${row.mine ? ` · ${ONLINE.worldMe}` : ''} #${row.tag}`);
+      button.title = `#${row.tag}`;
       const tiles = document.createElement('span');
       tiles.className = 'world-ranking-tiles';
       tiles.textContent = String(row.tiles);
       tiles.setAttribute('aria-label', ONLINE.worldTiles(row.tiles));
-      button.append(rank, swatch, name, tag, tiles);
+      button.append(rank, swatch, name, tiles);
       button.addEventListener('click', () => { this.setPane(null, false); this.flyToOwner(row.ownerId); });
       item.append(button);
       return item;
@@ -1932,8 +1963,7 @@ export class WorldView {
     }, CHALLENGE.confirmFailed);
   }
 
-  private installPanZoom(svg: SVGSVGElement) {
-    const set = () => {
+  private installPanZoom(svg: SVGSVGElement) {    const set = () => {
       if (!this.box || !this.fit) return;
       const [fx, fy, fw, fh] = this.fit;
       // The framed view is BOTH zoom limits. Its width is the most zoomed-OUT view that still fills
@@ -1980,17 +2010,17 @@ export class WorldView {
      * tile the plane, so "nearest centre" is the cell under the finger, and a shared edge cannot pick
      * an arbitrary neighbour from DOM paint order.
      */
-    const tapAt = (event: PointerEvent) => {
+    /** The nearest cell to a point, without selecting it (the double-tap arbiter needs it first). */
+    const cellAt = (x: number, y: number): string | null => {
+      if (svg !== this.svg) return null;
       const cells = this.world?.cells;
-      if (!cells?.length) return;
-      // The box ACTUALLY on screen, read from the SVG: it is the only mapping that cannot disagree
-      // with what the finger saw (FIT, pan and the aspect correction all land in this attribute).
+      if (!cells?.length) return null;
       const box = (svg.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
-      if (box.length !== 4 || box.some((value) => !Number.isFinite(value))) return;
+      if (box.length !== 4 || box.some((value) => !Number.isFinite(value))) return null;
       const rect = svg.getBoundingClientRect();
-      if (!(rect.width > 0) || !(rect.height > 0)) return;
-      const wx = box[0]! + (event.clientX - rect.left) / rect.width * box[2]!;
-      const wy = box[1]! + (event.clientY - rect.top) / rect.height * box[3]!;
+      if (!(rect.width > 0) || !(rect.height > 0)) return null;
+      const wx = box[0]! + (x - rect.left) / rect.width * box[2]!;
+      const wy = box[1]! + (y - rect.top) / rect.height * box[3]!;
       let best: string | null = null;
       let bestDistance = Infinity;
       for (const cell of cells) {
@@ -1998,7 +2028,49 @@ export class WorldView {
         const distance = (at.x - wx) ** 2 + (at.y - wy) ** 2;
         if (distance < bestDistance) { bestDistance = distance; best = cell.id; }
       }
+      return best;
+    };
+    const tapAt = (x: number, y: number) => {
+      // The svg may have been replaced by a repaint since the tap was queued; a stale viewBox would
+      // select the wrong cell, so a tap on a retired map does nothing at all.
+      if (svg !== this.svg) return;
+      const best = cellAt(x, y);
       if (best) this.select(best);
+    };
+    /** The map's current zoom depth, for the toggle's direction. */
+    const toggleZoom = (x: number, y: number) => {
+      if (!this.box) return;
+      const frame = this.bounds ?? this.fit;
+      if (!frame) return;
+      const deep = this.box[2] <= frame[2] * 0.72;
+      this.stopGlide();
+      this.setMoving(true);
+      zoom(deep ? DOUBLE_TAP_OUT : DOUBLE_TAP_IN, x, y, frameRect ?? svg.getBoundingClientRect());
+      this.setMoving(false);
+    };
+    /**
+     * A FINGER LIFTED WITHOUT TRAVELLING is either an ordinary tap or the second half of a double
+     * tap. The FIRST tap acts IMMEDIATELY — holding it back ~300ms to find out whether it becomes a
+     * double tap would make every selection feel laggy, so nothing is ever delayed.
+     *
+     * The two gestures are told apart by TIME, the way every map does it:
+     *   - two taps inside `DOUBLE_TAP_MS`, near each other: ONE double tap, which toggles the zoom
+     *     (anchored under the finger) instead of selecting again;
+     *   - a slower second tap, or one far away: just another ordinary tap, so tapping the same tile
+     *     at a normal pace still selects it and then lets it go.
+     * The cost is one visible detail: the first tap of a double tap selects the tile it lands on
+     * before the zoom. That is a momentary highlight, never a wrong board.
+     */
+    const finishTap = (x: number, y: number) => {
+      const now = Date.now();
+      const previous = this.lastTap;
+      this.lastTap = null;
+      if (previous && now - previous.at <= DOUBLE_TAP_MS && Math.hypot(x - previous.x, y - previous.y) <= DOUBLE_TAP_SLOP) {
+        toggleZoom(x, y);
+        return;
+      }
+      this.lastTap = { at: now, x, y };
+      tapAt(x, y);
     };
     svg.addEventListener('wheel', (event) => {
       if (Math.abs(event.deltaY) < .01) return;
@@ -2012,18 +2084,24 @@ export class WorldView {
       this.stopGlide();
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       frameRect = svg.getBoundingClientRect();
-      if (this.pointers.size > 1) { this.multiGesture = true; this.dragged = true; this.setMoving(true); }
-      else { this.dragged = false; this.multiGesture = false; }
+      if (this.pointers.size > 1) { this.multiGesture = true; this.dragged = true; this.lastTap = null; this.setMoving(true); }
+      else { this.dragged = false; this.multiGesture = false; this.gestureStart = { x: event.clientX, y: event.clientY }; }
     });
     svg.addEventListener('pointermove', (event) => {
       const old = this.pointers.get(event.pointerId);
       if (!old || !this.box) return;
       const dx = event.clientX - old.x, dy = event.clientY - old.y;
-      // A finger that has not yet travelled 3px is still a tap: the map stays put, so a tap can
-      // never nudge the view (or wake the motion state) on its way to selecting a tile.
-      if (!this.dragged && Math.abs(dx) + Math.abs(dy) <= 3) return;
+      // A finger that has not yet travelled TAP_SLOP is still a tap: the map stays put, so a tap can
+      // never nudge the view on its way to selecting a tile — and a slightly unsteady tap is not
+      // silently turned into a pan.
+      if (!this.dragged) {
+        const start = this.gestureStart ?? old;
+        if (Math.hypot(event.clientX - start.x, event.clientY - start.y) <= TAP_SLOP) return;
+      }
       if (!this.dragged) {
         this.dragged = true;
+        // The gesture is a PAN, so it can never be the first half of a double tap.
+        this.lastTap = null;
         this.touched = true;
         this.setMoving(true);
       }
@@ -2044,17 +2122,42 @@ export class WorldView {
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     });
     const end = (event: PointerEvent) => { this.pointers.delete(event.pointerId); };
-    svg.addEventListener('pointerup', (event) => {
+    /** The one place a gesture finishes: shared by the map and by the window (see below). */
+    const finish = (event: PointerEvent) => {
+      const wasSingle = this.pointers.size === 1;
       end(event);
-      // A tap, not the end of a pan: select the nearest cell. (Mouse's right/middle buttons and a
-      // second finger are not taps.)
-      if (!this.dragged && !this.multiGesture && event.button === 0) tapAt(event);
-      if (!this.pointers.size) { this.dragged = false; this.multiGesture = false; this.setMoving(false); }
-    });
-    svg.addEventListener('pointercancel', (event) => {
-      end(event);
-      if (!this.pointers.size) { this.dragged = false; this.multiGesture = false; this.setMoving(false); }
-    });
+      // A tap, not the end of a pan: hand it to the double-tap arbiter. (Mouse's right/middle
+      // buttons and a second finger are not taps.)
+      if (wasSingle && !this.dragged && !this.multiGesture && event.button === 0) finishTap(event.clientX, event.clientY);
+      if (!this.pointers.size) {
+        this.dragged = false;
+        this.multiGesture = false;
+        this.gestureStart = null;
+        this.setMoving(false);
+      }
+    };
+    svg.addEventListener('pointerup', finish);
+    // A RELEASE THAT LANDS OUTSIDE THE MAP STILL ENDS THE GESTURE (owner, 2026-10-28: the map felt
+    // "buggy and glitchy"). The finger is captured once a pan starts, but the capture itself only
+    // covers events the browser routes back to the SVG: an interrupted gesture (a system swipe, a
+    // notification, the browser taking the touch for a page gesture) delivered `pointercancel` and
+    // left `pointers` holding a finger that no longer exists — after which every later drag was
+    // offset by the ghost. Listening on the window means the state is always cleared exactly once.
+    const finishOutside = (event: PointerEvent) => {
+      if (!this.pointers.has(event.pointerId)) return;
+      finish(event);
+    };
+    window.addEventListener('pointerup', finishOutside);
+    window.addEventListener('pointercancel', finishOutside);
+    // A repaint builds a NEW svg (and a new set of closures). The previous gesture's window
+    // listeners and pending tap are released here, so they cannot pile up across repaints or fire
+    // against a retired map.
+    this.gestureCleanup?.();
+    this.gestureCleanup = () => {
+      window.removeEventListener('pointerup', finishOutside);
+      window.removeEventListener('pointercancel', finishOutside);
+      this.lastTap = null;
+    };
     // Re-frame when the WINDOW changes shape (a phone rotating, the on-screen keyboard, a notice line
     // changing the column's chrome). Untouched: the view follows the new frame exactly. Touched: the
     // player's zoom level is kept and re-derived at the new aspect, so the view stays band-free.
