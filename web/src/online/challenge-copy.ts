@@ -14,6 +14,21 @@
  *     and it is a word everyone already knows.
  *   - no cell coordinates: "3,-10" is the machine's name for the ground, not a sentence.
  *   - short sentences, one idea each, and the stake is always read from the world's own price.
+ *
+ * 2026-10-28 pass, owner's words: "i accepted the territory challenge, but i had to pay 50 seeds too
+ * — only challenging player should be paying 50 — the defending one have to be saying 'respond to
+ * keep your tile in 23:59 (timer)'". The ledger was already right (the defender is never debited);
+ * the sheet was not: it printed the challenger's stake above ACCEPT, which reads as a price.
+ *
+ * So the two sides now speak differently, because they are doing different things:
+ *   - THE CHALLENGER paid 50 Seeds. Their lines say so (`sendLine`, `sendMeta`, `sent`) and their
+ *     confirm sheet still shows the amount that is in play (`stakeOnly`).
+ *   - THE DEFENDER pays nothing, ever. Their sheet is about time, not money: the countdown is the
+ *     news, the tile is what is at risk, and the one action is to answer. No defender-facing string
+ *     may carry a figure + "Seeds" — `web/tests/territory-defender-copy.test.ts` enforces it.
+ *   - AT ZERO the server forfeits the tile to the challenger (`expireChallenges`), so instead of
+ *     still asking for an answer the sheet says exactly that (`deadlineLine`), and the defender is
+ *     never told they were charged (`defendMeta`).
  */
 export const CHALLENGE = Object.freeze({
   title: 'Territory challenge',
@@ -25,8 +40,18 @@ export const CHALLENGE = Object.freeze({
   sendKey: 'CHALLENGE',
   /** The tile bar's key on contested ground: it opens that challenge's own sheet. */
   viewKey: 'VIEW CHALLENGE',
-  /** the defender's sheet: who challenged you and what is at stake, then ACCEPT / DECLINE */
-  defendLine: (name: string, stake: number) => `${name} challenged you for this ground. ${stake} Seeds on it. Answer?`,
+  /**
+   * The DEFENDER's sheet: who challenged the tile, and the live countdown — the thing they have to
+   * answer. The countdown is passed in already floored by `remainingLabel`, and the sheet re-reads it
+   * every second while it is open, so it ticks. Nothing here is a price.
+   */
+  defendLine: (name: string, left: string) => `${name} challenged your tile. Answer within ${left} to keep it.`,
+  /**
+   * The defender's meta line: the one fact the owner's report was actually about. They are never
+   * charged; only the challenger escrows Seeds. Uppercase because the sheet's meta line is set in
+   * caps, and deliberately number-free so it can never be read as an amount.
+   */
+  defendMeta: 'NO SEEDS TO PAY',
   acceptKey: 'ACCEPT',
   declineKey: 'DECLINE',
   /** Declining is the one irreversible key: the first press only arms it. */
@@ -43,10 +68,18 @@ export const CHALLENGE = Object.freeze({
   notNow: 'NOT NOW',
   close: 'CLOSE',
   remaining: (left: string) => `${left} left`,
-  stakeMeta: (stake: number, left: string) => `${stake} SEEDS · ${left} LEFT`,
-  /** The offer's meta line: what it costs and the one thing it buys. */
+  /**
+   * The deadline itself, when it has passed with no answer. This sentence is the server's rule
+   * (`expireChallenges`: the tile moves to the challenger, their own stake returns, the defender is
+   * never charged). `web/tests/territory-defender-copy.test.ts` fails if the two ever disagree.
+   */
+  deadlineLine: (name: string) => `The deadline passed. ${name} takes this ground.`,
+  /** The challenger's offer's meta line: what they paid and the answer window. */
   sendMeta: (stake: number) => `${stake} SEEDS · 24 H TO ANSWER`,
-  /** The confirm's meta line: the stake is already committed, so only the amount is news. */
+  /**
+   * The CHALLENGER's confirm meta: the amount they escrowed is the news there. The defender's
+   * confirm sheet uses `defendMeta` instead — they never had a stake to read back.
+   */
   stakeOnly: (stake: number) => `${stake} SEEDS`,
   /** The rail's cap: anything past it is counted, never silently dropped. */
   more: (count: number) => `+${count} MORE`,

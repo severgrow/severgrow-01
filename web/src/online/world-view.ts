@@ -9,6 +9,7 @@ import {
   SWORDS_HIT_RADIUS,
   challengeForCell as challengeOnCell,
   challengeMarkerFor,
+  defendSheetCopy,
   isLow,
   opponentName,
   playerName,
@@ -257,6 +258,13 @@ export class WorldView {
   private sheetReturnFocus: HTMLElement | null = null;
   /** When the sheet last appeared: the tap that opened it must not also press a key on it. */
   private sheetShownAt = -Infinity;
+  /**
+   * The defender's (and the waiting challenger's) clock. The sheet is opened once per tap, but the
+   * deadline is live: this re-reads it every second while the sheet is up, so the countdown the
+   * player is deciding on is the one the server will apply. It only ever writes when the text
+   * actually changes (the label moves once a minute), and it stops with the sheet.
+   */
+  private sheetClock = 0;
   private readonly onSheetKey = (event: KeyboardEvent): void => {
     const sheet = this.sheet;
     if (!sheet || sheet.root.hidden) return;
@@ -383,12 +391,16 @@ export class WorldView {
     });
     await publicRefresh;
   }
-  close() {
+  close(instant = false) {
     this.active = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.chat.setOpen(false);
-    this.closeSheet(false);
+    // LEAVING FOR A MATCH IS NOT THE SAME AS BACKING OUT (owner, 2026-10-28). Backing out lets the
+    // sheet settle away in its own time; going to the duel tears it down now, because the card lives
+    // on `<body>` (outside this screen) and would otherwise float over the board during the map's
+    // exit beat. `instant` is the only difference: no animation, same teardown.
+    this.closeSheet(false, instant);
     // Leaving folds everything away, so the next visit opens on the bare map with only MENU.
     this.setKeys(false, false);
     this.stopGlide();
@@ -1754,16 +1766,69 @@ export class WorldView {
     if (this.sheetMode === 'defend') this.cue('thud');
     this.sheetReturnFocus = (document.activeElement as HTMLElement | null) ?? null;
     document.addEventListener('keydown', this.onSheetKey);
+    this.startSheetClock();
     const target = !sheet.primary.hidden ? sheet.primary : sheet.secondary;
     target.focus({ preventScroll: true });
   }
 
-  private closeSheet(restoreFocus = true) {
+  /** Only states with a deadline tick: the defender's ask and the challenger's wait. */
+  private startSheetClock() {
+    this.stopSheetClock();
+    if (this.sheetMode !== 'defend' && this.sheetMode !== 'wait') return;
+    this.sheetClock = window.setInterval(() => this.paintSheetClock(), 1000);
+    this.paintSheetClock();
+  }
+
+  private stopSheetClock() {
+    if (this.sheetClock) window.clearInterval(this.sheetClock);
+    this.sheetClock = 0;
+  }
+
+  /** Write only when the text changes: the label moves once a minute, the check runs once a second. */
+  private setSheetText(node: HTMLElement, text: string) {
+    if (node.textContent !== text) node.textContent = text;
+  }
+
+  /**
+   * THE DEFENDER'S SHEET IS LIVE (owner, 2026-10-28: "respond to keep your tile in 23:59 (timer)").
+   * The countdown is the thing the decision is made against, so it is re-read from the server's own
+   * deadline while the sheet is open — never a second clock started on open.
+   *
+   * At zero it stops asking. `expireChallenges` forfeits the tile to the challenger, and the sheet
+   * says that in the same words the closed state uses (`deadlineLine`) instead of leaving an ACCEPT
+   * key that the server would refuse. Expiry is lazy server-side, so this is the rule, not a claim
+   * that the transfer has already been written.
+   */
+  private paintSheetClock() {
+    const sheet = this.sheet;
+    const challenge = this.sheetChallenge;
+    if (!sheet || !challenge || sheet.root.hidden) return this.stopSheetClock();
+    const now = this.challengeNow();
+    const leftMs = challenge.expiresAt - now;
+    if (this.sheetMode === 'defend') {
+      const copy = defendSheetCopy(challenge, now);
+      this.setSheetText(sheet.line, copy.line);
+      this.setSheetText(sheet.meta, copy.meta);
+      if (!copy.expired) return;
+      // The deadline has passed with the sheet still open. Say what happens; stop asking.
+      this.stopSheetClock();
+      this.sheetMode = 'closed';
+      this.setSheetKeys(null, CHALLENGE.close);
+      return;
+    }
+    if (this.sheetMode === 'wait') {
+      this.setSheetText(sheet.meta, leftMs > 0 ? CHALLENGE.remaining(remainingLabel(leftMs)) : CHALLENGE.forfeited);
+      if (leftMs <= 0) this.stopSheetClock();
+    }
+  }
+
+  private closeSheet(restoreFocus = true, instant = false) {
     const sheet = this.sheet;
     if (!sheet) return;
     // The sheet's STATE is released now (this match is not "in" a challenge any more); only the
     // pixels take 180ms to leave, and a re-open in that window simply takes the card back.
     document.removeEventListener('keydown', this.onSheetKey);
+    this.stopSheetClock();
     if (this.declineArmed) {
       window.clearTimeout(this.declineArmed);
       this.declineArmed = 0;
@@ -1784,6 +1849,12 @@ export class WorldView {
       resetSurface(sheet.root);
       if (restoreFocus && returnTo?.isConnected) returnTo.focus({ preventScroll: true });
     };
+    // `instant` is the route into a duel: the card is outside the screen that is leaving, so it must
+    // be gone before the map's exit beat rather than fading over the board on its own.
+    if (instant) {
+      done();
+      return;
+    }
     exitSurface(sheet.card, { onDone: done });
     exitSurface(sheet.root, { travel: 0, scale: 1, duration: 150 });
   }
@@ -1827,17 +1898,25 @@ export class WorldView {
     this.sheetRequestId = crypto.randomUUID();
     this.sheetMode = sheetModeFor(challenge, me);
     const now = this.challengeNow();
+    // A PENDING CHALLENGE PAST ITS DEADLINE IS ALREADY A FORFEIT (expiry is applied lazily, but the
+    // rule is not): never offer ACCEPT on one. The closed branch below says what happened instead.
+    const overdue = challenge.status === 'pending' && challenge.expiresAt <= now;
+    if (overdue) this.sheetMode = 'closed';
     const other = opponentName(challenge, me);
     // The glyph carries the contested ground's colour (the same `--territory` the tile and its ring
     // use), so the card is anchored to the map it came from. Rock holds no tile and has no colour.
     this.setSheetGround(this.world?.claims.find((claim) => claim.cellId === challenge.cellId)?.colour ?? null);
     sheet.notice.textContent = '';
     switch (this.sheetMode) {
-      case 'defend':
-        sheet.line.textContent = CHALLENGE.defendLine(challenge.challengerName ?? 'Player', challenge.stake);
-        sheet.meta.textContent = CHALLENGE.stakeMeta(challenge.stake, remainingLabel(challenge.expiresAt - now));
+      case 'defend': {
+        // The countdown, not a price (owner report, 2026-10-28). `showSheet` starts the live clock
+        // and repaints this every second, so the number here is already honest on the first frame.
+        const copy = defendSheetCopy(challenge, now);
+        sheet.line.textContent = copy.line;
+        sheet.meta.textContent = copy.meta;
         this.setSheetKeys(CHALLENGE.acceptKey, CHALLENGE.declineKey);
         break;
+      }
       case 'wait':
         sheet.line.textContent = CHALLENGE.waitLine(challenge.defenderName ?? 'Player');
         sheet.meta.textContent = CHALLENGE.remaining(remainingLabel(challenge.expiresAt - now));
@@ -1857,7 +1936,10 @@ export class WorldView {
           sheet.line.textContent = CHALLENGE.confirmLine(winner);
           this.setSheetKeys(CHALLENGE.takeKey, CHALLENGE.notNow);
         }
-        sheet.meta.textContent = CHALLENGE.stakeOnly(challenge.stake);
+        // Only the CHALLENGER escrowed Seeds, so only the challenger reads an amount here. For the
+        // defender the same line would be the old misreading again — a figure above a key that looks
+        // like a price. They are told the one thing that is true for them.
+        sheet.meta.textContent = challenge.challengerId === me ? CHALLENGE.stakeOnly(challenge.stake) : CHALLENGE.defendMeta;
         break;
       }
       case 'resolved':
@@ -1866,8 +1948,15 @@ export class WorldView {
         this.setSheetKeys(null, CHALLENGE.close);
         break;
       default:
-        sheet.line.textContent = CHALLENGE.closedLine;
-        sheet.meta.textContent = CHALLENGE.closedShort;
+        // An unanswered challenge that ran out is a FORFEIT, not a neutral close: the tile went to
+        // the challenger (`expireChallenges`). Say so in words rather than "this challenge is over".
+        if (challenge.status === 'expired' || (challenge.status === 'pending' && challenge.expiresAt <= now)) {
+          sheet.line.textContent = CHALLENGE.deadlineLine(challenge.challengerName ?? 'The challenger');
+          sheet.meta.textContent = CHALLENGE.forfeited;
+        } else {
+          sheet.line.textContent = CHALLENGE.closedLine;
+          sheet.meta.textContent = CHALLENGE.closedShort;
+        }
         this.setSheetKeys(null, CHALLENGE.close);
     }
     this.showSheet();

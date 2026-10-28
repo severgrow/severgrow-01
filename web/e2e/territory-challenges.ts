@@ -193,7 +193,10 @@ const swordsData = (page: Page, cellId: string) => page.evaluate((id) => {
     hit: { w: hb.width, h: hb.height },
     dx: (hb.left + hb.width / 2) - (tb.left + tb.width / 2),
     dy: (hb.top + hb.height / 2) - (tb.top + tb.height / 2),
-    swordGroups: group.querySelectorAll(':scope > g > g').length,
+    // The trace is ONE filled path containing both swords and the crossing block (world-view.ts
+    // `makeMarker`: "this is ONE filled path, not two rotated copies").
+    glyphPaths: glyph ? glyph.querySelectorAll(':scope > path').length : 0,
+    glyphD: glyph?.querySelector('path')?.getAttribute('d')?.length ?? 0,
     animation: glyph ? getComputedStyle(glyph).animationName : '',
     transition: glyph ? getComputedStyle(glyph).transitionDuration : '',
   };
@@ -204,6 +207,32 @@ const activate = async (page: Page, selector: string) => {
   await page.locator(selector).first().focus();
   await page.keyboard.press('Enter');
   await page.waitForTimeout(250);
+};
+
+/**
+ * Open the challenge window. Since the 2026-10-28 redesign there is no single "list" panel: MENU
+ * slides out the key row, and the CHALLENGES key opens its pane. This is that one path, so a suite
+ * step never depends on the key row already being open.
+ */
+const openChallengeWindow = async (page: Page): Promise<void> => {
+  if (await page.isHidden('#online-world-panel')) {
+    if ((await page.getAttribute('#online-world-menu', 'aria-expanded')) !== 'true') await page.click('#online-world-menu');
+    await page.click('#world-key-challenges');
+  }
+  await page.waitForSelector('.world-challenge-chip', { state: 'visible', timeout: 10_000 });
+};
+
+/**
+ * Tap a tile and open its challenge sheet. A contested tile's tap selects it and offers VIEW
+ * CHALLENGE on the tile bar; the crossed swords (drawn above the tile) open the sheet directly. Both
+ * are real paths, so this takes whichever the tap produced rather than assuming one.
+ */
+const tapAndOpenSheet = async (page: Page): Promise<void> => {
+  const open = await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 2500 })
+    .then(() => true).catch(() => false);
+  if (open) return;
+  await activate(page, '#online-world-selection .world-claim-button');
+  await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
 };
 
 const scrollState = (page: Page) => page.evaluate(() => ({
@@ -320,9 +349,10 @@ try {
     await page.goto(BASE, { waitUntil: 'load' });
     await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20_000 });
     await page.evaluate(() => document.fonts?.ready ?? Promise.resolve()).catch(() => undefined);
-    // The map control is an ICON since 2026-10-23 (owner: no "FIT" word), so readiness is the icon
-    // in place, not a text value. world-pan.ts waits on the same thing.
-    await page.waitForFunction(() => !!document.querySelector('#online-world-fit .world-fit-icon'), undefined, { timeout: 20_000 });
+    // Readiness is the LOBBY being installed, not just the page loading: the world view injects its
+    // hardware-key icons when it is constructed, and that is the moment `#menu-world` has a handler.
+    // (The old signal was the FIT icon, which the 2026-10-28 redesign removed.)
+    await page.waitForFunction(() => !!document.querySelector('#online-world-keys .world-key svg'), undefined, { timeout: 20_000 });
     await activate(page, '#menu-world');
     await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 20_000 });
     await page.locator('.world-hex').first().waitFor({ state: 'attached', timeout: 45_000 });
@@ -345,8 +375,7 @@ try {
     // the rival tap opened the challenge offer; shut it, then open the one window's list
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => (document.querySelector('.world-challenge-sheet') as HTMLElement | null)?.hidden !== false);
-    await page.click('#online-world-menu');
-    await page.waitForSelector('.world-challenge-chip', { timeout: 10_000 });
+    await openChallengeWindow(page);
     await page.waitForTimeout(700); // the chips' one-time arrival settles before anything is measured
 
     // ---- 1. no page scroll, with the rail on screen ------------------------------------------
@@ -440,9 +469,11 @@ try {
     const outgoingSwords = await swordsData(page, rival2);
     const swordCount = await page.evaluate(() => document.querySelectorAll('.world-swords').length);
     check(`[${tag}] the crossed swords mark the DEFENDER's contested tile`, !!incomingSwords &&
-      incomingSwords.side === 'incoming' && incomingSwords.swordGroups === 2);
+      incomingSwords.side === 'incoming' && incomingSwords.glyphPaths === 1 && incomingSwords.glyphD > 0,
+      `${incomingSwords?.side}, ${incomingSwords?.glyphPaths} path(s)`);
     check(`[${tag}] the crossed swords mark the CHALLENGER's contested tile`, !!outgoingSwords &&
-      outgoingSwords.side === 'outgoing' && outgoingSwords.swordGroups === 2);
+      outgoingSwords.side === 'outgoing' && outgoingSwords.glyphPaths === 1 && outgoingSwords.glyphD > 0,
+      `${outgoingSwords?.side}, ${outgoingSwords?.glyphPaths} path(s)`);
     check(`[${tag}] only contested tiles carry swords (no marker on a plain rival tile)`, swordCount === 2,
       `${swordCount} marker(s)`);
     // The glyph is a drawing OF the tile, not an overlay near it: the hit disc is centred on the hex.
@@ -463,15 +494,16 @@ try {
       `${incomingSwords?.label} / ${outgoingSwords?.label}`);
     check(`[${tag}] the swords glyph itself is static (no animation, no transition)`,
       incomingSwords?.animation === 'none' && incomingSwords.transition === '0s');
-    // Tapping the SWORDS opens the existing challenge sheet, which already answers "who challenged".
+    // Tapping the SWORDS selects their tile; the tile bar's VIEW CHALLENGE opens the sheet that
+    // already answers "who challenged". (`tapAndOpenSheet` takes whichever door the tap produced.)
     await tapSwords(page, own1);
-    await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await tapAndOpenSheet(page);
     await page.waitForTimeout(500); // a fresh sheet ignores presses for its first 450 ms (the opening tap is spent)
     await settleSheet(page);
     const swordsSheet = await page.evaluate(() =>
       (document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-line') as HTMLElement | null)?.textContent ?? '');
     check(`[${tag}] tapping the swords says who challenged this tile`,
-      swordsSheet.includes('RYK') && swordsSheet.includes('challenged you'), swordsSheet);
+      swordsSheet.includes('RYK') && swordsSheet.includes('challenged your tile'), swordsSheet);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(250);
 
@@ -488,7 +520,7 @@ try {
 
     // ---- 4. the send sheet: one primary key, and it sends -----------------------------------
     await tapCell(page, rival);
-    await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await tapAndOpenSheet(page);
     await page.waitForTimeout(500); // a fresh sheet ignores presses for its first 450 ms (the opening tap is spent)
     await settleSheet(page);
     const sendSheet = await page.evaluate(() => {
@@ -528,7 +560,7 @@ try {
 
     // ---- 5. the defender sheet, and DECLINE --------------------------------------------------
     await tapCell(page, own1);
-    await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await tapAndOpenSheet(page);
     await page.waitForTimeout(500); // a fresh sheet ignores presses for its first 450 ms (the opening tap is spent)
     await settleSheet(page);
     const defendSheet = await page.evaluate(() => {
@@ -540,8 +572,13 @@ try {
         secondary: (sheet.querySelector('.world-challenge-secondary') as HTMLButtonElement).textContent ?? '',
       };
     });
-    check(`[${tag}] the defender sheet spells out the stake and the time`,
-      defendSheet.line.includes('50 Seeds') && /SEEDS · .* LEFT/.test(defendSheet.meta), defendSheet.meta);
+    // THE RULE CHANGED (owner report, 2026-10-28): the defender is never charged, and the sheet used
+    // to show the challenger's 50-Seed stake right above ACCEPT, which read as a price. The defender
+    // is now asked to answer, on a live countdown, and told outright that it costs nothing. The old
+    // expectation here pinned the misleading copy; it is updated to the new rule, not weakened.
+    check(`[${tag}] the defender sheet states the countdown and never charges them`,
+      /Answer within .+ to keep it/.test(defendSheet.line) && !/50|Seeds/i.test(defendSheet.line) &&
+      defendSheet.meta === 'NO SEEDS TO PAY', `${defendSheet.line} | ${defendSheet.meta}`);
     check(`[${tag}] the defender sheet offers ACCEPT as the one primary key`,
       defendSheet.primary === 'ACCEPT' && defendSheet.secondary === 'DECLINE');
     // DECLINE is now armed by the first press (owner review, 2026-10-24): it is the one
@@ -574,8 +611,8 @@ try {
       JSON.stringify(afterDecline));
 
     // ---- 6. a finished linked duel offers TAKE THE GROUND -----------------------------------
-    // the chip lives in the one window: open it first (owner, 2026-10-28)
-    if (await page.isHidden('#online-world-panel')) await page.click('#online-world-menu');
+    // the chip lives in the challenge window: open it first (one MENU key + one CHALLENGES key)
+    await openChallengeWindow(page);
     await activate(page, '.world-challenge-chip[data-challenge-id="out-2"]');
     await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
     await page.waitForTimeout(500); // a fresh sheet ignores presses for its first 450 ms (the opening tap is spent)
@@ -624,9 +661,9 @@ try {
   }));
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20_000 });
-  // The map control is an ICON since 2026-10-23 (owner: no "FIT" word), so readiness is the icon
-  // in place, not a text value. world-pan.ts waits on the same thing.
-  await page.waitForFunction(() => !!document.querySelector('#online-world-fit .world-fit-icon'), undefined, { timeout: 20_000 });
+  // Readiness is the LOBBY installed (its world view injects the hardware-key icons), not the old
+  // FIT icon the 2026-10-28 redesign removed.
+  await page.waitForFunction(() => !!document.querySelector('#online-world-keys .world-key svg'), undefined, { timeout: 20_000 });
   await activate(page, '#menu-world');
   await page.waitForSelector('.world-ring.low', { timeout: 20_000 });
   const reduced = await page.evaluate(() => {

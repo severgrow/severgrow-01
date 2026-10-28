@@ -89,6 +89,34 @@ export const winnerName = (challenge: WorldChallengeWire): string | null => {
 };
 
 /**
+ * THE DEFENDER'S SHEET, AS A FUNCTION OF THE CLOCK (owner report, 2026-10-28: the defender was shown
+ * the challenger's stake above ACCEPT and read it as their price; they must instead read a countdown
+ * and be able to answer to keep the tile).
+ *
+ * The sheet is opened once, but the deadline keeps moving, so the sentence is computed from `now`
+ * rather than captured on open — the sheet re-runs this every second. At zero it STOPS asking and
+ * says what `expireChallenges` does: the tile goes to the challenger. Keeping that rule here (pure,
+ * no DOM) is what makes both the live tick and the expired state testable.
+ */
+export type DefendSheetCopy = { line: string; meta: string; expired: boolean };
+
+export const defendSheetCopy = (
+  challenge: Pick<WorldChallengeWire, 'challengerName' | 'expiresAt'>,
+  now: number,
+): DefendSheetCopy => {
+  const name = challenge.challengerName ?? 'Player';
+  const left = challenge.expiresAt - now;
+  if (left > 0) {
+    return { line: CHALLENGE.defendLine(name, remainingLabel(left)), meta: CHALLENGE.defendMeta, expired: false };
+  }
+  return {
+    line: CHALLENGE.deadlineLine(challenge.challengerName ?? 'The challenger'),
+    meta: CHALLENGE.forfeited,
+    expired: true,
+  };
+};
+
+/**
  * THE CROSSED SWORDS (owner, 2026-10-24: "place 2 swords graphic on top of the tile that is being
  * challenged... if someone clicks at it they can see who challenged it too").
  *
