@@ -35,6 +35,17 @@ const FRESH_MS = 6 * 60 * 60 * 1000;
 const STAGE_CELL_PX = 54;
 const desktopStage = (): boolean =>
   typeof matchMedia === 'function' && matchMedia('(min-width: 960px) and (min-height: 560px) and (min-aspect-ratio: 5/4)').matches;
+
+/**
+ * THE KEY ROW'S TRAVEL ORDER, as a pure list, so it is testable without a browser.
+ *
+ * The row is laid out next to MENU, so the key nearest MENU is the LAST in document order. That one
+ * leads the roll-out (`--key-i` 0); the farthest trails it. The array is the `--key-i` for each key
+ * in document order: `[count-1, …, 1, 0]`. Derived from the live row's length, never from a fixed
+ * selector list, so a fourth or fifth key is indexed the moment it exists.
+ */
+export const keyRowOrder = (count: number): number[] =>
+  Array.from({ length: Math.max(0, count) }, (_, index) => count - 1 - index);
 /** How long a freshly opened challenge sheet ignores presses: longer than a tap's own click, shorter than a deliberate answer. */
 const SHEET_GUARD_MS = 450;
 /** Motes drifting off held ground: few on purpose (they are atmosphere, not effects). */
@@ -269,9 +280,18 @@ export class WorldView {
       menu.title = ONLINE.worldMenu;
       menu.addEventListener('click', () => this.setKeys(!this.keysOpen));
     }
-    document.getElementById('online-world-keys')?.setAttribute('aria-label', ONLINE.worldMenu);
+    const row = document.getElementById('online-world-keys');
+    row?.setAttribute('aria-label', ONLINE.worldMenu);
+    // THE ROW'S ORDER, stamped once from the row itself (never a hardcoded count): `--key-i` 0 is
+    // the key nearest MENU, the last is the farthest, and `--key-count` lets the closed state use
+    // the SAME stagger formula mirrored. A fourth or fifth key therefore joins the wave the moment
+    // it is added to the markup - the old `:nth-last-child(1..3)` list silently left it unindexed.
+    const rowKeys = [...(row?.querySelectorAll<HTMLButtonElement>('.world-key') ?? [])];
+    const order = keyRowOrder(rowKeys.length);
+    rowKeys.forEach((key, index) => key.style.setProperty('--key-i', String(order[index] ?? 0)));
+    row?.style.setProperty('--key-count', String(rowKeys.length));
     const names: Record<Pane | 'chat', string> = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, chat: ONLINE.worldChat };
-    for (const key of document.querySelectorAll<HTMLButtonElement>('#online-world-keys .world-key')) {
+    for (const key of rowKeys) {
       const pane = key.dataset.pane as Pane | undefined;
       key.insertAdjacentHTML('afterbegin', WORLD_KEY_ICONS[pane ?? 'chat']);
       key.setAttribute('aria-label', names[pane ?? 'chat']);
@@ -1097,13 +1117,18 @@ export class WorldView {
    * MENU's row of keys (owner, 2026-10-28: "MENU button stays and it's the only button visible
    * straight away, 4 other keys open after clicking menu"). Folding the row also shuts whatever window
    * or chat it had open.
+   *
+   * INSTANT BY CONSTRUCTION (owner, 2026-10-28: "built it in a smart way so it loads instantly
+   * always"): the row already rests at opacity 0 ON SCREEN and is pre-promoted (CSS `will-change`),
+   * so opening is compositor work only. This handler therefore MEASURES nothing and awaits nothing -
+   * no layout read, no rAF, no timer - and the one class that starts the motion is its last write,
+   * so the first animated frame is the very next one. Every other update (the lamps, ARIA, the
+   * window) lands first, in the same task, before that class.
    */
   private setKeys(open: boolean, focus = true) {
     this.keysOpen = open;
     const keys = document.getElementById('online-world-keys');
     const menu = document.getElementById('online-world-menu');
-    keys?.classList.toggle('open', open);
-    keys?.toggleAttribute('inert', !open);
     menu?.setAttribute('aria-expanded', String(open));
     menu?.classList.toggle('on', open);
     document.getElementById('online-world-grid')?.classList.toggle('keys-open', open);
@@ -1113,6 +1138,10 @@ export class WorldView {
       if (focus) menu?.focus({ preventScroll: true });
     }
     this.paintPanel();
+    // LAST, and the only change that starts a transition: `.open` drives the roll-out, `inert`
+    // takes the folded row out of the tap and Tab order. Neither needs a prior measurement.
+    keys?.toggleAttribute('inert', !open);
+    keys?.classList.toggle('open', open);
   }
 
   /** Open one key's page of the window, switch to another, or shut it (null). */
