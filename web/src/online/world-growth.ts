@@ -118,3 +118,38 @@ export const borderSegments = (cells: readonly { q: number; r: number }[]): [num
   }
   return out;
 };
+
+export type Patch = { cellIds: string[]; tiles: number; centre: { x: number; y: number } };
+
+/** The separate patches of my land (tiles that touch), the biggest first; a tie, the earlier grown first. */
+export const ownPatches = (cells: readonly Cell[], claims: readonly Claim[], me: string | null): Patch[] => {
+  if (!me) return [];
+  const when = new Map(claims.filter((c) => c.ownerId === me).map((c) => [c.cellId, c.claimedAt] as const));
+  const mine = cells.filter((c) => when.has(c.id));
+  const byId = new Map(mine.map((c) => [c.id, c] as const));
+  const seen = new Set<string>();
+  const out: (Patch & { first: number })[] = [];
+  for (const start of mine) {
+    if (seen.has(start.id)) continue;
+    const group: Cell[] = [];
+    const stack = [start];
+    seen.add(start.id);
+    while (stack.length) {
+      const cell = stack.pop()!;
+      group.push(cell);
+      for (const [dq, dr] of ACROSS) {
+        const near = byId.get(`${cell.q + dq},${cell.r + dr}`);
+        if (near && !seen.has(near.id)) { seen.add(near.id); stack.push(near); }
+      }
+    }
+    const pts = group.map((c) => cellXY(c.q, c.r));
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+    out.push({
+      cellIds: group.map((c) => c.id),
+      tiles: group.length,
+      centre: { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 },
+      first: Math.min(...group.map((c) => when.get(c.id)!)),
+    });
+  }
+  return out.sort((a, b) => b.tiles - a.tiles || a.first - b.first).map(({ first: _first, ...patch }) => patch);
+};

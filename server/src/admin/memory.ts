@@ -7,7 +7,7 @@
 // faked (there is one: a world claim's `source`).
 import { playerTag } from '../../../src/player-tag.js';
 import { newId } from '../ids.js';
-import { WORLD_CELLS } from '../world.js';
+import { WORLD_CELLS, seenCellIds } from '../world.js';
 import { SEED_ECONOMY } from '../seeds/config.js';
 import { shapeCampaign } from './campaign.js';
 import { classificationOf, shapePlayers, PLAYERS_LIMIT, type PlayerFacts } from './players.js';
@@ -594,8 +594,10 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
       return {
         serverNow: now,
         revision: store?.revision ?? 0,
-        cellsTotal: WORLD_CELLS.length,
-        cellIds: WORLD_CELLS.map((cell) => cell.id),
+        // The SEEN map (world v3): the v2 coast plus the land uncovered around every tile, the same
+        // set players see (server/src/world.ts), so a tile grown on new land shows here too.
+        cellsTotal: seenCellIds(claims.map((c) => c.cellId)).size,
+        cellIds: [...seenCellIds(claims.map((c) => c.cellId))],
         totalClaims: claims.length,
         owners: new Set(claims.map((c) => c.ownerId)).size,
         claimsByDay: days.map((day) => ({ day, n: byDay.get(day)?.length ?? 0 })),

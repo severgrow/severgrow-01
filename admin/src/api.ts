@@ -193,9 +193,47 @@ export type AdminSession = {
   serverNow: number;
 };
 
+class AdminTimeout extends Error {}
+const failed = (error: unknown): { ok: false; status: number; code: string; message: string } =>
+  error instanceof AdminTimeout
+    ? { ok: false, status: 0, code: 'TIMEOUT', message: TIMEOUT_MESSAGE }
+    : { ok: false, status: 0, code: 'OFFLINE', message: 'Could not reach the duel API.' };
+
 export type Page<T> = { rows: T[]; total: number; nextCursor: string | null };
 
+/**
+ * ONE REQUEST AT A TIME, and none forever (owner report, 2026-10-28: "Seeds & world" showed "Function
+ * failed due to not having enough compute resources" and "Loading…" without end). The page used to
+ * fire several heavy reads together; the Edge function has a small per-request budget and its pooled
+ * queries can hang when issued together (server/src/admin/postgres.ts, `world`). The client now sends
+ * them in the order asked, each after the last has answered, and gives up after this long.
+ */
+export const ADMIN_REQUEST_TIMEOUT_MS = 45_000;
+const TIMEOUT_MESSAGE = 'The server took too long to answer. Try again.';
+
 export class AdminApi {
+  /** The tail of the one-at-a-time line every request joins. */
+  private line: Promise<unknown> = Promise.resolve();
+
+  /** Join the line: start only when the request ahead has answered, and stop waiting at the timeout. */
+  private send(url: string, init: RequestInit = {}): Promise<Response> {
+    const run = async (): Promise<Response> => {
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), ADMIN_REQUEST_TIMEOUT_MS);
+      try {
+        return await fetch(url, { ...init, signal: abort.signal });
+      } catch (error) {
+        if (abort.signal.aborted) throw new AdminTimeout();
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    const turn = this.line.then(run, run);
+    this.line = turn.catch(() => undefined);
+    return turn;
+  }
+
   constructor(
     private readonly base: string,
     readonly token: string,
@@ -238,23 +276,23 @@ export class AdminApi {
     }
     const text = search.toString();
     try {
-      const response = await fetch(`${this.base}${path}${text ? `?${text}` : ''}`, { headers: this.headers() });
+      const response = await this.send(`${this.base}${path}${text ? `?${text}` : ''}`, { headers: this.headers() });
       return await this.parse<T>(response);
-    } catch {
-      return { ok: false, status: 0, code: 'OFFLINE', message: 'Could not reach the duel API.' };
+    } catch (error) {
+      return failed(error);
     }
   }
 
   async post<T>(path: string, body: unknown): Promise<ApiResult<T>> {
     try {
-      const response = await fetch(`${this.base}${path}`, {
+      const response = await this.send(`${this.base}${path}`, {
         method: 'POST',
         headers: this.headers({ 'content-type': 'application/json' }),
         body: JSON.stringify(body ?? {}),
       });
       return await this.parse<T>(response);
-    } catch {
-      return { ok: false, status: 0, code: 'OFFLINE', message: 'Could not reach the duel API.' };
+    } catch (error) {
+      return failed(error);
     }
   }
 
@@ -267,13 +305,13 @@ export class AdminApi {
     }
     const text = search.toString();
     try {
-      const response = await fetch(`${this.base}${path}${text ? `?${text}` : ''}`, { headers: this.headers({ accept: 'text/csv' }) });
+      const response = await this.send(`${this.base}${path}${text ? `?${text}` : ''}`, { headers: this.headers({ accept: 'text/csv' }) });
       if (response.ok) return { ok: true, data: await response.text() };
       const parsed = await this.parse<never>(response);
       if (parsed.ok) return { ok: false, status: response.status, code: 'ERROR', message: 'The export could not be read.' };
       return { ok: false, status: parsed.status, code: parsed.code, message: parsed.message };
-    } catch {
-      return { ok: false, status: 0, code: 'OFFLINE', message: 'Could not reach the duel API.' };
+    } catch (error) {
+      return failed(error);
     }
   }
 

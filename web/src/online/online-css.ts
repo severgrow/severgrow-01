@@ -1046,6 +1046,11 @@ export const ONLINE_CSS = `
    coordinates read-out bottom-left. Every one sits on the same 10px edge and is 44px tall, so the
    menu key's right edge is FIT's right edge and the four make one frame. */
 .world-grid > .world-mine { right: auto; left: 10px; }
+/* with land in several places, the key shows which patch it is on: a tiny 2/3 under the target */
+.world-grid > .world-mine[data-patch]:not([data-patch=''])::after {
+  content: attr(data-patch); position: absolute; left: 50%; bottom: 3px; translate: -50% 0;
+  font-size: .5rem; line-height: 1; letter-spacing: .08em; color: #cfc6acb3; font-variant-numeric: tabular-nums;
+}
 .world-grid > #online-world-fit { top: auto; bottom: 10px; right: 10px; }
 .world-coord {
   position: absolute; z-index: 2; left: 10px; bottom: 10px; margin: 0; pointer-events: none;

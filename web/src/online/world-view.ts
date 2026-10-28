@@ -24,7 +24,7 @@ import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { WORLD_CLAIMED_EVENT } from './world-events.js';
-import { borderSegments, cellXY, fogRings, newCellIds, ownCentre, ranking, recentActivity, standing } from './world-growth.js';
+import { borderSegments, cellXY, fogRings, newCellIds, ownCentre, ownPatches, ranking, recentActivity, standing } from './world-growth.js';
 import { ONLINE } from '../../../src/strings.js';
 
 /** A tile grown this recently keeps its halo (the map shows where the world is moving). */
@@ -919,10 +919,17 @@ export class WorldView {
     this.flyTo(at.x, at.y);
     this.select(cellId);
   }
+  /** Which patch of my land find-my-land showed last (owner, 2026-10-28: each press shows the next). */
+  private patchAt = -1;
   private flyToMine() {
     if (!this.world) return;
-    const centre = ownCentre(this.world.cells, this.world.claims, this.identity?.playerId ?? null);
-    if (centre) this.flyTo(centre.x, centre.y);
+    const patches = ownPatches(this.world.cells, this.world.claims, this.identity?.playerId ?? null);
+    if (!patches.length) return;
+    this.patchAt = (this.patchAt + 1) % patches.length;
+    const patch = patches[this.patchAt]!;
+    this.flyTo(patch.centre.x, patch.centre.y);
+    const mine = document.getElementById('online-world-mine');
+    if (mine) mine.dataset.patch = patches.length > 1 ? `${this.patchAt + 1}/${patches.length}` : '';
   }
   private flyToOwner(ownerId: string) {
     if (!this.world) return;

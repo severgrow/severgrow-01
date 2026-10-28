@@ -2,7 +2,7 @@
 // recent-activity strip, "find my land", and which cells are new since the last look.
 import { describe, expect, it } from 'vitest';
 import { seenCellIds } from '../../server/src/world.js';
-import { agoLabel, borderSegments, fogRings, newCellIds, ownCentre, ranking, recentActivity, standing } from '../src/online/world-growth.js';
+import { agoLabel, borderSegments, fogRings, newCellIds, ownCentre, ownPatches, ranking, recentActivity, standing } from '../src/online/world-growth.js';
 
 type Claim = { cellId: string; ownerId: string; ownerName: string | null; ownerTag: string; colour: string; claimedAt: number };
 const claim = (cellId: string, ownerId: string, claimedAt: number, ownerName: string | null = ownerId.toUpperCase()): Claim =>
@@ -94,5 +94,24 @@ describe('the outline of your land', () => {
   it('a ring of six around a hole is outlined inside and out', () => {
     const ring = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]].map(([q, r]) => ({ q: q!, r: r! }));
     expect(borderSegments(ring)).toHaveLength(6 * 6 - 12);
+  });
+});
+
+// Owner, 2026-10-28: "when having tiles in multiple locations, it should show different ones after
+// clicking it again". Find-my-land walks the separate patches of your land, biggest first.
+describe('the patches of your land', () => {
+  const cells = ['0,0', '1,0', '2,0', '9,0', '9,1', '-6,3'].map((id) => { const [q, r] = id.split(',').map(Number); return { id, q: q!, r: r! }; });
+  const claims = [claim('0,0', 'me', 1), claim('1,0', 'me', 2), claim('2,0', 'me', 3), claim('9,0', 'me', 4), claim('9,1', 'me', 5), claim('-6,3', 'me', 6), claim('5,5', 'other', 7)];
+  it('groups touching tiles into patches, the biggest first, each with its own centre', () => {
+    const patches = ownPatches(cells, claims, 'me');
+    expect(patches.map((p) => p.tiles)).toEqual([3, 2, 1]);
+    expect(patches[0]!.centre).toEqual(ownCentre(cells.slice(0, 3), claims, 'me'));
+    expect(patches[2]!.cellIds).toEqual(['-6,3']);
+  });
+  it('a tie keeps the patch grown first ahead; no land, no patches', () => {
+    const tie = [claim('0,0', 'me', 9), claim('9,0', 'me', 1)];
+    expect(ownPatches(cells, tie, 'me').map((p) => p.cellIds[0])).toEqual(['9,0', '0,0']);
+    expect(ownPatches(cells, claims, 'nobody')).toEqual([]);
+    expect(ownPatches(cells, claims, null)).toEqual([]);
   });
 });

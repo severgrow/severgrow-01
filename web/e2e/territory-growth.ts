@@ -161,6 +161,12 @@ try {
   await page.click('#online-world-mine');
   await page.waitForTimeout(200);
   check('find my land moves the map back to my tiles', (await page.getAttribute('.world-map-svg', 'viewBox')) !== vb1);
+  // land in several places: each press shows the next patch (owner, 2026-10-28)
+  const vbA = await page.getAttribute('.world-map-svg', 'viewBox');
+  await page.click('#online-world-mine');
+  await page.waitForTimeout(200);
+  const vbB = await page.getAttribute('.world-map-svg', 'viewBox');
+  check('a second press of find-my-land shows a different patch of my land', vbA !== vbB && /^\d\/\d$/.test((await page.getAttribute('#online-world-mine', 'data-patch')) ?? ''), `${vbA} → ${vbB}`);
 
   // selling a tile (owner, 2026-10-27): my tile at 10,0, from the selection bar
   const walletBefore = await page.textContent('#online-world-wallet');

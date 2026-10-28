@@ -5,7 +5,7 @@
 // `player_tokens` (token hashes), `matches.invite_code`, `match_moves.events` payloads,
 // `player_identities.subject` (the Google subject) and any email. The API's response shapes in
 // types.ts are the whitelist; nothing here can widen them.
-import { WORLD_CELLS, WORLD_VERSION } from '../world.js';
+import { WORLD_CELLS, seenCellIds } from '../world.js';
 import { SEED_ECONOMY } from '../seeds/config.js';
 import { ApiError } from '../errors.js';
 import { newId } from '../ids.js';
@@ -986,7 +986,8 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       // until the platform's 150s idle timeout. It was reproduced with the PRE-filter SQL as well,
       // so it is a pre-existing runtime quirk, not the test filter — and one query at a time always
       // answers (~1.5s). Same rows, same order, no pipelining.
-      const meta = await pool.query('select revision from world_meta where version = $1', [WORLD_VERSION]);
+      // world_meta keeps ONE row, version 1 (its own check constraint), whatever the map's version.
+      const meta = await pool.query('select revision from world_meta where version = 1');
       const total = await pool.query(`select count(*)::int as n from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`);
       const owners = await pool.query(`select count(distinct c.owner_id)::int as n from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`);
       const byDay = await pool.query(
@@ -1020,8 +1021,10 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       return {
         serverNow: now,
         revision: num(meta.rows[0]?.revision),
-        cellsTotal: WORLD_CELLS.length,
-        cellIds: WORLD_CELLS.map((cell) => cell.id),
+        // The SEEN map (world v3): the v2 coast plus the land uncovered around every tile, the same
+        // set players see (server/src/world.ts), so a tile grown on new land shows here too.
+        cellsTotal: seenCellIds(all.rows.map((row) => str(row.cell_id))).size,
+        cellIds: [...seenCellIds(all.rows.map((row) => str(row.cell_id)))],
         totalClaims: num(total.rows[0]?.n),
         owners: num(owners.rows[0]?.n),
         claimsByDay: days.map((day) => ({ day, n: dayIndex.get(day) ?? 0 })),
