@@ -60,6 +60,23 @@ Status: implemented on isolated `futa0.5-world-seeds` branch; **not deployed**. 
 - **Ops**: `docs/ops/return-challenged-tiles.sql` hands back tiles one player took from another by
   challenge (Supabase SQL editor; look first, then change).
 
+## v3.3: four cockpit corners and Territory chat (owner, 2026-10-28)
+
+- **Four corners, one key design**: find-my-land top-left (each press visits the next patch of your
+  land, "2/3"), the MENU top-right, ZOOM bottom-right, CHAT bottom-left. Each is the in-game cockpit
+  key: 44px, radius 12, the supplied hardware frame (`hardware/button-frame-supplied.webp`), on one
+  10px edge (14px on the desktop stage). The coordinates read-out is gone. The menu window opens on
+  the corner row and covers the menu key exactly (on desktop it drops from that corner).
+- **Territory chat** (`server/src/chat/territory.ts`, `web/src/online/territory-chat.ts`): one shared
+  channel for everyone in Territory. Each line shows the sender's nickname and #tag. The server keeps
+  the newest 30 messages and deletes older ones (`territory_messages`, migration
+  `0018_territory_chat.sql`). It reuses duel chat's text rules, its block list (`match_chat_blocks`:
+  one list for both chats) and the rate limiter (6 a minute, 200 a day). Tap someone's message for
+  BLOCK (two taps) and REPORT; a report copies the line into `territory_chat_reports`. While open it
+  asks for news every 4 s; shut, it asks for nothing. Menu and chat are one window at a time.
+- **Rollout order**: run `server/migrations/0018_territory_chat.sql` once (Supabase SQL editor), then
+  deploy the `duel` function, then the site. Until then the chat says it is not reachable.
+
 ## Ownership and economy
 
 - The world is one versioned, frozen axial hex map. v2 (2026-10-21) is **274 cells** (21 rows, r −10…10): the 183-cell v1 landmass plus an irregular coastal growth, baked into `server/src/world.ts` by `scripts/gen-world-v2.mjs` (no runtime randomness). Its cell IDs are `q,r`. Expansions only ADD ids; every v1 id is unchanged, so an existing claim can never be orphaned — verified against the nine live claims when the coastline shape shipped (none dropped). Historical 8×8 `world_tiles` owners are copied into the central 64 positions by migration `0011_seeds_world.sql`; the historical table and migration remain intact.

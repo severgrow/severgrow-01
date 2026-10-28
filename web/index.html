@@ -291,7 +291,7 @@
                Centred over the map on a light glass, so the land stays visible behind it. -->
           <section id="online-world-panel" class="world-panel" role="dialog" aria-modal="false" aria-label="Territory" hidden>
             <header class="world-panel-head">
-              <span class="world-panel-led" aria-hidden="true"></span>
+              <span class="world-panel-spacer" aria-hidden="true"></span>
               <div class="world-seg world-tabs" role="tablist" aria-label="Territory">
                 <button id="world-tab-challenges" class="world-seg-key" type="button" role="tab" data-tab="challenges" aria-selected="true"><span class="world-seg-label"></span><span class="world-deck-count" hidden></span></button>
                 <button id="world-tab-ranking" class="world-seg-key" type="button" role="tab" data-tab="ranking" aria-selected="false"><span class="world-seg-label"></span></button>
@@ -318,19 +318,24 @@
               </div>
             </div>
           </section>
-          <!-- THE ONE MAP CONTROL (owner, 2026-10-21: "with a 'fit' toggle"). It sits on the panel's
-               corner like a map control, and it is a real <button> so it is keyboard reachable and
-               announces its pressed state. Its words come from `ONLINE.worldFit*` (lobby-ui.ts);
-               world-view.ts only owns the state and the viewBox. -->
-          <button id="online-world-fit" class="world-fit" type="button" aria-pressed="false"></button>
-          <!-- Find my land: one tap centres the map on your own tiles (they can be anywhere now). It
-               mirrors FIT in the opposite corner, so the window's controls are symmetric. -->
-          <button id="online-world-mine" class="world-fit world-mine" type="button" hidden></button>
-          <!-- The selected tile's coordinates, a quiet machine read-out between the two corner keys. -->
-          <p id="online-world-coord" class="world-coord" aria-hidden="true"></p>
-          <!-- THE MENU KEY: one hardware key at the window's foot, centred. Its lamp counts the open
-               challenges (red when one is waiting for your answer). -->
-          <button id="online-world-menu" class="world-menu-key" type="button" aria-expanded="false" aria-controls="online-world-panel"><span class="world-menu-glyph" aria-hidden="true"><i></i><i></i><i></i></span><span class="world-deck-count" hidden></span></button>
+          <!-- THE FOUR CORNERS (owner, 2026-10-28: "4 corners symmetrically aligned with YOUR TILES,
+               MENU, ZOOM, CHAT, all the same size and design as the in-game cockpit buttons"). Each is
+               the cockpit's 44px hardware key (the supplied button frame), on one shared edge. -->
+          <button id="online-world-mine" class="world-fit world-mine world-corner" type="button" disabled></button>
+          <button id="online-world-menu" class="world-menu-key world-corner" type="button" aria-expanded="false" aria-controls="online-world-panel"><span class="world-menu-glyph" aria-hidden="true"><i></i><i></i><i></i></span><span class="world-deck-count" hidden></span></button>
+          <button id="online-world-fit" class="world-fit world-corner" type="button" aria-pressed="false"></button>
+          <button id="online-world-chat" class="world-chat-key world-corner" type="button" aria-expanded="false" aria-controls="online-world-chat-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v11H10l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></svg></button>
+          <!-- TERRITORY CHAT: one shared channel for everyone here (web/src/online/territory-chat.ts).
+               It rises from the chat key's corner on the same dark glass as the menu window. -->
+          <section id="online-world-chat-panel" class="world-chat" aria-label="Territory chat" hidden>
+            <ol id="world-chat-list" class="world-chat-list" aria-live="polite"></ol>
+            <p id="world-chat-empty" class="world-chat-empty" hidden></p>
+            <form id="world-chat-form" class="world-chat-form" autocomplete="off">
+              <input id="world-chat-input" class="world-chat-input" type="text" maxlength="280" enterkeyhint="send" />
+              <button id="world-chat-send" class="world-chat-send" type="submit"></button>
+            </form>
+            <p id="world-chat-status" class="world-chat-status" role="status"></p>
+          </section>
         </div>
         <div id="online-world-selection" class="world-selection" aria-live="polite"></div>
         <p id="online-world-notice" class="online-notice" role="status" aria-live="polite"></p>

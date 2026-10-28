@@ -20,6 +20,7 @@ import { WorldEconomyService } from '../../server/src/seeds/service.js';
 import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { WORLD_CELL_IDS } from '../../server/src/world.js';
+import { createTerritoryChatRouter, memoryTerritoryChatStore } from '../../server/src/chat/territory.js';
 import { seedSettings } from './helpers/settings-seed.js';
 
 const CHROME = process.env.PW_CHROMIUM ?? undefined;
@@ -35,7 +36,7 @@ const config = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'] };
 const store = new MemoryWorldEconomyStore();
 const economy = new WorldEconomyService(store, storage);
 const service = new MatchService({ storage, config, economy });
-const api = createHttpServer({ service, config, live: chainRouters(createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) })) });
+const api = createHttpServer({ service, config, live: chainRouters(createTerritoryChatRouter({ store: memoryTerritoryChatStore(storage), service, storage }), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) })) });
 await new Promise<void>((resolve) => api.listen(0, '127.0.0.1', resolve));
 const apiBase = `http://127.0.0.1:${(api.address() as AddressInfo).port}`;
 
@@ -102,9 +103,21 @@ try {
     return { menuTop: k.top - g.top, menuRight: g.right - k.right, fitBottom: g.bottom - f.bottom, fitRight: g.right - f.right,
       menuH: k.height, fitH: f.height, gridL: g.left, gridR: innerWidth - g.right };
   });
-  check('the menu key is top-right and FIT bottom-right, their right edges one line',
-    Math.abs(sym.menuRight - sym.fitRight) <= 0.5 && Math.abs(sym.menuTop - sym.fitBottom) <= 0.5 && Math.abs(sym.menuH - sym.fitH) <= 0.5 &&
-    Math.abs(sym.gridL - sym.gridR) <= 1, JSON.stringify(sym));
+  check('the map window is centred on the screen', Math.abs(sym.gridL - sym.gridR) <= 1, JSON.stringify(sym));
+  const corners = await page.evaluate(() => {
+    const g = document.getElementById('online-world-grid')!.getBoundingClientRect();
+    return ['online-world-mine', 'online-world-menu', 'online-world-fit', 'online-world-chat'].map((id) => {
+      const r = document.getElementById(id)!.getBoundingClientRect();
+      return { id, w: r.width, h: r.height, top: r.top - g.top, left: r.left - g.left, right: g.right - r.right, bottom: g.bottom - r.bottom,
+        frame: getComputedStyle(document.getElementById(id)!, '::before').backgroundImage.includes('button-frame-supplied') };
+    });
+  });
+  const [tl, tr, br, bl] = corners;
+  check('four corner keys: tiles, menu, zoom, chat — one size, the cockpit frame, one edge',
+    corners.every((c) => c.w === 44 && c.h === 44 && c.frame) &&
+    tl!.top === tl!.left && tr!.top === tr!.right && br!.bottom === br!.right && bl!.bottom === bl!.left && tl!.top === br!.bottom,
+    JSON.stringify(corners.map((c) => [c.id.replace('online-world-', ''), c.w, c.top, c.left, c.right, c.bottom, c.frame])));
+  check('the coordinates read-out is gone', (await count(page, '#online-world-coord')) === 0);
   const overflow = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, win: window.innerWidth, col: document.querySelector('.online-world .online-inner')!.getBoundingClientRect().right }));
   check('the strip never widens the screen (no sideways scroll)', overflow.doc <= overflow.win && overflow.col <= overflow.win, JSON.stringify(overflow));
   const dash = await page.evaluate(() => { const el = document.querySelector('.world-hex.available'); return el ? getComputedStyle(el).strokeDasharray : 'none'; });
@@ -150,7 +163,7 @@ try {
   check('picking a row closes the window', await page.evaluate(() => document.getElementById('online-world-panel')!.hidden === true));
 
   // find my land and the activity strip
-  check('find my land shows once I hold tiles', await page.isVisible('#online-world-mine'));
+  check('find my land wakes once I hold tiles', await page.isEnabled('#online-world-mine'));
   const vb0 = await page.getAttribute('.world-map-svg', 'viewBox');
   await page.click('#online-world-menu');
   check('the window reopens on the tab it was left on', (await page.getAttribute('#online-world-panel', 'data-tab')) === 'ranking');
@@ -201,6 +214,42 @@ try {
   check('mist, motes, halos and glow are softly blurred', soft.every((f) => /^url\(#world-blur-/.test(f)), soft.join(' '));
   check('the fog breathes in two rings', (await count(page, '.world-fog-ring')) === 2);
   check('a few motes drift off the land', (await count(page, '.world-spore')) > 0);
+
+  // TERRITORY CHAT (owner, 2026-10-28): one shared channel, from the bottom-left key
+  await page.click('#online-world-chat');
+  await page.waitForSelector('#online-world-chat-panel:not([hidden])');
+  check('an empty chat says so', (await page.textContent('#world-chat-empty'))?.includes('Say hello') === true);
+  await page.fill('#world-chat-input', 'hello territory');
+  await page.press('#world-chat-input', 'Enter');
+  await page.waitForSelector('.world-chat-line.mine');
+  const mineLine = await page.textContent('.world-chat-line.mine');
+  check('my message shows with my nickname and tag', /hello territory/.test(mineLine ?? '') && /#[0-9A-Z]{4}/.test(mineLine ?? ''), mineLine ?? '');
+  check('the box clears after sending', (await page.inputValue('#world-chat-input')) === '');
+  const other = others[0]!;
+  const say = (text: string) => fetch(`${apiBase}/v1/territory/chat`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${other.token}` }, body: JSON.stringify({ text, requestId: crypto.randomUUID() }) });
+  await say('hi from the north');
+  await page.waitForSelector('.world-chat-line:not(.mine)', { timeout: 10_000 });
+  check("another player's message arrives while the chat is open", /hi from the north/.test((await page.textContent('.world-chat-line:not(.mine)')) ?? ''));
+  const chatBox = await page.evaluate(() => { const c = document.getElementById('online-world-chat-panel')!.getBoundingClientRect(); const g = document.getElementById('online-world-grid')!.getBoundingClientRect(); const k = document.getElementById('online-world-chat')!.getBoundingClientRect(); return { left: c.left - g.left, keyLeft: k.left - g.left, above: k.top - c.bottom }; });
+  check('the chat rises from its corner, on the key\'s edge', chatBox.left === chatBox.keyLeft && chatBox.above > 0 && chatBox.above < 16, JSON.stringify(chatBox));
+  await page.screenshot({ path: `${SHOTS}/territory-chat-390x844.png` });
+  await page.click('.world-chat-line:not(.mine)');
+  check('tapping their message offers Block and Report', (await page.$$eval('.world-chat-mod button', (b) => b.map((x) => x.textContent))).join('|') === 'Block|Report');
+  await page.click('.world-chat-mod button:last-child');
+  await page.waitForFunction(() => /Reported/.test(document.getElementById('world-chat-status')?.textContent ?? ''));
+  check('a report is acknowledged', true);
+  await page.click('.world-chat-line:not(.mine)');
+  await page.click('.world-chat-mod button:first-child');
+  check('block asks once more', (await page.textContent('.world-chat-mod button:first-child')) === 'Confirm block');
+  await page.click('.world-chat-mod button:first-child');
+  await page.waitForFunction(() => !document.querySelector('.world-chat-line:not(.mine)'));
+  check("a blocked player's messages disappear", true);
+  await page.click('#online-world-menu');
+  check('opening the menu shuts the chat (one window at a time)', await page.isHidden('#online-world-chat-panel') && await page.isVisible('#online-world-panel'));
+  await page.waitForTimeout(350); // the window's 200 ms arrival
+  const covered = await page.evaluate(() => { const p = document.getElementById('online-world-panel')!.getBoundingClientRect(); const k = document.getElementById('online-world-menu')!.getBoundingClientRect(); return { pTop: p.top, kTop: k.top, pRight: p.right, kRight: k.right }; });
+  check('the menu window lies exactly over the menu key', covered.pTop === covered.kTop && covered.pRight === covered.kRight, JSON.stringify(covered));
+  await page.click('#world-panel-close');
 
   // the desktop view: bigger, and still centred
   await page.setViewportSize({ width: 1440, height: 900 });

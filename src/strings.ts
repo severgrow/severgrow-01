@@ -90,6 +90,18 @@ export const ONLINE = Object.freeze({
   worldNoChallenges: 'No open challenges.',
   worldNoHistory: 'No past challenges yet.',
   worldMenu: 'Challenges and ranking',
+  /** Territory chat (owner, 2026-10-28): one shared channel, newest 30 messages. */
+  worldChat: 'Territory chat',
+  worldChatPlaceholder: 'Say something',
+  worldChatSend: 'Send',
+  worldChatEmpty: 'No messages yet. Say hello.',
+  worldChatBlock: 'Block',
+  worldChatBlockConfirm: 'Confirm block',
+  worldChatReport: 'Report',
+  worldChatReported: 'Reported. Thank you.',
+  worldChatFailed: 'Could not send. Try again.',
+  worldChatSlow: 'Slow down a little.',
+  worldChatOffline: 'Chat is not reachable right now.',
   /** Your standing, at the top of the ranking (owner, 2026-10-28: "addictive, satisfying"). */
   worldPlace: (rank: number, players: number) => `#${rank} of ${players}`,
   worldToPass: (gap: number, name: string) => `${gap} ${gap === 1 ? 'tile' : 'tiles'} to pass ${name}`,

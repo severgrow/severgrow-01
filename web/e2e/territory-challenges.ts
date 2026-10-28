@@ -347,6 +347,7 @@ try {
     await page.waitForFunction(() => (document.querySelector('.world-challenge-sheet') as HTMLElement | null)?.hidden !== false);
     await page.click('#online-world-menu');
     await page.waitForSelector('.world-challenge-chip', { timeout: 10_000 });
+    await page.waitForTimeout(700); // the chips' one-time arrival settles before anything is measured
 
     // ---- 1. no page scroll, with the rail on screen ------------------------------------------
     const scroll = await scrollState(page);

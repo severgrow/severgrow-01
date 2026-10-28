@@ -1,3 +1,4 @@
+import type { TerritoryChatPage } from './chat/territory.js';
 import type { ChatContent, ChatResult } from './chat/types.js';
 // A small isomorphic client for the duel API. It depends only on an injected `fetch` and an
 // injected key/value store, so the same code runs in the browser (with localStorage), in a Node
@@ -501,6 +502,23 @@ export class DuelClient {
 
   chatAction(token: string, matchId: string, action: 'mute' | 'block' | 'report', body: { value: boolean } | { messageId: string; reason: 'abuse' | 'spam' | 'other' }, signal?: AbortSignal): Promise<ChatResult> {
     return this.request('POST', `/v1/matches/${encodeURIComponent(matchId)}/chat/${action}`, { token, body, ...(signal ? { signal } : {}) });
+  }
+
+  // ---- Territory chat (server/src/chat/territory.ts): one shared channel, newest 30 ----
+  territoryChat(token: string, signal?: AbortSignal): Promise<TerritoryChatPage> {
+    return this.request('GET', '/v1/territory/chat', { token, ...(signal ? { signal } : {}) });
+  }
+
+  territoryChatSend(token: string, text: string, requestId: string): Promise<TerritoryChatPage> {
+    return this.request('POST', '/v1/territory/chat', { token, body: { text, requestId } });
+  }
+
+  territoryChatBlock(token: string, messageId: string): Promise<TerritoryChatPage> {
+    return this.request('POST', '/v1/territory/chat/block', { token, body: { messageId } });
+  }
+
+  territoryChatReport(token: string, messageId: string, reason: 'abuse' | 'spam' | 'other'): Promise<{ reported: true }> {
+    return this.request('POST', '/v1/territory/chat/report', { token, body: { messageId, reason } });
   }
 
   private request<T>(

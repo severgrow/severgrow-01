@@ -25,6 +25,7 @@ import { MemoryWorldEconomyStore } from './seeds/memory.js';
 import { postgresWorldEconomyStore } from './seeds/postgres.js';
 import { chatNotifier } from './chat/notifier.js';
 import { createChatRouter } from './chat/router.js';
+import { createTerritoryChatRouter, memoryTerritoryChatStore, postgresTerritoryChatStore } from './chat/territory.js';
 import { memoryChatStore } from './chat/memory.js';
 import { postgresChatStore } from './chat/postgres.js';
 import { adminRouterNode } from './admin/node.js';
@@ -72,6 +73,9 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
       createChatRouter({ service, storage: live.storage, ...(chatNotifications ? { notifier: chatNotifications } : {}), store: isMemory
         ? memoryChatStore(storage as MemoryStorage, memoryFeedback!)
         : postgresChatStore(poolFromUrl(databaseUrlFromEnv()!)) }),
+      createTerritoryChatRouter({ service, storage: live.storage, store: isMemory
+        ? memoryTerritoryChatStore(storage)
+        : postgresTerritoryChatStore(poolFromUrl(databaseUrlFromEnv()!)) }),
       createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }),
       await feedbackRouterNode(storage, service, databaseUrlFromEnv(), memoryFeedback),
       await accountsRouterNode(storage, service, databaseUrlFromEnv(), process.env, memoryLinks),

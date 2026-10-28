@@ -905,25 +905,12 @@ export const ONLINE_CSS = `
 .online-world .online-inner { position: relative; z-index: 1; }
 
 /* ---- THE MENU KEY: one hardware key at the window's foot, centred (owner, 2026-10-28) ---- */
-/* .world-grid > for the same reason as FIT: the press layer's position: relative must not win. */
-.world-grid > .world-menu-key {
-  position: absolute; z-index: 3; top: 10px; right: 10px;
-  width: 64px; height: 44px; box-sizing: border-box; padding: 0; border: 0; border-radius: 10px; cursor: pointer;
-  display: grid; place-items: center; color: #cfc6ac;
-  background: linear-gradient(#232822, #1a1e1a);
-  box-shadow: inset 0 1px 0 #e8ddc524, inset 0 -2px 0 #00000066, 0 2px 8px #0008, 0 0 0 1px #00000040;
-  transition: transform 90ms ease, box-shadow 90ms ease, color 140ms ease;
-  -webkit-tap-highlight-color: transparent;
-}
-.world-grid > .world-menu-key:active { transform: translateY(1px); box-shadow: inset 0 1px 0 #e8ddc512, inset 0 -1px 0 #00000059, 0 1px 4px #0008; }
-.world-grid > .world-menu-key.on { color: #f2e7cb; box-shadow: inset 0 1px 0 #e8ddc52e, inset 0 -1px 0 #0000004d, inset 0 0 0 1px #d5c89b52, 0 2px 8px #0008; }
-.world-menu-key:focus { outline: none; }
-.world-menu-key:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 /* three grille slots, the key's only marking */
 .world-menu-glyph { display: grid; gap: 3px; width: 18px; }
 .world-menu-glyph i { display: block; height: 2px; border-radius: 1px; background: currentColor; opacity: .85; }
 .world-menu-glyph i:nth-child(2) { width: 70%; justify-self: center; }
-.world-menu-key .world-deck-count { position: absolute; top: -6px; right: -6px; }
+.world-grid > .world-menu-key .world-deck-count { position: absolute; z-index: 2; top: -6px; right: -6px; }
+.world-grid > .world-menu-key .world-menu-glyph { position: absolute; left: 50%; top: 50%; translate: -50% -50%; }
 .world-deck-count {
   min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px;
   display: inline-grid; place-items: center; font-size: .6rem; font-weight: 700; letter-spacing: 0;
@@ -936,8 +923,11 @@ export const ONLINE_CSS = `
 
 /* ---- the one window: centred over the map, light enough to see the land through ---- */
 .world-panel {
-  position: absolute; z-index: 4; left: 50%; top: 12px; translate: -50% 0;
-  width: min(calc(100% - 24px), 460px); max-height: calc(100% - 24px);
+  /* It opens ON the corner row (owner, 2026-10-28: "it actually covers it, super aligned"): the same
+     10px edge as the four corner keys, so the window lies exactly over the menu key, and its own
+     close key sits where the menu key was. */
+  position: absolute; z-index: 4; left: 50%; top: 10px; translate: -50% 0;
+  width: min(calc(100% - 20px), 460px); max-height: calc(100% - 20px);
   display: flex; flex-direction: column; overflow: hidden;
   border-radius: 15px; color: #e8ddc5;
   background: rgba(10, 13, 11, .66);
@@ -946,6 +936,7 @@ export const ONLINE_CSS = `
   animation: world-panel-in 200ms cubic-bezier(.2, .8, .3, 1) both;
 }
 .world-panel[hidden] { display: none; }
+@keyframes world-panel-corner { from { opacity: 0; translate: 0 -6px; } to { opacity: 1; translate: 0 0; } }
 @keyframes world-panel-in { from { opacity: 0; translate: -50% -6px; } to { opacity: 1; translate: -50% 0; } }
 @media (prefers-reduced-motion: reduce) { .world-panel { animation: none; } }
 .world-panel-head {
@@ -954,8 +945,8 @@ export const ONLINE_CSS = `
 }
 .world-tabs .world-seg-key { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 .world-tabs .world-deck-count { min-width: 16px; height: 16px; font-size: .56rem; }
-/* The window's tiny status LED (left) balances the close key (right): the title stays centred. */
-.world-panel-led { justify-self: center; width: 6px; height: 6px; border-radius: 50%; background: #9fd27a; box-shadow: 0 0 6px #9fd27aa6; }
+/* An empty cell the close key's width (left) keeps the tabs exactly centred. */
+.world-panel-spacer { width: 40px; }
 .world-panel-title {
   margin: 0; text-align: center; font-size: .66rem; font-weight: 700; letter-spacing: .2em;
   text-transform: uppercase; color: #e8ddc5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -1041,24 +1032,93 @@ export const ONLINE_CSS = `
 .world-activity-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .world-activity-ago { margin-left: auto; color: #e8ddc58f; white-space: nowrap; }
 
-/* THE FOUR CORNERS, mirrored (owner, 2026-10-28: "super aligned and symmetrical … contained and
-   clean"): find-my-land top-left, the MENU key top-right, FIT (the magnifier) bottom-right, and the
-   coordinates read-out bottom-left. Every one sits on the same 10px edge and is 44px tall, so the
-   menu key's right edge is FIT's right edge and the four make one frame. */
-.world-grid > .world-mine { right: auto; left: 10px; }
-/* with land in several places, the key shows which patch it is on: a tiny 2/3 under the target */
+/* THE FOUR CORNERS (owner, 2026-10-28: "4 corners symmetrically aligned with YOUR TILES, MENU,
+   ZOOM, CHAT — all the same size and design as the in-game cockpit buttons"). Each is the cockpit's
+   own key: 44px, radius 12, #111312 under the supplied hardware frame, ivory ink (the duel chat key in
+   web/src/online/chat/style.ts is the reference). One 10px edge for all four. */
+.world-grid > .world-corner {
+  position: absolute; z-index: 3; box-sizing: border-box;
+  width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; margin: 0;
+  display: grid; place-items: center; line-height: 0;
+  border: 0; border-radius: 12px; background: #111312; color: var(--control-ivory, #f5edda);
+  box-shadow: 0 2px 8px #0007; -webkit-backdrop-filter: none; backdrop-filter: none;
+  cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  transition: transform 90ms ease, box-shadow 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+.world-grid > .world-corner::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: url('./hardware/button-frame-supplied.webp') center / contain no-repeat;
+}
+.world-grid > .world-corner > :is(svg, span) { position: relative; z-index: 1; }
+.world-grid > .world-corner:active { transform: translateY(1px); }
+.world-grid > .world-corner:is(:hover, :focus-visible, .on, [aria-expanded='true'], [aria-pressed='true']) {
+  color: #fff1cf; box-shadow: 0 0 9px var(--light-bloom, rgba(196, 150, 88, .22)), 0 2px 8px #0007;
+}
+.world-grid > .world-corner:focus { outline: none; }
+.world-grid > .world-corner:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+.world-grid > .world-corner:disabled { opacity: .45; cursor: default; }
+.world-grid > .world-corner svg { width: 21px; height: 21px; opacity: .94; }
+.world-grid > .world-chat-key svg { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.world-grid > .world-mine { top: 10px; left: 10px; right: auto; bottom: auto; }
+.world-grid > .world-menu-key { top: 10px; right: 10px; left: auto; bottom: auto; }
+.world-grid > #online-world-fit { bottom: 10px; right: 10px; top: auto; left: auto; }
+.world-grid > .world-chat-key { bottom: 10px; left: 10px; top: auto; right: auto; }
 .world-grid > .world-mine[data-patch]:not([data-patch=''])::after {
-  content: attr(data-patch); position: absolute; left: 50%; bottom: 3px; translate: -50% 0;
-  font-size: .5rem; line-height: 1; letter-spacing: .08em; color: #cfc6acb3; font-variant-numeric: tabular-nums;
+  content: attr(data-patch); position: absolute; z-index: 1; left: 50%; bottom: 4px; translate: -50% 0;
+  font-size: .48rem; line-height: 1; letter-spacing: .08em; color: #f5edda99; font-variant-numeric: tabular-nums;
 }
-.world-grid > #online-world-fit { top: auto; bottom: 10px; right: 10px; }
-.world-coord {
-  position: absolute; z-index: 2; left: 10px; bottom: 10px; margin: 0; pointer-events: none;
-  height: 44px; box-sizing: border-box; display: flex; align-items: center; padding: 0 12px; border-radius: 9px;
-  background: #0b0e0cb3; color: #cfc6acb3; box-shadow: inset 0 0 0 1px #d5c89b1f;
-  font-size: .58rem; letter-spacing: .2em; font-variant-numeric: tabular-nums; white-space: nowrap;
+
+/* ---- TERRITORY CHAT: rises from the chat key's corner on the menu window's glass ---- */
+.world-chat {
+  position: absolute; z-index: 4; left: 10px; bottom: 62px;
+  width: min(calc(100% - 20px), 400px); max-height: min(46%, 360px);
+  display: flex; flex-direction: column; gap: 6px; padding: 10px; box-sizing: border-box;
+  border-radius: 15px; color: #e8ddc5; background: rgba(10, 13, 11, .62);
+  -webkit-backdrop-filter: blur(6px) saturate(1.05); backdrop-filter: blur(6px) saturate(1.05);
+  box-shadow: inset 0 1px 0 #e8ddc514, 0 14px 34px rgba(0, 0, 0, .28);
+  animation: world-chat-in 200ms cubic-bezier(.2, .8, .3, 1) both;
 }
-.world-coord:empty { display: none; }
+.world-chat[hidden] { display: none; }
+@keyframes world-chat-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+.world-chat-list {
+  list-style: none; margin: 0; padding: 0 2px; min-height: 0; flex: 1 1 auto; overflow: auto;
+  overscroll-behavior: contain; touch-action: pan-y; display: flex; flex-direction: column; gap: 6px;
+}
+.world-chat-line { display: grid; gap: 2px; padding: 4px 6px; border-radius: 8px; font-size: .74rem; line-height: 1.35; cursor: default; }
+.world-chat-line:not(.mine) { cursor: pointer; }
+.world-chat-line.picked { background: #e8ddc50f; }
+.world-chat-line:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 1px; }
+.world-chat-who { display: flex; gap: 6px; align-items: baseline; font-size: .58rem; letter-spacing: .14em; text-transform: uppercase; }
+.world-chat-who b { color: #f2e7cb; font-weight: 700; }
+.world-chat-who i { font-style: normal; color: #e8ddc570; }
+.world-chat-line.mine .world-chat-who b { color: #cfc6acb3; }
+.world-chat-text { color: #e8ddc5; overflow-wrap: anywhere; letter-spacing: .02em; }
+.world-chat-mod { display: flex; gap: 6px; margin-top: 4px; }
+.world-chat-mod button {
+  min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; cursor: pointer; color: #e8ddc5;
+  background: linear-gradient(#1f241f, #191d19); box-shadow: inset 0 1px 0 #e8ddc51f, inset 0 -2px 0 #00000059;
+  font: inherit; font-size: .58rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+}
+.world-chat-empty { margin: 4px 0; text-align: center; font-size: .7rem; color: #e8ddc58f; }
+.world-chat-empty[hidden] { display: none; }
+.world-chat-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.world-chat-input {
+  min-width: 0; height: 40px; padding: 0 12px; box-sizing: border-box; border: 0; border-radius: 10px;
+  background: #0a0d0bcc; color: #f2e7cb; box-shadow: inset 0 1px 0 #000a, inset 0 0 0 1px #e8ddc50d;
+  font: inherit; font-size: 16px; letter-spacing: .02em;
+}
+.world-chat-input::placeholder { color: #e8ddc566; }
+.world-chat-input:focus { outline: none; box-shadow: inset 0 1px 0 #000a, inset 0 0 0 1px #d5c89b52; }
+.world-chat-send {
+  height: 40px; padding: 0 14px; border: 0; border-radius: 10px; cursor: pointer;
+  color: #161a16; background: linear-gradient(#efe4c8, #ddd1b2); box-shadow: inset 0 1px 0 #fff8, inset 0 -2px 0 #0000002e;
+  font: inherit; font-size: .62rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+}
+.world-chat-send:active { transform: translateY(1px); }
+.world-chat-status { margin: 0; min-height: 0; font-size: .64rem; text-align: center; color: #e8ddc5a6; }
+.world-chat-status:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .world-chat { animation: none; } }
+html.reduce-motion .world-chat { animation: none; }
 /* the selection bar and the notice: one centred axis, like everything else on this screen */
 .online-world .world-selection { justify-content: center; text-align: center; flex-wrap: wrap; }
 .online-world .online-notice { text-align: center; }
@@ -1154,12 +1214,14 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
   }
   .online-world #online-world-notice:empty { display: none; }
   /* the four corners sit in a little from the stage's rounded corners, on one 14px edge */
-  .online-world .world-grid > .world-mine { top: 14px; left: 14px; right: auto; }
-  .online-world .world-grid > .world-menu-key { top: 14px; right: 14px; width: 72px; }
+  .online-world .world-grid > .world-mine { top: 14px; left: 14px; }
+  .online-world .world-grid > .world-menu-key { top: 14px; right: 14px; }
   .online-world .world-grid > #online-world-fit { bottom: 14px; right: 14px; }
-  .online-world .world-coord { left: 14px; bottom: 14px; }
-  /* the window opens under the top row and clear of the foot, a little wider */
-  .online-world .world-panel { top: 72px; width: min(calc(100% - 48px), 520px); max-height: calc(100% - 160px); }
+  .online-world .world-grid > .world-chat-key { bottom: 14px; left: 14px; }
+  /* the menu window drops from ITS corner and covers the menu key exactly (owner, 2026-10-28) */
+  .online-world .world-panel { top: 14px; right: 14px; left: auto; translate: none; width: 440px; max-height: calc(100% - 28px); animation-name: world-panel-corner; }
+  /* the chat rises from ITS corner, the mirror image */
+  .online-world .world-chat { left: 14px; bottom: 66px; width: 400px; max-height: min(52%, 460px); }
 }
 
 /* Every free tile is open to grow now, so "available" is a quiet lift; the board's own global

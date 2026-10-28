@@ -24,6 +24,7 @@ import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { WORLD_CLAIMED_EVENT } from './world-events.js';
+import { TerritoryChat } from './territory-chat.js';
 import { borderSegments, cellXY, fogRings, newCellIds, ownCentre, ownPatches, ranking, recentActivity, standing } from './world-growth.js';
 import { ONLINE } from '../../../src/strings.js';
 
@@ -116,6 +117,8 @@ export class WorldView {
   private knownCells: Set<string> | null = null;
   /** THE ONE WINDOW (owner, 2026-10-28): open or shut, and which of its two tabs is showing. */
   private panelOpen = false;
+  /** Territory chat (web/src/online/territory-chat.ts): opens from the bottom-left corner key. */
+  private readonly chat: TerritoryChat;
   /** The player pressed FIT themselves this session: their choice beats the desktop default. */
   private fitChosen = false;
   private tab: 'challenges' | 'ranking' = 'challenges';
@@ -219,6 +222,8 @@ export class WorldView {
       mine.title = ONLINE.worldMine;
       mine.addEventListener('click', () => this.flyToMine());
     }
+    // ONE WINDOW AT A TIME: the chat shuts the menu window, and the menu window shuts the chat.
+    this.chat = new TerritoryChat(client, () => this.identity?.token ?? null, () => this.setPanel(false));
     // THE MENU KEY opens the one window; pressing it again (or close, or Escape) shuts it.
     const menu = document.getElementById('online-world-menu');
     if (menu) {
@@ -317,6 +322,7 @@ export class WorldView {
     this.active = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.chat.setOpen(false);
     this.closeSheet(false);
   }
   private notice(text: string) { document.getElementById('online-world-notice')!.textContent = text; }
@@ -803,7 +809,6 @@ export class WorldView {
     this.paintFrontier();
     this.paintAccent();
     this.paintSelection();
-    this.paintCoord();
     // A challenged tile opens the challenge sheet; a rival tile on my frontier opens the challenge
     // offer. Everything else keeps the claim bar, so the map's original behaviour is unchanged.
     const challenge = challengeOnCell(this.allChallenges, cellId);
@@ -966,20 +971,12 @@ export class WorldView {
       this.busy = false;
       await this.refresh(true);
       this.paintSelection();
-      this.paintCoord();
-    }
-  }
-
-  /** The selected tile's coordinates on the window's foot: Q 3 · R −2. */
-  private paintCoord() {
-    const node = document.getElementById('online-world-coord');
-    if (!node) return;
-    const cell = this.selected ? this.world?.cells.find((candidate) => candidate.id === this.selected) : null;
-    node.textContent = cell ? `Q ${cell.q} · R ${cell.r}`.replace(/-/g, '−') : '';
+      }
   }
 
   /** Open or shut the one window. */
   private setPanel(open: boolean) {
+    if (open) this.chat.setOpen(false);
     this.panelOpen = open;
     this.sellArmed = null;
     this.paintPanel();
@@ -992,7 +989,8 @@ export class WorldView {
     if (!panel || !this.world) return;
     const me = this.identity?.playerId ?? null;
     const claims = this.world.claims;
-    if (mine) mine.hidden = !me || !claims.some((claim) => claim.ownerId === me);
+    // A corner is never empty: with no land yet, find-my-land is there but quiet.
+    if (mine) (mine as HTMLButtonElement).disabled = !me || !claims.some((claim) => claim.ownerId === me);
     const isOpen = (c: WorldChallengeWire) => c.status === 'pending' || c.status === 'accepted';
     const open = this.allChallenges.filter(isOpen);
     const waiting = this.allChallenges.some((c) => c.status === 'pending' && !c.fromMe);
