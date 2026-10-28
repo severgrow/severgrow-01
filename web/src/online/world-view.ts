@@ -26,7 +26,8 @@ import { lastWorld, rememberWorld } from './world-memory.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { WORLD_CLAIMED_EVENT } from './world-events.js';
 import { TerritoryChat } from './territory-chat.js';
-import { borderSegments, cellXY, fogRings, newCellIds, ownCentre, ranking, standing } from './world-growth.js';
+import { borderSegments, cellXY, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ranking, standing } from './world-growth.js';
+import type { FogRing, FogShift } from './world-growth.js';
 import { ONLINE } from '../../../src/strings.js';
 
 /** A tile grown this recently keeps its halo (the map shows where the world is moving). */
@@ -58,6 +59,13 @@ type Pane = 'ranking' | 'challenges';
 const GLIDE_MS = 380;
 /** The soft-focus layers stay off this long after a gesture ends, so a quick second flick never re-blurs mid-motion. */
 const SETTLE_MS = 140;
+/**
+ * THE MIST'S HAND-OFF (owner, 2026-10-28: "the way the empty tiles around the 'discovered' is
+ * changing colors, shading — i like that, but make it smooth more transition like rather than
+ * sudden changes"). The same 520 ms as `world-rise` (online-css.ts): the uncovered mist lifting and
+ * the fresh land rising are ONE moment, not two tempos, so no new duration token is introduced.
+ */
+const FOG_LIFT_MS = 520;
 /**
  * TAP, DRAG AND DOUBLE TAP (owner, 2026-10-28: "it should be possible to 'scroll' around the map
  * always when holding and dragging finger. quick double tap should zoom out / zoom in, right now
@@ -159,6 +167,16 @@ export class WorldView {
   private selected: string | null = null;
   /** The cells on the map at the last paint: new ones rise in (null before the first paint). */
   private knownCells: Set<string> | null = null;
+  /**
+   * The fog at the last paint, and the hand-off still in flight. The map is rebuilt wholesale on
+   * every paint, so the old mist nodes cannot animate out — these two are the DATA that lets the
+   * next paint redraw the same hand-off instead of cutting it (see `fogShift`).
+   */
+  private fogCells: Map<string, FogRing> | null = null;
+  private mistShift: FogShift | null = null;
+  private mistShiftAt = 0;
+  /** When the fog's slow breath started, so a rebuilt map continues it instead of restarting it. */
+  private mistAt: number | null = null;
   /** MENU's row of four keys is out (owner, 2026-10-28). */
   private keysOpen = false;
   /** The one window, and which key's page it shows; null when shut. */
@@ -509,6 +527,22 @@ export class WorldView {
       world.cells.map((cell) => cell.id).join(';'),
       world.claims.map((c) => `${c.cellId}:${c.ownerId}:${c.colour}:${c.ownerName ?? ''}:${c.ownerTag}:${c.claimedAt}`).join(';')].join('|');
   }
+  /**
+   * The shade the two fog rings were ACTUALLY showing a moment ago, read from the map that is about
+   * to be replaced. The rings breathe between their resting opacity and a lower one, so copying the
+   * resting value onto the outgoing mist would brighten the very cells being uncovered — a shade
+   * jump of exactly the kind this pass removes. Called once per paint, before the rebuild.
+   */
+  private mistShades(): [number, number] {
+    const rings = this.svg?.querySelectorAll<SVGGElement>('.world-fog-ring');
+    const shade = (index: number, resting: number): number => {
+      const group = rings?.[index];
+      if (!group) return resting;
+      const value = Number.parseFloat(getComputedStyle(group).opacity);
+      return Number.isFinite(value) ? value : resting;
+    };
+    return [shade(0, 0.42), shade(1, 0.16)];
+  }
   private paint() {
     const container = document.getElementById('online-world-grid')!;
     const world = this.world!;
@@ -575,6 +609,31 @@ export class WorldView {
     const seenIds = new Set(world.cells.map((cell) => cell.id));
     const anywhere = world.version >= 3;
     const own = new Set(world.claims.filter((claim) => claim.ownerId === this.identity?.playerId).map((claim) => claim.cellId));
+    // THE MIST'S HAND-OFF (owner, 2026-10-28). This whole map is rebuilt on every paint, so a cell
+    // that becomes seen used to lose its fog in the same frame: a cut, with the land's shading
+    // arriving at full strength. Instead the fog of the LAST paint is remembered on the view and the
+    // diff is drawn once more as a short overlay — the old mist fades off the new face while the
+    // ring beyond fades to its new shade underneath it. `fogShift` owns the diff and the
+    // Reduce-motion gate; `fogAtLastLook` is what makes it survive a repaint (it rebuilds the fog
+    // the eye was actually seeing, including a hand-off that is still in flight).
+    const nowMs = Date.now();
+    const inFlight = this.mistShift && nowMs - this.mistShiftAt < FOG_LIFT_MS ? this.mistShift : null;
+    const fogNow = fogRings(seenIds);
+    const shift = fogShift(fogAtLastLook(this.fogCells, inFlight), fogNow, interfaceMotionAllowed());
+    // Nothing NEW to hand off, but one is still running: keep drawing it, so a repaint that changes
+    // no fog cannot snap a half-lifted mist to settled.
+    const shown = shift.lift.length || shift.deepen.length || shift.arrive.length ? shift : inFlight;
+    // Resumed, not restarted: a second paint inside the hand-off keeps the layer's own clock.
+    const resume = inFlight ? Math.min(FOG_LIFT_MS, nowMs - this.mistShiftAt) : 0;
+    // The shade the old mist was really showing. The ring groups breathe, so their resting opacity
+    // is not what the eye last saw; this is read from the map about to be replaced (see `mistShades`).
+    const mist = this.mistShades();
+    const shiftingCells = new Set<string>();
+    if (shown) {
+      for (const cell of shown.lift) shiftingCells.add(cell.id);
+      for (const cell of shown.deepen) shiftingCells.add(cell.id);
+      for (const cell of shown.arrive) shiftingCells.add(cell.id);
+    }
     const fogLayer = document.createElementNS(NS, 'g');
     fogLayer.classList.add('world-fog-layer');
     fogLayer.setAttribute('aria-hidden', 'true');
@@ -586,14 +645,61 @@ export class WorldView {
       fogLayer.append(g);
       return g;
     });
-    for (const [id, ring] of fogRings(seenIds)) {
+    // THE BREATH CONTINUES. A new node would start both loops at full strength (.42 / .16) on every
+    // repaint — the whole fog flashing brighter whenever anyone grows a tile, which is the other
+    // half of the owner's "sudden changes". The elapsed time is fed back as a negative delay.
+    if (this.mistAt === null) this.mistAt = nowMs;
+    const mistElapsed = nowMs - this.mistAt;
+    fogRing[0]!.style.animationDelay = loopPhase(mistElapsed, 9000);
+    fogRing[1]!.style.animationDelay = loopPhase(mistElapsed, 13000);
+    const fogPath = (id: string, ring: FogRing): SVGPathElement => {
       const [q, r] = id.split(',').map(Number) as [number, number];
       const at = coords(q, r);
       const fog = document.createElementNS(NS, 'path');
       fog.setAttribute('d', hexPath(at.x, at.y));
+      fog.setAttribute('data-cell-id', id);
       fog.classList.add('world-fog', `ring-${ring}`);
-      fogRing[ring - 1]!.append(fog);
+      return fog;
+    };
+    for (const [id, ring] of fogNow) {
+      // A cell in the hand-off is drawn by the overlay BELOW, once: never two mists on one hex.
+      if (shiftingCells.has(id)) continue;
+      fogRing[ring - 1]!.append(fogPath(id, ring));
     }
+    // The overlay: two halves, one clock each. `was` is the mist the eye last saw (fading away),
+    // `now` is the shade the coast has just reached (fading up). Both are blurred exactly like the
+    // ambient fog and both carry `pointer-events: none`.
+    let fogShiftLayer: SVGGElement | null = null;
+    if (shiftingCells.size) {
+      fogShiftLayer = document.createElementNS(NS, 'g');
+      fogShiftLayer.classList.add('world-fog-shift');
+      fogShiftLayer.setAttribute('aria-hidden', 'true');
+      const shiftWas = document.createElementNS(NS, 'g');
+      shiftWas.classList.add('world-fog-shift-was');
+      shiftWas.setAttribute('filter', 'url(#world-blur-mist)');
+      const shiftNow = document.createElementNS(NS, 'g');
+      shiftNow.classList.add('world-fog-shift-now');
+      shiftNow.setAttribute('filter', 'url(#world-blur-mist)');
+      if (resume > 0) {
+        shiftWas.style.animationDelay = `-${resume}ms`;
+        shiftNow.style.animationDelay = `-${resume}ms`;
+      }
+      const wasPath = (id: string, ring: FogRing) => {
+        const path = fogPath(id, ring);
+        path.style.opacity = String(mist[ring - 1]);
+        return path;
+      };
+      if (shown) {
+        for (const cell of shown.lift) shiftWas.append(wasPath(cell.id, cell.ring));
+        for (const cell of shown.deepen) shiftWas.append(wasPath(cell.id, cell.from));
+        for (const cell of shown.arrive) shiftNow.append(fogPath(cell.id, cell.ring));
+        for (const cell of shown.deepen) shiftNow.append(fogPath(cell.id, cell.to));
+      }
+      fogShiftLayer.append(shiftWas, shiftNow);
+    }
+    this.fogCells = fogNow;
+    this.mistShift = shown;
+    this.mistShiftAt = inFlight ? this.mistShiftAt : nowMs;
     // NEW LAND RISES IN: cells that were not on the map at the last look come up one after another,
     // nearest the newest tile first, so an uncovering reads as the land being discovered.
     const fresh = newCellIds(this.knownCells, world.cells.map((cell) => cell.id));
@@ -720,6 +826,10 @@ export class WorldView {
       spores.append(mote);
     }
     svg.append(faces, lines, marks, rings, swords);
+    // The mist's hand-off paints ABOVE the new faces (so the old mist is still visible over the land
+    // it is leaving) and BELOW the tile edges (so the coast's outline is crisp from the first
+    // frame). It is inserted, not appended, so the faces/lines order above is untouched.
+    if (fogShiftLayer) svg.insertBefore(fogShiftLayer, lines);
     // THE OUTLINE OF YOUR LAND: one soft line around every piece of it, so your tiles read as one
     // country rather than scattered cells. A blurred glow under a fine crisp edge.
     const border = document.createElementNS(NS, 'g');

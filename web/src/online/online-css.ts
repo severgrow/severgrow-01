@@ -1127,6 +1127,17 @@ html.reduce-motion .world-chat { animation: none; }
 .world-fog-ring.ring-2 { opacity: .16; animation: world-mist-far 13s ease-in-out infinite; }
 @keyframes world-mist { 50% { opacity: .26; } }
 @keyframes world-mist-far { 50% { opacity: .07; } }
+/* ---- the hand-off (owner, 2026-10-28): the uncovered mist lifts off the new land while the ring
+   beyond fades to the shade the new coast gives it. Two layer opacities and nothing else — the
+   blur is never animated, and the 520 ms is world-rise's own beat, so a reveal is one moment. ---- */
+.world-fog-shift { pointer-events: none; }
+.world-fog-shift-was, .world-fog-shift-now { pointer-events: none; }
+.world-fog-shift .world-fog.ring-1 { opacity: .42; }
+.world-fog-shift .world-fog.ring-2 { opacity: .16; }
+.world-fog-shift-was { opacity: 0; animation: world-fog-lift 520ms ease-in-out both; }
+.world-fog-shift-now { opacity: 1; animation: world-fog-settle 520ms ease-in-out both; }
+@keyframes world-fog-lift { from { opacity: 1; } to { opacity: 0; } }
+@keyframes world-fog-settle { from { opacity: 0; } to { opacity: 1; } }
 /* ---- new land rises in ---- */
 @keyframes world-rise {
   0% { opacity: 0; transform: translateY(5px) scale(.55); }
@@ -1160,10 +1171,10 @@ html.reduce-motion .world-chat { animation: none; }
   100% { opacity: 0; transform: translate(3px, -16px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .world-fog-ring, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-hex-face.rising, .world-deck-count.waiting { animation: none; }
+  .world-fog-ring, .world-fog-shift-was, .world-fog-shift-now, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-hex-face.rising, .world-deck-count.waiting { animation: none; }
   .world-spore, .world-ripples { display: none; }
 }
-html.reduce-motion :is(.world-fog-ring, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-hex-face.rising, .world-deck-count.waiting) { animation: none; }
+html.reduce-motion :is(.world-fog-ring, .world-fog-shift-was, .world-fog-shift-now, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-hex-face.rising, .world-deck-count.waiting) { animation: none; }
 html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
 
 /* ================= THE DESKTOP STAGE (owner, 2026-10-28: "make the map bigger, use the space
@@ -1225,6 +1236,6 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
    the soft-focus blurs are drawn sharp and the ambient loops hold still. A blur re-renders on every
    frame the view moves; this is what keeps a pan at 60 fps on a mid phone. */
 .world-grid.moving .world-map-svg [filter] { filter: none; }
-.world-grid.moving .world-map-svg :is(.world-fog-ring, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore) { animation-play-state: paused; }
+.world-grid.moving .world-map-svg :is(.world-fog-ring, .world-fog-shift-was, .world-fog-shift-now, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore) { animation-play-state: paused; }
 .world-grid.moving .world-map-svg .world-accent-line { filter: none; }
 `;
