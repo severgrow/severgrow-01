@@ -99,6 +99,7 @@ export const ONLINE = Object.freeze({
   worldChatBlockConfirm: 'Confirm block',
   worldChatReport: 'Report',
   worldChatReported: 'Reported. Thank you.',
+  worldChatRetry: 'Retry',
   worldChatFailed: 'Could not send. Try again.',
   worldChatSlow: 'Slow down a little.',
   worldChatOffline: 'Chat is not reachable right now.',

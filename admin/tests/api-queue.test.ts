@@ -53,3 +53,17 @@ describe('the admin client', () => {
     expect((await next).ok).toBe(true);
   });
 });
+
+
+it('keeps the deadline active until the entire response body is read', async () => {
+ vi.useFakeTimers();
+ vi.stubGlobal('fetch', (_url: string, init: RequestInit) => Promise.resolve(new Response(new ReadableStream({start(c) {
+   init.signal?.addEventListener('abort', () => c.error(new DOMException('aborted','AbortError')));
+ }}))));
+ const api = new AdminApi('https://api.test','test');
+ const request = api.get('/v1/admin/world');
+ await vi.advanceTimersByTimeAsync(ADMIN_REQUEST_TIMEOUT_MS + 10);
+ const result = await request;
+ expect(result.ok).toBe(false);
+ expect(result.ok ? '' : result.code).toBe('TIMEOUT');
+});

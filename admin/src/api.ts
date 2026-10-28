@@ -221,7 +221,9 @@ export class AdminApi {
       const abort = new AbortController();
       const timer = setTimeout(() => abort.abort(), ADMIN_REQUEST_TIMEOUT_MS);
       try {
-        return await fetch(url, { ...init, signal: abort.signal });
+        const response = await fetch(url, { ...init, signal: abort.signal });
+        const body = await response.arrayBuffer();
+        return new Response([204,205,304].includes(response.status) ? null : body, { status: response.status, statusText: response.statusText, headers: response.headers });
       } catch (error) {
         if (abort.signal.aborted) throw new AdminTimeout();
         throw error;

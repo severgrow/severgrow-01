@@ -169,6 +169,10 @@ const signIn = async (page: Page, user: string) => {
 };
 const saveName = async (page: Page, name: string) => {
   await page.fill('#acct-nickname .acct-input', name);
+  await page.locator('#acct-nickname .acct-input').dispatchEvent('keydown', {key:'Enter',isComposing:true,bubbles:true});
+  await page.waitForTimeout(100);
+  check('IME confirmation does not submit the nickname', await sheetVisible(page, 'acct-nickname'));
+
   await page.click('[data-acct="nickname-save"]');
 };
 const openSettings = async (page: Page) => {

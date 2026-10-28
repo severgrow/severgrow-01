@@ -55,7 +55,7 @@ const G_LOGO = `<svg aria-hidden="true" width="18" height="18" viewBox="0 0 48 4
 
 const CSS = `
 ${glassBaseCss('.acct-glass')}
-.acct-glass { z-index:95; left:50%; top:50%; transform:translate(-50%,-50%); width:min(400px, calc(100vw - 32px));
+.acct-glass { font-size:.8125rem; z-index:95; left:50%; top:50%; transform:translate(-50%,-50%); width:min(400px, calc(100vw - 32px));
   max-height:calc(100dvh - 32px); overflow:auto; padding:18px 16px 16px; background:rgba(8,10,10,.88); display:flex; flex-direction:column; gap:12px; }
 .acct-glass[hidden], .acct-scrim[hidden], .acct-toast[hidden], [data-acct][hidden] { display:none !important; }
 .acct-scrim { position:fixed; inset:0; z-index:94; background:rgba(4,6,5,.5); }
@@ -67,7 +67,7 @@ ${glassBaseCss('.acct-glass')}
 .acct-actions { display:flex; flex-direction:column; gap:8px; }
 .acct-actions.row { flex-direction:row; justify-content:flex-end; flex-wrap:wrap; }
 .acct-btn { min-height:44px; padding:0 16px; border-radius:999px; cursor:pointer; border:1px solid rgba(214,204,177,.28);
-  background:rgba(255,255,255,.04); color:#f0e9dc; font:700 14px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; }
+  background:rgba(255,255,255,.04); color:#f0e9dc; font:700 .875rem/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; }
 .acct-btn.danger { border-color:rgba(224,115,92,.6); color:#f2b3a3; }
 .acct-btn.danger.solid { background:#c4553f; border-color:#c4553f; color:#fff6ef; }
 .acct-btn:disabled { opacity:.55; cursor:default; }
@@ -77,8 +77,8 @@ ${glassBaseCss('.acct-glass')}
 .acct-google:hover { background:#1d1d1f; }
 .acct-google:disabled { opacity:.6; cursor:default; }
 .acct-google:focus-visible, .acct-btn:focus-visible, .acct-linkbtn:focus-visible { outline:2px solid #f0e9dc; outline-offset:2px; }
-.acct-linkbtn { align-self:center; min-height:44px; padding:0 8px; border:0; background:none; color:#b7a98a; font:inherit; font-size:13px; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
-.acct-status { min-height:1.3em; font-size:13px; color:#c9e4a8 !important; }
+.acct-linkbtn { align-self:center; min-height:44px; padding:0 8px; border:0; background:none; color:#b7a98a; font:inherit; font-size:.8125rem; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.acct-status { min-height:1.3em; font-size:.8125rem; color:#c9e4a8 !important; }
 .acct-status[data-tone='bad'] { color:#e0735c !important; }
 .acct-status:empty { display:none; }
 #acct-hub { display:flex; flex-direction:column; gap:10px; align-items:stretch; text-align:center; }
@@ -93,7 +93,7 @@ ${glassBaseCss('.acct-glass')}
 .acct-toast[data-tone='bad'] { border-color:rgba(224,115,92,.6); }
 /* The nickname field: dark glass, NO border contour — the fill alone marks it, cream text on focus. */
 .acct-input { min-height:44px; width:100%; box-sizing:border-box; padding:0 14px; border:0; border-radius:12px;
-  background:rgba(255,255,255,.07); color:#f6ecd8; font:600 16px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
+  background:rgba(255,255,255,.07); color:#f6ecd8; font:600 max(16px, 1rem)/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
 .acct-input::placeholder { color:#8f866f; font-weight:400; }
 .acct-input:focus-visible { outline:2px solid #f0e9dc; outline-offset:1px; }
 `;
@@ -130,21 +130,38 @@ const sheet = (id: string, label: string) => {
   // A LOCKED sheet asks for something that must be given (a new account's name): the scrim and
   // Escape do not dismiss it; only the sheet's own action closes it.
   let locked = false;
+  let trigger: HTMLElement | null = null;
+  const viewport = () => {
+    const v = window.visualViewport;
+    panel.style.top = `${(v?.offsetTop ?? 0) + (v?.height ?? innerHeight) / 2}px`;
+    panel.style.maxHeight = `${Math.max(100, (v?.height ?? innerHeight) - 32)}px`;
+  };
+  window.visualViewport?.addEventListener('resize', viewport);
+  window.visualViewport?.addEventListener('scroll', viewport);
   const close = () => {
     if (panel.hidden) return;
     locked = false;
     scrim.hidden = panel.hidden = true;
     const f = onClose;
     onClose = null;
+    trigger?.focus({ preventScroll: true });
     f?.();
   };
   scrim.addEventListener('click', () => { if (!locked) close(); });
   panel.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !locked) close();
+    if (e.key === 'Escape') { e.stopPropagation(); if (!locked) close(); }
+    if (e.key === 'Tab') {
+      const controls = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),a[href]')].filter(e => e.getClientRects().length);
+      const first = controls[0], last = controls.at(-1);
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    }
   });
   return {
     panel,
     open: (then?: () => void, options: { locked?: boolean } = {}) => {
+      trigger = document.activeElement as HTMLElement | null;
+      viewport();
       onClose = then ?? null;
       locked = options.locked === true;
       scrim.hidden = panel.hidden = false;
@@ -679,7 +696,7 @@ export const mountAccounts = async (): Promise<void> => {
     try {
       const res = await apiPatch('/v1/players/me', { displayName: input.value }, s.identity.token);
       const player = res.ok ? (res.json.player as { displayName?: unknown } | undefined) : undefined;
-      if (!player || typeof player.displayName !== 'string') throw new Error(String(res.status));
+      if (!player || typeof player.displayName !== 'string') throw new Error(res.status === 400 ? 'invalid-name' : 'service-unavailable');
       // Keep this device's identity honest, so Settings and the lobby show the NEW name at once.
       // The #tag is derived from the player id, so it is untouched and stays exactly as it was.
       writeIdentity(kv, { ...s.identity, displayName: player.displayName });
@@ -687,8 +704,8 @@ export const mountAccounts = async (): Promise<void> => {
       nickSheet.close();
       renderSettings();
       say(ACCOUNT.nicknameSaved);
-    } catch {
-      status.textContent = navigator.onLine ? ACCOUNT.nicknameError : ACCOUNT.offline;
+    } catch (error) {
+      status.textContent = !navigator.onLine ? ACCOUNT.offline : error instanceof Error && error.message === 'invalid-name' ? ACCOUNT.nicknameError : ACCOUNT.unavailable;
       status.dataset.tone = 'bad';
       save.disabled = false;
       if (skip) skip.disabled = false;
@@ -719,7 +736,7 @@ export const mountAccounts = async (): Promise<void> => {
     skip?.addEventListener('click', () => nickSheet.close());
     save.addEventListener('click', () => void submitNickname(input, status, save, skip));
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault();
         void submitNickname(input, status, save, skip);
       }

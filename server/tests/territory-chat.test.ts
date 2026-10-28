@@ -147,3 +147,19 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       await expect(client.territoryChat('nope')).rejects.toBeInstanceOf(DuelError);
     });
   });
+
+
+it.skipIf(!localUrl)('serializes concurrent retention and delivers reports once to the admin inbox', async () => {
+ const storage = postgresStorage(pool as unknown as PgPool);
+ const service = new MatchService({storage,config:DEFAULT_SERVER_CONFIG});
+ const a = await service.createGuest(), b = await service.createGuest();
+ const store = postgresTerritoryChatStore(pool as unknown as PgPool);
+ await pool!.query('delete from territory_messages');
+ await Promise.all(Array.from({length:50},(_,i)=>store.send(a.player.id,`concurrent-${i}`,newId(),Date.now())));
+ expect(Number((await pool!.query('select count(*) as n from territory_messages')).rows[0].n)).toBe(30);
+ const message = (await store.history(b.player.id)).messages[0]!;
+ await store.report(b.player.id,message.id,'abuse',Date.now());
+ await store.report(b.player.id,message.id,'abuse',Date.now());
+ const reports = await pool!.query("select count(*) as n from feedback_reports where context->>'messageId'=$1",[message.id]);
+ expect(Number(reports.rows[0].n)).toBe(1);
+});

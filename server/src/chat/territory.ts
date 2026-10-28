@@ -107,6 +107,17 @@ const message = (row: PgRow, player: string): TerritoryMessage => ({
 });
 
 export const postgresTerritoryChatStore = (pool: PgPool): TerritoryChatStore => {
+  const transaction = async (run: (c: Awaited<ReturnType<PgPool['connect']>>) => Promise<void>) => {
+    const c = await pool.connect();
+    try {
+      await c.query('begin');
+      // One shared channel: insertion, retention and report evidence use the same short lock.
+      await c.query("select pg_advisory_xact_lock(hashtext('futasaku:territory-chat'))");
+      await run(c);
+      await c.query('commit');
+    } catch (error) { await c.query('rollback'); throw error; }
+    finally { c.release?.(); }
+  };
   const senderOf = async (messageId: string): Promise<string> => {
     const row = (await pool.query('select sender_id from territory_messages where id=$1', [messageId])).rows[0];
     return row ? String(row.sender_id) : notFound();
@@ -123,17 +134,13 @@ export const postgresTerritoryChatStore = (pool: PgPool): TerritoryChatStore => 
       return { messages: rows.reverse().map((row) => message(row, player)) };
     },
     async send(player, text, requestId, now) {
-      // One statement: insert (a replayed request id is a no-op), then keep only the newest 30.
-      await pool.query(
-        `with added as (
-           insert into territory_messages(id, sender_id, text, request_id, created_at)
-           values ($1, $2, $3, $4, $5) on conflict (sender_id, request_id) do nothing returning sequence
-         )
-         delete from territory_messages
-          where sequence <= (select sequence from territory_messages order by sequence desc offset $6 limit 1)
-            and exists (select 1 from added)`,
-        [newId(), player, text, requestId, now, TERRITORY_CHAT_KEEP - 1],
-      );
+      await transaction(async c => {
+        await c.query(`insert into territory_messages(id,sender_id,text,request_id,created_at)
+          values($1,$2,$3,$4,$5) on conflict(sender_id,request_id) do nothing`,
+          [newId(), player, text, requestId, now]);
+        await c.query(`delete from territory_messages where sequence <
+          (select sequence from territory_messages order by sequence desc offset $1 limit 1)`, [TERRITORY_CHAT_KEEP - 1]);
+      });
     },
     async block(player, messageId) {
       const sender = await senderOf(messageId);
@@ -141,14 +148,18 @@ export const postgresTerritoryChatStore = (pool: PgPool): TerritoryChatStore => 
       await pool.query('insert into match_chat_blocks(blocker_id, blocked_id) values ($1, $2) on conflict do nothing', [player, sender]);
     },
     async report(player, messageId, reason, now) {
-      const sender = await senderOf(messageId);
-      if (sender === player) notYours();
-      await pool.query(
-        `insert into territory_chat_reports(message_id, reporter_id, sender_id, text, reason, created_at)
-         select id, $2, sender_id, text, $3, $4 from territory_messages where id = $1
-         on conflict do nothing`,
-        [messageId, player, reason, now],
-      );
+      await transaction(async c => {
+        const row = (await c.query('select sender_id,text from territory_messages where id=$1', [messageId])).rows[0];
+        if (!row) notFound();
+        if (String(row!.sender_id) === player) notYours();
+        const added = await c.query(`insert into territory_chat_reports(message_id,reporter_id,sender_id,text,reason,created_at)
+          values($1,$2,$3,$4,$5,$6) on conflict do nothing returning message_id`,
+          [messageId, player, row!.sender_id, row!.text, reason, now]);
+        if (added.rows.length) await c.query(
+          'insert into feedback_reports(id,created_at,kind,player_id,message,context,build,user_agent) values($1,$2,$3,$4,$5,$6,null,null)',
+          [newId(), now, 'report', player, `Territory chat: ${reason}`,
+           JSON.stringify({source:'territory-chat',messageId,reportedPlayerId:row!.sender_id,text:row!.text,reason})]);
+      });
     },
   };
 };

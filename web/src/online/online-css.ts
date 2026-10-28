@@ -1095,7 +1095,7 @@ export const ONLINE_CSS = `
 .world-chat-text { color: #e8ddc5; overflow-wrap: anywhere; letter-spacing: .02em; }
 .world-chat-mod { display: flex; gap: 6px; margin-top: 4px; }
 .world-chat-mod button {
-  min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; cursor: pointer; color: #e8ddc5;
+  min-height: 44px; padding: 0 12px; border: 0; border-radius: 8px; cursor: pointer; color: #e8ddc5;
   background: linear-gradient(#1f241f, #191d19); box-shadow: inset 0 1px 0 #e8ddc51f, inset 0 -2px 0 #00000059;
   font: inherit; font-size: .58rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
 }
@@ -1103,14 +1103,14 @@ export const ONLINE_CSS = `
 .world-chat-empty[hidden] { display: none; }
 .world-chat-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
 .world-chat-input {
-  min-width: 0; height: 40px; padding: 0 12px; box-sizing: border-box; border: 0; border-radius: 10px;
+  min-width: 0; height: 44px; padding: 0 12px; box-sizing: border-box; border: 0; border-radius: 10px;
   background: #0a0d0bcc; color: #f2e7cb; box-shadow: inset 0 1px 0 #000a, inset 0 0 0 1px #e8ddc50d;
   font: inherit; font-size: 16px; letter-spacing: .02em;
 }
 .world-chat-input::placeholder { color: #e8ddc566; }
 .world-chat-input:focus { outline: none; box-shadow: inset 0 1px 0 #000a, inset 0 0 0 1px #d5c89b52; }
 .world-chat-send {
-  height: 40px; padding: 0 14px; border: 0; border-radius: 10px; cursor: pointer;
+  height: 44px; padding: 0 14px; border: 0; border-radius: 10px; cursor: pointer;
   color: #161a16; background: linear-gradient(#efe4c8, #ddd1b2); box-shadow: inset 0 1px 0 #fff8, inset 0 -2px 0 #0000002e;
   font: inherit; font-size: .62rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
 }

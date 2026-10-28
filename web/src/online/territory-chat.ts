@@ -14,6 +14,11 @@ export class TerritoryChat {
   private open = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private busy = false;
+  private pending: { text: string; id: string } | null = null;
+  private generation = 0;
+  private failures = 0;
+  private signature = '';
+  private request: AbortController | null = null;
   /** The message whose moderation keys are showing, and whether its Block is armed. */
   private picked: string | null = null;
   private blockArmed = false;
@@ -31,6 +36,25 @@ export class TerritoryChat {
     /** Told when the chat opens, so the menu window can shut (one window at a time). */
     private readonly onOpen: () => void = () => undefined,
   ) {
+    document.addEventListener('visibilitychange', () => {
+      if (!this.open) return;
+      this.cancelPoll();
+      if (!document.hidden) void this.poll();
+    });
+    window.addEventListener('online', () => { if (this.open) { this.cancelPoll(); void this.poll(); } });
+    const viewport = () => {
+      const v = window.visualViewport;
+      const keyboard = !!v && v.height < innerHeight * .8;
+      if (!this.panel) return;
+      this.panel.classList.toggle('keyboard', keyboard);
+      if (keyboard && v) {
+        this.panel.style.top = `${v.offsetTop + 12}px`;
+        this.panel.style.bottom = 'auto';
+        this.panel.style.maxHeight = `${Math.max(100, v.height - 24)}px`;
+      } else { this.panel.style.top = ''; this.panel.style.bottom = ''; this.panel.style.maxHeight = ''; }
+    };
+    window.visualViewport?.addEventListener('resize', viewport);
+    window.visualViewport?.addEventListener('scroll', viewport);
     if (this.key) {
       this.key.setAttribute('aria-label', ONLINE.worldChat);
       this.key.title = ONLINE.worldChat;
@@ -43,6 +67,7 @@ export class TerritoryChat {
     const send = document.getElementById('world-chat-send');
     if (send) send.textContent = ONLINE.worldChatSend;
     if (this.empty) this.empty.textContent = ONLINE.worldChatEmpty;
+    this.input?.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229)) e.preventDefault(); });
     document.getElementById('world-chat-form')?.addEventListener('submit', (event) => { event.preventDefault(); void this.send(); });
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && this.open) { this.setOpen(false); event.stopPropagation(); }
@@ -59,43 +84,68 @@ export class TerritoryChat {
     this.key?.classList.toggle('on', open);
     this.picked = null;
     this.blockArmed = false;
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-    if (!open) return;
+    this.cancelPoll();
+    if (!open) { this.key?.focus({ preventScroll: true }); return; }
     this.onOpen();
     this.say('');
     this.paint();
     void this.poll();
   }
 
+  private cancelPoll() {
+    this.generation++;
+    this.request?.abort(); this.request = null;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+  }
+
   private async poll() {
-    if (!this.open) return;
+    if (!this.open || document.hidden || this.busy) return;
+    const generation = this.generation;
+    const request = new AbortController();
+    this.request = request;
     const token = this.token();
     if (token) {
       try {
-        this.messages = (await this.client.territoryChat(token)).messages;
+        const page = await this.client.territoryChat(token, request.signal);
+        if (generation !== this.generation) return;
+        this.messages = page.messages;
+        this.failures = 0;
         this.paint();
         if (this.status?.textContent === ONLINE.worldChatOffline) this.say('');
       } catch {
+        if (generation !== this.generation) return;
+        this.failures++;
         this.say(ONLINE.worldChatOffline);
       }
     }
-    if (this.open) this.timer = setTimeout(() => void this.poll(), TERRITORY_CHAT_POLL_MS);
+    if (this.open && generation === this.generation && !document.hidden) this.timer = setTimeout(() => void this.poll(), Math.min(60_000, TERRITORY_CHAT_POLL_MS * 2 ** Math.min(4, this.failures)));
   }
 
   private async send() {
     const token = this.token();
     const text = this.input?.value.trim() ?? '';
     if (!token || !text || this.busy) return;
+    const pending = this.pending ?? { text, id: crypto.randomUUID() };
+    this.pending = pending;
     this.busy = true;
+    const send = document.getElementById('world-chat-send') as HTMLButtonElement | null;
+    if (send) send.disabled = true;
+    this.cancelPoll();
     try {
-      this.messages = (await this.client.territoryChatSend(token, text, crypto.randomUUID())).messages;
-      if (this.input) this.input.value = '';
+      this.messages = (await this.client.territoryChatSend(token, pending.text, pending.id)).messages;
+      if (this.input?.value.trim() === pending.text) this.input.value = '';
+      this.pending = null;
+      if (send) send.textContent = ONLINE.worldChatSend;
       this.say('');
       this.paint(true);
     } catch (error) {
+      if (send) send.textContent = ONLINE.worldChatRetry;
       this.say((error as { code?: string }).code === 'RATE_LIMITED' ? ONLINE.worldChatSlow : ONLINE.worldChatFailed);
     } finally {
       this.busy = false;
+      if (send) send.disabled = false;
+      if (this.open) void this.poll();
     }
   }
 
@@ -131,6 +181,13 @@ export class TerritoryChat {
   private paint(forceBottom = false) {
     const list = this.list;
     if (!list) return;
+    const signature = JSON.stringify([this.messages, this.picked, this.blockArmed]);
+    if (signature === this.signature && !forceBottom) return;
+    this.signature = signature;
+    const focused = document.activeElement as HTMLElement | null;
+    const focusedId = focused?.closest<HTMLElement>('[data-message-id]')?.dataset.messageId;
+    const focusedAction = focused?.dataset.action;
+    const previousTop = list.scrollTop;
     const atBottom = forceBottom || list.scrollHeight - list.scrollTop - list.clientHeight < 24;
     if (this.empty) this.empty.hidden = this.messages.length > 0;
     list.replaceChildren(...this.messages.map((m) => {
@@ -158,14 +215,14 @@ export class TerritoryChat {
         const keys = document.createElement('span');
         keys.className = 'world-chat-mod';
         const block = document.createElement('button');
-        block.type = 'button';
+        block.type = 'button'; block.dataset.action = 'block';
         block.textContent = this.blockArmed ? ONLINE.worldChatBlockConfirm : ONLINE.worldChatBlock;
         block.addEventListener('click', () => {
           if (!this.blockArmed) { this.blockArmed = true; this.paint(); return; }
           void this.block(m.id);
         });
         const report = document.createElement('button');
-        report.type = 'button';
+        report.type = 'button'; report.dataset.action = 'report';
         report.textContent = ONLINE.worldChatReport;
         report.addEventListener('click', () => void this.report(m.id));
         keys.append(block, report);
@@ -174,5 +231,10 @@ export class TerritoryChat {
       return item;
     }));
     if (atBottom) list.scrollTop = list.scrollHeight;
+    else list.scrollTop = previousTop;
+    if (focusedId) {
+      const row = [...list.children].find(e => (e as HTMLElement).dataset.messageId === focusedId) as HTMLElement | undefined;
+      (focusedAction ? row?.querySelector<HTMLElement>(`[data-action="${focusedAction}"]`) : row)?.focus({ preventScroll: true });
+    }
   }
 }
