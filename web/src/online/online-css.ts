@@ -661,6 +661,11 @@ export const ONLINE_CSS = `
 /* asked once already: the key lights the challenge red, so the second press is a decision */
 .world-claim-button.armed { color: #fff4e6; background: linear-gradient(#d9694f, #b8533c); box-shadow: inset 0 1px 0 #ffffff40, inset 0 -2px 0 #00000040, 0 0 12px #e07a5f66; }
 .world-claim-button:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+/* on its way to the server: the same key, dimmed and breathing, so the bar never changes size */
+.world-claim-button.working { opacity: .62; cursor: default; animation: world-working 1.1s ease-in-out infinite; }
+@keyframes world-working { 50% { opacity: .42; } }
+@media (prefers-reduced-motion: reduce) { .world-claim-button.working { animation: none; } }
+html.reduce-motion .world-claim-button.working { animation: none; }
 .online-world .online-notice { min-height: 20px; max-width: 720px; width: 100%; margin: 0 auto; }
 /* A short (640px) phone: one small, deliberate step tighter — 6px, not 3px crumbs — and a shallower
    selection bar, so the map keeps the room it needs without the column reading as cramped. */
@@ -902,7 +907,7 @@ html.reduce-motion .world-selection { animation: none; }
 /* the row's challenges key carries the lamp while the row is out, so MENU's own lamp steps aside */
 .world-menu-key[aria-expanded='true'] .world-deck-count { opacity: 0; }
 .world-grid > .world-menu-key .world-deck-count { position: absolute; z-index: 2; top: -6px; right: -6px; }
-.world-grid > .world-menu-key .world-menu-glyph { position: absolute; left: 50%; top: 50%; translate: -50% -50%; }
+.world-grid > .world-menu-key .world-menu-glyph { position: absolute; z-index: 1; left: 50%; top: 50%; translate: -50% -50%; }
 .world-deck-count {
   min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px;
   display: inline-grid; place-items: center; font-size: .6rem; font-weight: 700; letter-spacing: 0;
@@ -945,8 +950,7 @@ html.reduce-motion .world-selection { animation: none; }
 .world-panel-body { overflow: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 10px; }
 .world-pane { display: none; flex-direction: column; gap: 8px; }
 .world-panel[data-pane='challenges'] .world-pane[data-pane='challenges'],
-.world-panel[data-pane='ranking'] .world-pane[data-pane='ranking'],
-.world-panel[data-pane='latest'] .world-pane[data-pane='latest'] { display: flex; }
+.world-panel[data-pane='ranking'] .world-pane[data-pane='ranking'] { display: flex; }
 .world-pane > .world-pane-label:first-child { margin-top: 0; }
 .world-pane-label { margin: 4px 4px 0; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: #e8ddc58f; text-align: center; }
 .world-pane-empty { margin: 2px 0 6px; text-align: center; font-size: .74rem; color: #e8ddc5a6; }
@@ -994,19 +998,7 @@ html.reduce-motion .world-selection { animation: none; }
 .world-ranking-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .06em; }
 .world-ranking-tag { color: #e8ddc570; font-size: .62rem; letter-spacing: .08em; }
 .world-ranking-tiles { text-align: right; font-weight: 700; letter-spacing: .04em; }
-.world-ranking-row:focus-visible, .world-activity-chip:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
-/* LATEST: the newest placements, one row each, the same rhythm as the ranking */
-.world-activity { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
-.world-activity-chip {
-  min-width: 0; display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 10px;
-  border: 0; border-radius: 8px; background: #161b17b3; color: #e8ddc5; cursor: pointer;
-  box-shadow: inset 0 1px 0 #e8ddc50f;
-  font: inherit; font-size: .66rem; letter-spacing: .12em; text-transform: uppercase; font-variant-numeric: tabular-nums;
-}
-.world-activity-chip:active { background: #232922b3; }
-.world-activity-chip::before { content: ''; width: 10px; height: 10px; border-radius: 2px; background: var(--territory); flex: none; }
-.world-activity-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.world-activity-ago { margin-left: auto; color: #e8ddc58f; white-space: nowrap; }
+.world-ranking-row:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 
 /* THE MAP'S KEYS (owner, 2026-10-28: "teenage engineering/nintendo inspo"). MENU and the four keys it
    slides out are one family: the in-game cockpit key, 44px, radius 12, #111312 under the supplied
@@ -1024,13 +1016,22 @@ html.reduce-motion .world-selection { animation: none; }
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: url('./hardware/button-frame-supplied.webp') center / contain no-repeat;
 }
-.world-grid > .world-corner > :is(svg, span), .world-key > :is(svg, span) { position: relative; z-index: 1; }
+/* Only the icon is lifted above the frame. A wider rule (every svg AND span child) also caught the
+   press layer (.press-shade, web/src/logic/press.ts): made relative it became a second grid row and
+   pushed every icon ~5px up after the first press. The glyph and the lamp place themselves. */
+.world-key > svg { position: relative; z-index: 1; }
 .world-grid > .world-corner:active { transform: translateY(1px); }
 /* a row key presses with translate and scale, leaving transform to its slide */
 .world-key:active { translate: 0 1px; scale: .985; filter: brightness(.96); }
-.world-grid > .world-corner:is(:hover, :focus-visible, .on, [aria-expanded='true']),
-.world-key:is(:hover, :focus-visible) {
+.world-grid > .world-corner:is(:focus-visible, .on, [aria-expanded='true']),
+.world-key:focus-visible {
   color: #fff1cf; box-shadow: 0 0 9px var(--light-bloom, rgba(196, 150, 88, .22)), 0 2px 8px #0007;
+}
+/* Hover glow only where there is a real pointer: on a phone :hover sticks to the last key tapped. */
+@media (hover: hover) {
+  .world-grid > .world-corner:hover, .world-key:hover {
+    color: #fff1cf; box-shadow: 0 0 9px var(--light-bloom, rgba(196, 150, 88, .22)), 0 2px 8px #0007;
+  }
 }
 /* the lit key: its page is open (a lamp under the icon, like a hardware toggle that is ON) */
 .world-key.on { color: #fff6dc; box-shadow: 0 0 12px var(--light-bloom, rgba(196, 150, 88, .32)), 0 2px 8px #0007; }
@@ -1057,12 +1058,11 @@ html.reduce-motion .world-selection { animation: none; }
 .world-keys .world-key {
   position: relative; opacity: 0; transform: translateX(calc(var(--i) * 52px + 52px)) scale(.86);
   transition: transform 180ms var(--ix-ease-open), opacity 120ms ease, scale var(--ix-press) ease, translate var(--ix-press) ease;
-  transition-delay: calc((3 - var(--i)) * 18ms);
+  transition-delay: calc((2 - var(--i)) * 18ms);
 }
-.world-keys .world-key:nth-child(4) { --i: 0; }
-.world-keys .world-key:nth-child(3) { --i: 1; }
-.world-keys .world-key:nth-child(2) { --i: 2; }
-.world-keys .world-key:nth-child(1) { --i: 3; }
+.world-keys .world-key:nth-last-child(1) { --i: 0; }
+.world-keys .world-key:nth-last-child(2) { --i: 1; }
+.world-keys .world-key:nth-last-child(3) { --i: 2; }
 .world-keys.open { pointer-events: auto; }
 .world-keys.open .world-key { opacity: 1; transform: none; transition-delay: calc(var(--i) * 28ms); }
 .world-keys:not(.open) .world-key { pointer-events: none; }
@@ -1227,6 +1227,6 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
    the soft-focus blurs are drawn sharp and the ambient loops hold still. A blur re-renders on every
    frame the view moves; this is what keeps a pan at 60 fps on a mid phone. */
 .world-grid.moving .world-map-svg [filter] { filter: none; }
-.world-grid.moving .world-map-svg :is(.world-fog-ring, .world-hex-face, .world-halo, .world-border-glow, .world-spore) { animation-play-state: paused; }
+.world-grid.moving .world-map-svg :is(.world-fog-ring, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore) { animation-play-state: paused; }
 .world-grid.moving .world-map-svg .world-accent-line { filter: none; }
 `;

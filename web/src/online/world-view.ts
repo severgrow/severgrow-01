@@ -25,7 +25,7 @@ import { lastWorld, rememberWorld } from './world-memory.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { WORLD_CLAIMED_EVENT } from './world-events.js';
 import { TerritoryChat } from './territory-chat.js';
-import { borderSegments, cellXY, fogRings, newCellIds, ownCentre, ranking, recentActivity, standing } from './world-growth.js';
+import { borderSegments, cellXY, fogRings, newCellIds, ownCentre, ranking, standing } from './world-growth.js';
 import { ONLINE } from '../../../src/strings.js';
 
 /** A tile grown this recently keeps its halo (the map shows where the world is moving). */
@@ -40,8 +40,8 @@ const SHEET_GUARD_MS = 450;
 /** Motes drifting off held ground: few on purpose (they are atmosphere, not effects). */
 const SPORE_COUNT = 7;
 /**
- * THE FOUR KEYS' ICONS (owner, 2026-10-28: "ranking -123 style podium, challenges swords, chat chat
- * icon, latest like a book icon"). Line icons in the key's own ink on a 24-unit grid; the swords are
+ * THE KEYS' ICONS (owner, 2026-10-28: "ranking -123 style podium, challenges swords, chat chat
+ * icon"; LATEST and its book were removed for now the same day). Line icons in the key's own ink on a 24-unit grid; the swords are
  * the map's own traced glyph, so one mark means challenges everywhere.
  */
 const KEY_ICON = (body: string, viewBox = '0 0 24 24') =>
@@ -51,11 +51,8 @@ const WORLD_KEY_ICONS = {
     '<text x="12" y="14.6" text-anchor="middle">1</text><text x="6.2" y="18.4" text-anchor="middle">2</text><text x="17.8" y="19.1" text-anchor="middle">3</text>', '2.5 5 19 19'),
   challenges: KEY_ICON(`<path class="fill" d="${SWORD_PATH}"/>`, '-7.6 -7.6 15.2 15.2'),
   chat: KEY_ICON('<path class="line" d="M5 5h14v11H10l-5 4V5Z"/><path class="line" d="M8 9h8M8 12h5"/>'),
-  latest: KEY_ICON('<path class="line" d="M12 6.6C10 5.1 7 4.6 3.5 5.1v13.2c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5.1C17 4.6 14 5.1 12 6.6Zm0 0v13.2"/>'),
 } as const;
-type Pane = 'ranking' | 'challenges' | 'latest';
-/** How many placements the LATEST page lists. */
-const LATEST_COUNT = 12;
+type Pane = 'ranking' | 'challenges';
 /** How long a glide to a tile or a player takes: one breath, like the interface's own surfaces. */
 const GLIDE_MS = 380;
 /** The soft-focus layers stay off this long after a gesture ends, so a quick second flick never re-blurs mid-motion. */
@@ -143,6 +140,8 @@ export class WorldView {
   /** The grow and sell keys ask once more before they act; this is the tile that was asked about. */
   private growArmed: string | null = null;
   private sellArmed: string | null = null;
+  /** A grow or sell on its way to the server: its key stays in the bar, dimmed, so nothing jumps. */
+  private working: 'grow' | 'sell' | null = null;
   /** What the tile bar and the window last drew, so a 12 s poll that changes nothing touches no DOM. */
   private selectionSignature = '';
   private paneSignature = '';
@@ -244,7 +243,7 @@ export class WorldView {
       menu.addEventListener('click', () => this.setKeys(!this.keysOpen));
     }
     document.getElementById('online-world-keys')?.setAttribute('aria-label', ONLINE.worldMenu);
-    const names: Record<Pane | 'chat', string> = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, chat: ONLINE.worldChat, latest: ONLINE.worldLatest };
+    const names: Record<Pane | 'chat', string> = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, chat: ONLINE.worldChat };
     for (const key of document.querySelectorAll<HTMLButtonElement>('#online-world-keys .world-key')) {
       const pane = key.dataset.pane as Pane | undefined;
       key.insertAdjacentHTML('afterbegin', WORLD_KEY_ICONS[pane ?? 'chat']);
@@ -884,8 +883,12 @@ export class WorldView {
     const world = this.world;
     const cellId = this.selected;
     let line = '';
-    let action: { label: string; run: () => void; armed?: boolean } | null = null;
-    if (world && cellId) {
+    let action: { label: string; run: () => void; armed?: boolean; working?: boolean } | null = null;
+    if (world && cellId && this.working) {
+      const tile = world.claims.find((claim) => claim.cellId === cellId);
+      line = tile ? ownerLine(tile, true, this.myLevel()) : `FREE TILE · ${world.cost} SEEDS`;
+      action = { label: this.working === 'grow' ? ONLINE.worldGrowing : ONLINE.worldSelling, run: () => undefined, working: true };
+    } else if (world && cellId) {
       const tile = world.claims.find((claim) => claim.cellId === cellId);
       const challenge = this.identity ? challengeOnCell(this.allChallenges, cellId) : null;
       if (tile) {
@@ -939,12 +942,15 @@ export class WorldView {
     const key = bar.querySelector<HTMLButtonElement>('.world-claim-button');
     if (key && action) {
       key.onclick = action.run;
+      key.disabled = !!action.working;
       key.classList.toggle('armed', !!action.armed);
+      key.classList.toggle('working', !!action.working);
     }
   }
   private async claim() {
     if (!this.identity || !this.selected || this.busy) return;
     this.busy = true;
+    this.working = 'grow';
     const cellId = this.selected;
     this.growArmed = null;
     this.pendingRequest ??= crypto.randomUUID();
@@ -962,7 +968,7 @@ export class WorldView {
       this.notice('That tile may have changed. The map has refreshed; no Seeds were taken.');
       this.pendingRequest = null;
       await this.refresh(true);
-    } finally { this.busy = false; this.paintSelection(); }
+    } finally { this.busy = false; this.working = null; this.paintSelection(); }
   }
   /** THE GROW RIPPLE: the new tile sends two soft rings out over the land around it. */
   private ripple(cellId: string) {
@@ -987,7 +993,7 @@ export class WorldView {
     window.setTimeout(() => group.remove(), 1600);
   }
 
-  // ---- the growing territory: ranking, latest, gliding to a place (owner, 2026-10-27) ----------
+  // ---- the growing territory: ranking, gliding to a place (owner, 2026-10-27) -------------------
 
   /** Keep a view on the world: inside the fit box, or centred on it when it is the larger. */
   private clampBox(box: [number, number, number, number]): [number, number, number, number] {
@@ -1033,13 +1039,6 @@ export class WorldView {
     this.glideFrame = 0;
     this.setMoving(false);
   }
-  private flyToCell(cellId: string) {
-    const cell = this.world?.cells.find((candidate) => candidate.id === cellId);
-    if (!cell) return;
-    const at = cellXY(cell.q, cell.r);
-    this.flyTo(at.x, at.y);
-    this.select(cellId, false);
-  }
   private flyToOwner(ownerId: string) {
     if (!this.world) return;
     const centre = ownCentre(this.world.cells, this.world.claims, ownerId);
@@ -1049,6 +1048,7 @@ export class WorldView {
   private async sell(cellId: string) {
     if (!this.identity || this.busy) return;
     this.busy = true;
+    this.working = 'sell';
     this.sellArmed = null;
     this.paintSelection();
     try {
@@ -1060,6 +1060,7 @@ export class WorldView {
       this.notice(code === 'CELL_BUSY' ? ONLINE.worldSellBusy : ONLINE.worldSellFailed);
     } finally {
       this.busy = false;
+      this.working = null;
       await this.refresh(true);
       this.markSelection();
     }
@@ -1131,7 +1132,7 @@ export class WorldView {
     panel.dataset.pane = this.pane ?? '';
     if (!this.pane) return;
     const title = document.getElementById('world-panel-title');
-    if (title) title.textContent = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, latest: ONLINE.worldLatest }[this.pane];
+    if (title) title.textContent = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges }[this.pane];
     if (this.pane === 'challenges') {
       const history = this.allChallenges.filter((c) => !isOpen(c));
       const empty = document.getElementById('world-challenges-empty');
@@ -1140,7 +1141,6 @@ export class WorldView {
       if (past) { past.hidden = history.length > 0; past.textContent = ONLINE.worldNoHistory; }
     }
     if (this.pane === 'ranking') this.paintRanking(me);
-    if (this.pane === 'latest') this.paintLatest(me);
   }
 
   private paintRanking(me: string | null) {
@@ -1178,34 +1178,6 @@ export class WorldView {
       button.addEventListener('click', () => { this.setPane(null, false); this.flyToOwner(row.ownerId); });
       item.append(button);
       return item;
-    }));
-  }
-
-  /** LATEST: the newest placements, newest first; a row glides to that tile and selects it. */
-  private paintLatest(me: string | null) {
-    const strip = document.getElementById('online-world-activity');
-    const empty = document.getElementById('world-latest-empty');
-    if (!strip || !this.world) return;
-    const entries = recentActivity(this.world.claims, this.challengeNow(), LATEST_COUNT);
-    const signature = `latest|${me}|${JSON.stringify(entries)}`;
-    if (signature === this.paneSignature) return;
-    this.paneSignature = signature;
-    if (empty) { empty.hidden = entries.length > 0; empty.textContent = ONLINE.worldNoLatest; }
-    strip.replaceChildren(...entries.map((entry) => {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'world-activity-chip';
-      chip.style.setProperty('--territory', entry.colour);
-      const name = document.createElement('span');
-      name.className = 'world-activity-name';
-      name.textContent = entry.ownerId === me ? ONLINE.worldMe : entry.name;
-      const ago = document.createElement('span');
-      ago.className = 'world-activity-ago';
-      ago.textContent = `+1 · ${entry.ago}`;
-      chip.append(name, ago);
-      chip.setAttribute('aria-label', `${entry.ownerId === me ? ONLINE.worldMe : entry.name} grew a tile, ${entry.ago}`);
-      chip.addEventListener('click', () => { this.setPane(null, false); this.flyToCell(entry.cellId); });
-      return chip;
     }));
   }
 

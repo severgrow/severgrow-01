@@ -91,6 +91,16 @@ const tapTile = async (p: Page, id: string) => {
   await p.waitForTimeout(120);
   return !!at;
 };
+/** How far each key's drawn icon sits from its key's centre, in CSS px (ink, not the svg box). */
+const iconOffsets = (p: Page) => p.evaluate(() => [...document.querySelectorAll<HTMLElement>('#online-world-keys .world-key')].map((key) => {
+  const svg = key.querySelector<SVGSVGElement>('svg.world-key-icon')!;
+  const k = key.getBoundingClientRect(); const s = svg.getBoundingClientRect();
+  const vb = svg.viewBox.baseVal; const ink = (svg as unknown as SVGGraphicsElement).getBBox();
+  const scale = Math.min(s.width / vb.width, s.height / vb.height);
+  const ox = s.left + (s.width - vb.width * scale) / 2, oy = s.top + (s.height - vb.height * scale) / 2;
+  const cx = ox + (ink.x - vb.x + ink.width / 2) * scale, cy = oy + (ink.y - vb.y + ink.height / 2) * scale;
+  return { id: key.id, dx: +(cx - (k.left + k.width / 2)).toFixed(1), dy: +(cy - (k.top + k.height / 2)).toFixed(1) };
+}));
 const barKey = (p: Page) => p.evaluate(() => {
   const bar = document.getElementById('online-world-selection')!;
   return bar.hidden ? null : (bar.querySelector('.world-claim-button')?.textContent ?? '');
@@ -133,11 +143,15 @@ try {
         top: Math.round(r.top - menu.top), w: Math.round(r.width), h: Math.round(r.height), left: r.left, right: r.right, gridL: grid.left, menuL: menu.left };
     });
   });
-  check('four keys: ranking, challenges, chat, latest', row.map((k) => k.id).join(',') === 'world-key-ranking,world-key-challenges,online-world-chat,world-key-latest', JSON.stringify(row.map((k) => k.id)));
+  check('three keys: ranking, challenges, chat (LATEST removed)', row.map((k) => k.id).join(',') === 'world-key-ranking,world-key-challenges,online-world-chat' && (await count(page, '#world-key-latest, #online-world-activity')) === 0, JSON.stringify(row.map((k) => k.id)));
   check('each key is an icon only, with a spoken name', row.every((k) => k.icon && !k.text && !!k.label), JSON.stringify(row.map((k) => [k.label, k.text])));
   check('the row sits on MENU\'s line, every key 44px', row.every((k) => k.top === 0 && k.w === 44 && k.h === 44), JSON.stringify(row.map((k) => [k.top, k.w, k.h])));
-  check('the row runs left to right in order and ends at MENU', row.every((k, i) => i === 0 || k.left > row[i - 1]!.right) && row[3]!.right < row[3]!.menuL && row[0]!.left >= row[0]!.gridL, JSON.stringify(row.map((k) => Math.round(k.left))));
+  check('the row runs left to right in order and ends at MENU', row.every((k, i) => i === 0 || k.left > row[i - 1]!.right) && row[2]!.right < row[2]!.menuL && row[0]!.left >= row[0]!.gridL, JSON.stringify(row.map((k) => Math.round(k.left))));
   check('the podium icon carries 1, 2, 3', await page.evaluate(() => [...document.querySelectorAll('#world-key-ranking text')].map((t) => t.textContent).join('') === '123'));
+  const offsets = await iconOffsets(page);
+  check('every icon sits in the centre of its key (within 0.75px)', offsets.every((o) => Math.abs(o.dx) <= .75 && Math.abs(o.dy) <= .75), JSON.stringify(offsets));
+  const glyph = await page.evaluate(() => { const k = document.getElementById('online-world-menu')!.getBoundingClientRect(); const g = document.querySelector('#online-world-menu .world-menu-glyph')!.getBoundingClientRect(); return { dx: Math.round((g.left + g.width / 2) - (k.left + k.width / 2)), dy: Math.round((g.top + g.height / 2) - (k.top + k.height / 2)) }; });
+  check('MENU\'s close mark sits in the centre of MENU', Math.abs(glyph.dx) <= 1 && Math.abs(glyph.dy) <= 1, JSON.stringify(glyph));
   check('the challenges key carries the swords', (await count(page, '#world-key-challenges svg path.fill')) === 1);
   await page.screenshot({ path: `${SHOTS}/territory-keys-390.png` });
 
@@ -149,17 +163,15 @@ try {
   check('the open key is lit', await page.evaluate(() => document.getElementById('world-key-ranking')!.classList.contains('on')));
   const under = await page.evaluate(() => { const p = document.getElementById('online-world-panel')!.getBoundingClientRect(); const k = document.getElementById('online-world-menu')!.getBoundingClientRect(); return p.top - k.bottom; });
   check('the window hangs under the key row, so the keys stay in reach', under >= 4 && under <= 12, String(under));
-  check('the keys stay out while a page is open', (await visible(page, '#online-world-keys .world-key')) === 4);
+  check('the keys stay out while a page is open', (await visible(page, '#online-world-keys .world-key')) === 3);
   await page.screenshot({ path: `${SHOTS}/territory-ranking-390.png` });
   await page.click('#world-key-challenges');
   await page.waitForTimeout(200);
   check('CHALLENGES swaps the page in place', (await page.getAttribute('#online-world-panel', 'data-pane')) === 'challenges' && await page.isVisible('#world-challenges-empty'));
-  await page.click('#world-key-latest');
+  await page.click('#world-key-challenges');
   await page.waitForTimeout(200);
-  check('LATEST lists the newest placements', (await page.getAttribute('#online-world-panel', 'data-pane')) === 'latest' && (await count(page, '#online-world-activity .world-activity-chip')) === 8, String(await count(page, '#online-world-activity .world-activity-chip')));
-  await page.screenshot({ path: `${SHOTS}/territory-latest-390.png` });
-  await page.click('#world-key-latest');
-  await page.waitForTimeout(200);
+  const pressed = await iconOffsets(page);
+  check('icons stay centred after a key has been pressed (the press layer is not a grid row)', pressed.every((o) => Math.abs(o.dx) <= .75 && Math.abs(o.dy) <= .75), JSON.stringify(pressed));
   check('pressing the lit key again shuts its page', await page.isHidden('#online-world-panel') && await keysOut(page));
   await page.click('#online-world-chat');
   await page.waitForSelector('#online-world-chat-panel:not([hidden])');
@@ -286,8 +298,12 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 }); await page.waitForTimeout(300);
   check('desktop also shows only MENU at rest', (await visible(page, '.world-grid button')) === 1);
   await page.click('#online-world-menu'); await page.waitForTimeout(300);
-  await page.click('#world-key-latest'); await page.waitForTimeout(200);
-  await page.screenshot({ path: `${SHOTS}/territory-latest-desktop.png` });
+  const deskOffsets = await iconOffsets(page);
+  const glyph2 = await page.evaluate(() => { const k = document.getElementById('online-world-menu')!.getBoundingClientRect(); const g = document.querySelector('#online-world-menu .world-menu-glyph')!.getBoundingClientRect(); const c = document.querySelector('#world-key-challenges .world-deck-count') as HTMLElement; return { dx: Math.round((g.left + g.width / 2) - (k.left + k.width / 2)), dy: Math.round((g.top + g.height / 2) - (k.top + k.height / 2)), countPos: getComputedStyle(c).position }; });
+  check('after many presses MENU\'s mark is still centred and the lamp still rides the corner', Math.abs(glyph2.dx) <= 1 && Math.abs(glyph2.dy) <= 1 && glyph2.countPos === 'absolute', JSON.stringify(glyph2));
+  check('on desktop too every icon is centred in its key', deskOffsets.every((o) => Math.abs(o.dx) <= .75 && Math.abs(o.dy) <= .75), JSON.stringify(deskOffsets));
+  await page.click('#world-key-ranking'); await page.waitForTimeout(200);
+  await page.screenshot({ path: `${SHOTS}/territory-ranking-desktop.png` });
   await context.close();
 } finally {
   await browser.close();

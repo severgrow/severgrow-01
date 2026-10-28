@@ -97,9 +97,9 @@ chat, latest should be separate options using just icons … MENU button stays a
 visible straight away, 4 other keys open after clicking menu … teenage engineering/nintendo inspo …
 tapping empty tile should NOT open the menu and still have option to grow/sell/challenge".
 
-- **At rest only MENU shows** (top-right). Pressing it slides a row of four icon-only 44px hardware keys
+- **At rest only MENU shows** (top-right). Pressing it slides a row of icon-only 44px hardware keys
   out to its left: RANKING (a 1-2-3 podium), CHALLENGES (the map's traced swords, carrying the open-
-  challenge lamp), CHAT, LATEST (an open book). MENU's grille folds into a close mark. Each key opens its
+  challenge lamp), CHAT (LATEST, an open book, was removed in v3.5.1). MENU's grille folds into a close mark. Each key opens its
   own page of one window that hangs under the row; the lit key gets a lamp, pressing it again shuts the
   page, and MENU folds everything away. Fit map and My land are gone.
 - **A tap only selects.** The tile bar floats at the map's foot: free ground GROW A TILE → CONFIRM GROW,
@@ -115,6 +115,18 @@ tapping empty tile should NOT open the menu and still have option to grow/sell/c
 - Checks: `web/e2e/territory-menu.ts` (CI, 47 checks), `web/e2e/territory-smooth.ts` (frame-time probe,
   run by hand). The older `territory-growth`, `world-pan`, `territory-swords` and `territory-challenges`
   suites still drive the removed FIT / My land keys and the auto-opening offer; they are not in CI.
+
+### v3.5.1 (owner, 2026-10-28): LATEST removed, icons centred
+
+- LATEST and its book key are removed "for now"; the row is RANKING, CHALLENGES, CHAT.
+  (`recentActivity` in `world-growth.ts` stays for when it returns.)
+- Off-centre icons: a rule lifting every `svg`/`span` child above the key frame also caught the press
+  layer (`.press-shade`), turning it into a second grid row after the first press (icons ~5px high) —
+  and outranked MENU's glyph and the challenge lamp. Only the key's `svg` is lifted now; the suite
+  measures the drawn ink to within 0.75px of each key's centre, before and after presses.
+- Hover glow only on devices with a real pointer (`@media (hover: hover)`), so a tapped key on a phone
+  does not stay lit. A grow or sell in flight keeps its key in the bar (GROWING… / SELLING…, dimmed)
+  instead of the bar shrinking and growing back. Starting a pan pauses only the animated tiles.
 
 ## Ownership and economy
 

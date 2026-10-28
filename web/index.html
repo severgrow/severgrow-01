@@ -288,15 +288,15 @@
           <!-- THE MENU KEY AND ITS FOUR KEYS (owner, 2026-10-28: "MENU button stays and it's the only
                button visible straight away, 4 other keys open after clicking menu ... teenage
                engineering/nintendo inspo"). MENU sits top-right; pressing it slides out one row of
-               icon-only hardware keys to its left: RANKING (podium), CHALLENGES (swords), CHAT,
-               LATEST (book). Each key opens its own window; MENU again folds everything away.
+               icon-only hardware keys to its left: RANKING (podium), CHALLENGES (swords), CHAT.
+               Each key opens its own window; MENU again folds everything away. (LATEST was removed
+               for now, owner 2026-10-28.)
                The icons are drawn in world-view.ts. -->
           <button id="online-world-menu" class="world-menu-key world-corner" type="button" aria-expanded="false" aria-controls="online-world-keys"><span class="world-menu-glyph" aria-hidden="true"><i></i><i></i><i></i></span><span class="world-deck-count" hidden></span></button>
           <nav id="online-world-keys" class="world-keys" inert>
             <button id="world-key-ranking" class="world-key" type="button" data-pane="ranking" aria-expanded="false" aria-controls="online-world-panel"></button>
             <button id="world-key-challenges" class="world-key" type="button" data-pane="challenges" aria-expanded="false" aria-controls="online-world-panel"><span class="world-deck-count" hidden></span></button>
             <button id="online-world-chat" class="world-key world-chat-key" type="button" aria-expanded="false" aria-controls="online-world-chat-panel"></button>
-            <button id="world-key-latest" class="world-key" type="button" data-pane="latest" aria-expanded="false" aria-controls="online-world-panel"></button>
           </nav>
           <!-- THE WINDOW: one dark glass drawer under the key row, showing whichever key is lit. -->
           <section id="online-world-panel" class="world-panel" role="dialog" aria-modal="false" aria-labelledby="world-panel-title" hidden>
@@ -320,10 +320,6 @@
                 <!-- Where you stand, and who is next to pass. -->
                 <div id="world-standing" class="world-standing" hidden></div>
                 <ol id="online-world-ranking" class="world-ranking-list" aria-label="Ranking"></ol>
-              </div>
-              <div class="world-pane" data-pane="latest">
-                <div id="online-world-activity" class="world-activity" aria-label="Latest"></div>
-                <p id="world-latest-empty" class="world-pane-empty" hidden></p>
               </div>
             </div>
           </section>
