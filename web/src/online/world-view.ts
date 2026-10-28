@@ -22,10 +22,10 @@ import { SWORD_PATH } from './swords-glyph.js';
 import { ownerLine } from './world-selection.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
-import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
+import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { WORLD_CLAIMED_EVENT } from './world-events.js';
 import { TerritoryChat } from './territory-chat.js';
-import { borderSegments, cellXY, fogRings, newCellIds, ownCentre, ownPatches, ranking, recentActivity, standing } from './world-growth.js';
+import { borderSegments, cellXY, fogRings, newCellIds, ownCentre, ranking, recentActivity, standing } from './world-growth.js';
 import { ONLINE } from '../../../src/strings.js';
 
 /** A tile grown this recently keeps its halo (the map shows where the world is moving). */
@@ -39,8 +39,27 @@ const desktopStage = (): boolean =>
 const SHEET_GUARD_MS = 450;
 /** Motes drifting off held ground: few on purpose (they are atmosphere, not effects). */
 const SPORE_COUNT = 7;
-/** Find my land: a small target, drawn in the button's own ink. */
-const WORLD_MINE_ICON = '<svg class="world-fit-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M12 3.6 19.3 7.8v8.4L12 20.4 4.7 16.2V7.8Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></svg>';
+/**
+ * THE FOUR KEYS' ICONS (owner, 2026-10-28: "ranking -123 style podium, challenges swords, chat chat
+ * icon, latest like a book icon"). Line icons in the key's own ink on a 24-unit grid; the swords are
+ * the map's own traced glyph, so one mark means challenges everywhere.
+ */
+const KEY_ICON = (body: string, viewBox = '0 0 24 24') =>
+  `<svg class="world-key-icon" viewBox="${viewBox}" aria-hidden="true" focusable="false">${body}</svg>`;
+const WORLD_KEY_ICONS = {
+  ranking: KEY_ICON('<path class="line" d="M3 20.5h18M9 20.5V8.5h6v12M3.5 20.5v-8h5.5M20.5 20.5V14H15"/>' +
+    '<text x="12" y="14.6" text-anchor="middle">1</text><text x="6.2" y="18.4" text-anchor="middle">2</text><text x="17.8" y="19.1" text-anchor="middle">3</text>', '2.5 5 19 19'),
+  challenges: KEY_ICON(`<path class="fill" d="${SWORD_PATH}"/>`, '-7.6 -7.6 15.2 15.2'),
+  chat: KEY_ICON('<path class="line" d="M5 5h14v11H10l-5 4V5Z"/><path class="line" d="M8 9h8M8 12h5"/>'),
+  latest: KEY_ICON('<path class="line" d="M12 6.6C10 5.1 7 4.6 3.5 5.1v13.2c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5.1C17 4.6 14 5.1 12 6.6Zm0 0v13.2"/>'),
+} as const;
+type Pane = 'ranking' | 'challenges' | 'latest';
+/** How many placements the LATEST page lists. */
+const LATEST_COUNT = 12;
+/** How long a glide to a tile or a player takes: one breath, like the interface's own surfaces. */
+const GLIDE_MS = 380;
+/** The soft-focus layers stay off this long after a gesture ends, so a quick second flick never re-blurs mid-motion. */
+const SETTLE_MS = 140;
 
 type Identity = { token: string; playerId: string };
 
@@ -115,15 +134,24 @@ export class WorldView {
   private selected: string | null = null;
   /** The cells on the map at the last paint: new ones rise in (null before the first paint). */
   private knownCells: Set<string> | null = null;
-  /** THE ONE WINDOW (owner, 2026-10-28): open or shut, and which of its two tabs is showing. */
-  private panelOpen = false;
-  /** Territory chat (web/src/online/territory-chat.ts): opens from the bottom-left corner key. */
+  /** MENU's row of four keys is out (owner, 2026-10-28). */
+  private keysOpen = false;
+  /** The one window, and which key's page it shows; null when shut. */
+  private pane: Pane | null = null;
+  /** Territory chat (web/src/online/territory-chat.ts): opens from its key in the row. */
   private readonly chat: TerritoryChat;
-  /** The player pressed FIT themselves this session: their choice beats the desktop default. */
-  private fitChosen = false;
-  private tab: 'challenges' | 'ranking' = 'challenges';
-  /** The sell key asks once more before it sells (the grow key's own two-tap pattern). */
+  /** The grow and sell keys ask once more before they act; this is the tile that was asked about. */
+  private growArmed: string | null = null;
   private sellArmed: string | null = null;
+  /** What the tile bar and the window last drew, so a 12 s poll that changes nothing touches no DOM. */
+  private selectionSignature = '';
+  private paneSignature = '';
+  /** What the map was last drawn from: an unchanged world is never rebuilt. */
+  private paintSignature = '';
+  /** One pending viewBox write per frame, however many pointer events arrive in it. */
+  private viewFrame = 0;
+  private glideFrame = 0;
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingRequest: string | null = null;
   private busy = false;
   private svg: SVGSVGElement | null = null;
@@ -135,13 +163,7 @@ export class WorldView {
   private bounds: [number, number, number, number] | null = null;
   /** True once the player has panned or zoomed, so a re-frame never throws their view away. */
   private touched = false;
-  /**
-   * THE FIT TOGGLE (owner, 2026-10-21: "keep it large and pannable in both axes, with a 'fit'
-   * toggle"). FIT is a PURE VIEW change: it draws `containFor` in place of `box` and leaves `box`,
-   * `touched` and every cell untouched, so turning it off restores the exact view the player had.
-   */
-  private fitted = false;
-  /** The panel's measured aspect from the last paint/resize, so a FIT view can be rebuilt on demand. */
+  /** The panel's measured aspect from the last paint/resize. */
   private aspect = 0;
   /** The panel's measured width in CSS pixels — the only way to hold the MIN_CELL_PX floor. */
   private pixels = 0;
@@ -212,41 +234,36 @@ export class WorldView {
 
   constructor(private readonly client: DuelClient, private readonly ensureIdentity: () => Promise<Identity | null>) {
     document.addEventListener('visibilitychange', () => { if (this.active && !document.hidden) void this.refresh(); });
-    // One reset inside the menu (see `fitted`): aria-pressed reflects the current fit state; its label
-    // is set from `ONLINE.worldFit` in lobby-ui.ts. Keyboard and screen readers get it for free
-    // because it is a real <button>.
-    document.getElementById('online-world-fit')?.addEventListener('click', () => { this.fitChosen = true; this.setFitted(true); this.setPanel(false); });
-    const mine = document.getElementById('online-world-mine');
-    if (mine) {
-      mine.innerHTML = WORLD_MINE_ICON;
-      const label = document.createElement('span'); label.textContent = ONLINE.worldMineShort; mine.append(label);
-      mine.setAttribute('aria-label', ONLINE.worldMine);
-      mine.title = ONLINE.worldMine;
-      mine.addEventListener('click', () => { this.flyToMine(); this.setPanel(false); });
-    }
     // ONE WINDOW AT A TIME: the chat shuts the menu window, and the menu window shuts the chat.
-    this.chat = new TerritoryChat(client, () => this.identity?.token ?? null, () => this.setPanel(false), () => this.setPanel(true));
-    const chatLabel = document.createElement('span'); chatLabel.textContent = ONLINE.worldChatShort;
-    document.getElementById('online-world-chat')?.append(chatLabel);
-    document.querySelector('.world-menu-tools')?.setAttribute('aria-label', ONLINE.worldMenu);
-    // THE MENU KEY opens the one window; pressing it again (or close, or Escape) shuts it.
+    this.chat = new TerritoryChat(client, () => this.identity?.token ?? null, () => this.setPane(null, false));
+    // THE MENU KEY slides the four keys out; pressing it again folds them, and any open window, away.
     const menu = document.getElementById('online-world-menu');
     if (menu) {
       menu.setAttribute('aria-label', ONLINE.worldMenu);
       menu.title = ONLINE.worldMenu;
-      menu.addEventListener('click', () => this.setPanel(!this.panelOpen));
+      menu.addEventListener('click', () => this.setKeys(!this.keysOpen));
     }
-    document.getElementById('world-panel-close')?.addEventListener('click', () => this.setPanel(false));
-    for (const key of document.querySelectorAll<HTMLButtonElement>('.world-tabs .world-seg-key')) {
-      const tab = key.dataset.tab === 'ranking' ? 'ranking' : 'challenges';
-      const label = key.querySelector('.world-seg-label');
-      if (label) label.textContent = tab === 'ranking' ? ONLINE.worldRanking : ONLINE.worldChallenges;
-      key.addEventListener('click', () => { this.tab = tab; this.paintPanel(); });
+    document.getElementById('online-world-keys')?.setAttribute('aria-label', ONLINE.worldMenu);
+    const names: Record<Pane | 'chat', string> = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, chat: ONLINE.worldChat, latest: ONLINE.worldLatest };
+    for (const key of document.querySelectorAll<HTMLButtonElement>('#online-world-keys .world-key')) {
+      const pane = key.dataset.pane as Pane | undefined;
+      key.insertAdjacentHTML('afterbegin', WORLD_KEY_ICONS[pane ?? 'chat']);
+      key.setAttribute('aria-label', names[pane ?? 'chat']);
+      key.title = names[pane ?? 'chat'];
+      // The chat key is TerritoryChat's own; the other three open their page of the window.
+      if (pane) key.addEventListener('click', () => this.setPane(this.pane === pane ? null : pane));
     }
-    const labels: [string, string][] = [['world-current-label', ONLINE.worldCurrent], ['world-history-label', ONLINE.worldHistory], ['world-latest-label', ONLINE.worldLatest]];
+    document.getElementById('world-panel-close')?.addEventListener('click', () => this.setPane(null));
+    const labels: [string, string][] = [['world-current-label', ONLINE.worldCurrent], ['world-history-label', ONLINE.worldHistory]];
     for (const [id, text] of labels) { const node = document.getElementById(id); if (node) node.textContent = text; }
+    // Escape steps back one layer: the window, then the row of keys, then the tile.
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && this.active && this.panelOpen) { this.setPanel(false); event.stopPropagation(); }
+      if (event.key !== 'Escape' || !this.active || (this.sheet && !this.sheet.root.hidden)) return;
+      if (this.pane) this.setPane(null);
+      else if (this.keysOpen) this.setKeys(false);
+      else if (this.selected) this.deselect();
+      else return;
+      event.stopPropagation();
     });
   }
 
@@ -294,10 +311,6 @@ export class WorldView {
     this.touched = false;
     this.box = null;
     this.notice('');
-    // THE DESKTOP STAGE opens on the whole world (owner, 2026-10-28: "make the map bigger, use the
-    // space better"): a wide screen has the room to show every tile at a comfortable size. A scroll
-    // in drops into the large view; a phone keeps the large view.
-    if (!this.fitChosen && this.fitted) this.setFitted(false);
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
     if (!this.world) {
@@ -329,6 +342,9 @@ export class WorldView {
     this.timer = null;
     this.chat.setOpen(false);
     this.closeSheet(false);
+    // Leaving folds everything away, so the next visit opens on the bare map with only MENU.
+    this.setKeys(false, false);
+    this.stopGlide();
   }
   private notice(text: string) { document.getElementById('online-world-notice')!.textContent = text; }
   private schedule() {
@@ -378,7 +394,10 @@ export class WorldView {
         (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged))) {
         this.world = map.world;
         this.fromMemory = false;
-        this.paint();
+        // SMOOTH REFRESH (owner, 2026-10-28): rebuilding the map throws away every node, its running
+        // glints and halos, and a focused tile. Only a change in what the map is drawn from may do
+        // that; a forced re-read that brings the same world back keeps the drawn one.
+        if (this.paintSignatureOf() !== this.paintSignature) this.paint();
         rememberWorld(browserStorage(), map.world);
         if (moving.length) this.celebrateGround(moving);
       }
@@ -418,9 +437,19 @@ export class WorldView {
       // the world, so a caption counting it was noise. The element no longer exists in the markup, and
       // this method no longer writes to it.
     }
+  /** Everything `paint` draws from: the ground, its owners, who is looking and whether they can grow. */
+  private paintSignatureOf(): string {
+    const world = this.world;
+    if (!world) return '';
+    const canGrow = !!this.wallet && this.wallet.balance >= world.cost;
+    return [world.revision, world.version, world.cost, this.identity?.playerId ?? '', canGrow,
+      world.cells.map((cell) => cell.id).join(';'),
+      world.claims.map((c) => `${c.cellId}:${c.ownerId}:${c.colour}:${c.ownerName ?? ''}:${c.ownerTag}:${c.claimedAt}`).join(';')].join('|');
+  }
   private paint() {
     const container = document.getElementById('online-world-grid')!;
     const world = this.world!;
+    this.paintSignature = this.paintSignatureOf();
     const occupied = new Map(world.claims.map((claim) => [claim.cellId, claim]));
     const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('role', 'group');
@@ -679,7 +708,7 @@ export class WorldView {
     }
     this.observer?.disconnect();
     this.installPanZoom(svg);
-    // Keep the ONE control: the panel's markup owns the FIT button, and only the SVG is replaced.
+    // Only the SVG is replaced: the keys, windows and tile bar over it are the page's own markup.
     container.querySelector('.world-map-svg')?.remove();
     container.append(svg);
     this.svg = svg;
@@ -738,9 +767,9 @@ export class WorldView {
     return this.pixels > 0 ? this.pixels * (X * R) / MIN_CELL_PX : Infinity;
   }
   /**
-   * THE FIT VIEW: the smallest rect with the panel's own aspect that CONTAINS the whole fit box.
-   * The silhouette is entirely on screen with only FIT_EDGE of sea around it — hexes are small here, and
-   * that is expected (the owner: "with a 'fit' toggle"). Used only while `fitted` is on.
+   * THE WHOLE-WORLD VIEW: the smallest rect with the panel's own aspect that CONTAINS the whole fit
+   * box, with only FIT_EDGE of sea around it. The desktop stage's widest zoom (see `boundsFor`); the
+   * phone's FIT key that also used it was removed (owner, 2026-10-28).
    */
   private containFor(aspect: number): [number, number, number, number] | null {
     if (!this.fit || !Number.isFinite(aspect) || aspect <= 0) return null;
@@ -768,10 +797,7 @@ export class WorldView {
     return [box[0], box[1] + (box[3] - height) / 2, box[2], height];
   }
   /**
-   * Write the view. FIT is a pure viewBox change on the SAME svg: cell identity, `box` and
-   * `touched` are untouched, so toggling back lands exactly where the player left the map. There is
-   * no transition either way — a viewBox animation would be motion the owner did not ask for (and
-   * the reduce-motion rule forbids adding it), so the switch is instant by construction.
+   * Write the view: one viewBox attribute on the SAME svg, so cell identity is never touched.
    */
   private applyView(measure = true) {
     if (!this.svg) return;
@@ -782,17 +808,29 @@ export class WorldView {
     const rect = measure ? this.svg.getBoundingClientRect() : null;
     const aspect = rect && rect.width > 0 && rect.height > 0 ? rect.width / rect.height : this.aspect;
     if (rect && aspect > 0) { this.aspect = aspect; this.pixels = rect.width; }
-    const box = this.fitted ? this.containFor(aspect) : this.reconcile(this.box, aspect);
-    const target = box ?? this.fit;
+    const target = this.reconcile(this.box, aspect) ?? this.fit;
     if (target) this.svg.setAttribute('viewBox', target.join(' '));
   }
-  /** The one control: FIT shows the whole silhouette; off is the large, pannable view. */
-  private setFitted(on: boolean) {
-    this.fitted = on;
-    const button = document.getElementById('online-world-fit');
-    button?.setAttribute('aria-pressed', String(on));
-    document.getElementById('online-world-grid')?.classList.toggle('fitted', on);
-    this.applyView();
+  /**
+   * ONE VIEW WRITE PER FRAME (owner, 2026-10-28: "always looks smooth"). A phone can deliver several
+   * pointer moves inside one frame; each used to re-draw the whole map. They now only move `box`,
+   * and the frame that follows writes it once.
+   */
+  private queueView() {
+    if (this.viewFrame) return;
+    this.viewFrame = requestAnimationFrame(() => { this.viewFrame = 0; this.applyView(false); });
+  }
+  /**
+   * THE MAP IN MOTION. The soft-focus layers (mist, halos, the outline's glow, the motes) are SVG
+   * Gaussian blurs, and a blur is re-rendered on every frame the view moves: measured at 4x CPU
+   * throttle that alone took a pan from 17 ms to 50 ms frames (web/e2e/territory-smooth.ts). While
+   * the map moves they are drawn sharp and still; they soften again a moment after it rests.
+   */
+  private setMoving(on: boolean) {
+    const grid = document.getElementById('online-world-grid');
+    if (this.settleTimer) { clearTimeout(this.settleTimer); this.settleTimer = null; }
+    if (on) { grid?.classList.add('moving'); return; }
+    this.settleTimer = setTimeout(() => { this.settleTimer = null; grid?.classList.remove('moving'); }, SETTLE_MS);
   }
   /** The selection highlight, drawn in the ONE accent path above every tile edge. */
   private paintAccent() {
@@ -802,66 +840,113 @@ export class WorldView {
     const at = coords(cell.q, cell.r);
     this.accent.setAttribute('d', hexPath(at.x, at.y));
   }
-  private select(cellId: string) {
+  /**
+   * A TAP SELECTS, NOTHING MORE (owner, 2026-10-28: "tapping empty tile should NOT open the menu and
+   * still have option to grow/sell/challenge without opening the menu"). The tile bar at the map's
+   * foot shows who holds it and its one action; a second tap on the same tile lets it go. A tap on
+   * the map also shuts an open window, the way a tap outside any sheet does.
+   */
+  private select(cellId: string, toggle = true) {
+    if (this.pane) this.setPane(null, false);
+    if (toggle && this.selected === cellId) return this.deselect();
     this.selected = cellId;
     this.pendingRequest = null;
-    const owner = this.world?.claims.find((claim) => claim.cellId === cellId)?.ownerId;
+    this.growArmed = null;
+    this.sellArmed = null;
+    this.markSelection();
+  }
+  private deselect() {
+    this.selected = null;
+    this.pendingRequest = null;
+    this.growArmed = null;
+    this.sellArmed = null;
+    this.markSelection();
+  }
+  private markSelection() {
+    const cellId = this.selected;
+    const owner = cellId ? this.world?.claims.find((claim) => claim.cellId === cellId)?.ownerId : undefined;
     for (const path of this.svg?.querySelectorAll('.world-hex') ?? []) {
-      path.classList.toggle('selected', path.getAttribute('data-cell-id') === cellId);
+      path.classList.toggle('selected', !!cellId && path.getAttribute('data-cell-id') === cellId);
       path.classList.toggle('same-owner', !!owner && path.getAttribute('data-owner-id') === owner);
     }
-    this.sellArmed = null;
     this.paintFrontier();
     this.paintAccent();
     this.paintSelection();
-    // A challenged tile opens the challenge sheet; a rival tile on my frontier opens the challenge
-    // offer. Everything else keeps the claim bar, so the map's original behaviour is unchanged.
-    const challenge = challengeOnCell(this.allChallenges, cellId);
-    if (challenge) return this.openChallengeSheet(challenge);
-    if (this.isFrontier(cellId)) return this.openSendSheet(cellId);
-    this.setPanel(true);
   }
-  private paintSelection(confirm = false) {
-    const pane = document.getElementById('online-world-selection')!;
-    pane.replaceChildren();
-    pane.hidden = !this.world || !this.selected;
-    if (!this.world || !this.selected) {
-      pane.textContent = 'Choose a tile to see who holds it.';
-      return;
+  /**
+   * THE TILE BAR: one line and at most one key. Free ground grows, your own ground sells, a rival's
+   * ground beside yours can be challenged, and contested ground opens its challenge. Grow and sell ask
+   * twice. The bar is rebuilt only when what it says changes, so the 12 s poll never resets a press
+   * or an armed key; the key's action is re-pointed at the current state on every paint.
+   */
+  private paintSelection() {
+    const bar = document.getElementById('online-world-selection')!;
+    const world = this.world;
+    const cellId = this.selected;
+    let line = '';
+    let action: { label: string; run: () => void; armed?: boolean } | null = null;
+    if (world && cellId) {
+      const tile = world.claims.find((claim) => claim.cellId === cellId);
+      const challenge = this.identity ? challengeOnCell(this.allChallenges, cellId) : null;
+      if (tile) {
+        const mine = tile.ownerId === this.identity?.playerId;
+        // Own ground: this device's real level beats the server's last-paid one (2026-10-24 report).
+        line = ownerLine(tile, mine, mine ? this.myLevel() : null);
+        if (challenge) {
+          action = { label: CHALLENGE.viewKey, run: () => this.openChallengeSheet(challenge) };
+        } else if (mine && !this.busy && world.version >= 3) {
+          // Your own tile can be sold back (owner, 2026-10-27).
+          const armed = this.sellArmed === cellId;
+          action = {
+            label: armed ? ONLINE.worldSellConfirm : ONLINE.worldSell(world.cost), armed,
+            run: () => { if (armed) void this.sell(cellId); else { this.sellArmed = cellId; this.paintSelection(); } },
+          };
+        } else if (!mine && this.isFrontier(cellId)) {
+          action = { label: CHALLENGE.sendKey, run: () => this.openSendSheet(cellId) };
+        }
+      } else {
+        const available = !!this.svg?.querySelector(`.world-hex[data-cell-id="${cellId}"]`)?.classList.contains('available');
+        // OWNER WORDING (2026-10-16): "when placing a tile dont say 'claim hex' say grow a tile
+        // everywhere". The verb is GROW and the noun is TILE throughout this screen - it also matches
+        // the game's own Grow action, so the world map and the board speak the same language.
+        line = !available && this.wallet && this.wallet.balance < world.cost ? `${world.cost} SEEDS NEEDED` : `FREE TILE · ${world.cost} SEEDS`;
+        if (available && !this.busy) {
+          const armed = this.growArmed === cellId;
+          action = {
+            label: armed ? 'CONFIRM GROW' : 'GROW A TILE', armed,
+            run: () => { if (armed) void this.claim(); else { this.growArmed = cellId; this.paintSelection(); } },
+          };
+        }
+      }
     }
-    const tile = this.world.claims.find((claim) => claim.cellId === this.selected);
-    if (tile) {
-      const mine = tile.ownerId === this.identity?.playerId;
-      // Own ground: this device's real level beats the server's last-paid one (2026-10-24 report).
-      const line = document.createElement('span');
-      line.textContent = ownerLine(tile, mine, mine ? this.myLevel() : null);
-      pane.append(line);
-      // Your own tile can be sold back (owner, 2026-10-27), with the grow key's two-tap confirm.
-      if (mine && !this.busy && this.world.version >= 3) pane.append(this.sellKey(tile.cellId, 'world-claim-button'));
-      return;
+    bar.hidden = !line;
+    bar.classList.toggle('has-action', !!action);
+    const signature = `${cellId}|${line}|${action?.label ?? ''}`;
+    if (signature !== this.selectionSignature) {
+      this.selectionSignature = signature;
+      const text = document.createElement('span');
+      text.className = 'world-selection-line';
+      text.textContent = line;
+      bar.replaceChildren(text);
+      if (action) {
+        const key = document.createElement('button');
+        key.type = 'button';
+        key.className = 'world-claim-button';
+        key.textContent = action.label;
+        bar.append(key);
+      }
     }
-    const label = document.createElement('span');
-    const available = this.svg?.querySelector(`.world-hex[data-cell-id="${this.selected}"]`)?.classList.contains('available');
-    // OWNER WORDING (2026-10-16): "when placing a tile dont say 'claim hex' say grow a tile
-    // everywhere". The verb is GROW and the noun is TILE throughout this screen - it also matches
-    // the game's own Grow action, so the world map and the board speak the same language.
-    label.textContent = available ? `FREE TILE · ${this.world.cost} SEEDS` : this.wallet && this.wallet.balance < this.world.cost ? `${this.world.cost} SEEDS NEEDED` : `FREE TILE · ${this.world.cost} SEEDS`;
-    pane.append(label);
-    if (!available || this.busy) return;
-    const action = document.createElement('button');
-    action.type = 'button';
-    action.className = 'world-claim-button';
-    action.textContent = confirm ? 'CONFIRM GROW' : 'GROW A TILE';
-    action.addEventListener('click', () => {
-      if (!confirm) return this.paintSelection(true);
-      void this.claim();
-    });
-    pane.append(action);
+    const key = bar.querySelector<HTMLButtonElement>('.world-claim-button');
+    if (key && action) {
+      key.onclick = action.run;
+      key.classList.toggle('armed', !!action.armed);
+    }
   }
   private async claim() {
     if (!this.identity || !this.selected || this.busy) return;
     this.busy = true;
     const cellId = this.selected;
+    this.growArmed = null;
     this.pendingRequest ??= crypto.randomUUID();
     this.paintSelection();
     try {
@@ -902,9 +987,8 @@ export class WorldView {
     window.setTimeout(() => group.remove(), 1600);
   }
 
-  // ---- the growing territory: ranking, activity, find my land (owner, 2026-10-27) -------------
+  // ---- the growing territory: ranking, latest, gliding to a place (owner, 2026-10-27) ----------
 
-  /** Centre the view on a point of the map, keeping the zoom. */
   /** Keep a view on the world: inside the fit box, or centred on it when it is the larger. */
   private clampBox(box: [number, number, number, number]): [number, number, number, number] {
     if (!this.fit) return box;
@@ -916,32 +1000,45 @@ export class WorldView {
       w, h,
     ];
   }
+  /**
+   * Centre the view on a point of the map, keeping the zoom. It GLIDES there (an ease-out over
+   * GLIDE_MS, one viewBox write per frame) instead of jumping, so the player sees where they went;
+   * under reduced motion it arrives at once.
+   */
   private flyTo(x: number, y: number) {
     if (!this.box || !this.fit) return;
-    if (this.fitted) this.setFitted(false);
+    this.stopGlide();
     const [, , w, h] = this.box;
-    this.box = this.clampBox([x - w / 2, y - h / 2, w, h]);
+    const to = this.clampBox([x - w / 2, y - h / 2, w, h]);
     this.touched = true;
-    this.applyView(false);
+    if (!interfaceMotionAllowed()) { this.box = to; this.applyView(false); return; }
+    const from = [...this.box] as [number, number, number, number];
+    const start = performance.now();
+    this.setMoving(true);
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / GLIDE_MS);
+      const eased = 1 - (1 - t) ** 3;
+      this.box = from.map((value, i) => value + (to[i]! - value) * eased) as [number, number, number, number];
+      this.applyView(false);
+      if (t < 1) { this.glideFrame = requestAnimationFrame(step); return; }
+      this.glideFrame = 0;
+      this.setMoving(false);
+    };
+    this.glideFrame = requestAnimationFrame(step);
+  }
+  /** A finger on the map takes the view back from a glide at once. */
+  private stopGlide() {
+    if (!this.glideFrame) return;
+    cancelAnimationFrame(this.glideFrame);
+    this.glideFrame = 0;
+    this.setMoving(false);
   }
   private flyToCell(cellId: string) {
     const cell = this.world?.cells.find((candidate) => candidate.id === cellId);
     if (!cell) return;
     const at = cellXY(cell.q, cell.r);
     this.flyTo(at.x, at.y);
-    this.select(cellId);
-  }
-  /** Which patch of my land find-my-land showed last (owner, 2026-10-28: each press shows the next). */
-  private patchAt = -1;
-  private flyToMine() {
-    if (!this.world) return;
-    const patches = ownPatches(this.world.cells, this.world.claims, this.identity?.playerId ?? null);
-    if (!patches.length) return;
-    this.patchAt = (this.patchAt + 1) % patches.length;
-    const patch = patches[this.patchAt]!;
-    this.flyTo(patch.centre.x, patch.centre.y);
-    const mine = document.getElementById('online-world-mine');
-    if (mine) mine.dataset.patch = patches.length > 1 ? `${this.patchAt + 1}/${patches.length}` : '';
+    this.select(cellId, false);
   }
   private flyToOwner(ownerId: string) {
     if (!this.world) return;
@@ -949,92 +1046,111 @@ export class WorldView {
     if (centre) this.flyTo(centre.x, centre.y);
   }
 
-  /** SELL THIS TILE · +100, then CONFIRM SELL. */
-  private sellKey(cellId: string, className: string): HTMLButtonElement {
-    const key = document.createElement('button');
-    key.type = 'button';
-    key.className = className;
-    const armed = this.sellArmed === cellId;
-    key.textContent = armed ? ONLINE.worldSellConfirm : ONLINE.worldSell(this.world?.cost ?? 100);
-    key.addEventListener('click', () => {
-      if (!armed) { this.sellArmed = cellId; this.paintSelection(); return; }
-      void this.sell(cellId);
-    });
-    return key;
-  }
-
   private async sell(cellId: string) {
     if (!this.identity || this.busy) return;
     this.busy = true;
     this.sellArmed = null;
+    this.paintSelection();
     try {
       await this.client.sellWorld(this.identity.token, cellId, crypto.randomUUID());
       this.notice(ONLINE.worldSold(this.world?.cost ?? 100));
-      this.selected = null;
+      if (this.selected === cellId) this.selected = null;
     } catch (error) {
       const code = (error as { code?: string }).code;
       this.notice(code === 'CELL_BUSY' ? ONLINE.worldSellBusy : ONLINE.worldSellFailed);
     } finally {
       this.busy = false;
       await this.refresh(true);
-      this.paintSelection();
-      }
+      this.markSelection();
+    }
   }
 
-  /** Open or shut the one window. */
-  private setPanel(open: boolean) {
-    if (open) this.chat.setOpen(false);
-    this.panelOpen = open;
-    this.sellArmed = null;
+  /**
+   * MENU's row of keys (owner, 2026-10-28: "MENU button stays and it's the only button visible
+   * straight away, 4 other keys open after clicking menu"). Folding the row also shuts whatever window
+   * or chat it had open.
+   */
+  private setKeys(open: boolean, focus = true) {
+    this.keysOpen = open;
+    const keys = document.getElementById('online-world-keys');
+    const menu = document.getElementById('online-world-menu');
+    keys?.classList.toggle('open', open);
+    keys?.toggleAttribute('inert', !open);
+    menu?.setAttribute('aria-expanded', String(open));
+    menu?.classList.toggle('on', open);
+    document.getElementById('online-world-grid')?.classList.toggle('keys-open', open);
+    if (!open) {
+      this.chat.setOpen(false);
+      this.setPane(null, false);
+      if (focus) menu?.focus({ preventScroll: true });
+    }
     this.paintPanel();
-    if (open) (document.querySelector<HTMLElement>('#online-world-selection button') ?? document.getElementById('world-panel-close'))?.focus({preventScroll:true});
-    else document.getElementById('online-world-menu')?.focus({preventScroll:true});
   }
 
-  /** The menu key's lamp, the window's tabs, and its open pane. */
+  /** Open one key's page of the window, switch to another, or shut it (null). */
+  private setPane(pane: Pane | null, focus = true) {
+    const panel = document.getElementById('online-world-panel');
+    const was = this.pane;
+    if (pane === was) return;
+    if (pane) this.chat.setOpen(false);
+    this.pane = pane;
+    this.paneSignature = '';
+    this.sellArmed = null;
+    document.getElementById('online-world-grid')?.classList.toggle('pane-open', !!pane);
+    if (panel) {
+      if (pane && !was) { panel.hidden = false; enterSurface(panel); }
+      else if (!pane) exitSurface(panel, { onDone: () => { if (!this.pane) panel.hidden = true; } });
+      // Switching keys swaps the page in place with the same small breath.
+      else enterSurface(panel.querySelector<HTMLElement>('.world-panel-body'), { travel: 2 });
+    }
+    this.paintPanel();
+    this.paintSelection();
+    if (!focus) return;
+    if (pane) document.getElementById('world-panel-close')?.focus({ preventScroll: true });
+    else if (was) document.querySelector<HTMLElement>(`#online-world-keys [data-pane="${was}"]`)?.focus({ preventScroll: true });
+  }
+
+  /** The lamps on MENU and the challenges key, which key is lit, and the window's open page. */
   private paintPanel() {
     const panel = document.getElementById('online-world-panel');
-    const mine = document.getElementById('online-world-mine');
     if (!panel || !this.world) return;
     const me = this.identity?.playerId ?? null;
-    const claims = this.world.claims;
-    // My land remains in the drawer but is disabled until the player owns a tile.
-    if (mine) (mine as HTMLButtonElement).disabled = !me || !claims.some((claim) => claim.ownerId === me);
     const isOpen = (c: WorldChallengeWire) => c.status === 'pending' || c.status === 'accepted';
     const open = this.allChallenges.filter(isOpen);
     const waiting = this.allChallenges.some((c) => c.status === 'pending' && !c.fromMe);
-    const menu = document.getElementById('online-world-menu');
-    menu?.setAttribute('aria-expanded', String(this.panelOpen));
-    menu?.classList.toggle('on', this.panelOpen);
-    for (const count of document.querySelectorAll<HTMLElement>('#online-world-menu .world-deck-count, #world-tab-challenges .world-deck-count')) {
+    for (const count of document.querySelectorAll<HTMLElement>('#online-world-menu .world-deck-count, #world-key-challenges .world-deck-count')) {
       count.hidden = open.length === 0;
       count.textContent = String(open.length);
       count.classList.toggle('waiting', waiting);
     }
-    panel.hidden = !this.panelOpen;
-    panel.dataset.tab = this.tab;
-    if (!this.panelOpen) return;
-    for (const key of document.querySelectorAll<HTMLButtonElement>('.world-tabs .world-seg-key')) {
-      const on = key.dataset.tab === this.tab;
-      key.setAttribute('aria-selected', String(on));
+    for (const key of document.querySelectorAll<HTMLButtonElement>('#online-world-keys .world-key[data-pane]')) {
+      const on = key.dataset.pane === this.pane;
+      key.setAttribute('aria-expanded', String(on));
       key.classList.toggle('on', on);
     }
-    if (this.tab === 'challenges') {
+    panel.dataset.pane = this.pane ?? '';
+    if (!this.pane) return;
+    const title = document.getElementById('world-panel-title');
+    if (title) title.textContent = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, latest: ONLINE.worldLatest }[this.pane];
+    if (this.pane === 'challenges') {
       const history = this.allChallenges.filter((c) => !isOpen(c));
       const empty = document.getElementById('world-challenges-empty');
       if (empty) { empty.hidden = open.length > 0; empty.textContent = ONLINE.worldNoChallenges; }
       const past = document.getElementById('world-history-empty');
       if (past) { past.hidden = history.length > 0; past.textContent = ONLINE.worldNoHistory; }
     }
-    if (this.tab === 'ranking') this.paintRanking(me);
+    if (this.pane === 'ranking') this.paintRanking(me);
+    if (this.pane === 'latest') this.paintLatest(me);
   }
 
   private paintRanking(me: string | null) {
     const list = document.getElementById('online-world-ranking');
-    const strip = document.getElementById('online-world-activity');
-    if (!list || !strip || !this.world) return;
-    const claims = this.world.claims;
-    const rows = ranking(claims, me);
+    if (!list || !this.world) return;
+    const rows = ranking(this.world.claims, me);
+    // An unchanged table is left alone: a poll must not reset a press or the list's scroll.
+    const signature = `ranking|${JSON.stringify(rows)}`;
+    if (signature === this.paneSignature) return;
+    this.paneSignature = signature;
     this.paintStanding(rows);
     list.replaceChildren(...rows.map((row) => {
       const item = document.createElement('li');
@@ -1059,12 +1175,23 @@ export class WorldView {
       tiles.textContent = String(row.tiles);
       tiles.setAttribute('aria-label', ONLINE.worldTiles(row.tiles));
       button.append(rank, swatch, name, tag, tiles);
-      button.addEventListener('click', () => { this.setPanel(false); this.flyToOwner(row.ownerId); });
+      button.addEventListener('click', () => { this.setPane(null, false); this.flyToOwner(row.ownerId); });
       item.append(button);
       return item;
     }));
-    const now = this.challengeNow();
-    strip.replaceChildren(...recentActivity(claims, now).map((entry) => {
+  }
+
+  /** LATEST: the newest placements, newest first; a row glides to that tile and selects it. */
+  private paintLatest(me: string | null) {
+    const strip = document.getElementById('online-world-activity');
+    const empty = document.getElementById('world-latest-empty');
+    if (!strip || !this.world) return;
+    const entries = recentActivity(this.world.claims, this.challengeNow(), LATEST_COUNT);
+    const signature = `latest|${me}|${JSON.stringify(entries)}`;
+    if (signature === this.paneSignature) return;
+    this.paneSignature = signature;
+    if (empty) { empty.hidden = entries.length > 0; empty.textContent = ONLINE.worldNoLatest; }
+    strip.replaceChildren(...entries.map((entry) => {
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'world-activity-chip';
@@ -1077,7 +1204,7 @@ export class WorldView {
       ago.textContent = `+1 · ${entry.ago}`;
       chip.append(name, ago);
       chip.setAttribute('aria-label', `${entry.ownerId === me ? ONLINE.worldMe : entry.name} grew a tile, ${entry.ago}`);
-      chip.addEventListener('click', () => { this.setPanel(false); this.flyToCell(entry.cellId); });
+      chip.addEventListener('click', () => { this.setPane(null, false); this.flyToCell(entry.cellId); });
       return chip;
     }));
   }
@@ -1854,18 +1981,15 @@ export class WorldView {
       this.box[0] = this.box[2] >= fw ? fx + (fw - this.box[2]) / 2 : Math.max(fx, Math.min(fx + fw - this.box[2], this.box[0]));
       this.box[1] = this.box[3] >= fh ? fy + (fh - this.box[3]) / 2 : Math.max(fy, Math.min(fy + fh - this.box[3], this.box[1]));
       // A pan never re-measures: `this.aspect` is kept by the ResizeObserver (and by open/repaint).
-      this.applyView(false);
+      // The write itself waits for the next frame (see `queueView`).
+      this.queueView();
     };
-    const zoom = (scale: number, x: number, y: number) => {
+    // The map's on-screen box, read once when a finger lands rather than on every move: nothing
+    // can resize the map mid-gesture, and a layout read per move is time a frame does not have.
+    let frameRect: DOMRect | null = null;
+    const zoom = (scale: number, x: number, y: number, rect: DOMRect = frameRect ?? svg.getBoundingClientRect()) => {
       if (!this.box || !this.fit) return;
-      if (this.fitted) {
-        const shown = (svg.getAttribute('viewBox') ?? '').split(/[ ,]+/).map(Number);
-        if (shown.length !== 4 || shown.some(v => !Number.isFinite(v))) return;
-        this.box = [shown[0]!, shown[1]!, shown[2]!, shown[3]!];
-        this.setFitted(false);
-      }
       const [bx, by, bw, bh] = this.box;
-      const rect = svg.getBoundingClientRect();
       const fx = (x - rect.left) / rect.width, fy = (y - rect.top) / rect.height;
       const frame = this.bounds ?? this.fit;
       const width = Math.max(frame[2] / 4, Math.min(frame[2], bw / scale));
@@ -1906,33 +2030,35 @@ export class WorldView {
     };
     svg.addEventListener('wheel', (event) => {
       if (Math.abs(event.deltaY) < .01) return;
-      event.preventDefault(); zoom(Math.exp(-Math.max(-100, Math.min(100, event.deltaY * (event.deltaMode === 1 ? 16 : 1))) * .002), event.clientX, event.clientY);
+      event.preventDefault();
+      this.stopGlide();
+      this.setMoving(true);
+      zoom(Math.exp(-Math.max(-100, Math.min(100, event.deltaY * (event.deltaMode === 1 ? 16 : 1))) * .002), event.clientX, event.clientY, svg.getBoundingClientRect());
+      this.setMoving(false);
     }, { passive: false });
     svg.addEventListener('pointerdown', (event) => {
+      this.stopGlide();
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      if (this.pointers.size > 1) { this.multiGesture = true; this.dragged = true; }
+      frameRect = svg.getBoundingClientRect();
+      if (this.pointers.size > 1) { this.multiGesture = true; this.dragged = true; this.setMoving(true); }
       else { this.dragged = false; this.multiGesture = false; }
     });
     svg.addEventListener('pointermove', (event) => {
       const old = this.pointers.get(event.pointerId);
       if (!old || !this.box) return;
       const dx = event.clientX - old.x, dy = event.clientY - old.y;
-      if (Math.abs(dx) + Math.abs(dy) > 3) {
+      // A finger that has not yet travelled 3px is still a tap: the map stays put, so a tap can
+      // never nudge the view (or wake the motion state) on its way to selecting a tile.
+      if (!this.dragged && Math.abs(dx) + Math.abs(dy) <= 3) return;
+      if (!this.dragged) {
         this.dragged = true;
-        // FIT mode is a preview of the whole silhouette: a drag there must not move the saved view,
-        // so the finger can still be lifted without selecting a tile.
-        if (!this.fitted) {
-          this.touched = true;
-          // Capturing on pointerdown retargets a touch tap's click to the SVG,
-          // so a tile never receives it. Capture only once the gesture is a pan.
-          if (!svg.hasPointerCapture(event.pointerId)) svg.setPointerCapture(event.pointerId);
-        }
+        this.touched = true;
+        this.setMoving(true);
       }
-      if (this.fitted && this.pointers.size < 2) {
-        this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-        return;
-      }
-      const rect = svg.getBoundingClientRect();
+      // Capturing on pointerdown retargets a touch tap's click to the SVG,
+      // so a tile never receives it. Capture only once the gesture is a pan.
+      if (!svg.hasPointerCapture(event.pointerId)) svg.setPointerCapture(event.pointerId);
+      const rect = frameRect ?? svg.getBoundingClientRect();
       if (this.pointers.size === 1) {
         this.box[0] -= dx / rect.width * this.box[2]; this.box[1] -= dy / rect.height * this.box[3]; set();
       } else {
@@ -1940,7 +2066,7 @@ export class WorldView {
         if (other) {
           const before = Math.hypot(old.x - other.x, old.y - other.y);
           const after = Math.hypot(event.clientX - other.x, event.clientY - other.y);
-          if (before > 0 && Math.abs(after - before) >= 1) zoom(after / before, (event.clientX + other.x) / 2, (event.clientY + other.y) / 2);
+          if (before > 0 && Math.abs(after - before) >= 1) zoom(after / before, (event.clientX + other.x) / 2, (event.clientY + other.y) / 2, rect);
         }
       }
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -1951,9 +2077,12 @@ export class WorldView {
       // A tap, not the end of a pan: select the nearest cell. (Mouse's right/middle buttons and a
       // second finger are not taps.)
       if (!this.dragged && !this.multiGesture && event.button === 0) tapAt(event);
-      if (!this.pointers.size) { this.dragged = false; this.multiGesture = false; }
+      if (!this.pointers.size) { this.dragged = false; this.multiGesture = false; this.setMoving(false); }
     });
-    svg.addEventListener('pointercancel', (event) => { end(event); this.dragged = false; });
+    svg.addEventListener('pointercancel', (event) => {
+      end(event);
+      if (!this.pointers.size) { this.dragged = false; this.multiGesture = false; this.setMoving(false); }
+    });
     // Re-frame when the WINDOW changes shape (a phone rotating, the on-screen keyboard, a notice line
     // changing the column's chrome). Untouched: the view follows the new frame exactly. Touched: the
     // player's zoom level is kept and re-derived at the new aspect, so the view stays band-free.

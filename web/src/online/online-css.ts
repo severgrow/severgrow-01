@@ -587,29 +587,6 @@ export const ONLINE_CSS = `
 }
 .world-map-svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 .world-map-svg:active { cursor: grabbing; }
-/* THE ONE MAP CONTROL: FIT (owner, 2026-10-21: "keep it large and pannable in both axes, with a
-   'fit' toggle"). It rides the panel's top-right corner the way a map control does — absolutely
-   positioned, so it is never a grid item, never part of the pannable content, and never takes a
-   pan. 44px square at least, because it is a touch control too. Quiet: the same cream ink and
-   hairline border as the selection bar, no fill of its own beyond the panel's own dark glass.
-   The .world-grid > prefix is LOAD-BEARING, not decoration. After the control's first press the
-   global feedback layer gives it a .press-shade child, and style.css's
-   :is(button, …):has(> .press-shade) { position: relative } outranks a plain .world-fit
-   (0,1,1 against 0,1,0). Relative put the control back INTO the panel's grid: it took a 44px row,
-   the map lost that height and the large view was re-framed 7% wider (measured on the live site,
-   2026-10-21). Scoping this rule to the panel restores the corner and the map's height. */
-.world-grid > .world-fit {
-  position: absolute; top: 10px; right: 10px; z-index: 2;
-  box-sizing: border-box; min-width: 44px; min-height: 44px; padding: 0 10px;
-  display: grid; place-items: center;
-  color: #cfc8ae; background: #161b17cc; border: 1px solid #d5c89b40; border-radius: 9px;
-  font: inherit; font-size: .72rem; font-weight: 700; letter-spacing: .12em; line-height: 0;
-  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); cursor: pointer;
-}
-.world-fit[aria-pressed='true'] { color: #f2e5c5; border-color: #d5c89b9c; background: #2b3029e6; }
-.world-fit-icon { display: block; pointer-events: none; }
-.world-fit:focus { outline: none; }
-.world-fit:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 /* THE TWO LAYERS (world-view.ts). Each tile is drawn TWICE: a FACE (its surface) and a LINE (its
    edge, plus the whole touch target). Every face paints first, then every line, so a neighbour's
    fill can never bury an edge — that was the owner's uneven highlight (2026-10-16: a cream edge
@@ -655,31 +632,41 @@ export const ONLINE_CSS = `
    which paints above every fill, so it can never be buried by a neighbour's surface. */
 .world-hex:focus { outline: none; }
 .world-hex:focus-visible { outline: none; stroke: #fff4d3; stroke-width: 1.7; }
-/* The controls anchor to the bottom of the column (owner, 2026-10-16). Now that the window hugs the
-   map instead of filling the column, the leftover height would otherwise collect under the
-   selection bar as dead space at the very bottom. Pushing the controls down keeps the column
-   spanning the viewport and keeps the one real action (GROW A TILE) at thumb height, where it
-   already was before. The header -> summary -> Seeds -> window steps above stay on the column's own
-   rhythm; this is the ONE deliberate break in it, and it is the bottom anchor, not a gap. */
+/* THE TILE BAR (owner, 2026-10-28: "tapping empty tile should NOT open the menu and still have option
+   to grow/sell/challenge"). A tapped tile's line and its one key float at the map's foot on the
+   windows' dark glass, centred, so the map's own height never changes when a tile is picked (no
+   re-frame, no jump). Hidden while a window is open: one surface at a time. */
 .world-selection {
-  margin-top: auto;
-  min-height: 58px; width: min(100%, 720px); margin-inline: auto;
-  display: flex; justify-content: space-between; align-items: center; gap: 10px;
-  /* NO RULE ABOVE THE HINT (owner, 2026-10-17: a line under the map, between it and "Choose a
-     tile to see who holds it", was redundant). The bar is separated from the map by its own
-     min-height alone; the space does the dividing, so nothing draws a divider. */
-  color: #e8ddbe; font-size: .83rem; letter-spacing: .04em;
+  position: absolute; z-index: 3; left: 50%; bottom: 10px; translate: -50% 0;
+  box-sizing: border-box; width: max-content; max-width: calc(100% - 20px); min-height: 44px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 6px 6px 6px 16px; border-radius: 14px;
+  color: #e8ddbe; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase;
+  background: rgba(10, 13, 11, .7);
+  -webkit-backdrop-filter: blur(8px) saturate(1.05); backdrop-filter: blur(8px) saturate(1.05);
+  box-shadow: inset 0 1px 0 #e8ddc514, 0 10px 26px #0006;
+  animation: world-bar-in var(--ix-open) var(--ix-ease-open) both;
 }
+.world-selection:not(.has-action) { padding: 6px 16px; }
+.world-selection[hidden], .world-grid.pane-open .world-selection { display: none; }
+.world-selection-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes world-bar-in { from { opacity: 0; translate: -50% 4px; } to { opacity: 1; translate: -50% 0; } }
 .world-claim-button {
-  min-height: 44px; padding: 0 17px; flex: none;
-  color: #eee3c6; background: #2b3029; border: 1px solid #d5c89b7a;
-  border-radius: 9px; font: inherit; font-weight: 700; letter-spacing: .08em;
+  min-height: 40px; padding: 0 15px; flex: none;
+  color: #161a16; background: linear-gradient(#efe4c8, #ddd1b2); border: 0;
+  box-shadow: inset 0 1px 0 #fff8, inset 0 -2px 0 #0000002e;
+  border-radius: 10px; font: inherit; font-size: .66rem; font-weight: 700; letter-spacing: .12em;
+  cursor: pointer; touch-action: manipulation;
 }
+/* asked once already: the key lights the challenge red, so the second press is a decision */
+.world-claim-button.armed { color: #fff4e6; background: linear-gradient(#d9694f, #b8533c); box-shadow: inset 0 1px 0 #ffffff40, inset 0 -2px 0 #00000040, 0 0 12px #e07a5f66; }
+.world-claim-button:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 .online-world .online-notice { min-height: 20px; max-width: 720px; width: 100%; margin: 0 auto; }
 /* A short (640px) phone: one small, deliberate step tighter — 6px, not 3px crumbs — and a shallower
    selection bar, so the map keeps the room it needs without the column reading as cramped. */
-@media (max-height: 650px) { .online-world .online-inner { gap: 6px; } .world-selection { min-height: 48px; } }
-@media (prefers-reduced-motion: reduce) { .world-hex, .world-hex-face { transition: none; } }
+@media (max-height: 650px) { .online-world .online-inner { gap: 6px; } }
+@media (prefers-reduced-motion: reduce) { .world-hex, .world-hex-face { transition: none; } .world-selection { animation: none; } }
+html.reduce-motion .world-selection { animation: none; }
 
 /* ---- Territory challenges (docs/TERRITORY-CHALLENGES.md) ------------------ */
 /* THE FRONTIER: a rival tile that shares a side with the selected cell of mine. It keeps the
@@ -890,7 +877,6 @@ export const ONLINE_CSS = `
 .online-world { --world-w: min(100%, 1240px, max(388px, calc((100dvh - 262px) * 1.32))); }
 .online-world .online-head,
 .online-world .world-wallet,
-.online-world .world-selection,
 .online-world .online-notice { width: var(--world-w); max-width: var(--world-w); margin-inline: auto; }
 .online-world .world-grid { width: var(--world-w); max-width: var(--world-w); }
 /* A lowkey world of its own: faint survey contours under everything, centred on the map. */
@@ -904,11 +890,17 @@ export const ONLINE_CSS = `
 }
 .online-world .online-inner { position: relative; z-index: 1; }
 
-/* ---- THE MENU KEY: one hardware key at the window's foot, centred (owner, 2026-10-28) ---- */
-/* three grille slots, the key's only marking */
+/* ---- THE MENU KEY (owner, 2026-10-28): the one key on the map at rest, top-right ---- */
+/* three grille slots, the key's only marking; while its row is out they fold into a close mark */
 .world-menu-glyph { display: grid; gap: 3px; width: 18px; }
-.world-menu-glyph i { display: block; height: 2px; border-radius: 1px; background: currentColor; opacity: .85; }
+.world-menu-glyph i { display: block; height: 2px; border-radius: 1px; background: currentColor; opacity: .85;
+  transition: transform var(--ix-open) var(--ix-ease-open), opacity var(--ix-close) ease, width var(--ix-open) var(--ix-ease-open); }
 .world-menu-glyph i:nth-child(2) { width: 70%; justify-self: center; }
+.world-menu-key[aria-expanded='true'] .world-menu-glyph i:nth-child(1) { transform: translateY(5px) rotate(45deg); }
+.world-menu-key[aria-expanded='true'] .world-menu-glyph i:nth-child(2) { opacity: 0; width: 0; }
+.world-menu-key[aria-expanded='true'] .world-menu-glyph i:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
+/* the row's challenges key carries the lamp while the row is out, so MENU's own lamp steps aside */
+.world-menu-key[aria-expanded='true'] .world-deck-count { opacity: 0; }
 .world-grid > .world-menu-key .world-deck-count { position: absolute; z-index: 2; top: -6px; right: -6px; }
 .world-grid > .world-menu-key .world-menu-glyph { position: absolute; left: 50%; top: 50%; translate: -50% -50%; }
 .world-deck-count {
@@ -921,61 +913,44 @@ export const ONLINE_CSS = `
 .world-deck-count.waiting { background: #e07a5f; color: #160b08; box-shadow: 0 0 10px #e07a5f8c; animation: world-lamp 2.4s ease-in-out infinite; }
 @keyframes world-lamp { 50% { box-shadow: 0 0 3px #e07a5f4d; } }
 
-/* ---- the one window: centred over the map, light enough to see the land through ---- */
+/* ---- the one window: under the row of keys, light enough to see the land through ---- */
 .world-panel {
-  /* It opens ON the corner row (owner, 2026-10-28: "it actually covers it, super aligned"): the same
-     10px edge as the four corner keys, so the window lies exactly over the menu key, and its own
-     close key sits where the menu key was. */
-  position: absolute; z-index: 4; left: 50%; top: 10px; translate: -50% 0;
-  width: min(calc(100% - 20px), 460px); max-height: calc(100% - 20px);
+  /* It hangs from the key row (10px edge + 44px key + 8px gap), right-aligned with MENU, so the lit
+     key stays visible above it and the next key is one tap away. */
+  position: absolute; z-index: 4; right: 10px; top: 62px;
+  width: min(calc(100% - 20px), 420px); max-height: calc(100% - 72px);
   display: flex; flex-direction: column; overflow: hidden;
   border-radius: 15px; color: #e8ddc5;
   background: rgba(10, 13, 11, .66);
   -webkit-backdrop-filter: blur(6px) saturate(1.05); backdrop-filter: blur(6px) saturate(1.05);
   box-shadow: inset 0 1px 0 #e8ddc514, 0 14px 34px rgba(0, 0, 0, .28);
-  animation: world-panel-in var(--ix-open) var(--ix-ease-open) both;
+  transform-origin: top right;
 }
 .world-panel[hidden] { display: none; }
-@keyframes world-panel-corner { from { opacity: 0; translate: 0 -4px; } to { opacity: 1; translate: 0 0; } }
-@keyframes world-panel-in { from { opacity: 0; translate: -50% -4px; } to { opacity: 1; translate: -50% 0; } }
-@media (prefers-reduced-motion: reduce) { .world-panel { animation: none; } }
 .world-panel-head {
-  display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center;
-  min-height: 50px; padding: 4px 2px; border-bottom: 1px solid #e8ddc512;
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center;
+  min-height: 46px; padding: 2px; border-bottom: 1px solid #e8ddc512;
 }
-.world-tabs .world-seg-key { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
-.world-tabs .world-deck-count { min-width: 16px; height: 16px; font-size: .56rem; }
-/* An empty cell the close key's width (left) keeps the tabs exactly centred. */
-.world-panel-spacer { width: 40px; }
+/* An empty cell the close key's width (left) keeps the title exactly centred. */
+.world-panel-spacer { width: 44px; }
 .world-panel-title {
   margin: 0; text-align: center; font-size: .66rem; font-weight: 700; letter-spacing: .2em;
   text-transform: uppercase; color: #e8ddc5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .world-panel-close {
-  justify-self: center; width: 40px; height: 40px; display: grid; place-items: center;
+  justify-self: center; width: 44px; height: 44px; display: grid; place-items: center;
   border: 0; background: none; color: #cfc6ac; cursor: pointer; border-radius: 9px;
 }
 .world-panel-close:focus-visible { outline: 2px solid #f2e5c5; outline-offset: -4px; }
 .world-panel-body { overflow: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 10px; }
 .world-pane { display: none; flex-direction: column; gap: 8px; }
-.world-panel[data-tab='challenges'] .world-pane[data-pane='challenges'],
-.world-panel[data-tab='ranking'] .world-pane[data-pane='ranking'] { display: flex; }
+.world-panel[data-pane='challenges'] .world-pane[data-pane='challenges'],
+.world-panel[data-pane='ranking'] .world-pane[data-pane='ranking'],
+.world-panel[data-pane='latest'] .world-pane[data-pane='latest'] { display: flex; }
 .world-pane > .world-pane-label:first-child { margin-top: 0; }
 .world-pane-label { margin: 4px 4px 0; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: #e8ddc58f; text-align: center; }
 .world-pane-empty { margin: 2px 0 6px; text-align: center; font-size: .74rem; color: #e8ddc5a6; }
 .world-pane-empty[hidden] { display: none; }
-
-/* the CURRENT / HISTORY switch: a two-position hardware slider */
-.world-seg {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 10px;
-  background: #0a0d0b; box-shadow: inset 0 1px 0 #000a, inset 0 0 0 1px #e8ddc50d;
-}
-.world-seg-key {
-  min-height: 34px; border: 0; border-radius: 8px; cursor: pointer; background: transparent; color: #cfc6ac99;
-  font: inherit; font-size: .62rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
-}
-.world-seg-key.on { color: #f2e7cb; background: linear-gradient(#252a24, #1e231e); box-shadow: inset 0 1px 0 #e8ddc51f, 0 1px 2px #0007; }
-.world-seg-key:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 
 /* the challenge chips, stacked in the window instead of a sideways rail */
 .world-panel .world-challenges {
@@ -1020,23 +995,23 @@ export const ONLINE_CSS = `
 .world-ranking-tag { color: #e8ddc570; font-size: .62rem; letter-spacing: .08em; }
 .world-ranking-tiles { text-align: right; font-weight: 700; letter-spacing: .04em; }
 .world-ranking-row:focus-visible, .world-activity-chip:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
-/* the latest placements: two even columns of chips */
-.world-activity { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+/* LATEST: the newest placements, one row each, the same rhythm as the ranking */
+.world-activity { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
 .world-activity-chip {
-  min-width: 0; display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 9px;
+  min-width: 0; display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 10px;
   border: 0; border-radius: 8px; background: #161b17b3; color: #e8ddc5; cursor: pointer;
   box-shadow: inset 0 1px 0 #e8ddc50f;
-  font: inherit; font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; font-variant-numeric: tabular-nums;
+  font: inherit; font-size: .66rem; letter-spacing: .12em; text-transform: uppercase; font-variant-numeric: tabular-nums;
 }
-.world-activity-chip::before { content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--territory); flex: none; }
+.world-activity-chip:active { background: #232922b3; }
+.world-activity-chip::before { content: ''; width: 10px; height: 10px; border-radius: 2px; background: var(--territory); flex: none; }
 .world-activity-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .world-activity-ago { margin-left: auto; color: #e8ddc58f; white-space: nowrap; }
 
-/* THE FOUR CORNERS (owner, 2026-10-28: "4 corners symmetrically aligned with YOUR TILES, MENU,
-   ZOOM, CHAT — all the same size and design as the in-game cockpit buttons"). Each is the cockpit's
-   own key: 44px, radius 12, #111312 under the supplied hardware frame, ivory ink (the duel chat key in
-   web/src/online/chat/style.ts is the reference). One 10px edge for all four. */
-.world-grid > .world-corner {
+/* THE MAP'S KEYS (owner, 2026-10-28: "teenage engineering/nintendo inspo"). MENU and the four keys it
+   slides out are one family: the in-game cockpit key, 44px, radius 12, #111312 under the supplied
+   hardware frame, ivory ink (the duel chat key in web/src/online/chat/style.ts is the reference). */
+.world-grid > .world-corner, .world-key {
   position: absolute; z-index: 3; box-sizing: border-box;
   width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; margin: 0;
   display: grid; place-items: center; line-height: 0;
@@ -1045,33 +1020,59 @@ export const ONLINE_CSS = `
   cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   transition: transform 90ms ease, box-shadow 140ms ease, color 140ms ease, opacity 140ms ease;
 }
-.world-grid > .world-corner::before {
+.world-grid > .world-corner::before, .world-key::before {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: url('./hardware/button-frame-supplied.webp') center / contain no-repeat;
 }
-.world-grid > .world-corner > :is(svg, span) { position: relative; z-index: 1; }
+.world-grid > .world-corner > :is(svg, span), .world-key > :is(svg, span) { position: relative; z-index: 1; }
 .world-grid > .world-corner:active { transform: translateY(1px); }
-.world-grid > .world-corner:is(:hover, :focus-visible, .on, [aria-expanded='true'], [aria-pressed='true']) {
+/* a row key presses with translate and scale, leaving transform to its slide */
+.world-key:active { translate: 0 1px; scale: .985; filter: brightness(.96); }
+.world-grid > .world-corner:is(:hover, :focus-visible, .on, [aria-expanded='true']),
+.world-key:is(:hover, :focus-visible) {
   color: #fff1cf; box-shadow: 0 0 9px var(--light-bloom, rgba(196, 150, 88, .22)), 0 2px 8px #0007;
 }
-.world-grid > .world-corner:focus { outline: none; }
-.world-grid > .world-corner:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
-.world-grid > .world-corner:disabled { opacity: .45; cursor: default; }
-.world-grid > .world-corner svg { width: 21px; height: 21px; opacity: .94; }
-.world-grid > .world-chat-key svg { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
-.world-grid > .world-mine { top: 10px; left: 10px; right: auto; bottom: auto; }
-.world-grid > .world-menu-key { top: 10px; right: 10px; left: auto; bottom: auto; }
-.world-grid > #online-world-fit { bottom: 10px; right: 10px; top: auto; left: auto; }
-.world-grid > .world-chat-key { bottom: 10px; left: 10px; top: auto; right: auto; }
-.world-grid > .world-mine[data-patch]:not([data-patch=''])::after {
-  content: attr(data-patch); position: absolute; z-index: 1; left: 50%; bottom: 4px; translate: -50% 0;
-  font-size: .48rem; line-height: 1; letter-spacing: .08em; color: #f5edda99; font-variant-numeric: tabular-nums;
+/* the lit key: its page is open (a lamp under the icon, like a hardware toggle that is ON) */
+.world-key.on { color: #fff6dc; box-shadow: 0 0 12px var(--light-bloom, rgba(196, 150, 88, .32)), 0 2px 8px #0007; }
+.world-key::after {
+  content: ''; position: absolute; z-index: 1; left: 50%; bottom: 5px; width: 10px; height: 2px; translate: -50% 0;
+  border-radius: 1px; background: #f2c879; box-shadow: 0 0 6px #f2c879; opacity: 0; transition: opacity var(--ix-press) ease;
 }
+.world-key.on::after { opacity: 1; }
+.world-grid > .world-corner:focus, .world-key:focus { outline: none; }
+.world-grid > .world-corner:focus-visible, .world-key:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+.world-grid > .world-menu-key { top: 10px; right: 10px; left: auto; bottom: auto; }
+.world-key-icon { width: 21px; height: 21px; opacity: .94; overflow: visible; }
+.world-key-icon .line { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.world-key-icon .fill { fill: currentColor; }
+.world-key-icon text { fill: currentColor; font: 700 5.6px/1 system-ui, sans-serif; }
+.world-key .world-deck-count { position: absolute; z-index: 2; top: -6px; right: -6px; }
+/* THE ROW: four keys to MENU's left, on the same 10px edge, 8px apart. At rest they are tucked
+   behind MENU (transparent, inert); MENU slides them out one after another, nearest first, on the
+   compositor only (transform + opacity), and folds them back in reverse. */
+.world-keys {
+  position: absolute; z-index: 3; top: 10px; right: 62px;
+  display: flex; gap: 8px; pointer-events: none;
+}
+.world-keys .world-key {
+  position: relative; opacity: 0; transform: translateX(calc(var(--i) * 52px + 52px)) scale(.86);
+  transition: transform 180ms var(--ix-ease-open), opacity 120ms ease, scale var(--ix-press) ease, translate var(--ix-press) ease;
+  transition-delay: calc((3 - var(--i)) * 18ms);
+}
+.world-keys .world-key:nth-child(4) { --i: 0; }
+.world-keys .world-key:nth-child(3) { --i: 1; }
+.world-keys .world-key:nth-child(2) { --i: 2; }
+.world-keys .world-key:nth-child(1) { --i: 3; }
+.world-keys.open { pointer-events: auto; }
+.world-keys.open .world-key { opacity: 1; transform: none; transition-delay: calc(var(--i) * 28ms); }
+.world-keys:not(.open) .world-key { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .world-keys .world-key, .world-menu-glyph i { transition: none; } }
+html.reduce-motion :is(.world-keys .world-key, .world-menu-glyph i) { transition: none; }
 
-/* ---- TERRITORY CHAT: rises from the chat key's corner on the menu window's glass ---- */
+/* ---- TERRITORY CHAT: hangs from the key row like the other windows, on the same glass ---- */
 .world-chat {
-  position: absolute; z-index: 4; left: 10px; bottom: 62px;
-  width: min(calc(100% - 20px), 400px); max-height: min(46%, 360px);
+  position: absolute; z-index: 4; right: 10px; top: 62px;
+  width: min(calc(100% - 20px), 420px); max-height: calc(100% - 72px);
   display: flex; flex-direction: column; gap: 6px; padding: 10px; box-sizing: border-box;
   border-radius: 15px; color: #e8ddc5; background: rgba(10, 13, 11, .62);
   -webkit-backdrop-filter: blur(6px) saturate(1.05); backdrop-filter: blur(6px) saturate(1.05);
@@ -1119,10 +1120,8 @@ export const ONLINE_CSS = `
 .world-chat-status:empty { display: none; }
 @media (prefers-reduced-motion: reduce) { .world-chat { animation: none; } }
 html.reduce-motion .world-chat { animation: none; }
-/* the selection bar and the notice: one centred axis, like everything else on this screen */
-.online-world .world-selection { justify-content: center; text-align: center; flex-wrap: wrap; }
+/* the notice: one centred axis, like everything else on this screen */
 .online-world .online-notice { text-align: center; }
-.online-world .world-claim-button { text-transform: uppercase; }
 
 /* ---- the fog, alive: two rings breathing at different paces ---- */
 .world-fog { fill: #1b201c; stroke: #8f977f; stroke-width: .4; stroke-dasharray: 1.6 2.4; vector-effect: non-scaling-stroke; pointer-events: none; }
@@ -1191,7 +1190,7 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
   /* a deeper vignette: the stage's edges fall away into the dark, the centre holds the light */
   .online-world .world-grid::after { background: radial-gradient(ellipse 72% 70% at 50% 48%, transparent 46%, #060807d9 100%); }
   /* the floating HUD: every pill sits in the stage's own cell, above the map */
-  .online-world :is(#online-world-wallet, #daily-place, #online-world-live, #online-world-selection, #online-world-notice) {
+  .online-world :is(#online-world-wallet, #daily-place, #online-world-live, #online-world-notice) {
     grid-row: 2; position: relative; z-index: 5; width: auto; max-width: min(680px, calc(var(--world-w) - 200px)); margin: 0;
   }
   .online-world #online-world-live { position: absolute; }
@@ -1201,52 +1200,33 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
     box-shadow: inset 0 1px 0 #e8ddc514, 0 8px 22px #0005;
   }
   .online-world #daily-place { align-self: start; margin-top: 92px; }
-  .online-world #online-world-selection {
-    align-self: end; margin-bottom: 14px; min-height: 52px; padding: 5px 6px 5px 20px; gap: 14px; flex-wrap: nowrap;
-    border-radius: 15px; background: rgba(10, 13, 11, .62);
-    -webkit-backdrop-filter: blur(10px) saturate(1.1); backdrop-filter: blur(10px) saturate(1.1);
-    box-shadow: inset 0 1px 0 #e8ddc514, 0 10px 26px #0006;
-  }
-  .online-world #online-world-selection:not(:has(button)) { padding: 5px 20px; }
+  .online-world .world-selection { bottom: 14px; min-height: 52px; padding: 6px 7px 6px 20px; border-radius: 16px; font-size: .78rem; }
+  .online-world .world-selection:not(.has-action) { padding: 6px 20px; }
   .online-world #online-world-notice {
     align-self: end; margin-bottom: 78px; min-height: 0; padding: 7px 14px; border-radius: 10px;
     background: rgba(10, 13, 11, .5); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   }
   .online-world #online-world-notice:empty { display: none; }
-  /* the four corners sit in a little from the stage's rounded corners, on one 14px edge */
-  .online-world .world-grid > .world-mine { top: 14px; left: 14px; }
+  /* the keys sit in a little from the stage's rounded corners, on one 14px edge; the windows hang
+     from the row like on a phone, a fixed width at the right */
   .online-world .world-grid > .world-menu-key { top: 14px; right: 14px; }
-  .online-world .world-grid > #online-world-fit { bottom: 14px; right: 14px; }
-  .online-world .world-grid > .world-chat-key { bottom: 14px; left: 14px; }
-  /* the menu window drops from ITS corner and covers the menu key exactly (owner, 2026-10-28) */
-  .online-world .world-panel { top: 14px; right: 14px; left: auto; translate: none; width: 440px; max-height: calc(100% - 28px); animation-name: world-panel-corner; }
-  /* the chat rises from ITS corner, the mirror image */
-  .online-world .world-chat { left: 14px; bottom: 66px; width: 400px; max-height: min(52%, 460px); }
+  .online-world .world-keys { top: 14px; right: 66px; }
+  .online-world :is(.world-panel, .world-chat) { top: 68px; right: 14px; width: 420px; max-height: calc(100% - 82px); }
 }
 
 /* Every free tile is open to grow now, so "available" is a quiet lift; the board's own global
    .available (a dashed onboarding ring with pointer-events: none) must never leak onto the world. */
 .world-hex.available { stroke: #858d7c; stroke-width: .42; stroke-dasharray: none; stroke-opacity: 1; pointer-events: all; }
 
-/* One map control, all utilities inside its existing glass window. */
-.world-menu-tools {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:4px 0 12px;border-bottom:1px solid #e8ddc51a;margin-bottom:12px;}
-.world-menu-tools button {position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:0;min-height:64px;border:0;border-radius:9px;background:#e8ddc508;color:#e8ddc5;font:inherit;font-size:.6875rem;cursor:pointer;touch-action:manipulation;}
-.world-menu-tools button svg {width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;}
-.world-menu-tools button:disabled {opacity:.35;cursor:default;}
-.world-menu-tools button:focus-visible {outline:2px solid #e8ddc5;outline-offset:-3px;}
-.world-chat-head {display:flex;align-items:center;gap:12px;padding-bottom:7px;border-bottom:1px solid #e8ddc51a;font-size:.6875rem;letter-spacing:.08em;}
-.world-chat-head button {min-height:44px;border:0;background:#e8ddc50a;border-radius:8px;color:inherit;padding:0 12px;font:inherit;cursor:pointer;}
-.online-world .world-chat {left:auto;right:10px;top:10px;bottom:auto;max-height:calc(100% - 20px);}
-@media(min-width:960px) and (min-height:560px) and (min-aspect-ratio:5/4) { .online-world .world-chat {right:14px;top:14px;bottom:auto;max-height:calc(100% - 28px);} }
 /* Your land has a distinct ivory rim, independent of player colour, with a quiet glow underneath. */
 .world-border-edge {stroke:#f2e5c5;stroke-width:1.15;stroke-opacity:.9;}
 .world-border-glow {stroke-width:2.8;opacity:.26;}
 
-/* Tile actions belong to this same drawer; no separate toolbar floats over the map. */
-.online-world .world-panel #online-world-selection {position:static;inset:auto;grid-area:auto;transform:none;translate:none;align-self:stretch;margin:0 0 12px;padding:10px;display:flex;flex-wrap:wrap;gap:8px;min-height:0;border-radius:9px;background:#e8ddc508;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;text-align:left;font-size:.75rem;}
-.online-world .world-panel #online-world-selection[hidden] {display:none;}
-.online-world .world-panel #online-world-selection button {min-height:44px;width:100%;flex:1 1 100%;}
-
 .online-world .world-chat.keyboard {position:fixed;left:max(8px,env(safe-area-inset-left));right:auto;width:min(400px,calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)));z-index:70;}
-.world-menu-tools .world-mine[data-patch]:not([data-patch=''])::after {content:attr(data-patch);position:absolute;right:6px;top:5px;font-size:.55rem;color:#e8ddc58c;}
+/* THE MAP IN MOTION (world-view.ts, setMoving): while a finger pans or pinches, or the view glides,
+   the soft-focus blurs are drawn sharp and the ambient loops hold still. A blur re-renders on every
+   frame the view moves; this is what keeps a pan at 60 fps on a mid phone. */
+.world-grid.moving .world-map-svg [filter] { filter: none; }
+.world-grid.moving .world-map-svg :is(.world-fog-ring, .world-hex-face, .world-halo, .world-border-glow, .world-spore) { animation-play-state: paused; }
+.world-grid.moving .world-map-svg .world-accent-line { filter: none; }
 `;

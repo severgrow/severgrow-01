@@ -1,7 +1,7 @@
 import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 // TERRITORY CHAT, the page's side (owner, 2026-10-28): one shared channel for everyone in Territory,
 // the newest 30 messages (server/src/chat/territory.ts keeps no more). It opens from the chat key in
-// the map's single menu and offers an explicit return to that menu on the same dark glass. While open
+// the row of keys under MENU and closes from its own close key, on the same dark glass. While open
 // it asks for the channel every few seconds; shut, it asks for nothing. Tapping someone else's message
 // offers the two moderation keys duel chat already has: Block (two taps) and Report.
 import type { DuelClient } from '../../../server/src/client.js';
@@ -36,7 +36,6 @@ export class TerritoryChat {
     private readonly token: () => string | null,
     /** Told when the chat opens, so the menu window can shut (one window at a time). */
     private readonly onOpen: () => void = () => undefined,
-    private readonly onMenu: () => void = () => undefined,
   ) {
     document.addEventListener('visibilitychange', () => {
       if (!this.open) return;
@@ -67,7 +66,7 @@ export class TerritoryChat {
       this.input.setAttribute('aria-label', ONLINE.worldChatPlaceholder);
     }
     const back = document.getElementById('world-chat-back');
-    if (back) { back.textContent = ONLINE.worldMenuBack; back.addEventListener('click', () => { this.setOpen(false); this.onMenu(); }); }
+    back?.addEventListener('click', () => this.setOpen(false));
     const heading = document.getElementById('world-chat-heading'); if (heading) heading.textContent = ONLINE.worldChat;
     const send = document.getElementById('world-chat-send');
     if (send) send.textContent = ONLINE.worldChatSend;
@@ -75,7 +74,7 @@ export class TerritoryChat {
     this.input?.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229)) e.preventDefault(); });
     document.getElementById('world-chat-form')?.addEventListener('submit', (event) => { event.preventDefault(); void this.send(); });
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && this.open) { this.setOpen(false); event.stopPropagation(); }
+      if (event.key === 'Escape' && this.open) { this.setOpen(false); event.stopImmediatePropagation(); }
     });
   }
 
@@ -94,7 +93,8 @@ export class TerritoryChat {
     this.picked = null;
     this.blockArmed = false;
     this.cancelPoll();
-    if (!open) { document.getElementById('online-world-menu')?.focus({ preventScroll: true }); return; }
+    // Focus goes back to the key that opened it, or to MENU when the row of keys has folded away.
+    if (!open) { (this.key && !this.key.closest('[inert]') ? this.key : document.getElementById('online-world-menu'))?.focus({ preventScroll: true }); return; }
     this.onOpen();
     document.getElementById('world-chat-back')?.focus({ preventScroll: true });
     this.say('');

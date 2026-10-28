@@ -25,8 +25,6 @@ import type { SeedFlushResult } from './seed-rewards.js';
 import { settlePendingSeeds } from './seed-settle.js';
 import type { SeedWallet } from '../../../server/src/seeds/types.js';
 
-/** The Territory zoom toggle's mark: a lens and a handle, stroked in currentColor, no text. */
-export const WORLD_FIT_ICON = '<svg class="world-fit-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.4 15.4 20.5 20.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
 import {
   FIRST_ONLINE_CARD_KEY,
   friendlyJoinError,
@@ -355,16 +353,6 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     // both must name the same screen.
     $('online-world-title').textContent = ONLINE.worldTitle;
     $('online-world-screen').setAttribute('aria-label', ONLINE.worldTitle);
-    // THE ONE MAP CONTROL (owner, 2026-10-21): one quiet FIT toggle. Spoken as a plain sentence,
-    // shown as a magnifying glass; `aria-pressed` is owned by world-view.ts, which owns its state.
-    const fitButton = document.getElementById('online-world-fit');
-    if (fitButton) {
-      // A simple magnifying glass, drawn in the button's own ink (owner, 2026-10-23: no "FIT" word).
-      fitButton.innerHTML = WORLD_FIT_ICON;
-      const label = document.createElement('span'); label.textContent = ONLINE.worldFitShort; fitButton.append(label);
-      fitButton.setAttribute('aria-label', ONLINE.worldFit);
-      fitButton.title = ONLINE.worldFit;
-    }
     // The Your-matches label carries a COUNT, so `paintMatchesDisclosure` owns its text. Writing
     // the count-less string here would wipe the number every time another screen calls fillCopy.
     $('online-matches-empty').textContent = ONLINE.emptyMatches;

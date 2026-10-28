@@ -23,6 +23,8 @@ export const CHALLENGE = Object.freeze({
   /** the challenger's sheet: who holds it and what it costs, then one key */
   sendLine: (name: string, stake: number) => `${name} holds this ground. Challenge it for ${stake} Seeds?`,
   sendKey: 'CHALLENGE',
+  /** The tile bar's key on contested ground: it opens that challenge's own sheet. */
+  viewKey: 'VIEW CHALLENGE',
   /** the defender's sheet: who challenged you and what is at stake, then ACCEPT / DECLINE */
   defendLine: (name: string, stake: number) => `${name} challenged you for this ground. ${stake} Seeds on it. Answer?`,
   acceptKey: 'ACCEPT',

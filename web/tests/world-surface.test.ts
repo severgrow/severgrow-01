@@ -308,10 +308,14 @@ describe('the world column shares the menu column edge', () => {
     expect(bodyOf(styleCss, '.menu-inner'), 'the menu column rule must exist').toContain('width: min(420px, 100% - 32px)');
   });
 
-  it('the controls anchor to the bottom edge, so the shorter window cannot leave a dead band', () => {
+  it('the tile bar floats at the map\u2019s bottom edge, so picking a tile never changes the map\u2019s height', () => {
+    // Owner, 2026-10-28: the tile's grow / sell / challenge key lives on the map, not in the menu.
+    // It floats over the window's foot (absolute), so the map keeps the whole column and is never
+    // re-framed when a tile is picked.
     const selection = bodyOf(onlineCss, '.world-selection');
     expect(selection, 'the selection rule must exist').not.toBeNull();
-    expect(selection!, 'the controls must anchor to the bottom').toContain('margin-top: auto');
+    expect(selection!, 'the bar floats over the map').toContain('position: absolute');
+    expect(selection!, 'the bar anchors to the bottom edge').toMatch(/bottom:\s*10px/);
   });
 
   it('nothing draws a rule above the “Choose a tile” hint', () => {

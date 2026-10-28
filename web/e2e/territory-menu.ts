@@ -1,11 +1,13 @@
-// THE GROWING TERRITORY, end to end (owner, 2026-10-27): the map grows around its tiles, a tile can
-// be grown anywhere on the seen map, the fog shows where it can grow, the RANKING drops over the map,
-// the activity strip flies to a placement, and "find my land" centres on your own tiles.
+// THE TERRITORY MENU (owner, 2026-10-28): "fit map and my land was to be removed, and ranking,
+// challenges, chat, latest should be separate options using just icons ... MENU button stays and it's
+// the only button visible straight away, 4 other keys open after clicking menu ... tapping empty tile
+// should NOT open the menu and still have option to grow/sell/challenge without opening the menu".
 //
 // A real economy (memory) behind the real HTTP app; the product build points at it. Three other
-// players hold tiles; this device's guest gets 300 Seeds and grows a tile at the far east coast.
+// players hold tiles, one of them right beside this device's own tile, so all three tile actions
+// (grow, sell, challenge) can be reached from the tile bar.
 //
-//   npx tsx web/e2e/territory-growth.ts
+//   PW_CHROMIUM=/opt/pw-browsers/chromium npx tsx web/e2e/territory-menu.ts
 import { spawn } from 'node:child_process';
 import type { AddressInfo } from 'node:net';
 import { chromium } from 'playwright-core';
@@ -44,7 +46,7 @@ const guestOf = async () => (await (await fetch(`${apiBase}/v1/guests`, { method
 const fund = (playerId: string, n: number) => store.adminAdjustSeeds({ playerId, delta: n * 100, reason: 'e2e', actorId: 'e2e', requestId: `fund-${playerId}-${n}`, now: Date.now() });
 // three other players with land
 const others = await Promise.all([guestOf(), guestOf(), guestOf()]);
-const otherCells = [['0,0', '1,0', '2,0'], ['-5,3', '-4,3'], ['3,-6']];
+const otherCells = [['0,0', '1,0', '2,0'], ['-5,3', '-4,3'], ['3,-6', '-1,-4']];
 for (const [i, g] of others.entries()) {
   await fund(g.player.id, otherCells[i]!.length);
   for (const [j, cell] of otherCells[i]!.entries()) await store.claim(g.player.id, cell, `other-${i}-${j}-req`, Date.now() - (10 - j) * 60_000);
@@ -68,10 +70,31 @@ const web = await preview({ configFile: 'web/vite.config.ts', preview: { host: '
 const origin = web.resolvedUrls?.local?.[0]?.replace(/\/$/, '') ?? '';
 
 const count = (p: Page, sel: string) => p.evaluate((s) => document.querySelectorAll(s).length, sel);
-const openTools = async (p: Page) => {
-  if (!(await p.isVisible('#online-world-panel'))) await p.click('#online-world-menu');
-  await p.waitForSelector('#online-world-panel:not([hidden])');
+const keysOut = (p: Page) => p.evaluate(() => document.getElementById('online-world-keys')!.classList.contains('open'));
+const visible = (p: Page, sel: string) => p.evaluate((s) => [...document.querySelectorAll<HTMLElement>(s)].filter((e) => {
+  const r = e.getBoundingClientRect(); const cs = getComputedStyle(e);
+  return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05 && !e.closest('[hidden]');
+}).length, sel);
+/** A tile's centre on screen, or null when it is outside the map window. */
+const tileAt = (p: Page, id: string) => p.evaluate((cell) => {
+  const el = document.querySelector(`.world-hex[data-cell-id="${cell}"]`);
+  const svg = document.querySelector('.world-map-svg')?.getBoundingClientRect();
+  if (!el || !svg) return null;
+  const r = el.getBoundingClientRect(); const x = r.x + r.width / 2, y = r.y + r.height / 2;
+  return x > svg.left + 30 && x < svg.right - 30 && y > svg.top + 70 && y < svg.bottom - 70 ? { x, y } : null;
+}, id);
+/** Tap a tile with a real touch when it is on screen; otherwise select it from the keyboard. */
+const tapTile = async (p: Page, id: string) => {
+  const at = await tileAt(p, id);
+  if (at) await p.touchscreen.tap(at.x, at.y);
+  else { await p.focus(`.world-hex[data-cell-id="${id}"]`); await p.keyboard.press('Enter'); }
+  await p.waitForTimeout(120);
+  return !!at;
 };
+const barKey = (p: Page) => p.evaluate(() => {
+  const bar = document.getElementById('online-world-selection')!;
+  return bar.hidden ? null : (bar.querySelector('.world-claim-button')?.textContent ?? '');
+});
 
 const browser = await chromium.launch(CHROME ? { executablePath: CHROME } : {});
 try {
@@ -88,78 +111,183 @@ try {
   await page.waitForTimeout(700);
   const before = await count(page, '.world-hex');
   check('the map opens at the v2 coast plus the land around the tiles', before >= WORLD_CELL_IDS.size, `${before} cells`);
-  check('the fog shows land beyond the coast', (await count(page, '.world-fog.ring-1')) > 0 && (await count(page, '.world-fog.ring-2')) > 0);
-  // ONE MENU KEY (owner, 2026-10-28): no row of keys over the map. The four corners mirror each
-  // other: find-my-land top-left, MENU top-right, FIT bottom-right, all on one edge.
-  check('there is no row of menu keys over the map', (await count(page, '#online-world-deck, #world-tab-actions')) === 0);
-  const sym = await page.evaluate(() => {
-    const g = document.getElementById('online-world-grid')!.getBoundingClientRect();
-    const k = document.getElementById('online-world-menu')!.getBoundingClientRect();
-    const f = document.getElementById('online-world-fit')!.getBoundingClientRect();
-    return { menuTop: k.top - g.top, menuRight: g.right - k.right, fitBottom: g.bottom - f.bottom, fitRight: g.right - f.right,
-      menuH: k.height, fitH: f.height, gridL: g.left, gridR: innerWidth - g.right };
-  });
-  check('the map window is centred on the screen', Math.abs(sym.gridL - sym.gridR) <= 1, JSON.stringify(sym));
-  check('only one navigation key remains on the map', await page.locator('.world-grid > button').count()===1);
-  await openTools(page);
-  check('menu contains labelled My land, Fit map and Chat tools', await page.locator('.world-menu-tools button').count()===3 && await page.locator('#online-world-fit').isVisible());
-  await page.click('#world-panel-close');
-  check('the coordinates read-out is gone', (await count(page, '#online-world-coord')) === 0);
-  const overflow = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, win: window.innerWidth, col: document.querySelector('.online-world .online-inner')!.getBoundingClientRect().right }));
-  check('the strip never widens the screen (no sideways scroll)', overflow.doc <= overflow.win && overflow.col <= overflow.win, JSON.stringify(overflow));
-  const dash = await page.evaluate(() => { const el = document.querySelector('.world-hex.available'); return el ? getComputedStyle(el).strokeDasharray : 'none'; });
-  check('free tiles keep a solid edge', dash === 'none', dash);
-  await page.screenshot({ path: `${SHOTS}/territory-open-390x844.png` });
 
+  // ---- at rest: MENU is the only key -------------------------------------------------------------
+  check('Fit map and My land are gone', (await count(page, '#online-world-fit, #online-world-mine, .world-menu-tools')) === 0);
+  check('at rest MENU is the only key visible on the map', (await visible(page, '.world-grid button')) === 1 && await page.isVisible('#online-world-menu'));
+  check('the four keys are not reachable at rest', await page.evaluate(() => document.getElementById('online-world-keys')!.hasAttribute('inert')));
+  const grid0 = await page.evaluate(() => { const g = document.getElementById('online-world-grid')!.getBoundingClientRect(); return { l: g.left, r: innerWidth - g.right }; });
+  check('the map window is centred on the screen', Math.abs(grid0.l - grid0.r) <= 1, JSON.stringify(grid0));
+  await page.screenshot({ path: `${SHOTS}/territory-rest-390.png` });
+
+  // ---- MENU slides out four icon keys ------------------------------------------------------------
   await page.click('#online-world-menu');
+  await page.waitForTimeout(320);
+  check('MENU slides out its row', await keysOut(page) && (await page.getAttribute('#online-world-menu', 'aria-expanded')) === 'true');
+  const row = await page.evaluate(() => {
+    const menu = document.getElementById('online-world-menu')!.getBoundingClientRect();
+    const grid = document.getElementById('online-world-grid')!.getBoundingClientRect();
+    return [...document.querySelectorAll<HTMLElement>('#online-world-keys .world-key')].map((k) => {
+      const r = k.getBoundingClientRect();
+      return { id: k.id, label: k.getAttribute('aria-label'), text: k.textContent?.replace(/\d/g, '').trim(), icon: !!k.querySelector('svg.world-key-icon'),
+        top: Math.round(r.top - menu.top), w: Math.round(r.width), h: Math.round(r.height), left: r.left, right: r.right, gridL: grid.left, menuL: menu.left };
+    });
+  });
+  check('four keys: ranking, challenges, chat, latest', row.map((k) => k.id).join(',') === 'world-key-ranking,world-key-challenges,online-world-chat,world-key-latest', JSON.stringify(row.map((k) => k.id)));
+  check('each key is an icon only, with a spoken name', row.every((k) => k.icon && !k.text && !!k.label), JSON.stringify(row.map((k) => [k.label, k.text])));
+  check('the row sits on MENU\'s line, every key 44px', row.every((k) => k.top === 0 && k.w === 44 && k.h === 44), JSON.stringify(row.map((k) => [k.top, k.w, k.h])));
+  check('the row runs left to right in order and ends at MENU', row.every((k, i) => i === 0 || k.left > row[i - 1]!.right) && row[3]!.right < row[3]!.menuL && row[0]!.left >= row[0]!.gridL, JSON.stringify(row.map((k) => Math.round(k.left))));
+  check('the podium icon carries 1, 2, 3', await page.evaluate(() => [...document.querySelectorAll('#world-key-ranking text')].map((t) => t.textContent).join('') === '123'));
+  check('the challenges key carries the swords', (await count(page, '#world-key-challenges svg path.fill')) === 1);
+  await page.screenshot({ path: `${SHOTS}/territory-keys-390.png` });
+
+  // ---- each key opens its own page ---------------------------------------------------------------
+  await page.click('#world-key-ranking');
   await page.waitForSelector('#online-world-panel:not([hidden])');
-  await page.screenshot({path:`${SHOTS}/single-menu-phone.png`});
-  check('three labelled tools live only in the menu', await page.locator('.world-menu-tools button').count()===3);
-  check('my land has an ivory ownership perimeter', await page.locator('.world-border-edge').evaluate(e=>getComputedStyle(e).stroke==='rgb(242, 229, 197)'));
-  await page.click('#online-world-mine');
-  check('My land returns to the map',await page.isHidden('#online-world-panel'));
-  await page.screenshot({path:`${SHOTS}/owned-land-phone.png`});
+  check('RANKING opens its own page', (await page.getAttribute('#online-world-panel', 'data-pane')) === 'ranking' && (await page.textContent('#world-panel-title')) === 'Ranking');
+  check('the ranking lists every player', (await count(page, '.world-ranking-row')) === 4);
+  check('the open key is lit', await page.evaluate(() => document.getElementById('world-key-ranking')!.classList.contains('on')));
+  const under = await page.evaluate(() => { const p = document.getElementById('online-world-panel')!.getBoundingClientRect(); const k = document.getElementById('online-world-menu')!.getBoundingClientRect(); return p.top - k.bottom; });
+  check('the window hangs under the key row, so the keys stay in reach', under >= 4 && under <= 12, String(under));
+  check('the keys stay out while a page is open', (await visible(page, '#online-world-keys .world-key')) === 4);
+  await page.screenshot({ path: `${SHOTS}/territory-ranking-390.png` });
+  await page.click('#world-key-challenges');
+  await page.waitForTimeout(200);
+  check('CHALLENGES swaps the page in place', (await page.getAttribute('#online-world-panel', 'data-pane')) === 'challenges' && await page.isVisible('#world-challenges-empty'));
+  await page.click('#world-key-latest');
+  await page.waitForTimeout(200);
+  check('LATEST lists the newest placements', (await page.getAttribute('#online-world-panel', 'data-pane')) === 'latest' && (await count(page, '#online-world-activity .world-activity-chip')) === 8, String(await count(page, '#online-world-activity .world-activity-chip')));
+  await page.screenshot({ path: `${SHOTS}/territory-latest-390.png` });
+  await page.click('#world-key-latest');
+  await page.waitForTimeout(200);
+  check('pressing the lit key again shuts its page', await page.isHidden('#online-world-panel') && await keysOut(page));
+  await page.click('#online-world-chat');
+  await page.waitForSelector('#online-world-chat-panel:not([hidden])');
+  check('CHAT opens the chat on its own', await page.isHidden('#online-world-panel') && (await page.getAttribute('#online-world-chat', 'aria-expanded')) === 'true');
+  await page.click('#world-key-ranking');
+  await page.waitForTimeout(200);
+  check('one window at a time: a page shuts the chat', await page.isHidden('#online-world-chat-panel') && await page.isVisible('#online-world-panel'));
+  await page.click('#online-world-chat');
+  await page.waitForSelector('#online-world-chat-panel:not([hidden])');
+  await page.click('#world-chat-back');
+  await page.waitForTimeout(200);
+  check('the chat\'s close key shuts it and leaves the keys out', await page.isHidden('#online-world-chat-panel') && await keysOut(page));
+  await page.click('#world-key-ranking');
+  await page.waitForSelector('#online-world-panel:not([hidden])');
   await page.click('#online-world-menu');
-  await page.click('#online-world-fit');
-  check('Fit is a one-tap reset and closes the menu', await page.isHidden('#online-world-panel') && await page.getAttribute('#online-world-fit','aria-pressed')==='true');
-  const fit=await page.getAttribute('.world-map-svg','viewBox');
-  const rect=await page.locator('.world-map-svg').boundingBox(); if(!rect)throw new Error('map absent');
-  const x=rect.x+rect.width*.5,y=rect.y+rect.height*.5;
-  await page.mouse.move(x,y);await page.mouse.wheel(0,-80);await page.waitForTimeout(100);
-  check('wheel zoom works directly after Fit',await page.getAttribute('.world-map-svg','viewBox')!==fit);
-  const beforeTap=await page.getAttribute('.world-map-svg','viewBox');
-  await page.touchscreen.tap(x,y);
-  check('ordinary tap does not zoom',await page.getAttribute('.world-map-svg','viewBox')===beforeTap);
+  await page.waitForTimeout(300);
+  check('MENU folds the row and the page away', !(await keysOut(page)) && await page.isHidden('#online-world-panel') && (await visible(page, '.world-grid button')) === 1);
+
+  // ---- a tap selects; the tile bar carries grow / sell / challenge -------------------------------
+  const free = await page.evaluate(() => {
+    const svg = document.querySelector('.world-map-svg')!.getBoundingClientRect();
+    for (const el of document.querySelectorAll('.world-hex.available')) {
+      const r = el.getBoundingClientRect(); const x = r.x + r.width / 2, y = r.y + r.height / 2;
+      if (x > svg.left + 60 && x < svg.right - 60 && y > svg.top + 120 && y < svg.bottom - 120) return { x, y, id: el.getAttribute('data-cell-id')! };
+    }
+    return null;
+  });
+  if (!free) throw new Error('no free tile on screen');
+  const viewBefore = await page.getAttribute('.world-map-svg', 'viewBox');
+  await page.touchscreen.tap(free.x, free.y);
+  await page.waitForTimeout(150);
+  check('tapping a free tile opens no menu and no window', await page.isHidden('#online-world-panel') && !(await keysOut(page)) && await page.isHidden('#online-world-chat-panel'));
+  check('…and does not move the map', (await page.getAttribute('.world-map-svg', 'viewBox')) === viewBefore);
+  check('the tile bar offers GROW A TILE', (await barKey(page)) === 'GROW A TILE', String(await barKey(page)));
+  const barBox = await page.evaluate(() => { const b = document.getElementById('online-world-selection')!.getBoundingClientRect(); const g = document.getElementById('online-world-grid')!.getBoundingClientRect(); return { bottom: Math.round(g.bottom - b.bottom), centre: Math.round((b.left + b.right) / 2 - (g.left + g.right) / 2) }; });
+  check('the bar floats at the map\'s foot, centred', barBox.bottom >= 8 && barBox.bottom <= 16 && Math.abs(barBox.centre) <= 1, JSON.stringify(barBox));
+  await page.screenshot({ path: `${SHOTS}/territory-grow-bar-390.png` });
+  await page.click('#online-world-selection .world-claim-button');
+  check('GROW asks once more', (await barKey(page)) === 'CONFIRM GROW');
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await page.waitForTimeout(900);
+  check('a background refresh keeps the armed key', (await barKey(page)) === 'CONFIRM GROW');
+  await page.click('#online-world-selection .world-claim-button');
+  await page.waitForFunction((id) => document.querySelector(`.world-hex[data-cell-id="${id}"]`)?.classList.contains('mine'), free.id, { timeout: 10_000 });
+  check('CONFIRM GROW grows the tile from the bar', true);
+  await page.waitForTimeout(300);
+  const sellLabel = await barKey(page);
+  check('the tile bar now offers to sell it', /sell/i.test(sellLabel ?? ''), String(sellLabel));
+  await tapTile(page, free.id);
+  check('a second tap on the same tile lets it go', await page.isHidden('#online-world-selection'));
+  const touched = await tapTile(page, '-1,-4');
+  check('a rival tile beside mine offers CHALLENGE in the bar', (await barKey(page)) === 'CHALLENGE', `${await barKey(page)} (${touched ? 'touch' : 'keyboard'})`);
+  check('…without opening the offer by itself', (await count(page, '.world-challenge-sheet:not([hidden])')) === 0);
+  await page.click('#online-world-selection .world-claim-button');
+  await page.waitForTimeout(600);
+  check('CHALLENGE opens the challenge offer', (await count(page, '.world-challenge-sheet:not([hidden])')) === 1);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
+  // ---- a tap on the map shuts an open page --------------------------------------------------------
+  await page.click('#online-world-menu');
+  await page.waitForTimeout(250);
+  await page.click('#world-key-ranking');
   await page.waitForSelector('#online-world-panel:not([hidden])');
-  check('tile actions appear in the same menu', await page.locator('#online-world-panel #online-world-selection').isVisible());
-  await page.click('#world-panel-close');
-  await page.click('#online-world-menu');await page.click('#online-world-fit');
-  const beforePinch=await page.getAttribute('.world-map-svg','viewBox');
-  const cdp=await context.newCDPSession(page);
-  const points=(d:number)=>[{x:x-d,y,id:1},{x:x+d,y,id:2}];
-  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:points(35)});
-  for(const d of [42,50,58,65])await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:points(d)});
-  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(150);
-  check('real touch pinch zooms from Fit',await page.getAttribute('.world-map-svg','viewBox')!==beforePinch);
-  check('pinch release does not open tile actions',await page.isHidden('#online-world-panel'));
-  await page.click('#online-world-menu');await page.click('#online-world-chat');
-  await page.waitForSelector('#world-chat-back');await page.click('#world-chat-back');
-  check('chat returns to the menu',await page.isVisible('#online-world-panel'));
-  await page.click('#world-panel-close');
-  await page.setViewportSize({width:320,height:568});
-  await page.click('#online-world-menu');await page.waitForTimeout(180);
-  check('narrow phone menu stays within the viewport',await page.locator('#online-world-panel').evaluate(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight;}));
-  await page.screenshot({path:`${SHOTS}/single-menu-320.png`});
-  await page.click('#world-panel-close');
-  await page.setViewportSize({width:844,height:390});
-  await page.click('#online-world-menu');await page.click('#online-world-chat');
-  await page.evaluate(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:240});visualViewport!.dispatchEvent(new Event('resize'));});
-  check('landscape keyboard keeps chat usable',await page.locator('#world-chat-input').evaluate(e=>e.getBoundingClientRect().bottom<=visualViewport!.height));
-  await page.evaluate(()=>{delete (visualViewport as any).height;visualViewport!.dispatchEvent(new Event('resize'));});
-  await page.click('#world-chat-back');await page.click('#world-panel-close');
-  await page.setViewportSize({width:1440,height:900});await page.waitForTimeout(300);
-  check('desktop also has only one map key',await page.locator('.world-grid > button').count()===1);
-  await page.click('#online-world-menu');await page.screenshot({path:`${SHOTS}/single-menu-desktop.png`});
+  const svgBox = (await page.locator('.world-map-svg').boundingBox())!;
+  await page.touchscreen.tap(svgBox.x + svgBox.width * .5, svgBox.y + svgBox.height * .85);
+  await page.waitForTimeout(250);
+  check('a tap on the map shuts the open page and selects the tile', await page.isHidden('#online-world-panel') && await page.isVisible('#online-world-selection'));
+  // a ranking row glides the view to that player
+  await page.click('#world-key-ranking');
+  await page.waitForSelector('#online-world-panel:not([hidden])');
+  const glideFrom = await page.getAttribute('.world-map-svg', 'viewBox');
+  await page.locator('.world-ranking-row').nth(1).click();
+  await page.waitForTimeout(80);
+  const mid = await page.getAttribute('.world-map-svg', 'viewBox');
+  const moving = await page.evaluate(() => document.getElementById('online-world-grid')!.classList.contains('moving'));
+  await page.waitForTimeout(700);
+  const glideTo = await page.getAttribute('.world-map-svg', 'viewBox');
+  check('a ranking row glides the map to that player', glideTo !== glideFrom && mid !== glideTo && moving, `${glideFrom} → ${mid} → ${glideTo}`);
+  check('the map rests sharp again after the glide', !(await page.evaluate(() => document.getElementById('online-world-grid')!.classList.contains('moving'))));
+  await page.click('#online-world-menu');
+  await page.waitForTimeout(250);
+
+  // ---- gestures ---------------------------------------------------------------------------------
+  const rect = (await page.locator('.world-map-svg').boundingBox())!;
+  const x = rect.x + rect.width * .5, y = rect.y + rect.height * .5;
+  const wheelFrom = await page.getAttribute('.world-map-svg', 'viewBox');
+  await page.mouse.move(x, y); await page.mouse.wheel(0, -80); await page.waitForTimeout(100);
+  check('wheel zoom works', (await page.getAttribute('.world-map-svg', 'viewBox')) !== wheelFrom);
+  await tapTile(page, '0,0'); await tapTile(page, '0,0');
+  const beforePinch = await page.getAttribute('.world-map-svg', 'viewBox');
+  const cdp = await context.newCDPSession(page);
+  const points = (d: number) => [{ x: x - d, y, id: 1 }, { x: x + d, y, id: 2 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: points(35) });
+  for (const d of [42, 50, 58, 65]) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: points(d) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await page.waitForTimeout(150);
+  check('real touch pinch zooms', (await page.getAttribute('.world-map-svg', 'viewBox')) !== beforePinch);
+  check('pinch release does not select a tile', await page.isHidden('#online-world-selection'));
+  await page.waitForTimeout(200);
+  check('the soft focus returns once the map rests', !(await page.evaluate(() => document.getElementById('online-world-grid')!.classList.contains('moving'))));
+
+  // ---- small, landscape and desktop ---------------------------------------------------------------
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.waitForTimeout(200);
+  await page.click('#online-world-menu'); await page.waitForTimeout(300);
+  const narrow = await page.evaluate(() => {
+    const g = document.getElementById('online-world-grid')!.getBoundingClientRect();
+    return [...document.querySelectorAll('#online-world-keys .world-key')].every((k) => { const r = k.getBoundingClientRect(); return r.left >= g.left + 4 && r.right <= g.right; });
+  });
+  check('on a 320px phone the whole row fits inside the map', narrow);
+  await page.click('#world-key-ranking'); await page.waitForTimeout(200);
+  check('narrow phone window stays within the viewport', await page.locator('#online-world-panel').evaluate((e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }));
+  await page.screenshot({ path: `${SHOTS}/territory-ranking-320.png` });
+  await page.click('#online-world-menu'); await page.waitForTimeout(250);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.click('#online-world-menu'); await page.waitForTimeout(250);
+  await page.click('#online-world-chat');
+  await page.waitForSelector('#online-world-chat-panel:not([hidden])');
+  await page.evaluate(() => { Object.defineProperty(visualViewport, 'height', { configurable: true, value: 240 }); visualViewport!.dispatchEvent(new Event('resize')); });
+  check('landscape keyboard keeps chat usable', await page.locator('#world-chat-input').evaluate((e) => e.getBoundingClientRect().bottom <= visualViewport!.height));
+  await page.evaluate(() => { delete (visualViewport as any).height; visualViewport!.dispatchEvent(new Event('resize')); });
+  await page.click('#world-chat-back');
+  await page.click('#online-world-menu'); await page.waitForTimeout(250);
+  await page.setViewportSize({ width: 1440, height: 900 }); await page.waitForTimeout(300);
+  check('desktop also shows only MENU at rest', (await visible(page, '.world-grid button')) === 1);
+  await page.click('#online-world-menu'); await page.waitForTimeout(300);
+  await page.click('#world-key-latest'); await page.waitForTimeout(200);
+  await page.screenshot({ path: `${SHOTS}/territory-latest-desktop.png` });
   await context.close();
 } finally {
   await browser.close();
@@ -167,8 +295,8 @@ try {
   await new Promise<void>((resolve) => api.close(() => resolve()));
 }
 if (failed) {
-  console.log(`${failed} territory-growth checks failed`);
+  console.log(`${failed} territory-menu checks failed`);
   process.exit(1);
 }
-console.log('territory-growth checks passed');
+console.log('territory-menu checks passed');
 process.exit(0);

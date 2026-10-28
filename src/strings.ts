@@ -77,11 +77,6 @@ export const ONLINE = Object.freeze({
   worldYou: 'You',
   worldHeld: (filled: number, cells: number) => `${filled} of ${cells} tiles grown`,
   worldError: 'Could not read the map. Try again.',
-  // THE FIT TOGGLE (owner, 2026-10-21: "keep it large and pannable in both axes, with a 'fit'
-  // toggle"). Plain words for the screen reader label; the button shows a magnifying glass (2026-10-23).
-  worldFit: 'Fit the whole map',
-  /** Find my land (owner, 2026-10-27). */
-  worldMine: 'Go to my tiles',
   worldRanking: 'Ranking',
   worldChallenges: 'Challenges',
   worldCurrent: 'Current',
@@ -90,7 +85,7 @@ export const ONLINE = Object.freeze({
   worldNoChallenges: 'No open challenges.',
   worldNoHistory: 'No past challenges yet.',
   worldMenu: 'Territory menu',
-  worldMenuBack: 'Menu', worldMineShort: 'My land', worldFitShort: 'Fit map', worldChatShort: 'Chat',
+  worldNoLatest: 'Nothing grown yet.',
   /** Territory chat (owner, 2026-10-28): one shared channel, newest 30 messages. */
   worldChat: 'Territory chat',
   worldChatPlaceholder: 'Say something',

@@ -6,10 +6,10 @@
   --instrument-selection: #f2e5c5;
 }
 /* Match the existing native keys' finite press; never change a control's hit box. */
-html.futasaku-product :is(.acct-btn,.world-corner,.world-menu-tools button,.world-chat-send,.world-chat-mod button,.match-chat button) {
+html.futasaku-product :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button) {
   transition: transform var(--ix-press) var(--ix-ease-open), filter var(--ix-press) var(--ix-ease-open);
 }
-html.futasaku-product :is(.acct-btn,.world-corner,.world-menu-tools button,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) {
+html.futasaku-product :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) {
   transform: scale(.985);
   filter: brightness(.96);
 }
@@ -24,7 +24,7 @@ html.futasaku-product #hand .card.lifted:not(:focus-visible) {
   outline: 1px solid var(--instrument-selection);
   outline-offset: 1px;
 }
-html.reduce-motion :is(.acct-btn,.world-corner,.world-menu-tools button,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) { transform: none; }
+html.reduce-motion :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) { transform: none; }
 @media(prefers-reduced-motion:reduce) {
-  html.futasaku-product :is(.acct-btn,.world-corner,.world-menu-tools button,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) { transform:none; }
+  html.futasaku-product :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) { transform:none; }
 }

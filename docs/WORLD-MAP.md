@@ -90,6 +90,32 @@ Your land keeps its stable player hue and gains a stronger ivory perimeter with 
 No extra map overlay nodes, animation loops, subscriptions, game rules or server changes are needed.
 The existing 0018 migration/Edge deployment requirement for Territory chat is unchanged.
 
+## v3.5: MENU and four icon keys, the tile bar, a smooth map (owner, 2026-10-28)
+
+Supersedes v3.4's drawer. Owner: "fit map and my land was to be removed, and ranking, challenges,
+chat, latest should be separate options using just icons … MENU button stays and it's the only button
+visible straight away, 4 other keys open after clicking menu … teenage engineering/nintendo inspo …
+tapping empty tile should NOT open the menu and still have option to grow/sell/challenge".
+
+- **At rest only MENU shows** (top-right). Pressing it slides a row of four icon-only 44px hardware keys
+  out to its left: RANKING (a 1-2-3 podium), CHALLENGES (the map's traced swords, carrying the open-
+  challenge lamp), CHAT, LATEST (an open book). MENU's grille folds into a close mark. Each key opens its
+  own page of one window that hangs under the row; the lit key gets a lamp, pressing it again shuts the
+  page, and MENU folds everything away. Fit map and My land are gone.
+- **A tap only selects.** The tile bar floats at the map's foot: free ground GROW A TILE → CONFIRM GROW,
+  your ground SELL → CONFIRM SELL, a rival tile beside yours CHALLENGE (opens the offer), contested
+  ground VIEW CHALLENGE. Tapping the same tile again lets it go; a tap on the map shuts an open page.
+- **Smoothness.** The SVG Gaussian blurs re-rendered on every frame of a pan: at 4x CPU throttle pan and
+  pinch frames ran at p95 50 ms. While the map moves (pan, pinch, wheel, a glide) `.world-grid.moving`
+  draws them sharp and pauses the ambient loops; they soften again 140 ms after it rests. View writes
+  are coalesced to one per animation frame and the map box is measured once per gesture. Result: p95
+  17 ms. A refresh that brings back the same world no longer rebuilds the map, and the tile bar and the
+  window's lists are only rebuilt when their content changes (a poll no longer resets an armed key).
+  Ranking and Latest rows glide the view to their place (380 ms ease-out; instant under reduced motion).
+- Checks: `web/e2e/territory-menu.ts` (CI, 47 checks), `web/e2e/territory-smooth.ts` (frame-time probe,
+  run by hand). The older `territory-growth`, `world-pan`, `territory-swords` and `territory-challenges`
+  suites still drive the removed FIT / My land keys and the auto-opening offer; they are not in CI.
+
 ## Ownership and economy
 
 - The world is one versioned, frozen axial hex map. v2 (2026-10-21) is **274 cells** (21 rows, r −10…10): the 183-cell v1 landmass plus an irregular coastal growth, baked into `server/src/world.ts` by `scripts/gen-world-v2.mjs` (no runtime randomness). Its cell IDs are `q,r`. Expansions only ADD ids; every v1 id is unchanged, so an existing claim can never be orphaned — verified against the nine live claims when the coastline shape shipped (none dropped). Historical 8×8 `world_tiles` owners are copied into the central 64 positions by migration `0011_seeds_world.sql`; the historical table and migration remain intact.

@@ -285,26 +285,27 @@
              announces movement; this is the one sentence that says a challenge arrived. -->
         <p id="online-world-live" class="world-live" role="status" aria-live="polite"></p>
         <div id="online-world-grid" class="world-grid">
-          <!-- THE ONE WINDOW (owner, 2026-10-28: "challenges and ranking should be in 1 menu, with
-               sections like current match intel, so there is not too much text in the main
-               territory view"). One key at the map's top-right opens it; two tabs inside, like Match Intel.
-               Centred over the map on a light glass, so the land stays visible behind it. -->
-          <section id="online-world-panel" class="world-panel" role="dialog" aria-modal="false" aria-label="Territory" hidden>
+          <!-- THE MENU KEY AND ITS FOUR KEYS (owner, 2026-10-28: "MENU button stays and it's the only
+               button visible straight away, 4 other keys open after clicking menu ... teenage
+               engineering/nintendo inspo"). MENU sits top-right; pressing it slides out one row of
+               icon-only hardware keys to its left: RANKING (podium), CHALLENGES (swords), CHAT,
+               LATEST (book). Each key opens its own window; MENU again folds everything away.
+               The icons are drawn in world-view.ts. -->
+          <button id="online-world-menu" class="world-menu-key world-corner" type="button" aria-expanded="false" aria-controls="online-world-keys"><span class="world-menu-glyph" aria-hidden="true"><i></i><i></i><i></i></span><span class="world-deck-count" hidden></span></button>
+          <nav id="online-world-keys" class="world-keys" inert>
+            <button id="world-key-ranking" class="world-key" type="button" data-pane="ranking" aria-expanded="false" aria-controls="online-world-panel"></button>
+            <button id="world-key-challenges" class="world-key" type="button" data-pane="challenges" aria-expanded="false" aria-controls="online-world-panel"><span class="world-deck-count" hidden></span></button>
+            <button id="online-world-chat" class="world-key world-chat-key" type="button" aria-expanded="false" aria-controls="online-world-chat-panel"></button>
+            <button id="world-key-latest" class="world-key" type="button" data-pane="latest" aria-expanded="false" aria-controls="online-world-panel"></button>
+          </nav>
+          <!-- THE WINDOW: one dark glass drawer under the key row, showing whichever key is lit. -->
+          <section id="online-world-panel" class="world-panel" role="dialog" aria-modal="false" aria-labelledby="world-panel-title" hidden>
             <header class="world-panel-head">
               <span class="world-panel-spacer" aria-hidden="true"></span>
-              <div class="world-seg world-tabs" role="tablist" aria-label="Territory">
-                <button id="world-tab-challenges" class="world-seg-key" type="button" role="tab" data-tab="challenges" aria-selected="true"><span class="world-seg-label"></span><span class="world-deck-count" hidden></span></button>
-                <button id="world-tab-ranking" class="world-seg-key" type="button" role="tab" data-tab="ranking" aria-selected="false"><span class="world-seg-label"></span></button>
-              </div>
+              <h3 id="world-panel-title" class="world-panel-title"></h3>
               <button id="world-panel-close" class="world-panel-close" type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
             </header>
             <div class="world-panel-body">
-              <div id="online-world-selection" class="world-selection" aria-live="polite" hidden></div>
-              <nav class="world-menu-tools" aria-label="Map tools">
-                <button id="online-world-mine" class="world-fit world-mine" type="button" disabled></button>
-                <button id="online-world-fit" class="world-fit" type="button" aria-pressed="false"></button>
-                <button id="online-world-chat" class="world-chat-key" type="button" aria-expanded="false" aria-controls="online-world-chat-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v11H10l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></svg></button>
-              </nav>
               <div class="world-pane" data-pane="challenges">
                 <p class="world-pane-label" id="world-current-label"></p>
                 <!-- The challenge lists (world-view.ts): each chip carries a small copy of the map's
@@ -319,20 +320,24 @@
                 <!-- Where you stand, and who is next to pass. -->
                 <div id="world-standing" class="world-standing" hidden></div>
                 <ol id="online-world-ranking" class="world-ranking-list" aria-label="Ranking"></ol>
-                <p class="world-pane-label" id="world-latest-label"></p>
-                <div id="online-world-activity" class="world-activity" aria-labelledby="world-latest-label"></div>
+              </div>
+              <div class="world-pane" data-pane="latest">
+                <div id="online-world-activity" class="world-activity" aria-label="Latest"></div>
+                <p id="world-latest-empty" class="world-pane-empty" hidden></p>
               </div>
             </div>
           </section>
-          <!-- One map key; navigation tools and contextual actions live in its drawer. -->
-
-          <button id="online-world-menu" class="world-menu-key world-corner" type="button" aria-expanded="false" aria-controls="online-world-panel"><span class="world-menu-glyph" aria-hidden="true"><i></i><i></i><i></i></span><span class="world-deck-count" hidden></span></button>
-
-
+          <!-- THE TILE BAR: a tapped tile's owner and its one action (GROW, SELL or CHALLENGE), floating
+               at the foot of the map. Tapping a tile never opens the menu. -->
+          <div id="online-world-selection" class="world-selection" aria-live="polite" hidden></div>
           <!-- TERRITORY CHAT: one shared channel for everyone here (web/src/online/territory-chat.ts).
-               It rises from the chat key's corner on the same dark glass as the menu window. -->
+               It opens under the key row on the same dark glass as the other windows. -->
           <section id="online-world-chat-panel" class="world-chat" aria-label="Territory chat" hidden>
-            <header class="world-chat-head"><button id="world-chat-back" type="button"></button><span id="world-chat-heading"></span></header>
+            <header class="world-panel-head world-chat-head">
+              <span class="world-panel-spacer" aria-hidden="true"></span>
+              <h3 id="world-chat-heading" class="world-panel-title"></h3>
+              <button id="world-chat-back" class="world-panel-close" type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
+            </header>
             <ol id="world-chat-list" class="world-chat-list" aria-live="polite"></ol>
             <p id="world-chat-empty" class="world-chat-empty" hidden></p>
             <form id="world-chat-form" class="world-chat-form" autocomplete="off">
