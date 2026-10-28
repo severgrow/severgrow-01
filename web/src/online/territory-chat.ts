@@ -208,9 +208,10 @@ export class TerritoryChat {
       who.className = 'world-chat-who';
       const name = document.createElement('b');
       name.textContent = m.name;
-      const tag = document.createElement('i');
-      tag.textContent = `#${m.tag}`;
-      who.append(name, tag);
+      // The name is what the player reads; the tag is kept as the author's tooltip and accessible
+      // name, so two players with the same name stay distinguishable (owner, 2026-10-28).
+      name.title = `#${m.tag}`;
+      who.append(name);
       const text = document.createElement('span');
       text.className = 'world-chat-text';
       text.textContent = m.text;

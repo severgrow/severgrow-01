@@ -996,7 +996,6 @@ html.reduce-motion .world-selection { animation: none; }
 .world-ranking-rank { color: #e8ddc570; letter-spacing: .08em; }
 .world-ranking-swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--territory); box-shadow: 0 0 6px color-mix(in srgb, var(--territory) 50%, transparent); }
 .world-ranking-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .06em; }
-.world-ranking-tag { color: #e8ddc570; font-size: .62rem; letter-spacing: .08em; }
 .world-ranking-tiles { text-align: right; font-weight: 700; letter-spacing: .04em; }
 .world-ranking-row:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 
@@ -1091,7 +1090,6 @@ html.reduce-motion :is(.world-keys .world-key, .world-menu-glyph i) { transition
 .world-chat-line:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 1px; }
 .world-chat-who { display: flex; gap: 6px; align-items: baseline; font-size: .58rem; letter-spacing: .14em; text-transform: uppercase; }
 .world-chat-who b { color: #f2e7cb; font-weight: 700; }
-.world-chat-who i { font-style: normal; color: #e8ddc570; }
 .world-chat-line.mine .world-chat-who b { color: #cfc6acb3; }
 .world-chat-text { color: #e8ddc5; overflow-wrap: anywhere; letter-spacing: .02em; }
 .world-chat-mod { display: flex; gap: 6px; margin-top: 4px; }
