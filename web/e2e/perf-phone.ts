@@ -366,7 +366,10 @@ console.log('PERF_PHONE ' + JSON.stringify(runs));
 // Budgets. The idle ones are the point of the probe: a phone that is merely thinking must not
 // animate or recalculate, and a move must still run at 60 fps.
 check('idle: the game requests ~no frames (<= 1/s mean)', mean((g) => g.idle.appRafPerS) <= 1, `${mean((g) => g.idle.appRafPerS).toFixed(1)}/s`);
-check('idle: main thread is quiet (recalc <= 5 ms/s at 4x CPU)', mean((g) => g.idle.recalcMsPerS) <= 5, `${mean((g) => g.idle.recalcMsPerS).toFixed(1)} ms/s`);
+// The residual is the display's blink writing one class twice a second (2-3 style passes/s). A
+// per-frame pump would show ~60 recalcs/s, which is what this budget exists to catch.
+check('idle: no per-frame style work (<= 4 recalcs/s at 4x CPU)', mean((g) => g.idle.recalcCountPerS) <= 4, `${mean((g) => g.idle.recalcCountPerS).toFixed(1)}/s`);
+check('idle: main thread is quiet (recalc <= 15 ms/s at 4x CPU)', mean((g) => g.idle.recalcMsPerS) <= 15, `${mean((g) => g.idle.recalcMsPerS).toFixed(1)} ms/s`);
 check('idle: no paint-property animation is running', mean((g) => g.anim.paint) === 0, `${mean((g) => g.anim.paint).toFixed(1)} running`);
 check('a turn still animates at full rate (p95 <= 34 ms at 4x CPU)', mean((g) => g.turn.p95) <= 34, `${mean((g) => g.turn.p95).toFixed(1)} ms`);
 check('hidden: nothing animates and no frames are requested', mean((g) => g.hidden.animations) === 0 && mean((g) => g.hidden.appRafPerS) <= 1, `${mean((g) => g.hidden.animations).toFixed(1)} anims, ${mean((g) => g.hidden.appRafPerS).toFixed(1)} rAF/s`);

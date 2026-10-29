@@ -159,9 +159,9 @@ html.futa04-information #smart-led-window.led-pulse #smart-led-hot { animation:s
    bill: 105 ms of style recalculation and 140 ms of main-thread task EVERY second, because a
    non-composited animation forces a full style pass every frame, for as long as the player thinks.
    A blink is two instants a second. player/led-blink.ts gives the next phase and its hold; the
-   cockpit sets led-alarm-off for it. Same dots, same beat, same 20 ms edge (the transition below),
-   roughly zero cost. Do not turn this back into a CSS animation. */
-html.futa04-information #smart-led.led-alarm :is(#smart-led-cells,#smart-led-bloom) { transition:opacity 20ms linear; }
+   cockpit sets led-alarm-off for it. Same dots, same beat, roughly zero cost. (The old 20 ms ramp
+   at each edge was 1.2 frames at 60 Hz and still cost a style pass per edge, so the switch is a
+   cut, like the dots themselves.) Do not turn this back into a CSS animation. */
 html.futa04-information #smart-led.led-alarm.led-alarm-off #smart-led-cells { opacity:0; }
 /* The glow rests at its own dimmed strength (--light-bloom-op), so it blinks between THAT and off. */
 html.futa04-information #smart-led.led-alarm.led-alarm-off #smart-led-bloom { opacity:0; }
