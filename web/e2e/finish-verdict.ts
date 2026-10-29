@@ -293,7 +293,10 @@ try {
   await page.evaluate('(() => { window.__severgrow.state().history.length = 0; })()');
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.click('#go-board');
-  await page.waitForSelector('#gameover[hidden]', { timeout: 10_000 });
+  // `#gameover[hidden]` cannot be awaited as a VISIBLE selector: a hidden element never becomes
+  // visible, so that wait could only ever time out. The question here is whether the card has gone
+  // away, which is the `hidden` STATE of the element.
+  await page.waitForSelector('#gameover', { state: 'hidden', timeout: 10_000 });
   const reopened = await page.evaluate(`(() => {
     const b = [...document.querySelectorAll('#moves button')].find((el) => (el.textContent || '').trim() === 'Results');
     if (!b) return false;
