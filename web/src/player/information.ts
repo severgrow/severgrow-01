@@ -246,7 +246,12 @@ html.futa04-information .dock #futa04-box .pile-meter-window {
 }
 html.futa04-information .dock #futa04-box .pile-meter-drum { position: absolute; top: 0; left: 0; width: 100%; height: 20px; }
 html.futa04-information .dock #futa04-box .pile-meter-face {
-  position: relative; top:1px; display: grid; place-items: center; width: 100%;
+  /* The digit is centred in its window, not 1px below it. A top:1px nudge moved the face down —
+     the drum's travel is the window's own height, so the offset moved the resting digit too: its
+     text box sat 1.0px low (0 top gap, -2 bottom) and its ink 0.55px low in the 11x10 window
+     (owner, 2026-10-29: the counters' numbers were not centred in the tiny box). Centred it is
+     0.00 on the text box and 0.45 on the ink, both inside the 0.5px the audit asks for. */
+  position: relative; display: grid; place-items: center; width: 100%;
   height: 10px; white-space: nowrap; font: inherit;
   text-shadow: 0 1px 1px #020303, 0 -1px rgba(255,250,225,.12);
   background: transparent;

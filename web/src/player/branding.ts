@@ -19,6 +19,11 @@ html.futa04-branding.slim-hud .game > .hud {
 }
 html.futa04-branding .game > #race { display: none !important; }
 html.futa04-branding .game { max-width: none; margin: 0; }
+/* The menu key sits flush with the top edge (the fixed HUD has no top padding), so the shared
+   3px focus ring at offset 2px was clipped by the screen: 5px of it fell outside the viewport
+   and the key looked ringless on the top side. Keep this one ring inside the key — the key is a
+   44px circle, so a 3px inset ring clears its icon. (Measured: ring top -5.00 before, 0 after.) */
+html.futa04-branding #hud-menu:focus-visible { outline-offset: -3px; }
 /* iOS home-screen apps expose the notch/home insets to the layout code. The
    shared .screen padding would reserve the same insets again, shrinking the
    board and leaving an unused band below the hand. Safari tabs keep it. */

@@ -394,9 +394,14 @@ html.futa04-information #futa04-box > #smart-bloom {
 html.futa04-information #futa04-box > #smart-bloom[hidden] { display:none; }
 html.futa04-information #smart-bloom-button {
   display:grid; place-items:center; position:relative; width:100%; min-width:44px; height:100%;
+  /* One track that can never be wider than the key: the recipe is sized by the control, never
+     the other way round (an auto track grew to the recipe's min-content and pushed it out). */
+  grid-template-columns:minmax(0,1fr);
   border:0; border-radius:0; padding:4px 2px 8px;
   background:none; color:var(--control-ivory); cursor:pointer; box-shadow:none;
   touch-action:manipulation;
+  /* The recipe is sized against the control it lives in (see the fit rules below). */
+  container-type:inline-size;
 }
 html.futa04-information #smart-bloom-button:is(:hover,:focus-visible,[aria-expanded='true']) {
   filter:brightness(1.18);
@@ -442,12 +447,21 @@ html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.redu
   html.futa04-information #smart-bloom-button::after,
   html.futa04-information #smart-bloom-button .futa04-combination { animation:none !important; }
 }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-combination { display:flex; flex-wrap:nowrap; justify-content:center; gap:3px; max-width:100%; }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card { flex:0 0 clamp(26px,2.5vw,30px); width:clamp(26px,2.5vw,30px); min-width:clamp(26px,2.5vw,30px); height:clamp(41px,3.9vw,47px); padding:1px; border-radius:3px; }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-combination:has(.futa04-mini-card:nth-child(5)) .futa04-mini-card { flex-basis:21px; width:21px; min-width:21px; height:35px; }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-combination:has(.futa04-mini-card:nth-child(6)) .futa04-mini-card { flex-basis:19px; width:19px; min-width:19px; }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card .c-num { font-size:13px; }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card .c-suit svg { width:13px; height:13px; }
+html.futa04-information #futa04-box #smart-bloom-button .futa04-combination { display:flex; flex-wrap:nowrap; justify-content:center; gap:3px; width:100%; max-width:100%; }
+/* The recipe must always FIT its own button. The designed cards are 26px wide (30px on a large
+   desktop), which leaves 22px of slack at 390x844 — but a five- or six-card run, and the narrow
+   cockpit (40px centre column at 320x568, 68px in landscape), used to paint outside the control:
+   measured overhang 44px at 320, 8px at 360, 23px for a six-card run at 390, 20px in landscape.
+   The cards keep the designed size whenever it fits and share the button's content box when it
+   does not, so a recipe can never cover the LED display beside it. */
+html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card { flex:0 1 clamp(26px,2.5vw,30px); width:auto; min-width:0; height:clamp(41px,3.9vw,47px); padding:1px; border-radius:3px; container-type:inline-size; }
+html.futa04-information #futa04-box #smart-bloom-button .futa04-combination:has(.futa04-mini-card:nth-child(5)) .futa04-mini-card { flex-basis:21px; height:35px; }
+html.futa04-information #futa04-box #smart-bloom-button .futa04-combination:has(.futa04-mini-card:nth-child(6)) .futa04-mini-card { flex-basis:19px; }
+/* The printed rank and suit follow their own card (cqw is the card's content box): the 13px mark
+   is untouched at every designed width and only narrows when the card itself is narrow — the
+   shared 320px cockpit gives a three-card recipe 11px cards, a six-card one 15px at 390. */
+html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card .c-num { font-size:min(13px, 110cqw); }
+html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card .c-suit svg { width:min(13px, 120cqw); height:min(13px, 120cqw); }
 html.futa04-information #smart-bloom-count { position:absolute; right:2px; top:1px; font:600 9px/1 var(--font-mono,monospace); color:var(--control-ivory); }
 html.futa04-information #smart-bloom-count[hidden] { display:none; }
 html.futa04-information #smart-bloom-selector {
