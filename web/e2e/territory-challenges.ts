@@ -468,6 +468,12 @@ try {
     // ---- 2b. the crossed swords on the contested tile (owner, 2026-10-24) --------------------
     const incomingSwords = await swordsData(page, own1);
     const outgoingSwords = await swordsData(page, rival2);
+    // THE RULE CHANGED (owner, 2026-10-29): "as RYK I have a duel over a tile in territory - but
+    // theres no swords icon on the tile that is being challenged right now - it should always show
+    // one". An ACCEPTED challenge is a live duel over that tile and nothing has changed hands, so it
+    // carries the mark for as long as the row is open. This fixture's `out-2` is exactly that state,
+    // so the third marker below is the owner's bug, pinned.
+    const acceptedSwords = await swordsData(page, rival3);
     const swordCount = await page.evaluate(() => document.querySelectorAll('.world-swords').length);
     check(`[${tag}] the crossed swords mark the DEFENDER's contested tile`, !!incomingSwords &&
       incomingSwords.side === 'incoming' && incomingSwords.glyphPaths === 1 && incomingSwords.glyphD > 0,
@@ -475,7 +481,10 @@ try {
     check(`[${tag}] the crossed swords mark the CHALLENGER's contested tile`, !!outgoingSwords &&
       outgoingSwords.side === 'outgoing' && outgoingSwords.glyphPaths === 1 && outgoingSwords.glyphD > 0,
       `${outgoingSwords?.side}, ${outgoingSwords?.glyphPaths} path(s)`);
-    check(`[${tag}] only contested tiles carry swords (no marker on a plain rival tile)`, swordCount === 2,
+    check(`[${tag}] an ACCEPTED challenge keeps its swords for the whole duel`, !!acceptedSwords &&
+      acceptedSwords.side === 'outgoing' && acceptedSwords.glyphPaths === 1,
+      `${acceptedSwords?.side ?? 'missing'}`);
+    check(`[${tag}] exactly the contested tiles carry swords (two pending, one accepted)`, swordCount === 3,
       `${swordCount} marker(s)`);
     // The glyph is a drawing OF the tile, not an overlay near it: the hit disc is centred on the hex.
     check(`[${tag}] the swords sit at the tile's centre, inside its ring`,
@@ -617,7 +626,7 @@ try {
       markers: document.querySelectorAll('.world-swords').length,
     }), own1);
     check(`[${tag}] DECLINE clears the swords and the ring from that tile`,
-      !afterDecline.swords && !afterDecline.ring && afterDecline.markers === 1,
+      !afterDecline.swords && !afterDecline.ring && afterDecline.markers === 2,
       JSON.stringify(afterDecline));
 
     // ---- 6. a finished linked duel SETTLES ITSELF (owner, 2026-10-29) ------------------------

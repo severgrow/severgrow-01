@@ -107,6 +107,19 @@ const tapAt = async (page: Page, selector: string) => {
 const tapTile = (page: Page, cellId: string) => tapAt(page, `.world-hex[data-cell-id="${cellId}"]`);
 const tapSwords = (page: Page, cellId: string) => tapAt(page, `.world-swords[data-cell-id="${cellId}"] .world-swords-hit`);
 
+/**
+ * A tap on contested ground SELECTS it; the tile bar's one key (VIEW CHALLENGE) opens the sheet that
+ * says who challenged. (The sheet is not opened by the tap itself — that is the 2026-10-28 redesign,
+ * and this suite stopped running before it ever reached here, so it still assumed the old door.)
+ */
+const tapAndOpenSheet = async (page: Page): Promise<void> => {
+  const open = await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 1500 })
+    .then(() => true).catch(() => false);
+  if (open) return;
+  await activate(page, '#online-world-selection .world-claim-button');
+  await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+};
+
 const activate = async (page: Page, selector: string) => {
   await page.locator(selector).first().focus();
   await page.keyboard.press('Enter');
@@ -219,7 +232,11 @@ const openTerritory = async (page: Page) => {
   await page.goto(BASE_URL, { waitUntil: 'load' });
   await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20_000 });
   await page.evaluate(() => document.fonts?.ready ?? Promise.resolve()).catch(() => undefined);
-  await page.waitForFunction(() => !!document.querySelector('#online-world-fit .world-fit-icon'), undefined, { timeout: 20_000 });
+  // The FIT key (`#online-world-fit`) was removed with the 2026-10-28 menu redesign, and this line
+  // used to wait for it — which is why this suite died in setup, before it checked a single marker.
+  // Readiness is the LOBBY being installed: the world view injects its hardware-key icons when it is
+  // constructed, and that is the moment `#menu-world` has a handler.
+  await page.waitForFunction(() => !!document.querySelector('#online-world-keys .world-key svg'), undefined, { timeout: 20_000 });
   await activate(page, '#menu-world');
   await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 20_000 });
   await page.locator('.world-hex').first().waitFor({ state: 'attached', timeout: 45_000 });
@@ -275,7 +292,7 @@ try {
 
     // ---- 2. the tap tells you who, in the existing challenge sheet ----------------------------
     await tapSwords(page, own1);
-    await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await tapAndOpenSheet(page);
     await settleSheet(page);
     const sheetLine = await page.evaluate(() =>
       (document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-line') as HTMLElement | null)?.textContent ?? '');
@@ -283,6 +300,11 @@ try {
     await page.screenshot({ path: join(OUT, `popover-defender-${tag}.png`) });
     await page.keyboard.press('Escape');
     await page.waitForTimeout(250);
+
+    // A tap on contested ground SELECTED it; Enter on the marker toggles a selection, so clear it
+    // first (the same tap a player makes) or the marker's key would deselect instead of opening.
+    await tapTile(page, own1);
+    await page.waitForTimeout(150);
 
     // ---- 2b. the same answer without a finger: focus the marker, press Enter ------------------
     const focused = await page.evaluate((id) => {
@@ -293,7 +315,7 @@ try {
     check(`[${tag}] the swords are a separate keyboard stop with their spoken name`,
       focused.focused && focused.label.startsWith('Challenge on this tile.'), focused.label);
     await page.keyboard.press('Enter');
-    await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await tapAndOpenSheet(page);
     await settleSheet(page);
     const keyboardLine = await page.evaluate(() =>
       (document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-line') as HTMLElement | null)?.textContent ?? '');
@@ -303,7 +325,7 @@ try {
     await page.waitForTimeout(250);
 
     await tapSwords(page, rival2);
-    await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await tapAndOpenSheet(page);
     await settleSheet(page);
     const challengerLine = await page.evaluate(() =>
       (document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-line') as HTMLElement | null)?.textContent ?? '');
@@ -314,7 +336,7 @@ try {
 
     // ---- 3. before -> send -> after: the marker arrives with the data -------------------------
     await tapTile(page, sendTarget);
-    await page.waitForSelector('.world-challenge-sheet:not([hidden])', { timeout: 10_000 });
+    await tapAndOpenSheet(page);
     await settleSheet(page);
     await page.screenshot({ path: join(OUT, `before-send-${tag}.png`) });
     check(`[${tag}] the target tile has no swords before sending`,
@@ -327,6 +349,21 @@ try {
       sentMarker?.label ?? 'missing');
     await page.screenshot({ path: join(OUT, `after-send-${tag}.png`) });
     await closeup(page, sendTarget, join(OUT, `closeup-after-send-${tag}.png`));
+
+    // ---- 3b. THE OWNER'S BUG (2026-10-29): an ACCEPTED challenge keeps its swords --------------
+    // "as RYK I have a duel over a tile in territory - but theres no swords icon on the tile that is
+    // being challenged right now - it should always show one." An accepted challenge is a live duel
+    // and nothing has changed hands, so the mark must survive the answer.
+    state.outgoing = state.outgoing.map((c) => c.id === 'new-1' ? { ...c, status: 'accepted' as const, matchId: 'm-9' } : c);
+    // A real product path re-reads the map: the tab coming back to the foreground calls refresh().
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await page.waitForFunction(() =>
+      document.querySelector('.world-challenge-chip[data-challenge-id="new-1"]')?.getAttribute('data-status') === 'accepted',
+      undefined, { timeout: 20_000 }).catch(() => undefined);
+    const acceptedMarker = await markerInfo(page, sendTarget);
+    check(`[${tag}] the swords STAY once the challenge is ACCEPTED (a live duel is still a dispute)`,
+      !!acceptedMarker && acceptedMarker.side === 'outgoing', acceptedMarker?.side ?? 'missing');
+    await page.screenshot({ path: join(OUT, `after-accepted-${tag}.png`) });
 
     // The defender answers: the mock's list now carries the challenge as declined. Nothing local runs.
     state.outgoing = state.outgoing.map((c) => c.id === 'new-1' ? { ...c, status: 'declined' as const } : c);
@@ -385,11 +422,16 @@ try {
     await reduced.screenshot({ path: join(OUT, `reduced-motion-${tag}.png`) });
     await reduced.close();
 
-    // ---- 6. FIT receipt (no checks): the smallest cell size, where the mark is ~16px -----------
-    // The framed view above is the 46px-cell shipping size. Fit is the "whole island" zoom; the
-    // trace must still read as a mark there rather than a blob, so keep the evidence.
-    await page.locator('#online-world-fit').click();
-    await page.waitForTimeout(350);
+    // ---- 6. the whole-map zoom, where the mark is ~16px ---------------------------------------
+    // (This used to click the FIT key; that key no longer exists, and a wheel-out is the same zoom.)
+    // The framed view above is the 46px-cell shipping size. Zoomed out, the trace must still read as
+    // a mark rather than a blob, so keep the evidence.
+    const panelForFit = await page.locator('.world-map-svg').boundingBox();
+    if (panelForFit) {
+      await page.mouse.move(panelForFit.x + panelForFit.width / 2, panelForFit.y + panelForFit.height / 2);
+      await page.mouse.wheel(0, 1200);
+      await page.waitForTimeout(350);
+    }
     await page.screenshot({ path: join(OUT, `fit-${tag}.png`) });
     await closeup(page, own1, join(OUT, `closeup-fit-${tag}.png`));
     await page.close();

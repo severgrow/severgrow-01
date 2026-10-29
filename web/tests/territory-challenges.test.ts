@@ -128,24 +128,34 @@ describe('the crossed swords marker', () => {
     const incoming = challenge({ id: 'in', fromMe: false });
     const outgoing = challenge({ id: 'out', fromMe: true });
     expect(challengeMarkerFor([incoming], '0,0')).toEqual({
+      key: 'in',
       challengeId: 'in',
       cellId: '0,0',
-      incoming: true,
+      mine: true,
+      side: 'incoming',
       name: 'BloomHeron',
       label: 'Challenge on this tile. BloomHeron challenged you.',
     });
     expect(challengeMarkerFor([outgoing], '0,0')).toEqual({
+      key: 'out',
       challengeId: 'out',
       cellId: '0,0',
-      incoming: false,
+      mine: true,
+      side: 'outgoing',
       name: 'RYK',
       label: 'Challenge on this tile. You challenged RYK.',
     });
   });
 
-  it('clears the moment the challenge stops being pending — by data, not by a timer', () => {
-    expect(challengeMarkerFor([challenge({ status: 'pending' })], '0,0')).not.toBeNull();
-    for (const status of ['accepted', 'declined', 'expired', 'stale', 'resolved'] as const) {
+  it('keeps the swords for the WHOLE open life of a challenge — pending AND accepted', () => {
+    // THE OWNER'S BUG (2026-10-29): "as RYK I have a duel over a tile in territory - but theres no
+    // swords icon on the tile that is being challenged right now". An accepted challenge is a live
+    // duel over that tile; the ground has not changed hands yet, so the mark must stay.
+    for (const status of ['pending', 'accepted'] as const) {
+      expect(challengeMarkerFor([challenge({ status })], '0,0')).not.toBeNull();
+    }
+    // And it leaves when the row CLOSES — by data, not by a timer of the marker's own.
+    for (const status of ['declined', 'expired', 'stale', 'resolved'] as const) {
       expect(challengeMarkerFor([challenge({ status })], '0,0')).toBeNull();
     }
     // A pending challenge on ANOTHER tile never marks this one.
@@ -168,6 +178,11 @@ describe('the crossed swords marker', () => {
     // A pending incoming challenge outranks an outgoing one on the same tile, however the list is sorted.
     const outgoing = challenge({ id: 'm', fromMe: true, expiresAt: TTL - 2 * HOUR });
     expect(challengeMarkerFor([outgoing, later], '0,0')!.challengeId).toBe('z');
+    // An answer still owed outranks a duel already running on the same tile (only one such row can
+    // truly exist — the schema's one-open-per-cell index — but a stale cache must still be stable).
+    const running = challenge({ id: 'b', fromMe: false, status: 'accepted', expiresAt: TTL - 5 * HOUR });
+    expect(challengeMarkerFor([running, later], '0,0')!.challengeId).toBe('z');
+    expect(challengeMarkerFor([later, running], '0,0')!.challengeId).toBe('z');
     // Same challenge, same answer: the label cannot shimmer between polls.
     expect(challengeMarkerFor([later], '0,0')).toEqual(challengeMarkerFor([later], '0,0'));
   });

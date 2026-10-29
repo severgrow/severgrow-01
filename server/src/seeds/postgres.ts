@@ -24,6 +24,7 @@ import type {
   TrainingTicket,
   WorldChallenge,
   WorldChallengeStatus,
+  WorldDispute,
   WorldEconomyStore,
 } from './types.js';
 import { emptyWallet } from './types.js';
@@ -468,6 +469,30 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
       "select * from world_challenges where status='accepted' and match_id is not null order by created_at asc limit 50",
     );
     return rows.map(challengeFromRow);
+  },
+
+  /**
+   * THE PUBLIC DISPUTE LIST — ONE statement for the whole map, whatever its size, on a read every
+   * client performs. The predicate is exactly the partial index's (`world_challenges_one_open_idx`,
+   * on `cell_id` where the status is open), so Postgres scans the open rows only; the same query
+   * answers the map, the admin and the client marker layer, with no per-cell round trip.
+   *
+   * `live` is the phase, not a timestamp: a running linked duel has NOT resolved anything, so it is
+   * still a dispute over the ground.
+   */
+  async disputedCells(): Promise<WorldDispute[]> {
+    const { rows } = await pool.query(
+      `select cell_id, challenger_id, defender_id, status
+         from world_challenges
+        where status in ('pending','accepted')
+        order by cell_id`,
+    );
+    return rows.map((r) => ({
+      cellId: String(r.cell_id),
+      challengerId: String(r.challenger_id),
+      defenderId: String(r.defender_id),
+      live: String(r.status) === 'accepted',
+    }));
   },
 
   async challengesInvolving(playerId, since) {

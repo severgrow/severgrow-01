@@ -1,6 +1,6 @@
 import type { DuelClient } from '../../../server/src/client.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
-import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload } from '../../../server/src/seeds/types.js';
+import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
 import { worldNeighbours } from '../../../server/src/world.js';
 import { CHALLENGE } from './challenge-copy.js';
 import type { ChallengeMarker } from './challenge-view.js';
@@ -8,8 +8,8 @@ import {
   CHALLENGE_RAIL_MAX,
   SWORDS_HIT_RADIUS,
   challengeForCell as challengeOnCell,
-  challengeMarkerFor,
   defendSheetCopy,
+  disputeMarkersFor,
   isLow,
   opponentName,
   remainingLabel,
@@ -53,6 +53,14 @@ export const keyRowOrder = (count: number): number[] =>
   Array.from({ length: Math.max(0, count) }, (_, index) => count - 1 - index);
 /** How long a freshly opened challenge sheet ignores presses: longer than a tap's own click, shorter than a deliberate answer. */
 const SHEET_GUARD_MS = 450;
+/**
+ * THE OTHER PLAYERS' MARK, drawn smaller (owner, 2026-10-29: "clear distinction between my tiles that
+ * are challenged -- and challenges other people have over tiles"). The distinction is SHAPE and
+ * weight, never colour alone: my mark is the filled trace at full size with a tap target, theirs is
+ * the outline of the same trace at 78%, dimmer, with no target. One constant, so the two weights
+ * cannot drift.
+ */
+const QUIET_SWORDS_SCALE = 0.78;
 /** Motes drifting off held ground: few on purpose (they are atmosphere, not effects). */
 const SPORE_COUNT = 7;
 /**
@@ -279,6 +287,15 @@ export class WorldView {
    * it off the map in the same frame the data closes the challenge.
    */
   private readonly markerNodes = new Map<string, { group: SVGGElement; hit: SVGCircleElement }>();
+  /**
+   * THE OTHER PLAYERS' DISPATCH (owner, 2026-10-29): one `<path>` per disputed tile that is not
+   * mine, keyed by `others:<cellId>`. No wrapper, no hit disc, no listener — a hollow glyph is one
+   * node, so 100 disputes cost 100 nodes on a map that already draws thousands.
+   */
+  private readonly quietNodes = new Map<string, SVGPathElement>();
+  /** The public dispute list from the last `/v1/world` read. Never cached to the device. */
+  private disputes: WorldDispute[] = [];
+  private disputesGroup: SVGGElement | null = null;
   private swordsGroup: SVGGElement | null = null;
   private marksGroup: SVGGElement | null = null;
   /**
@@ -495,6 +512,11 @@ export class WorldView {
       const signature = this.challengeSignatureOf();
       const challengeChanged = signature !== this.challengeSignature;
       this.challengeSignature = signature;
+      // THE PUBLIC DISPUTE LAYER: taken from EVERY read, before the "should the map be replaced"
+      // decision below. A dispute appearing or closing does not bump the world's revision, so
+      // keeping this on `this.world` would have shown a stale layer for as long as ownership stood
+      // still. It is one array reference — no repaint, no timer.
+      this.disputes = map.world.disputes ?? [];
       const ownerChanged = this.world?.claims.length !== map.world.claims.length ||
         map.world.claims.some((claim, index) => {
           const previous = this.world?.claims[index];
@@ -846,6 +868,12 @@ export class WorldView {
     // THE SWORDS LAYER: the contested tile's marker, in the map's own coordinates. It sits ABOVE the
     // ring (the two never overlap: the ring is the tile's outline, the glyph is in the middle) and
     // below the selection accent, so pan and zoom move it with its tile for free — no HTML overlay.
+    // TWO layers, in drawing order (owner, 2026-10-29): `quiet` is everybody else's dispute — the
+    // hollow, untappable mark — and `swords` is MINE, on top, because a call to action outranks
+    // background news. Two groups rather than one because nodes are reused by key and their order in
+    // a single group would then depend on arrival order.
+    const quiet = document.createElementNS(NS, 'g');
+    quiet.classList.add('world-disputes-layer');
     const swords = document.createElementNS(NS, 'g');
     swords.classList.add('world-swords-layer');
     // the fog lies under every tile, so the coast always reads on top of it
@@ -869,7 +897,7 @@ export class WorldView {
       mote.style.setProperty('--spore-delay', `${-(i * 1.9).toFixed(1)}s`);
       spores.append(mote);
     }
-    svg.append(faces, lines, marks, rings, swords);
+    svg.append(faces, lines, marks, rings, quiet, swords);
     // THE TAKEOVER paints ABOVE the tile edges so the losing colour drains over the whole ground and
     // its flash cannot be buried by a neighbour's stroke. It is data-driven (see `takeoverNodes`) and
     // is redrawn by any paint that lands inside its 900 ms beat.
@@ -912,7 +940,9 @@ export class WorldView {
     this.ringsGroup = rings;
     this.ringPaths.clear();
     this.swordsGroup = swords;
+    this.disputesGroup = quiet;
     this.markerNodes.clear();
+    this.quietNodes.clear();
     this.paintAccent();
     // THE FIT BOX carries `PAD` on all four sides, so the outermost cell can be panned clear of the
     // panel's rounded corner (see `PAD`).
@@ -1554,48 +1584,74 @@ export class WorldView {
 
   /**
    * THE CROSSED SWORDS (owner, 2026-10-24). Two white swords, red-glow, drawn at the centre of the
-   * tile a challenge is waiting on — the defender's tiles and the challenger's alike, because the
-   * payload carries both lists and `challengeMarkerFor` reads the pending state of either. The glyphs
-   * appear on the refresh that follows a send (the sheet calls `refresh(true)`), and leave in the same
-   * frame the challenge stops being pending: no local timer, no guess about acceptance.
+   * tile a challenge is WAITING on — the defender's tiles and the challenger's alike. The owner's
+   * 2026-10-29 report ("I have a duel over a tile ... but theres no swords icon") is why the mark
+   * now follows the CHALLENGE, not the timer: `pending` AND `accepted` (a live duel has resolved
+   * nothing), and it leaves only when the row CLOSES. No local timer, no guess about acceptance.
    *
-   * Nodes are keyed by challenge id and reused, so a marker under the player's keyboard focus is not
-   * destroyed by the 12 s poll. The marker is the tile's own tap: the SVG's nearest-cell resolution
-   * already turns a tap into `select()`, which opens the existing challenge sheet — that sheet already
-   * names the challenger, so there is no second popover to keep in step.
+   * The same pass draws EVERYBODY'S disputes: `disputeMarkersFor` merges my private rows with the
+   * public list on the map, one marker per cell, mine outranking theirs. Other pairs get the quiet
+   * hollow mark (see `makeQuietMarker`), which is why there are two groups.
+   *
+   * Nodes are keyed by `marker.key` and reused, so a marker under the player's keyboard focus is not
+   * destroyed by the 12 s poll. MY mark is the tile's own tap: the SVG's nearest-cell resolution turns
+   * a tap (or Enter on the marker) into `select()`, and the tile bar's one key opens the existing
+   * challenge sheet, which already names the challenger — so there is no second popover to keep in
+   * step. The quiet mark is deliberately NOT a tap target: it has nothing of mine to open.
    */
   private paintSwords() {
     const group = this.swordsGroup;
-    if (!group || !this.world) return;
-    const pending = this.allChallenges.filter((challenge) => challenge.status === 'pending');
-    const wanted = new Map<string, ChallengeMarker>();
-    for (const cellId of new Set(pending.map((challenge) => challenge.cellId))) {
-      const marker = challengeMarkerFor(pending, cellId);
-      if (marker) wanted.set(marker.challengeId, marker);
-    }
-    // Data-driven removal, before the additions: a challenge that closed this poll takes its swords
-    // with it in the same paint.
-    for (const [id, node] of [...this.markerNodes]) {
-      if (wanted.has(id)) continue;
-      node.group.remove();
-      this.markerNodes.delete(id);
-    }
-    for (const [id, marker] of wanted) {
-      const cell = this.world.cells.find((candidate) => candidate.id === marker.cellId);
+    const quietGroup = this.disputesGroup;
+    // Both layers are created together in `paint()`; without either there is nothing to draw into.
+    if (!group || !quietGroup || !this.world) return;
+    const me = this.identity?.playerId ?? null;
+    const markers = disputeMarkersFor(this.allChallenges, this.disputes, me);
+    // One Map for the cells instead of a linear search per marker: with many disputes the old
+    // `world.cells.find` was markers × cells on every poll.
+    const cells = new Map(this.world.cells.map((cell) => [cell.id, cell] as const));
+    const mine = new Set<string>();
+    const theirs = new Set<string>();
+    for (const marker of markers) {
+      const cell = cells.get(marker.cellId);
       if (!cell) continue;
       const at = coords(cell.q, cell.r);
       const transform = `translate(${at.x.toFixed(2)} ${at.y.toFixed(2)})`;
-      let node = this.markerNodes.get(id);
-      if (!node) {
-        node = this.makeMarker(marker);
-        group.append(node.group);
-        this.markerNodes.set(id, node);
+      if (marker.mine) {
+        mine.add(marker.key);
+        let node = this.markerNodes.get(marker.key);
+        if (!node) {
+          node = this.makeMarker(marker);
+          group.append(node.group);
+          this.markerNodes.set(marker.key, node);
+        }
+        // The tile never moves in world space, but keeping this write here means a marker made before a
+        // world revision still lands on its cell after a re-frame (the SVG paints in world units).
+        node.group.setAttribute('transform', transform);
+        node.group.setAttribute('data-side', marker.side);
+        node.hit.setAttribute('aria-label', marker.label);
+        continue;
       }
-      // The tile never moves in world space, but keeping this write here means a marker made before a
-      // world revision still lands on its cell after a re-frame (the SVG paints in world units).
-      node.group.setAttribute('transform', transform);
-      node.group.setAttribute('data-side', marker.incoming ? 'incoming' : 'outgoing');
-      node.hit.setAttribute('aria-label', marker.label);
+      theirs.add(marker.key);
+      let path = this.quietNodes.get(marker.key);
+      if (!path) {
+        path = this.makeQuietMarker(marker);
+        quietGroup.append(path);
+        this.quietNodes.set(marker.key, path);
+      }
+      path.setAttribute('transform', `${transform} scale(${QUIET_SWORDS_SCALE})`);
+      path.setAttribute('aria-label', marker.label);
+    }
+    // Data-driven removal, before the additions: a challenge that closed this poll takes its swords
+    // with it in the same paint.
+    for (const [key, node] of [...this.markerNodes]) {
+      if (mine.has(key)) continue;
+      node.group.remove();
+      this.markerNodes.delete(key);
+    }
+    for (const [key, node] of [...this.quietNodes]) {
+      if (theirs.has(key)) continue;
+      node.remove();
+      this.quietNodes.delete(key);
     }
   }
 
@@ -1682,7 +1738,7 @@ export class WorldView {
   private makeMarker(marker: ChallengeMarker): { group: SVGGElement; hit: SVGCircleElement } {
     const group = document.createElementNS(NS, 'g');
     group.classList.add('world-swords');
-    group.setAttribute('data-challenge-id', marker.challengeId);
+    group.setAttribute('data-challenge-id', marker.challengeId ?? '');
     group.setAttribute('data-cell-id', marker.cellId);
     // The touch target: an invisible disc inside the hex, 44.6 px at the map's 46 px cell floor
     // (SWORDS_HIT_RADIUS) and larger at every zoom-in. It is a real button to assistive tech.
@@ -1708,6 +1764,24 @@ export class WorldView {
     glyph.append(blade);
     group.append(hit, glyph);
     return { group, hit };
+  }
+
+  /**
+   * SOMEBODY ELSE'S DISPUTE (owner, 2026-10-29): the same traced glyph, drawn as its OUTLINE, at
+   * 78%, with no bloom, no tap target and no key handler. One `<path>` — the whole node — so the
+   * layer costs one element per disputed tile however many challenges exist. `role="img"` rather
+   * than a button: a screen reader is told the ground is being fought over, a keyboard is not asked
+   * to stop on it, and nothing promises an action that does not exist.
+   */
+  private makeQuietMarker(marker: ChallengeMarker): SVGPathElement {
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', SWORD_PATH);
+    path.setAttribute('role', 'img');
+    path.setAttribute('aria-label', marker.label);
+    path.setAttribute('data-side', marker.side);
+    path.setAttribute('data-cell-id', marker.cellId);
+    path.classList.add('world-swords', 'world-swords-quiet');
+    return path;
   }
 
   /**

@@ -155,6 +155,27 @@ export type WorldChallengesPayload = {
   serverNow: number;
 };
 
+/**
+ * A TILE UNDER DISPUTE, as the PUBLIC map shows it (owner, 2026-10-29: "have that icon on EVERY
+ * players tile that is in duel challenge right now, but also, other people challenges").
+ *
+ * The map is a public read, and a claim has always published its owner's id and display name, so a
+ * dispute adds no privacy beyond what the map already shows — as long as it carries ONLY the two
+ * ids and the phase. It must never carry the stake, the stake cell, the match id, a request key or
+ * anything from a wallet; `server/tests/territory-disputes.test.ts` pins the exact key set and
+ * checks the whole `/v1/world` body for those values.
+ *
+ * `cellId` is the contested ground. Exactly one open dispute per cell exists (the partial unique
+ * index `world_challenges_one_open_idx`), so this list is one entry per disputed tile.
+ */
+export type WorldDispute = {
+  cellId: string;
+  challengerId: string;
+  defenderId: string;
+  /** true = the defender accepted and the linked duel is live; false = still waiting for an answer. */
+  live: boolean;
+};
+
 export interface WorldEconomyStore {
   wallet(playerId: string): Promise<SeedWallet>;
   /**
@@ -187,6 +208,12 @@ export interface WorldEconomyStore {
   settleChallenge(input: { id: string; playerId: string; winnerId: string | null; now: number }): Promise<ChallengeSettleResult>;
   /** Rows involving this player: open incoming plus recent outgoing. */
   challengesInvolving(playerId: string, since: number): Promise<WorldChallenge[]>;
+  /**
+   * THE PUBLIC DISPUTE LIST, for the whole map in ONE read (never one query per cell). Open rows
+   * only — `pending` and `accepted`, because a running duel has not settled anything yet — in the
+   * minimal public shape (`WorldDispute`). Read on every `/v1/world` poll, so it must stay cheap.
+   */
+  disputedCells(): Promise<WorldDispute[]>;
   /**
    * Accepted challenges whose linked duel may have finished. The service reads them to settle
    * LAZILY on any world/challenge read: the same idiom as `expireChallenges`, and the reason a

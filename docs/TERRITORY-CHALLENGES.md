@@ -143,11 +143,16 @@ ink, one `--territory` accent. The challenge layer adds **four** things and no n
 - **The crossed swords.** The tile a challenge is waiting on carries two small swords, drawn in the
   map's own SVG inside the timer ring's centre — white ink, a restrained red bloom, no badge. They
   appear for the defender and for the challenger because the payload carries both lists, on the
-  refresh that follows a send, and they leave in the same frame the status stops being `pending`
-  (accepted, declined, expired, stale or forfeited): the data closes them, no local timer. Tapping
-  the swords — or the tile, which is the same tap — opens the existing challenge sheet, which already
-  says who challenged. The hit disc is 44.6 px at the map's 46 px cell floor and the glyph itself is
-  static in every motion mode, so reduced motion has nothing to switch off.
+  refresh that follows a send, and they stay for the **whole open life of the challenge**: `pending`
+  and `accepted` both, because a live linked duel has not changed hands yet. They leave when the row
+  CLOSES (declined, expired, stale, resolved): the data closes them, no local timer. (Updated
+  2026-10-29 after the owner reported that an accepted challenge lost its swords mid-duel.) EVERY
+  player's open dispute is drawn too — see [`TERRITORY-MARKERS.md`](TERRITORY-MARKERS.md): mine is the
+  solid, tappable mark; another pair's is the same traced silhouette drawn hollow, smaller, with no
+  tap target, so the two differ by shape and weight, never by colour alone. Tapping my mark — or the
+  tile, which is the same tap — opens the existing challenge sheet, which already says who
+  challenged. The hit disc is 44.6 px at the map's 46 px cell floor and both marks are static in
+  every motion mode, so reduced motion (and the moving-map pause) has nothing to switch off.
 - **The timer ring.** The signature element. A thin ring **traced along the hex's own outline**
   (the same 6-point `hexPath` the tiles use, so it is the cell's shape, not a circle stuck on top),
   draining clockwise from full to empty over the 24 h. It is `stroke-dasharray` animated on the

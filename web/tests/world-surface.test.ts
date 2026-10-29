@@ -219,9 +219,28 @@ describe('the world map rests on the ONE shared page surface', () => {
     expect(worldView, 'the edges must live in their own group').toContain("lines.classList.add('world-lines')");
     // The challenge layer (frontier marks, timer rings, the crossed swords) paints above the edges
     // and below the selection accent; the fills still paint first and the edges above them. The
-    // swords are the LAST of the challenge groups, so the ring is never drawn over the glyph.
-    expect(worldView, 'the edge group must be appended after the fill group')
-      .toMatch(/svg\.append\(faces, lines, marks, rings, swords\)/);
+    // swords are the LAST of the challenge groups, so the ring is never drawn over the glyph, and
+    // the QUIET disputes layer (other players' marks) is inserted before them: my own contested
+    // tiles always paint above background news about somebody else's.
+    // Assert the INVARIANT, not the spelling of the call. A new layer may join this list (the
+    // `quiet` disputes layer did, 2026-10-29); what must never change is the ORDER: faces first,
+    // then lines, then the challenge layers, with MY swords last of all.
+    const appendLine = worldView.match(/svg\.append\(faces,[^)]*\)/)?.[0] ?? '';
+    const order = (appendLine.match(/\(([^)]*)\)/)?.[1] ?? '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    expect(order.length, 'the map must be assembled in one append').toBeGreaterThan(3);
+    const at = (name: string) => order.indexOf(name);
+    expect(at('faces'), 'the map must be appended').toBe(0);
+    expect(at('lines'), 'the edges must paint above the fills').toBeGreaterThan(at('faces'));
+    expect(at('marks'), 'the challenge marks must paint above the edges').toBeGreaterThan(at('lines'));
+    expect(at('rings'), 'the timer rings must paint above the marks').toBeGreaterThan(at('marks'));
+    expect(at('swords'), 'MY swords must be the last challenge layer').toBe(order.length - 1);
+    // The quiet layer carries OTHER players' disputes: it must exist, and it must paint BELOW mine,
+    // so a call to action always outranks background news about somebody else.
+    expect(at('quiet'), 'the quiet disputes layer must paint below my own').toBeGreaterThan(at('rings'));
+    expect(at('quiet'), 'the quiet disputes layer must paint below my own').toBeLessThan(at('swords'));
     expect(worldView, 'the selection must draw last of all, above every edge').toMatch(/svg\.append\(accentGroup\)/);
     // The fill layer MUST paint before the stroke layer, and a face must not swallow a tap.
     const face = bodyOf(onlineCss, '.world-hex-face');
