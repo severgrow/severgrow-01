@@ -2,6 +2,8 @@
 import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage, ledToken } from './led-cells.js';
 import type { LedTone } from './led-cells.js';
 import { publishDisplayLight, LIGHT_CAPS } from './light.js';
+import { firstBlinkPhase, nextBlinkPhase, blinkOnMs } from './led-blink.js';
+import type { BlinkPhase } from './led-blink.js';
 import { DisplayMachine } from './display-machine.js';
 import type { DisplayFrame } from './display-machine.js';
 import type { DisplayEvent } from './display-readout.js';
@@ -29,8 +31,6 @@ const actionKind = (button: HTMLButtonElement) => button.matches('[data-kind],.b
   : button.matches('.empty-continue') ? 'continue' : button.matches('.primary') ? 'confirm' : 'continue';
 const priority: Record<string, number> = { back: -1, clear: 0, confirm: 1, cancel: 2, bloom: 3, reverse: 4, next: 5, previous: 6, continue: 7, skip: 8, whole: 9 };
 
-/** Where in each idle-blink beat the dots go dark (80% for 200 ms of 1000 ms). */
-const ALARM_ON_PCT = Math.round((1 - LIGHT_CAPS.alarmOffMs / LIGHT_CAPS.alarmMs) * 100);
 
 export const SMART_COCKPIT_CSS = `
 html.futa04-information #step-cue { display:none !important; }
@@ -152,21 +152,20 @@ html.futa04-information #smart-led-window.led-pulse #smart-led-hot { animation:s
 /* Idle re-prompt: keep blinking with the board cues until the player starts the next move.
    NEGATIVE SPACE (owner, 2026-10-22: the brightening was barely visible): the dots and their glow
    switch OFF for LIGHT_CAPS.alarmOffMs of every LIGHT_CAPS.alarmMs. Opacity only, on sprites that
-   were already baked, so nothing re-rasterises. */
-html.futa04-information #smart-led.led-alarm #smart-led-cells { animation:smart-led-alarm ${LIGHT_CAPS.alarmMs}ms linear infinite; }
+   were already baked, so nothing re-rasterises.
+
+   STEPPED, NOT ANIMATED (2026-10-29). This was a 60 Hz CSS opacity animation on the two glyph
+   canvases, and MEASURED on an idle phone-sized screen at 4x CPU throttle it was the whole idle
+   bill: 105 ms of style recalculation and 140 ms of main-thread task EVERY second, because a
+   non-composited animation forces a full style pass every frame, for as long as the player thinks.
+   A blink is two instants a second. player/led-blink.ts gives the next phase and its hold; the
+   cockpit sets led-alarm-off for it. Same dots, same beat, same 20 ms edge (the transition below),
+   roughly zero cost. Do not turn this back into a CSS animation. */
+html.futa04-information #smart-led.led-alarm :is(#smart-led-cells,#smart-led-bloom) { transition:opacity 20ms linear; }
+html.futa04-information #smart-led.led-alarm.led-alarm-off #smart-led-cells { opacity:0; }
 /* The glow rests at its own dimmed strength (--light-bloom-op), so it blinks between THAT and off. */
-html.futa04-information #smart-led.led-alarm #smart-led-bloom { animation:smart-led-alarm-bloom ${LIGHT_CAPS.alarmMs}ms linear infinite; }
+html.futa04-information #smart-led.led-alarm.led-alarm-off #smart-led-bloom { opacity:0; }
 @keyframes smart-led-pulse { 0%,100% { opacity:0; } 50% { opacity:.62; } }
-@keyframes smart-led-alarm {
-  0%, ${ALARM_ON_PCT - 2}% { opacity:1; }
-  ${ALARM_ON_PCT}%, ${100 - 2}% { opacity:0; }
-  100% { opacity:1; }
-}
-@keyframes smart-led-alarm-bloom {
-  0%, ${ALARM_ON_PCT - 2}% { opacity:var(--light-bloom-op,.286); }
-  ${ALARM_ON_PCT}%, ${100 - 2}% { opacity:0; }
-  100% { opacity:var(--light-bloom-op,.286); }
-}
 /* A flash is one 60 ms breath of at most 35% white on the display's own glass. Never a strobe,
    never a filter on the glyph canvas. */
 html.futa04-information #smart-led-flash {
@@ -653,6 +652,12 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
   /** The running motif painter, so the interval can be stopped while the page is hidden. */
   let motifPaint: (() => void) | null = null;
   let flashTimer = 0;
+  /**
+   * The idle re-prompt blink's own clock: two wake-ups a second while the display is blinking its
+   * step word, and none at all otherwise (see the CSS note and player/led-blink.ts for why this is
+   * not a CSS animation any more).
+   */
+  let blinkTimer = 0;
   let lastReduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
   let reel: Animation[] = [];
   const close = () => { selector.hidden = true; context.setAttribute('aria-expanded','false'); };
@@ -686,6 +691,31 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
       return choice;
     }));
   };
+  /**
+   * The idle re-prompt blink, stepped. Two class writes a second instead of a 60 Hz animation
+   * (see the note above its CSS). It stops with the page and with the alarm itself, and it never
+   * leaves the dots dark when something else takes the glass.
+   */
+  const stopBlink = () => {
+    window.clearTimeout(blinkTimer);
+    blinkTimer = 0;
+    led.classList.remove('led-alarm-off');
+  };
+  const runBlink = (phase: BlinkPhase) => {
+    blinkTimer = window.setTimeout(() => {
+      blinkTimer = 0;
+      if (!led.classList.contains('led-alarm') || document.hidden) { led.classList.remove('led-alarm-off'); return; }
+      const next = nextBlinkPhase(phase);
+      led.classList.toggle('led-alarm-off', next.off);
+      runBlink(next);
+    }, Math.max(1, phase.holdMs));
+  };
+  const startBlink = () => {
+    if (blinkTimer) return;
+    const first = firstBlinkPhase();
+    led.classList.toggle('led-alarm-off', first.off);
+    runBlink(first);
+  };
   const setText = (frame: DisplayFrame) => {
     const { text:value, mode } = frame;
     const reduceNow = () => document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
@@ -698,6 +728,8 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     windowEl.classList.toggle('led-alarm', alarming);
     // The blink dims the bloom too, which sits outside the window, so the class rides on #smart-led.
     led.classList.toggle('led-alarm', alarming);
+    // Two wake-ups a second while the step word blinks, nothing at all otherwise.
+    if (alarming) startBlink(); else stopBlink();
     // The pulse/alarm is the display's own glass now (the baked hot layer inside the window).
     // The keys never animate, so the panel carries no beat class of its own.
     panel.dataset.ledMode = mode;
@@ -820,14 +852,17 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     });
   };
   // The motif animation (an 11 fps canvas repaint) stops with the page: nothing is looking at it,
-  // and a phone in a pocket must not keep painting the LED cells.
+  // and a phone in a pocket must not keep painting the LED cells. The blink follows the same rule:
+  // a hidden page has nobody to blink at, and a timer that keeps waking a pocketed phone is waste.
   document.addEventListener('visibilitychange', () => {
     window.clearInterval(motifTimer);
     motifTimer = 0;
-    if (!document.hidden && motifPaint) {
+    if (document.hidden) { stopBlink(); return; }
+    if (motifPaint) {
       motifPaint();
       motifTimer = window.setInterval(motifPaint, 88);
     }
+    if (led.classList.contains('led-alarm')) startBlink();
   });
   // Hold times follow Speed (--anim); skip/0 floors inside DisplayMachine.
   const machine = new DisplayMachine(setText, () => {
@@ -849,6 +884,10 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
   };
   machine.reset(phaseMessage());
   publishDisplayLight('amber');
+  // The cadence the blink really runs, written once as a contract for the display suite: ON for
+  // the rest of the beat, OFF for LIGHT_CAPS.alarmOffMs, 1 Hz in total.
+  led.dataset.alarmOn = String(blinkOnMs());
+  led.dataset.alarmOff = String(LIGHT_CAPS.alarmOffMs);
   const refreshMessage = () => machine.phase(phaseMessage());
   const flash = (value: string, ms = 1900) => machine.event({message:value.toUpperCase(),priority:30,duration:ms});
   const collect = (): Action[] => {
