@@ -1,9 +1,7 @@
 /** Futasaku 0.4 cockpit presentation. Game-owned buttons remain the action source. */
-import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage, ledToken } from './led-cells.js';
+import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeSpan, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage, ledToken } from './led-cells.js';
 import type { LedTone } from './led-cells.js';
 import { publishDisplayLight, LIGHT_CAPS } from './light.js';
-import { firstBlinkPhase, nextBlinkPhase, blinkOnMs } from './led-blink.js';
-import type { BlinkPhase } from './led-blink.js';
 import { DisplayMachine } from './display-machine.js';
 import type { DisplayFrame } from './display-machine.js';
 import type { DisplayEvent } from './display-readout.js';
@@ -31,6 +29,8 @@ const actionKind = (button: HTMLButtonElement) => button.matches('[data-kind],.b
   : button.matches('.empty-continue') ? 'continue' : button.matches('.primary') ? 'confirm' : 'continue';
 const priority: Record<string, number> = { back: -1, clear: 0, confirm: 1, cancel: 2, bloom: 3, reverse: 4, next: 5, previous: 6, continue: 7, skip: 8, whole: 9 };
 
+/** Where in each idle-blink beat the dots go dark (80% for 200 ms of 1000 ms). */
+const ALARM_ON_PCT = Math.round((1 - LIGHT_CAPS.alarmOffMs / LIGHT_CAPS.alarmMs) * 100);
 
 export const SMART_COCKPIT_CSS = `
 html.futa04-information #step-cue { display:none !important; }
@@ -133,6 +133,20 @@ html.futa04-information #futa04-box #smart-led-window::before {
 html.futa04-information #futa04-box #smart-led-text {
   position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap;
 }
+/* THE INK LAYER. A plain box around the glyph canvas, and the ONLY thing that blinks.
+   Measured (2026-10-29, 4x CPU, 390x844, CDP): an OPACITY animation on the canvas itself never
+   composites — Chrome vetoes it for directly-composited canvas content — so the 1 Hz idle blink
+   was 180 main-thread frames/s (540 beginMain in 3 s, the whole game's biggest CPU cost) for a cue
+   that changes twice a second. On this plain box the same animation is composited: 0. The canvas
+   is untouched, so its pixels, its scale rule and its marquee are exactly as they were. */
+html.futa04-information #futa04-box #smart-led-ink { display:block; flex:none; height:26px; }
+/* While the marquee runs the box covers the glass, so the strip inside it is laid out from the
+   window's own left edge. (The canvas rule below still says position:absolute; left:0, but it
+   loses on specificity to the #futa04-box #smart-led-cells rule above — so the strip used to be
+   silently CENTRED as a flex item, i.e. a marquee started in the middle of its text and its light
+   was in step with a different part of the message. The box is what actually anchors it now, and
+   the measured before/after screenshots agree pixel for pixel once both are anchored.) */
+html.futa04-information #smart-led-window.scrolling #smart-led-ink { position:absolute; left:0; right:0; top:50%; translate:0 -50%; height:26px; }
 html.futa04-information #futa04-box #smart-led-cells {
   display:block; flex:none; width:auto; height:26px; position:relative;
 }
@@ -146,25 +160,30 @@ html.futa04-information #smart-led-cells.scrolling { position:absolute; left:0; 
 @keyframes smart-led-scroll { from { transform:translateX(0); } to { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
 html.futa04-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
 /* Attention pulses and impact flashes are short, one-shot and fully skipped under reduce-motion.
-   Every one of them animates OPACITY on a sprite that was baked once; none of them animates a
-   filter or a shadow, so the compositor never re-rasterises the LED. */
-html.futa04-information #smart-led-window.led-pulse #smart-led-hot { animation:smart-led-pulse 500ms ease-in-out 1; }
+   Every one of them animates OPACITY on a box or a sprite that was baked once; none of them
+   animates a filter or a shadow, so the compositor never re-rasterises the LED.
+   The pulse rides the WRAPPER for the same measured reason as the blink: opacity on the canvas
+   would be main-thread work. The hot sprite itself only becomes visible for the pulse. */
+html.futa04-information #smart-led-window.led-pulse #smart-led-pulse { animation:smart-led-pulse 500ms ease-in-out 1; }
+html.futa04-information #smart-led-window.led-pulse #smart-led-hot { opacity:1; }
 /* Idle re-prompt: keep blinking with the board cues until the player starts the next move.
    NEGATIVE SPACE (owner, 2026-10-22: the brightening was barely visible): the dots and their glow
-   switch OFF for LIGHT_CAPS.alarmOffMs of every LIGHT_CAPS.alarmMs. Opacity only, on sprites that
-   were already baked, so nothing re-rasterises.
-
-   STEPPED, NOT ANIMATED (2026-10-29). This was a 60 Hz CSS opacity animation on the two glyph
-   canvases, and MEASURED on an idle phone-sized screen at 4x CPU throttle it was the whole idle
-   bill: 105 ms of style recalculation and 140 ms of main-thread task EVERY second, because a
-   non-composited animation forces a full style pass every frame, for as long as the player thinks.
-   A blink is two instants a second. player/led-blink.ts gives the next phase and its hold; the
-   cockpit sets led-alarm-off for it. Same dots, same beat, roughly zero cost. (The old 20 ms ramp
-   at each edge was 1.2 frames at 60 Hz and still cost a style pass per edge, so the switch is a
-   cut, like the dots themselves.) Do not turn this back into a CSS animation. */
-html.futa04-information #smart-led.led-alarm.led-alarm-off #smart-led-cells { opacity:0; }
+   switch OFF for LIGHT_CAPS.alarmOffMs of every LIGHT_CAPS.alarmMs. Opacity only, on a baked
+   sprite, so nothing re-rasterises — and steps(1,end) makes the blink a STATE: the compositor
+   changes it at 80% and 98% of the beat instead of interpolating for the whole second. */
+html.futa04-information #smart-led.led-alarm #smart-led-ink { animation:smart-led-alarm ${LIGHT_CAPS.alarmMs}ms steps(1,end) infinite; }
 /* The glow rests at its own dimmed strength (--light-bloom-op), so it blinks between THAT and off. */
-html.futa04-information #smart-led.led-alarm.led-alarm-off #smart-led-bloom { opacity:0; }
+html.futa04-information #smart-led.led-alarm #smart-led-bloom { animation:smart-led-alarm-bloom ${LIGHT_CAPS.alarmMs}ms steps(1,end) infinite; }
+@keyframes smart-led-alarm {
+  0%, ${ALARM_ON_PCT - 2}% { opacity:1; }
+  ${ALARM_ON_PCT}%, ${100 - 2}% { opacity:0; }
+  100% { opacity:1; }
+}
+@keyframes smart-led-alarm-bloom {
+  0%, ${ALARM_ON_PCT - 2}% { opacity:var(--light-bloom-op,.286); }
+  ${ALARM_ON_PCT}%, ${100 - 2}% { opacity:0; }
+  100% { opacity:var(--light-bloom-op,.286); }
+}
 @keyframes smart-led-pulse { 0%,100% { opacity:0; } 50% { opacity:.62; } }
 /* A flash is one 60 ms breath of at most 35% white on the display's own glass. Never a strobe,
    never a filter on the glyph canvas. */
@@ -176,7 +195,12 @@ html.futa04-information #smart-led-window.led-flash-cut #smart-led-flash { anima
 html.futa04-information #smart-led-window.led-flash-bloom #smart-led-flash { animation:smart-led-flash-bloom 60ms linear 1; }
 @keyframes smart-led-flash-cut { 0% { opacity:0; } 22% { opacity:.35; } 100% { opacity:0; } }
 @keyframes smart-led-flash-bloom { 0% { opacity:0; } 28% { opacity:.26; } 100% { opacity:0; } }
-/* The baked brightness layer: the same lit dots as the cells, one draw, opacity-only cues. */
+/* The baked brightness layer: the same lit dots as the cells, one draw, opacity-only cues.
+   It sits in its own plain box (the pulse layer) so the one-shot pulse can be a composited
+   opacity change instead of a main-thread animation on a canvas — measured, see #smart-led-ink. */
+html.futa04-information #smart-led-pulse {
+  position:absolute; inset:0; pointer-events:none; z-index:2; opacity:1;
+}
 html.futa04-information #smart-led-hot {
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
   pointer-events:none; opacity:0; z-index:2;
@@ -249,11 +273,19 @@ html.futa04-information.reduce-motion.idle-urgency #smart-bloom-button .futa04-c
     animation:none !important;
   }
 }
-html.futa04-information.reduce-motion #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) :is(#smart-led-hot,#smart-led-flash) { animation:none !important; }
-html.futa04-information.reduce-motion #smart-led.led-alarm :is(#smart-led-cells,#smart-led-bloom) { animation:none !important; }
+html.futa04-information.reduce-motion #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) :is(#smart-led-pulse,#smart-led-flash) { animation:none !important; }
+html.futa04-information.reduce-motion #smart-led.led-alarm :is(#smart-led-ink,#smart-led-bloom) { animation:none !important; }
 @media (prefers-reduced-motion:reduce) {
-  html.futa04-information #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) :is(#smart-led-hot,#smart-led-flash) { animation:none !important; }
-  html.futa04-information #smart-led.led-alarm :is(#smart-led-cells,#smart-led-bloom) { animation:none !important; }
+  html.futa04-information #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) :is(#smart-led-pulse,#smart-led-flash) { animation:none !important; }
+  html.futa04-information #smart-led.led-alarm :is(#smart-led-ink,#smart-led-bloom) { animation:none !important; }
+}
+/* NOTHING RUNS WHEN IT CANNOT BE SEEN. The tab is hidden (a phone in a pocket), the page is
+   paused, or the game screen is away: pause every display animation instead of letting the
+   compositor keep ticking a layer nobody can look at. Pausing keeps the animation's phase, so
+   the blink or marquee resumes exactly where it stopped when the player comes back. */
+html.led-hidden #smart-led :is(#smart-led-ink,#smart-led-cells,#smart-led-pulse,#smart-led-hot,#smart-led-bloom,#smart-led-bloom-clip,#smart-led-window,#smart-led-flash),
+body.paused #smart-led :is(#smart-led-ink,#smart-led-cells,#smart-led-pulse,#smart-led-hot,#smart-led-bloom,#smart-led-bloom-clip,#smart-led-window,#smart-led-flash) {
+  animation-play-state:paused !important;
 }
 /* Opponent replay: the read-out says "not yours" by going a little quieter. A modest luminance
    drop that stays fully legible — never a blackout, never a flash, no border, no badge: the DIM
@@ -284,7 +316,6 @@ html.futa04-information #smart-led-bloom-clip {
 html.futa04-information #smart-led-bloom {
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
   pointer-events:none; z-index:0; opacity:var(--light-bloom-op,.286);
-  will-change:opacity, transform;
 }
 /* Scrolling: the sprite is aligned to the strip's own left edge. The clip is offset by its own
    wing on each side, so the alignment inside it is the old alignment plus that wing. */
@@ -617,6 +648,12 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
   const led = document.createElement('div'); led.id = 'smart-led'; led.setAttribute('role','status'); led.setAttribute('aria-live','polite');
   const windowEl = document.createElement('div'); windowEl.id = 'smart-led-window';
   const text = document.createElement('span'); text.id = 'smart-led-text';
+  // Two plain boxes carry the opacity cues. A canvas is directly-composited content: an opacity
+  // animation on it is refused by the compositor and becomes main-thread work on every frame
+  // (measured 2026-10-29: the idle blink alone was 180 main frames/s). The boxes around the
+  // canvases composite the same animation for free, and the canvases themselves never change.
+  const ink = document.createElement('div'); ink.id = 'smart-led-ink'; ink.setAttribute('aria-hidden','true');
+  const pulse = document.createElement('div'); pulse.id = 'smart-led-pulse'; pulse.setAttribute('aria-hidden','true');
   const cells = document.createElement('canvas'); cells.id = 'smart-led-cells'; cells.setAttribute('aria-hidden','true');
   // The one-shot brightness layer (pulse/alarm) and the capped flash, both opacity-only.
   const hot = document.createElement('canvas'); hot.id = 'smart-led-hot'; hot.setAttribute('aria-hidden','true');
@@ -627,7 +664,9 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
   const bloomEl = document.createElement('canvas'); bloomEl.id = 'smart-led-bloom'; bloomEl.setAttribute('aria-hidden','true');
   const bloomClip = document.createElement('div'); bloomClip.id = 'smart-led-bloom-clip'; bloomClip.setAttribute('aria-hidden','true');
   bloomClip.append(bloomEl);
-  windowEl.append(text,cells,hot,flashEl); led.append(windowEl,bloomClip);
+  ink.append(cells);
+  pulse.append(hot);
+  windowEl.append(text,ink,pulse,flashEl); led.append(windowEl,bloomClip);
   const context = document.createElement('button'); context.id = 'smart-context'; context.type = 'button'; context.setAttribute('aria-haspopup','menu'); context.setAttribute('aria-expanded','false');
   const selector = document.createElement('div'); selector.id = 'smart-selector'; selector.setAttribute('role','menu'); selector.hidden = true;
   context.setAttribute('aria-controls',selector.id);
@@ -657,7 +696,6 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
    * step word, and none at all otherwise (see the CSS note and player/led-blink.ts for why this is
    * not a CSS animation any more).
    */
-  let blinkTimer = 0;
   let lastReduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
   let reel: Animation[] = [];
   const close = () => { selector.hidden = true; context.setAttribute('aria-expanded','false'); };
@@ -691,31 +729,6 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
       return choice;
     }));
   };
-  /**
-   * The idle re-prompt blink, stepped. Two class writes a second instead of a 60 Hz animation
-   * (see the note above its CSS). It stops with the page and with the alarm itself, and it never
-   * leaves the dots dark when something else takes the glass.
-   */
-  const stopBlink = () => {
-    window.clearTimeout(blinkTimer);
-    blinkTimer = 0;
-    led.classList.remove('led-alarm-off');
-  };
-  const runBlink = (phase: BlinkPhase) => {
-    blinkTimer = window.setTimeout(() => {
-      blinkTimer = 0;
-      if (!led.classList.contains('led-alarm') || document.hidden) { led.classList.remove('led-alarm-off'); return; }
-      const next = nextBlinkPhase(phase);
-      led.classList.toggle('led-alarm-off', next.off);
-      runBlink(next);
-    }, Math.max(1, phase.holdMs));
-  };
-  const startBlink = () => {
-    if (blinkTimer) return;
-    const first = firstBlinkPhase();
-    led.classList.toggle('led-alarm-off', first.off);
-    runBlink(first);
-  };
   const setText = (frame: DisplayFrame) => {
     const { text:value, mode } = frame;
     const reduceNow = () => document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
@@ -728,8 +741,6 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     windowEl.classList.toggle('led-alarm', alarming);
     // The blink dims the bloom too, which sits outside the window, so the class rides on #smart-led.
     led.classList.toggle('led-alarm', alarming);
-    // Two wake-ups a second while the step word blinks, nothing at all otherwise.
-    if (alarming) startBlink(); else stopBlink();
     // The pulse/alarm is the display's own glass now (the baked hot layer inside the window).
     // The keys never animate, so the panel carries no beat class of its own.
     panel.dataset.ledMode = mode;
@@ -811,10 +822,14 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
         motifTimer = document.hidden ? 0 : window.setInterval(paint,88);
       } else {
         motifPaint = null;
-        drawLedCells(cells,shown,scrolling,mode);
+        // Baked for the WINDOW while it scrolls: one period plus the glass, never the message
+        // three times over. The bloom also needs the light of the dots just outside the glass
+        // (its falloff reaches ~BLOOM_PAD past the bezel), so its strip carries that margin.
+        const span = scrolling ? ledMarqueeSpan(shown, windowEl.clientWidth) : undefined;
+        drawLedCells(cells,shown,scrolling,mode,1,span);
         // One bake per message: the bloom and the brightness layer come from those same dots.
-        drawLedHot(hot,shown,scrolling,mode);
-        drawLedBloom(bloomEl,shown,scrolling,mode);
+        drawLedHot(hot,shown,scrolling,mode,1,span);
+        drawLedBloom(bloomEl,shown,scrolling,mode,1,span === undefined ? undefined : span + 2 * BLOOM_PAD);
       }
       bloomEl.classList.toggle('scrolling', scrolling);
       windowEl.classList.toggle('scrolling', scrolling);
@@ -852,17 +867,23 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     });
   };
   // The motif animation (an 11 fps canvas repaint) stops with the page: nothing is looking at it,
-  // and a phone in a pocket must not keep painting the LED cells. The blink follows the same rule:
-  // a hidden page has nobody to blink at, and a timer that keeps waking a pocketed phone is waste.
+  // and a phone in a pocket must not keep painting the LED cells.
+  // The display's CSS animations (the marquee, the blink) are paused too — a composited animation
+  // is invisible but still costs the compositor a tick and the GPU a frame, so the screen, not
+  // just the painter, is why the gate exists. Paused, not cancelled: the phase survives.
+  const applyVisibilityGate = () => {
+    document.documentElement.classList.toggle('led-hidden', document.hidden);
+  };
+  applyVisibilityGate();
   document.addEventListener('visibilitychange', () => {
+    applyVisibilityGate();
     window.clearInterval(motifTimer);
     motifTimer = 0;
-    if (document.hidden) { stopBlink(); return; }
+    if (document.hidden) return;
     if (motifPaint) {
       motifPaint();
       motifTimer = window.setInterval(motifPaint, 88);
     }
-    if (led.classList.contains('led-alarm')) startBlink();
   });
   // Hold times follow Speed (--anim); skip/0 floors inside DisplayMachine.
   const machine = new DisplayMachine(setText, () => {
@@ -886,7 +907,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
   publishDisplayLight('amber');
   // The cadence the blink really runs, written once as a contract for the display suite: ON for
   // the rest of the beat, OFF for LIGHT_CAPS.alarmOffMs, 1 Hz in total.
-  led.dataset.alarmOn = String(blinkOnMs());
+  led.dataset.alarmOn = String(LIGHT_CAPS.alarmMs - LIGHT_CAPS.alarmOffMs);
   led.dataset.alarmOff = String(LIGHT_CAPS.alarmOffMs);
   const refreshMessage = () => machine.phase(phaseMessage());
   const flash = (value: string, ms = 1900) => machine.event({message:value.toUpperCase(),priority:30,duration:ms});
