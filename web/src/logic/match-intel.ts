@@ -1,5 +1,7 @@
 import { createCards, dealOpening } from '../../../src/engine/index.js';
 import type { Card, Event, State, View } from '../../../src/engine/index.js';
+import { INTEL } from '../../../src/strings.js';
+import { homeSides } from './home.js';
 
 /** One public beat the player may step through in the glass. Newest last. */
 export type IntelMove = {
@@ -23,6 +25,8 @@ export type MatchIntel = {
   moves: IntelMove[];
   deckCount: number;
   oppHand: number;
+  /** How many cards the player is holding (the opponent's count is public too). */
+  handCount: number;
   fruitUnseen: number;
 };
 
@@ -98,6 +102,27 @@ export const publicIntelMoves = (view: View, history: readonly Event[], me = 0):
   return out;
 };
 
+/** The single strategic read of the position (Now's line under the score; Tips leads with its own
+ *  most urgent read). Public information only: homes, land and the Draw pile. Home danger outranks
+ *  everything — a match can end on the next Grow. */
+export const matchObservation = (view: View): string => {
+  const me = view.player;
+  const mine = homeSides(view, me);
+  const theirs = homeSides(view, me === 0 ? 1 : 0);
+  const myLeft = mine.openSides - mine.taken;
+  const theirLeft = theirs.openSides - theirs.taken;
+  if (mine.taken > 0 && myLeft > 0 && myLeft <= 2) return INTEL.observation.home(myLeft, mine.taken);
+  if (theirs.taken > 0 && theirLeft > 0 && theirLeft <= 2) return INTEL.observation.theirHome(theirLeft);
+  if (view.deckCount > 0 && view.deckCount <= 4) return INTEL.observation.deck(view.deckCount);
+  const tiles = (owner: 0 | 1): number => Object.values(view.board).filter((t) => t?.owner === owner).length;
+  const mineTiles = tiles(me);
+  const theirTiles = tiles(me === 0 ? 1 : 0);
+  if (mineTiles > theirTiles) return INTEL.observation.lead(mineTiles - theirTiles, view.deckCount);
+  if (mineTiles < theirTiles) return INTEL.observation.behind(theirTiles - mineTiles, view.deckCount);
+  if (view.discard.length > 0) return INTEL.observation.level(mineTiles);
+  return INTEL.observation.open(view.deckCount);
+};
+
 export const matchIntel = (view: View, history: readonly Event[], opening: readonly Card[]): MatchIntel => {
   const territory: [number, number] = [0, 0];
   for (const tile of Object.values(view.board)) if (tile) territory[tile.owner]++;
@@ -109,10 +134,6 @@ export const matchIntel = (view: View, history: readonly Event[], opening: reado
     else if (event.t === 'Sever') cuts[1 - event.player as 0 | 1] += event.coords.length; // the event names the victim; the cut is credited to the other seat
   }
   const discarded = publicDiscardHistory(view, history, opening);
-  const bombsInHand = view.hand.filter((card) => card.suit === null).length;
-  const observation = bombsInHand >= 2 ? 'TWO BOMBS CAN BLOOM.'
-    : view.phase === 'ACT' && view.sproutsThisTurn === 0 ? 'GROW CAN BE SKIPPED.'
-    : view.discard.length ? 'WATCH THE DISCARD.' : null;
   return {
     discarded,
     score: [view.score, view.opponentScore],
@@ -121,10 +142,11 @@ export const matchIntel = (view: View, history: readonly Event[], opening: reado
     cuts,
     bombs,
     turn: Math.ceil(view.turnNumber / 2),
-    observation,
+    observation: matchObservation(view),
     moves: publicIntelMoves(view, history),
     deckCount: view.deckCount,
     oppHand: view.opponentHandCount,
+    handCount: view.hand.length,
     fruitUnseen: view.fruitUnseen,
   };
 };
