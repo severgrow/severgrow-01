@@ -407,7 +407,12 @@ try {
         `header ends ${bottom(m.head).toFixed(1)}, stage starts ${m.grid?.y.toFixed(1)} (gap ${m.gap})`);
       check(`[${tag}] Seeds float over the stage's top, centred`, inside(m.wallet, m.grid) && centredIn(m.wallet, m.grid) &&
         (m.wallet?.y ?? 0) - (m.grid?.y ?? 0) <= 24, `wallet ${rect(m.wallet)} in ${rect(m.grid)}`);
-      check(`[${tag}] the selected tile floats over the stage's foot, centred`, inside(m.selection, m.grid) && centredIn(m.selection, m.grid) &&
+    }
+    // THE TILE BAR floats over the map's foot on EVERY size since 2026-10-28 ("tapping empty tile
+    // should NOT open the menu and still have option to grow/sell/challenge"); it used to sit in the
+    // column under the map on a phone. Measured whenever a tile is selected.
+    if ((m.selection?.height ?? 0) > 0) {
+      check(`[${tag}] the selected tile floats over the map's foot, centred`, inside(m.selection, m.grid) && centredIn(m.selection, m.grid) &&
         bottom(m.grid) - bottom(m.selection) <= 90, `selection ${rect(m.selection)} in ${rect(m.grid)}`);
     }
     const steps = m.bar
@@ -416,8 +421,6 @@ try {
     const stepSpread = Math.max(...steps) - Math.min(...steps);
     if (!stage) check(`[${tag}] the header → Seeds → map steps are ONE rhythm`, stepSpread <= 1,
       `steps=${steps.map((s) => s.toFixed(1)).join(', ')} column gap=${m.gap}`);
-    if (!stage) check(`[${tag}] the controls sit below the map window`, (m.selection?.y ?? 0) >= bottom(m.grid),
-      `selection y=${m.selection?.y?.toFixed(1)} window ends ${bottom(m.grid).toFixed(1)}`);
     check(`[${tag}] an empty notice leaves no dead row`, (m.notice?.height ?? 0) === 0,
       `notice ${m.notice?.height ?? 0}x${m.notice?.width ?? 0}`);
 
@@ -507,7 +510,8 @@ try {
     //    chrome leaves: on a phone the width frames it and the surplus height is cropped; on a wide
     //    screen the height frames it and the whole world stays in view. Both are measured, and in
     //    both the column reaches its bottom edge.
-    const columnBottom = Math.max(bottom(m.selection), (m.notice?.height ?? 0) > 0 ? bottom(m.notice) : 0);
+    // The map window is the column's last element now (the tile bar floats inside it).
+    const columnBottom = Math.max(bottom(m.grid), (m.notice?.height ?? 0) > 0 ? bottom(m.notice) : 0);
     const viewportGap = m.vh - columnBottom;
     const gx = m.grid?.x ?? 0;
     const gw = m.grid?.width ?? 0;

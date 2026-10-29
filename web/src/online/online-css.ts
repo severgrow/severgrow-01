@@ -978,7 +978,8 @@ html.reduce-motion .world-selection { animation: none; }
 .world-panel-body { overflow: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 10px; }
 .world-pane { display: none; flex-direction: column; gap: 8px; }
 .world-panel[data-pane='challenges'] .world-pane[data-pane='challenges'],
-.world-panel[data-pane='ranking'] .world-pane[data-pane='ranking'] { display: flex; }
+.world-panel[data-pane='ranking'] .world-pane[data-pane='ranking'],
+.world-panel[data-pane='achievements'] .world-pane[data-pane='achievements'] { display: flex; }
 .world-pane > .world-pane-label:first-child { margin-top: 0; }
 .world-pane-label { margin: 4px 4px 0; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: #e8ddc58f; text-align: center; }
 .world-pane-empty { margin: 2px 0 6px; text-align: center; font-size: .74rem; color: #e8ddc5a6; }
@@ -1013,6 +1014,32 @@ html.reduce-motion .world-selection { animation: none; }
   transition: width 600ms cubic-bezier(.2, .8, .3, 1);
 }
 /* the ranking */
+/* ---- ACHIEVEMENTS (owner, 2026-10-29): one-time Seeds for first steps ---- */
+.world-key[hidden] { display: none; }
+/* a reward waiting: the lamp turns the ivory-gold of a coin, steady (never a loop) */
+.world-deck-count.ready { background: #f2c879; color: #1b1406; box-shadow: 0 0 8px #f2c87973; }
+.world-achievements { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.world-achievement {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  min-height: 52px; padding: 7px 8px 7px 12px; border-radius: 10px; background: #e8ddc508;
+  transition: background var(--ix-open) ease;
+}
+.world-achievement.ready { background: #f2c87914; box-shadow: inset 0 0 0 1px #f2c87933; }
+.world-achievement.claimed { opacity: .62; }
+.world-achievement-text { display: grid; gap: 3px; min-width: 0; }
+.world-achievement-text strong { font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: #f2e7cb; font-weight: 700; }
+.world-achievement-text > span { font-size: .66rem; letter-spacing: .04em; color: #e8ddc5a6; overflow-wrap: anywhere; }
+.world-achievement-meter { height: 3px; border-radius: 2px; background: #e8ddc514; overflow: hidden; margin-top: 2px; }
+.world-achievement-meter i { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #b8955099, #f2c879); }
+.world-achievement.claimed .world-achievement-meter { display: none; }
+.world-achievement-reward { font-size: .66rem; letter-spacing: .1em; color: #e8ddc58a; font-variant-numeric: tabular-nums; padding-right: 6px; }
+.world-achievement-done { font-size: .9rem; color: #f2c879; padding-right: 10px; }
+.world-achievement-claim { min-height: 40px; }
+/* the moment it pays: one warm flash across the row, finite */
+.world-achievement.just-claimed { animation: world-paid 900ms cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes world-paid { 0% { background: #f2c87959; } 100% { background: #e8ddc508; } }
+@media (prefers-reduced-motion: reduce) { .world-achievement.just-claimed { animation: none; } }
+html.reduce-motion .world-achievement.just-claimed { animation: none; }
 .world-ranking-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .world-ranking-row {
   width: 100%; display: grid; grid-template-columns: 2.4ch 10px minmax(0, 1fr) auto 3.5ch; align-items: center; gap: 9px;

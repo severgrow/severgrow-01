@@ -23,6 +23,14 @@ export const planSeedReward = (input: RewardInput, day: {
       ? { amount: SEED_ECONOMY.tileCost, reason: null }
       : { amount: 0, reason: 'not_a_solve' };
   }
+  // TERRITORY ACHIEVEMENTS (owner, 2026-10-29): a fixed, one-time amount the service verified
+  // (server/src/seeds/achievements.ts). Outside the daily cap like a campaign clear, and not multiplied:
+  // the number on the card is the number paid.
+  if (input.mode === 'campaign' && input.achievementSeeds !== undefined) {
+    return Number.isInteger(input.achievementSeeds) && input.achievementSeeds > 0 && input.outcome === 'win'
+      ? { amount: input.achievementSeeds, reason: null }
+      : { amount: 0, reason: 'not_earned' };
+  }
   if (input.mode === 'campaign' && input.lessonLevel !== undefined) {
     return input.lessonLevel === LESSON_SEED_REWARD.level && input.outcome === 'win'
       ? { amount: pay(LESSON_SEED_REWARD.seeds), reason: null }

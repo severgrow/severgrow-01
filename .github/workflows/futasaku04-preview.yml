@@ -1,69 +1,145 @@
-name: Futasaku 0.4 Pages preview
+name: Publish futasaku.com (live + /test)
 
-# futasaku.com is published from ONE branch: futa0.5-online, and only after CI passed on the exact
-# commit (the ci-gate job). /futa0.4/ and /futa-test/ are still built from futa0.4's HEAD, and the
-# published Main/Dev/Test2 SHAs are rebuilt and checked for parity, but a push to any other branch
-# no longer publishes anything (owner decision, 2026-10-20). /2/ and /3/ are retired: they forward
-# to the root (scripts/compose-retired-routes.mjs).
+# TWO STAGES, ONE SITE (owner, 2026-10-29: "let's do futasaku.com/test and use promote word").
+#
+#   futa0.5-online  ->  https://www.futasaku.com/test/   every push, once CI passed on it
+#   live            ->  https://www.futasaku.com/        only when someone PROMOTES
+#
+# Every run rebuilds BOTH from their branch heads, so a push to either keeps the other exactly
+# where it was. Promoting = moving the `live` branch to the commit /test/ is showing, by one of:
+#   - `npm run promote` (any agent or terminal: Claude, Codex, Cursor, ...), or
+#   - Actions -> this workflow -> Run workflow -> type `promote` (from a phone too).
+# Rolling back = `npm run promote -- <older-sha>`. See docs/RELEASE-FLOW.md.
+#
+# /futa0.4/ and /futa-test/ are still built from futa0.4's HEAD; Main (/firststep/) and /test2/ are
+# rebuilt from their published SHAs and checked for byte parity. /test/ used to be the retired dev
+# copy of Main; it is now the staging copy of the game.
 on:
   push:
-    branches: [futa0.5-online]
+    branches: [futa0.5-online, live]
   workflow_dispatch:
+    inputs:
+      promote:
+        description: 'Type "promote" to put what /test/ shows live at the site root'
+        required: false
+        default: ''
 
 permissions:
   contents: read
   pages: write
   id-token: write
-  actions: read # the CI gate reads this commit's CI result
+  actions: read # the CI gate reads each commit's CI result
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  # futasaku.com never publishes a commit whose CI failed: wait for CI (ci.yml) on this exact
-  # commit and stop here unless it passed. CI and this workflow both start on the same push, so
-  # this waits ~20 min while CI runs; a red or cancelled CI leaves the site as it was.
+  # PROMOTE: move `live` to the exact commit /test/ is serving (read from its release.json), never to
+  # a newer push nobody has looked at yet. Only on a manual run with the word typed.
+  promote:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.promote == 'promote'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: futa0.5-online
+      - name: Move live to the commit /test/ is serving
+        run: |
+          sha=$(curl -fsSL --retry 3 -H 'Cache-Control: no-cache' \
+            "https://severgrow.github.io/severgrow-01/test/release.json?promote=$(date +%s)" | jq -r .commit)
+          echo "/test/ is serving $sha"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::/test/ has no commit to promote"; exit 1; }
+          git merge-base --is-ancestor "$sha" origin/futa0.5-online || { echo "::error::$sha is not on futa0.5-online"; exit 1; }
+          git push origin "$sha:refs/heads/live"
+          echo "::notice::Promoted $sha to live"
+
+  # Which commit each stage shows: the branch heads, read AFTER any promotion above.
+  resolve:
+    needs: promote
+    if: ${{ !cancelled() && (needs.promote.result == 'success' || needs.promote.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      root: ${{ steps.heads.outputs.root }}
+      test: ${{ steps.heads.outputs.test }}
+    steps:
+      - id: heads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          branch_sha() {
+            curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/git/ref/heads/$1" | jq -r '.object.sha // empty' || true
+          }
+          root=$(branch_sha live)
+          test=$(branch_sha futa0.5-online)
+          [[ "$root" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::no live branch: create it at the commit that should be live"; exit 1; }
+          [[ "$test" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::no futa0.5-online branch"; exit 1; }
+          echo "root=$root" >> "$GITHUB_OUTPUT"
+          echo "test=$test" >> "$GITHUB_OUTPUT"
+          echo "::notice::live (root) = $root; /test/ = $test"
+
+  # Neither stage ever publishes a commit whose CI failed: wait for CI (ci.yml) on BOTH commits.
+  # A red or cancelled CI leaves the whole site as it was.
   ci-gate:
-    # A manual run from any other branch would publish that branch at the root: refuse it.
-    if: github.ref_name == 'futa0.5-online'
+    needs: resolve
+    if: ${{ !cancelled() && needs.resolve.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:
-      - name: Wait for CI to pass on this commit
+      - name: Wait for CI to pass on both commits
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
+          ROOT: ${{ needs.resolve.outputs.root }}
+          TEST: ${{ needs.resolve.outputs.test }}
         run: |
-          for i in $(seq 1 150); do
-            json=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=20" || echo '{}')
-            state=$(echo "$json" | jq -r '[.workflow_runs // [] | .[]] | sort_by(.created_at) | last | if . == null then "waiting none" else "\(.status) \(.conclusion // "none")" end')
-            echo "CI on $SHA: $state"
-            case "$state" in
-              "completed success") exit 0 ;;
-              completed*) echo "::error::CI did not pass on $SHA ($state); not publishing"; exit 1 ;;
-            esac
-            sleep 30
+          for sha in $(printf '%s\n%s\n' "$ROOT" "$TEST" | sort -u); do
+            ok=
+            for i in $(seq 1 150); do
+              json=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$sha&per_page=20" || echo '{}')
+              state=$(echo "$json" | jq -r '[.workflow_runs // [] | .[]] | sort_by(.created_at) | last | if . == null then "waiting none" else "\(.status) \(.conclusion // "none")" end')
+              echo "CI on $sha: $state"
+              case "$state" in
+                "completed success") ok=1; break ;;
+                completed*) echo "::error::CI did not pass on $sha ($state); not publishing"; exit 1 ;;
+              esac
+              sleep 30
+            done
+            [ -n "$ok" ] || { echo "::error::CI did not finish on $sha in time; not publishing"; exit 1; }
           done
-          echo "::error::CI did not finish on $SHA in time; not publishing"; exit 1
 
   build:
-    needs: ci-gate
+    needs: [resolve, ci-gate]
+    if: ${{ !cancelled() && needs.ci-gate.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    env:
+      ROOT_SHA: ${{ needs.resolve.outputs.root }}
+      TEST_SHA: ${{ needs.resolve.outputs.test }}
     steps:
       - name: Check out Futasaku 0.4 (+ futa-test) source
         uses: actions/checkout@v4
         with:
           path: preview
           ref: futa0.4
-      - name: Check out Futasaku 0.5 online source
+      - name: Check out the live game (site root)
         uses: actions/checkout@v4
         with:
           path: futa05
-          ref: ${{ github.sha }}
+          ref: ${{ needs.resolve.outputs.root }}
+      - name: Check out the test copy (/test/)
+        uses: actions/checkout@v4
+        with:
+          path: test05
+          ref: ${{ needs.resolve.outputs.test }}
       - name: Read exact published source commits
         id: published
         run: |
@@ -95,11 +171,14 @@ jobs:
           cache-dependency-path: |
             preview/package-lock.json
             futa05/package-lock.json
-      - name: Install and validate Futasaku 0.4
+            test05/package-lock.json
+      # futa0.4 is a locked line with its own CI on its own pushes. Its full `npm run check` (~9 min)
+      # used to run here on EVERY futa0.5-online deploy, re-testing the same unchanged commit; the
+      # builds and asset checks below are what this route needs.
+      - name: Build Futasaku 0.4 (+ futa-test)
         working-directory: preview
         run: |
           npm ci
-          npm run check
           CHANNEL=futa04 npm run web:build
           CHANNEL=futa04 node scripts/check-channel-assets.mjs
           mv web/dist web/dist-futa04
@@ -107,8 +186,7 @@ jobs:
           CHANNEL=futa-test node scripts/check-channel-assets.mjs
           mv web/dist web/dist-futa-test
           mv web/dist-futa04 web/dist
-      - name: Build /futa0.5/ preview channel
-        working-directory: futa05
+      - name: Build the live game and the test copy
         env:
           CHANNEL: futa05
           VITE_FIND_OPPONENT: '1'
@@ -119,18 +197,20 @@ jobs:
           for v in VITE_DUEL_API_URL VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
             test -n "${!v}" || { echo "Missing Actions Variable $v (VITE_DUEL_API_URL may fall back to FUTA05_API_URL)"; exit 1; }
           done
-          npm ci
-          npm run web:build
-          node scripts/check-channel-assets.mjs
-          echo "$(git rev-parse HEAD)" > web/dist/BUILD_SHA
-      # The admin dashboard (futasaku.com/admin/). Its own build, so no player ever downloads it.
-      # Published only because the compose step below is handed `web/dist-admin`; remove that
-      # argument and the composed site is byte-identical to what shipped before.
+          for dir in futa05 test05; do
+            if [ "$dir" = test05 ] && [ "$ROOT_SHA" = "$TEST_SHA" ]; then
+              cp -r futa05/web/dist test05/web/dist   # the same commit: build once
+              continue
+            fi
+            (cd "$dir" && npm ci && npm run web:build && node scripts/check-channel-assets.mjs)
+          done
+          echo "$ROOT_SHA" > futa05/web/dist/BUILD_SHA
+          echo "$TEST_SHA" > test05/web/dist/BUILD_SHA
+      # The admin dashboard (futasaku.com/admin/) is a production tool: built from the LIVE commit.
       - name: Build the admin dashboard
         working-directory: futa05
         env:
           VITE_DUEL_API_URL: ${{ vars.VITE_DUEL_API_URL || vars.FUTA05_API_URL }}
-          # Public values (the game ships the same two): "Sign in with Google" on /admin/ itself.
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: |
@@ -147,6 +227,8 @@ jobs:
           cd ../candidate
           if cmp -s package-lock.json ../live/package-lock.json; then ln -s ../live/node_modules node_modules; else npm ci; fi
           CHANNEL=test2 npm run web:build
+      # The composers come from the TEST checkout (futa0.5-online's head), the same way the old
+      # workflow always ran futa0.5-online's copy, whichever ref triggered the run.
       - name: Compose routes and verify existing public bytes
         env:
           MAIN_SHA: ${{ steps.published.outputs.main }}
@@ -156,9 +238,10 @@ jobs:
           node candidate/scripts/compose-pages.mjs live/web/dist dev/web/dist candidate/web/dist site \
             "$MAIN_SHA" "$DEV_SHA" "$TEST2_SHA"
           node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)" preview/web/dist-futa-test
-          node futa05/scripts/compose-futa05-preview.mjs site futa05/web/dist "$(git -C futa05 rev-parse HEAD)" futa05/web/dist-admin
-          node futa05/scripts/compose-retired-routes.mjs site
+          node test05/scripts/compose-futa05-preview.mjs site futa05/web/dist "$ROOT_SHA" futa05/web/dist-admin
+          node test05/scripts/compose-retired-routes.mjs site
           node preview/scripts/check-pages-parity.mjs site
+          node test05/scripts/compose-test-route.mjs site test05/web/dist "$TEST_SHA"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -166,6 +249,7 @@ jobs:
 
   deploy:
     needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages

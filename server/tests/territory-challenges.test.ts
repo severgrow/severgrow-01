@@ -166,6 +166,10 @@ describe('the stake is chosen, free, and never a Seed', () => {
     await h.register(h.a, ...defenders);
     h.own(hub, h.a.id);
     for (const [index, cellId] of targets.entries()) h.own(cellId, defenders[index]!.id);
+    // One tile backs one stake (territory-challenge-integrity.test.ts), so the cap is reached with
+    // enough tiles to back three challenges: three more of a's, away from the contested ring.
+    const near = new Set([hub, ...targets, ...targets.flatMap((t) => worldNeighbours(t))]);
+    for (const cell of WORLD_CELLS.filter((c) => !near.has(c.id)).slice(0, 3)) h.own(cell.id, h.a.id);
 
     expect((await send(h, h.a, targets[0]!, 'first-request-1')).ok).toBe(true);
     expect(await send(h, h.a, targets[0]!, 'first-request-2')).toMatchObject({ ok: false, code: 'CELL_BUSY' });

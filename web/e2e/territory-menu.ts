@@ -143,10 +143,10 @@ try {
         top: Math.round(r.top - menu.top), w: Math.round(r.width), h: Math.round(r.height), left: r.left, right: r.right, gridL: grid.left, menuL: menu.left };
     });
   });
-  check('three keys: ranking, challenges, chat (LATEST removed)', row.map((k) => k.id).join(',') === 'world-key-ranking,world-key-challenges,online-world-chat' && (await count(page, '#world-key-latest, #online-world-activity')) === 0, JSON.stringify(row.map((k) => k.id)));
+  check('four keys: ranking, challenges, achievements, chat (LATEST removed)', row.map((k) => k.id).join(',') === 'world-key-ranking,world-key-challenges,world-key-achievements,online-world-chat' && (await count(page, '#world-key-latest, #online-world-activity')) === 0, JSON.stringify(row.map((k) => k.id)));
   check('each key is an icon only, with a spoken name', row.every((k) => k.icon && !k.text && !!k.label), JSON.stringify(row.map((k) => [k.label, k.text])));
   check('the row sits on MENU\'s line, every key 44px', row.every((k) => k.top === 0 && k.w === 44 && k.h === 44), JSON.stringify(row.map((k) => [k.top, k.w, k.h])));
-  check('the row runs left to right in order and ends at MENU', row.every((k, i) => i === 0 || k.left > row[i - 1]!.right) && row[2]!.right < row[2]!.menuL && row[0]!.left >= row[0]!.gridL, JSON.stringify(row.map((k) => Math.round(k.left))));
+  check('the row runs left to right in order and ends at MENU', row.every((k, i) => i === 0 || k.left > row[i - 1]!.right) && row[row.length - 1]!.right < row[row.length - 1]!.menuL && row[0]!.left >= row[0]!.gridL, JSON.stringify(row.map((k) => Math.round(k.left))));
   check('the podium icon carries 1, 2, 3', await page.evaluate(() => [...document.querySelectorAll('#world-key-ranking text')].map((t) => t.textContent).join('') === '123'));
   const offsets = await iconOffsets(page);
   check('every icon sits in the centre of its key (within 0.75px)', offsets.every((o) => Math.abs(o.dx) <= .75 && Math.abs(o.dy) <= .75), JSON.stringify(offsets));
@@ -163,7 +163,7 @@ try {
   check('the open key is lit', await page.evaluate(() => document.getElementById('world-key-ranking')!.classList.contains('on')));
   const under = await page.evaluate(() => { const p = document.getElementById('online-world-panel')!.getBoundingClientRect(); const k = document.getElementById('online-world-menu')!.getBoundingClientRect(); return p.top - k.bottom; });
   check('the window hangs under the key row, so the keys stay in reach', under >= 4 && under <= 12, String(under));
-  check('the keys stay out while a page is open', (await visible(page, '#online-world-keys .world-key')) === 3);
+  check('the keys stay out while a page is open', (await visible(page, '#online-world-keys .world-key')) === 4);
   await page.screenshot({ path: `${SHOTS}/territory-ranking-390.png` });
   await page.click('#world-key-challenges');
   await page.waitForTimeout(200);
@@ -184,6 +184,18 @@ try {
   await page.click('#world-chat-back');
   await page.waitForTimeout(200);
   check('the chat\'s close key shuts it and leaves the keys out', await page.isHidden('#online-world-chat-panel') && await keysOut(page));
+  // ---- ACHIEVEMENTS (owner, 2026-10-29): one-time Seeds, claimed from the row ------------------
+  check('the achievements key lights when a reward is ready (this player holds a tile)',
+    (await page.textContent('#world-key-achievements .world-deck-count'))?.trim() !== '' && await page.isVisible('#world-key-achievements .world-deck-count'));
+  await page.click('#world-key-achievements');
+  await page.waitForSelector('#online-world-panel[data-pane="achievements"]:not([hidden])');
+  check('ACHIEVEMENTS lists every goal', (await count(page, '.world-achievement')) === 8);
+  const seedsBefore = Number((await page.textContent('#online-world-wallet'))?.replace(/\D/g, '') ?? 0);
+  await page.click('.world-achievement.ready .world-achievement-claim');
+  await page.waitForSelector('.world-achievement.claimed', { timeout: 10_000 });
+  const seedsAfter = Number((await page.textContent('#online-world-wallet'))?.replace(/\D/g, '') ?? 0);
+  check('CLAIM pays the Seeds into the wallet at once', seedsAfter - seedsBefore === 100, `${seedsBefore} -> ${seedsAfter}`);
+  await page.screenshot({ path: `${SHOTS}/territory-achievements-390.png` });
   await page.click('#world-key-ranking');
   await page.waitForSelector('#online-world-panel:not([hidden])');
   await page.click('#online-world-menu');

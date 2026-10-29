@@ -296,6 +296,7 @@
           <nav id="online-world-keys" class="world-keys" inert>
             <button id="world-key-ranking" class="world-key" type="button" data-pane="ranking" aria-expanded="false" aria-controls="online-world-panel"></button>
             <button id="world-key-challenges" class="world-key" type="button" data-pane="challenges" aria-expanded="false" aria-controls="online-world-panel"><span class="world-deck-count" hidden></span></button>
+            <button id="world-key-achievements" class="world-key" type="button" data-pane="achievements" aria-expanded="false" aria-controls="online-world-panel" hidden><span class="world-deck-count" hidden></span></button>
             <button id="online-world-chat" class="world-key world-chat-key" type="button" aria-expanded="false" aria-controls="online-world-chat-panel"></button>
           </nav>
           <!-- THE WINDOW: one dark glass drawer under the key row, showing whichever key is lit. -->
@@ -320,6 +321,12 @@
                 <!-- Where you stand, and who is next to pass. -->
                 <div id="world-standing" class="world-standing" hidden></div>
                 <ol id="online-world-ranking" class="world-ranking-list" aria-label="Ranking"></ol>
+              </div>
+              <!-- ACHIEVEMENTS (owner, 2026-10-29): one-time Seeds for first steps, paid by the server
+                   (server/src/seeds/achievements.ts). The key stays hidden on a server without them. -->
+              <div class="world-pane" data-pane="achievements">
+                <p id="world-achievements-intro" class="world-pane-empty"></p>
+                <ol id="online-world-achievements" class="world-achievements" aria-label="Achievements"></ol>
               </div>
             </div>
           </section>

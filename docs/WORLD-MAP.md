@@ -128,6 +128,27 @@ tapping empty tile should NOT open the menu and still have option to grow/sell/c
   does not stay lit. A grow or sell in flight keeps its key in the bar (GROWING… / SELLING…, dimmed)
   instead of the bar shrinking and growing back. Starting a pan pauses only the animated tiles.
 
+## v3.6: achievements, one stake per tile, /test (owner, 2026-10-29)
+
+- **Achievements** (owner: "turn it into achievements and pay seeds for those — for beta we want quick
+  easy engagement in territory"). A fourth key in MENU's row (a medal) opens a page of eight one-time
+  rewards, 900 Seeds in all: Put down roots (first tile, 100 — it pays the tile back), Good neighbours
+  (a tile next to another player, 50), Throw down (send a challenge, 75), Stand your ground (accept one,
+  75), Small holding (3 tiles, 100), Conqueror (win a challenge, 150), On the podium (top 3, 100),
+  Estate (10 tiles, 250). The key's lamp (and MENU's) counts rewards ready to claim; CLAIM pays at once.
+  The server decides (`server/src/seeds/achievements.ts`, routes `GET /v1/seeds/achievements` and
+  `POST /v1/seeds/achievements/claim`) from the map and the player's own challenge rows, and pays through
+  the ordinary settlement under `achievement:<id>`: one receipt per player, so a retry replays it. No
+  migration. The amounts are fixed (not doubled by the beta multiplier) and sit outside the daily cap.
+  **Rollout:** deploy the `duel` function (bundle rebuilt in this change). Until then the page keeps the
+  key hidden (the route answers 404), so /test/ and the live site are safe either way.
+- **One tile backs one stake.** A tile already staked in one of your open challenges, or contested by an
+  open challenge, is no longer chosen as a new stake; the next-nearest free tile is, and with none left
+  the send is refused (`NO_TILE`, "All your tiles are already at stake"). Before, a one-tile player could
+  promise that tile to three defenders. Everything else stays free and generous.
+  `server/tests/territory-challenge-integrity.test.ts`.
+- **futasaku.com/test** is the staging copy; "promote" puts it live (docs/RELEASE-FLOW.md).
+
 ## Ownership and economy
 
 - The world is one versioned, frozen axial hex map. v2 (2026-10-21) is **274 cells** (21 rows, r −10…10): the 183-cell v1 landmass plus an irregular coastal growth, baked into `server/src/world.ts` by `scripts/gen-world-v2.mjs` (no runtime randomness). Its cell IDs are `q,r`. Expansions only ADD ids; every v1 id is unchanged, so an existing claim can never be orphaned — verified against the nine live claims when the coastline shape shipped (none dropped). Historical 8×8 `world_tiles` owners are copied into the central 64 positions by migration `0011_seeds_world.sql`; the historical table and migration remain intact.

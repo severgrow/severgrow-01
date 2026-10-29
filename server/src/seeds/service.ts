@@ -16,6 +16,8 @@ import type {
   WorldEconomyStore,
 } from './types.js';
 import { verifyCampaignProof, verifyLessonProof, verifyTrainingProof } from './verify.js';
+import { achievementById, achievementFacts, achievementSourceKey, achievementViews } from './achievements.js';
+import type { AchievementView } from './achievements.js';
 import { FINAL_LESSON } from '../../../web/src/lessons/final.js';
 import { DailyTurnError, goalMet, playTurn } from '../../../src/daily/core.js';
 import { puzzleNoOn } from '../../../src/daily/calendar.js';
@@ -103,6 +105,38 @@ export class WorldEconomyService {
   }
 
   async acknowledge(player: PlayerRecord): Promise<void> { await this.store.acknowledgeInvitation(player.id); }
+
+  // ---- Territory achievements (server/src/seeds/achievements.ts) -------------------------------
+
+  /** The player's achievements: progress from the map and their own challenges, and which are paid. */
+  async achievements(player: PlayerRecord): Promise<AchievementView[]> {
+    const [snapshot, challenges, keys] = await Promise.all([
+      this.store.world(),
+      this.store.challengesInvolving(player.id, 0),
+      this.store.receiptKeys(player.id, 'achievement:'),
+    ]);
+    return achievementViews(achievementFacts(player.id, snapshot.claims, challenges), new Set(keys));
+  }
+
+  /**
+   * CLAIM one. Re-verified here from stored facts (never from the request), then paid through the
+   * ordinary settlement under `achievement:<id>`: one receipt per player, so a retry replays it.
+   */
+  async claimAchievement(player: PlayerRecord, id: string) {
+    const def = achievementById(id);
+    if (!def) throw new ApiError('INVALID_REQUEST', 'Unknown achievement.');
+    const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
+    if (!(await this.matches.hitRateLimit(`seeds:achievement:${player.id}`, bucket, 120)).ok) {
+      throw new ApiError('RATE_LIMITED', 'Please wait a moment.');
+    }
+    const view = (await this.achievements(player)).find((a) => a.id === def.id)!;
+    if (!view.done && !view.claimed) return { ok: false as const, code: 'NOT_EARNED' as const };
+    const reward = await this.store.settle({
+      playerId: player.id, sourceKey: achievementSourceKey(def.id), mode: 'campaign', outcome: 'win',
+      opponentId: null, now: this.now(), achievementSeeds: def.seeds,
+    });
+    return { ok: true as const, id: def.id, awarded: reward.awarded, replayed: reward.replayed, wallet: reward.wallet };
+  }
 
   async settleOnline(match: MatchRecord): Promise<Map<string, { awarded: number; reason: string | null }>> {
     if (match.status !== 'finished' || match.state.phase !== 'GAME_OVER' || !match.result ||

@@ -245,8 +245,9 @@ const run = async (browser: Browser, scenario: Scenario): Promise<void> => {
     };
   });
   check(`[${tag}] the defender is asked to answer on a countdown`,
-    /challenged your tile\. Answer within .+ to keep it\./.test(before.line), before.line);
-  check(`[${tag}] the defender is told defending costs no Seeds`, before.meta === 'NO SEEDS TO PAY', before.meta);
+    /challenged your tile\. Answer within .+ to keep it\b/.test(before.line), before.line);
+  // 2026-10-29: the meta also names the risk ("· YOUR TILE AT STAKE"), at the owner's request.
+  check(`[${tag}] the defender is told defending costs no Seeds`, before.meta.startsWith('NO SEEDS TO PAY'), before.meta);
   check(`[${tag}] no price is shown to the defender`, !/\d+\s*seeds|50/i.test(`${before.line} ${before.meta}`),
     `${before.line} | ${before.meta}`);
   check(`[${tag}] the defender still gets ACCEPT / DECLINE`, before.primary === 'ACCEPT' && before.secondary === 'DECLINE',

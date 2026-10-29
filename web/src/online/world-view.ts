@@ -22,6 +22,8 @@ import {
 import { stakedCellFor } from '../../../server/src/seeds/stake.js';
 import { stakeName } from './challenge-copy.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
+import type { AchievementView } from '../../../server/src/seeds/achievements.js';
+import { ACHIEVEMENT_COPY, ACHIEVEMENTS_UI } from './achievement-copy.js';
 import { SWORD_PATH } from './swords-glyph.js';
 import { ownerLine } from './world-selection.js';
 import { browserStorage } from '../../../server/src/client.js';
@@ -75,8 +77,11 @@ const WORLD_KEY_ICONS = {
     '<text x="12" y="14.6" text-anchor="middle">1</text><text x="6.2" y="18.4" text-anchor="middle">2</text><text x="17.8" y="19.1" text-anchor="middle">3</text>', '2.5 5 19 19'),
   challenges: KEY_ICON(`<path class="fill" d="${SWORD_PATH}"/>`, '-7.6 -7.6 15.2 15.2'),
   chat: KEY_ICON('<path class="line" d="M5 5h14v11H10l-5 4V5Z"/><path class="line" d="M8 9h8M8 12h5"/>'),
+  // ACHIEVEMENTS (owner, 2026-10-29): a medal on its ribbon, the star in the key's own ink.
+  achievements: KEY_ICON('<path class="line" d="M8.2 3.5 12 9.2l3.8-5.7"/><circle class="line" cx="12" cy="15" r="5.6"/>' +
+    '<path class="fill" d="m12 11.9 1 2 2.2.3-1.6 1.5.4 2.2-2-1.1-2 1.1.4-2.2-1.6-1.5 2.2-.3Z"/>'),
 } as const;
-type Pane = 'ranking' | 'challenges';
+type Pane = 'ranking' | 'challenges' | 'achievements';
 /**
  * HOW LONG THE GLIDE TAKES, AND HOW IT MOVES (owner, 2026-10-29: "the 'out of map' territory
  * animation is too fast and too jumpy - a bit slower, way smoother, without costing much CPU at all").
@@ -369,6 +374,14 @@ export class WorldView {
   /** What the tile bar and the window last drew, so a 12 s poll that changes nothing touches no DOM. */
   private selectionSignature = '';
   private paneSignature = '';
+  /**
+   * TERRITORY ACHIEVEMENTS, as the server last reported them. `null` = not available (a guest, or a
+   * server that predates them): the key stays hidden, so the page is safe on either server.
+   */
+  private achievements: AchievementView[] | null = null;
+  /** The achievement whose CLAIM is on its way, and the one that just paid (for its moment). */
+  private claimingAchievement: string | null = null;
+  private justClaimed: string | null = null;
   /** What the map was last drawn from: an unchanged world is never rebuilt. */
   private paintSignature = '';
   /** One pending viewBox write per frame, however many pointer events arrive in it. */
@@ -526,7 +539,7 @@ export class WorldView {
     const order = keyRowOrder(rowKeys.length);
     rowKeys.forEach((key, index) => key.style.setProperty('--key-i', String(order[index] ?? 0)));
     row?.style.setProperty('--key-count', String(rowKeys.length));
-    const names: Record<Pane | 'chat', string> = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, chat: ONLINE.worldChat };
+    const names: Record<Pane | 'chat', string> = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, achievements: ACHIEVEMENTS_UI.title, chat: ONLINE.worldChat };
     for (const key of rowKeys) {
       const pane = key.dataset.pane as Pane | undefined;
       key.insertAdjacentHTML('afterbegin', WORLD_KEY_ICONS[pane ?? 'chat']);
@@ -700,6 +713,8 @@ export class WorldView {
       this.paintSwords();
       this.paintStakes();
       this.paintChallenges();
+      // Achievements are re-read only when something they count may have moved (never every poll).
+      if (force || ownerChanged || challengeChanged || walletChanged) void this.loadAchievements();
       // LAST: a finished duel is settled by the server on this very read. If this client is the one
       // that has not seen the resolved row yet (or a read raced the settlement), it posts the same
       // idempotent confirm in the background — never a key the player must press.
@@ -1559,11 +1574,25 @@ export class WorldView {
     const isOpen = (c: WorldChallengeWire) => c.status === 'pending' || c.status === 'accepted';
     const open = this.allChallenges.filter(isOpen);
     const waiting = this.allChallenges.some((c) => c.status === 'pending' && !c.fromMe);
-    for (const count of document.querySelectorAll<HTMLElement>('#online-world-menu .world-deck-count, #world-key-challenges .world-deck-count')) {
+    for (const count of document.querySelectorAll<HTMLElement>('#world-key-challenges .world-deck-count')) {
       count.hidden = open.length === 0;
       count.textContent = String(open.length);
       count.classList.toggle('waiting', waiting);
     }
+    // Achievements ready to claim light their own key, and MENU carries the sum of everything that
+    // wants the player: open challenges plus rewards waiting.
+    const ready = (this.achievements ?? []).filter((a) => a.done && !a.claimed).length;
+    const reward = document.querySelector<HTMLElement>('#world-key-achievements .world-deck-count');
+    if (reward) { reward.hidden = ready === 0; reward.textContent = String(ready); reward.classList.toggle('ready', ready > 0); }
+    const menuCount = document.querySelector<HTMLElement>('#online-world-menu .world-deck-count');
+    if (menuCount) {
+      menuCount.hidden = open.length + ready === 0;
+      menuCount.textContent = String(open.length + ready);
+      menuCount.classList.toggle('waiting', waiting);
+      menuCount.classList.toggle('ready', !waiting && ready > 0);
+    }
+    const achievementsKey = document.getElementById('world-key-achievements');
+    if (achievementsKey) achievementsKey.hidden = this.achievements === null;
     for (const key of document.querySelectorAll<HTMLButtonElement>('#online-world-keys .world-key[data-pane]')) {
       const on = key.dataset.pane === this.pane;
       key.setAttribute('aria-expanded', String(on));
@@ -1572,7 +1601,7 @@ export class WorldView {
     panel.dataset.pane = this.pane ?? '';
     if (!this.pane) return;
     const title = document.getElementById('world-panel-title');
-    if (title) title.textContent = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges }[this.pane];
+    if (title) title.textContent = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, achievements: ACHIEVEMENTS_UI.title }[this.pane];
     if (this.pane === 'challenges') {
       const history = this.allChallenges.filter((c) => !isOpen(c));
       const empty = document.getElementById('world-challenges-empty');
@@ -1581,6 +1610,102 @@ export class WorldView {
       if (past) { past.hidden = history.length > 0; past.textContent = ONLINE.worldNoHistory; }
     }
     if (this.pane === 'ranking') this.paintRanking(me);
+    if (this.pane === 'achievements') this.paintAchievements();
+  }
+
+  /** Re-read achievements (only on a change that could move them; see `refresh`). */
+  private async loadAchievements(): Promise<void> {
+    const identity = this.identity;
+    if (!identity) return;
+    try {
+      const views = await this.client.achievements(identity.token);
+      if (identity !== this.identity || !this.active) return;
+      this.achievements = views;
+    } catch (error) {
+      // A server without the route answers 404: hide the key rather than show a broken page.
+      const status = (error as { status?: number } | null)?.status;
+      if (status === 404 || (error as { code?: string } | null)?.code === 'NOT_FOUND') this.achievements = null;
+      else return;
+    }
+    this.paintPanel();
+  }
+
+  /** The achievements page: each row a goal, its progress, and CLAIM when it is earned. */
+  private paintAchievements() {
+    const list = document.getElementById('online-world-achievements');
+    const intro = document.getElementById('world-achievements-intro');
+    if (!list) return;
+    if (intro) intro.textContent = ACHIEVEMENTS_UI.intro;
+    const views = this.achievements ?? [];
+    const signature = `achievements|${this.claimingAchievement}|${this.justClaimed}|${JSON.stringify(views)}`;
+    if (signature === this.paneSignature) return;
+    this.paneSignature = signature;
+    list.replaceChildren(...views.map((view) => {
+      const copy = ACHIEVEMENT_COPY[view.id];
+      const item = document.createElement('li');
+      item.className = `world-achievement${view.claimed ? ' claimed' : view.done ? ' ready' : ''}${this.justClaimed === view.id ? ' just-claimed' : ''}`;
+      const text = document.createElement('span');
+      text.className = 'world-achievement-text';
+      const title = document.createElement('strong');
+      title.textContent = copy.title;
+      const detail = document.createElement('span');
+      detail.textContent = view.goal > 1 && !view.claimed ? `${copy.detail} · ${view.progress}/${view.goal}` : copy.detail;
+      text.append(title, detail);
+      const meter = document.createElement('span');
+      meter.className = 'world-achievement-meter';
+      meter.setAttribute('aria-hidden', 'true');
+      const fill = document.createElement('i');
+      fill.style.width = `${Math.round(100 * view.progress / view.goal)}%`;
+      meter.append(fill);
+      text.append(meter);
+      let action: HTMLElement;
+      if (view.claimed) {
+        action = document.createElement('span');
+        action.className = 'world-achievement-done';
+        action.textContent = '✓';
+        action.setAttribute('aria-label', ACHIEVEMENTS_UI.claimed);
+      } else if (view.done) {
+        const key = document.createElement('button');
+        key.type = 'button';
+        key.className = 'world-claim-button world-achievement-claim';
+        const busy = this.claimingAchievement === view.id;
+        key.textContent = busy ? ACHIEVEMENTS_UI.claiming : ACHIEVEMENTS_UI.claim(view.seeds);
+        key.disabled = busy;
+        key.addEventListener('click', () => void this.claimAchievement(view.id));
+        action = key;
+      } else {
+        action = document.createElement('span');
+        action.className = 'world-achievement-reward';
+        action.textContent = ACHIEVEMENTS_UI.reward(view.seeds);
+      }
+      item.append(text, action);
+      return item;
+    }));
+  }
+
+  private async claimAchievement(id: string): Promise<void> {
+    const identity = this.identity;
+    if (!identity || this.claimingAchievement) return;
+    this.claimingAchievement = id;
+    this.paintPanel();
+    try {
+      const claim = await this.client.claimAchievement(identity.token, id);
+      this.wallet = claim.wallet;
+      this.paintWallet();
+      const view = this.achievements?.find((a) => a.id === id);
+      if (view) view.claimed = true;
+      this.justClaimed = id;
+      this.cue('chime');
+      this.notice(ACHIEVEMENTS_UI.paid(claim.awarded));
+      // The moment is CSS (finite); the flag only marks which row plays it on this paint.
+      window.setTimeout(() => { if (this.justClaimed === id) { this.justClaimed = null; this.paintPanel(); } }, 1400);
+    } catch {
+      this.notice(ACHIEVEMENTS_UI.failed);
+      void this.loadAchievements();
+    } finally {
+      this.claimingAchievement = null;
+      this.paintPanel();
+    }
   }
 
   private paintRanking(me: string | null) {
@@ -2401,12 +2526,19 @@ export class WorldView {
     this.setSheetGround(tile.colour ?? null);
     // The SAME deterministic chooser the server uses (`server/src/seeds/stake.ts`), so the tile this
     // sentence names is exactly the tile the send will put at risk.
-    const stakeCellId = this.world
-      ? stakedCellFor(this.identity.playerId, cellId, this.world.claims)
-      : null;
+    // One tile backs one stake: tiles already staked in my open challenges, or contested by any open
+    // challenge (the public dispute list), are skipped exactly as the server skips them.
+    const me = this.identity.playerId;
+    const unavailable = new Set<string>([
+      ...(this.world?.disputes ?? []).map((d) => d.cellId),
+      ...this.allChallenges.filter((c) => c.fromMe && (c.status === 'pending' || c.status === 'accepted') && c.stakeCellId)
+        .map((c) => c.stakeCellId!),
+    ]);
+    const stakeCellId = this.world ? stakedCellFor(me, cellId, this.world.claims, unavailable) : null;
+    const holdsTiles = !!this.world?.claims.some((claim) => claim.ownerId === me);
     sheet.notice.textContent = '';
     if (stakeCellId === null) {
-      sheet.line.textContent = CHALLENGE.noTile;
+      sheet.line.textContent = holdsTiles ? CHALLENGE.allStaked : CHALLENGE.noTile;
       sheet.meta.textContent = CHALLENGE.defendMeta;
       this.setSheetKeys(null, CHALLENGE.notNow);
     } else {
@@ -2551,7 +2683,7 @@ export class WorldView {
     } catch (error) {
       const code = (error as { code?: unknown } | null)?.code;
       sheet.notice.textContent =
-        code === 'CELL_BUSY' ? CHALLENGE.busy : failure;
+        code === 'CELL_BUSY' ? CHALLENGE.busy : code === 'NO_TILE' ? CHALLENGE.allStaked : failure;
     } finally {
       if (this.sheet) this.setSheetBusy(false);
     }

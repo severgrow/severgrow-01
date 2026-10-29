@@ -119,6 +119,8 @@ export const CHALLENGE = Object.freeze({
   othersLive: 'A tile in dispute. A duel is being played over this ground.',
   /** A challenger with no tile cannot put one at stake. Clear, and not about money. */
   noTile: 'You need a tile of your own to put at stake.',
+  /** Every tile you hold already backs a challenge (one tile backs one stake). */
+  allStaked: 'All your tiles are already at stake. Finish a challenge, or grow another tile.',
   busy: 'Someone already challenged this ground.',
   sendFailed: 'The challenge did not send. Nothing was taken.',
   answerFailed: 'That answer did not send. Try again.',

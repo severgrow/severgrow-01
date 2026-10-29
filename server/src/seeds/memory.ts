@@ -92,6 +92,11 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     this.purchases.set(`${playerId}:${requestId}`, cellId);
     return { ok: true, cellId, revision: ++this.revision, wallet: { ...wallet }, replayed: false };
   }
+  async receiptKeys(playerId: string, prefix: string): Promise<string[]> {
+    return [...this.receipts.values()]
+      .filter((r) => r.input.playerId === playerId && r.input.sourceKey.startsWith(prefix))
+      .map((r) => r.input.sourceKey);
+  }
   async sell(playerId: string, cellId: string, requestId: string, now: number): Promise<SellResult> {
     const wallet = this.current(playerId);
     const prior = this.purchases.get(`sale:${playerId}:${requestId}`);
@@ -195,7 +200,10 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     if (target.ownerId === input.challengerId) return fail('OWN_TILE');
     // The stake is a TILE, so the challenger must hold one. Their nearest own tile is chosen here,
     // deterministically, and persisted — no wallet is touched and no ledger row is written.
-    const stakeCellId = stakedCellFor(input.challengerId, input.cellId, this.claims.values());
+    // A tile already riding on an open challenge (staked by this player, or contested) backs nothing new.
+    const unavailable = new Set(this.openChallenges().flatMap((c) =>
+      c.challengerId === input.challengerId && c.stakeCellId ? [c.stakeCellId, c.cellId] : [c.cellId]));
+    const stakeCellId = stakedCellFor(input.challengerId, input.cellId, this.claims.values(), unavailable);
     if (stakeCellId === null) return fail('NO_TILE');
     const ownNeighbour = worldNeighbours(input.cellId)
       .some((id) => this.claims.get(id)?.ownerId === input.challengerId);

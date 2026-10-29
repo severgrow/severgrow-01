@@ -328,6 +328,10 @@ try {
     await page.route('**/v1/world', (route) => route.fulfill({
       status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE),
     }));
+    // Achievements (2026-10-29) are not what this suite tests: an empty list keeps their key quiet.
+    await page.route('**/v1/seeds/achievements', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, achievements: [] }),
+    }));
     await page.route('**/v1/seeds/wallet', (route) => route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ ok: true, wallet: { balance: 150, lifetimeEarned: 150, lifetimeSpent: 0, worldInvitationSeen: true } }),

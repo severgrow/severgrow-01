@@ -1,0 +1,8 @@
+---
+description: FUTASAKU project instructions (the canonical copy is AGENTS.md)
+alwaysApply: true
+---
+
+Read and follow `AGENTS.md` at the repository root before any work: it is the single set of
+instructions shared by every tool. Releases: a push to `futa0.5-online` reaches futasaku.com/test/;
+only when the owner says "promote", run `npm run promote` to put /test/ live (docs/RELEASE-FLOW.md).

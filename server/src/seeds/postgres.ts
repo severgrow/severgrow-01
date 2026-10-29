@@ -154,6 +154,14 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
     const level = rows[0]?.level;
     return level == null ? null : number(level);
   },
+  async receiptKeys(playerId, prefix) {
+    // `starts_with`, not LIKE: a prefix is data, never a pattern.
+    const { rows } = await pool.query(
+      'select source_key from seed_reward_receipts where player_id=$1 and starts_with(source_key, $2)',
+      [playerId, prefix],
+    );
+    return rows.map((row) => String(row.source_key));
+  },
   async world() {
     return transaction(pool, async (client) => {
       // A shared lock gives a revision and ownership list from the same committed claim state.
@@ -307,7 +315,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
           `insert into seed_ledger(id,player_id,delta,balance_after,category,source_key,economy_version,created_at,metadata)
            values($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,
           [newId(), input.playerId, decision.amount, next.balance, input.mode, input.sourceKey,
-            SEED_ECONOMY.version, input.now, JSON.stringify({ outcome: input.outcome, campaignLevel: input.campaignLevel ?? null, lessonLevel: input.lessonLevel ?? null, dailyPuzzle: input.dailyPuzzle ?? null })],
+            SEED_ECONOMY.version, input.now, JSON.stringify({ outcome: input.outcome, campaignLevel: input.campaignLevel ?? null, lessonLevel: input.lessonLevel ?? null, dailyPuzzle: input.dailyPuzzle ?? null, achievementSeeds: input.achievementSeeds ?? null })],
         );
       }
       return { awarded: decision.amount, reason: decision.reason, wallet: next, replayed: false };
@@ -356,11 +364,29 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
         if (!target.rows[0]) return fail('NOT_OWNED');
         const defenderId = String(target.rows[0].owner_id);
         if (defenderId === input.challengerId) return fail('OWN_TILE');
-        const own = await client.query('select cell_id from world_claims where owner_id=$1', [input.challengerId]);
+        // Checked before the stake read below, which needs the column.
+        if (!(await hasStakeColumn())) {
+          // Never guess how a new challenge should settle. The send is refused until 0019 is applied.
+          throw Object.assign(new Error('Apply server/migrations/0019_challenge_tile_stake.sql before challenging.'), { code: 'STAKE_COLUMN_MISSING' });
+        }
+        // `for update` serialises one player's sends: two at once could otherwise both pick the same
+        // free tile as their stake (2026-10-29 abuse pass).
+        const own = await client.query('select cell_id from world_claims where owner_id=$1 order by cell_id for update', [input.challengerId]);
         // THE STAKE IS A TILE, NOT SEEDS (owner, 2026-10-29). The nearest own tile, deterministic on
-        // ties; no wallet lock, no debit, no ledger row.
+        // ties; no wallet lock, no debit, no ledger row. A tile already staked in an open challenge,
+        // or contested by one, backs nothing new (stake.ts).
+        const riding = await client.query(
+          `select cell_id, stake_cell_id, challenger_id from world_challenges where status in ('pending','accepted')
+             and (challenger_id=$1 or cell_id = any($2::text[]))`,
+          [input.challengerId, own.rows.map((row) => String(row.cell_id))],
+        );
+        const unavailable = new Set<string>();
+        for (const row of riding.rows) {
+          unavailable.add(String(row.cell_id));
+          if (String(row.challenger_id) === input.challengerId && row.stake_cell_id != null) unavailable.add(String(row.stake_cell_id));
+        }
         const stakeCellId = stakedCellFor(input.challengerId, input.cellId,
-          own.rows.map((row) => ({ cellId: String(row.cell_id), ownerId: input.challengerId })));
+          own.rows.map((row) => ({ cellId: String(row.cell_id), ownerId: input.challengerId })), unavailable);
         if (stakeCellId === null) return fail('NO_TILE');
         if (!worldNeighbours(input.cellId).some((id) => own.rows.some((r) => String(r.cell_id) === id))) return fail('NOT_ADJACENT');
         const busy = await client.query("select 1 from world_challenges where cell_id=$1 and status in ('pending','accepted')", [input.cellId]);
@@ -369,10 +395,6 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
         if (number(outgoing.rows[0]?.n) >= WORLD_CHALLENGE_OPEN_LIMIT) return fail('TOO_MANY_OPEN');
         const incoming = await client.query("select count(*)::int as n from world_challenges where defender_id=$1 and status in ('pending','accepted')", [defenderId]);
         if (number(incoming.rows[0]?.n) >= WORLD_CHALLENGE_OPEN_LIMIT) return fail('DEFENDER_TOO_MANY');
-        if (!(await hasStakeColumn())) {
-          // Never guess how a new challenge should settle. The send is refused until 0019 is applied.
-          throw Object.assign(new Error('Apply server/migrations/0019_challenge_tile_stake.sql before challenging.'), { code: 'STAKE_COLUMN_MISSING' });
-        }
         const id = newId();
         const inserted = await client.query(
           `insert into world_challenges(id,cell_id,challenger_id,defender_id,status,stake,stake_cell_id,request_key,created_at,expires_at)

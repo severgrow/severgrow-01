@@ -44,6 +44,7 @@
     "server:clean-test-data": "node --env-file-if-exists=.env --import tsx server/scripts/clean-test-data.ts",
     "server:backfill-bots": "node --env-file-if-exists=.env --import tsx server/scripts/backfill-test-bursts.ts",
     "server:build-edge": "node server/scripts/build-edge.mjs",
+    "promote": "node scripts/promote.mjs",
     "e2e:online": "tsx web/e2e/online-lobby-check.ts && tsx web/e2e/online-duel-two-browser.ts",
     "e2e:live": "tsx web/e2e/live-duels.ts",
     "skin:manifest": "tsx web/skin-manifest.ts"

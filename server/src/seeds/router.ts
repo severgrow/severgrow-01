@@ -36,6 +36,17 @@ export const createWorldEconomyRouter = (deps: {
       campaignHighestLevel: await economy.campaignHighestLevel(player),
     });
   }
+  // ---- Territory achievements (one-time Seeds for first steps; server-verified) ----
+  if (req.method === 'GET' && path === '/v1/seeds/achievements') {
+    return ok(200, { achievements: await economy.achievements(player) });
+  }
+  if (req.method === 'POST' && path === '/v1/seeds/achievements/claim') {
+    const body = await bodyOf(req);
+    if (typeof body.id !== 'string') throw new ApiError('INVALID_REQUEST', 'Choose an achievement.');
+    const result = await economy.claimAchievement(player, body.id);
+    if (!result.ok) return { status: 409, body: { ok: false, code: result.code, message: 'Not earned yet.' } };
+    return ok(200, { claim: result });
+  }
   // ---- Territory challenges -------------------------------------------------
   // The list is private to the two participants (the map is public, the challenges are not), and
   // no route exposes a balance: a challenge names a stake, never a wallet.

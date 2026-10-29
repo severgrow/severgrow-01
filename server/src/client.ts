@@ -36,6 +36,7 @@ import type {
   WorldChallengeWire,
   WorldChallengesPayload,
 } from './seeds/types.js';
+import type { AchievementView } from './seeds/achievements.js';
 import type { Action, Event } from '../../src/engine/index.js';
 
 /** Protocol version the browser/build reports (P-5 handshake). */
@@ -412,6 +413,19 @@ export class DuelClient {
   async sellWorld(token: string, cellId: string, requestId: string): Promise<SellResult> {
     const response = await this.request<{ sale: SellResult }>('POST', '/v1/world/sales', { token, body: { cellId, requestId } });
     return response.sale;
+  }
+
+  /** Territory achievements: progress and which are paid (server/src/seeds/achievements.ts). */
+  async achievements(token: string): Promise<AchievementView[]> {
+    const response = await this.request<{ achievements: AchievementView[] }>('GET', '/v1/seeds/achievements', { token });
+    return response.achievements;
+  }
+
+  /** Claim one achievement's Seeds. Idempotent: a second claim replays the first payment. */
+  async claimAchievement(token: string, id: string): Promise<{ id: string; awarded: number; replayed: boolean; wallet: SeedWallet }> {
+    const response = await this.request<{ claim: { id: string; awarded: number; replayed: boolean; wallet: SeedWallet } }>(
+      'POST', '/v1/seeds/achievements/claim', { token, body: { id } });
+    return response.claim;
   }
 
   async acknowledgeWorldInvitation(token: string): Promise<void> {

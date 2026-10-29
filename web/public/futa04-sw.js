@@ -17,6 +17,9 @@ function cachePrefix() {
   // The /3/ preview (levels 1-10 as the tutorial): its own scope, its own cache.
   if (/^\/3\//.test(url.pathname)) return 'futa05lessons3-';
   if (url.pathname.includes('/futa0.5/')) return 'futa05-';
+  // The TEST copy at /test/ (docs/RELEASE-FLOW.md): the same game one promote ahead of the root. Its
+  // own prefix, so a newer cache version there can never purge the live game's cache, or vice versa.
+  if (/^\/test\//.test(url.pathname)) return 'futa05test-';
   if (url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futa0.4/')) return 'futa04-';
   return 'severor-main2-';
 }

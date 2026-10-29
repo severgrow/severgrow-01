@@ -35,6 +35,8 @@ export type RewardInput = {
   trainingTicketId?: string;
   /** Only for a server-verified Daily Puzzle solve (receipt `daily:<no>`): pays exactly one tile. */
   dailyPuzzle?: number;
+  /** Only for a server-verified Territory achievement (receipt `achievement:<id>`): its fixed amount. */
+  achievementSeeds?: number;
 };
 export type RewardResult = { awarded: number; reason: string | null; wallet: SeedWallet; replayed: boolean };
 export type ClaimResult =
@@ -185,6 +187,8 @@ export interface WorldEconomyStore {
    * own id is accepted — callers pass the authenticated player, never one from the request.
    */
   campaignHighestLevel(playerId: string): Promise<number | null>;
+  /** This player's recorded receipt keys that start with `prefix` (e.g. `achievement:`); own id only. */
+  receiptKeys(playerId: string, prefix: string): Promise<string[]>;
   world(): Promise<WorldSnapshot>;
   claim(playerId: string, cellId: string, requestId: string, now: number): Promise<ClaimResult>;
   /** Sell one of the player's own tiles back for `SEED_ECONOMY.tileSaleReturn`; idempotent by request. */

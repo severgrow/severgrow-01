@@ -11,9 +11,13 @@ import { hexDistance, parseWorldCell } from '../world.js';
  * client's preview sentence. This is the ONE definition: `memory.ts` and `postgres.ts` both call it,
  * and `web/src/online/world-view.ts` calls it to name the tile before the send.
  *
- * `null` means the player holds no tile at all, which the service refuses as `NO_TILE`. (A challenger
- * normally has one anyway — the contested tile must share a side with their land — but the rule is
- * stated once here instead of relying on adjacency to imply it.)
+ * `null` means the player holds no tile that can back a stake, which the service refuses as `NO_TILE`.
+ *
+ * ONE TILE BACKS ONE STAKE (2026-10-29 abuse pass). `unavailable` names tiles that are already riding
+ * on something: staked in one of the challenger's own OPEN challenges, or contested by an open
+ * challenge. They are skipped, so a player with one tile cannot promise it to three defenders (only
+ * the first winner could have collected). Both stores pass it; server/tests/
+ * territory-challenge-integrity.test.ts pins the rule.
  */
 export type StakeClaim = { cellId: string; ownerId: string };
 
@@ -21,12 +25,13 @@ export const stakedCellFor = (
   challengerId: string,
   contestedCellId: string,
   claims: Iterable<StakeClaim>,
+  unavailable: ReadonlySet<string> = new Set(),
 ): string | null => {
   const target = parseWorldCell(contestedCellId);
   if (!target) return null;
   const own: { id: string; distance: number }[] = [];
   for (const claim of claims) {
-    if (claim.ownerId !== challengerId) continue;
+    if (claim.ownerId !== challengerId || unavailable.has(claim.cellId)) continue;
     const cell = parseWorldCell(claim.cellId);
     if (!cell) continue;
     own.push({ id: claim.cellId, distance: hexDistance(cell.q - target.q, cell.r - target.r) });
