@@ -77,8 +77,30 @@ const WORLD_KEY_ICONS = {
   chat: KEY_ICON('<path class="line" d="M5 5h14v11H10l-5 4V5Z"/><path class="line" d="M8 9h8M8 12h5"/>'),
 } as const;
 type Pane = 'ranking' | 'challenges';
-/** How long a glide to a tile or a player takes: one breath, like the interface's own surfaces. */
-const GLIDE_MS = 380;
+/**
+ * HOW LONG THE GLIDE TAKES, AND HOW IT MOVES (owner, 2026-10-29: "the 'out of map' territory
+ * animation is too fast and too jumpy - a bit slower, way smoother, without costing much CPU at all").
+ *
+ * 380 ms was too quick for a move across the whole map, but the speed was only half of it: the old
+ * curve `1 - (1 - t) ** 3` is an ease-OUT cubic with no ease-in at all, so the camera covered ~87.5%
+ * of the distance in the FIRST HALF of the time — it snapped, then crawled. A longer duration on
+ * that curve would only have made the crawl longer, so the curve had to change too.
+ *
+ * 560 ms is one slow breath (inside 520–620 ms). `glideProgress` is a true smoothstep: it leaves
+ * rest gently, arrives gently, and is exactly half-way at half-time. It is NOT the CSS
+ * `easeOpen` bezier (0.22, 1, 0.36, 1): that bezier is another hard ease-out — 96% of the travel at
+ * the midpoint — so the same words would have measured like the old curve.
+ */
+export const GLIDE_MS = 560;
+/**
+ * The glide's curve, as a pure function so a test can hold it: 3t² - 2t³ (true smoothstep).
+ * Zero speed at both ends, 1.5x the average speed at the middle, `glideProgress(0.5) === 0.5`.
+ * Exported only so `web/tests/territory-glide.test.ts` can prove the shape without a browser.
+ */
+export const glideProgress = (t: number): number => {
+  const x = t < 0 ? 0 : t > 1 ? 1 : t;
+  return x * x * (3 - 2 * x);
+};
 /** The soft-focus layers stay off this long after a gesture ends, so a quick second flick never re-blurs mid-motion. */
 const SETTLE_MS = 140;
 /**
@@ -1412,9 +1434,13 @@ export class WorldView {
     ];
   }
   /**
-   * Centre the view on a point of the map, keeping the zoom. It GLIDES there (an ease-out over
-   * GLIDE_MS, one viewBox write per frame) instead of jumping, so the player sees where they went;
-   * under reduced motion it arrives at once.
+   * Centre the view on a point of the map, keeping the zoom. It GLIDES there (a smoothstep over
+   * GLIDE_MS, one viewBox write per frame, no measuring) instead of jumping, so the player sees
+   * where they went; under reduced motion it arrives at once.
+   *
+   * A second tap mid-flight (`stopGlide` from pointerdown, or a new `flyTo`) simply starts the new
+   * glide from the CURRENT box, so a re-target continues from the pixel the camera is on — the
+   * curve restarts, the position never jumps.
    */
   private flyTo(x: number, y: number) {
     if (!this.box || !this.fit) return;
@@ -1428,7 +1454,7 @@ export class WorldView {
     this.setMoving(true);
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / GLIDE_MS);
-      const eased = 1 - (1 - t) ** 3;
+      const eased = glideProgress(t);
       this.box = from.map((value, i) => value + (to[i]! - value) * eased) as [number, number, number, number];
       this.applyView(false);
       if (t < 1) { this.glideFrame = requestAnimationFrame(step); return; }
