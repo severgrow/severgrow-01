@@ -22,6 +22,7 @@ import type {
   TrainingTicket,
   WorldChallenge,
   WorldClaim,
+  WorldDispute,
   WorldEconomyStore,
   WorldSnapshot,
 } from './types.js';
@@ -293,6 +294,23 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     return [...this.challenges.values()]
       .filter((challenge) => challenge.status === 'accepted' && challenge.matchId !== null)
       .map((challenge) => ({ ...challenge }));
+  }
+
+  /**
+   * The public dispute list: every OPEN challenge, for the whole map, in one pass. Mirrors the SQL
+   * store exactly (same filter, same shape, same order), so the map draws the same layer whichever
+   * backend is running.
+   */
+  async disputedCells(): Promise<WorldDispute[]> {
+    return [...this.challenges.values()]
+      .filter((challenge) => challenge.status === 'pending' || challenge.status === 'accepted')
+      .sort((a, b) => (a.cellId < b.cellId ? -1 : a.cellId > b.cellId ? 1 : 0))
+      .map((challenge) => ({
+        cellId: challenge.cellId,
+        challengerId: challenge.challengerId,
+        defenderId: challenge.defenderId,
+        live: challenge.status === 'accepted',
+      }));
   }
 
   async challengesInvolving(playerId: string, since: number): Promise<WorldChallenge[]> {

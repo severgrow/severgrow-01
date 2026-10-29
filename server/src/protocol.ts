@@ -2,6 +2,7 @@
 // that cross the network: a match summary and a player-specific view. The authoritative engine
 // `State` (deck order, both hands, seed) is never part of any payload.
 import type { Action, EndReason, Event, GameResult, Player, RulesConfig, View } from '../../src/engine/index.js';
+import type { WorldDispute } from './seeds/types.js';
 
 export type MatchStatus = 'waiting' | 'active' | 'finished';
 
@@ -194,8 +195,10 @@ export type SweepResponse = {
 
 /**
  * One tile on the PUBLIC shared world map. Deliberately carries only what a visitor needs: the
- * cell, the holder's display name, when it was placed and whether it was taken by beating the
- * previous holder. No player id, no match id — the map is a public read.
+ * cell, who holds it (the owner's id and display name, which the map has always published), the
+ * holder's colour and Campaign level, and when it was placed. No match id, no token, no balance.
+ * `disputes` names the two sides of an OPEN challenge for the same reason: the claim beside it
+ * already names the holder.
  */
 export type WorldMapPayload = {
   world: {
@@ -209,6 +212,13 @@ export type WorldMapPayload = {
      * challenger puts one of their own tiles at stake instead (`WorldChallengeWire.stakeCellId`).
      */
     challengeStake: number;
+    /**
+     * Tiles under an OPEN challenge, whoever is playing — the map's dispute layer reads this
+     * (owner, 2026-10-29). Minimal public shape: the cell and the two sides' ids, nothing private.
+     * One entry per disputed cell (`world_challenges_one_open_idx`). OPTIONAL because a client may
+     * be talking to a server deployed before this field existed; the client treats it as empty.
+     */
+    disputes?: WorldDispute[];
   };
 };
 export type WorldMapResponse = { ok: true } & WorldMapPayload;

@@ -47,6 +47,11 @@ export class WorldEconomyService {
     await this.settleFinished(this.now()).catch(() => 0);
     await this.store.expireChallenges(this.now()).catch(() => 0);
     const snapshot = await this.store.world();
+    // THE PUBLIC DISPUTE LIST (owner, 2026-10-29). Read AFTER the two lazy closes above, so a row
+    // that just expired or settled never marks the tile it no longer contests. A mark is
+    // decoration: if this read fails (an unmigrated table, a replica blip) the map must still
+    // answer, exactly like the two housekeeping calls above.
+    const disputes = await this.store.disputedCells().catch(() => []);
     return {
       // The SEEN map: the v2 coast plus two rings around every tile (server/src/world.ts).
       version: WORLD_VERSION, revision: snapshot.revision, cells: seenWorld(snapshot.claims.map((c) => c.cellId)),
@@ -64,6 +69,8 @@ export class WorldEconomyService {
        * TILE the challenger puts up (`stakeCellId` on each challenge).
        */
       challengeStake: 0,
+      /** Tiles under an open challenge, for everybody's map. Public shape only (`WorldDispute`). */
+      disputes,
     };
   }
 

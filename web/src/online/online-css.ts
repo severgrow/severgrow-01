@@ -712,6 +712,15 @@ html.reduce-motion .world-selection { animation: none; }
   stroke: #f2e5c5; stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
 }
+/* SOMEBODY ELSE'S DISPUTE (owner, 2026-10-29): the same traced silhouette, HOLLOW. The distinction
+   from my own mark is the fill (solid vs outline), the size (78%) and the target (a button vs not) —
+   never the hue alone, so it survives any colour vision and the owner-coloured tile underneath. No
+   bloom, so it reads as a wire in the ground rather than a badge on it. Static: nothing here is
+   added to the moving-paused or reduce-motion lists, because nothing here ever moves. */
+.world-swords-quiet {
+  fill: none; stroke: #f8f2e1; stroke-width: .8; stroke-linejoin: round;
+  opacity: .5; vector-effect: non-scaling-stroke; pointer-events: none;
+}
 .world-swords-glyph {
   /* Solid, not stroked: the mark is the owner's heraldic reference (2026-10-24), so it is filled in
      the tiles' own warm ink-white with the challenge's red bloom underneath it. No stroke means

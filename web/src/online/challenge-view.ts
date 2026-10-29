@@ -1,4 +1,4 @@
-import type { WorldChallengeWire } from '../../../server/src/seeds/types.js';
+import type { WorldChallengeWire, WorldDispute } from '../../../server/src/seeds/types.js';
 import { CHALLENGE } from './challenge-copy.js';
 
 /**
@@ -148,18 +148,6 @@ export const defendSheetCopy = (
     expired: true,
   };
 };
-
-/**
- * THE CROSSED SWORDS (owner, 2026-10-24: "place 2 swords graphic on top of the tile that is being
- * challenged... if someone clicks at it they can see who challenged it too").
- *
- * The glyph is drawn in the map's own SVG, but WHICH tile carries it — and what it says when a
- * keyboard reaches it — is arithmetic, so it is asserted here instead of in a browser. The marker is
- * the pending state and nothing else: the moment a challenge is accepted, declined, expired, stale
- * or forfeited the data stops offering one, so the swords leave without a timer of their own. That is
- * also exactly the lifecycle of the timer ring (`ringFraction`), so glyph and ring arrive and leave
- * together.
- */
 /** The settled sheet: what the server already did, with no key to press. */
 export const resolvedSheetCopy = (
   challenge: Pick<WorldChallengeWire, 'winnerId' | 'challengerId' | 'challengerName' | 'defenderName'>,
@@ -196,15 +184,35 @@ export const stakeMarkersFor = (
   }))
   .sort((a, b) => (a.cellId < b.cellId ? -1 : a.cellId > b.cellId ? 1 : a.challengeId < b.challengeId ? -1 : 1));
 
+/** A challenge still has a claim on its tile while it is open. History never marks a cell. */
+export const isOpenChallenge = (
+  challenge: Pick<WorldChallengeWire, 'status'>,
+): boolean => challenge.status === 'pending' || challenge.status === 'accepted';
+
+/**
+ * WHAT THE MAP DRAWS, and how heavy it is drawn:
+ *   incoming  my tile, somebody challenged me — a call to action (tappable, opens the sheet)
+ *   outgoing  my challenge out there, my own tile at stake — the same weight (tappable)
+ *   others    two other players are settling this tile — information only (quiet, not tappable)
+ */
+export type MarkerSide = 'incoming' | 'outgoing' | 'others';
+
 export type ChallengeMarker = {
-  /** The one challenge the marker belongs to; paint() reuses its node by this id across polls. */
-  challengeId: string;
+  /**
+   * The DOM key, stable across 12 s polls: the challenge's id for my own rows, `others:<cell>` for a
+   * public dispute. `paintSwords` reuses one node per key, so a focused marker is never destroyed.
+   */
+  key: string;
+  /** My challenge's id, or null for another pair's dispute — the map never knew that row. */
+  challengeId: string | null;
   cellId: string;
-  /** True when this player DEFENDS the tile (the challenge arrived), false when they sent it. */
-  incoming: boolean;
-  /** The other player's display name — the answer the tap gives. */
-  name: string;
-  /** The glyph's accessible name. Deterministic for a challenge; never contains an id. */
+  /** True when this player is one of the two sides. Mine outranks theirs on a shared cell. */
+  mine: boolean;
+  /** The weight to draw, and the `data-side` the scene graph carries. */
+  side: MarkerSide;
+  /** The other player's display name from my own row; null for another pair's dispute. */
+  name: string | null;
+  /** The glyph's accessible name. Deterministic; never contains an id or a coordinate. */
   label: string;
 };
 
@@ -222,9 +230,12 @@ export const swordsHitPx = (cellPixelWidth: number): number =>
   (SWORDS_HIT_RADIUS * 2 / HEX_WIDTH_UNITS) * cellPixelWidth;
 
 /**
- * The marker for one tile, or null. A pending challenge is the ONLY state with swords — an accepted
- * one already has a sheet and a duel, and a closed one is history. If a cell somehow carries more
- * than one pending entry, the defender's own answer outranks an outgoing one, then the sooner
+ * The marker for one tile of MINE, or null. Open = `pending` OR `accepted` (see `isOpenChallenge`):
+ * a live linked duel has resolved nothing, so its tile keeps its swords until the row closes.
+ *
+ * If a cell somehow carries more than one open entry (the schema's one-open-per-cell index makes
+ * that impossible in real data, but a stale cache could), the order is deterministic: the answer I
+ * still owe outranks one I sent, then a pending row outranks a running one, then the sooner
  * deadline, then the id — the same tile always draws the same marker, whatever order the list
  * arrives in.
  */
@@ -233,19 +244,65 @@ export const challengeMarkerFor = (
   cellId: string,
 ): ChallengeMarker | null => {
   const open = challenges
-    .filter((challenge) => challenge.cellId === cellId && challenge.status === 'pending')
+    .filter((challenge) => challenge.cellId === cellId && isOpenChallenge(challenge))
     .sort((a, b) =>
       (a.fromMe === b.fromMe ? 0 : a.fromMe ? 1 : -1) ||
+      (a.status === b.status ? 0 : a.status === 'pending' ? -1 : 1) ||
       a.expiresAt - b.expiresAt ||
       (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const challenge = open[0];
   if (!challenge) return null;
   const name = (challenge.fromMe ? challenge.defenderName : challenge.challengerName) ?? 'Player';
   return {
+    key: challenge.id,
     challengeId: challenge.id,
     cellId,
-    incoming: !challenge.fromMe,
+    mine: true,
+    side: challenge.fromMe ? 'outgoing' : 'incoming',
     name,
     label: challenge.fromMe ? CHALLENGE.markerTo(name) : CHALLENGE.markerFrom(name),
   };
+};
+
+/**
+ * THE DISPUTE LAYER (owner, 2026-10-29). Every tile under an open challenge, for EVERYBODY:
+ *
+ *   - my own rows come from `/v1/world/challenges` (they carry the names and the sheet);
+ *   - every other pair's row comes from the PUBLIC `world.disputes` on `GET /v1/world`, which is
+ *     only the cell and the two ids — hence a quiet mark with no tap and no name.
+ *
+ * ONE MARKER PER CELL is the contract: the scene graph is keyed by `marker.key`, so a duplicate
+ * here would double a node on every poll. Mine outranks a public entry for the same tile (my row
+ * knows more). A public entry that involves ME is SKIPPED rather than drawn as background news:
+ * my private row is the only thing allowed to speak for my own ground, and it arrives on the same
+ * poll. The cost is linear in disputed cells: 1–4 nodes each, nothing per frame.
+ */
+export const disputeMarkersFor = (
+  challenges: readonly WorldChallengeWire[],
+  disputes: readonly WorldDispute[],
+  viewerId: string | null,
+): ChallengeMarker[] => {
+  const byCell = new Map<string, ChallengeMarker>();
+  const myCells = new Set<string>();
+  for (const challenge of challenges) {
+    if (isOpenChallenge(challenge)) myCells.add(challenge.cellId);
+  }
+  for (const cellId of myCells) {
+    const marker = challengeMarkerFor(challenges, cellId);
+    if (marker) byCell.set(cellId, marker);
+  }
+  for (const dispute of disputes) {
+    if (byCell.has(dispute.cellId)) continue;
+    if (viewerId !== null && (dispute.challengerId === viewerId || dispute.defenderId === viewerId)) continue;
+    byCell.set(dispute.cellId, {
+      key: `others:${dispute.cellId}`,
+      challengeId: null,
+      cellId: dispute.cellId,
+      mine: false,
+      side: 'others',
+      name: null,
+      label: dispute.live ? CHALLENGE.othersLive : CHALLENGE.othersPending,
+    });
+  }
+  return [...byCell.values()].sort((a, b) => (a.cellId < b.cellId ? -1 : a.cellId > b.cellId ? 1 : 0));
 };

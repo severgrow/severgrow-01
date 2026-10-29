@@ -109,6 +109,14 @@ export const CHALLENGE = Object.freeze({
   /** The crossed swords on a contested tile: the glyph's one spoken name, who and which side. */
   markerFrom: (name: string) => `Challenge on this tile. ${name} challenged you.`,
   markerTo: (name: string) => `Challenge on this tile. You challenged ${name}.`,
+  /**
+   * ANOTHER PAIR'S DISPUTE (owner, 2026-10-29): information, not a call to action. It names nobody
+   * — the mark is about the TILE being in dispute — and says whether the duel has started, because
+   * "waiting" and "being fought" are different news. Both are read by assistive tech only; there is
+   * no tap, so no sentence here may promise one.
+   */
+  othersPending: 'A tile in dispute. Another player has challenged this ground.',
+  othersLive: 'A tile in dispute. A duel is being played over this ground.',
   /** A challenger with no tile cannot put one at stake. Clear, and not about money. */
   noTile: 'You need a tile of your own to put at stake.',
   busy: 'Someone already challenged this ground.',
