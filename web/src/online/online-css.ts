@@ -1277,6 +1277,14 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
     background: rgba(10, 13, 11, .5); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   }
   .online-world #online-world-notice:empty { display: none; }
+  /* A READOUT IS NOT A CONTROL (owner report, 2026-10-29: "wasnt able to zoom at some point
+     randomly"). The wallet pill and the notice are pure display, but they sit INSIDE the map's
+     stage, so a wheel over them was swallowed: measured, the wallet at 136x38 and the notice at
+     507x37 each ate the scroll without zooming and without scrolling anything. A desktop player
+     pointing at the middle of the map is still pointing at the map, so these let the wheel reach
+     the svg underneath. Deliberately NOT applied to the selection bar (it carries the Grow/Sell
+     keys) or to the MENU key (it is the menu). */
+  .online-world :is(#online-world-wallet, #online-world-notice) { pointer-events: none; }
   /* the keys sit in a little from the stage's rounded corners, on one 14px edge; the windows hang
      from the row like on a phone, a fixed width at the right */
   .online-world .world-grid > .world-menu-key { top: 14px; right: 14px; }
