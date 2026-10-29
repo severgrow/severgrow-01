@@ -857,10 +857,6 @@ export const INTEL = Object.freeze({
   scoreLine: (you: number, them: number, turn: number): string => `${you} – ${them} points · turn ${turn}`,
   latest: 'LATEST',
   noMoves: 'No moves yet. The first card is face up on the Throw pile.',
-  tiles: 'TILES',
-  drawPile: 'DRAW PILE',
-  theirHand: 'THEIR HAND',
-  bombsUnseen: 'BOMBS UNSEEN',
   thrown: 'THROWN SO FAR',
   thrownNone: 'Nothing thrown yet.',
   /** one sentence per public move; `you` is true for my own */
@@ -881,28 +877,124 @@ export const INTEL = Object.freeze({
       default: return `${who}: ${verb.toLowerCase()}${detail ? ` ${detail}` : ''}.`;
     }
   },
-  tipLabel: (level: number, name: string): string => `LESSON ${level} · ${name.toUpperCase()}`,
-  seeRule: 'See the rule',
+  seeRule: 'Open the rule',
   fullRules: 'Full rules',
-  /** the tips, most urgent first */
+  /** The four verdicts. They name what the player is deciding (a risk, a gain, the clock),
+   *  not the lesson a rule came from — that is the whole point of the rework (owner, 2026-10-29:
+   *  "tips should be more strategic tips, not the basic info of rules"). */
+  kind: Object.freeze({
+    danger: 'DANGER',
+    opportunity: 'OPPORTUNITY',
+    tempo: 'TEMPO',
+    endgame: 'ENDGAME',
+  }),
+  /** The small line above a tab's content. It says WHICH surface this is: Tips is this match,
+   *  Rules is reference. The two tabs never read alike. */
+  scope: Object.freeze({
+    now: 'THE MATCH',
+    tips: 'THIS MATCH',
+    rules: 'HOW THE GAME WORKS',
+    turn: (n: number): string => `TURN ${n}`,
+    reference: 'TEN LESSONS',
+  }),
+  /** The scannable four-number readout (plus the public Bomb count). */
+  stat: Object.freeze({
+    land: 'LAND',
+    cuts: 'CUTS',
+    deck: 'DECK',
+    hand: 'HAND',
+    bombs: 'BOMBS',
+  }),
+  /** A quiet Tips tab still looks composed: no blank panel, no empty sentence. */
+  quiet: Object.freeze({
+    title: 'NO OPEN FRONT',
+    line: 'Neither home is exposed. The next Grow sets the shape of the match.',
+  }),
+  /** ONE strategic read of the position, shown on Now above the readout. Every variant is
+   *  derived from public information only (board, deck count, both homes). */
+  observation: Object.freeze({
+    home: (left: number, taken: number): string => left === 1
+      ? 'They need one more side of your home to take the match.'
+      : `Your home is down to ${left} open sides; they already hold ${taken}.`,
+    theirHome: (left: number): string => left === 1
+      ? 'Their home is one side from falling.'
+      : `Their home is down to ${left} open sides.`,
+    deck: (n: number): string => n === 1
+      ? 'The last card is in the Draw pile. The count decides what follows.'
+      : `${n} cards left in the Draw pile. The count is coming.`,
+    lead: (by: number, deck: number): string => `You are ${by} tile${by === 1 ? '' : 's'} up with ${deck} left in the Draw pile.`,
+    behind: (by: number, deck: number): string => `You are ${by} tile${by === 1 ? '' : 's'} down with ${deck} left in the Draw pile.`,
+    level: (tiles: number): string => `The land is level at ${tiles} tile${tiles === 1 ? '' : 's'} each.`,
+    open: (deck: number): string => `Both homes stand alone. ${deck} cards left in the Draw pile.`,
+  }),
+  /** The tips. Each one names THIS match's numbers and the decision they create; none states a
+   *  rule on its own. `intel-guide.ts` builds the evidence chips from the same counts, so a tip
+   *  cannot cite a number the engine disagrees with. */
   tips: Object.freeze({
-    homeDanger: (left: number): string => left === 1
-      ? 'Your home has one open side left. Fill it now, or they win by surrounding it.'
-      : `Your home has ${left} open sides left. Fill one before they surround it.`,
-    surround: (left: number): string => left === 1
-      ? 'Their home has one open side left. Take it for an instant win.'
-      : `Their home has only ${left} open sides left. Take them and you win at once.`,
-    cut: (n: number): string => `A higher card on their weak link cuts off ${n} of their tiles.`,
-    blast: 'Two Bombs make a Blast: it clears a whole area and does not use your Grow.',
-    bloom: 'You can Bloom: several tiles at once, and it does not use your Grow.',
-    bomb: 'Your Bomb removes any one of their tiles, even a 9.',
-    pileBloom: 'The top card of the Throw pile completes a Bloom in your hand. Take it.',
-    gold: 'A gold hex is in reach. It counts double at the end.',
-    weak: (n: number): string => `If they cut your weak link you lose ${n} tiles. A higher card there holds it.`,
-    deckLow: (n: number): string => n === 1 ? 'One card left in the Draw pile. Make this turn count.' : `${n} cards left in the Draw pile. Make each turn count.`,
-    throwIt: 'Throw a card you cannot use. They see it, and may take it.',
-    keepJoined: 'Keep every tile joined to your home. A cut chain withers.',
-    stronger: 'A higher card can take their tile. Grow toward their home.',
+    home: (left: number, taken: number) => left === 1
+      ? {
+        headline: 'Your home is one side from falling.',
+        detail: `They hold ${taken}. Close the last side before their next Grow.`,
+      }
+      : {
+        headline: `Your home has ${left} open sides.`,
+        detail: `They hold ${taken} of your home's sides. Fill one before they close the ring.`,
+      },
+    surround: (left: number, taken: number, winNow: boolean) => left === 1
+      ? {
+        headline: 'Their home is one side from falling.',
+        detail: winNow ? 'A Grow this turn ends the match.' : `You hold ${taken}. Take the last side and the match is yours.`,
+      }
+      : {
+        headline: `Their home has ${left} open sides.`,
+        detail: `You hold ${taken} of them. Close one and they have ${left - 1} left to defend.`,
+      },
+    weak: (loss: number) => ({
+      headline: `One hex holds ${loss} of your tiles together.`,
+      detail: 'It is within their reach. Strengthen it, or grow a second link so the cut costs less.',
+    }),
+    cut: (loss: number, rank: number) => ({
+      headline: `One Grow severs ${loss} of their tiles.`,
+      detail: `Your ${rank} takes the hex their chain hangs from.`,
+    }),
+    deck: (n: number) => ({
+      headline: n === 1 ? 'One card left in the Draw pile.' : `${n} cards left in the Draw pile.`,
+      detail: 'The count is close. Every tile you hold is a point at the end.',
+    }),
+    pile: (rank: number) => ({
+      headline: 'The pile top completes a Bloom.',
+      detail: `Take the ${rank} instead of drawing blind: the set is already in your hand.`,
+    }),
+    blast: (tiles: number) => ({
+      headline: `A Blast clears ${tiles} of their tiles.`,
+      detail: 'Two Bombs, one move: the target and its neighbours go, and your Grow is untouched.',
+    }),
+    bloom: (tiles: number) => ({
+      headline: `A Bloom lands ${tiles} tiles in one move.`,
+      detail: 'It widens the network without spending the Grow you still have.',
+    }),
+    bomb: (theirBest: number) => ({
+      headline: 'A Bomb removes any tile you touch.',
+      detail: `Their ${theirBest} is no more safe than any other: strength does not matter, and only the home is immune.`,
+    }),
+    gold: () => ({
+      headline: 'Gold is in reach.',
+      detail: 'It scores double at the end; take it if you can hold it.',
+    }),
+    throw: () => ({
+      headline: 'Every card you throw is one they can take.',
+      detail: 'The Grow is done. What you throw lands face up on the pile.',
+    }),
+    land: (mine: number, theirs: number, deck: number) => ({
+      headline: mine > theirs ? `You hold ${mine} tiles to their ${theirs}.`
+        : mine < theirs ? `They hold ${theirs} tiles to your ${mine}.`
+        : `Level at ${mine} tile${mine === 1 ? '' : 's'} each.`,
+      detail: `No large cut is open on either side. ${deck} cards left in the Draw pile.`,
+    }),
+    stronger: (takeable: number) => ({
+      headline: `${takeable} of their tiles are open to a stronger card.`,
+      detail: 'Take one: they lose a tile and you gain it.',
+    }),
   }),
 });
 

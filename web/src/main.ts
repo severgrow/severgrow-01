@@ -180,7 +180,7 @@ import {
 import type { TutorialGate } from './logic/tutorial-gate.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
 import type { GlassSurface, IntelGuide, IntelTabId } from './player/glass-surface.js';
-import { intelTips, nearestRule, ruleCards, tipLabel } from './logic/intel-guide.js';
+import { intelTips, nearestRule, ruleCards } from './logic/intel-guide.js';
 import { cancelStarterRitual, isStarterRitualPlaying, playStarterRitual } from './player/starter-ritual.js';
 import { offlineRitualKey, onlineRitualKey, playsStarterRitual, starterRitualView } from './logic/starter-ritual.js';
 import type { StarterRitualView } from './logic/starter-ritual.js';
@@ -5940,14 +5940,14 @@ const lastIntelTab = (): IntelTabId => {
   return saved === 'tips' || saved === 'rules' ? saved : 'now';
 };
 
-/** Match Intel's content: the public match record, plus tips and lesson cards for this moment. */
+/** Match Intel's content: the public match record, plus this match's tips and the rule cards. */
 function intelModel(): { data: ReturnType<typeof matchIntel>; guide: IntelGuide } | null {
   if (!session) return null;
   const v = session.view;
   const tips = intelTips(v);
   return {
     data: matchIntel(v, session.state.history ?? [], openingPublicDiscard(session.state, session.base)),
-    guide: { tips: tips.map((t) => ({ level: t.level, label: tipLabel(t), text: t.text })), rules: ruleCards(session.state.config), rule: nearestRule(tips) },
+    guide: { tips, rules: ruleCards(session.state.config), rule: nearestRule(tips) },
   };
 }
 
