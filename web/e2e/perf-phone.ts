@@ -48,35 +48,44 @@ const stats = (xs: number[]) => {
   return { n: s.length, avg: s.reduce((a, b) => a + b, 0) / Math.max(1, s.length), median: at(0.5), p95: at(0.95), worst: s.at(-1) ?? 0 };
 };
 
-/** Runs before any app code: a frame recorder that never forces frames unless we ask it to, and a
- *  counter of the frames the GAME itself requests (the pump: 0 while the player is only thinking). */
+/**
+ * Runs before any app code. It counts the frames the GAME asks for (its pump) and long tasks, but
+ * it NEVER schedules a frame of its own while idle: a probe that keeps a rAF chain alive forces the
+ * browser to produce a frame every 16 ms and would end up measuring its own heartbeat. Idle frames
+ * are read from the CDP trace (MainFrame.Draw), idle main-thread cost from Performance metrics.
+ */
 const init = () => {
   const w = window as unknown as Record<string, unknown>;
-  const probe = { on: false, frames: [] as number[], long: 0, appRaf: 0, own: 0 };
+  const probe = { on: false, frames: [] as number[], long: 0, appRaf: 0, own: 0, recording: false };
   w.__probe = probe;
   const raf = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (cb: FrameRequestCallback) => {
     if (!probe.own) probe.appRaf++;
     return raf(cb);
   };
-  let last = 0;
-  const tick = (t: number) => {
-    if (probe.on) {
-      if (last) probe.frames.push(t - last);
-      last = t;
-    } else last = 0;
-    probe.own++;
-    requestAnimationFrame(tick);
-    probe.own--;
-  };
-  probe.own++;
-  requestAnimationFrame(tick);
-  probe.own--;
   try {
     new PerformanceObserver((l) => {
       for (const e of l.getEntries()) if (probe.on) probe.long += e.duration;
     }).observe({ type: 'longtask', buffered: false });
   } catch { /* not every engine exposes longtask */ }
+  /** Frame timing for a move: only runs while a move is actually being measured. */
+  (w as { __recordFrames?: (on: boolean) => void }).__recordFrames = (on: boolean) => {
+    probe.recording = on;
+    if (on) probe.frames = [];
+    else return;
+    let last = 0;
+    const tick = (t: number) => {
+      if (!probe.recording) return;
+      if (last) probe.frames.push(t - last);
+      last = t;
+      probe.own++;
+      requestAnimationFrame(tick);
+      probe.own--;
+    };
+    probe.own++;
+    requestAnimationFrame(tick);
+    probe.own--;
+  };
 };
 
 /** CSS properties whose animation costs a paint / layout / re-raster on every frame. */
@@ -124,10 +133,10 @@ const measureIdle = async (page: Page, cdp: any, bcdp: any, ms: number): Promise
     transferMode: 'ReportEvents',
   });
   const before = await metrics(cdp);
-  await page.evaluate('(() => { const p = window.__probe; p.frames = []; p.long = 0; p.appRaf = 0; p.on = true; })()');
+  await page.evaluate('(() => { const p = window.__probe; p.long = 0; p.appRaf = 0; p.on = true; })()');
   await page.waitForTimeout(ms);
   const after = await metrics(cdp);
-  const probe = await page.evaluate<{ frames: number[]; long: number; appRaf: number }>('(() => { const p = window.__probe; p.on = false; return { frames: p.frames, long: p.long, appRaf: p.appRaf }; })()');
+  const probe = await page.evaluate<{ long: number; appRaf: number }>('(() => { const p = window.__probe; p.on = false; return { long: p.long, appRaf: p.appRaf }; })()');
   await bcdp.send('Tracing.end');
   await done;
   bcdp.off('Tracing.dataCollected', onData);
@@ -164,13 +173,13 @@ const measureTurn = async (page: Page): Promise<Turn> => {
     const s = h.state();
     const action = s.phase === 'DRAW' ? (pick('Draw') ?? legal[0]) : (pick('Bloom') ?? pick('Sprout') ?? legal[0]);
     if (!action) return { ok: false, kind: 'none' };
-    const p = window.__probe; p.frames = []; p.long = 0; p.on = true;
+    window.__recordFrames(true);
     const ok = h.playFor(action, 0);
     return { ok, kind: action.t };
   })()` as never);
   await page.waitForFunction('(() => { const h = window.__severgrow; return !h || !h.busy(); })()', undefined, { timeout: 60_000 }).catch(() => undefined);
   await page.waitForTimeout(150);
-  const frames = await page.evaluate<number[]>('(() => { const p = window.__probe; p.on = false; return p.frames.slice(1); })()');
+  const frames = await page.evaluate<number[]>('(() => { const p = window.__probe; window.__recordFrames(false); return p.frames.slice(1); })()');
   const g = stats(frames);
   return {
     frames: g.n,
@@ -336,7 +345,7 @@ try {
 } finally {
   await browser.close();
   if (DIST) await new Promise<void>((r) => (served as { server: import('node:http').Server }).server.close(() => r()));
-  else await (served as unknown as { close: () => Promise<void> }).close().catch(() => undefined);
+  else await new Promise<void>((r) => (served as { server: { httpServer: import('node:http').Server } }).server.httpServer.close(() => r()));
 }
 
 const mean = (f: (g: G) => number) => runs.reduce((sum, g) => sum + f(g), 0) / Math.max(1, runs.length);

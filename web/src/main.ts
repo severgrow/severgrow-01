@@ -75,6 +75,7 @@ import { shareCard } from './ui/sharecard.js';
 import { feel, observeLongTasks, perfStart, perfStep } from './logic/perf.js';
 import { dragExceeded, installPress, PRESS_SELECTOR, shouldSkipPress } from './logic/press.js';
 import { attachSchedulerPause, scheduler } from './logic/scheduler.js';
+import { mountHiddenPause } from './ui/hidden-pause.js';
 import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './logic/timing.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
@@ -10408,6 +10409,8 @@ installPress();
 // Phase 4: the hand's breath pauses under a finger and in a hidden tab.
 installHandBreath($('hand'));
 attachSchedulerPause($('game'), $('board-wrap'));
+// A hidden tab has nobody looking at it: park every playing animation until it is back.
+mountHiddenPause();
 observeLongTasks();
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab' || e.key.startsWith('Arrow')) document.documentElement.classList.add('kbd');
