@@ -109,6 +109,25 @@ export const breathAmpOf = (weight: number): number => {
 };
 
 /**
+ * The breath's amplitude as a thousandth (8 = 0.8%), quantised to the five steps the stylesheet
+ * can bake. Why quantise at all: a keyframe whose `scale` is `calc()` over a custom property cannot
+ * run on the compositor, so every card forced a full style pass on the main thread every frame for
+ * as long as the hand was breathing — the single biggest idle cost after the display's blink
+ * (measured 2026-10-29, web/e2e/perf-phone.ts). Static keyframes composite for free.
+ *
+ * The steps are 0.008 / 0.007 / 0.006 / 0.005 / 0.004, so the largest error against `breathAmpOf`
+ * is 0.0005 of the card's size — 0.03 px on a 60 px card at the widest, which no display can show.
+ */
+export const breathAmpStep = (weight: number): 4 | 5 | 6 | 7 | 8 => {
+  const thousandths = Math.round(breathAmpOf(weight) * 1000);
+  if (thousandths >= 8) return 8;
+  if (thousandths === 7) return 7;
+  if (thousandths === 6) return 6;
+  if (thousandths === 5) return 5;
+  return 4;
+};
+
+/**
  * The one motion gate. Every path that animates reads this: a reduced-motion preference or a
  * time scale of zero (Speed Off / fast-forward) means "no motion", never a new preference.
  */

@@ -79,7 +79,7 @@ import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './log
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { EASE, BREATH, MOTION, PINNED, breathAmpOf, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
+import { EASE, BREATH, MOTION, PINNED, breathAmpStep, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
 import { boardHasSettled, resultHoldStalled } from './logic/result-hold.js';
 import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
 import { enterSurface, exitSurface, resetSurface } from './ui/interface-motion.js';
@@ -7395,7 +7395,6 @@ function renderHand(v: View, advice: Advice | null) {
     if (i < BREATH.maxCards) {
       b.style.setProperty('--breath-period', `${breathPeriodOf(c.id)}ms`);
       b.style.setProperty('--breath-phase', `${breathPhaseOf(c.id)}ms`);
-      b.style.setProperty('--breath-scale', (1 + breathAmpOf(weight)).toFixed(4));
     }
     const off = i - (n - 1) / 2;
     const lifted = sel.card === c.id || picked.has(c.id) || bloomPick.includes(c.id) || inBloom;
@@ -7405,6 +7404,8 @@ function renderHand(v: View, advice: Advice | null) {
     const firstFruit = c.suit === null && cards[i - 1]?.suit !== null && i > 0;
     b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
     if (i >= BREATH.maxCards) b.classList.add('breath-off');
+    // One of five baked amplitudes (never a custom property: see hand-breath-a* in style.css).
+    else b.classList.add(`breath-a${breathAmpStep(weight)}`);
     if (IS_FUTA04) {
       // Picked toward a Bloom, or in the Bloom being painted: the Bloom's own aqua, as on the board.
       b.classList.toggle('futa04-bloom-pick', IS_FUTA04 && inBloom);

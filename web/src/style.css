@@ -1715,16 +1715,47 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 }
 /* Phase 4: the idle breath. It animates `scale` only, so the fan's inline rotation/lift and the
    press's `translate` still compose. A light card sways up to 0.8%, a heavy one 0.4%; the period
-   and phase are per-card (logic/motion.ts), and `linear` with four stops is the smooth loop. */
-@keyframes hand-breath {
+   and phase are per-card (logic/motion.ts), and `linear` with four stops is the smooth loop.
+
+   FIVE BAKED AMPLITUDES, NOT A `var()` (2026-10-29). These keyframes used to read
+   `calc(1 + (var(--breath-scale) - 1) * 0.5)`. A keyframe value that depends on a custom property
+   cannot be handed to the compositor, so each breathing card forced a full style pass on the main
+   thread EVERY frame, for as long as the hand was idle — measured at ~190 ms of style recalculation
+   and ~260 ms of main-thread task per second on a phone-sized screen at 4x CPU throttle (the
+   largest idle cost after the display's blink). The card picks one of five static amplitudes
+   (`breath-a8`..`breath-a4`, logic/motion.ts `breathAmpStep`); 0.03 px is the whole difference. */
+@keyframes hand-breath-a8 {
   0%, 100% { scale: 1; }
-  25% { scale: calc(1 + (var(--breath-scale, 1.006) - 1) * 0.5); }
-  50% { scale: var(--breath-scale, 1.006); }
-  75% { scale: calc(1 + (var(--breath-scale, 1.006) - 1) * 0.5); }
+  25%, 75% { scale: 1.004; }
+  50% { scale: 1.008; }
+}
+@keyframes hand-breath-a7 {
+  0%, 100% { scale: 1; }
+  25%, 75% { scale: 1.0035; }
+  50% { scale: 1.007; }
+}
+@keyframes hand-breath-a6 {
+  0%, 100% { scale: 1; }
+  25%, 75% { scale: 1.003; }
+  50% { scale: 1.006; }
+}
+@keyframes hand-breath-a5 {
+  0%, 100% { scale: 1; }
+  25%, 75% { scale: 1.0025; }
+  50% { scale: 1.005; }
+}
+@keyframes hand-breath-a4 {
+  0%, 100% { scale: 1; }
+  25%, 75% { scale: 1.002; }
+  50% { scale: 1.004; }
 }
 #hand.breathing .card:not(.breath-off) {
-  animation: hand-breath var(--breath-period, 5200ms) linear var(--breath-phase, 0ms) infinite;
+  animation: hand-breath-a6 var(--breath-period, 5200ms) linear var(--breath-phase, 0ms) infinite;
 }
+#hand.breathing .card.breath-a8:not(.breath-off) { animation-name: hand-breath-a8; }
+#hand.breathing .card.breath-a7:not(.breath-off) { animation-name: hand-breath-a7; }
+#hand.breathing .card.breath-a5:not(.breath-off) { animation-name: hand-breath-a5; }
+#hand.breathing .card.breath-a4:not(.breath-off) { animation-name: hand-breath-a4; }
 /* A finger on the fan, a hidden tab or a pause freezes the breath where it is (no jump). */
 #hand.breathing.breath-hold .card:not(.breath-off) {
   animation-play-state: paused;

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CARD_LIFT, MAX_RANK, liftOf, settleOvershootOf, shadowOf, weightOf,
 } from '../src/logic/card-weight.js';
-import { BREATH, breathAmpOf, breathPeriodOf, breathPhaseOf } from '../src/logic/motion.js';
+import { BREATH, breathAmpOf, breathAmpStep, breathPeriodOf, breathPhaseOf } from '../src/logic/motion.js';
 
 describe('card weight', () => {
   it('is 0 for the lightest rank and 1 for the heaviest', () => {
@@ -59,6 +59,22 @@ describe('the hand breath', () => {
     expect(breathAmpOf(1)).toBeCloseTo(BREATH.minAmp, 6);
     expect(breathAmpOf(0.5)).toBeGreaterThan(breathAmpOf(1));
     expect(breathAmpOf(2)).toBeCloseTo(BREATH.minAmp, 6);
+  });
+
+  it('bakes the amplitude in five compositor-safe steps, within a display resolution of exact', () => {
+    // The keyframes must be static values (a var() in a keyframe keeps the breath on the main
+    // thread); the step may differ from the exact amplitude by 0.0005 of the card's size at most
+    // (0.03 px on a 60 px card).
+    for (let rank = 1; rank <= 9; rank++) {
+      const weight = (rank - 1) / 8;
+      const step = breathAmpStep(weight);
+      expect([4, 5, 6, 7, 8]).toContain(step);
+      expect(Math.abs(step / 1000 - breathAmpOf(weight))).toBeLessThanOrEqual(0.00051); // one thousandth of a pixel of float slop
+    }
+    // Heavier still means less sway, never more.
+    expect(breathAmpStep(0)).toBe(8);
+    expect(breathAmpStep(1)).toBe(4);
+    for (let w = 0; w < 1; w += 0.125) expect(breathAmpStep(w + 0.125)).toBeLessThanOrEqual(breathAmpStep(w));
   });
 
   it('gives every card a deterministic period and phase inside the range', () => {
