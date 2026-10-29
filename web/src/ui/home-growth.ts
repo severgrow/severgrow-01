@@ -136,7 +136,16 @@ const mounted = new WeakMap<SVGGElement, Mounted>();
  * When a growth is due, BOTH stages are drawn now and the change waits for `playHomeGrowth` (the
  * board must be on screen and settled first). Otherwise only the settled stage is drawn.
  */
+/**
+ * OFF (owner, 2026-10-29: "default skin should be the only thing that shows - look at the home
+ * tile"). The tree below is procedural art drawn over the default garden sprite, so on the live board
+ * it read as another skin. Nothing is drawn while this is false; the growth history logic is kept.
+ * web/tests/default-skin-only.test.ts pins it.
+ */
+export const HOME_GROWTH_DRAWN = false;
+
 export const mountHomeGrowth = (home: SVGGElement, key: string, c: Colors): void => {
+  if (!HOME_GROWTH_DRAWN) return;
   const read = source;
   if (!read) return;
   const s = read();
