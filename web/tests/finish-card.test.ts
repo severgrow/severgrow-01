@@ -211,3 +211,48 @@ describe('the won lockup (owner, 2026-10-24)', () => {
     expect(read('../src/style.css')).not.toMatch(/@keyframes go-rule/);
   });
 });
+
+describe('the inquest and the double harvest (surprise, 2026-10-29)', () => {
+  it('lives INSIDE the finish card, and starts hidden', () => {
+    expect(goCard).toContain('id="go-verdict"');
+    expect(goCard).toContain('id="go-inquest"');
+    expect(goCard).toContain('id="go-harvest"');
+    expect(goCard).toMatch(/id="go-verdict"[^>]*hidden/);
+  });
+
+  it('is never behind "More": the truth of the match is part of the result', () => {
+    // The detail lines wait behind the disclosure; this pair is the answer to "how did that
+    // happen", so it is on the card itself.
+    expect(goCard).not.toMatch(/id="go-verdict"[^>]*data-go-extra/);
+    expect(goCard).not.toMatch(/id="go-inquest"[^>]*data-go-extra/);
+    expect(goCard).not.toMatch(/id="go-harvest"[^>]*data-go-extra/);
+  });
+
+  it('adds no new panel, tab, badge or screen: only the card grows a row', () => {
+    // The verdict block carries no button, no role and no surface of its own.
+    const block = html.slice(html.indexOf('id="go-verdict"'), html.indexOf('</figure>') + '</figure>'.length);
+    expect(block).not.toMatch(/<button|<section|<dialog|role=/);
+    expect(html).not.toMatch(/<section id="go-(inquest|harvest|verdict)"/);
+    // And the card's own control rows are unchanged.
+    expect(goButtons).not.toMatch(/id="go-(inquest|harvest|verdict)"/);
+  });
+
+  it('is static: one opacity-only beat, and Reduce motion removes it', () => {
+    const css = read('../src/style.css');
+    expect(css).toMatch(/#gameover\[data-fresh='1'\] \.go-verdict \{\s*animation: go-verdict-in/);
+    expect(css).toMatch(/@keyframes go-verdict-in \{\s*from \{\s*opacity: 0;/);
+    expect(css).toMatch(/\.reduce-motion #gameover\[data-fresh='1'\] \.go-verdict \{\s*animation: none;/);
+    // Never a loop, never a filter/blur, never a timer: the stamp's own rules do not animate at all.
+    const stampRules = css.slice(css.indexOf('#gameover .go-harvest-svg'), css.indexOf('#gameover[data-fresh=\'1\'] .go-verdict'));
+    expect(stampRules).not.toMatch(/animation|filter|transition/);
+  });
+
+  it('main.ts paints it from the match record, and hides BOTH when there is none', () => {
+    expect(mainSource).toMatch(/paintVerdict\(info\.inquest, info\.harvest\)/);
+    expect(mainSource).toMatch(/const verdict = offlineVerdict\(st\);/);
+    expect(mainSource).toMatch(/box\.hidden = !line && !figure;/);
+    // The offline gate: the public projection of the events, and nothing when there are none.
+    expect(mainSource).toMatch(/const events = st\.result \? eventsFor\(st, HUMAN\) : \[\];/);
+    expect(mainSource).toMatch(/if \(!st\.result \|\| events\.length === 0\) return \{ line: null, figure: null \};/);
+  });
+});

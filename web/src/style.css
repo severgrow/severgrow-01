@@ -7404,6 +7404,116 @@ body.result .corner-tools {
   font-size: 0.88rem;
   line-height: 1.3;
 }
+
+/* ---------- THE INQUEST AND THE DOUBLE HARVEST (surprise, 2026-10-29) ----------
+   Two pieces of the SAME result, not two new surfaces: one sentence naming the turn the match was
+   decided on, and one small stamped figure of the final position with the two joined networks in
+   their own inks. They share one row so the plate grows by a single line at the tightest phone,
+   and the pair is static: no loop, no filter, no timer. The one entering beat is the card's own
+   opacity fade, switched off for Reduce motion below. */
+#gameover .go-verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 12px 0 0;
+}
+#gameover .go-inquest {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--fu-cream-70);
+  font-size: 0.82rem;
+  line-height: 1.36;
+  text-wrap: pretty;
+}
+#gameover .go-harvest {
+  flex: 0 0 auto;
+  margin: 0;
+  width: 112px;
+}
+#gameover .go-harvest-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+/* The plate: every hex of the board the match was played on, faint enough to sit under the inks. */
+#gameover .go-harvest-svg .hv-plate path {
+  fill: none;
+  stroke: var(--fu-cream-14);
+  stroke-width: 0.7;
+}
+/* The reader's network: solid. The other seat: a lighter tone with a hatch, so the two masses are
+   told apart by pattern and weight as well as by ink — never by colour alone. */
+#gameover .go-harvest-svg .hv-you path {
+  fill: var(--c-you);
+  fill-opacity: 0.9;
+  stroke: var(--c-you);
+  stroke-width: 0.5;
+}
+#gameover .go-harvest-svg .hv-them path {
+  fill: var(--c-bot);
+  fill-opacity: 0.18;
+  stroke: var(--c-bot);
+  stroke-width: 0.9;
+}
+#gameover .go-harvest-svg .hv-hatch path {
+  fill: url(#go-harvest-hatch);
+  stroke: none;
+}
+#gameover .go-harvest-svg pattern line {
+  stroke: var(--c-bot);
+  stroke-opacity: 0.9;
+  stroke-width: 1;
+}
+/* A tile that is not joined to its own home (a board caught mid-turn): an outline, never a fill. */
+#gameover .go-harvest-svg .hv-cutoff {
+  fill: none;
+  stroke: var(--fu-cream-55);
+  stroke-width: 0.9;
+  stroke-dasharray: 1.5 1.5;
+}
+/* The rim of the board: the engraved edge of the stamp, so the ground reads as a shape. */
+#gameover .go-harvest-svg .hv-outline line {
+  stroke: var(--fu-cream-28);
+  stroke-width: 1.3;
+}
+/* The cut line: where the two networks strangle each other. */
+#gameover .go-harvest-svg .hv-frontier line {
+  stroke: var(--c-gold);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+#gameover .go-harvest-svg .hv-home circle {
+  fill: none;
+  stroke: var(--fu-cream);
+  stroke-width: 1.1;
+}
+#gameover .go-harvest-svg .hv-home .hv-home-dot {
+  fill: var(--fu-cream);
+  stroke: none;
+}
+/* A sealed home takes a heavier ring: the shape says it, not just the colour. */
+#gameover .go-harvest-svg .hv-sealed circle {
+  stroke: var(--c-gold);
+  stroke-width: 2;
+}
+#gameover[data-fresh='1'] .go-verdict {
+  animation: go-verdict-in var(--ix-open) var(--ix-ease-open) 120ms both;
+}
+@keyframes go-verdict-in {
+  from {
+    opacity: 0;
+  }
+}
+.reduce-motion #gameover[data-fresh='1'] .go-verdict {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #gameover[data-fresh='1'] .go-verdict {
+    animation: none;
+  }
+}
 /* The two quiet ways out share ONE line (owner review, 2026-10-23). They were two full-width rows
    of 44px each, which is what made the plate tall enough for the lockup above to read high: the
    framed keys keep the plate's width, and "More" / "Back to menu" pair up under them. This is the
@@ -7532,6 +7642,19 @@ body.result .corner-tools {
   }
   #gameover .go-reason {
     margin-top: 4px;
+  }
+  /* The verdict pair takes the tightest plate: a smaller stamp, a smaller measure, and no extra
+     air above it. It is still one row, so the card grows by a line, never by a block. */
+  #gameover .go-verdict {
+    gap: 8px;
+    margin-top: 7px;
+  }
+  #gameover .go-harvest {
+    width: 74px;
+  }
+  #gameover .go-inquest {
+    font-size: 0.78rem;
+    line-height: 1.32;
   }
   #gameover .go-buttons {
     margin-top: 10px;
