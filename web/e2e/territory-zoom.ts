@@ -136,6 +136,10 @@ const errors: string[] = [];
 try {
   const context: BrowserContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page: Page = await context.newPage();
+  // This suite is run on a busy machine (other suites build and drive browsers beside it), so the
+  // waits are patience, not assertions: no check here is about how FAST the map answers.
+  page.setDefaultNavigationTimeout(90_000);
+  page.setDefaultTimeout(45_000);
   page.on('pageerror', (e) => errors.push(e.message));
   await page.addInitScript((raw) => {
     for (const p of ['', 'main2:', 'futa04:']) localStorage.setItem(`${p}severgrow.duel.identity.v1`, raw);
@@ -308,6 +312,16 @@ try {
   await page.click('#world-panel-close');
   await page.waitForTimeout(600);
   await zoomWorks('after the pane CLOSES, the wheel still zooms');
+
+  // ---- 4b. after a GLIDE: a ranking row flies the view to that player's land ------------------
+  // The glide writes `box` every frame on its own rAF, so the wheel has to take over cleanly when
+  // it lands (`stopGlide` on the first wheel) and the view must still answer afterwards.
+  await openKey('#world-key-ranking');
+  await page.waitForSelector('.world-ranking-row', { timeout: 20_000 });
+  await page.click('.world-ranking-row');
+  await page.waitForTimeout(1300);
+  await zoomWorks('after a fly-to glide, the wheel still zooms');
+  await doubleTapWorks('...and the double tap still zooms after a glide');
 
   // The chat is the other window; it takes the same corner of the map.
   const chatVisible = async () =>
