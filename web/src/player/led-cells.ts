@@ -90,7 +90,32 @@ const ADVANCE = LED_ADVANCE;
 const DOT_X = 2.3;
 const SEPARATOR = ' • ';
 export const ledMessageWidth = (message: string) => Math.max(1, message.length * ADVANCE - 1);
-export const ledMarqueeTravel = (message: string) => ledMessageWidth(`${message}${SEPARATOR}`);
+/**
+ * The distance one marquee loop travels, in CSS px: a WHOLE number of dot advances.
+ *
+ * The width formula is 1 px narrower than the advance (the last column of a glyph is inset), and
+ * the old travel inherited that -1. The strip then wrapped 1 px away from the column it started
+ * on, and every glyph after the wrap sat on a fraction of a dot. A dot-matrix sign steps column by
+ * column, so the period is exactly N advances — the wrap lands on the same column and the seam is
+ * exact rather than 1 px out.
+ */
+export const ledMarqueeTravel = (message: string) => (message.length + SEPARATOR.length) * ADVANCE;
+/** How many whole dot columns one loop is worth: the marquee's step grid. */
+export const ledMarqueeSteps = (message: string) => message.length + SEPARATOR.length;
+/**
+ * How much strip a marquee has to hold, in CSS px, for a display `windowWidth` wide.
+ *
+ * THE WINDOW, NOT THE MESSAGE (2026-10-29). The animation travels exactly one period
+ * (`ledMarqueeTravel`), so at any moment the glass shows strip [t, t + windowWidth] for
+ * t in [0, period]: one period plus the window is every pixel that can ever be on screen.
+ * Bounding the sprite to that keeps the raster work flat in the LENGTH of the message —
+ * before this, scrolling baked the message three times over (measured 2522 CSS px / a
+ * 7566 px bitmap for a 58-character line, and a long sentence would overflow the maximum
+ * canvas width and stop drawing altogether). Callers pass this only while scrolling; a
+ * static message is baked at its own width, exactly as before.
+ */
+export const ledMarqueeSpan = (message: string, windowWidth: number) =>
+  Math.max(1, Math.ceil(ledMarqueeTravel(message) + Math.max(0, windowWidth)));
 
 /** Readable static shorthand for the physical window when motion is reduced. The full copy stays in the live region. */
 export function ledStaticMessage(message: string) {
@@ -170,16 +195,27 @@ export function ledToken(message: string): string | null {
 export type LedDot = { x: number; y: number; r: number; tone: LightTone };
 export type LedLayout = { width: number; height: number; scale: number; dots: LedDot[] };
 
-/** The lit dots of a message, in CSS px. The ONE source for the cells and their light. */
-export function ledLayout(message: string, repeat = false, mode: LedTone = 'amber', scale = 1): LedLayout {
+/** The lit dots of a message, in CSS px. The ONE source for the cells and their light.
+ *  `span` bounds how much strip is built (the marquee case); it is ignored for a static
+ *  message, whose sprite is exactly its own width. */
+export function ledLayout(message: string, repeat = false, mode: LedTone = 'amber', scale = 1, span?: number): LedLayout {
   const s = Math.max(0.5, scale);
   const advance = ADVANCE * s;
   const dotX = DOT_X * s;
   const rowStep = 3.1 * s;
   const originY = 3.15 * s;
   const cellH = 26 * s;
-  const shown = repeat ? `${message}${SEPARATOR}${message}${SEPARATOR}${message}` : message;
-  const width = Math.max(1, shown.length * advance - s);
+  const period = `${message}${SEPARATOR}`;
+  // Three copies is the legacy marquee strip; with a span we build only the copies that can be
+  // seen (one period plus the window), so the bitmap stops growing with the message.
+  const copies = span === undefined
+    ? 0
+    : Math.max(2, Math.ceil((span + advance) / Math.max(advance, period.length * advance)));
+  const shown = repeat
+    ? (span === undefined ? `${period}${period}${message}` : message + (SEPARATOR + message).repeat(copies - 1))
+    : message;
+  const contentWidth = Math.max(1, shown.length * advance - s);
+  const width = span === undefined ? contentWidth : Math.max(1, Math.min(contentWidth, span));
   const colon = mode === 'score' ? shown.indexOf(':') : -1;
   // In the score face the digits before the colon are YOUR score and the digits after are the
   // opponent's, so each side takes its own ink (green / red) while the colon stays amber.
@@ -212,8 +248,9 @@ export function drawLedCells(
   repeat = false,
   mode: LedTone = 'amber',
   scale = 1,
+  span?: number,
 ) {
-  const layout = ledLayout(message, repeat, mode, scale);
+  const layout = ledLayout(message, repeat, mode, scale, span);
   const s = layout.scale;
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   canvas.width = Math.ceil(layout.width * dpr);
@@ -321,9 +358,10 @@ export function ledBloomSprite(
   repeat = false,
   mode: LedTone = 'amber',
   scale = 1,
+  span?: number,
 ): LedSprite | null {
   if (typeof document === 'undefined') return null;
-  const layout = ledLayout(message, repeat, mode, scale);
+  const layout = ledLayout(message, repeat, mode, scale, span);
   const width = layout.width + BLOOM_PAD * 2;
   const height = layout.height + BLOOM_PAD * 2;
   const canvas = document.createElement('canvas');
@@ -406,8 +444,9 @@ export function drawLedBloom(
   repeat = false,
   mode: LedTone = 'amber',
   scale = 1,
+  span?: number,
 ): number {
-  const sprite = ledBloomSprite(message, repeat, mode, scale);
+  const sprite = ledBloomSprite(message, repeat, mode, scale, span);
   if (!sprite) return 0;
   canvas.width = sprite.canvas.width;
   canvas.height = sprite.canvas.height;
@@ -426,9 +465,10 @@ export function ledHotSprite(
   repeat = false,
   mode: LedTone = 'amber',
   scale = 1,
+  span?: number,
 ): LedSprite | null {
   if (typeof document === 'undefined') return null;
-  const layout = ledLayout(message, repeat, mode, scale);
+  const layout = ledLayout(message, repeat, mode, scale, span);
   const canvas = document.createElement('canvas');
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   canvas.width = Math.max(1, Math.ceil(layout.width * dpr));
@@ -454,8 +494,9 @@ export function drawLedHot(
   repeat = false,
   mode: LedTone = 'amber',
   scale = 1,
+  span?: number,
 ): number {
-  const sprite = ledHotSprite(message, repeat, mode, scale);
+  const sprite = ledHotSprite(message, repeat, mode, scale, span);
   if (!sprite) return 0;
   canvas.width = sprite.canvas.width;
   canvas.height = sprite.canvas.height;
