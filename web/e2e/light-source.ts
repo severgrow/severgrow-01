@@ -583,7 +583,11 @@ try {
   check(errors.length === 0, `no browser errors at rest (${errors.join(' | ')})`);
 
   /* Caps, read from the LIVE stylesheet: a flash is 60 ms and at most 35% white, and the alarm
-     keeps its 1.2 s beat. No strobe, no brightness filter. */
+     keeps its 1 s beat. No strobe, no brightness filter.
+     The idle blink is STEPPED since 2026-10-29 (a 60 Hz CSS opacity animation on the glyph canvases
+     kept the main thread in a style pass every frame while the player only thought — measured in
+     web/e2e/perf-phone.ts). Its cadence is read from the live display's own data-alarm-on /
+     data-alarm-off contract, and this suite asserts no alarm ANIMATION is applied any more. */
   const caps = await page.evaluate(() => {
     const rules: string[] = [];
     for (const sheet of [...document.styleSheets]) {
@@ -608,7 +612,9 @@ try {
       flashBloomMs: flashMs('smart-led-flash-bloom'),
       flashPeak: Math.max(peakWhite('smart-led-flash-cut'), peakWhite('smart-led-flash-bloom')),
       flashDuration: (getComputedStyle(document.getElementById('smart-led-flash')!).animationDuration || '0s'),
-      alarmMs: flashMs('smart-led-alarm'),
+      alarmOn: Number(document.getElementById('smart-led')?.dataset.alarmOn ?? NaN),
+      alarmOff: Number(document.getElementById('smart-led')?.dataset.alarmOff ?? NaN),
+      alarmAnimation: rules.some(rule => /animation\s*:/.test(rule) && /smart-led-alarm/.test(rule)),
       hot: getComputedStyle(document.getElementById('smart-led-hot')!).filter,
       oldFilterKeyframes: rules.some(rule => /@keyframes smart-led-(pulse|alarm)/.test(rule) && /filter:/.test(rule)),
     };
@@ -616,7 +622,11 @@ try {
   check(caps.flashPeak > 0 && caps.flashPeak <= .35, `a flash is at most 35% white (peak ${caps.flashPeak})`);
   check(caps.flashCutMs !== null && caps.flashBloomMs !== null, `both flash animations are applied with a duration (cut ${caps.flashCutMs} ms, bloom ${caps.flashBloomMs} ms)`);
   check(caps.flashCutMs === LIGHT_FLASH_MS && caps.flashBloomMs === LIGHT_FLASH_MS, `a flash is exactly ${LIGHT_FLASH_MS} ms (cut ${caps.flashCutMs}, bloom ${caps.flashBloomMs})`);
-  check(caps.alarmMs === LIGHT_CAPS.alarmMs, `the alarm keeps its ${LIGHT_CAPS.alarmMs / 1000} s beat (${caps.alarmMs} ms)`);
+  check(caps.alarmOn + caps.alarmOff === LIGHT_CAPS.alarmMs,
+    `the alarm keeps its ${LIGHT_CAPS.alarmMs / 1000} s beat (${caps.alarmOn} ms on + ${caps.alarmOff} ms off)`);
+  check(caps.alarmOff === LIGHT_CAPS.alarmOffMs,
+    `the dots go dark for ${LIGHT_CAPS.alarmOffMs} ms of it (${caps.alarmOff} ms)`);
+  check(caps.alarmAnimation === false, 'the idle blink is stepped, not a 60 Hz CSS animation');
   check(!caps.oldFilterKeyframes, 'no pulse/alarm keyframe animates a filter any more');
   check(caps.hot === 'none', 'the brightness layer itself carries no filter');
 
