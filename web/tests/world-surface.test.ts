@@ -170,13 +170,18 @@ describe('the world map rests on the ONE shared page surface', () => {
     const capRatio = Number(cap![1]) / Number(cap![2]);
     expect(Math.abs(capRatio - svgRatio), `cap ${capRatio.toFixed(4)} vs world ${svgRatio.toFixed(4)}`).toBeLessThan(0.002);
 
-    // The framing rule: the view is sized to the WINDOW’s aspect, and the framed view is BOTH zoom
+    // The framing rule: the view is sized to the WINDOW's aspect, and the framed view is BOTH zoom
     // limits, so zooming out can never widen the box back to the world and letterbox it.
     expect(worldView, 'the view must frame itself to the window').toContain('boundsFor');
     expect(worldView, 'the window’s aspect must come from its measured box')
       .toMatch(/getBoundingClientRect\(\)[\s\S]{0,120}width \/ .{0,40}height/);
-    expect(worldView, 'zoom-out must stop at the framed view, not the whole world')
-      .toMatch(/Math\.max\(frame\[2\] \/ 4, Math\.min\(frame\[2\], bw \/ scale\)\)/);
+    // The step itself is pure now (`zoomedView`, web/tests/world-zoom.test.ts proves it as numbers);
+    // the LIMIT it must never cross is still this one line, and it must stay exactly that.
+    const stepAt = worldView.indexOf('export const zoomedView');
+    expect(stepAt, 'the zoom step must have one home').toBeGreaterThan(-1);
+    const zoomStep = worldView.slice(stepAt, worldView.indexOf('export const clampedView'));
+    expect(zoomStep, 'zoom-out must stop at the framed view, not the whole world')
+      .toMatch(/Math\.max\(frame\[2\] \/ 4, Math\.min\(frame\[2\], bw \/ step\)\)/);
     expect(worldView, 'a resize must re-frame the view').toContain('ResizeObserver');
   });
 

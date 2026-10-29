@@ -124,6 +124,132 @@ const DOUBLE_TAP_OUT = 0.46;
  */
 const RESUME_MS = 700;
 
+/**
+ * A VIEW OF THE MAP: x, y, width and height in world units — the four numbers of `viewBox`.
+ */
+export type ViewBox = [number, number, number, number];
+
+/**
+ * THE MAP CANNOT LOSE ITS ZOOM (owner, 2026-10-29: "sometimes zoom in zoom out on territory doesnt
+ * work — i was just testing on desktop and wasnt able to zoom at some point randomly — add a fix").
+ *
+ * The view used to be trusted. `zoom()` divided the finger's position by the map's measured box, and
+ * a box of 0 x 0 — measured while the panel was hidden, mid-transition or mid-repaint — made that
+ * anchor Infinity (or 0/0), so the new view inherited it. From then on EVERY clamp was arithmetic on
+ * NaN (`Math.max(closest, Math.min(frame, NaN))` is NaN), `viewBox` was written as
+ * "NaN NaN NaN NaN", the map drew nothing and zoom could never come back: no error, no way out but
+ * a reload. The same trust let a view that is `null` (a fresh visit drops it, see `open`) freeze the
+ * wheel and the double tap, because each path began with `if (!this.box) return`.
+ *
+ * So the view is checked at ONE boundary, in the numbers, not in the DOM: every read goes through
+ * `usableView`, and every write goes through the two pure steps below (`zoomedView`, `clampedView`),
+ * which are allowed to return four finite numbers and nothing else. A view that cannot be trusted is
+ * replaced by the frame it was standing in, never propagated. Tested by web/tests/world-zoom.test.ts.
+ */
+export const usableView = (box: readonly number[] | null | undefined): box is ViewBox =>
+  !!box && box.length === 4 && box.every((value) => Number.isFinite(value)) && box[2]! > 0 && box[3]! > 0;
+
+/** The same view, or a copy of `fallback` — never a reference a caller could write through. */
+export const finiteView = (box: readonly number[] | null | undefined, fallback: ViewBox): ViewBox =>
+  usableView(box) ? [box[0], box[1], box[2], box[3]] : [fallback[0], fallback[1], fallback[2], fallback[3]];
+
+/**
+ * A FRACTION OF THE MAP, clamped to it. Anything that is not a number has no honest position, and a
+ * wrong anchor is worse than a dull one, so it becomes the centre.
+ */
+const unit = (value: number): number =>
+  Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.5;
+
+/**
+ * WHERE THE FINGER (or the pointer) IS, as a fraction of the map: 0..1 on each axis, clamped so a
+ * point that somehow arrives from outside the map can never throw the view past the world.
+ *
+ * A map that cannot be measured has NO honest anchor, and a wrong one is worse than a dull one: the
+ * centre (0.5, 0.5) keeps the zoom where the player is looking and, above all, keeps it finite.
+ */
+export const viewAnchor = (
+  x: number,
+  y: number,
+  rect: { left: number; top: number; width: number; height: number },
+): [number, number] => {
+  const fraction = (at: number, from: number, size: number): number =>
+    !Number.isFinite(at) || !Number.isFinite(from) || !Number.isFinite(size) || size <= 0
+      ? 0.5
+      : unit((at - from) / size);
+  return [fraction(x, rect.left, rect.width), fraction(y, rect.top, rect.height)];
+};
+
+/**
+ * ONE ZOOM STEP about an anchor — the map's zoom, as arithmetic. The anchor stays under the same
+ * point, both axes scale by the same factor (the view's OWN aspect, so hexes stay true), and the
+ * framed view is both ends: `frame / 4` is as far in as it goes, `frame` as far out.
+ *
+ * Identical to the numbers it replaced whenever the view is sound, which is what keeps the feel.
+ */
+export const zoomedView = (
+  box: readonly number[] | null | undefined,
+  anchor: readonly [number, number],
+  scale: number,
+  frame: ViewBox,
+): ViewBox => {
+  const [bx, by, bw, bh] = finiteView(box, frame);
+  const step = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const ax = unit(anchor[0]);
+  const ay = unit(anchor[1]);
+  const width = Math.max(frame[2] / 4, Math.min(frame[2], bw / step));
+  const height = width * bh / bw;
+  return finiteView([bx + ax * (bw - width), by + ay * (bh - height), width, height], frame);
+};
+
+/**
+ * THE ONE PLACE A VIEW IS MADE LEGAL: the framed view is both zoom limits, the width keeps the
+ * view's own aspect, and the pan is clamped to the world's fit box (which carries `PAD`, so the
+ * outermost column can come clear of the panel's rounded corner on both axes). A view wider than
+ * the world is centred on it instead.
+ */
+export const clampedView = (
+  box: readonly number[] | null | undefined,
+  fit: ViewBox,
+  frame: ViewBox,
+  closest: number,
+): ViewBox => {
+  const [bx, by, bw, bh] = finiteView(box, frame);
+  const aspect = bw / bh;
+  const floor = Number.isFinite(closest) && closest > 0 ? closest : frame[2] / 4;
+  const width = Math.max(floor, Math.min(frame[2], bw));
+  const height = width / aspect;
+  const [fx, fy, fw, fh] = fit;
+  const x = width >= fw ? fx + (fw - width) / 2 : Math.max(fx, Math.min(fx + fw - width, bx));
+  const y = height >= fh ? fy + (fh - height) / 2 : Math.max(fy, Math.min(fy + fh - height, by));
+  return finiteView([x, y, width, height], frame);
+};
+
+/**
+ * THE POINTERS A NEW EVENT PROVES ARE GONE (see `pointers`). A mouse is ONE pointer: it has one
+ * position and one button state, so a second tracked mouse id, or a tracked mouse id at the moment
+ * the event says every button is up, is a release this map never saw — the browser delivered the
+ * `pointerup` to its own chrome, or the window lost the event. Left in `pointers`, such a ghost made
+ * `size > 1` forever: `finish` never cleared `dragged`/`multiGesture`, and every later tap — and so
+ * every double tap, and so the zoom toggle — was swallowed by a pinch that had ended.
+ *
+ * A FINGER is exempt: touch releases are the browser's own business (see `recapture`, `lastRelease`),
+ * and a mouse press must never drop a finger that is still on the map.
+ */
+export const stalePointers = (
+  pointers: ReadonlyMap<number, { touch: boolean }>,
+  event: { id: number; pointerType: string; buttons: number; down: boolean },
+): number[] => {
+  if (event.pointerType === 'touch') return [];
+  const stale: number[] = [];
+  for (const [id, pointer] of pointers) {
+    if (pointer.touch) continue;
+    // A press: any OTHER mouse id cannot be down at the same time. A move/release: every button up
+    // means no mouse id can be held at all.
+    if (event.down ? id !== event.id : event.buttons === 0) stale.push(id);
+  }
+  return stale;
+};
+
 type Identity = { token: string; playerId: string };
 
 /**
@@ -232,10 +358,10 @@ export class WorldView {
   private svg: SVGSVGElement | null = null;
   /** The single top-most path that carries the selection highlight (see `paintAccent`). */
   private accent: SVGPathElement | null = null;
-  private box: [number, number, number, number] | null = null;
-  private fit: [number, number, number, number] | null = null;
+  private box: ViewBox | null = null;
+  private fit: ViewBox | null = null;
   /** The smallest view the window allows — the framed view; see `boundsFor`. */
-  private bounds: [number, number, number, number] | null = null;
+  private bounds: ViewBox | null = null;
   /** True once the player has panned or zoomed, so a re-frame never throws their view away. */
   private touched = false;
   /** The panel's measured aspect from the last paint/resize. */
@@ -243,7 +369,7 @@ export class WorldView {
   /** The panel's measured width in CSS pixels — the only way to hold the MIN_CELL_PX floor. */
   private pixels = 0;
   private observer: ResizeObserver | null = null;
-  private pointers = new Map<number, { x: number; y: number }>();
+  private pointers = new Map<number, { x: number; y: number; touch: boolean }>();
   private dragged = false;
   private multiGesture = false;
   /** The tap that just landed, waiting to find out whether a second one makes it a double tap. */
@@ -1042,11 +1168,32 @@ export class WorldView {
    * 2026-10-16. Keeping the box's WIDTH and re-deriving its height (about the same centre) is the
    * smallest correction: the pan's horizontal window is untouched.
    */
-  private reconcile(box: [number, number, number, number] | null, aspect: number): [number, number, number, number] | null {
-    if (!box || !(aspect > 0) || !(box[3] > 0)) return box;
+  private reconcile(box: ViewBox | null, aspect: number): ViewBox | null {
+    if (!box || !usableView(box) || !(aspect > 0)) return box;
     if (Math.abs(box[2] / box[3] - aspect) <= 0.002) return box;
     const height = box[2] / aspect;
     return [box[0], box[1] + (box[3] - height) / 2, box[2], height];
+  }
+  /**
+   * THE VIEW, RECOVERED IF IT IS EVER MISSING OR POISONED (see the note at `usableView`).
+   *
+   * `open()` drops the view so a visit re-frames itself to the window, but that re-frame lives in
+   * `paint()`, and a paint is SKIPPED when the world has not changed (see `refresh`). The second
+   * visit therefore used to leave `this.box === null` while the map was still on screen: every
+   * gesture guarded on it and returned, so the wheel and the double tap stopped answering — for the
+   * rest of the session, because nothing but a repaint could restore it.
+   *
+   * So a view that cannot be used is REPLACED by the frame the map is standing in (the window's own
+   * framed view, capped so a cell keeps its touch size), never merely refused. Every path that needs
+   * the view goes through here, and the field is healed as a side effect, so a poisoned view can
+   * never outlive the next gesture. Returns null only before the world's fit box exists at all.
+   */
+  private recoverBox(): ViewBox | null {
+    if (usableView(this.box)) return this.box;
+    const recovered = this.detailFor(this.aspect, this.pixels) ?? this.bounds ?? this.fit;
+    if (!recovered || !usableView(recovered)) return null;
+    this.box = [...recovered];
+    return this.box;
   }
   /**
    * Write the view: one viewBox attribute on the SAME svg, so cell identity is never touched.
@@ -1060,8 +1207,13 @@ export class WorldView {
     const rect = measure ? this.svg.getBoundingClientRect() : null;
     const aspect = rect && rect.width > 0 && rect.height > 0 ? rect.width / rect.height : this.aspect;
     if (rect && aspect > 0) { this.aspect = aspect; this.pixels = rect.width; }
-    const target = this.reconcile(this.box, aspect) ?? this.fit;
-    if (target) this.svg.setAttribute('viewBox', target.join(' '));
+    // NOTHING BUT FOUR FINITE NUMBERS EVER REACHES THE ATTRIBUTE. "NaN NaN NaN NaN" is a map that
+    // draws nothing and can never be zoomed back (see `usableView`); the fallback is the world's own
+    // fit box, which is always a real view.
+    const box = this.recoverBox();
+    if (!box) return;
+    const target = this.reconcile(box, aspect);
+    if (usableView(target)) this.svg.setAttribute('viewBox', target.join(' '));
   }
   /**
    * ONE VIEW WRITE PER FRAME (owner, 2026-10-28: "always looks smooth"). A phone can deliver several
@@ -2427,42 +2579,46 @@ export class WorldView {
     }, CHALLENGE.confirmFailed);
   }
 
-  private installPanZoom(svg: SVGSVGElement) {    const set = () => {
-      if (!this.box || !this.fit) return;
-      const [fx, fy, fw, fh] = this.fit;
+  private installPanZoom(svg: SVGSVGElement) {
+    const set = () => {
+      // A VIEW THAT CANNOT BE USED IS REPLACED, NOT REFUSED (see `recoverBox`). Refusing here is how
+      // the map went quiet for a whole visit: every gesture used to start by returning.
+      const box = this.recoverBox();
+      if (!box || !this.fit) return;
+      const frame = this.bounds ?? this.fit;
       // The framed view is BOTH zoom limits. Its width is the most zoomed-OUT view that still fills
       // the window (any wider and the box's aspect leaves the window's, so the SVG would letterbox
       // again); a quarter of it is as far in as the map goes. Height follows the box's own aspect, so
       // the two axes always scale together and the hexes stay true.
-      const frame = this.bounds ?? this.fit;
-      const aspect = this.box[3] > 0 ? this.box[2] / this.box[3] : 1;
       // As far in as a quarter of the framed view — but never so far that the 44px floor could not be
       // drawn: on a narrow (landscape-phone) window a quarter is still wider than one cell at 46px.
-      const closest = Math.min(frame[2] / 4, this.cellFloor());
-      this.box[2] = Math.max(closest, Math.min(frame[2], this.box[2]));
-      this.box[3] = this.box[2] / aspect;
       // Panning clamps to the FIT BOX, which carries `PAD` on every side: the outermost column/row
       // can therefore come fully inside the panel, clear of its rounded corner, on both axes.
       // A view wider (or taller) than the world — the stage zoomed out — stays centred on it.
-      this.box[0] = this.box[2] >= fw ? fx + (fw - this.box[2]) / 2 : Math.max(fx, Math.min(fx + fw - this.box[2], this.box[0]));
-      this.box[1] = this.box[3] >= fh ? fy + (fh - this.box[3]) / 2 : Math.max(fy, Math.min(fy + fh - this.box[3], this.box[1]));
+      // The maths is pure (`clampedView`), so a NaN anywhere in it can only ever produce a legal
+      // view: this is the gate the poisoning used to walk through.
+      this.box = clampedView(box, this.fit, frame, Math.min(frame[2] / 4, this.cellFloor()));
       // A pan never re-measures: `this.aspect` is kept by the ResizeObserver (and by open/repaint).
       // The write itself waits for the next frame (see `queueView`).
       this.queueView();
     };
     // The map's on-screen box, read once when a finger lands rather than on every move: nothing
     // can resize the map mid-gesture, and a layout read per move is time a frame does not have.
+    // The ResizeObserver CLEARS it (see below), so a rect measured before the window changed can
+    // never be used to place a later zoom.
     let frameRect: DOMRect | null = null;
+    /** The cached box, unless it is empty — an empty rect is re-measured rather than divided by. */
+    const liveRect = (rect: DOMRect): DOMRect =>
+      rect.width > 0 && rect.height > 0 ? rect : svg.getBoundingClientRect();
     const zoom = (scale: number, x: number, y: number, rect: DOMRect = frameRect ?? svg.getBoundingClientRect()) => {
-      if (!this.box || !this.fit) return;
-      const [bx, by, bw, bh] = this.box;
-      const fx = (x - rect.left) / rect.width, fy = (y - rect.top) / rect.height;
+      const box = this.recoverBox();
+      if (!box || !this.fit) return;
       const frame = this.bounds ?? this.fit;
-      const width = Math.max(frame[2] / 4, Math.min(frame[2], bw / scale));
-      // Scaled by the box's OWN aspect (which is the window's), not the world's, so zooming keeps the
-      // view framed and the two axes scale equally at every zoom level.
-      const height = width * bh / bw;
-      this.box = [bx + fx * (bw - width), by + fy * (bh - height), width, height];
+      // The anchor is a fraction of the LIVE map, so a rect that cannot be measured falls back to the
+      // centre instead of turning into Infinity (see `viewAnchor`). Scaled by the box's OWN aspect
+      // (which is the window's), not the world's, so zooming keeps the view framed and the two axes
+      // scale equally at every zoom level.
+      this.box = zoomedView(box, viewAnchor(x, y, liveRect(rect)), scale, frame);
       this.touched = true;
       set();
     };
@@ -2503,10 +2659,12 @@ export class WorldView {
     };
     /** The map's current zoom depth, for the toggle's direction. */
     const toggleZoom = (x: number, y: number) => {
-      if (!this.box) return;
+      // The same recovery as every other gesture: a double tap must answer even when the visit was
+      // opened without a fresh frame (see `recoverBox`).
+      const box = this.recoverBox();
       const frame = this.bounds ?? this.fit;
-      if (!frame) return;
-      const deep = this.box[2] <= frame[2] * 0.72;
+      if (!box || !frame) return;
+      const deep = box[2] <= frame[2] * 0.72;
       this.stopGlide();
       this.setMoving(true);
       zoom(deep ? DOUBLE_TAP_OUT : DOUBLE_TAP_IN, x, y, frameRect ?? svg.getBoundingClientRect());
@@ -2544,8 +2702,31 @@ export class WorldView {
       zoom(Math.exp(-Math.max(-100, Math.min(100, event.deltaY * (event.deltaMode === 1 ? 16 : 1))) * .002), event.clientX, event.clientY, svg.getBoundingClientRect());
       this.setMoving(false);
     }, { passive: false });
+    /**
+     * THE POINTERS THE MAP IS HOLDING, and the two ways a desktop release goes missing: the browser
+     * delivered the `pointerup` to its own chrome, or the window never saw it at all. A ghost id then
+     * made `pointerdown`'s `size > 1` branch fire on the NEXT press — `multiGesture` and `dragged`
+     * were set and `finish` could never clear them, because it only clears when `pointers` empties —
+     * so every tap was read as a pinch and the double-tap zoom (and the tile selection) stopped
+     * answering until the page was reloaded. `stalePointers` is the pure rule; this is the only place
+     * it is applied, so both handlers and `recapture` agree.
+     */
+    const forget = (ids: number[]): void => {
+      if (!ids.length) return;
+      for (const id of ids) this.pointers.delete(id);
+      if (this.pointers.size) return;
+      this.dragged = false;
+      this.multiGesture = false;
+      this.gestureStart = null;
+      // Nothing is holding the map any more, so the soft-focus layers may soften again (the missed
+      // release is exactly the case `finish` never got to run for).
+      this.setMoving(false);
+    };
     svg.addEventListener('pointerdown', (event) => {
       this.stopGlide();
+      // A MOUSE IS ONE POINTER: a second tracked mouse id cannot be a second finger, so it is the
+      // ghost of a release nobody reported. Dropping it before this press means `size` is honest.
+      forget(stalePointers(this.pointers, { id: event.pointerId, pointerType: event.pointerType, buttons: event.buttons, down: true }));
       // A FINGER THAT COMES DOWN IS A NEW GESTURE FOR THIS id, whatever the machine was left in by
       // the one before it. The id's tracking and its remembered release are scrubbed BEFORE this
       // gesture's own origin is written, so a cancelled (or phantom-ended) gesture can never lend
@@ -2553,7 +2734,7 @@ export class WorldView {
       // by the dead gesture's distance as well as its own.
       this.pointers.delete(event.pointerId);
       if (this.lastRelease?.id === event.pointerId) this.lastRelease = null;
-      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, touch: event.pointerType === 'touch' });
       frameRect = svg.getBoundingClientRect();
       if (this.pointers.size > 1) { this.multiGesture = true; this.dragged = true; this.lastTap = null; this.setMoving(true); }
       else { this.dragged = false; this.multiGesture = false; this.gestureStart = { x: event.clientX, y: event.clientY }; }
@@ -2581,7 +2762,7 @@ export class WorldView {
       const remembered = gone && gone.id === event.pointerId && Date.now() - gone.at <= RESUME_MS ? gone : null;
       const from = remembered ?? { x: event.clientX, y: event.clientY };
       this.lastRelease = null;
-      this.pointers.set(event.pointerId, { x: from.x, y: from.y });
+      this.pointers.set(event.pointerId, { x: from.x, y: from.y, touch: event.pointerType === 'touch' });
       // Same two branches as a second finger arriving: two fingers are a pinch (never a tap), one
       // finger is a pan again — but a pan still has to pass the tap slop, so a twitchy tap that a
       // stray release interrupted is not turned into a nudge of the view.
@@ -2590,10 +2771,14 @@ export class WorldView {
       return true;
     };
     svg.addEventListener('pointermove', (event) => {
+      // A MOVE THAT SAYS EVERY BUTTON IS UP is the second way a desktop release goes missing: the
+      // mouse is provably not holding anything, so a tracked non-touch pointer cannot be a live
+      // gesture. Drop it (and its latches) rather than panning the map from a dead anchor.
+      forget(stalePointers(this.pointers, { id: event.pointerId, pointerType: event.pointerType, buttons: event.buttons, down: false }));
       let old = this.pointers.get(event.pointerId);
       if (!old && !recapture(event)) return;
       old = this.pointers.get(event.pointerId);
-      if (!old || !this.box) return;
+      if (!old || !this.recoverBox()) return;
       const dx = event.clientX - old.x, dy = event.clientY - old.y;
       // A finger that has not yet travelled TAP_SLOP is still a tap: the map stays put, so a tap can
       // never nudge the view on its way to selecting a tile — and a slightly unsteady tap is not
@@ -2612,9 +2797,17 @@ export class WorldView {
       // Capturing on pointerdown retargets a touch tap's click to the SVG,
       // so a tile never receives it. Capture only once the gesture is a pan.
       if (!svg.hasPointerCapture(event.pointerId)) svg.setPointerCapture(event.pointerId);
-      const rect = frameRect ?? svg.getBoundingClientRect();
+      // A map that cannot be measured cannot be panned by a measured distance: no rect, no move
+      // (dividing by its width is exactly how a pan used to write Infinity into the view).
+      const rect = liveRect(frameRect ?? svg.getBoundingClientRect());
+      if (!(rect.width > 0) || !(rect.height > 0)) {
+        this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, touch: event.pointerType === 'touch' });
+        return;
+      }
       if (this.pointers.size === 1) {
-        this.box[0] -= dx / rect.width * this.box[2]; this.box[1] -= dy / rect.height * this.box[3]; set();
+        const box = this.recoverBox()!;
+        this.box = [box[0] - dx / rect.width * box[2], box[1] - dy / rect.height * box[3], box[2], box[3]];
+        set();
       } else {
         const other = [...this.pointers.entries()].find(([id]) => id !== event.pointerId)?.[1];
         if (other) {
@@ -2623,7 +2816,7 @@ export class WorldView {
           if (before > 0 && Math.abs(after - before) >= 1) zoom(after / before, (event.clientX + other.x) / 2, (event.clientY + other.y) / 2, rect);
         }
       }
-      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, touch: event.pointerType === 'touch' });
     });
     const end = (event: PointerEvent) => {
       // Remember where this finger was ONLY when the browser says it was RELEASED: if that report
@@ -2696,16 +2889,24 @@ export class WorldView {
         const r = svg.getBoundingClientRect();
         const aspect = r.height > 0 ? r.width / r.height : 0;
         const next = this.boundsFor(aspect);
-        if (!next || !this.box) return;
+        // A hidden / mid-transition map measures 0: keep the last good frame rather than invent one.
+        if (!next) return;
+        // THE MAP'S BOX JUST MOVED, so the one cached at `pointerdown` is stale: a zoom after a
+        // resize must be anchored on the new box, not the old one.
+        frameRect = null;
         const prev = this.bounds;
         this.aspect = aspect;
         this.pixels = r.width;
         this.bounds = next;
-        if (!this.touched || !prev) {
+        // A MISSING OR POISONED VIEW IS RE-FRAMED HERE, not skipped. `open()` drops the view so a
+        // visit frames itself afresh; when it is shown again this callback is the only thing that
+        // runs, and the old `!this.box` guard made it a no-op — the second visit was a map that
+        // could not be zoomed or panned at all (see `recoverBox`).
+        if (!this.touched || !prev || !usableView(this.box)) {
           // The large view is re-derived too, so a rotated phone keeps the 44px floor.
           this.box = [...(this.detailFor(aspect, r.width) ?? next)];
         } else {
-          const z = this.box[2] / prev[2];
+          const z = prev[2] > 0 ? this.box[2] / prev[2] : 1;
           this.box[2] = next[2] * z;
           this.box[3] = next[3] * z;
         }
