@@ -73,7 +73,13 @@ describe('the pause panel: dark glass, one lead, one pair, one tool row', () => 
   it('has ONE content axis: a mirrored nameplate, a mirrored read-out, equal columns', () => {
     expect(bodyFor('gm-head')).toContain('grid-template-columns: 44px 1fr 44px');
     expect(bodyFor('gm-scores')).toContain('grid-template-columns: 1fr 1px 1fr');
-    expect(bodyFor('.gm-pair')).toContain('grid-template-columns: 1fr 1fr');
+    // The two-key rows derive their columns from what is VISIBLE (owner, 2026-10-29: "no orphaned
+    // single button that's half the width of regular button"). A fixed `1fr 1fr` is exactly what
+    // left a lone key at half width when its neighbour was `[hidden]`; `web/tests/half-width-rows`
+    // holds the rule and `web/e2e/territory-prep.ts` measures it.
+    expect(bodyFor('.gm-pair')).toContain('grid-auto-flow: column');
+    expect(bodyFor('.gm-pair')).toContain('grid-auto-columns: 1fr');
+    expect(bodyFor('.gm-pair')).not.toContain('grid-template-columns');
     expect(bodyFor('.gm-tools')).toContain('grid-auto-columns: 1fr');
     expect(bodyFor('.gm-lead')).toContain('width: 100%');
   });

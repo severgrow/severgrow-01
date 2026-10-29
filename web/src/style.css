@@ -2154,22 +2154,29 @@ html.futasaku-product .install-prompt-scrim {
   box-shadow: none;
 }
 
-/* the pair: New game and Main menu, two equal keys on one line, the axis between them */
+/* the pair: New game and Main menu, two equal keys on one line, the axis between them.
+   THE COLUMNS COME FROM WHAT IS VISIBLE (owner, 2026-10-29: "in 'paused' menu or any similar there
+   should be no orphaned single button that's half the width of regular button"). A fixed
+   `1fr 1fr` keeps an empty second track when one key is hidden, so the lone key was painted at HALF
+   width — the orphan (measured: Main menu 163px in a 334px row in a duel, where Restart is hidden;
+   the old `:has()` guards only ever covered `.gm-acts`, so the pair had none at all).
+   `grid-auto-flow: column` + `grid-auto-columns: 1fr` derive the columns from the row's own items,
+   and `[hidden]` is `display: none !important` (top of this file), so a hidden key is not an item:
+   one visible key fills the line, two split it. No `:has()` decides a width. `.gm-leads` and
+   `.gm-tools` already worked this way; all four rows are now one behaviour. */
 #sheet-menu .gm-pair,
 #sheet-menu .gm-acts {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 8px;
   margin-top: 8px;
 }
-/* The duel's rows only take space when the duel puts something in them. */
+/* A row with nothing to put in it takes no space at all: in a live duel both the pair and the duel
+   row can be empty, and the plate must not keep a phantom gap where they were. */
+#sheet-menu .gm-pair:not(:has(> .gm-act:not([hidden]))),
 #sheet-menu .gm-acts:not(:has(> .gm-act:not([hidden]))) {
   display: none;
-}
-/* One visible duel row takes the whole line. */
-#sheet-menu .gm-acts > .gm-act:not([hidden]):only-of-type,
-#sheet-menu .gm-acts:not(:has(> .gm-act:not([hidden]) ~ .gm-act:not([hidden]))) > .gm-act:not([hidden]) {
-  grid-column: 1 / -1;
 }
 #sheet-menu .gm-act {
   position: relative;
@@ -7633,7 +7640,12 @@ body.result .corner-tools {
 }
 .go-review-keys {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Same rule as the pause plate's rows (owner, 2026-10-29: no orphaned half-width button): the
+     columns come from what is VISIBLE. "Show me" is hidden when the player's move was already the
+     best one (main.ts openReview: `hidden = !p`), and a fixed `1fr 1fr` then left "Back" at HALF
+     width — measured 132/272, 161/330 and 198/404 before this change. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 8px;
 }
 .go-review-keys .btn {
