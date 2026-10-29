@@ -3528,7 +3528,7 @@ html.futasaku-product #campaign .campaign-chapters {
 }
 /* A cut or a Mega Bomb: pause and dim the ambient skin loops so the moment reads. */
 .moment-quiet :is(.amb-pulse, .amb-glint, .amb-bubble, .amb-ember, .territory-branch, .grass-blade,
-  .lm-canopy, .lm-leaf, .lm-smoke, .lm-crater, .lm-ember, .lava-heat, .lava-streaks, .lava-rafts) {
+  .lm-canopy, .lm-leaf, .lm-smoke, .lm-crater, .lm-ember, .lm-growth, .lava-heat, .lava-streaks, .lava-rafts) {
   animation-play-state: paused;
 }
 .moment-quiet .l-amb {
@@ -6427,6 +6427,81 @@ html.final-turns .game::after {
 .reduce-motion .landmark .lm-smoke,
 .reduce-motion .landmark .lm-ring {
   animation: none !important;
+}
+/* ---------------------------------------------------------------------------------------------
+   The home grows. The player's own home is drawn a stage older by logic/home-growth.ts, with the
+   drawing in ui/home-growth.ts. Static SVG at rest: the only movement is one finite settle when a
+   new stage is put out (transform/opacity, never a filter, never a loop). An in-match state always
+   wins: danger lowers the crown, a Strangle greys and collapses it, so an old tree that is
+   strangled still reads as dying. Reduces motion / Speed Off never start the settle at all.
+   ============================================================================================= */
+.lm-growth {
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: 50% 62%;
+}
+.lm-growth-shadow {
+  opacity: 0.3;
+}
+.lm-growth-to {
+  opacity: 0;
+}
+.landmark.lm-growing .lm-growth-to {
+  animation: lm-growth-in 760ms cubic-bezier(0.2, 0.8, 0.3, 1.06) 1 both;
+}
+.landmark.lm-growing .lm-growth-from {
+  animation: lm-growth-out 620ms ease-out 1 both;
+}
+@keyframes lm-growth-in {
+  from { opacity: 0; transform: scale(0.62); }
+  70% { opacity: 1; }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes lm-growth-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.1); }
+}
+/* Danger: the crown dims and droops (a still state, not a new loop). Dying: grey and collapsed. */
+.landmark.danger.lm-tree .lm-growth {
+  opacity: 0.84;
+}
+.landmark.worried.lm-tree .lm-growth {
+  transform: scale(0.985) rotate(-1deg);
+}
+.landmark.strangled .lm-growth-crown circle,
+.landmark.strangled .lm-growth-trunk {
+  fill: #8f8a83;
+}
+.landmark.strangled .lm-growth-trunk,
+.landmark.strangled .lm-growth-base {
+  stroke: #6f6a63;
+}
+.landmark.strangled .lm-growth .lm-growth-apple {
+  opacity: 0;
+}
+.landmark.strangled .lm-growth {
+  opacity: 0.68;
+  transform: scale(0.9);
+}
+.landmark.strangled .default-home-art {
+  opacity: 0.55;
+  transition: opacity 0.5s ease-out;
+}
+.reduce-motion .landmark.lm-growing .lm-growth-to,
+.reduce-motion .landmark.lm-growing .lm-growth-from {
+  animation: none;
+}
+.reduce-motion .landmark.lm-growing .lm-growth-to {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .landmark.lm-growing .lm-growth-to,
+  .landmark.lm-growing .lm-growth-from {
+    animation: none;
+  }
+  .landmark.lm-growing .lm-growth-to {
+    opacity: 1;
+  }
 }
 /* the coach and tips never cover the Undo chip at the right end of the message row */
 .dock:has(#tool-undo:not([hidden])) .dock-overlays {
