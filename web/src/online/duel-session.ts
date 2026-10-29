@@ -7,6 +7,10 @@ import type { Step } from '../logic/anim.js';
 import type { Played } from '../logic/session.js';
 import { breakdownPart } from '../logic/endgame.js';
 import { gameHighlights } from '../logic/highlights.js';
+import { inquest } from '../logic/inquest.js';
+import type { Inquest } from '../logic/inquest.js';
+import { harvestFigure } from '../logic/harvest.js';
+import type { HarvestFigure } from '../logic/harvest.js';
 import { moveSummary, resultReason, resultTitle } from '../logic/log.js';
 import type { Highlight } from '../logic/highlights.js';
 import { ONLINE, RESULT } from '../../../src/strings.js';
@@ -44,6 +48,14 @@ export type FinishInfo = {
   /** Already mapped to display seats (0 = me), ready for the shared highlight list. */
   highlights: Highlight[];
   moves: string | null;
+  /**
+   * THE INQUEST (surprise, 2026-10-29): one line naming the turn that decided the duel, computed
+   * from the server's public event history in engine seat order. Null until that history has
+   * loaded, and null for a duel whose record the server will not hand over — never a guess.
+   */
+  inquest: Inquest | null;
+  /** THE DOUBLE HARVEST: the final position as one small figure, or null with the same gate. */
+  harvest: HarvestFigure | null;
 };
 
 /**
@@ -426,12 +438,15 @@ export class OnlineSession {
     const sub = snap.opponentName ? ONLINE.finishSubOpponent(snap.opponentName) : ONLINE.finishSubFallback;
     const breakdown = RESULT.breakdown(breakdownPart(this.state, 0), breakdownPart(this.state, 1));
     const r = snap.result;
-    if (!r) return { title: ONLINE.finishedFallback, reason: '', sub, scores, breakdown, highlights: [], moves: null };
+    if (!r) return { title: ONLINE.finishedFallback, reason: '', sub, scores, breakdown, highlights: [], moves: null, inquest: null, harvest: null };
     const history = this.historyEvents;
     const highlights = gameHighlights(history, snap.seat).map((h) => ({
       ...h,
       by: h.by === null ? null : ((h.by === snap.seat ? 0 : 1) as Player),
     }));
+    // The verdict pair shares ONE gate: the match's public record. Until it has loaded (or when the
+    // server refuses it) neither the line nor the stamp is drawn — a pruned duel says nothing.
+    const record = this.historyLoaded && history.length > 0 ? history : null;
     return {
       title: resultTitle(r, snap.seat),
       reason: resultReason(r, snap.seat),
@@ -440,6 +455,10 @@ export class OnlineSession {
       breakdown,
       highlights,
       moves: moveSummary(history, snap.seat),
+      // `snap.view` is the engine's own seat view: engine coords, engine result. The line and the
+      // figure each turn that into the reading seat's perspective themselves.
+      inquest: record ? inquest(record, r, snap.seat) : null,
+      harvest: record ? harvestFigure(snap.view.board, snap.view.config, snap.seat, snap.view.terrain) : null,
     };
   }
 
