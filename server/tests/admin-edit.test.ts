@@ -170,7 +170,7 @@ describe('admin: edit the world map', () => {
     expect(t.economy.claims.size).toBe(0);
   });
 
-  it('an edit on a challenged cell closes the challenge and refunds the escrow first', async () => {
+  it('an edit on a challenged cell closes the challenge, and no Seeds move (challenging is free)', async () => {
     const t = setup();
     const admin = await t.makePlayer(ADMIN_ID, 'RYK');
     const a = await t.makePlayer(null, 'Challenger');
@@ -179,9 +179,10 @@ describe('admin: edit the world map', () => {
     t.economy.claims.set(pair.near, { cellId: pair.near, ownerId: a.player.id, ownerName: null, ownerLevel: null, claimedAt: NOW });
     t.economy.claims.set(pair.target, { cellId: pair.target, ownerId: b.player.id, ownerName: null, ownerLevel: null, claimedAt: NOW });
     t.economy.wallets.set(a.player.id, { balance: SEED_ECONOMY.tileCost, lifetimeEarned: SEED_ECONOMY.tileCost, lifetimeSpent: 0, worldInvitationSeen: true });
-    const sent = await t.economy.sendChallenge({ challengerId: a.player.id, cellId: pair.target, requestId: 'req-chal-0001', stake: SEED_ECONOMY.tileCost, now: NOW });
+    const sent = await t.economy.sendChallenge({ challengerId: a.player.id, cellId: pair.target, requestId: 'req-chal-0001', now: NOW });
     expect(sent.ok).toBe(true);
-    expect((await t.economy.wallet(a.player.id)).balance).toBe(0);
+    // RULE CHANGE (owner, 2026-10-29): a challenge is free, so the wallet is untouched on send.
+    expect((await t.economy.wallet(a.player.id)).balance).toBe(SEED_ECONOMY.tileCost);
 
     const out = await call(t.app, CELL, admin.token, { cellId: pair.target, ownerId: c.player.id });
     expect(out.body).toMatchObject({ ok: true, challengesClosed: 1 });

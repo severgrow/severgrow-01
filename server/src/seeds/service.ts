@@ -40,8 +40,11 @@ export class WorldEconomyService {
 
   async world() {
     // A forfeit must reach the PUBLIC map even when neither participant is signed in to read their
-    // challenge list. The lazy sweep is a handful of indexed rows; a failure never breaks the map
-    // (the daily `/v1/sweep` path still applies it), because a read must not fail on housekeeping.
+    // challenge list. The same lazy idiom settles a FINISHED linked duel: the map read is one of the
+    // two places a player always passes through, so the winner gets the tile without pressing
+    // CONFIRM / TAKE THE GROUND. Failures never break the map (the daily `/v1/sweep` path still
+    // applies both), because a read must not fail on housekeeping.
+    await this.settleFinished(this.now()).catch(() => 0);
     await this.store.expireChallenges(this.now()).catch(() => 0);
     const snapshot = await this.store.world();
     return {
@@ -56,11 +59,11 @@ export class WorldEconomyService {
       })),
       cost: SEED_ECONOMY.tileCost,
       /**
-       * What a challenge costs to send. Its own number, because a challenge is not a tile purchase
-       * (owner, 2026-10-24: 50, not the tile's 100). The client reads the stake from HERE so the
-       * price on the sheet can never drift from the price the server charges.
+       * Historical shape kept for older clients: 0 since 2026-10-29, because a challenge costs no
+       * Seeds at all. The client never prints a price from here any more; the stake it names is the
+       * TILE the challenger puts up (`stakeCellId` on each challenge).
        */
-      challengeStake: SEED_ECONOMY.challengeStake,
+      challengeStake: 0,
     };
   }
 
@@ -220,6 +223,39 @@ export class WorldEconomyService {
     return this.store.expireChallenges(now);
   }
 
+  /**
+   * AUTOMATIC SETTLEMENT (owner, 2026-10-29: "after the match, automatically give the tile to the
+   * winner"). Called lazily by every world/challenge read, exactly like `expireChallenges`: there is
+   * no new worker and no scheduler. For each accepted challenge whose linked duel is FINISHED, the
+   * winner is read from the match result and the store settles it under its row lock. A challenge
+   * whose duel is still running is never touched (the explicit `confirm` route stays as back-compat).
+   *
+   * Safe at any concurrency: `settleChallenge` is first-time-only and row-locked, so two clients (or
+   * a client and the sweeper) settling at once produce exactly one transfer; later calls replay.
+   */
+  private async settleFinished(now: number): Promise<number> {
+    const rows = await this.store.challengesAwaitingSettlement();
+    let settled = 0;
+    for (const challenge of rows) {
+      if (challenge.matchId === null) continue;
+      const match = await this.matches.matchById(challenge.matchId);
+      if (!match || match.status !== 'finished' || !match.result) continue;
+      const winnerSeat = match.result.winner;
+      let winnerId: string | null = null;
+      if (winnerSeat !== null) {
+        const participants = await this.matches.participantsOf(challenge.matchId);
+        winnerId = participants.find((p) => p.seat === winnerSeat)?.playerId ?? null;
+        // Never settle a decided duel against a missing seat: that would be recorded as a draw.
+        if (winnerId === null) continue;
+      }
+      const result = await this.store.settleChallenge({
+        id: challenge.id, playerId: challenge.challengerId, winnerId, now,
+      });
+      if (result.ok && result.settled) settled += 1;
+    }
+    return settled;
+  }
+
   private async challengeWire(c: WorldChallenge, viewerId: string, now: number): Promise<WorldChallengeWire> {
     const [challenger, defender] = await Promise.all([
       this.matches.playerById(c.challengerId),
@@ -242,11 +278,13 @@ export class WorldEconomyService {
       fromMe: c.challengerId === viewerId,
       status: c.status,
       stake: c.stake,
+      stakeCellId: c.stakeCellId,
       createdAt: c.createdAt,
       expiresAt: c.expiresAt,
       respondedAt: c.respondedAt,
       matchId: c.matchId,
-      // Only a FINISHED linked duel may be confirmed. The client uses this to offer TAKE THE GROUND.
+      // Only a FINISHED linked duel has a result. The server settles it on this very read, so the
+      // client never has to offer a primary CONFIRM key.
       matchFinished: match?.status === 'finished' && match.result !== null,
       matchWinnerId,
       winnerId: c.winnerId,
@@ -258,7 +296,12 @@ export class WorldEconomyService {
 
   async challenges(player: PlayerRecord): Promise<WorldChallengesPayload> {
     const now = this.now();
-    await this.store.expireChallenges(now);
+    // Lazy, like the map read: settle any finished linked duel first, then close what timed out.
+    // Settle before expire so a duel that finished just inside the 7-day window is played, not
+    // closed as stale. Both are idempotent; any failure is housekeeping, never a reason to hide the
+    // player's list.
+    await this.settleFinished(now).catch(() => 0);
+    await this.store.expireChallenges(now).catch(() => 0);
     const rows = await this.store.challengesInvolving(player.id, now - WORLD_CHALLENGE_LIST_WINDOW_MS);
     const wires = await Promise.all(rows.map((c) => this.challengeWire(c, player.id, now)));
     return {
@@ -277,14 +320,22 @@ export class WorldEconomyService {
       throw new ApiError('RATE_LIMITED', 'Please wait before challenging again.');
     }
     const now = this.now();
-    const result = await this.store.sendChallenge({
-      challengerId: player.id,
-      cellId,
-      requestId,
-      // Its own price, not a tile's (owner, 2026-10-24: "make it cost 50 seeds no 100").
-      stake: SEED_ECONOMY.challengeStake,
-      now,
-    });
+    let result;
+    try {
+      result = await this.store.sendChallenge({
+        challengerId: player.id,
+        cellId,
+        requestId,
+        now,
+      });
+    } catch (error) {
+      // The send is REFUSED, never guessed, when the tile-stake column is missing. Applying
+      // `server/migrations/0019_challenge_tile_stake.sql` makes this disappear.
+      if ((error as { code?: unknown } | null)?.code === 'STAKE_COLUMN_MISSING') {
+        throw new ApiError('CHALLENGE_MIGRATION_PENDING', 'Territory is being updated. Try again shortly.');
+      }
+      throw error;
+    }
     if (!result.ok) return result;
     return { ok: true, challenge: await this.challengeWire(result.challenge, player.id, now), replayed: result.replayed };
   }

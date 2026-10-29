@@ -9,6 +9,7 @@ import {
   utcDay,
 } from './config.js';
 import { planSeedReward } from './rewards.js';
+import { stakedCellFor } from './stake.js';
 import type {
   AdminCellResult,
   AdminSeedAdjustResult,
@@ -61,6 +62,9 @@ const challengeFromRow = (r: Record<string, unknown>): WorldChallenge => ({
   defenderId: String(r.defender_id),
   status: String(r.status) as WorldChallengeStatus,
   stake: number(r.stake),
+  // Absent when migration 0019 has not been applied yet: `select *` simply has no such key, and the
+  // row then behaves as a legacy Seed-stake row. Sends are refused with a clear error in that state.
+  stakeCellId: r.stake_cell_id == null ? null : String(r.stake_cell_id),
   createdAt: number(r.created_at),
   expiresAt: number(r.expires_at),
   respondedAt: r.responded_at == null ? null : number(r.responded_at),
@@ -113,7 +117,22 @@ const takeCell = async (
 };
 
 /** All debits, credits, caps and claims are checked and written inside Postgres transactions. */
-export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
+export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
+  /**
+   * Is `world_challenges.stake_cell_id` present (migration 0019)? Probed once per store. A missing
+   * column must never make the game silently apply the WRONG rule: challenge sends are refused with
+   * a clear error until the migration is applied, while rows written before it still settle under
+   * their recorded Seed stake.
+   */
+  let stakeColumn: Promise<boolean> | null = null;
+  const hasStakeColumn = (): Promise<boolean> => {
+    stakeColumn ??= pool.query(
+      `select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'world_challenges' and column_name = 'stake_cell_id'`,
+    ).then((result) => result.rows.length > 0).catch(() => false);
+    return stakeColumn;
+  };
+  return {
   async wallet(playerId) {
     const { rows } = await pool.query('select * from seed_wallets where player_id = $1', [playerId]);
     return rows[0] ? walletFromRow(rows[0]) : emptyWallet();
@@ -223,7 +242,10 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
       if (!parseWorldCell(cellId)) return fail('INVALID_CELL');
       const held = await client.query('select owner_id from world_claims where cell_id=$1', [cellId]);
       if (String(held.rows[0]?.owner_id ?? '') !== playerId) return fail('NOT_OWNED');
-      const busy = await client.query("select 1 from world_challenges where cell_id=$1 and status in ('pending','accepted')", [cellId]);
+      const busySql = (await hasStakeColumn())
+        ? "select 1 from world_challenges where (cell_id=$1 or stake_cell_id=$1) and status in ('pending','accepted')"
+        : "select 1 from world_challenges where cell_id=$1 and status in ('pending','accepted')";
+      const busy = await client.query(busySql, [cellId]);
       if (busy.rows.length) return fail('CELL_BUSY');
       await client.query('delete from world_claims where cell_id=$1 and owner_id=$2', [cellId, playerId]);
       const updated = await client.query(
@@ -325,7 +347,6 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
   async sendChallenge(input): Promise<ChallengeSendResult> {
     try {
       return await transaction(pool, async (client) => {
-        const wallet = await lockedWallet(client, input.challengerId);
         const prior = await client.query('select * from world_challenges where challenger_id=$1 and request_key=$2', [input.challengerId, input.requestId]);
         if (prior.rows[0]) return { ok: true, challenge: challengeFromRow(prior.rows[0]), replayed: true };
         const fail = (code: Extract<ChallengeSendResult, { ok: false }>['code']): ChallengeSendResult => ({ ok: false, code });
@@ -335,6 +356,11 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
         const defenderId = String(target.rows[0].owner_id);
         if (defenderId === input.challengerId) return fail('OWN_TILE');
         const own = await client.query('select cell_id from world_claims where owner_id=$1', [input.challengerId]);
+        // THE STAKE IS A TILE, NOT SEEDS (owner, 2026-10-29). The nearest own tile, deterministic on
+        // ties; no wallet lock, no debit, no ledger row.
+        const stakeCellId = stakedCellFor(input.challengerId, input.cellId,
+          own.rows.map((row) => ({ cellId: String(row.cell_id), ownerId: input.challengerId })));
+        if (stakeCellId === null) return fail('NO_TILE');
         if (!worldNeighbours(input.cellId).some((id) => own.rows.some((r) => String(r.cell_id) === id))) return fail('NOT_ADJACENT');
         const busy = await client.query("select 1 from world_challenges where cell_id=$1 and status in ('pending','accepted')", [input.cellId]);
         if (busy.rows.length) return fail('CELL_BUSY');
@@ -342,23 +368,15 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
         if (number(outgoing.rows[0]?.n) >= WORLD_CHALLENGE_OPEN_LIMIT) return fail('TOO_MANY_OPEN');
         const incoming = await client.query("select count(*)::int as n from world_challenges where defender_id=$1 and status in ('pending','accepted')", [defenderId]);
         if (number(incoming.rows[0]?.n) >= WORLD_CHALLENGE_OPEN_LIMIT) return fail('DEFENDER_TOO_MANY');
-        if (wallet.balance < input.stake) return fail('NO_FUNDS');
+        if (!(await hasStakeColumn())) {
+          // Never guess how a new challenge should settle. The send is refused until 0019 is applied.
+          throw Object.assign(new Error('Apply server/migrations/0019_challenge_tile_stake.sql before challenging.'), { code: 'STAKE_COLUMN_MISSING' });
+        }
         const id = newId();
         const inserted = await client.query(
-          `insert into world_challenges(id,cell_id,challenger_id,defender_id,status,stake,request_key,created_at,expires_at)
-           values($1,$2,$3,$4,'pending',$5,$6,$7,$8) returning *`,
-          [id, input.cellId, input.challengerId, defenderId, input.stake, input.requestId, input.now, input.now + WORLD_CHALLENGE_TTL_MS],
-        );
-        const updated = await client.query(
-          `update seed_wallets set balance=balance-$2, lifetime_spent=lifetime_spent+$2
-            where player_id=$1 and balance >= $2 returning *`, [input.challengerId, input.stake],
-        );
-        if (!updated.rows[0]) throw new Error('Wallet debit failed after locked balance check.');
-        const next = walletFromRow(updated.rows[0]);
-        await client.query(
-          `insert into seed_ledger(id,player_id,delta,balance_after,category,source_key,economy_version,created_at)
-           values($1,$2,$3,$4,'world_challenge',$5,$6,$7)`,
-          [newId(), input.challengerId, -input.stake, next.balance, `world-challenge:${id}:escrow`, SEED_ECONOMY.version, input.now],
+          `insert into world_challenges(id,cell_id,challenger_id,defender_id,status,stake,stake_cell_id,request_key,created_at,expires_at)
+           values($1,$2,$3,$4,'pending',0,$5,$6,$7,$8) returning *`,
+          [id, input.cellId, input.challengerId, defenderId, stakeCellId, input.requestId, input.now, input.now + WORLD_CHALLENGE_TTL_MS],
         );
         return { ok: true, challenge: challengeFromRow(inserted.rows[0]!), replayed: false };
       });
@@ -394,7 +412,10 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
       const updated = await client.query(
         "update world_challenges set status='declined', responded_at=$2 where id=$1 returning *", [c.id, input.now],
       );
-      await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:refund`, input.now);
+      // No refund for a tile-stake challenge: no Seeds were taken. Legacy Seed rows keep their refund.
+      if (c.stakeCellId === null && c.stake > 0) {
+        await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:refund`, input.now);
+      }
       return { ok: true, challenge: challengeFromRow(updated.rows[0]!), replayed: false };
     });
   },
@@ -411,17 +432,27 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
         return { ok: true, challenge: c, settled: false, winnerId: c.winnerId, cellId: c.cellId, replayed: true };
       }
       if (c.status !== 'accepted') return { ok: false, code: 'CHALLENGE_CLOSED' };
-      // The first confirmation settles. The row lock makes a concurrent second confirmation wait,
-      // then see `resolved` above and replay the stored result instead of transferring again.
-      if (input.winnerId === c.challengerId &&
-        await takeCell(client, c.cellId, c.defenderId, c.challengerId, input.now)) {
-        await client.query('update world_meta set revision=revision+1 where version=1', []);
-      }
-      if (input.winnerId === c.defenderId) {
-        await creditWallet(client, c.defenderId, c.stake, `world-challenge:${c.id}:payout`, input.now);
-      } else {
-        await creditWallet(client, c.challengerId, c.stake,
-          `world-challenge:${c.id}:${input.winnerId === null ? 'refund' : 'payout'}`, input.now);
+      // THE WINNER TAKES THE LOSER'S TILE (owner, 2026-10-29), and exactly ONE tile moves:
+      //   challenger wins → the contested tile; the challenger keeps their stake tile.
+      //   defender wins   → the challenger's stake tile; the defender keeps the contested tile.
+      // A draw has no winner and nothing changes hands.
+      // The row lock makes a concurrent second settlement wait, then see `resolved` above and replay
+      // the stored result instead of transferring again.
+      if (input.winnerId === c.challengerId) {
+        if (await takeCell(client, c.cellId, c.defenderId, c.challengerId, input.now)) {
+          await client.query('update world_meta set revision=revision+1 where version=1', []);
+        }
+      } else if (input.winnerId === c.defenderId) {
+        if (c.stakeCellId !== null) {
+          if (await takeCell(client, c.stakeCellId, c.challengerId, c.defenderId, input.now)) {
+            await client.query('update world_meta set revision=revision+1 where version=1', []);
+          }
+        } else if (c.stake > 0) {
+          // Legacy Seed-stake row: its recorded stake is the only thing the defender can still take.
+          await creditWallet(client, c.defenderId, c.stake, `world-challenge:${c.id}:payout`, input.now);
+        }
+      } else if (c.stakeCellId === null && c.stake > 0) {
+        await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:refund`, input.now);
       }
       const updated = await client.query(
         "update world_challenges set status='resolved', winner_id=$2, resolved_at=$3 where id=$1 returning *",
@@ -430,6 +461,13 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
       const next = challengeFromRow(updated.rows[0]!);
       return { ok: true, challenge: next, settled: true, winnerId: next.winnerId, cellId: next.cellId, replayed: false };
     });
+  },
+
+  async challengesAwaitingSettlement() {
+    const { rows } = await pool.query(
+      "select * from world_challenges where status='accepted' and match_id is not null order by created_at asc limit 50",
+    );
+    return rows.map(challengeFromRow);
   },
 
   async challengesInvolving(playerId, since) {
@@ -456,19 +494,24 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
       for (const row of due.rows) {
         const c = challengeFromRow(row);
         if (c.status === 'pending') {
-          // Unanswered for 24 h: the owner's decision is a forfeit. The tile moves to the
-          // challenger and their own stake comes back; the defender loses the tile.
+          // Unanswered for 24 h: the owner's decision is a forfeit. The challenger takes the
+          // contested tile; their own staked tile was never escrowed, so it stays theirs. The
+          // defender is never charged. (A legacy Seed row still gets its recorded stake back.)
           if (await takeCell(client, c.cellId, c.defenderId, c.challengerId, now)) {
             await client.query('update world_meta set revision=revision+1 where version=1', []);
           }
-          await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:payout`, now);
+          if (c.stakeCellId === null && c.stake > 0) {
+            await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:payout`, now);
+          }
           await client.query(
             "update world_challenges set status='expired', winner_id=$2, resolved_at=$3 where id=$1",
             [c.id, c.challengerId, now],
           );
         } else {
-          // Accepted but unresolved for 7 days: close honestly and refund. Never transfers.
-          await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:refund`, now);
+          // Accepted but unresolved for 7 days: close honestly. Nothing transfers.
+          if (c.stakeCellId === null && c.stake > 0) {
+            await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:refund`, now);
+          }
           await client.query("update world_challenges set status='stale', resolved_at=$2 where id=$1", [c.id, now]);
         }
         changed += 1;
@@ -511,15 +554,18 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
       if (previousOwnerId === input.ownerId) {
         return { ok: true, cellId: input.cellId, previousOwnerId, ownerId: input.ownerId, changed: false, revision, challengesClosed: 0 };
       }
-      // An open challenge would otherwise settle against a tile that moved under it: close it as
-      // stale and refund the escrow first, exactly as the 7-day close does.
-      const open = await client.query(
-        "select * from world_challenges where cell_id=$1 and status in ('pending','accepted') for update",
-        [input.cellId],
-      );
+      // An open challenge on this cell — as the contested ground OR as the challenger's stake —
+      // would otherwise settle against a tile that moved under it: close it as stale. Only a legacy
+      // Seed escrow is handed back; nothing changes hands.
+      const openSql = (await hasStakeColumn())
+        ? "select * from world_challenges where (cell_id=$1 or stake_cell_id=$1) and status in ('pending','accepted') for update"
+        : "select * from world_challenges where cell_id=$1 and status in ('pending','accepted') for update";
+      const open = await client.query(openSql, [input.cellId]);
       for (const row of open.rows) {
         const c = challengeFromRow(row);
-        await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:refund`, input.now);
+        if (c.stakeCellId === null && c.stake > 0) {
+          await creditWallet(client, c.challengerId, c.stake, `world-challenge:${c.id}:refund`, input.now);
+        }
         await client.query("update world_challenges set status='stale', resolved_at=$2 where id=$1", [c.id, input.now]);
       }
       if (input.ownerId === null) {
@@ -539,4 +585,5 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
       return { ok: true, cellId: input.cellId, previousOwnerId, ownerId: input.ownerId, changed: true, revision: revision + 1, challengesClosed: open.rows.length };
     });
   },
-});
+  };
+};

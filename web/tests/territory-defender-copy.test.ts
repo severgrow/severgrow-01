@@ -1,14 +1,13 @@
-// THE DEFENDER IS NOT BUYING THEIR OWN TILE (owner report, 2026-10-28).
+// THE DEFENDER IS NEVER CHARGED (owner report, 2026-10-28), AND SINCE 2026-10-29 NOBODY IS.
 //
-// Owner, verbatim: "i accepted the territory challenge, but i had to pay 50 seeds too — only
-// challenging player should be paying 50 — the defending one have to be saying 'respond to keep your
-// tile in 23:59 (timer)'".
+// Owner, 2026-10-28, verbatim: "i accepted the territory challenge, but i had to pay 50 seeds too —
+// only challenging player should be paying 50 — the defending one have to be saying 'respond to keep
+// your tile in 23:59 (timer)'".
 //
-// The money was already right: `respondChallenge` and `expireChallenges` in
-// `server/src/seeds/postgres.ts` never debit the defender, and `settleChallenge` only ever CREDITS
-// them. The sheet was what lied: it showed the challenger's 50-Seed stake as `50 SEEDS · 22 h LEFT`
-// directly above ACCEPT, which reads as a price. These tests pin the words to the economy, and pin
-// the expiry sentence to what `expireChallenges` actually does.
+// Owner, 2026-10-29, verbatim: "make challenging free ... challenging is like putting your tile at
+// stake." So the seed price is gone entirely: the challenger risks a TILE, the defender risks the
+// CONTESTED tile, and the winner takes the loser's tile. These tests pin the words to that rule and
+// fail if any challenge sentence reintroduces a Seed price or forgets to name the stake.
 //
 // A copy or economy change that breaks this file is a real decision, not a formatting tweak.
 import { readFileSync } from 'node:fs';
@@ -36,6 +35,20 @@ const defenderFacing = (): string[] => [
   CHALLENGE.forfeited,
 ];
 
+/** Every string the CHALLENGER can read while sending, waiting or settling. */
+const challengerFacing = (): string[] => [
+  CHALLENGE.sendLine('RYK', 'your tile 3,-10'),
+  CHALLENGE.sendMeta('your tile 3,-10'),
+  CHALLENGE.sent('your tile 3,-10'),
+  CHALLENGE.waitLine('RYK'),
+  CHALLENGE.duelLine,
+  CHALLENGE.settlingLine('BloomHeron'),
+  CHALLENGE.stakeMeta('your tile 3,-10'),
+  CHALLENGE.stakeLabel('your tile 3,-10'),
+  CHALLENGE.noTile,
+  CHALLENGE.sendFailed,
+];
+
 describe('the defender is told to answer, never to pay', () => {
   it('states the live countdown and asks for an answer', () => {
     const line = CHALLENGE.defendLine('RYK', '22 h');
@@ -46,6 +59,9 @@ describe('the defender is told to answer, never to pay', () => {
     // The countdown is the one time label the whole feature uses, floored (challenge-view.ts).
     expect(CHALLENGE.defendLine('RYK', '59 min')).toContain('59 min');
     expect(CHALLENGE.defendLine('RYK', '2 d')).toContain('2 d');
+    // RULE CHANGE (owner, 2026-10-29): they are told what losing costs them — the contested tile.
+    expect(line).toMatch(/lose the duel/i);
+    expect(line).toMatch(/take it/i);
   });
 
   it('never shows the defender a price — no amount of Seeds, no "you pay"', () => {
@@ -57,23 +73,39 @@ describe('the defender is told to answer, never to pay', () => {
     }
   });
 
-  it('says outright that defending costs no Seeds, because that is the report', () => {
+  it('says outright that defending costs no Seeds AND that the contested tile is what is at risk', () => {
     expect(CHALLENGE.defendMeta).toMatch(/NO SEEDS TO PAY/i);
-    // It is a statement, not a number: no countdown, no stake, nothing to misread as a charge.
+    expect(CHALLENGE.defendMeta).toMatch(/YOUR TILE AT STAKE/i);
+    // It is a statement, not a number: no countdown, no amount, nothing to misread as a charge.
     expect(CHALLENGE.defendMeta).not.toMatch(/\d/);
   });
+});
 
-  it('keeps the CHALLENGER’s side honest about the 50 Seeds they paid', () => {
-    expect(CHALLENGE.sendLine('RYK', 50)).toContain('50 Seeds');
-    expect(CHALLENGE.sendMeta(50)).toContain('50 SEEDS');
-    expect(CHALLENGE.sent(50)).toContain('50 Seeds');
-    // The confirm sheet's amount belongs to the challenger's own escrow, so it is still theirs to see.
-    expect(CHALLENGE.stakeOnly(50)).toContain('50 SEEDS');
+describe('the challenger names the tile, never a Seed price', () => {
+  it('says the challenge is free and what happens on a loss', () => {
+    const line = CHALLENGE.sendLine('RYK', 'your tile 3,-10');
+    expect(line).toContain('RYK');
+    expect(line).toMatch(/free/i);
+    expect(line).toContain('your tile 3,-10');
+    expect(line).toMatch(/lose/i);
+    expect(line).toMatch(/take/i);
   });
 
-  it('never says "staked" (owner vocabulary, 2026-10-24)', () => {
-    for (const text of [...defenderFacing(), CHALLENGE.sendLine('RYK', 50), CHALLENGE.sendMeta(50), CHALLENGE.sent(50)]) {
-      expect(text, text).not.toMatch(/stake/i);
+  it('names the stake in the meta line instead of an amount', () => {
+    expect(CHALLENGE.sendMeta('your tile 3,-10')).toContain('YOUR TILE 3,-10 AT STAKE');
+    expect(CHALLENGE.sendMeta('your tile 3,-10')).toContain('24 H TO ANSWER');
+    expect(CHALLENGE.sent('your tile 3,-10')).toContain('your tile 3,-10');
+    // No sentence anywhere implies that challenging is paid in Seeds.
+    for (const text of challengerFacing()) {
+      expect(text, text).not.toMatch(/\b\d+\s*seeds?\b/i);
+      expect(text, text).not.toMatch(/\byou (?:pay|owe|spend|are charged)\b/i);
+      expect(text, text).not.toMatch(/need \d+ seeds/i);
+    }
+  });
+
+  it('uses the owner’s word: the tile is AT STAKE', () => {
+    for (const text of [CHALLENGE.sendLine('RYK', 'your tile 3,-10'), CHALLENGE.sendMeta('your tile 3,-10'), CHALLENGE.defendMeta]) {
+      expect(text, text).toMatch(/stake/i);
     }
   });
 });
@@ -123,9 +155,9 @@ describe('the expiry sentence matches what the server actually does', () => {
   });
 
   it('the pending branch never charges or credits the defender', () => {
-    // The ONLY wallet movement is the challenger's own stake coming back.
+    // The ONLY wallet movement (for a legacy row) is that row's recorded stake coming back.
     expect(pending).not.toMatch(/creditWallet\(client, c\.defenderId/);
-    expect(pending).not.toMatch(/debit|balance\s*-/i);
+    expect(pending).not.toMatch(/balance\s*-/);
   });
 
   it('so the sentence says the deadline passed and the challenger took the ground', () => {

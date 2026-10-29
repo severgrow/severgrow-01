@@ -13,8 +13,9 @@
  * encourage. The COUNT limits (`dailyMatches`, `pairDailyMatches`) are deliberately NOT doubled:
  * those guard how many matches may pay at all (anti-farming), not how much each pays.
  *
- * PRICES ARE UNTOUCHED - a tile still costs 100 and a challenge stake is still 50. That is the
- * whole point: the payout rises and the price does not, so Territory is reachable sooner.
+ * PRICES ARE UNTOUCHED - a tile still costs 100. A challenge costs NOTHING (owner, 2026-10-29): it
+ * is a tile put at stake, never a Seed payment. That is the whole point: the payout rises and the
+ * price does not, so Territory is reachable sooner.
  *
  * Receipts are idempotent and store the amount actually paid, so anything settled before this keeps
  * its old figure and a replayed clear returns that old figure. Only NEW settlements are doubled.
@@ -27,13 +28,6 @@ export const SEED_ECONOMY = Object.freeze({
   tileCost: 100,
   /** What selling a tile back returns (owner, 2026-10-27: "selling your tile for 100 seeds"). */
   tileSaleReturn: 100,
-  /**
-   * What a Territory challenge costs to send (owner, 2026-10-24: "make it cost 50 seeds no 100").
-   * Deliberately NOT `tileCost`: growing a tile and disputing someone else's are different
-   * purchases, and one number serving both made the challenge look like the price of land. The
-   * stake still goes to the winner and comes back on a decline or a lapse; only the amount moved.
-   */
-  challengeStake: 50,
   utcDailyRepeatableCap: 600,
   online: {
     queue: { win: 30, loss: 8, draw: 12, dailyMatches: 20, pairDailyMatches: 5 },
@@ -43,10 +37,10 @@ export const SEED_ECONOMY = Object.freeze({
 } as const);
 
 /**
- * Territory challenges (docs/TERRITORY-CHALLENGES.md). The stake is `SEED_ECONOMY.challengeStake`,
- * its own price since 2026-10-24 (a challenge is not the same purchase as a tile). The timers are
- * not economy values: they are the defender's answer window and the outer bound on a linked duel
- * that never resolves.
+ * Territory challenges (docs/TERRITORY-CHALLENGES.md). There is NO Seed price since 2026-10-29: a
+ * challenge is free, and the challenger puts one of their OWN tiles at stake instead
+ * (`server/src/seeds/stake.ts`). The timers below are not economy values: they are the defender's
+ * answer window and the outer bound on a linked duel that never resolves.
  */
 export const WORLD_CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
 export const WORLD_CHALLENGE_STALE_MS = 7 * 24 * 60 * 60 * 1000;

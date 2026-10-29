@@ -204,7 +204,10 @@ export type WorldMapPayload = {
     cells: { id: string; q: number; r: number }[];
     claims: { cellId: string; ownerId: string; ownerName: string | null; ownerLevel: number | null; ownerTag: string; colour: string; claimedAt: number }[];
     cost: number;
-    /** What one Territory challenge costs to send. Its own price, never the tile's. */
+    /**
+     * Historical field, kept for older clients. 0 since 2026-10-29: a challenge costs no Seeds; the
+     * challenger puts one of their own tiles at stake instead (`WorldChallengeWire.stakeCellId`).
+     */
     challengeStake: number;
   };
 };

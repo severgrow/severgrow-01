@@ -12,12 +12,15 @@ import {
   defendSheetCopy,
   isLow,
   opponentName,
-  playerName,
   remainingLabel,
+  resolvedSheetCopy,
   ringFraction,
+  settlementSheetCopy,
   sheetModeFor,
-  winnerName,
+  stakeMarkersFor,
 } from './challenge-view.js';
+import { stakedCellFor } from '../../../server/src/seeds/stake.js';
+import { stakeName } from './challenge-copy.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { SWORD_PATH } from './swords-glyph.js';
 import { ownerLine } from './world-selection.js';
@@ -26,8 +29,8 @@ import { lastWorld, rememberWorld } from './world-memory.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { WORLD_CLAIMED_EVENT } from './world-events.js';
 import { TerritoryChat } from './territory-chat.js';
-import { borderSegments, cellXY, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ranking, standing } from './world-growth.js';
-import type { FogRing, FogShift } from './world-growth.js';
+import { borderSegments, cellXY, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ranking, standing, takeovers } from './world-growth.js';
+import type { FogRing, FogShift, Takeover } from './world-growth.js';
 import { ONLINE } from '../../../src/strings.js';
 
 /** A tile grown this recently keeps its halo (the map shows where the world is moving). */
@@ -77,6 +80,14 @@ const SETTLE_MS = 140;
  * the fresh land rising are ONE moment, not two tempos, so no new duration token is introduced.
  */
 const FOG_LIFT_MS = 520;
+/**
+ * THE TAKEOVER'S ONE MOMENT (owner, 2026-10-29: "create a special animation for that tile take over
+ * - simple but impressive"). Long enough to read a colour drain and a single edge flash, short
+ * enough that the map never feels stuck; the same order of magnitude as the mist's 520 ms hand-off
+ * and shorter than the old settle ring's 1.25 s. No new duration token, no blur: a fill's opacity
+ * and one stroke's opacity, both composited.
+ */
+const TAKEOVER_MS = 900;
 /**
  * TAP, DRAG AND DOUBLE TAP (owner, 2026-10-28: "it should be possible to 'scroll' around the map
  * always when holding and dragging finger. quick double tap should zoom out / zoom in, right now
@@ -270,6 +281,15 @@ export class WorldView {
   private readonly markerNodes = new Map<string, { group: SVGGElement; hit: SVGCircleElement }>();
   private swordsGroup: SVGGElement | null = null;
   private marksGroup: SVGGElement | null = null;
+  /**
+   * THE TAKEOVER, kept as DATA across paints (see `takeovers` in world-growth.ts). The map is rebuilt
+   * wholesale, so the hand-off is redrawn by `paint()` from this record with a negative animation
+   * delay — a repaint mid-animation continues the same moment instead of cutting it.
+   */
+  private takeoverShift: Takeover[] = [];
+  private takeoverAt = 0;
+  /** The quiet hexes that ring the challenger's own tile at risk, keyed by challenge id. */
+  private readonly stakeNodes = new Map<string, SVGPathElement>();
   /** Set by lobby-ui once `openMatch` exists, so an accepted challenge can open its duel. */
   private matchOpener: ((matchId: string) => void) | null = null;
   private sheet: {
@@ -283,7 +303,7 @@ export class WorldView {
     secondary: HTMLButtonElement;
     notice: HTMLElement;
   } | null = null;
-  private sheetMode: 'send' | 'defend' | 'wait' | 'duel' | 'confirm' | 'resolved' | 'closed' = 'closed';
+  private sheetMode: 'send' | 'defend' | 'wait' | 'duel' | 'settling' | 'resolved' | 'closed' = 'closed';
   private sheetCellId: string | null = null;
   private sheetChallenge: WorldChallengeWire | null = null;
   private sheetRequestId: string | null = null;
@@ -482,25 +502,24 @@ export class WorldView {
             previous.ownerId !== claim.ownerId;
         });
       // The ground that changed hands, captured BEFORE the new map replaces the old one: this is the
-      // only moment that knows both answers, and it is what the settle ceremony points at.
-      const moving = ownerChanged
-        ? map.world.claims
-          .filter((claim) => {
-            const previous = this.world?.claims.find((candidate) => candidate.cellId === claim.cellId);
-            return previous && previous.ownerId !== claim.ownerId;
-          })
-          .map((claim) => claim.cellId)
-        : [];
+      // only moment that knows both answers, and it is what the takeover ceremony points at.
+      const moved = takeovers(this.world?.claims ?? null, map.world.claims, interfaceMotionAllowed());
       if (this.fromMemory || !this.world || map.world.revision > this.world.revision ||
         (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged))) {
         this.world = map.world;
         this.fromMemory = false;
+        // Keep the takeover as DATA before the paint, so `paint()` can draw the hand-off (and a later
+        // repaint can resume it) rather than relying on an ephemeral DOM node.
+        if (moved.length) {
+          this.takeoverShift = moved;
+          this.takeoverAt = Date.now();
+        }
         // SMOOTH REFRESH (owner, 2026-10-28): rebuilding the map throws away every node, its running
         // glints and halos, and a focused tile. Only a change in what the map is drawn from may do
         // that; a forced re-read that brings the same world back keeps the drawn one.
         if (this.paintSignatureOf() !== this.paintSignature) this.paint();
         rememberWorld(browserStorage(), map.world);
-        if (moving.length) this.celebrateGround(moving);
+        if (moved.length) this.cueTakeover(moved);
       }
       this.paintWallet();
       this.paintPanel();
@@ -509,7 +528,12 @@ export class WorldView {
       // bump ownership). These only touch attributes, the swords and the challenge strip, never the map.
       this.paintRings();
       this.paintSwords();
+      this.paintStakes();
       this.paintChallenges();
+      // LAST: a finished duel is settled by the server on this very read. If this client is the one
+      // that has not seen the resolved row yet (or a read raced the settlement), it posts the same
+      // idempotent confirm in the background — never a key the player must press.
+      this.settleAutomatically();
     } catch {
       if (this.active) this.notice('The world could not refresh. Tap here to try again.');
     } finally { this.schedule(); }
@@ -846,6 +870,11 @@ export class WorldView {
       spores.append(mote);
     }
     svg.append(faces, lines, marks, rings, swords);
+    // THE TAKEOVER paints ABOVE the tile edges so the losing colour drains over the whole ground and
+    // its flash cannot be buried by a neighbour's stroke. It is data-driven (see `takeoverNodes`) and
+    // is redrawn by any paint that lands inside its 900 ms beat.
+    const takeover = this.takeoverNodes();
+    if (takeover) svg.append(takeover);
     // The mist's hand-off paints ABOVE the new faces (so the old mist is still visible over the land
     // it is leaving) and BELOW the tile edges (so the coast's outline is crisp from the first
     // frame). It is inserted, not appended, so the faces/lines order above is untouched.
@@ -1570,6 +1599,86 @@ export class WorldView {
     }
   }
 
+  /**
+   * THE STAKE RING (owner, 2026-10-29: "challenging is like putting your tile at stake"). A quiet
+   * dashed outline on the challenger's OWN auto-chosen tile for as long as the challenge is open.
+   * It is the same six-point hex as every other outline (never a circle), carries no animation, and
+   * leaves in the same frame the data closes the challenge. The tile's own accessible name gains the
+   * stake sentence, so a keyboard or screen-reader user is told exactly which tile is at risk.
+   */
+  private paintStakes() {
+    const group = this.ringsGroup;
+    if (!group || !this.world) return;
+    const me = this.identity?.playerId ?? null;
+    const wanted = me ? stakeMarkersFor(this.allChallenges, me) : [];
+    const byId = new Map(wanted.map((marker) => [marker.challengeId, marker]));
+    for (const [id, node] of [...this.stakeNodes]) {
+      if (byId.has(id)) continue;
+      node.remove();
+      this.stakeNodes.delete(id);
+    }
+    for (const [id, marker] of byId) {
+      const cell = this.world.cells.find((candidate) => candidate.id === marker.cellId);
+      if (!cell) continue;
+      let path = this.stakeNodes.get(id);
+      if (!path) {
+        path = document.createElementNS(NS, 'path');
+        path.setAttribute('pathLength', '1');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('aria-hidden', 'true');
+        path.classList.add('world-stake');
+        group.append(path);
+        this.stakeNodes.set(id, path);
+      }
+      const at = coords(cell.q, cell.r);
+      path.setAttribute('d', hexPath(at.x, at.y));
+      path.setAttribute('data-challenge-id', id);
+      path.setAttribute('data-cell-id', marker.cellId);
+      const claim = this.world.claims.find((candidate) => candidate.cellId === marker.cellId);
+      if (claim) path.style.setProperty('--territory', claim.colour);
+    }
+    // The spoken sentence lives on the tile itself. `ariaBase` keeps the original label so a poll
+    // never appends the sentence twice.
+    const staked = new Map(wanted.map((marker) => [marker.cellId, marker.label] as const));
+    for (const hex of this.svg?.querySelectorAll<SVGPathElement>('.world-hex') ?? []) {
+      const cellId = hex.getAttribute('data-cell-id') ?? '';
+      if (hex.dataset.ariaBase === undefined) hex.dataset.ariaBase = hex.getAttribute('aria-label') ?? '';
+      const base = hex.dataset.ariaBase;
+      const label = staked.has(cellId) ? `${base}. ${staked.get(cellId)}` : base;
+      if (hex.getAttribute('aria-label') !== label) hex.setAttribute('aria-label', label);
+    }
+  }
+
+  /**
+   * AUTOMATIC SETTLEMENT'S CLIENT HALF. The server settles a finished linked duel on the read that
+   * follows (`WorldEconomyService.settleFinished`); this is only the harmless fallback for a client
+   * whose read raced it — it posts the same idempotent `confirm` in the background, once per
+   * challenge per session, then re-reads. The player never presses a key for this.
+   */
+  private readonly autoSettleTried = new Set<string>();
+
+  private settleAutomatically() {
+    const identity = this.identity;
+    if (!identity) return;
+    for (const challenge of this.allChallenges) {
+      if (challenge.status !== 'accepted' || !challenge.matchFinished || challenge.winnerId !== null) continue;
+      if (this.autoSettleTried.has(challenge.id)) continue;
+      this.autoSettleTried.add(challenge.id);
+      void this.settleInBackground(identity.token, challenge.id);
+    }
+  }
+
+  private async settleInBackground(token: string, challengeId: string): Promise<void> {
+    try {
+      await this.client.confirmWorldChallenge(token, challengeId, crypto.randomUUID());
+    } catch {
+      // A failed fallback is not a player-facing error: the sheet keeps its SETTLE NOW key, and the
+      // server's own lazy settlement will apply on the next read anyway.
+      return;
+    }
+    if (this.active) void this.refresh(true);
+  }
+
   private makeMarker(marker: ChallengeMarker): { group: SVGGElement; hit: SVGCircleElement } {
     const group = document.createElementNS(NS, 'g');
     group.classList.add('world-swords');
@@ -1602,36 +1711,62 @@ export class WorldView {
   }
 
   /**
-   * THE SETTLE BEAT. When a challenge actually moves a tile, the ground is redrawn by `paint()` like
-   * any other change — correct, and completely silent. This is the one moment the whole feature
-   * exists for, so the cell draws its own outline once in its NEW owner's colour and fades: a
-   * receipt for the ground, lasting 1.25 s, then leaving no trace on the map.
-   * Opacity and one dash offset only, and reduced motion holds it still instead of drawing it.
+   * THE TAKEOVER'S SOUND (owner, 2026-10-29). The ground is the reward, so a gain is heard as well as
+   * seen. A loss is left to the list and the sheet: a sad noise at a stranger's good news would be a
+   * punishment, not information. The animation itself is drawn by `takeoverNodes()`.
    */
-  private celebrateGround(cellIds: readonly string[]) {
-    const group = this.ringsGroup;
-    if (!group || !this.world) return;
+  private cueTakeover(moved: readonly Takeover[]) {
     const me = this.identity?.playerId ?? null;
-    let gained = false;
-    for (const id of cellIds) {
-      const cell = this.world.cells.find((candidate) => candidate.id === id);
-      if (!cell) continue;
-      const claim = this.world.claims.find((candidate) => candidate.cellId === id);
-      if (claim && me && claim.ownerId === me) gained = true;
-      const at = coords(cell.q, cell.r);
-      const path = document.createElementNS(NS, 'path');
-      path.setAttribute('d', hexPath(at.x, at.y));
-      path.setAttribute('pathLength', '1');
-      path.setAttribute('fill', 'none');
-      path.setAttribute('aria-hidden', 'true');
-      path.classList.add('world-settle');
-      if (claim) path.style.setProperty('--territory', claim.colour);
-      group.append(path);
-      window.setTimeout(() => path.remove(), 1400);
+    if (me && moved.some((tile) => tile.toOwnerId === me)) this.cue('chime');
+  }
+
+  /**
+   * THE TAKEOVER LAYER, rebuilt from the stored diff on every paint so it survives a repaint.
+   *
+   * For each cell whose owner changed: the LOSING owner's colour is drawn over the tile and drains
+   * away, revealing the winner's face that the map has already settled into underneath; the tile's
+   * edge flashes once in the winner's colour; a short label names the moment. Both halves carry the
+   * same clock (`takeoverAt`), re-fed as a negative `animation-delay` when a repaint lands mid-beat,
+   * exactly the trick `fogShift` uses. Opacity only — no blur, no layout, no new duration token.
+   */
+  private takeoverNodes(): SVGGElement | null {
+    const moved = this.takeoverShift;
+    if (!moved.length || !this.world) return null;
+    const elapsed = Date.now() - this.takeoverAt;
+    if (!(elapsed >= 0) || elapsed >= TAKEOVER_MS) {
+      this.takeoverShift = [];
+      return null;
     }
-    // The ground is the reward, so a gain is heard as well as seen. A loss is left to the list and
-    // the sheet: a sad noise at a stranger's good news would be a punishment, not information.
-    if (gained) this.cue('chime');
+    const layer = document.createElementNS(NS, 'g');
+    layer.classList.add('world-takeover');
+    layer.setAttribute('aria-hidden', 'true');
+    // Resumed, not restarted: a repaint inside the beat keeps the layer's own clock.
+    const delay = `-${elapsed}ms`;
+    for (const tile of moved) {
+      const cell = this.world.cells.find((candidate) => candidate.id === tile.cellId);
+      if (!cell) continue;
+      const at = coords(cell.q, cell.r);
+      const d = hexPath(at.x, at.y);
+      const was = document.createElementNS(NS, 'path');
+      was.setAttribute('d', d);
+      was.classList.add('world-takeover-was');
+      was.style.fill = shade(tile.fromColour, 49);
+      was.style.animationDelay = delay;
+      const edge = document.createElementNS(NS, 'path');
+      edge.setAttribute('d', d);
+      edge.classList.add('world-takeover-edge');
+      edge.style.setProperty('--territory', tile.toColour);
+      edge.style.animationDelay = delay;
+      const label = document.createElementNS(NS, 'text');
+      label.setAttribute('x', at.x.toFixed(2));
+      label.setAttribute('y', (at.y - R * 1.55).toFixed(2));
+      label.setAttribute('text-anchor', 'middle');
+      label.classList.add('world-takeover-label');
+      label.style.animationDelay = delay;
+      label.textContent = `${tile.winnerName.toUpperCase()} TAKES IT`;
+      layer.append(was, edge, label);
+    }
+    return layer.childElementCount ? layer : null;
   }
 
   /**
@@ -1779,7 +1914,7 @@ export class WorldView {
         // The clock, not the coordinate: the chip already names the player.
         return CHALLENGE.remaining(remainingLabel(challenge.expiresAt - now));
       case 'accepted':
-        return challenge.matchFinished ? CHALLENGE.ready : CHALLENGE.duel;
+        return challenge.matchFinished ? CHALLENGE.settlingShort : CHALLENGE.duel;
       case 'resolved':
         return CHALLENGE.settledShort;
       case 'expired':
@@ -2002,33 +2137,33 @@ export class WorldView {
     exitSurface(sheet.root, { travel: 0, scale: 1, duration: 150 });
   }
 
-  /** The challenger's offer: one sentence, one primary key. */
+  /** The challenger's offer: what it costs (nothing), what is at stake (their own tile), one key. */
   private openSendSheet(cellId: string) {
     const tile = this.world?.claims.find((claim) => claim.cellId === cellId);
     if (!tile || !this.identity) return;
     const sheet = this.ensureSheet();
-    const stake = this.challengeStake();
     this.sheetMode = 'send';
     this.sheetCellId = cellId;
     this.sheetChallenge = null;
     this.sheetRequestId = crypto.randomUUID();
     this.setSheetGround(tile.colour ?? null);
-    sheet.line.textContent = CHALLENGE.sendLine(tile.ownerName ?? 'Player', stake);
-    sheet.meta.textContent = CHALLENGE.sendMeta(stake);
+    // The SAME deterministic chooser the server uses (`server/src/seeds/stake.ts`), so the tile this
+    // sentence names is exactly the tile the send will put at risk.
+    const stakeCellId = this.world
+      ? stakedCellFor(this.identity.playerId, cellId, this.world.claims)
+      : null;
     sheet.notice.textContent = '';
-    if (this.wallet && this.wallet.balance < stake) {
+    if (stakeCellId === null) {
+      sheet.line.textContent = CHALLENGE.noTile;
+      sheet.meta.textContent = CHALLENGE.defendMeta;
       this.setSheetKeys(null, CHALLENGE.notNow);
-      sheet.notice.textContent = CHALLENGE.noFunds(stake);
     } else {
+      const stake = stakeName(stakeCellId);
+      sheet.line.textContent = CHALLENGE.sendLine(tile.ownerName ?? 'Player', stake);
+      sheet.meta.textContent = CHALLENGE.sendMeta(stake);
       this.setSheetKeys(CHALLENGE.sendKey, CHALLENGE.notNow);
     }
     this.showSheet();
-  }
-
-  /** One place reads the challenge price: the server sends it, the sheet only prints it. */
-  private challengeStake(): number {
-    const stake = this.world?.challengeStake;
-    return typeof stake === 'number' && Number.isFinite(stake) && stake > 0 ? stake : 50;
   }
 
   /** Every other state of the same sheet. The server's status chooses it; the client never guesses. */
@@ -2060,39 +2195,40 @@ export class WorldView {
         this.setSheetKeys(CHALLENGE.acceptKey, CHALLENGE.declineKey);
         break;
       }
-      case 'wait':
+      case 'wait': {
+        const stake = challenge.stakeCellId === null ? null : stakeName(challenge.stakeCellId);
         sheet.line.textContent = CHALLENGE.waitLine(challenge.defenderName ?? 'Player');
-        sheet.meta.textContent = CHALLENGE.remaining(remainingLabel(challenge.expiresAt - now));
+        sheet.meta.textContent = stake
+          ? `${CHALLENGE.stakeMeta(stake)} · ${CHALLENGE.remaining(remainingLabel(challenge.expiresAt - now))}`
+          : CHALLENGE.remaining(remainingLabel(challenge.expiresAt - now));
         this.setSheetKeys(null, CHALLENGE.close);
         break;
+      }
       case 'duel':
         sheet.line.textContent = CHALLENGE.duelLine;
         sheet.meta.textContent = other;
         this.setSheetKeys(CHALLENGE.openDuelKey, CHALLENGE.close);
         break;
-      case 'confirm': {
-        const winner = playerName(challenge, challenge.matchWinnerId);
-        if (winner === null) {
-          sheet.line.textContent = CHALLENGE.drawLine;
-          this.setSheetKeys(CHALLENGE.drawKey, CHALLENGE.notNow);
-        } else {
-          sheet.line.textContent = CHALLENGE.confirmLine(winner);
-          this.setSheetKeys(CHALLENGE.takeKey, CHALLENGE.notNow);
-        }
-        // Only the CHALLENGER escrowed Seeds, so only the challenger reads an amount here. For the
-        // defender the same line would be the old misreading again — a figure above a key that looks
-        // like a price. They are told the one thing that is true for them.
-        sheet.meta.textContent = challenge.challengerId === me ? CHALLENGE.stakeOnly(challenge.stake) : CHALLENGE.defendMeta;
+      case 'settling': {
+        // AUTOMATIC (owner, 2026-10-29). The server applies this on the read; there is NO primary key
+        // to press. SETTLE NOW is a harmless fallback on the secondary key (same idempotent confirm).
+        const copy = settlementSheetCopy(challenge, me);
+        sheet.line.textContent = copy.line;
+        sheet.meta.textContent = copy.meta;
+        this.setSheetKeys(null, CHALLENGE.settleKey);
         break;
       }
-      case 'resolved':
-        sheet.line.textContent = CHALLENGE.resolvedLine(winnerName(challenge));
-        sheet.meta.textContent = CHALLENGE.settledShort;
+      case 'resolved': {
+        const copy = resolvedSheetCopy(challenge);
+        sheet.line.textContent = copy.line;
+        sheet.meta.textContent = copy.meta;
         this.setSheetKeys(null, CHALLENGE.close);
         break;
+      }
       default:
-        // An unanswered challenge that ran out is a FORFEIT, not a neutral close: the tile went to
-        // the challenger (`expireChallenges`). Say so in words rather than "this challenge is over".
+        // An unanswered challenge that ran out is a FORFEIT, not a neutral close: the contested tile
+        // went to the challenger (`expireChallenges`); their own staked tile was never at risk on a
+        // lapse. Say so in words rather than "this challenge is over".
         if (challenge.status === 'expired' || (challenge.status === 'pending' && challenge.expiresAt <= now)) {
           sheet.line.textContent = CHALLENGE.deadlineLine(challenge.challengerName ?? 'The challenger');
           sheet.meta.textContent = CHALLENGE.forfeited;
@@ -2110,7 +2246,6 @@ export class WorldView {
     switch (this.sheetMode) {
       case 'send': return this.sheetSend();
       case 'defend': return this.sheetRespond(true);
-      case 'confirm': return this.sheetConfirm();
       case 'duel': {
         const matchId = this.sheetChallenge?.matchId;
         this.closeSheet();
@@ -2129,6 +2264,8 @@ export class WorldView {
   private declineArmed = 0;
 
   private sheetSecondary(): void {
+    // The fallback for a finished duel the server has not applied yet: same idempotent confirm.
+    if (this.sheetMode === 'settling') return void this.sheetConfirm();
     if (this.sheetMode === 'defend') {
       const sheet = this.sheet;
       if (!sheet || this.sheetBusy) return;
@@ -2162,8 +2299,7 @@ export class WorldView {
     } catch (error) {
       const code = (error as { code?: unknown } | null)?.code;
       sheet.notice.textContent =
-        code === 'NO_FUNDS' ? CHALLENGE.noFunds(this.challengeStake()) :
-          code === 'CELL_BUSY' ? CHALLENGE.busy : failure;
+        code === 'CELL_BUSY' ? CHALLENGE.busy : failure;
     } finally {
       if (this.sheet) this.setSheetBusy(false);
     }
@@ -2176,10 +2312,11 @@ export class WorldView {
     this.sheetRequestId ??= crypto.randomUUID();
     const requestId = this.sheetRequestId;
     await this.runSheet(async () => {
-      await this.client.sendWorldChallenge(me.token, cellId, requestId);
+      const sent = await this.client.sendWorldChallenge(me.token, cellId, requestId);
       // The stake is a weight, so it lands as one.
       this.cue('thud');
-      this.notice(CHALLENGE.sent(this.challengeStake()));
+      const stake = sent.challenge.stakeCellId;
+      this.notice(stake ? CHALLENGE.sent(stakeName(stake)) : CHALLENGE.sendFailed);
       this.closeSheet();
       await this.refresh(true);
     }, CHALLENGE.sendFailed);

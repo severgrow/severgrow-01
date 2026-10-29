@@ -107,10 +107,11 @@ describe('the beta payout doubling', () => {
     expect(allowed.amount).toBe(SEED_ECONOMY.online.friend.win * BETA_PAYOUT_MULTIPLIER);
   });
 
-  it('does NOT touch prices - a tile and a challenge still cost what they cost', () => {
-    // The encouragement is "you earn more", never "things got cheaper", so these must not move with
-    // the multiplier (they are prices, not payouts).
+  it('does NOT touch prices - a tile still costs 100, and a challenge costs nothing', () => {
+    // The encouragement is "you earn more", never "things got cheaper", so the tile price must not
+    // move with the multiplier (it is a price, not a payout). A CHALLENGE stopped being a price on
+    // 2026-10-29: it is free, and the challenger stakes a tile instead.
     expect(SEED_ECONOMY.tileCost).toBe(100);
-    expect(SEED_ECONOMY.challengeStake).toBe(50);
+    expect('challengeStake' in SEED_ECONOMY).toBe(false);
   });
 });

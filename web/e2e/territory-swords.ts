@@ -54,11 +54,11 @@ const claims = [hub.id, own1, rival2, sendTarget].map((cellId) => ({
   colour: OWN.has(cellId) ? 'hsl(80 34% 49%)' : 'hsl(220 34% 49%)',
   claimedAt: NOW - 5 * 60_000,
 }));
-const WORLD = { ok: true, world: { version: 2, revision: 5, cost: 100, challengeStake: 50, cells: WORLD_CELLS, claims } };
+const WORLD = { ok: true, world: { version: 2, revision: 5, cost: 100, challengeStake: 0, cells: WORLD_CELLS, claims } };
 
 const base = {
   challengerId: 'p1', defenderId: 'r1', challengerName: 'BloomHeron', defenderName: 'RYK',
-  fromMe: true, stake: 50, respondedAt: null, matchId: null, matchFinished: false,
+  fromMe: true, stake: 0, stakeCellId: null, respondedAt: null, matchId: null, matchFinished: false,
   matchWinnerId: null, winnerId: null, resolvedAt: null, remainingMs: 0, serverNow: NOW,
 };
 /** The ONE mutable list the mock serves; the send/answer steps edit it as the server would. */

@@ -27,6 +27,7 @@ import type {
 } from './types.js';
 import { emptyWallet } from './types.js';
 import { parseWorldCell, seenCellIds, worldNeighbours } from '../world.js';
+import { stakedCellFor } from './stake.js';
 
 type Receipt = { input: RewardInput; awarded: number; reason: string | null };
 /**
@@ -97,7 +98,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     const fail = (code: 'NOT_OWNED' | 'CELL_BUSY' | 'INVALID_CELL'): SellResult => ({ ok: false, code, revision: this.revision, wallet: { ...wallet } });
     if (!parseWorldCell(cellId)) return fail('INVALID_CELL');
     if (this.claims.get(cellId)?.ownerId !== playerId) return fail('NOT_OWNED');
-    if (this.openChallenges().some((c) => c.cellId === cellId)) return fail('CELL_BUSY');
+    if (this.openChallenges().some((c) => c.cellId === cellId || c.stakeCellId === cellId)) return fail('CELL_BUSY');
     this.claims.delete(cellId);
     wallet.balance += SEED_ECONOMY.tileSaleReturn;
     this.ledger.push({ id: newId(), playerId, delta: SEED_ECONOMY.tileSaleReturn, category: 'world_sale', sourceKey: `world-sale:${requestId}`, balanceAfter: wallet.balance, createdAt: now });
@@ -148,11 +149,16 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   //
   // Every mutation below runs to completion without an `await`, exactly like the claim path above:
   // Node's single-threaded event loop gives the same all-or-nothing guarantee the Postgres store
-  // gets from its transactions and row locks. Seeds are only MOVED — the escrow debit plus the one
-  // matching credit (refund or payout) always nets to zero across the two players.
+  // gets from its transactions and row locks.
+  //
+  // 2026-10-29 (owner): a challenge is FREE. There is no escrow and no refund; each side risks a
+  // TILE, and exactly one tile changes hands when the linked duel finishes. `stake_cell_id` is the
+  // challenger's own auto-chosen tile. Older rows (`stakeCellId === null && stake > 0`) keep their
+  // historical Seed behaviour so data written before the rule change still settles honestly.
 
-  /** A refund or payout. Lifetime counters are untouched: this moves value, it does not earn it. */
+  /** A legacy payout/refund. Lifetime counters are untouched: this moves value, it does not earn it. */
   private credit(playerId: string, amount: number, sourceKey: string, now: number): void {
+    if (amount <= 0) return;
     const wallet = this.current(playerId);
     wallet.balance += amount;
     this.ledger.push({ id: newId(), playerId, delta: amount, category: 'world_challenge', sourceKey, balanceAfter: wallet.balance, createdAt: now });
@@ -175,8 +181,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     return found ? { ...found } : null;
   }
 
-  async sendChallenge(input: { challengerId: string; cellId: string; requestId: string; stake: number; now: number }): Promise<ChallengeSendResult> {
-    const wallet = this.current(input.challengerId);
+  async sendChallenge(input: { challengerId: string; cellId: string; requestId: string; now: number }): Promise<ChallengeSendResult> {
     const replayId = this.challengeRequests.get(`${input.challengerId}:${input.requestId}`);
     if (replayId) {
       const replay = this.challenges.get(replayId);
@@ -187,13 +192,16 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     const target = this.claims.get(input.cellId);
     if (!target) return fail('NOT_OWNED');
     if (target.ownerId === input.challengerId) return fail('OWN_TILE');
+    // The stake is a TILE, so the challenger must hold one. Their nearest own tile is chosen here,
+    // deterministically, and persisted — no wallet is touched and no ledger row is written.
+    const stakeCellId = stakedCellFor(input.challengerId, input.cellId, this.claims.values());
+    if (stakeCellId === null) return fail('NO_TILE');
     const ownNeighbour = worldNeighbours(input.cellId)
       .some((id) => this.claims.get(id)?.ownerId === input.challengerId);
     if (!ownNeighbour) return fail('NOT_ADJACENT');
     if (this.openChallenges().some((c) => c.cellId === input.cellId)) return fail('CELL_BUSY');
     if (this.openChallenges().filter((c) => c.challengerId === input.challengerId).length >= WORLD_CHALLENGE_OPEN_LIMIT) return fail('TOO_MANY_OPEN');
     if (this.openChallenges().filter((c) => c.defenderId === target.ownerId).length >= WORLD_CHALLENGE_OPEN_LIMIT) return fail('DEFENDER_TOO_MANY');
-    if (wallet.balance < input.stake) return fail('NO_FUNDS');
 
     const id = newId();
     const challenge: WorldChallenge = {
@@ -202,7 +210,8 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
       challengerId: input.challengerId,
       defenderId: target.ownerId,
       status: 'pending',
-      stake: input.stake,
+      stake: 0,
+      stakeCellId,
       createdAt: input.now,
       expiresAt: input.now + WORLD_CHALLENGE_TTL_MS,
       respondedAt: null,
@@ -210,12 +219,6 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
       winnerId: null,
       resolvedAt: null,
     };
-    wallet.balance -= input.stake;
-    wallet.lifetimeSpent += input.stake;
-    this.ledger.push({
-      id: newId(), playerId: input.challengerId, delta: -input.stake, category: 'world_challenge',
-      sourceKey: `world-challenge:${id}:escrow`, balanceAfter: wallet.balance, createdAt: input.now,
-    });
     this.challenges.set(id, challenge);
     this.challengeRequests.set(`${input.challengerId}:${input.requestId}`, id);
     return { ok: true, challenge: { ...challenge }, replayed: false };
@@ -236,7 +239,11 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     } else {
       challenge.status = 'declined';
       challenge.respondedAt = input.now;
-      this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:refund`, input.now);
+      // Nothing is refunded for a tile-stake challenge: nothing was taken. Legacy Seed rows keep
+      // their original refund so data from before 2026-10-29 still settles honestly.
+      if (challenge.stakeCellId === null && challenge.stake > 0) {
+        this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:refund`, input.now);
+      }
     }
     return { ok: true, challenge: { ...challenge }, replayed: false };
   }
@@ -255,22 +262,37 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     }
     if (challenge.status !== 'accepted') return { ok: false, code: 'CHALLENGE_CLOSED' };
 
-    // Only an actual re-own bumps the shared revision; the state change alone does not move the map.
-    if (input.winnerId === challenge.challengerId &&
-      this.takeCell(challenge.cellId, challenge.defenderId, challenge.challengerId, input.now)) {
-      this.revision += 1;
-    }
-    // The stake follows the win. A draw has no winner: the challenger gets it back and the tile stays.
-    if (input.winnerId === challenge.defenderId) {
-      this.credit(challenge.defenderId, challenge.stake, `world-challenge:${challenge.id}:payout`, input.now);
-    } else {
-      this.credit(challenge.challengerId, challenge.stake,
-        `world-challenge:${challenge.id}:${input.winnerId === null ? 'refund' : 'payout'}`, input.now);
+    // THE WINNER TAKES THE LOSER'S TILE (owner, 2026-10-29), and exactly ONE tile moves:
+    //   challenger wins → the contested tile (lost by the defender); the stake tile is kept.
+    //   defender wins   → the challenger's stake tile (lost by the challenger); contested is kept.
+    // A draw has no winner: nothing changes hands.
+    if (input.winnerId === challenge.challengerId) {
+      if (this.takeCell(challenge.cellId, challenge.defenderId, challenge.challengerId, input.now)) {
+        this.revision += 1;
+      }
+    } else if (input.winnerId === challenge.defenderId) {
+      if (challenge.stakeCellId !== null) {
+        if (this.takeCell(challenge.stakeCellId, challenge.challengerId, challenge.defenderId, input.now)) {
+          this.revision += 1;
+        }
+      } else if (challenge.stake > 0) {
+        // Legacy Seed-stake row: its recorded stake is the only thing the defender can still take.
+        this.credit(challenge.defenderId, challenge.stake, `world-challenge:${challenge.id}:payout`, input.now);
+      }
+    } else if (challenge.stakeCellId === null && challenge.stake > 0) {
+      // Legacy draw: the historical escrow goes back; there is no winner and no tile transfer.
+      this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:refund`, input.now);
     }
     challenge.status = 'resolved';
     challenge.winnerId = input.winnerId;
     challenge.resolvedAt = input.now;
     return { ok: true, challenge: { ...challenge }, settled: true, winnerId: challenge.winnerId, cellId: challenge.cellId, replayed: false };
+  }
+
+  async challengesAwaitingSettlement(): Promise<WorldChallenge[]> {
+    return [...this.challenges.values()]
+      .filter((challenge) => challenge.status === 'accepted' && challenge.matchId !== null)
+      .map((challenge) => ({ ...challenge }));
   }
 
   async challengesInvolving(playerId: string, since: number): Promise<WorldChallenge[]> {
@@ -287,20 +309,25 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     let changed = 0;
     for (const challenge of this.challenges.values()) {
       if (challenge.status === 'pending' && challenge.expiresAt <= now) {
-        // The owner's decision: an unanswered challenge is a FORFEIT. The challenger takes the tile
-        // and their own stake comes back (they won it); the defender loses the tile.
+        // The owner's decision: an unanswered challenge is a FORFEIT. The challenger takes the
+        // contested tile; their own staked tile was never escrowed, so it simply stays theirs. The
+        // defender is never debited. (A legacy Seed row still gets its recorded stake back.)
         if (this.takeCell(challenge.cellId, challenge.defenderId, challenge.challengerId, now)) this.revision += 1;
         challenge.status = 'expired';
         challenge.winnerId = challenge.challengerId;
         challenge.resolvedAt = now;
-        this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:payout`, now);
+        if (challenge.stakeCellId === null && challenge.stake > 0) {
+          this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:payout`, now);
+        }
         changed += 1;
       } else if (challenge.status === 'accepted' && challenge.respondedAt !== null &&
         challenge.respondedAt + WORLD_CHALLENGE_STALE_MS <= now) {
-        // Never transfers: a linked duel that never resolved simply hands the stake back.
+        // Never transfers: a linked duel that never resolved closes honestly and nothing moves.
         challenge.status = 'stale';
         challenge.resolvedAt = now;
-        this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:refund`, now);
+        if (challenge.stakeCellId === null && challenge.stake > 0) {
+          this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:refund`, now);
+        }
         changed += 1;
       }
     }
@@ -330,14 +357,17 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     if (previousOwnerId === input.ownerId) {
       return { ok: true, cellId: input.cellId, previousOwnerId, ownerId: input.ownerId, changed: false, revision: this.revision, challengesClosed: 0 };
     }
-    // An open challenge on this cell would otherwise settle against a tile that moved under it.
-    // Close it as stale and hand the escrow back, exactly as the 7-day close does.
+    // An open challenge on this cell — as the contested ground OR as the challenger's stake — would
+    // otherwise settle against a tile that moved under it. Close it as stale and hand back only a
+    // legacy Seed escrow, exactly as the 7-day close does. Nothing changes hands.
     let challengesClosed = 0;
     for (const challenge of this.openChallenges()) {
-      if (challenge.cellId !== input.cellId) continue;
+      if (challenge.cellId !== input.cellId && challenge.stakeCellId !== input.cellId) continue;
       challenge.status = 'stale';
       challenge.resolvedAt = input.now;
-      this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:refund`, input.now);
+      if (challenge.stakeCellId === null && challenge.stake > 0) {
+        this.credit(challenge.challengerId, challenge.stake, `world-challenge:${challenge.id}:refund`, input.now);
+      }
       challengesClosed += 1;
     }
     for (const [key, id] of this.purchases) if (id === input.cellId) this.purchases.delete(key);

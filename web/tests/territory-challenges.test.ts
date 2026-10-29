@@ -9,8 +9,11 @@ import {
   opponentName,
   playerName,
   remainingLabel,
+  resolvedSheetCopy,
   ringFraction,
+  settlementSheetCopy,
   sheetModeFor,
+  stakeMarkersFor,
   swordsHitPx,
   winnerName,
 } from '../src/online/challenge-view.js';
@@ -27,7 +30,8 @@ const challenge = (over: Partial<WorldChallengeWire> = {}): WorldChallengeWire =
   defenderName: 'RYK',
   fromMe: true,
   status: 'pending',
-  stake: 100,
+  stake: 0,
+  stakeCellId: '3,-10',
   createdAt: 0,
   expiresAt: TTL,
   respondedAt: null,
@@ -85,7 +89,7 @@ describe('the one-primary sheet state', () => {
     expect(sheetModeFor(challenge(), 'b')).toBe('defend');
     expect(sheetModeFor(challenge(), 'a')).toBe('wait');
     expect(sheetModeFor(challenge({ status: 'accepted', matchId: 'm1' }), 'a')).toBe('duel');
-    expect(sheetModeFor(challenge({ status: 'accepted', matchId: 'm1', matchFinished: true }), 'a')).toBe('confirm');
+    expect(sheetModeFor(challenge({ status: 'accepted', matchId: 'm1', matchFinished: true }), 'a')).toBe('settling');
     expect(sheetModeFor(challenge({ status: 'resolved' }), 'a')).toBe('resolved');
     expect(sheetModeFor(challenge({ status: 'declined' }), 'a')).toBe('closed');
     expect(sheetModeFor(challenge({ status: 'expired' }), 'a')).toBe('closed');
@@ -177,5 +181,56 @@ describe('the crossed swords marker', () => {
     expect(SWORDS_HIT_RADIUS).toBeLessThan(10 * Math.sqrt(3) / 2);
     // It only grows with the map, never shrinks below the floor.
     expect(swordsHitPx(92)).toBeCloseTo(swordsHitPx(46) * 2, 6);
+  });
+});
+
+/**
+ * THE TILE AT STAKE (owner, 2026-10-29: "challenging is like putting your tile at stake"). The
+ * challenger's own tile is named in the sheet and ringed on the map; the defender's risk is the
+ * contested tile they were already shown.
+ */
+describe('the challenger’s stake marker', () => {
+  it('marks only the challenger’s own open stake, at the cell the server recorded', () => {
+    const markers = stakeMarkersFor([
+      challenge({ id: 'out', stakeCellId: '3,-10', status: 'pending' }),
+      challenge({ id: 'in', fromMe: false, challengerId: 'b', defenderId: 'a', stakeCellId: '4,-10', status: 'pending' }),
+      challenge({ id: 'won', stakeCellId: '5,-10', status: 'resolved' }),
+      challenge({ id: 'legacy', stakeCellId: null, status: 'pending' }),
+    ], 'a');
+    expect(markers).toEqual([{ challengeId: 'out', cellId: '3,-10', label: 'your tile 3,-10 is at stake in a challenge.' }]);
+  });
+
+  it('keeps an accepted challenge marked until it settles', () => {
+    expect(stakeMarkersFor([challenge({ status: 'accepted', stakeCellId: '3,-10' })], 'a')).toHaveLength(1);
+    expect(stakeMarkersFor([challenge({ status: 'expired', stakeCellId: '3,-10' })], 'a')).toHaveLength(0);
+  });
+});
+
+describe('the settlement sheet asks for no key', () => {
+  it('names the winner and says the server is settling, with a harmless fallback', () => {
+    const settling = settlementSheetCopy(challenge({
+      status: 'accepted', matchFinished: true, matchWinnerId: 'a', stakeCellId: '3,-10',
+    }), 'a');
+    expect(settling.line).toContain('BloomHeron');
+    expect(settling.line).toMatch(/settling/i);
+    expect(settling.meta).toBe('YOUR TILE 3,-10 AT STAKE');
+    // The fallback exists, but it is never a primary key the player must press.
+    expect(settling.fallback).toBe(true);
+    expect(JSON.stringify(settling)).not.toMatch(/TAKE THE GROUND|CONFIRM/);
+  });
+
+  it('a draw changes nothing and says so', () => {
+    const drawn = settlementSheetCopy(challenge({ status: 'accepted', matchFinished: true, matchWinnerId: null }), 'a');
+    expect(drawn.line).toBe('A draw. Nothing changes hands.');
+    expect(drawn.drawn).toBe(true);
+  });
+
+  it('renders the resolved state without a confirm tap', () => {
+    const challengerWon = resolvedSheetCopy(challenge({ status: 'resolved', winnerId: 'a', challengerId: 'a' }));
+    expect(challengerWon.line).toBe('BloomHeron took this ground.');
+    const defenderWon = resolvedSheetCopy(challenge({ status: 'resolved', winnerId: 'b' }));
+    expect(defenderWon.line).toBe('RYK kept this ground and took a tile.');
+    const draw = resolvedSheetCopy(challenge({ status: 'resolved', winnerId: null }));
+    expect(draw.line).toBe('Nothing changed hands.');
   });
 });

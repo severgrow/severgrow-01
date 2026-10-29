@@ -47,15 +47,24 @@ export type SellResult =
 export type TrainingTicket = { id: string; playerId: string; seed: number; botLevel: number; createdAt: number; expiresAt: number; usedAt: number | null };
 
 /**
- * Territory challenges — one paid tile may change hands when a linked duel finishes.
+ * Territory challenges — FREE to send since owner direction 2026-10-29: "make challenging free ...
+ * challenging is like putting your tile at stake". Each side now risks a TILE, never Seeds:
  *
- * `status` mirrors the design doc exactly:
- *   pending   the defender has 24 h to answer (the challenger's stake is escrowed)
- *   accepted  a linked `kind = 'territory'` duel exists; the first confirm settles it
- *   declined  the defender refused; the stake is refunded
- *   expired   the 24 h window passed unanswered; the challenger takes the tile by forfeit
- *   resolved  a played duel settled it; the winner took the tile and the stake
- *   stale     accepted but not settled within 7 days; the stake is refunded, nothing transfers
+ *   - the challenger stakes one of their OWN tiles (auto-chosen, `stakeCellId`);
+ *   - the defender risks the CONTESTED tile (unchanged);
+ *   - the winner takes the LOSER's tile, and nobody's wallet moves.
+ *
+ * `status` mirrors the design doc:
+ *   pending   the defender has 24 h to answer; the challenger's own tile is at stake
+ *   accepted  a linked `kind = 'territory'` duel exists; it settles itself when the duel finishes
+ *   declined  the defender refused; nothing changes hands
+ *   expired   the 24 h window passed unanswered; the challenger takes the contested tile by forfeit
+ *   resolved  a played duel settled it; the winner took the loser's tile
+ *   stale     accepted but not settled within 7 days; nothing transfers
+ *
+ * `stake` is KEPT for history: rows created before 2026-10-29 escrowed 50 Seeds and may still settle
+ * under their original rule (`stakeCellId === null && stake > 0`). Every NEW row is created with
+ * `stake = 0`; the tile stake is `stakeCellId`.
  */
 export type WorldChallengeStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'resolved' | 'stale';
 
@@ -65,7 +74,10 @@ export type WorldChallenge = {
   challengerId: string;
   defenderId: string;
   status: WorldChallengeStatus;
+  /** Historical escrow (50 before 2026-10-29). New rows are 0: a challenge costs no Seeds. */
   stake: number;
+  /** The challenger's own tile put at risk. Null for legacy Seed-stake rows and for a missing stake. */
+  stakeCellId: string | null;
   createdAt: number;
   expiresAt: number;
   respondedAt: number | null;
@@ -79,10 +91,11 @@ export type ChallengeSendFailure =
   | 'NOT_OWNED'
   | 'OWN_TILE'
   | 'NOT_ADJACENT'
+  /** The challenger holds no tile to put at stake (a challenge is never paid in Seeds). */
+  | 'NO_TILE'
   | 'CELL_BUSY'
   | 'TOO_MANY_OPEN'
-  | 'DEFENDER_TOO_MANY'
-  | 'NO_FUNDS';
+  | 'DEFENDER_TOO_MANY';
 
 export type ChallengeSendResult =
   | { ok: true; challenge: WorldChallenge; replayed: boolean }
@@ -114,7 +127,10 @@ export type WorldChallengeWire = {
   defenderName: string | null;
   fromMe: boolean;
   status: WorldChallengeStatus;
+  /** Historical Seeds escrow (0 for every challenge created since 2026-10-29). */
   stake: number;
+  /** The challenger's own tile at risk. Null on legacy Seed-stake rows. */
+  stakeCellId: string | null;
   createdAt: number;
   expiresAt: number;
   respondedAt: number | null;
@@ -160,15 +176,24 @@ export interface WorldEconomyStore {
   // ---- Territory challenges -------------------------------------------------
   /** One challenge by id (unlocked read; a transition re-reads it under its row lock). */
   challenge(id: string): Promise<WorldChallenge | null>;
-  /** Send: locks the wallet, inserts the escrow and the challenge in ONE transaction. */
-  sendChallenge(input: { challengerId: string; cellId: string; requestId: string; stake: number; now: number }): Promise<ChallengeSendResult>;
-  /** Accept (with the linked match id) or decline. Decline refunds in the same transaction. */
+  /**
+   * Send: picks the challenger's own tile nearest the contested one, then inserts the challenge in
+   * ONE transaction. Challenging is FREE (no wallet debit, no ledger row).
+   */
+  sendChallenge(input: { challengerId: string; cellId: string; requestId: string; now: number }): Promise<ChallengeSendResult>;
+  /** Accept (with the linked match id) or decline. Nothing is refunded: no Seeds were ever taken. */
   respondChallenge(input: { id: string; defenderId: string; accept: boolean; matchId: string | null; now: number }): Promise<ChallengeRespondResult>;
-  /** First-confirmed-wins settlement. Only the first call transfers; later calls replay it. */
+  /** First-confirmed-wins settlement. Only the first call moves a tile; later calls replay it. */
   settleChallenge(input: { id: string; playerId: string; winnerId: string | null; now: number }): Promise<ChallengeSettleResult>;
   /** Rows involving this player: open incoming plus recent outgoing. */
   challengesInvolving(playerId: string, since: number): Promise<WorldChallenge[]>;
-  /** Apply due forfeits (24 h) and stale closes (7 d). Returns how many rows changed. */
+  /**
+   * Accepted challenges whose linked duel may have finished. The service reads them to settle
+   * LAZILY on any world/challenge read: the same idiom as `expireChallenges`, and the reason a
+   * player never has to press CONFIRM / TAKE THE GROUND.
+   */
+  challengesAwaitingSettlement(): Promise<WorldChallenge[]>;
+  /** Apply due forfeits (24 h) and stale closes (7 d), and settle finished duels. Returns rows changed. */
   expireChallenges(now: number): Promise<number>;
 
   // ---- Owner edits from the admin dashboard (docs/ADMIN.md §3a) -------------

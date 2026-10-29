@@ -38,6 +38,9 @@ export type ApiErrorCode =
   // setup: the admin tables (migration 0012) are not present yet. Distinct from DB_UNAVAILABLE so
   // the dashboard can say "triage is not enabled yet" instead of "the database is unreachable".
   | 'ADMIN_MIGRATION_PENDING'
+  // setup: migration 0019 (the challenge tile stake) has not been applied. Sends are refused rather
+  // than guessed, so a deploy can never silently apply the wrong property rule.
+  | 'CHALLENGE_MIGRATION_PENDING'
   // everything else
   | 'INTERNAL';
 
@@ -71,6 +74,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   // 503: the feature exists but its schema is not deployed yet, so it is temporarily unavailable —
   // not a client error, and not the catch-all 500 that hides the cause.
   ADMIN_MIGRATION_PENDING: 503,
+  CHALLENGE_MIGRATION_PENDING: 503,
   INTERNAL: 500,
 };
 

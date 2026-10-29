@@ -82,6 +82,51 @@ export const ownCentre = (cells: readonly Cell[], claims: readonly Claim[], me: 
 export const newCellIds = (before: ReadonlySet<string> | null, now: readonly string[]): string[] =>
   before ? now.filter((id) => !before.has(id)) : [];
 
+/**
+ * THE TAKEOVER (owner, 2026-10-29: "create a special animation for that tile take over - simple but
+ * impressive"). A challenge settlement re-owns exactly one tile, and the map is rebuilt wholesale on
+ * every paint, so a freshly redrawn owner is silent and could never animate its own "before". The
+ * same trick as `fogShift` solves it: diff the CLAIMS before and after a refresh, remember the
+ * result on the view, and let each paint draw the hand-off from that data.
+ *
+ * One entry per cell whose OWNER changed. A tile that simply appeared (new land) is not a takeover;
+ * a refresh that changes nothing returns an empty list; Reduce motion returns an empty list too, so
+ * the map is drawn in its settled state. Sorted by cell id so the order is the same on every machine.
+ */
+export type Takeover = {
+  cellId: string;
+  fromOwnerId: string;
+  toOwnerId: string;
+  /** The colour the eye last saw on the tile, and the one it must settle into. */
+  fromColour: string;
+  toColour: string;
+  /** The new holder's display name, or a neutral word — never an id. */
+  winnerName: string;
+};
+
+export const takeovers = (
+  before: readonly Claim[] | null,
+  after: readonly Claim[],
+  animated = true,
+): Takeover[] => {
+  if (!before || !animated) return [];
+  const previous = new Map(before.map((claim) => [claim.cellId, claim] as const));
+  const out: Takeover[] = [];
+  for (const claim of after) {
+    const old = previous.get(claim.cellId);
+    if (!old || old.ownerId === claim.ownerId) continue;
+    out.push({
+      cellId: claim.cellId,
+      fromOwnerId: old.ownerId,
+      toOwnerId: claim.ownerId,
+      fromColour: old.colour,
+      toColour: claim.colour,
+      winnerName: claim.ownerName ?? 'Player',
+    });
+  }
+  return out.sort((a, b) => (a.cellId < b.cellId ? -1 : a.cellId > b.cellId ? 1 : 0));
+};
+
 /** The fog's two rings, exactly as `fogRings` labels them. */
 export type FogRing = 1 | 2;
 

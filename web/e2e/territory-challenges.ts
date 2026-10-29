@@ -90,12 +90,13 @@ const claims = [
   claimedAt: NOW - 5 * 60_000,
 }));
 
-// `cost` is a TILE's price; `challengeStake` is what a challenge costs (owner, 2026-10-24: 50).
-const SAMPLE = { ok: true, world: { version: 2, revision: 5, cost: 100, challengeStake: 50, cells: WORLD_CELLS, claims } };
+// `cost` is a TILE's price. `challengeStake` is historical and 0: challenging is free since
+// 2026-10-29, and the stake is a TILE (`stakeCellId` on each challenge).
+const SAMPLE = { ok: true, world: { version: 2, revision: 5, cost: 100, challengeStake: 0, cells: WORLD_CELLS, claims } };
 
 const base = {
   challengerId: 'p1', defenderId: 'r1', challengerName: 'BloomHeron', defenderName: 'RYK',
-  fromMe: true, stake: 50, respondedAt: null, matchId: null, matchFinished: false,
+  fromMe: true, stake: 0, stakeCellId: null, respondedAt: null, matchId: null, matchFinished: false,
   matchWinnerId: null, winnerId: null, resolvedAt: null, remainingMs: 0, serverNow: NOW,
 };
 const challenges: { incoming: WorldChallengeWire[]; outgoing: WorldChallengeWire[] } = {
@@ -106,11 +107,11 @@ const challenges: { incoming: WorldChallengeWire[]; outgoing: WorldChallengeWire
   }],
   outgoing: [
     {
-      ...base, id: 'out-1', cellId: rival2, status: 'pending',
+      ...base, id: 'out-1', cellId: rival2, status: 'pending', stakeCellId: hub.id,
       createdAt: NOW - 18 * HOUR, expiresAt: NOW + 6 * HOUR,
     },
     {
-      ...base, id: 'out-2', cellId: rival3, status: 'accepted', matchId: 'm-1',
+      ...base, id: 'out-2', cellId: rival3, status: 'accepted', matchId: 'm-1', stakeCellId: hub.id,
       createdAt: NOW - 2 * 24 * HOUR, expiresAt: NOW - 24 * HOUR, respondedAt: NOW - 2 * 24 * HOUR,
       matchFinished: true, matchWinnerId: 'p1',
     },

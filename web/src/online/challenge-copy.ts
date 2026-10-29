@@ -1,86 +1,96 @@
 /**
  * Territory challenge copy (docs/TERRITORY-CHALLENGES.md).
  *
- * It lives in the online layer, beside `seed-icon.ts`, because the product calls the currency by its
- * own word — the same word the Territory wallet already shows. `src/strings.ts` is scanned by
- * `web/tests/seed-words.test.ts`, which keeps the retired seed/plant vocabulary out of the game's
- * shared strings; the currency label has always lived on this side of that boundary.
+ * It lives in the online layer, beside `seed-icon.ts`, because that is where Territory's own words
+ * live. One sentence per state, one primary key, and the same words on the map, the sheet and the
+ * list.
  *
- * One sentence per state, one primary key, and the same words on the map, the sheet and the list.
+ * 2026-10-29 pass — THE OWNER'S RULE CHANGE, verbatim:
+ *   "make challenging free. make it clear, that if you lose, you lose the tile that you challenged
+ *    with and opponent takes it. so challenging is like putting your tile at stake. after the match,
+ *    automatically give the tile to the winner."
  *
- * 2026-10-24 pass, owner's words: "dont say 'staked' just challenged you - make it cost 50 seeds no
- * 100 - simple vocab everywhere easy to understand at first glance". So:
- *   - "staked" is gone from every line. One player *challenges* your ground; that is the whole idea
- *     and it is a word everyone already knows.
- *   - no cell coordinates: "3,-10" is the machine's name for the ground, not a sentence.
- *   - short sentences, one idea each, and the stake is always read from the world's own price.
+ * So:
+ *   - NO Seeds move anywhere in this loop. There is no price line, no "need N Seeds", no refund. A
+ *     challenger risks one of their OWN tiles (`stakeCellId`), auto-chosen nearest the contested
+ *     ground; the defender risks the CONTESTED tile. The winner takes the loser's tile.
+ *   - The challenger's lines NAME the tile at stake (a coordinate is the only unambiguous name, and
+ *     the map also rings it). The defender's lines name the ground they would lose.
+ *   - Settlement is automatic. `settlingLine` is shown while the server is applying it; the only key
+ *     is a harmless fallback (`settleKey`) for a client that has not seen the resolved row yet. No
+ *     player is ever asked to press CONFIRM / TAKE THE GROUND.
+ *   - A draw has no winner and NOTHING changes hands; the copy says exactly that.
  *
- * 2026-10-28 pass, owner's words: "i accepted the territory challenge, but i had to pay 50 seeds too
- * — only challenging player should be paying 50 — the defending one have to be saying 'respond to
- * keep your tile in 23:59 (timer)'". The ledger was already right (the defender is never debited);
- * the sheet was not: it printed the challenger's stake above ACCEPT, which reads as a price.
- *
- * So the two sides now speak differently, because they are doing different things:
- *   - THE CHALLENGER paid 50 Seeds. Their lines say so (`sendLine`, `sendMeta`, `sent`) and their
- *     confirm sheet still shows the amount that is in play (`stakeOnly`).
- *   - THE DEFENDER pays nothing, ever. Their sheet is about time, not money: the countdown is the
- *     news, the tile is what is at risk, and the one action is to answer. No defender-facing string
- *     may carry a figure + "Seeds" — `web/tests/territory-defender-copy.test.ts` enforces it.
- *   - AT ZERO the server forfeits the tile to the challenger (`expireChallenges`), so instead of
- *     still asking for an answer the sheet says exactly that (`deadlineLine`), and the defender is
- *     never told they were charged (`defendMeta`).
+ * `web/tests/territory-defender-copy.test.ts` pins the words to the server's behaviour and fails if
+ * anyone reintroduces a Seed price into a challenge.
  */
+
+/** The one way a tile is named in a sentence. The map rings the same tile. */
+export const stakeName = (cellId: string): string => `your tile ${cellId}`;
+
 export const CHALLENGE = Object.freeze({
   title: 'Territory challenge',
   listLabel: 'Challenges',
   incoming: 'INCOMING',
   outgoing: 'OUTGOING',
-  /** the challenger's sheet: who holds it and what it costs, then one key */
-  sendLine: (name: string, stake: number) => `${name} holds this ground. Challenge it for ${stake} Seeds?`,
+  /**
+   * The challenger's offer: what it costs (nothing) and what is at risk (their own tile). The tile
+   * is the auto-chosen nearest one; the tap that opens this sheet also marks it on the map.
+   */
+  sendLine: (name: string, tile: string) =>
+    `${name} holds this ground. Challenge for free — ${tile} is at stake: lose and they take it.`,
   sendKey: 'CHALLENGE',
   /** The tile bar's key on contested ground: it opens that challenge's own sheet. */
   viewKey: 'VIEW CHALLENGE',
   /**
-   * The DEFENDER's sheet: who challenged the tile, and the live countdown — the thing they have to
-   * answer. The countdown is passed in already floored by `remainingLabel`, and the sheet re-reads it
-   * every second while it is open, so it ticks. Nothing here is a price.
+   * The DEFENDER's sheet: who challenged, the live countdown, and the one thing they would lose —
+   * the contested ground. Answering costs nothing; only the duel decides it.
    */
-  defendLine: (name: string, left: string) => `${name} challenged your tile. Answer within ${left} to keep it.`,
+  defendLine: (name: string, left: string) =>
+    `${name} challenged your tile. Answer within ${left} to keep it — lose the duel and they take it.`,
   /**
-   * The defender's meta line: the one fact the owner's report was actually about. They are never
-   * charged; only the challenger escrows Seeds. Uppercase because the sheet's meta line is set in
-   * caps, and deliberately number-free so it can never be read as an amount.
+   * The defender's meta line: the owner's report was about being shown a price. Uppercase because
+   * the sheet's meta line is set in caps, and deliberately number-free.
    */
-  defendMeta: 'NO SEEDS TO PAY',
+  defendMeta: 'NO SEEDS TO PAY · YOUR TILE AT STAKE',
   acceptKey: 'ACCEPT',
   declineKey: 'DECLINE',
   /** Declining is the one irreversible key: the first press only arms it. */
   declineConfirm: 'TAP AGAIN TO DECLINE',
-  waitLine: (name: string) => `You challenged ${name}. They have 24 h to answer.`,
-  duelLine: 'Win the duel, take the ground.',
+  waitLine: (name: string) => `You challenged ${name}. They have 24 h to answer — your tile is at stake.`,
+  duelLine: 'Win the duel, take the ground. Lose it, they take your tile.',
   openDuelKey: 'OPEN DUEL',
-  confirmLine: (name: string) => `${name} won the duel. Take the ground?`,
-  drawLine: 'A draw. The ground stays where it is.',
-  drawKey: 'CONFIRM DRAW',
-  takeKey: 'TAKE THE GROUND',
-  resolvedLine: (name: string | null) => (name ? `${name} took this ground.` : 'The ground stayed where it was.'),
+  /**
+   * Settlement is automatic. This is what the sheet says while the server applies it: the winner
+   * has already been decided, so there is nothing for the player to choose.
+   */
+  settlingLine: (name: string) => `${name} won the duel. Settling the ground…`,
+  /** `settleKey` is the harmless fallback only: it posts the same idempotent confirm the server does. */
+  settleKey: 'SETTLE NOW',
+  drawLine: 'A draw. Nothing changes hands.',
+  drawMeta: 'NOTHING CHANGES HANDS · NO SEEDS TO PAY',
+  /** `contested` is true when the winner is the challenger, who took this very ground. */
+  resolvedLine: (name: string | null, contested: boolean) => {
+    if (name === null) return 'Nothing changed hands.';
+    return contested ? `${name} took this ground.` : `${name} kept this ground and took a tile.`;
+  },
   closedLine: 'This challenge is over.',
   notNow: 'NOT NOW',
   close: 'CLOSE',
   remaining: (left: string) => `${left} left`,
   /**
    * The deadline itself, when it has passed with no answer. This sentence is the server's rule
-   * (`expireChallenges`: the tile moves to the challenger, their own stake returns, the defender is
-   * never charged). `web/tests/territory-defender-copy.test.ts` fails if the two ever disagree.
+   * (`expireChallenges`: the contested tile moves to the challenger, their own staked tile simply
+   * stays theirs, the defender is never charged). `web/tests/territory-defender-copy.test.ts` fails
+   * if the two ever disagree.
    */
   deadlineLine: (name: string) => `The deadline passed. ${name} takes this ground.`,
-  /** The challenger's offer's meta line: what they paid and the answer window. */
-  sendMeta: (stake: number) => `${stake} SEEDS · 24 H TO ANSWER`,
-  /**
-   * The CHALLENGER's confirm meta: the amount they escrowed is the news there. The defender's
-   * confirm sheet uses `defendMeta` instead — they never had a stake to read back.
-   */
-  stakeOnly: (stake: number) => `${stake} SEEDS`,
+  /** The challenger's offer's meta line: the stake, then the answer window. Never a Seed amount. */
+  sendMeta: (tile: string) => `${tile.toUpperCase()} AT STAKE · 24 H TO ANSWER`,
+  /** The same meta for a challenge that already exists (waiting, contested, settling). */
+  stakeMeta: (tile: string) => `${tile.toUpperCase()} AT STAKE`,
+  /** The map ring's spoken name, so a screen reader is told which tile is at risk. */
+  stakeLabel: (tile: string) => `${tile} is at stake in a challenge.`,
   /** The rail's cap: anything past it is counted, never silently dropped. */
   more: (count: number) => `+${count} MORE`,
   /** A polite screen-reader line for a player who cannot see the rail appear. */
@@ -92,17 +102,19 @@ export const CHALLENGE = Object.freeze({
   /** The crossed swords on a contested tile: the glyph's one spoken name, who and which side. */
   markerFrom: (name: string) => `Challenge on this tile. ${name} challenged you.`,
   markerTo: (name: string) => `Challenge on this tile. You challenged ${name}.`,
-  noFunds: (stake: number) => `You need ${stake} Seeds to challenge.`,
+  /** A challenger with no tile cannot put one at stake. Clear, and not about money. */
+  noTile: 'You need a tile of your own to put at stake.',
   busy: 'Someone already challenged this ground.',
-  sendFailed: 'The challenge did not send. No Seeds were taken.',
+  sendFailed: 'The challenge did not send. Nothing was taken.',
   answerFailed: 'That answer did not send. Try again.',
-  confirmFailed: 'That result is not confirmed yet. Try again.',
+  confirmFailed: 'That result is not settled yet. Try again.',
   settled: 'The ground is yours.',
   resultSettled: 'The result is settled.',
-  alreadySettled: 'That result was already confirmed.',
-  sent: (stake: number) => `Challenge sent. Your ${stake} Seeds are held until they answer.`,
+  alreadySettled: 'That result was already settled.',
+  sent: (tile: string) => `Challenge sent. ${tile} is at stake until they answer.`,
   duel: 'DUEL',
-  ready: 'READY TO CLAIM',
+  /** A finished duel whose settlement is being applied (no tap needed). */
+  settlingShort: 'SETTLING',
   settledShort: 'SETTLED',
   forfeited: 'FORFEITED',
   stale: 'STALE',

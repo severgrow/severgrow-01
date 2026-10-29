@@ -119,15 +119,15 @@ describe.skipIf(!enabled)('Seeds and claims on real Postgres', () => {
     expect((await world.world()).claims.find((claim) => claim.cellId === contestedCell)?.ownerId).toBe(ownerId);
   });
 
-  it('escrows and refunds a Territory challenge without creating or destroying a Seed', async () => {
+  it('records a free Territory challenge without creating or destroying a Seed', async () => {
     const challenger = crypto.randomUUID();
     const defender = crypto.randomUUID();
     const players = postgresStorage(pool);
     for (const id of [challenger, defender]) {
       await players.createPlayer({ id, kind: 'guest', displayName: `Challenge ${id.slice(0, 4)}`, createdAt: Date.now(), upgradedAt: null });
     }
-    // 200 for the challenger (one claim + one stake), 100 for the defender (one claim).
-    for (let i = 0; i < 4; i++) await credit(challenger, `campaign:${crypto.randomUUID()}`);
+    // One tile's price each: enough to grow one tile, and not a Seed more is needed to challenge.
+    for (let i = 0; i < 2; i++) await credit(challenger, `campaign:${crypto.randomUUID()}`);
     for (let i = 0; i < 2; i++) await credit(defender, `campaign:${crypto.randomUUID()}`);
     const [held, target] = await freePair();
     expect((await world.claim(challenger, held, `req-${crypto.randomUUID()}`, Date.now())).ok).toBe(true);
@@ -136,11 +136,14 @@ describe.skipIf(!enabled)('Seeds and claims on real Postgres', () => {
     const beforeDefender = (await world.wallet(defender)).balance;
     const before = beforeChallenger + beforeDefender;
 
-    const sent = await world.sendChallenge({ challengerId: challenger, cellId: target, requestId: `req-${crypto.randomUUID()}`, stake: 100, now: Date.now() });
+    const sent = await world.sendChallenge({ challengerId: challenger, cellId: target, requestId: `req-${crypto.randomUUID()}`, now: Date.now() });
     expect(sent.ok).toBe(true);
     if (!sent.ok) return;
-    expect((await world.wallet(challenger)).balance).toBe(beforeChallenger - 100);
+    // RULE CHANGE (owner, 2026-10-29): challenging is free. The challenger's own tile is the stake.
+    expect((await world.wallet(challenger)).balance).toBe(beforeChallenger);
     expect((await world.wallet(defender)).balance).toBe(beforeDefender);
+    expect(sent.challenge.stake).toBe(0);
+    expect(sent.challenge.stakeCellId).toBe(held);
     const { rows } = await pool.query(
       "select count(*)::int as n from world_challenges where cell_id=$1 and status in ('pending','accepted')", [target],
     );

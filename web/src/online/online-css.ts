@@ -810,18 +810,33 @@ html.reduce-motion .world-selection { animation: none; }
 .world-challenge-notice { min-height: 0; margin: 0; font-size: .7rem; line-height: 1.35; color: #d9c89a; }
 .world-challenge-notice:not(:empty) { min-height: 1.1em; }
 
-/* THE SETTLE BEAT: the ground draws its own outline once in its new owner's colour, then goes. */
-.world-settle {
-  fill: none; stroke: var(--territory, #e8ddbe); stroke-width: 1.6;
-  stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none;
-  stroke-dasharray: 1; stroke-dashoffset: 1;
-  animation: world-settle 1250ms cubic-bezier(.22, 1, .36, 1) forwards;
+/* THE TAKEOVER (owner, 2026-10-29: "create a special animation for that tile take over - simple but
+   impressive"). One tile changes hands, so the LOSING owner's colour is drawn over it and drains
+   away while the winner's colour — already the new face underneath — settles in; the tile's edge
+   flashes once; a short label names the moment. Opacity only: no blur, no layout, no new duration
+   token (900 ms, the same order as the 520 ms mist hand-off). */
+.world-takeover { pointer-events: none; }
+.world-takeover-was { opacity: 1; animation: world-takeover-drain 900ms ease-in-out forwards; }
+.world-takeover-edge {
+  fill: none; stroke: var(--territory, #e8ddbe); stroke-width: 1.8; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke; opacity: 0;
+  animation: world-takeover-flash 900ms ease-out forwards;
 }
-@keyframes world-settle {
-  0% { stroke-dashoffset: 1; opacity: .95; }
-  38% { stroke-dashoffset: 0; opacity: .95; }
-  72% { stroke-dashoffset: 0; opacity: .5; }
-  100% { stroke-dashoffset: 0; opacity: 0; }
+.world-takeover-label {
+  fill: #f2e7cb; font-size: 3.4px; font-weight: 700; letter-spacing: .14em; text-anchor: middle;
+  paint-order: stroke; stroke: #0b0e0bcc; stroke-width: .7px; opacity: 0;
+  animation: world-takeover-name 900ms ease-out forwards;
+}
+@keyframes world-takeover-drain { 0% { opacity: .96; } 55% { opacity: .55; } 100% { opacity: 0; } }
+@keyframes world-takeover-flash { 0% { opacity: 0; } 18% { opacity: .95; } 100% { opacity: 0; } }
+@keyframes world-takeover-name { 0% { opacity: 0; } 20% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+
+/* THE STAKE (owner, 2026-10-29): a quiet dashed outline on the challenger's OWN tile at risk — the
+   same six-point hex as every other mark, static, never a second colour. */
+.world-stake {
+  fill: none; stroke: color-mix(in srgb, var(--territory, #cfc6ac) 62%, #fff4d6);
+  stroke-width: 1; stroke-dasharray: .03 .045; stroke-linejoin: round;
+  opacity: .6; vector-effect: non-scaling-stroke; pointer-events: none;
 }
 
 /* The one new continuous motion is the ring; reduced motion keeps its DRAINED LENGTH and stops both
@@ -835,7 +850,7 @@ html.reduce-motion .world-selection { animation: none; }
   .world-ring.done { opacity: 0; }
   /* A chip still appears and a settled tile still marks its new owner — it just does not move. */
   .world-challenge-chip.is-arriving { animation: none; }
-  .world-settle { animation: none; opacity: .9; }
+  .world-takeover-was, .world-takeover-edge, .world-takeover-label { animation: none; opacity: 0; }
 }
 
 .world-invitation {
@@ -1208,10 +1223,10 @@ html.reduce-motion .world-chat { animation: none; }
   100% { opacity: 0; transform: translate(3px, -16px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .world-fog-ring, .world-fog-shift-was, .world-fog-shift-now, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-hex-face.rising, .world-deck-count.waiting { animation: none; }
+  .world-fog-ring, .world-fog-shift-was, .world-fog-shift-now, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-hex-face.rising, .world-deck-count.waiting, .world-takeover-was, .world-takeover-edge, .world-takeover-label { animation: none; }
   .world-spore, .world-ripples { display: none; }
 }
-html.reduce-motion :is(.world-fog-ring, .world-fog-shift-was, .world-fog-shift-now, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-hex-face.rising, .world-deck-count.waiting) { animation: none; }
+html.reduce-motion :is(.world-fog-ring, .world-fog-shift-was, .world-fog-shift-now, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-hex-face.rising, .world-deck-count.waiting, .world-takeover-was, .world-takeover-edge, .world-takeover-label) { animation: none; }
 html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
 
 /* ================= THE DESKTOP STAGE (owner, 2026-10-28: "make the map bigger, use the space
@@ -1273,6 +1288,6 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
    the soft-focus blurs are drawn sharp and the ambient loops hold still. A blur re-renders on every
    frame the view moves; this is what keeps a pan at 60 fps on a mid phone. */
 .world-grid.moving .world-map-svg [filter] { filter: none; }
-.world-grid.moving .world-map-svg :is(.world-fog-ring, .world-fog-shift-was, .world-fog-shift-now, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore) { animation-play-state: paused; }
+.world-grid.moving .world-map-svg :is(.world-fog-ring, .world-fog-shift-was, .world-fog-shift-now, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-takeover-was, .world-takeover-edge, .world-takeover-label) { animation-play-state: paused; }
 .world-grid.moving .world-map-svg .world-accent-line { filter: none; }
 `;

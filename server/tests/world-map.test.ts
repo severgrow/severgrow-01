@@ -317,7 +317,7 @@ describe('selling a tile', () => {
     const store = await funded();
     for (let i = 1; i <= 4; i++) await grant(store, 'b', `campaign:${i}`);
     await store.claim('b', '1,0', 'request-buy-b', 2);
-    const sent = await store.sendChallenge({ challengerId: 'b', cellId: '0,0', requestId: 'challenge-1', stake: SEED_ECONOMY.challengeStake, now: 3 });
+    const sent = await store.sendChallenge({ challengerId: 'b', cellId: '0,0', requestId: 'challenge-1', now: 3 });
     expect(sent.ok).toBe(true);
     expect(await store.sell('a', '0,0', 'request-sell-5', 4)).toMatchObject({ ok: false, code: 'CELL_BUSY' });
   });

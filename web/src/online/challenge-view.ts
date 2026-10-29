@@ -1,5 +1,5 @@
 import type { WorldChallengeWire } from '../../../server/src/seeds/types.js';
-import { CHALLENGE } from './challenge-copy.js';
+import { CHALLENGE, stakeName } from './challenge-copy.js';
 
 /**
  * The challenge layer's pure arithmetic and state machine. Kept out of `world-view.ts` so the ring's
@@ -57,17 +57,50 @@ export const challengeForCell = (
  *   defend   incoming pending  → ACCEPT (primary) / DECLINE
  *   wait     outgoing pending  → no primary, the sentence explains the wait
  *   duel     accepted, match running → OPEN DUEL (primary)
- *   confirm  accepted, match FINISHED → TAKE THE GROUND (primary)
+ *   settling accepted, match FINISHED → NO primary: the server settles it by itself. The harmless
+ *            `SETTLE NOW` fallback lives on the secondary key and nobody has to press it.
  *   resolved already settled   → no primary
  *   closed   declined/expired/stale → no primary
  */
-export type ChallengeSheetMode = 'defend' | 'wait' | 'duel' | 'confirm' | 'resolved' | 'closed';
+export type ChallengeSheetMode = 'defend' | 'wait' | 'duel' | 'settling' | 'resolved' | 'closed';
 
 export const sheetModeFor = (challenge: WorldChallengeWire, viewerId: string): ChallengeSheetMode => {
   if (challenge.status === 'resolved') return 'resolved';
   if (challenge.status === 'pending') return challenge.defenderId === viewerId ? 'defend' : 'wait';
-  if (challenge.status === 'accepted') return challenge.matchFinished ? 'confirm' : 'duel';
+  if (challenge.status === 'accepted') return challenge.matchFinished ? 'settling' : 'duel';
   return 'closed';
+};
+
+/**
+ * THE SETTLING SHEET (owner, 2026-10-29). A finished linked duel is applied automatically by the
+ * server on the read that follows; the sheet therefore offers NO primary action. `fallback` is a
+ * harmless secondary key for the rare client that has not received the resolved row yet: it posts
+ * the same idempotent confirm, so pressing it can never settle twice.
+ */
+export type SettlementSheetCopy = { line: string; meta: string; fallback: boolean; drawn: boolean };
+
+export const settlementSheetCopy = (
+  challenge: Pick<WorldChallengeWire, 'matchWinnerId' | 'challengerName' | 'defenderName' | 'challengerId' | 'stakeCellId'>,
+  viewerId: string,
+): SettlementSheetCopy => {
+  const winner = challenge.matchWinnerId === null ? null
+    : challenge.matchWinnerId === challenge.challengerId ? challenge.challengerName
+      : challenge.defenderName;
+  if (winner === null) {
+    return { line: CHALLENGE.drawLine, meta: CHALLENGE.drawMeta, fallback: true, drawn: true };
+  }
+  const mine = challenge.matchWinnerId === viewerId;
+  const meta = challenge.stakeCellId === null
+    ? CHALLENGE.defendMeta
+    : mine
+      ? `YOUR TILE ${challenge.stakeCellId} AT STAKE`
+      : 'YOUR CONTESTED TILE AT STAKE';
+  return {
+    line: CHALLENGE.settlingLine(winner),
+    meta,
+    fallback: true,
+    drawn: false,
+  };
 };
 
 /** A participant's display name from the wire, or null for an unrelated id. */
@@ -127,6 +160,39 @@ export const defendSheetCopy = (
  * also exactly the lifecycle of the timer ring (`ringFraction`), so glyph and ring arrive and leave
  * together.
  */
+/** The settled sheet: what the server already did, with no key to press. */
+export const resolvedSheetCopy = (
+  challenge: Pick<WorldChallengeWire, 'winnerId' | 'challengerId' | 'challengerName' | 'defenderName'>,
+): { line: string; meta: string } => {
+  const name = challenge.winnerId === null ? null
+    : challenge.winnerId === challenge.challengerId ? challenge.challengerName : challenge.defenderName;
+  return {
+    line: CHALLENGE.resolvedLine(name, challenge.winnerId === challenge.challengerId),
+    meta: CHALLENGE.settledShort,
+  };
+};
+
+/**
+ * THE STAKE MARKER. The challenger's own tile is at risk for as long as the challenge is open, so
+ * the map draws a quiet, static ring on it (the same six-point hex outline as everything else) and
+ * tells assistive tech which tile it is. Only the CHALLENGER sees their own stake: it is their
+ * property, and the defender's risk is already named on the contested tile.
+ */
+export type StakeMarker = { challengeId: string; cellId: string; label: string };
+
+export const stakeMarkersFor = (
+  challenges: readonly WorldChallengeWire[],
+  viewerId: string,
+): StakeMarker[] => challenges
+  .filter((challenge) => challenge.challengerId === viewerId && challenge.stakeCellId !== null &&
+    (challenge.status === 'pending' || challenge.status === 'accepted'))
+  .map((challenge) => ({
+    challengeId: challenge.id,
+    cellId: challenge.stakeCellId!,
+    label: CHALLENGE.stakeLabel(stakeName(challenge.stakeCellId!)),
+  }))
+  .sort((a, b) => (a.cellId < b.cellId ? -1 : a.cellId > b.cellId ? 1 : a.challengeId < b.challengeId ? -1 : 1));
+
 export type ChallengeMarker = {
   /** The one challenge the marker belongs to; paint() reuses its node by this id across polls. */
   challengeId: string;
