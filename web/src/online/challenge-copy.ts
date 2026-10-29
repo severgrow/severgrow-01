@@ -26,7 +26,15 @@
  */
 
 /** The one way a tile is named in a sentence. The map rings the same tile. */
-export const stakeName = (cellId: string): string => `your tile ${cellId}`;
+/**
+ * How a staked tile is NAMED in a sentence.
+ *
+ * Not its coordinate: this file's own rule (see the header) is that `3,-10` is the machine's name for
+ * the ground, never a sentence a player reads. The tile is identified on the MAP instead — the stake
+ * marker sits on that exact cell — so the words only have to say whose it is and that it is at risk.
+ * The id is still what the marker uses; it is simply not spoken.
+ */
+export const stakeName = (_cellId: string): string => 'your nearest tile';
 
 export const CHALLENGE = Object.freeze({
   title: 'Territory challenge',
@@ -90,8 +98,7 @@ export const CHALLENGE = Object.freeze({
   /** The same meta for a challenge that already exists (waiting, contested, settling). */
   stakeMeta: (tile: string) => `${tile.toUpperCase()} AT STAKE`,
   /** The map ring's spoken name, so a screen reader is told which tile is at risk. */
-  stakeLabel: (tile: string) => `${tile} is at stake in a challenge.`,
-  /** The rail's cap: anything past it is counted, never silently dropped. */
+  stakeLabel: (tile: string) => `${tile} is at stake in a challenge.`,  /** The rail's cap: anything past it is counted, never silently dropped. */
   more: (count: number) => `+${count} MORE`,
   /** A polite screen-reader line for a player who cannot see the rail appear. */
   incomingAnnounce: (name: string) => `${name} challenged your ground.`,

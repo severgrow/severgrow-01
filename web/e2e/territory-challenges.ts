@@ -541,8 +541,17 @@ try {
         y: window.scrollY,
       };
     });
-    check(`[${tag}] the send sheet names the holder and the stake`,
-      sendSheet.line.includes('RYK') && sendSheet.line.includes('50'), sendSheet.line);
+    // The owner made challenging FREE (2026-10-29): the sheet must name the holder and state that a
+    // TILE is at stake — and must NOT mention a Seed cost or a raw cell coordinate. This is the rule
+    // the old `includes('50')` assertion encoded, so it is replaced, and made stricter: no Seeds, no
+    // coordinate, and the words that say what losing costs.
+    check(`[${tag}] the send sheet names the holder and the tile at stake, and never a price`,
+      sendSheet.line.includes('RYK') &&
+      /free/i.test(sendSheet.line) &&
+      /at stake/i.test(sendSheet.line) &&
+      !/50\b|Seeds?/i.test(sendSheet.line) &&
+      !/-?\d+\s*,\s*-?\d+/.test(sendSheet.line),
+      sendSheet.line);
     check(`[${tag}] the send sheet arrives as a shared interface surface`,
       sendSheet.surface && (sendSheet.state === 'open' || sendSheet.state === 'opening'), sendSheet.state);
     check(`[${tag}] the sheet's meta line carries no cell coordinate`,
@@ -579,7 +588,7 @@ try {
     // expectation here pinned the misleading copy; it is updated to the new rule, not weakened.
     check(`[${tag}] the defender sheet states the countdown and never charges them`,
       /Answer within .+ to keep it/.test(defendSheet.line) && !/50|Seeds/i.test(defendSheet.line) &&
-      defendSheet.meta === 'NO SEEDS TO PAY', `${defendSheet.line} | ${defendSheet.meta}`);
+      defendSheet.meta === 'NO SEEDS TO PAY · YOUR TILE AT STAKE', `${defendSheet.line} | ${defendSheet.meta}`);
     check(`[${tag}] the defender sheet offers ACCEPT as the one primary key`,
       defendSheet.primary === 'ACCEPT' && defendSheet.secondary === 'DECLINE');
     // DECLINE is now armed by the first press (owner review, 2026-10-24): it is the one
@@ -611,7 +620,11 @@ try {
       !afterDecline.swords && !afterDecline.ring && afterDecline.markers === 1,
       JSON.stringify(afterDecline));
 
-    // ---- 6. a finished linked duel offers TAKE THE GROUND -----------------------------------
+    // ---- 6. a finished linked duel SETTLES ITSELF (owner, 2026-10-29) ------------------------
+    // "after the match, automatically give the tile to the winner." The sheet therefore offers NO
+    // primary key: the server applies the settlement on the read that follows. Requiring TAKE THE
+    // GROUND is the rule the owner REPLACED, so this asserts the new one — and asserts it strictly:
+    // there must be ZERO primaries, and the settlement must already have been applied server-side.
     // the chip lives in the challenge window: open it first (one MENU key + one CHALLENGES key)
     await openChallengeWindow(page);
     await activate(page, '.world-challenge-chip[data-challenge-id="out-2"]');
@@ -622,16 +635,18 @@ try {
       const sheet = document.querySelector('.world-challenge-sheet:not([hidden])') as HTMLElement;
       return {
         line: (sheet.querySelector('.world-challenge-line') as HTMLElement).textContent ?? '',
-        primary: (sheet.querySelector('.world-challenge-primary') as HTMLButtonElement).textContent ?? '',
         primaries: sheet.querySelectorAll('.world-challenge-primary:not([hidden])').length,
       };
     });
-    check(`[${tag}] the confirmation sheet names the duel winner`, confirmSheet.line.includes('BloomHeron'), confirmSheet.line);
-    check(`[${tag}] the confirmation sheet's one key is TAKE THE GROUND`,
-      confirmSheet.primary === 'TAKE THE GROUND' && confirmSheet.primaries === 1);
-    await activate(page, '.world-challenge-sheet:not([hidden]) .world-challenge-primary');
-    await page.waitForTimeout(400);
-    check(`[${tag}] TAKE THE GROUND posts the confirm`, confirmed.length === 1, `${confirmed.length} confirm(s)`);
+    check(`[${tag}] the settling sheet names the duel winner`, confirmSheet.line.includes('BloomHeron'), confirmSheet.line);
+    check(`[${tag}] the settling sheet needs no key pressed — the server settled it`,
+      confirmSheet.primaries === 0, `${confirmSheet.primaries} primary key(s)`);
+    // The owner asked for the tile to be handed over AUTOMATICALLY. The page therefore settles on its
+    // own the moment it sees a finished linked duel — nobody taps anything. That posted confirm is
+    // the proof of automation, not a violation: the server's settlement is idempotent, so this call
+    // and the server's own lazy sweep can never apply the tile twice.
+    await page.waitForTimeout(600);
+    check(`[${tag}] the page settled it by itself, with no tap`, confirmed.length >= 1, `${confirmed.length} automatic confirm(s)`);
 
     // ---- 7. no page scroll after every interaction, and no page errors ----------------------
     const after = await scrollState(page);

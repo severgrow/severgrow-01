@@ -1,5 +1,5 @@
 import type { WorldChallengeWire } from '../../../server/src/seeds/types.js';
-import { CHALLENGE, stakeName } from './challenge-copy.js';
+import { CHALLENGE } from './challenge-copy.js';
 
 /**
  * The challenge layer's pure arithmetic and state machine. Kept out of `world-view.ts` so the ring's
@@ -189,7 +189,10 @@ export const stakeMarkersFor = (
   .map((challenge) => ({
     challengeId: challenge.id,
     cellId: challenge.stakeCellId!,
-    label: CHALLENGE.stakeLabel(stakeName(challenge.stakeCellId!)),
+    // The a11y label DOES name the cell: it is not a sentence a player reads, and a screen-reader
+    // user needs to know exactly which of their tiles is at risk. The visible sentence (above) must
+    // never carry a coordinate — that is the split this pair exists to make.
+    label: CHALLENGE.stakeLabel(`your tile ${challenge.stakeCellId!}`),
   }))
   .sort((a, b) => (a.cellId < b.cellId ? -1 : a.cellId > b.cellId ? 1 : a.challengeId < b.challengeId ? -1 : 1));
 
