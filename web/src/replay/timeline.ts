@@ -11,10 +11,12 @@
 // each action's beats come from the SAME `buildSteps` the live game animates, so a Bloom looks like
 // a Bloom and a cut looks like the cut the player watched.
 //
-// Pacing (the table below, `REPLAY_PACING`): every beat has a WEIGHT, the weights are scaled as ONE block to land the
-// match inside 25-50 s, and the relative weighting is never flattened — a busy move stays longer
-// than a quiet one at every scale. Clamps keep a four-move game from being stretched into a crawl
-// and a very long match from becoming a blur.
+// Pacing (the table below, `REPLAY_PACING`): every beat has a WEIGHT, and the whole match is scaled
+// as ONE block to a target length DERIVED FROM THE BEAT COUNT (owner, 2026-10-30: "the length should
+// depend on the amount of moves… just much faster"). A typical fifty-second replay was 62-73 beats;
+// the curve below turns 50 beats into ~30 s. Clamps keep a tiny game from being compressed into a
+// blur and a very long match under a sensible ceiling, and the relative weighting is never
+// flattened — a cut or a Blast is still held longer than an ordinary Grow at every scale.
 import { apply, coordKey, mirror, parseKey, scores, stateFromSetup } from '../../../src/engine/index.js';
 import type { Action, Player, RulesConfig, State, Terrain, Tile } from '../../../src/engine/index.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/versions.js';
@@ -23,18 +25,29 @@ import type { Board, Step } from '../logic/anim.js';
 
 /** The one pacing table. Durations are milliseconds. */
 export const REPLAY_PACING = Object.freeze({
-  /** A quiet beat (one single-tile Grow) at natural speed: the owner's "1.5-2 seconds". */
+  /** A quiet beat (one single-tile Grow) at natural speed: the scale is fitted against this. */
   unit: 1700,
-  /** The band the whole match must land in ("25-50 seconds or so"). */
-  minTotal: 25_000,
-  maxTotal: 50_000,
+  /**
+   * The duration curve (owner, 2026-10-30): the whole match follows how many beats it has.
+   *
+   *   target = clamp(endHold + perBeat * beats, minTotal, maxTotal)
+   *
+   * The numbers: 50 beats = 1.4 s + 50 × 0.57 s = 29.9 s (a 50-second replay is now about 30 s);
+   * 10 beats would be 7.1 s, so the 9 s floor holds it up instead of blurring it; past ~53 beats
+   * the 32 s cap ends the growth, so a 200-beat game is still 32 s and not a blur. Monotonic.
+   */
+  perBeat: 570,
+  /** The floor a very short match is held at ("not compressed into a blur"). */
+  minTotal: 9_000,
+  /** The sensible ceiling for a very long match. */
+  maxTotal: 32_000,
   /** Never stretch further than this: four moves must not become a two-minute crawl. */
   maxScale: 2.2,
-  /** Never compress further than this: a very long match stays readable, even past the band. */
-  minScale: 0.15,
+  /** Never compress further than this (a 200-beat match at the cap needs ~0.09). */
+  minScale: 0.06,
   /** No single beat is ever shorter than this (a blur floor) or longer than this (a crawl cap). */
   minFrame: 140,
-  maxFrame: 5_200,
+  maxFrame: 4_200,
   /** The final board rests on screen this long (the result is the point). */
   endHold: 1_400,
 });
@@ -48,23 +61,28 @@ export const REPLAY_PACING = Object.freeze({
 export const weightOf = (step: Step): number => {
   switch (step.k) {
     case 'grow':
-      return 1 + 0.55 * (step.tiles.length - 1) + (step.tiles.some((t) => t.replaced) ? 0.35 : 0);
+      // An ordinary grow is the quickest picture on screen; a multi-tile Bloom adds a beat per tile,
+      // and an overgrow adds the flip. The owner's "much faster" is most visible here.
+      return 0.85 + 0.5 * (step.tiles.length - 1) + (step.tiles.some((t) => t.replaced) ? 0.3 : 0);
     case 'sever':
-      return 1 + 0.1 * step.keys.length;
+      // A cut is a big moment: held longer than a grow, and longer again per link it severs.
+      return 1.3 + 0.14 * step.keys.length;
     case 'megaBomb':
-      return 1 + 0.2 * step.destroyed.length;
+      // The Blast is the biggest single picture: a base beat plus every tile it clears.
+      return 1.6 + 0.3 * step.destroyed.length;
     case 'fruit':
       return 1.2;
     case 'strengthen':
-      return 0.8;
+      return 0.6;
     case 'remove':
-      return 0.8 + 0.08 * step.keys.length;
+      return 0.9 + 0.09 * step.keys.length;
     case 'strangle':
-      return 1.1;
+      return 1.5;
     case 'turn':
-      return 0.55;
+      // The quiet hand-over: the shortest beat, so the eye resets without waiting.
+      return 0.35;
     case 'end':
-      return 1.1;
+      return 1.2;
     // A Draw/Discard has no picture on a board-only replay.
     default:
       return 0;
@@ -313,20 +331,18 @@ const diff = (before: Board, after: Board): { changed: string[]; removed: string
 };
 
 /**
- * The scale that lands a match in the band while keeping every beat's relative weight.
+ * The scale that lands a match on the beat-count curve while keeping every beat's relative weight.
  *
- *   raw    = unit * Σ weights                      (the match at natural speed)
- *   target = clamp(raw + endHold, 25 s, 50 s)
+ *   target = clamp(endHold + perBeat * beats, 9 s, 32 s)      (REPLAY_PACING)
  *   scale  = the s where Σ clamp(unit*w*s) + endHold == target   (bisection)
  *            inside [minScale, maxScale] and per-beat [minFrame, maxFrame]
  *
- * Because every beat is multiplied by the SAME s, a four-tile Bloom is 3.1× a Sprout at every
+ * Because every beat is multiplied by the SAME s, a four-tile Bloom is 2.8× a Sprout at every
  * scale. The clamps are what a short or a very long match bumps into instead of distorting that.
  */
 export const fitScale = (weights: readonly number[]): { scale: number; total: number } => {
-  const { unit, minTotal, maxTotal, minScale, maxScale, minFrame, maxFrame, endHold } = REPLAY_PACING;
-  const raw = weights.reduce((sum, w) => sum + unit * w, 0);
-  const target = Math.min(Math.max(raw + endHold, minTotal), maxTotal);
+  const { unit, perBeat, minTotal, maxTotal, minScale, maxScale, minFrame, maxFrame, endHold } = REPLAY_PACING;
+  const target = Math.min(Math.max(endHold + perBeat * weights.length, minTotal), maxTotal);
   const totalAt = (s: number): number => {
     let sum = endHold;
     for (const w of weights) sum += Math.min(Math.max(unit * w * s, minFrame), maxFrame);

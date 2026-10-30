@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CAMPAIGN, RESULT, TUTORIAL_REPLAY } from '../../src/strings.js';
 import { CAMPAIGN_LEVELS, nextCampaignLevel } from '../../src/campaign/index.js';
-import { finishLead } from '../src/logic/finish-actions.js';
+import { finishLead, territoryLinkVisible } from '../src/logic/finish-actions.js';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const html = read('../index.html');
@@ -118,15 +118,13 @@ describe('the card is one screen: the result leads, the rest waits behind "More"
     const firstIds = [...goButtons.matchAll(/<button id="([^"]+)"([^>]*)>/g)]
       .filter((m) => !/data-go-extra/.test(m[2]!))
       .map((m) => m[1]!);
-    // Game review (owner, 2026-10-23) is a key, not a row: it shares the board's row. Open Territory
-    // (level 10's won card, owner 2026-10-24) is the secondary's alternate, never shown beside it.
-    // The match replay (owner brief, 2026-10-25) is a deliberate row of its own: he asked for the
-    // control ON the end screen, so it is never behind the disclosure. The list stays an exact pin.
-    expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-replay', 'go-territory-open', 'go-board', 'go-review', 'go-more', 'go-menu']);
+    // Open Territory (level 10's won card, owner 2026-10-24) is the secondary's alternate, never
+    // shown beside it. The match replay (owner brief, 2026-10-25) is a deliberate row of its own:
+    // he asked for the control ON the end screen, so it is never behind the disclosure. The game
+    // review key was removed by the owner (2026-10-30), so it is not in the list. Exact pin.
+    expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-replay', 'go-territory-open', 'go-board', 'go-more', 'go-menu']);
     expect(mainSource).toMatch(/other\.hidden = lead === 'back-to-campaign' \|\| lead === 'back-to-tutorial' \|\| territoryIntro;/);
     expect(mainSource).toMatch(/\$\('go-territory-open'\)\.hidden = !territoryIntro;/);
-    const css = read('../src/style.css');
-    expect(css).toMatch(/\.go-buttons:has\(#go-review:not\(\[hidden\]\)\) > #go-board,\s*\.go-buttons:has\(#go-review:not\(\[hidden\]\)\) > #go-review \{\s*grid-column: auto;/);
   });
 
   it('is driven by one disclosure in main.ts, shared by every mode', () => {
@@ -175,22 +173,35 @@ describe('after the tutorial, the player lands in a level (never back at a menu)
   });
 });
 
-describe('game review on the finish card (owner, 2026-10-23)', () => {
-  it('starts hidden, and appears only once the worker has the answer', () => {
-    expect(goButtons).toMatch(/<button id="go-review" class="btn ghost" type="button" hidden>/);
-    expect(mainSource).toMatch(/btn\.hidden = reviewPoint === undefined;/);
-    expect(mainSource).toMatch(/void askReview\(s\.start, s\.log, HUMAN, st\)/);
+describe('the review face is gone (owner, 2026-10-30)', () => {
+  it('leaves no review ids in the markup', () => {
+    // The owner chose "remove the whole review feature": no key, no face, no "Show me" path.
+    expect(html).not.toMatch(/go-review/);
+    expect(goCard).not.toMatch(/go-review/);
+    expect(goButtons).not.toMatch(/go-review/);
   });
 
-  it('is offered for practice and level games only: never a lesson, never a duel', () => {
-    expect(mainSource).toMatch(/if \(!IS_FUTA04 \|\| lessonActive\(\) \|\| !session \|\| session\.state !== st\)/);
-    expect(mainSource).toMatch(/no replayable log to review\.\s*setGoExtra\('go-cut', false\);\s*\$\('go-review'\)\.hidden = true;/);
+  it('leaves no review state or wiring in main.ts', () => {
+    // No REVIEW copy, no worker review request, no face toggling, no `go-reviewing` branch.
+    expect(mainSource).not.toMatch(/\bREVIEW\b/);
+    expect(mainSource).not.toMatch(/askReview|reviewPoint|reviewFor|openReview|closeReview|syncReview|showBetterMove/);
+    expect(mainSource).not.toMatch(/go-review/);
+    expect(mainSource).not.toMatch(/\.classList\.(?:add|remove)\('reviewing'\)/);
   });
 
-  it('opens in the same card (the card never grows), and a fresh finish starts closed', () => {
-    expect(goCard).toMatch(/<div id="go-review-face" class="go-review-face" hidden>/);
-    expect(read('../src/style.css')).toMatch(/\.go-card\.reviewing > :not\(\.go-review-face\) \{\s*display: none !important;/);
-    expect((mainSource.match(/if \(wasHidden\) closeReview\(\);/g) ?? []).length).toBe(2);
+  it('leaves no review CSS, and the source copy is gone', () => {
+    const css = read('../src/style.css');
+    expect(css).not.toMatch(/go-review/);
+    expect(css).not.toMatch(/\.go-card\.reviewing/);
+    expect(read('../../src/strings.ts')).not.toMatch(/export const REVIEW\b/);
+  });
+
+  it('keeps the way back from the board: "Board" is not review-only', () => {
+    // #go-board puts the card away to show the final position; the board's own "Results" key
+    // brings it back (web/src/main.ts `button('Results', ...)`). It never belonged to the review.
+    expect(goButtons).toContain('id="go-board"');
+    expect(mainSource).toMatch(/bind\('go-board', \(\) => \{/);
+    expect(mainSource).toMatch(/button\('Results', 'ghost'/);
   });
 });
 
@@ -247,12 +258,54 @@ describe('the inquest and the double harvest (surprise, 2026-10-29)', () => {
     expect(stampRules).not.toMatch(/animation|filter|transition/);
   });
 
-  it('main.ts paints it from the match record, and hides BOTH when there is none', () => {
-    expect(mainSource).toMatch(/paintVerdict\(info\.inquest, info\.harvest\)/);
+  it('main.ts paints it from the match record, and the STAMP alone when only the board is known', () => {
+    // A duel's own record may be withheld (a pruned or refused history), but the final board is
+    // still the match: the inquest line is gated on the events, the stamp is not (owner, 2026-10-30).
+    expect(mainSource).toMatch(/const harvest = info\.harvest \?\? harvestFigure\(os\.state\.board, os\.state\.config, HUMAN, os\.state\.terrain\);/);
+    expect(mainSource).toMatch(/paintVerdict\(info\.inquest, harvest\);/);
     expect(mainSource).toMatch(/const verdict = offlineVerdict\(st\);/);
     expect(mainSource).toMatch(/box\.hidden = !line && !figure;/);
-    // The offline gate: the public projection of the events, and nothing when there are none.
-    expect(mainSource).toMatch(/const events = st\.result \? eventsFor\(st, HUMAN\) : \[\];/);
-    expect(mainSource).toMatch(/if \(!st\.result \|\| events\.length === 0\) return \{ line: null, figure: null \};/);
+    // The offline gate: the public projection gates the LINE only; the figure is the final board.
+    expect(mainSource).toMatch(/if \(!st\.result\) return \{ line: null, figure: null \};/);
+    expect(mainSource).toMatch(/const events = eventsFor\(st, HUMAN\);/);
+    expect(mainSource).toMatch(/line: events\.length \? inquest\(events, st\.result, HUMAN\) : null,/);
+    expect(mainSource).toMatch(/figure: harvestFigure\(st\.board, st\.config, HUMAN, st\.terrain\),/);
+    expect(mainSource).not.toMatch(/events\.length === 0\) return \{ line: null, figure: null \}/);
+  });
+});
+
+describe('the Territory key under the payout (owner, 2026-10-30)', () => {
+  it('is one control, sitting directly under the Seeds line in the card summary', () => {
+    const summary = html.slice(html.indexOf('<div class="go-summary">'), html.indexOf('</div>', html.indexOf('<div class="go-summary">')));
+    expect(summary).toContain('id="go-seeds"');
+    expect(summary).toContain('id="go-territory-grow"');
+    // It is the next element after the Seeds line, inside the summary (not in the buttons row).
+    expect(summary).toMatch(/<p id="go-seeds"[^>]*><\/p>\s*(?:<!--[\s\S]*?-->\s*)?<button id="go-territory-grow"[^>]*>/);
+    expect(goButtons).not.toContain('id="go-territory-grow"');
+    expect(summary).toMatch(/id="go-territory-grow"[^>]*hidden/);
+  });
+
+  it('reads exactly the product sentence, from src/strings.ts', () => {
+    expect(RESULT.growTiles).toBe('Grow tiles in Territory');
+    expect(html).not.toContain('>Grow tiles in Territory<');
+    expect(mainSource).toMatch(/btn\.textContent = RESULT\.growTiles/);
+    expect(mainSource).toMatch(/bind\('go-territory-grow'/);
+  });
+
+  it('is present with the payout and absent without it', () => {
+    // The pure rule: the key belongs with a payout line, and only where Territory is reachable.
+    expect(territoryLinkVisible({ payout: true, reachable: true })).toBe(true);
+    expect(territoryLinkVisible({ payout: false, reachable: true })).toBe(false);
+    expect(territoryLinkVisible({ payout: true, reachable: false })).toBe(false);
+    expect(territoryLinkVisible({ payout: false, reachable: false })).toBe(false);
+    // main.ts asks the DOM's own state: the Seeds line's visibility IS the payout's presence.
+    expect(mainSource).toMatch(/const payout = !!seeds && !seeds\.hidden && \(seeds\.textContent \?\? ''\)\.trim\(\) !== '';/);
+    expect(mainSource).toMatch(/btn\.hidden = !territoryLinkVisible\(\{ payout, reachable \}\);/);
+    // It is repainted whenever the Seeds line is, including its early-return (already-painted) path.
+    expect((mainSource.match(/syncTerritoryGrow\(\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('navigates through the product\'s own Territory route, never an invented one', () => {
+    expect(mainSource).toMatch(/bind\('go-territory-grow', \(\) => \{\n  hideGameOver\(\);\n  showScreen\('menu'\);\n  onlineLobbyCtl\?\.openWorld\('menu'\);/);
   });
 });

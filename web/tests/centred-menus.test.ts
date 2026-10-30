@@ -10,7 +10,7 @@ const tail = css.slice(css.indexOf('/* CENTRED MENUS'));
 
 describe('centred menus', () => {
   it('the finish card centres its words, its score and every key', () => {
-    expect(tail).toMatch(/#gameover :is\(\.go-context, \.go-title, \.go-sub, \.go-learned, \.go-reason, \.go-review-face\) \{\n  text-align: center;/);
+    expect(tail).toMatch(/#gameover :is\(\.go-context, \.go-title, \.go-sub, \.go-learned, \.go-reason\) \{\n  text-align: center;/);
     expect(tail).toMatch(/#gameover \.go-score \{ justify-content: center; \}/);
     expect(tail).toMatch(/#gameover \.go-buttons \.btn \{ justify-content: center; text-align: center; \}/);
     // The amber rule under a won title was removed (owner, 2026-10-24). No `::after` under the

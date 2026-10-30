@@ -10,10 +10,12 @@
 //   · the inquest line is on the card, in the game's own words, and cites a turn inside the match;
 //   · the harvest stamp is on the card, and the two masses in its one-sentence alternative are the
 //     REAL tile counts of the final board;
+//   · the review face is gone entirely (owner, 2026-10-30), and the Territory key sits with the
+//     payout and opens the Territory screen through the product's own route;
 //   · neither is behind "More" (the detail list is still folded while both are on screen);
 //   · the card does not scroll, the page does not widen, and there is no page error.
-// Finally it takes the match's public record away (the pruned-duel case) and asserts the card shows
-// NEITHER piece — and no placeholder, no empty row.
+// Finally it takes the match's public record away (the pruned-duel case) and asserts the card drops
+// the inquest LINE but KEEPS the harvest stamp — the final board is still known (owner, 2026-10-30).
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
@@ -156,6 +158,11 @@ const MEASURE = `(() => {
     verdict: shown(id('go-verdict')),
     inquest: shown(text) ? (text.textContent || '').trim() : null,
     harvest: shown(fig),
+    reviewIds: ['go-review', 'go-review-face', 'go-review-show', 'go-review-back', 'go-review-kicker'].filter((x) => !!id(x)).length,
+    cardReviewing: !!card && card.classList.contains('reviewing'),
+    seedsShown: shown(id('go-seeds')),
+    seedsText: shown(id('go-seeds')) ? (id('go-seeds').textContent || '').trim() : null,
+    territoryGrow: shown(id('go-territory-grow')) ? (id('go-territory-grow').textContent || '').trim() : null,
     label: svg ? svg.getAttribute('aria-label') : null,
     cells: svg ? svg.querySelectorAll('.hv-you path, .hv-them path').length : 0,
     hasRim: svg ? svg.querySelectorAll('.hv-outline line').length > 0 : false,
@@ -180,6 +187,11 @@ type Measure = {
   verdict: boolean;
   inquest: string | null;
   harvest: boolean;
+  reviewIds: number;
+  cardReviewing: boolean;
+  seedsShown: boolean;
+  seedsText: string | null;
+  territoryGrow: string | null;
   label: string | null;
   cells: number;
   hasRim: boolean;
@@ -269,6 +281,17 @@ try {
   );
   check('the stamp draws the board it is cut from', base.cells >= 2 && base.hasRim, `cells ${base.cells}`);
   check('neither piece waits behind "More"', base.verdict && !base.moreOpen);
+  // The owner removed the review face entirely (2026-10-30): no key, no face, no state.
+  check('the review face is gone from the card', base.reviewIds === 0 && !base.cardReviewing, `ids ${base.reviewIds}`);
+  // The Territory key belongs WITH the payout: present iff the Seeds line is on the card.
+  check(
+    'the Territory key is present with the payout and absent without it',
+    (base.territoryGrow !== null) === base.seedsShown,
+    `key ${base.territoryGrow ?? '(none)'} · payout ${base.seedsText ?? '(none)'}`,
+  );
+  if (base.territoryGrow !== null) {
+    check('the Territory key reads the product sentence', base.territoryGrow === 'Grow tiles in Territory', base.territoryGrow);
+  }
 
   // ---------- the three sizes ----------
   for (const size of SIZES) {
@@ -286,7 +309,7 @@ try {
     console.log(`    shot: docs/screens/finish/finish-inquest-${size.key}.png (card at y=${m.cardY})`);
   }
 
-  // ---------- the pruned duel: the record is gone, so NEITHER piece may show ----------
+  // ---------- the pruned duel: the record is gone, so the LINE may show nothing ----------
   // The card paints on a fresh appearance (the plate never repaints itself while it stands), so the
   // record is taken away exactly as a pruned duel would have it, and the card is put away and
   // brought back through the product's own "Board" → "Results" path.
@@ -309,14 +332,45 @@ try {
   const pruned = await measure(page);
   console.log(`    pruned: history ${pruned.historyLength} events, verdict ${pruned.verdict}, line ${pruned.inquest ?? '(none)'}`);
   check('a pruned record: the inquest line is gone', pruned.inquest === null, String(pruned.inquest));
-  check('a pruned record: the stamp is gone', !pruned.harvest);
-  check('a pruned record: no empty row is left behind', !pruned.verdict);
+  check('a pruned record: the stamp is STILL there (the final board is known)', pruned.harvest && pruned.cells >= 2, `cells ${pruned.cells}`);
+  check('a pruned record: the row stays because the stamp does', pruned.verdict);
   check('a pruned record: the result itself still shows', !!pruned.title && !!pruned.reason, pruned.title);
   check('a pruned record: no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}finish-inquest-pruned-1280x800.png` });
   console.log('    shot: docs/screens/finish/finish-inquest-pruned-1280x800.png');
+
+  // ---------- the Territory key, through the product's own route ----------
+  // This practice card has no payout line (a plain ?seed game asks for no reward), so the key is
+  // correctly absent. Give the card the award through the app's own reveal path (the same hook the
+  // seeds-fit suite uses): a visible Seeds line must grow the key, on the card that is already up.
+  const noPayout = await page.evaluate(`(() => !document.getElementById('go-seeds') || document.getElementById('go-seeds').hidden)()`);
+  if (noPayout) {
+    await page.evaluate(`(() => window.__severgrow.seedReveal(50))()`);
+    await page.waitForSelector('#go-territory-grow:not([hidden])', { timeout: 10_000 });
+  }
+  const territory = (await page.evaluate(`(() => {
+    const btn = document.getElementById('go-territory-grow');
+    const seeds = document.getElementById('go-seeds');
+    const shown = (el) => !!el && el.getClientRects().length > 0;
+    const r = btn ? btn.getBoundingClientRect() : null;
+    return { control: shown(btn), seeds: shown(seeds), label: btn ? (btn.textContent || '').trim() : null, height: r ? Math.round(r.height) : 0 };
+  })()`)) as { control: boolean; seeds: boolean; label: string | null; height: number };
+  check('the Territory key is on the card with the payout', (territory.control) === territory.seeds, `key ${territory.control} · payout ${territory.seeds}`);
+  if (territory.control) {
+    check('the Territory key is a real 44px target', territory.height >= 44, `${territory.height}px`);
+    check('the Territory key reads the product sentence', territory.label === 'Grow tiles in Territory', territory.label ?? '');
+    await page.click('#go-territory-grow');
+    const world = await page
+      .waitForSelector('#online-world-screen:not([hidden])', { timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    check('the Territory key opens the Territory screen', world);
+    await page.screenshot({ path: `${OUT}finish-territory-key-world-1280x800.png` });
+  } else {
+    check('the Territory key opens the Territory screen', false, 'the key was not on the card to press');
+  }
 
   await context.close();
 } finally {

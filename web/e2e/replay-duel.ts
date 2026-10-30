@@ -27,6 +27,7 @@ import { MemoryStorage } from '../../server/src/storage/memory.js';
 import type { PlayerRecord } from '../../server/src/storage/types.js';
 import { servePreview } from './helpers/preview-port.js';
 import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
+import { REPLAY_PACING } from '../src/replay/timeline.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -305,7 +306,11 @@ try {
   check('the replay mounts and its clock runs', !!mounted && mounted.total > 0, JSON.stringify(mounted));
   const total = mounted?.total ?? 0;
   console.log(`replay total: ${(total / 1000).toFixed(1)}s`);
-  check('the whole replay lands in the 25-50 s band', total >= 25_000 && total <= 52_000, `${(total / 1000).toFixed(1)}s`);
+  check(
+    `the whole replay lands on the ${REPLAY_PACING.minTotal / 1000}-${REPLAY_PACING.maxTotal / 1000} s curve`,
+    total >= REPLAY_PACING.minTotal && total <= REPLAY_PACING.maxTotal + 1_000,
+    `${(total / 1000).toFixed(1)}s`,
+  );
 
   // ---------- board only ----------
   const leaks = (await pageA.evaluate(() => {

@@ -7287,7 +7287,7 @@ body.result .corner-tools {
      high inside its own frame. It now takes a little more air above the lockup and a little more
      between the lockup and the ways out, paid for by the single row of quiet keys below (see
      `.go-buttons`), so the plate is SHORTER than before while its words sit lower in it. */
-  padding: 26px 18px 14px;
+  padding: var(--go-top, 26px) 18px 14px;
   text-align: left;
   background: color-mix(in srgb, var(--c-surface) 94%, transparent);
   border: 1px solid var(--fu-cream-22);
@@ -7389,6 +7389,36 @@ body.result .corner-tools {
      lands in place instead of pushing the score and the keys down. The height is the row's own
      height, so a visible award and the empty slot occupy the same line. */
   min-height: 32px;
+}
+/* The one way from the result to Territory (owner, 2026-10-30), directly under the payout. It is a
+   real 44px target, but reads as part of the card's words rather than a fifth control row: quiet
+   ghost material, its own width, centred. */
+#gameover .go-territory-grow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 44px;
+  margin: 4px auto 0;
+  padding: 0 18px;
+  border-radius: 9px;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+}
+#gameover .go-territory-grow[hidden] {
+  display: none;
+}
+/* A card that carries the Territory key is 22px taller with an award at 360x640 (measured by
+   `finish-fit`). The plate buys exactly that back from its own air and the control stack, so the
+   one-screen rule holds; the landscape rules below set their own padding and margin directly, so
+   the spread stays as it was. */
+#gameover .go-card:has(#go-territory-grow:not([hidden])) {
+  --go-top: 18px;
+  --go-buttons-gap: 10px;
+}
+#gameover .go-card:has(#go-territory-grow:not([hidden])) .go-territory-grow {
+  margin-top: 0;
 }
 #gameover .go-score {
   justify-content: flex-start;
@@ -7530,7 +7560,7 @@ body.result .corner-tools {
    behind it, and half-width text under full-width keys would read as an orphan. */
 #gameover .go-buttons {
   gap: 7px;
-  margin-top: 20px;
+  margin-top: var(--go-buttons-gap, 20px);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -7676,6 +7706,21 @@ body.result .corner-tools {
   #gameover .go-buttons .btn.link {
     min-height: 44px;
   }
+  /* The Territory key is a real 44px row (owner, 2026-10-30), and on the tightest phone a card
+     that also carries an award is 22px too tall without this. The plate buys 26px back from its
+     own top air, the control stack and the score's margin, so the one-screen rule still holds. */
+  #gameover .go-card:has(#go-territory-grow:not([hidden])) {
+    padding-top: 4px;
+  }
+  #gameover .go-card:has(#go-territory-grow:not([hidden])) .go-buttons {
+    margin-top: 0;
+  }
+  #gameover .go-card:has(#go-territory-grow:not([hidden])) .go-score {
+    margin-top: 6px;
+  }
+  #gameover .go-card:has(#go-territory-grow:not([hidden])) .go-territory-grow {
+    margin-top: 0;
+  }
 }
 
 /* ---------- the PLAY submenu's campaign caption ---------- */
@@ -7700,79 +7745,6 @@ body.result .corner-tools {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
-}
-
-/* GAME REVIEW on the finish card (owner, 2026-10-23). "Review" shares the "See the board" row, so
-   the card keeps its four rows before "More"; the review face takes the card's place while it is
-   open (go-card.reviewing), so the card never grows past one phone screen. */
-.go-buttons:has(#go-review:not([hidden])) {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-.go-buttons:has(#go-review:not([hidden])) > * {
-  grid-column: 1 / -1;
-}
-.go-buttons:has(#go-review:not([hidden])) > #go-board,
-.go-buttons:has(#go-review:not([hidden])) > #go-review {
-  grid-column: auto;
-  padding: 0 10px;
-}
-.go-card.reviewing > :not(.go-review-face) {
-  display: none !important;
-}
-.go-review-face {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  text-align: left;
-}
-.go-review-face[hidden] {
-  display: none;
-}
-.go-review-kicker {
-  margin: 0;
-  font-family: var(--font-ui);
-  font-size: 0.68rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  text-align: center;
-  color: var(--light-core, #f5d8a4);
-}
-.go-review-line {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
-  border-radius: var(--radius);
-  font-size: 0.92rem;
-  line-height: 1.35;
-  color: var(--c-text);
-}
-.go-review-better {
-  border-color: color-mix(in srgb, var(--light-core, #f5d8a4) 45%, transparent);
-  box-shadow: 0 0 14px var(--light-bloom, rgba(255, 195, 104, 0.18));
-}
-.go-review-label {
-  font-family: var(--font-ui);
-  font-size: 0.62rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--c-muted);
-}
-.go-review-keys {
-  display: grid;
-  /* Same rule as the pause plate's rows (owner, 2026-10-29: no orphaned half-width button): the
-     columns come from what is VISIBLE. "Show me" is hidden when the player's move was already the
-     best one (main.ts openReview: `hidden = !p`), and a fixed `1fr 1fr` then left "Back" at HALF
-     width — measured 132/272, 161/330 and 198/404 before this change. */
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: 8px;
-}
-.go-review-keys .btn {
-  min-height: 48px;
 }
 
 /* PLAYER STATS in the profile (owner, 2026-10-23): the record against the computer as a compact
@@ -8097,10 +8069,10 @@ html.reduce-motion #turn-cue { display: none; }
 @media (prefers-reduced-motion: reduce) { html.futasaku-product #turn-cue { display: none; } }
 
 /* CENTRED MENUS (owner, 2026-10-24: "everything should be centered here and in any similar
-   menus"). The finish card and its review face: kicker, title, score, reason and every key sit on
+   menus"). The finish card: kicker, title, score, reason and every key sit on
    the card's centre line; the won rule under the title centres with them. */
 html.futasaku-product #gameover .go-card,
-html.futasaku-product #gameover :is(.go-context, .go-title, .go-sub, .go-learned, .go-reason, .go-review-face) {
+html.futasaku-product #gameover :is(.go-context, .go-title, .go-sub, .go-learned, .go-reason) {
   text-align: center;
 }
 html.futasaku-product #gameover .go-score { justify-content: center; }
