@@ -223,29 +223,31 @@ describe('the won lockup (owner, 2026-10-24)', () => {
   });
 });
 
-describe('the inquest and the double harvest (surprise, 2026-10-29)', () => {
+describe('the double harvest stamp (surprise, 2026-10-29)', () => {
+  // Owner rule change (2026-10-30): the one-line match summary ("the inquest") is removed from the
+  // finish card. These tests used to pin that line; they now pin its absence and keep the stamp.
   it('lives INSIDE the finish card, and starts hidden', () => {
     expect(goCard).toContain('id="go-verdict"');
-    expect(goCard).toContain('id="go-inquest"');
     expect(goCard).toContain('id="go-harvest"');
     expect(goCard).toMatch(/id="go-verdict"[^>]*hidden/);
   });
 
-  it('is never behind "More": the truth of the match is part of the result', () => {
-    // The detail lines wait behind the disclosure; this pair is the answer to "how did that
-    // happen", so it is on the card itself.
+  it('carries no one-line match summary any more (owner, 2026-10-30)', () => {
+    expect(html).not.toContain('go-inquest');
+    expect(mainSource).not.toMatch(/inquest/i);
+    expect(read('../src/style.css')).not.toContain('.go-inquest');
+  });
+
+  it('is never behind "More": the final position is part of the result', () => {
     expect(goCard).not.toMatch(/id="go-verdict"[^>]*data-go-extra/);
-    expect(goCard).not.toMatch(/id="go-inquest"[^>]*data-go-extra/);
     expect(goCard).not.toMatch(/id="go-harvest"[^>]*data-go-extra/);
   });
 
   it('adds no new panel, tab, badge or screen: only the card grows a row', () => {
-    // The verdict block carries no button, no role and no surface of its own.
     const block = html.slice(html.indexOf('id="go-verdict"'), html.indexOf('</figure>') + '</figure>'.length);
     expect(block).not.toMatch(/<button|<section|<dialog|role=/);
-    expect(html).not.toMatch(/<section id="go-(inquest|harvest|verdict)"/);
-    // And the card's own control rows are unchanged.
-    expect(goButtons).not.toMatch(/id="go-(inquest|harvest|verdict)"/);
+    expect(html).not.toMatch(/<section id="go-(harvest|verdict)"/);
+    expect(goButtons).not.toMatch(/id="go-(harvest|verdict)"/);
   });
 
   it('is static: one opacity-only beat, and Reduce motion removes it', () => {
@@ -253,24 +255,16 @@ describe('the inquest and the double harvest (surprise, 2026-10-29)', () => {
     expect(css).toMatch(/#gameover\[data-fresh='1'\] \.go-verdict \{\s*animation: go-verdict-in/);
     expect(css).toMatch(/@keyframes go-verdict-in \{\s*from \{\s*opacity: 0;/);
     expect(css).toMatch(/\.reduce-motion #gameover\[data-fresh='1'\] \.go-verdict \{\s*animation: none;/);
-    // Never a loop, never a filter/blur, never a timer: the stamp's own rules do not animate at all.
     const stampRules = css.slice(css.indexOf('#gameover .go-harvest-svg'), css.indexOf('#gameover[data-fresh=\'1\'] .go-verdict'));
     expect(stampRules).not.toMatch(/animation|filter|transition/);
   });
 
-  it('main.ts paints it from the match record, and the STAMP alone when only the board is known', () => {
-    // A duel's own record may be withheld (a pruned or refused history), but the final board is
-    // still the match: the inquest line is gated on the events, the stamp is not (owner, 2026-10-30).
+  it('main.ts paints the stamp from the final board, online and offline', () => {
     expect(mainSource).toMatch(/const harvest = info\.harvest \?\? harvestFigure\(os\.state\.board, os\.state\.config, HUMAN, os\.state\.terrain\);/);
-    expect(mainSource).toMatch(/paintVerdict\(info\.inquest, harvest\);/);
-    expect(mainSource).toMatch(/const verdict = offlineVerdict\(st\);/);
-    expect(mainSource).toMatch(/box\.hidden = !line && !figure;/);
-    // The offline gate: the public projection gates the LINE only; the figure is the final board.
-    expect(mainSource).toMatch(/if \(!st\.result\) return \{ line: null, figure: null \};/);
-    expect(mainSource).toMatch(/const events = eventsFor\(st, HUMAN\);/);
-    expect(mainSource).toMatch(/line: events\.length \? inquest\(events, st\.result, HUMAN\) : null,/);
-    expect(mainSource).toMatch(/figure: harvestFigure\(st\.board, st\.config, HUMAN, st\.terrain\),/);
-    expect(mainSource).not.toMatch(/events\.length === 0\) return \{ line: null, figure: null \}/);
+    expect(mainSource).toMatch(/paintVerdict\(harvest\);/);
+    expect(mainSource).toMatch(/paintVerdict\(offlineVerdict\(st\)\);/);
+    expect(mainSource).toMatch(/box\.hidden = !figure;/);
+    expect(mainSource).toMatch(/return st\.result \? harvestFigure\(st\.board, st\.config, HUMAN, st\.terrain\) : null;/);
   });
 });
 

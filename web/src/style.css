@@ -7442,26 +7442,17 @@ body.result .corner-tools {
   line-height: 1.3;
 }
 
-/* ---------- THE INQUEST AND THE DOUBLE HARVEST (surprise, 2026-10-29) ----------
-   Two pieces of the SAME result, not two new surfaces: one sentence naming the turn the match was
-   decided on, and one small stamped figure of the final position with the two joined networks in
-   their own inks. They share one row so the plate grows by a single line at the tightest phone,
-   and the pair is static: no loop, no filter, no timer. The one entering beat is the card's own
-   opacity fade, switched off for Reduce motion below. */
+/* ---------- THE DOUBLE HARVEST (surprise, 2026-10-29) ----------
+   One small stamped figure of the final position, the two joined networks in their own inks,
+   centred in the card (the one-line summary beside it was removed, owner 2026-10-30). Static: no
+   loop, no filter, no timer. The one entering beat is the card's own opacity fade, switched off for
+   Reduce motion below. */
 #gameover .go-verdict {
   display: flex;
   align-items: flex-start;
+  justify-content: center;
   gap: 12px;
   margin: 12px 0 0;
-}
-#gameover .go-inquest {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  color: var(--fu-cream-70);
-  font-size: 0.82rem;
-  line-height: 1.36;
-  text-wrap: pretty;
 }
 #gameover .go-harvest {
   flex: 0 0 auto;
@@ -7688,10 +7679,6 @@ body.result .corner-tools {
   }
   #gameover .go-harvest {
     width: 74px;
-  }
-  #gameover .go-inquest {
-    font-size: 0.78rem;
-    line-height: 1.32;
   }
   #gameover .go-buttons {
     margin-top: 10px;

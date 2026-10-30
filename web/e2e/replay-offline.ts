@@ -71,7 +71,7 @@ const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
     .catch(() => undefined);
   const read = () => page.evaluate('(() => { const h = window.__severgrow; return h.state(); })()') as Promise<State | null>;
   const idle = () =>
-    page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
+    page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
   let waiting = 0;
   let refused = 0;
   for (let i = 0; i < maxSteps; i++) {
@@ -125,7 +125,7 @@ try {
   await settingsInit(page);
   // A deterministic offline practice game, seeded from the URL — the same door finish-fit uses.
   await page.goto(`${origin}/?seed=219682080`);
-  await page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 60_000 });
+  await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 60_000 });
   await waitVisible(page, '#game', 30_000);
   const ended = await toGameOver(page);
   check('a real practice match reaches its finish card', ended === 'ended', ended);
@@ -180,8 +180,19 @@ try {
       return !root?.querySelector('#hand, #dock, #hud, .cockpit, .card, #deck, #discard');
     })) === true,
   );
-  const boardBox = await page.locator('#replay .rp-board > svg').boundingBox();
-  check('the board dominates the replay screen', !!boardBox && boardBox.height >= 844 * 0.5, `${Math.round(boardBox?.height ?? 0)}px of 844`);
+  // The board itself (its hexes), not the SVG's box: the box also carries headroom for the homes,
+  // and since 2026-10-30 it is sized to the hexes. On a phone the board is as WIDE as the screen
+  // allows; the height test is for screens where the board is height-limited.
+  const hexes = (await page.evaluate(() => {
+    const r = [...document.querySelectorAll('#replay .rp-board svg .hex-cell')].map((c) => c.getBoundingClientRect());
+    if (!r.length) return null;
+    return { w: Math.max(...r.map((x) => x.right)) - Math.min(...r.map((x) => x.left)), h: Math.max(...r.map((x) => x.bottom)) - Math.min(...r.map((x) => x.top)) };
+  })) as { w: number; h: number } | null;
+  check(
+    'the board dominates the replay screen',
+    !!hexes && (hexes.w >= 390 * 0.85 || hexes.h >= 844 * 0.5),
+    `${Math.round(hexes?.w ?? 0)}×${Math.round(hexes?.h ?? 0)}px on 390×844`,
+  );
   await page.waitForTimeout(1400);
   await page.screenshot({ path: `${SHOTS}/replay-practice-mid-390x844.png` });
 

@@ -80,3 +80,23 @@ describe('the replay poster', () => {
     expect(posterFileName(posterFor(other))).toMatch(/^futasaku-[a-z0-9-]+-9-0\.png$/);
   });
 });
+
+describe('the poster is evenly spaced (owner, 2026-10-30)', () => {
+  it('the gaps above the names, between the score and the board, and under FUTASAKU.COM are equal', async () => {
+    const { boardTop, boardBottom } = await import('../src/replay/board-canvas.js');
+    const L = posterLayout(posterFor(buildReplay(input())));
+    // measured to the ink: a capital is ~0.72 of its size, centred in its box
+    const top = L.names[0].y + L.names[0].h / 2 - 0.36 * L.names[0].size;
+    const scoreFoot = L.score.you.y + L.score.you.h / 2 + 0.36 * L.score.you.size;
+    const between = boardTop(L.board) - scoreFoot;
+    const under = L.height - (L.mark.y + L.mark.h / 2 + 0.36 * L.mark.size);
+    expect(Math.abs(top - between)).toBeLessThanOrEqual(2);
+    expect(Math.abs(top - under)).toBeLessThanOrEqual(4);
+    // the sign-off sits a fixed gap under the lowest hex, on the poster's centre line
+    expect(L.mark.y - boardBottom(L.board)).toBeCloseTo(44, 0);
+    expect(L.mark.x + L.mark.w / 2).toBe(L.width / 2);
+    // the result line sits inside the gap between the score and the board
+    expect(L.turn.y).toBeGreaterThan(scoreFoot);
+    expect(L.turn.y + L.turn.h).toBeLessThan(boardTop(L.board));
+  });
+});

@@ -318,8 +318,10 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   const captionLine = document.createElement('span');
   captionLine.className = 'rp-caption-line';
   caption.append(captionEyebrow, captionLine);
-  boardBox.append(again, caption, brand);
-  stage.append(head, turn, boardBox, bar, videoRow, foot);
+  // The result line lives in the gap above the board (placed by `layoutStage`), so its arrival at
+  // the end never pushes the board down.
+  boardBox.append(turn, again, caption, brand);
+  stage.append(head, boardBox, bar, videoRow, foot);
   root.append(stage);
   document.body.append(root);
 
@@ -1119,37 +1121,76 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     }, reduce() ? 0 : 180);
   };
 
-  // THE SIGNATURE'S PLACE: the board's own drawn extent, read from the SVG, so the lockup sits a
-  // fixed gap under the lowest hex and on the board's own centre line — on every board shape, and
-  // however the box letterboxes it. Re-read only when the box changes size (never per frame).
-  const BRAND_GAP = 14;
-  const placeBrand = (): void => {
-    if (root.hidden) return;
-    let bb: DOMRect;
-    try {
-      bb = svg.getBBox();
-    } catch {
-      return;
-    }
+  // THE LAYOUT (owner, 2026-10-30: "the score should be lower, futasaku.com centred, equal spacing
+  // between stuff"). The board's SVG carries headroom for the homes, so its box is not the board:
+  // the real hex edges are measured once per match (in the SVG's own units) and the screen is laid
+  // out from them. The board is fitted as large as the box allows, and the free height is shared in
+  // THREE equal parts: above the score, between the score and the board, and between the signature
+  // and the scrub bar. FUTASAKU.COM sits a fixed gap under the lowest hex, on the board's centre.
+  // Re-run only when the box changes size (never per frame).
+  const BRAND_GAP = 16;
+  // Every gap is at least this tall: the result line sits in the one above the board.
+  const MIN_SPACE = 30;
+  let hexUnits: { x: number; y: number; w: number; h: number } | null = null;
+  let headSpace = 0;
+  const measureHexes = (): boolean => {
+    const cells = svg.querySelectorAll('.hex-cell');
     const m = svg.getScreenCTM();
-    if (!m || bb.width <= 0 || bb.height <= 0) return;
-    const box = boardBox.getBoundingClientRect();
-    const bottom = (bb.y + bb.height) * m.d + m.f - box.top;
-    const centre = (bb.x + bb.width / 2) * m.a + m.e - box.left;
-    const room = box.height - brand.offsetHeight;
-    const top = Math.round(Math.max(0, Math.min(bottom + BRAND_GAP, room)));
-    brand.style.top = `${top}px`;
-    brand.style.left = `${Math.round(centre)}px`;
-    brand.dataset.placed = '1';
-    // "Replay again" shares the board's centre line: under the signature when there is room (a
-    // phone), otherwise just above it, over the board's foot (a wide screen) — never on top of it.
-    const AGAIN_H = 44;
-    const below = top + brand.offsetHeight + 10;
-    again.style.left = `${Math.round(centre)}px`;
-    again.style.bottom = 'auto';
-    again.style.top = `${below + AGAIN_H <= box.height ? below : Math.max(0, top - 10 - AGAIN_H)}px`;
+    if (!cells.length || !m || !m.a || !m.d) return false;
+    let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+    cells.forEach((cell) => {
+      const c = cell.getBoundingClientRect();
+      if (!c.width || !c.height) return;
+      l = Math.min(l, c.left); t = Math.min(t, c.top); r = Math.max(r, c.right); b = Math.max(b, c.bottom);
+    });
+    if (!(r > l && b > t)) return false;
+    hexUnits = { x: (l - m.e) / m.a, y: (t - m.f) / m.d, w: (r - l) / m.a, h: (b - t) / m.d };
+    return true;
   };
-  const brandWatch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => placeBrand());
+  const layoutStage = (): void => {
+    if (root.hidden) return;
+    const vb = svg.viewBox?.baseVal;
+    if (!vb || !vb.width || !vb.height) return;
+    if (!hexUnits && !measureHexes()) return;
+    const U = hexUnits!;
+    const box = boardBox.getBoundingClientRect();
+    // The height the box would have with no space above the score (the score's margin comes out of it).
+    const avail = box.height + headSpace;
+    const brandH = brand.offsetHeight;
+    const scale = Math.max(0.01, Math.min(box.width / U.w, (avail - BRAND_GAP - brandH - 3 * MIN_SPACE) / U.h));
+    const boardW = U.w * scale;
+    const boardH = U.h * scale;
+    const space = Math.max(MIN_SPACE, Math.floor((avail - boardH - BRAND_GAP - brandH) / 3));
+    if (space !== headSpace) {
+      headSpace = space;
+      head.style.marginTop = `${space}px`;
+    }
+    // The SVG keeps its own view box; it is sized and moved so that its hexes land exactly here.
+    svg.style.position = 'absolute';
+    svg.style.maxWidth = 'none';
+    svg.style.maxHeight = 'none';
+    svg.style.width = `${vb.width * scale}px`;
+    svg.style.height = `${vb.height * scale}px`;
+    svg.style.left = `${(box.width - boardW) / 2 - (U.x - vb.x) * scale}px`;
+    svg.style.top = `${space - (U.y - vb.y) * scale}px`;
+    boardBox.style.setProperty('--rp-turn-top', `${Math.round(space / 2 - 10)}px`);
+    const top = Math.round(space + boardH + BRAND_GAP);
+    brand.style.top = `${top}px`;
+    brand.style.left = `${Math.round(box.width / 2)}px`;
+    brand.dataset.placed = '1';
+    // "Replay again" shares the centre line: under the signature when there is room (a phone),
+    // otherwise just above it, over the board's foot (a wide screen) — never on top of it.
+    const AGAIN_H = 44;
+    const below = top + brandH + 12;
+    again.style.left = `${Math.round(box.width / 2)}px`;
+    again.style.bottom = 'auto';
+    again.style.top = `${below + AGAIN_H <= box.height + headSpace - space ? below : Math.max(0, top - 12 - AGAIN_H)}px`;
+  };
+  const placeBrand = (): void => {
+    hexUnits = null;
+    layoutStage();
+  };
+  const brandWatch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => layoutStage());
   brandWatch?.observe(boardBox);
 
   const close = (): void => {

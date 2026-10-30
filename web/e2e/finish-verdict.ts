@@ -7,7 +7,7 @@
 // One whole match is played to its finish (the human seat driven with real legal moves, the
 // computer playing itself), then the SAME finish card is measured at the three sizes the brief
 // names: 320x568, 390x844 and 1280x800. At every size it asserts:
-//   · the inquest line is on the card, in the game's own words, and cites a turn inside the match;
+//   · the one-line match summary is GONE from the card (owner, 2026-10-30);
 //   · the harvest stamp is on the card, and the two masses in its one-sentence alternative are the
 //     REAL tile counts of the final board;
 //   · the review face is gone entirely (owner, 2026-10-30), and the Territory key sits with the
@@ -15,7 +15,7 @@
 //   · neither is behind "More" (the detail list is still folded while both are on screen);
 //   · the card does not scroll, the page does not widen, and there is no page error.
 // Finally it takes the match's public record away (the pruned-duel case) and asserts the card drops
-// the inquest LINE but KEEPS the harvest stamp — the final board is still known (owner, 2026-10-30).
+// the event record; the harvest stamp stays — the final board is still known (owner, 2026-10-30).
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
@@ -64,7 +64,7 @@ const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
   const read = () =>
     page.evaluate('(() => { const h = window.__severgrow; return h.state(); })()') as Promise<State | null>;
   const idle = () =>
-    page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, {
+    page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, {
       timeout: 30_000,
     });
   let waiting = 0;
@@ -157,6 +157,7 @@ const MEASURE = `(() => {
     pageWide: document.documentElement.scrollWidth > innerWidth,
     verdict: shown(id('go-verdict')),
     inquest: shown(text) ? (text.textContent || '').trim() : null,
+    hasSummaryNode: !!text,
     harvest: shown(fig),
     reviewIds: ['go-review', 'go-review-face', 'go-review-show', 'go-review-back', 'go-review-kicker'].filter((x) => !!id(x)).length,
     cardReviewing: !!card && card.classList.contains('reviewing'),
@@ -186,6 +187,7 @@ type Measure = {
   pageWide: boolean;
   verdict: boolean;
   inquest: string | null;
+  hasSummaryNode: boolean;
   harvest: boolean;
   reviewIds: number;
   cardReviewing: boolean;
@@ -242,7 +244,7 @@ try {
   });
 
   await page.goto(`${origin}/?seed=${SEED}`);
-  await page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, {
+  await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, {
     timeout: 40_000,
   });
   const ended = await toGameOver(page);
@@ -255,22 +257,9 @@ try {
   console.log(`    harvest: ${base.label ?? '(none)'}`);
 
   // ---------- the two pieces, on real data ----------
-  check('the inquest line is on the card', !!base.inquest);
+  // The owner removed the one-line match summary (2026-10-30): it must not be on the card.
+  check('the one-line match summary is gone from the card', base.inquest === null && !base.hasSummaryNode, base.inquest ?? '');
   check('the harvest stamp is on the card', base.harvest);
-  check(
-    'the line speaks the game\'s own sentence shapes',
-    !!base.inquest &&
-      /^(Turn \d+:|A draw|The deck ran out|The turn limit)/.test(base.inquest) &&
-      !/!/.test(base.inquest),
-    base.inquest ?? '',
-  );
-  // A cited turn can never be later than the last turn played (a "turn" is a round: both players').
-  const cited = base.inquest ? Number(/^Turn (\d+)/.exec(base.inquest)?.[1] ?? '0') : 0;
-  check(
-    'a cited turn is inside the match',
-    !base.inquest?.startsWith('Turn ') || (cited > 0 && cited <= Math.ceil(base.turnNumber / 2)),
-    `turn ${cited} of ${Math.ceil(base.turnNumber / 2)}`,
-  );
   // The stamp's own alternative must name the REAL final masses, and the drawing must be the board.
   const labelCounts = /Your network, (\d+) tiles?\. Theirs, (\d+)\./.exec(base.label ?? '');
   check('the stamp has a one-sentence alternative naming both masses', !!labelCounts, base.label ?? '');
@@ -299,14 +288,14 @@ try {
     await page.waitForTimeout(700); // the card re-renders on a resize (debounced, 80ms)
     await dismissInstall(page);
     const m = await measure(page);
-    check(`${size.key}: the inquest line still renders`, !!m.inquest, m.inquest ?? '');
+    check(`${size.key}: no one-line summary`, m.inquest === null, m.inquest ?? '');
     check(`${size.key}: the harvest stamp still renders`, m.harvest && m.cells >= 2, `cells ${m.cells}`);
     check(`${size.key}: the card does not scroll`, (m.cardOverflow ?? 1) <= 0, `overflow ${m.cardOverflow}px`);
     check(`${size.key}: the page does not widen`, !m.pageWide);
     check(`${size.key}: the outcome, the score and the reason are still legible`, !!m.title && !!m.score && !!m.reason);
     check(`${size.key}: no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '));
-    await page.screenshot({ path: `${OUT}finish-inquest-${size.key}.png` });
-    console.log(`    shot: docs/screens/finish/finish-inquest-${size.key}.png (card at y=${m.cardY})`);
+    await page.screenshot({ path: `${OUT}finish-verdict-${size.key}.png` });
+    console.log(`    shot: docs/screens/finish/finish-verdict-${size.key}.png (card at y=${m.cardY})`);
   }
 
   // ---------- the pruned duel: the record is gone, so the LINE may show nothing ----------
@@ -331,15 +320,14 @@ try {
   await page.waitForTimeout(600);
   const pruned = await measure(page);
   console.log(`    pruned: history ${pruned.historyLength} events, verdict ${pruned.verdict}, line ${pruned.inquest ?? '(none)'}`);
-  check('a pruned record: the inquest line is gone', pruned.inquest === null, String(pruned.inquest));
   check('a pruned record: the stamp is STILL there (the final board is known)', pruned.harvest && pruned.cells >= 2, `cells ${pruned.cells}`);
   check('a pruned record: the row stays because the stamp does', pruned.verdict);
   check('a pruned record: the result itself still shows', !!pruned.title && !!pruned.reason, pruned.title);
   check('a pruned record: no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.waitForTimeout(500);
-  await page.screenshot({ path: `${OUT}finish-inquest-pruned-1280x800.png` });
-  console.log('    shot: docs/screens/finish/finish-inquest-pruned-1280x800.png');
+  await page.screenshot({ path: `${OUT}finish-verdict-pruned-1280x800.png` });
+  console.log('    shot: docs/screens/finish/finish-verdict-pruned-1280x800.png');
 
   // ---------- the Territory key, through the product's own route ----------
   // This practice card has no payout line (a plain ?seed game asks for no reward), so the key is

@@ -428,45 +428,6 @@ export const RESULT = Object.freeze({
 });
 
 /**
- * THE INQUEST (surprise brief, 2026-10-29): ONE line on the finish card that says how the match was
- * actually decided — the turn and the event, never a statistic and never a repeat of the reason
- * line above it. Every sentence is written from the reading seat, "you" the player looking at the
- * card and "they" the other seat. Short sentences, no exclamation marks.
- *
- * A `turn` here is a ROUND: the number both players share, the same unit Match Intel shows.
- */
-export const INQUEST = Object.freeze({
-  /** A home was closed: "Turn 14: your 4-tile Bloom took the last side of their home." */
-  closed: (turn: number, mover: 'your' | 'their', move: string, home: 'your' | 'their') =>
-    `Turn ${turn}: ${mover} ${move} took the last side of ${home} home.`,
-  /** Both homes sealed in one turn. */
-  double: (turn: number) => `A draw. Both homes were sealed on turn ${turn}.`,
-  /** A home was closed by a turn whose move cannot be named (an old or trimmed log). */
-  sealed: (turn: number, home: 'your' | 'their') => `Turn ${turn}: ${home} home was sealed.`,
-  /** The biggest cut, and the victim never grew another tile. */
-  cutLasting: (turn: number, mover: 'you' | 'they', n: number, victim: 'you' | 'they') =>
-    `Turn ${turn}: ${mover} cut ${n} of ${victim === 'you' ? 'your' : 'their'} ${n === 1 ? 'link' : 'links'}, and ${victim} never grew again.`,
-  /** The biggest cut, and the score settled it after all. */
-  cutScore: (turn: number, mover: 'you' | 'they', n: number, victim: 'you' | 'they', scores: [number, number]) =>
-    `Turn ${turn}: ${mover} cut ${n} of ${victim === 'you' ? 'your' : 'their'} ${n === 1 ? 'link' : 'links'}. The score finished ${scores[0]} to ${scores[1]}.`,
-  /** The deck ran out with both networks whole. */
-  deckEnd: (turn: number, scores: [number, number]) => `The deck ran out on turn ${turn}: ${scores[0]} to ${scores[1]}.`,
-  /** The turn limit was reached. */
-  turnLimit: (turn: number, scores: [number, number]) => `The turn limit came on turn ${turn}: ${scores[0]} to ${scores[1]}.`,
-  /** Nothing separated the two seats. */
-  draw: (turn: number, scores: [number, number]) => `A draw on turn ${turn}: ${scores[0]} each.`,
-  /** The archived Knock rule. */
-  knock: (turn: number, who: 'your' | 'their', scores: [number, number]) =>
-    `Turn ${turn}: ${who} knock was counted at ${scores[0]} to ${scores[1]}.`,
-  /** An online resignation. */
-  resigned: (turn: number, who: 'you' | 'they', scores: [number, number]) =>
-    `Turn ${turn}: ${who} resigned with the score at ${scores[0]} to ${scores[1]}.`,
-  /** An online timeout. */
-  timeout: (turn: number, who: 'your' | 'their', scores: [number, number]) =>
-    `Turn ${turn}: ${who} clock ran out with the score at ${scores[0]} to ${scores[1]}.`,
-});
-
-/**
  * THE DOUBLE HARVEST (surprise brief, 2026-10-29): the one-sentence alternative for the finish
  * card's stamp. It names the two joined masses, how they meet, and whether a home was sealed — the
  * figure's picture in words, so the stamp never carries meaning by colour alone.

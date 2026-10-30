@@ -9,7 +9,7 @@ import { runRematch } from './online/rematch.js';
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { allNeighbors, apply, bloomGroups, coordKey, eventsFor, hexDistance, homeCoord, isStrangled, legalActions, newGame, newMatch, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
+import { allNeighbors, apply, bloomGroups, coordKey, hexDistance, homeCoord, isStrangled, legalActions, newGame, newMatch, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, Tile, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
@@ -29,8 +29,6 @@ import { createTheirsDim, replayedByOpponent } from './player/replay-display.js'
 import { outcomeCue } from './player/outcome-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
 import { gameHighlights } from './logic/highlights.js';
-import { inquest } from './logic/inquest.js';
-import type { Inquest } from './logic/inquest.js';
 import { harvestFigure, harvestSvg } from './logic/harvest.js';
 import type { HarvestFigure } from './logic/harvest.js';
 import { EMPTY_SEL, futa04OneTap, growControls, heldMoveWord, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
@@ -7968,22 +7966,15 @@ function checkResultHold(): void {
 }
 
 /**
- * THE FINISH CARD'S VERDICT (surprise, 2026-10-29): one line naming the turn the match was actually
- * decided on, and one stamp of the final position. Both come from the match's own record; when that
- * record is not available (a pruned duel, a refused history) NEITHER is drawn — the card says
- * nothing rather than guessing, and leaves no placeholder behind.
- *
- * Both are painted into the card that already exists: no panel, tab, badge or ornament, and nothing
- * behind "More". The pair is static: the SVG is one string, and the only motion is the card's own
- * entering fade (see the `.go-verdict` rule in style.css).
+ * THE FINISH CARD'S STAMP (surprise, 2026-10-29): one small figure of the final position, painted
+ * into the card that already exists — no panel, tab, badge or ornament, nothing behind "More". It is
+ * static: the SVG is one string, and the only motion is the card's own entering fade (the
+ * `.go-verdict` rule in style.css). The one-line summary beside it was removed (owner, 2026-10-30).
  */
-function paintVerdict(line: Inquest | null, figure: HarvestFigure | null): void {
+function paintVerdict(figure: HarvestFigure | null): void {
   const box = document.getElementById('go-verdict');
-  const text = document.getElementById('go-inquest');
   const fig = document.getElementById('go-harvest');
-  if (!box || !text || !fig) return;
-  text.textContent = line?.text ?? '';
-  text.hidden = !line;
+  if (!box || !fig) return;
   if (figure) {
     fig.innerHTML = harvestSvg(figure);
     fig.hidden = false;
@@ -7991,21 +7982,12 @@ function paintVerdict(line: Inquest | null, figure: HarvestFigure | null): void 
     fig.replaceChildren();
     fig.hidden = true;
   }
-  box.hidden = !line && !figure;
+  box.hidden = !figure;
 }
 
-/** The verdict for a FINISHED offline match: the line from the public events, the stamp from the board. */
-function offlineVerdict(st: State): { line: Inquest | null; figure: HarvestFigure | null } {
-  // `eventsFor` is the public projection: the opponent's deck draws carry no card, so nothing here
-  // can read a hand or a deck order even if the local state happens to hold it. The STAMP does not
-  // go through it (owner, 2026-10-30): a finished match's final board is known even when the event
-  // record is not, so the little map always shows. The LINE is still the record's alone.
-  if (!st.result) return { line: null, figure: null };
-  const events = eventsFor(st, HUMAN);
-  return {
-    line: events.length ? inquest(events, st.result, HUMAN) : null,
-    figure: harvestFigure(st.board, st.config, HUMAN, st.terrain),
-  };
+/** The stamp for a FINISHED offline match: its final board (known even when the event record is not). */
+function offlineVerdict(st: State): HarvestFigure | null {
+  return st.result ? harvestFigure(st.board, st.config, HUMAN, st.terrain) : null;
 }
 
 function renderGameOver() {
@@ -8080,11 +8062,10 @@ function renderGameOver() {
     $('go-sub').textContent = info.sub;
     $('go-reason').textContent = info.reason;
     $('go-score').innerHTML = `<span class="you">${info.scores[0]}</span><span class="dash">–</span><span class="bot">${info.scores[1]}</span>`;
-    // THE INQUEST AND THE DOUBLE HARVEST: the duel's own record, and the final board. A pruned or
-    // refused history can withhold the LINE, but never the STAMP (owner, 2026-10-30): the position
-    // on screen is the match's own final board.
+    // THE DOUBLE HARVEST: the duel's final board. A pruned or refused history never withholds it
+    // (owner, 2026-10-30): the position on screen is the match's own final board.
     const harvest = info.harvest ?? harvestFigure(os.state.board, os.state.config, HUMAN, os.state.terrain);
-    paintVerdict(info.inquest, harvest);
+    paintVerdict(harvest);
     $('go-break').textContent = info.breakdown;
     $('go-moves').textContent = info.moves ?? '';
     setGoExtra('go-moves', !!info.moves);
@@ -8262,13 +8243,9 @@ function renderGameOver() {
   $('go-share').textContent = RESULT.share;
   $('go-reason').textContent = taught ? '' : resultReason(r, HUMAN);
   if (taught) $('go-sub').hidden = true;
-  // THE INQUEST AND THE DOUBLE HARVEST (surprise, 2026-10-29): the truth of this match, and its
-  // final position stamped as one small figure. Both come from the public record; a match without
-  // one shows neither.
-  {
-    const verdict = offlineVerdict(st);
-    paintVerdict(verdict.line, verdict.figure);
-  }
+  // THE DOUBLE HARVEST (surprise, 2026-10-29): this match's final position, stamped as one small
+  // figure. (The one-line summary that sat beside it was removed, owner 2026-10-30.)
+  paintVerdict(offlineVerdict(st));
   // UX pass: what I did with the one-card move
   const moves = moveSummary(st.history ?? [], HUMAN);
   $('go-moves').textContent = moves ?? '';

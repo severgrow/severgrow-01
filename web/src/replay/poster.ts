@@ -13,6 +13,7 @@ import { fit } from '../logic/share.js';
 import type { TextBox } from '../logic/share.js';
 import {
   boardBottom,
+  boardTop,
   loadBoardArtUrls,
   layoutBoard,
   paintBoard,
@@ -28,12 +29,10 @@ export const POSTER_H = 1350;
 const M = 72;
 const BOARD_TOP = 392;
 const BOARD_H = 700;
-const MARK_TOP = 1204;
 /** The gap from the board's lowest hex to the sign-off. */
 const MARK_GAP = 44;
 
-/** The one extra line a video frame carries (the poster's own whitespace above the board). */
-export const TURN_TOP = 344;
+/** The one extra line a video frame carries (centred in the gap between the score and the board). */
 export const TURN_H = 28;
 
 /** The board's own pictures, handed over by the module the on-screen board already loaded. */
@@ -59,6 +58,8 @@ export type PosterData = {
 export type PosterCell = BoardCell;
 
 export type PosterLayout = {
+  /** The result line's box (the video's end hold), centred in the gap under the score. */
+  turn: TextBox;
   width: number;
   height: number;
   names: readonly [TextBox, TextBox];
@@ -87,9 +88,25 @@ export const posterFor = (model: ReplayModel): PosterData => {
 /** A pure, testable description of the poster's text and hexes. */
 export const posterLayout = (d: PosterData): PosterLayout => {
   const inner = POSTER_W - 2 * M;
+  // EQUAL SPACING (owner, 2026-10-30): the board is fitted first, then the free height is shared in
+  // three equal parts — above the names, between the score and the board, and under the sign-off —
+  // measured to the INK (a capital is ~0.72 of its size, centred in its box), not to the text boxes,
+  // so the gaps the eye sees are the equal ones. FUTASAKU.COM sits a fixed gap under the lowest hex.
+  const fitted = layoutBoard(d, { w: inner, h: BOARD_H, cx: Math.round(POSTER_W / 2), cy: Math.round(BOARD_TOP + BOARD_H / 2) });
+  const hexTop = fitted.cells.length ? boardTop(fitted) : BOARD_TOP;
+  const hexBottom = fitted.cells.length ? boardBottom(fitted) : BOARD_TOP + BOARD_H;
+  const CAP = 0.36; // half a capital's height, as a share of the font size
+  const inkTop = 86 + 22 - 36 * CAP; // the names' ink top, at the original placement
+  const inkFoot = 154 + 90 + 148 * CAP; // the score's ink foot, at the original placement
+  const MARK_H = 40;
+  const markInk = MARK_H / 2 + 30 * CAP; // the sign-off's ink foot, below its box top
+  const gap = Math.max(48, Math.floor((POSTER_H - (inkFoot - inkTop) - (hexBottom - hexTop) - MARK_GAP - markInk) / 3));
+  const lift = gap - inkTop; // moves the names and the score
+  const shift = inkFoot + lift + gap - hexTop; // moves the board
+  const board = { ...fitted, cells: fitted.cells.map((c) => ({ ...c, y: c.y + shift })) };
   const name = (text: string, align: 'left' | 'right'): TextBox => ({
     x: M,
-    y: 86,
+    y: 86 + lift,
     w: inner,
     h: 44,
     text: fit(text.toUpperCase(), 22),
@@ -99,21 +116,19 @@ export const posterLayout = (d: PosterData): PosterLayout => {
   });
   const third = inner / 3;
   const score = {
-    you: { x: M, y: 154, w: third, h: 180, text: String(d.score[0]), size: 148, weight: 800 as const, align: 'center' as const },
-    dash: { x: M + third, y: 154, w: third, h: 180, text: '–', size: 88, weight: 400 as const, align: 'center' as const },
-    opp: { x: M + 2 * third, y: 154, w: third, h: 180, text: String(d.score[1]), size: 148, weight: 800 as const, align: 'center' as const },
+    you: { x: M, y: 154 + lift, w: third, h: 180, text: String(d.score[0]), size: 148, weight: 800 as const, align: 'center' as const },
+    dash: { x: M + third, y: 154 + lift, w: third, h: 180, text: '–', size: 88, weight: 400 as const, align: 'center' as const },
+    opp: { x: M + 2 * third, y: 154 + lift, w: third, h: 180, text: String(d.score[1]), size: 148, weight: 800 as const, align: 'center' as const },
   };
-  const board = layoutBoard(d, { w: inner, h: BOARD_H, cx: Math.round(POSTER_W / 2), cy: Math.round(BOARD_TOP + BOARD_H / 2) });
-  // FUTASAKU.COM directly under the board, on its centre line (owner, 2026-10-30), never lower
-  // than the old fixed sign-off line.
-  const under = board.cells.length ? Math.round(boardBottom(board) + MARK_GAP) : MARK_TOP;
-  const mark: TextBox = { x: M, y: Math.min(under, MARK_TOP), w: inner, h: 40, text: d.mark, size: 30, weight: 800, align: 'center' };
+  const mark: TextBox = { x: M, y: Math.round(hexBottom + shift + MARK_GAP), w: inner, h: MARK_H, text: d.mark, size: 30, weight: 800, align: 'center' };
+  const turn: TextBox = { x: M, y: Math.round(inkFoot + lift + (gap - TURN_H) / 2), w: inner, h: TURN_H, text: '', size: 22, weight: 600, align: 'center' };
   return {
     width: POSTER_W,
     height: POSTER_H,
     names: [name(d.names[0], 'left'), name(d.names[1], 'right')],
     score,
     mark,
+    turn,
     board,
   };
 };
@@ -192,7 +207,7 @@ export const drawReplayPoster = (
   // once the board has stopped. The still poster passes no turn and keeps this whitespace empty.
   if (turn) {
     text(
-      { x: M, y: TURN_TOP, w: L.width - 2 * M, h: TURN_H, text: turn.text, size: 22, weight: 600, align: 'center' },
+      { ...L.turn, text: turn.text },
       turn.seat === null ? col.ink : turn.seat === 0 ? col.you : col.opp,
       4,
     );

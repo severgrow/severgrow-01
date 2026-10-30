@@ -124,6 +124,11 @@ export const REPLAY_CSS = `
   100% { transform: scale(1.12); }
 }
 #replay[data-ended='1'] .rp-turn {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--rp-turn-top, 8px);
+  z-index: 2;
   letter-spacing: .22em;
   animation: rp-turn-in 360ms 120ms cubic-bezier(.22, .72, .24, 1) both;
 }
@@ -169,9 +174,6 @@ export const REPLAY_CSS = `
   align-items: center;
   justify-content: center;
   margin: 2px 0 4px;
-  /* room for the signature under the board, so the board never sits on top of it */
-  padding-bottom: var(--rp-brand-room, 44px);
-  box-sizing: border-box;
 }
 /* ONLY the board's own outer SVG ("> svg"). The board nests small <svg> windows inside it — each
    strength stone and each bonus hex's gold frame is a cropped window onto a sprite atlas, sized by

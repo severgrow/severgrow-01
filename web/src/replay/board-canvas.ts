@@ -214,6 +214,18 @@ const hexAt = (g: CanvasRenderingContext2D, x: number, y: number, r: number) => 
   g.closePath();
 };
 
+/** The highest drawn point of the board (its highest hex corner), in canvas pixels. */
+export const boardTop = (L: BoardLayout): number => {
+  let high = Infinity;
+  for (const cell of L.cells) {
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 180) * (60 * i - 30);
+      high = Math.min(high, cell.y + toScreen(L.hex * Math.cos(a), L.hex * Math.sin(a)).y);
+    }
+  }
+  return high;
+};
+
 /** The lowest drawn point of the board (its lowest hex corner), in canvas pixels. */
 export const boardBottom = (L: BoardLayout): number => {
   let low = -Infinity;
