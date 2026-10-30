@@ -101,8 +101,8 @@ type TransitionEventRec = { kind: 'run' | 'start' | 'end'; prop: string; key: st
 type Sample = { why: number; at: number; keys: { o: number; tr: string }[] };
 type Rec = { click: number; handlerEnd: number; runs: TransitionEventRec[]; samples: Sample[]; gaps: number[]; longTaskMs: number };
 
-const launch = async (options: { reducedMotion?: 'reduce' | 'no-preference' } = {}) => {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3, ...options });
+const launch = async (options: { reducedMotion?: 'reduce' | 'no-preference'; viewport?: { width: number; height: number } } = {}) => {
+  const context = await browser.newContext({ viewport: options.viewport ?? { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3, ...options });
   const page = await context.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -115,7 +115,10 @@ const launch = async (options: { reducedMotion?: 'reduce' | 'no-preference' } = 
   await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 30_000 });
   await page.click('#menu-world');
   await page.waitForSelector('.world-hex.available', { timeout: 20_000 });
-  await page.waitForTimeout(900);
+  // Let the screen's first refresh land before anything is timed: the map's opening poll and its
+  // JSON parse are a ~100ms main-thread task at 4x CPU throttle, and a tap inside it cannot animate
+  // at all. This measures the row's own motion, not an unrelated refresh.
+  await page.waitForTimeout(2400);
   return { context, page, errors };
 };
 
@@ -203,17 +206,97 @@ const audit = (page: Page) => page.evaluate(`(() => {
   };
 })()`) as Promise<Audit>;
 
-/** The wave's gap, read from the product: the transform delay of the key one step out from MENU. */
+/** The wave's gap, read from the product: the SMALLEST non-zero transform delay in the row.
+ *  (The old helper read key i=1 and used that as the unit — but on the way IN key i=1 waits
+ *  (count-1-1) waves, so the unit was multiplied by four and the mirrored check was arithmetically
+ *  impossible to satisfy. The smallest positive delay is the wave itself, in either direction.) */
 const staggerOf = (measured: Audit): number => {
-  const step = measured.keys.find((k) => k.i === 1);
-  const at = step ? step.props.indexOf('transform') : -1;
-  return step && at >= 0 ? step.delays[at]! : NaN;
+  const at = measured.keys[0]?.props.indexOf('transform') ?? -1;
+  const delays = measured.keys.map((k) => k.delays[at] ?? 0).filter((d) => d > 0);
+  return delays.length ? Math.min(...delays) : NaN;
 };
 
 const pressOk = (measured: Audit): boolean => measured.keys.every((k) => {
   const at = (prop: string) => k.props.indexOf(prop);
   return ['scale', 'translate'].every((prop) => k.delays[at(prop)] === 0 && Math.round(k.durations[at(prop)]!) === 90);
 });
+
+type RollFrame = { at: number; dt: number; keys: { o: number; tx: number }[] };
+type RollRec = { click: number; frames: RollFrame[]; created: { key: string; at: number }[] };
+
+/**
+ * THE ROLL-OUT, FRAME BY FRAME (owner, 2026-10-30: "the animation of the submenu in territory isnt
+ * smooth"). The existing checks above are timing and computed-style audit; this one samples every
+ * key's real computed transform and opacity once per animation frame, so a whip or a stall shows up
+ * as a number rather than a feeling. Strings, not closures: tsx wraps named arrows in a helper the
+ * page does not have.
+ */
+const perFrameRollout = async (page: Page, viewport: { width: number; height: number }) => {
+  // Deliberately un-throttled: the row is composited, and at 4x CPU throttle this shared machine's
+  // other work (the map's 12 s refresh, a JSON parse) lands on the tap and delays the FIRST frame —
+  // which is a main-thread fact, not the row's motion. The row's own claim is that once it starts it
+  // never stalls; that is measured here, and the throttled picture is reported in the summary.
+  await page.waitForTimeout(150);
+  await page.evaluate(`(() => {
+    const w = window;
+    const row = document.getElementById('online-world-keys');
+    const keys = [...row.querySelectorAll('.world-key')];
+    w.__roll = { click: 0, frames: [], created: [] };
+    const rec = () => w.__roll;
+    document.getElementById('online-world-menu').addEventListener('click', () => {
+      if (!rec().click) rec().click = performance.now();
+    }, { capture: true });
+    row.addEventListener('transitionrun', (e) => {
+      if (e.propertyName !== 'transform' || !rec().click) return;
+      rec().created.push({ key: e.target.id, at: performance.now() - rec().click });
+    }, true);
+    let last = 0;
+    const tick = (t) => {
+      if (rec().click) {
+        const at = t - rec().click;
+        if (at > 420) return;
+        rec().frames.push({ at, dt: last ? t - last : 0, keys: keys.map((k) => {
+          const cs = getComputedStyle(k);
+          return { o: Number(cs.opacity), tx: cs.transform === 'none' ? 0 : new DOMMatrix(cs.transform).m41 };
+        }) });
+      }
+      last = t;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    return true;
+  })()`);
+  const box = (await page.locator('#online-world-menu').boundingBox())!;
+  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(600);
+  const rec = (await page.evaluate(() => (window as any).__roll)) as RollRec;
+  const analyse = (frames: RollFrame[], count: number) => {
+    const peak = Array.from({ length: count }, (_, i) => {
+      let worst = 0;
+      for (let f = 1; f < frames.length; f++) worst = Math.max(worst, Math.abs(frames[f]!.keys[i]!.tx - frames[f - 1]!.keys[i]!.tx));
+      return Math.round(worst * 10) / 10;
+    });
+    // Speed is displacement per millisecond, so a slow frame cannot fake a whip and a fast display
+    // cannot fake a stall. (260px in 150ms with this curve was ~4.5 px/ms; one 52px slot is ~0.9.)
+    const speed = Array.from({ length: count }, (_, i) => {
+      let worst = 0;
+      for (let f = 1; f < frames.length; f++) {
+        const dt = frames[f]!.at - frames[f - 1]!.at;
+        if (dt > 0) worst = Math.max(worst, Math.abs(frames[f]!.keys[i]!.tx - frames[f - 1]!.keys[i]!.tx) / dt);
+      }
+      return Math.round(worst * 100) / 100;
+    });
+    const first = frames[0]!.keys.map((k) => k.tx);
+    const last = frames.at(-1)!.keys.map((k) => k.tx);
+    const dips = frames[0]!.keys.map((_k, i) => frames.filter((f, at) => at > 0 && (f.keys[i]!.o < frames[at - 1]!.keys[i]!.o - 0.002 || Math.abs(f.keys[i]!.tx) > Math.abs(frames[at - 1]!.keys[i]!.tx) + 0.6)).length);
+    const settle = frames[0]!.keys.map((_k, i) => { const f = frames.find((fr) => fr.keys[i]!.o >= 0.999 && Math.abs(fr.keys[i]!.tx) < 0.6); return f ? Math.round(f.at) : null; });
+    const gaps = frames.map((f) => f.dt).filter((d) => d > 0).sort((a, b) => a - b);
+    return { peak, speed, first, last, dips, settle, gapP95: Math.round(gaps[Math.floor(gaps.length * 0.95)] ?? 0), gapWorst: Math.round(gaps.at(-1) ?? 0), frames: frames.length };
+  };
+  const a = analyse(rec.frames, rec.frames[0]?.keys.length ?? 0);
+  console.log(`rollout ${viewport.width}x${viewport.height}`, JSON.stringify({ ...a, created: rec.created.map((c) => Math.round(c.at)) }));
+  return { rec, a, count: rec.frames[0]?.keys.length ?? 0 };
+};
 
 const browser = await chromium.launch(CHROME ? { executablePath: CHROME } : {});
 try {
@@ -371,6 +454,34 @@ try {
 
   check('no page errors on the measured pass', main.errors.length === 0, main.errors.join(' | '));
   await main.context.close();
+
+  // ---- the roll-out, frame by frame, on a phone AND on its side ----------------------------------
+  // MEASURED (2026-10-30): the folded pose used to be translateX(i*52px + 52px), so the key farthest
+  // from MENU covered 260px in the same 150ms as the nearest key's 52px - a measured 82px in ONE
+  // 60Hz frame at five times the nearest key's speed, which is the whip the owner saw. Every key now
+  // covers exactly one row pitch, so all five have the same speed. The bounds below are the claim.
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    const run = await launch({ viewport });
+    const frames = await perFrameRollout(run.page, viewport);
+    const label = `${viewport.width}x${viewport.height}`;
+    const count = frames.count;
+    check(`${label}: every key is sampled across the roll-out`, count >= 3 && frames.rec.frames.length >= 8, `${frames.a.frames} frames of ${count} keys`);
+    check(`${label}: every key’s transition is created within one frame of the tap`, frames.rec.created.length >= count && frames.rec.created.every((c) => c.at <= 34), JSON.stringify(frames.rec.created.map((c) => Math.round(c.at))));
+    check(`${label}: every key covers the SAME one-slot travel (52px -> 0)`, frames.a.first.every((tx) => Math.abs(tx - 52) < 1) && frames.a.last.every((tx) => Math.abs(tx) < 1), `first ${JSON.stringify(frames.a.first.map(Math.round))} last ${JSON.stringify(frames.a.last.map(Math.round))}`);
+    check(`${label}: the peak frame-to-frame travel is trackable (34px or less, two frames’ worth)`, frames.a.peak.every((p) => p <= 34), JSON.stringify(frames.a.peak));
+    check(`${label}: no key ever moves faster than 1.8px/ms (one slot in one arrival, not a whip; the old fan measured ~4.5)`, frames.a.speed.every((s) => s <= 1.8), JSON.stringify(frames.a.speed));
+    check(`${label}: every key moves monotonically (no key ever dips back or stalls backwards)`, frames.a.dips.every((d) => d === 0), JSON.stringify(frames.a.dips));
+    // The end times differ by exactly the intended wave (18ms): frame sampling is 16.7ms, so the
+    // LADDER is checked as a span per step rather than key-against-key.
+    const settlements = frames.a.settle.filter((s): s is number => s !== null);
+    const descending = settlements.every((s, i) => i === 0 || s <= settlements[i - 1]!);
+    const perStep = settlements.length > 1 ? (settlements[0]! - settlements.at(-1)!) / (settlements.length - 1) : 0;
+    check(`${label}: the keys settle in the intended wave (farthest first, ~18ms apart)`, settlements.length === count && descending && perStep >= 10 && perStep <= 26, `${JSON.stringify(settlements)} ~${Math.round(perStep)}ms`);
+    check(`${label}: no stalled frame while the row rolls out (p95 <= 34ms, worst <= 50ms)`, frames.a.gapP95 <= 34 && frames.a.gapWorst <= 50, JSON.stringify({ p95: frames.a.gapP95, worst: frames.a.gapWorst }));
+    await run.page.screenshot({ path: `${SHOTS}/territory-keys-rollout-${label}.png`, scale: 'css' });
+    check(`${label}: no page errors`, run.errors.length === 0, run.errors.join(' | '));
+    await run.context.close();
+  }
 
   // ---- reduce motion: the row simply appears ------------------------------------------------------
   const reduced = await launch({ reducedMotion: 'reduce' });

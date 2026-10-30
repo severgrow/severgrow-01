@@ -70,6 +70,46 @@ const web = await preview({ configFile: 'web/vite.config.ts', preview: { host: '
 const origin = web.resolvedUrls?.local?.[0]?.replace(/\/$/, '') ?? '';
 
 const count = (p: Page, sel: string) => p.evaluate((s) => document.querySelectorAll(s).length, sel);
+
+/** Every animation frame for `ms`: the ring's computed opacity, the frame gaps, and a running clock. */
+const sampleRing = (p: Page, ms: number, selector = '.world-fog-ring.ring-1') => p.evaluate(`(() => new Promise((resolve) => {
+  const out = [];
+  const gaps = [];
+  const t0 = performance.now();
+  let last = t0;
+  function tick(t) {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (el) out.push([t - t0, Number(getComputedStyle(el).opacity), el === window.__ringNode ? 0 : 1]);
+    window.__ringNode = el;
+    gaps.push(t - last);
+    last = t;
+    if (t - t0 < ${ms}) requestAnimationFrame(tick); else resolve({ out, gaps: gaps.slice(1) });
+  }
+  requestAnimationFrame(tick);
+}))()`) as Promise<{ out: [number, number, number][]; gaps: number[] }>;
+
+/**
+ * THE BREATH, AS NUMBERS (owner, 2026-10-30: "should be smooth pulsating like changes ... right now
+ * looks choppy and laggy"). One frame of a 9 s breath changes the shade by ~0.0006. A repaint that
+ * snapped it forward by the hidden-startup gap measured 0.030 in a single frame; a rebuilt loop that
+ * restarted measured 0.16. The bound below (0.002) is three frames' worth, so any snap fails.
+ */
+const analyseBreath = (sample: { out: [number, number, number][]; gaps: number[] }) => {
+  const values = sample.out.map((r) => r[1]);
+  const steps = values.slice(1).map((v, i) => Math.abs(v - values[i]!));
+  const sorted = [...sample.gaps].filter((g) => g > 0).sort((a, b) => a - b);
+  if (!values.length) return { samples: 0, range: -1, maxStep: -1, maxStepAt: 0, gapP95: 0, gapWorst: 0, nodes: 0 };
+  return {
+    samples: values.length,
+    range: Math.round((Math.max(...values) - Math.min(...values)) * 10_000) / 10_000,
+    maxStep: Math.round(Math.max(...steps) * 10_000) / 10_000,
+    maxStepAt: Math.round(sample.out[steps.indexOf(Math.max(...steps)) + 1]?.[0] ?? 0),
+    gapP95: Math.round(sorted[Math.floor(sorted.length * 0.95)] ?? 0),
+    gapWorst: Math.round(sorted.at(-1) ?? 0),
+    nodes: sample.out.filter((r) => r[2] === 1).length,
+  };
+};
+
 const grow = async (p: Page, cellId: string) => {
   await p.focus(`.world-hex[data-cell-id="${cellId}"]`);
   await p.keyboard.press('Enter');
@@ -95,6 +135,23 @@ try {
   await page.click('#menu-world');
   await page.waitForSelector('.world-hex.available', { timeout: 20_000 });
   await page.waitForTimeout(900);
+
+  // THE BREATH IS NOT FILTERED AT RUNTIME. A `filter` on a layer whose child animates opacity makes
+  // the browser re-rasterise the whole Gaussian every frame; measured at 4x CPU throttle that was
+  // 80.3ms of GPU render passes per 1.5s of breathing vs 33.3ms without it, plus two extra raster
+  // queues per frame. The softness is baked into the paint now.
+  const layer = await page.evaluate(() => {
+    const el = document.querySelector<SVGGElement>('.world-fog-layer')!;
+    return { attr: el.getAttribute('filter'), css: getComputedStyle(el).filter, shift: [...document.querySelectorAll<SVGGElement>('.world-fog-shift-was, .world-fog-shift-now')].map((g) => g.getAttribute('filter')) };
+  });
+  check('the fog layer carries no SVG filter', layer.attr === null && layer.css === 'none', JSON.stringify(layer));
+  check('no hand-off half is filtered either', layer.shift.every((f) => f === null), JSON.stringify(layer.shift));
+
+  const idleBreath = analyseBreath(await sampleRing(page, 2400));
+  console.log('idle breath', JSON.stringify(idleBreath));
+  check('the mist is really breathing (its shade moves over 2.4 s)', idleBreath.range >= 0.004, JSON.stringify(idleBreath));
+  check('no frame of the breath jumps (every step <= 0.002, one frame is ~0.0006)', idleBreath.maxStep <= 0.002, JSON.stringify(idleBreath));
+  check('the idle breath holds the frame budget (p95 <= 34ms, worst <= 50ms)', idleBreath.gapP95 <= 34 && idleBreath.gapWorst <= 50, JSON.stringify(idleBreath));
 
   // The framed view on a phone crops the rings away, and the east coast (where this test grows) is
   // off-screen. Zoom out through the map's own wheel path first, so the filmstrip shows the actual
@@ -171,7 +228,16 @@ try {
     observer.observe(document.getElementById('online-world-grid'), { childList: true, subtree: true });
   })()`);
 
+  // THE SNAP ACROSS A REPAINT. This grow rebuilds the whole map, i.e. both fog ring nodes. The
+  // breath must continue, not jump: sampled across the rebuild, every frame's step stays inside the
+  // same 0.002 bound as idle. (The clock-fed form measured 0.030 here; a restart measured 0.16.)
+  const breathAcross = sampleRing(page, 4000);
+  await page.waitForTimeout(120);
   await grow(page, '8,0');
+  const acrossRepaint = analyseBreath(await breathAcross);
+  console.log('breath across a repaint', JSON.stringify(acrossRepaint));
+  check('the repaint really rebuilt the ring nodes (so the continuity check means something)', acrossRepaint.nodes >= 1, `${acrossRepaint.nodes} new node(s)`);
+  check('the breath never snaps across a repaint (every step <= 0.002)', acrossRepaint.maxStep <= 0.002, JSON.stringify(acrossRepaint));
   const first = await page.evaluate(() => (window as any).__fogFrame);
   await page.waitForFunction(() => (window as any).__fogPaused !== undefined, undefined, { timeout: 5000 });
   const during = await page.evaluate(() => (window as any).__fogPaused);
@@ -340,7 +406,41 @@ try {
   check('reduce motion: the land is already at rest in its first frame', quietFrame?.faceOpacity === '1' && quietFrame?.seen, JSON.stringify(quietFrame));
   check('reduce motion: no rise animation runs (the CSS gate holds)', quietFrame?.rising === 'none', String(quietFrame?.rising));
   check('reduce motion: no page errors', quietErrors.length === 0, quietErrors.join(' | '));
+  const quietRing = await quiet.evaluate(() => {
+    const el = document.querySelector<SVGGElement>('.world-fog-ring.ring-1')!;
+    return { anim: getComputedStyle(el).animationName, opacity: getComputedStyle(el).opacity };
+  });
+  const quietBreath = analyseBreath(await sampleRing(quiet, 900));
+  check('reduce motion: the fog is a still layer (no animation, no movement)', quietRing.anim === 'none' && quietBreath.range === 0, JSON.stringify({ ...quietRing, ...quietBreath }));
   await still.close();
+
+  // THE SAME BREATH ON ITS SIDE (owner's other viewport): the ring does not care about the window's
+  // aspect, but the map's own moving-layer budget might. Measured so a landscape regression fails.
+  const side = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const sideways = await side.newPage();
+  const sideErrors: string[] = [];
+  sideways.on('pageerror', (error) => sideErrors.push(String(error)));
+  await sideways.addInitScript((raw: string) => {
+    for (const p of ['', 'main2:', 'futa04:']) localStorage.setItem(`${p}severgrow.duel.identity.v1`, raw);
+  }, identity);
+  await seedSettings(sideways, { sound: false, music: false, coach: false, speed: 'skip', reduceMotion: false, eyeCandy: false });
+  await sideways.goto(origin + '/');
+  await sideways.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 30_000 });
+  await sideways.click('#menu-world');
+  await sideways.waitForSelector('.world-hex.available', { timeout: 20_000 });
+  await sideways.waitForTimeout(900);
+  const sideLayer = await sideways.evaluate(() => {
+    const el = document.querySelector<SVGGElement>('.world-fog-layer')!;
+    return { attr: el.getAttribute('filter'), css: getComputedStyle(el).filter };
+  });
+  check('844x390: the fog layer carries no SVG filter', sideLayer.attr === null && sideLayer.css === 'none', JSON.stringify(sideLayer));
+  const sideBreath = analyseBreath(await sampleRing(sideways, 2400));
+  console.log('844x390 breath', JSON.stringify(sideBreath));
+  check('844x390: the mist is breathing', sideBreath.range >= 0.004, JSON.stringify(sideBreath));
+  check('844x390: no frame of the breath jumps (every step <= 0.002)', sideBreath.maxStep <= 0.002, JSON.stringify(sideBreath));
+  check('844x390: the breath holds the frame budget (p95 <= 34ms, worst <= 50ms)', sideBreath.gapP95 <= 34 && sideBreath.gapWorst <= 50, JSON.stringify(sideBreath));
+  check('844x390: no page errors', sideErrors.length === 0, sideErrors.join(' | '));
+  await side.close();
 } finally {
   await browser.close();
   await web.close();

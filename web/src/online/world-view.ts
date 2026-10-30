@@ -42,7 +42,7 @@ import { lastWorld, rememberWorld } from './world-memory.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { WORLD_CLAIMED_EVENT } from './world-events.js';
 import { TerritoryChat } from './territory-chat.js';
-import { borderSegments, cellXY, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ranking, standing, takeovers } from './world-growth.js';
+import { borderSegments, cellXY, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ranking, ringPhase, standing, takeovers } from './world-growth.js';
 import type { FogRing, FogShift, Takeover } from './world-growth.js';
 import { ONLINE } from '../../../src/strings.js';
 
@@ -394,8 +394,6 @@ export class WorldView {
   private fogCells: Map<string, FogRing> | null = null;
   private mistShift: FogShift | null = null;
   private mistShiftAt = 0;
-  /** When the fog's slow breath started, so a rebuilt map continues it instead of restarting it. */
-  private mistAt: number | null = null;
   /** MENU's row of four keys is out (owner, 2026-10-28). */
   private keysOpen = false;
   /** The one window, and which key's page it shows; null when shut. */
@@ -842,6 +840,24 @@ export class WorldView {
     };
     return [shade(0, 0.42), shade(1, 0.16)];
   }
+  /**
+   * WHERE THE MIST'S BREATH IS RIGHT NOW, from the loop the eye is actually watching. The map is
+   * rebuilt on every paint, so the two ring groups are new nodes each time; giving the new node the
+   * old node's own phase is what makes a repaint a continuation rather than a restart. Read once per
+   * paint (never per frame): `currentTime` is the animation's local clock, `delay` the negative
+   * offset it was born with. A ring that has not started yet is showing its resting value, i.e. the
+   * 0 % frame - phase zero.
+   */
+  private fogPhase(ring: FogRing, period: number): number {
+    const group = this.svg?.querySelector<SVGGElement>(`.world-fog-ring.ring-${ring}`);
+    if (!group || typeof group.getAnimations !== 'function') return 0;
+    const animation = group.getAnimations()[0];
+    if (!animation) return 0;
+    const current = animation.currentTime;
+    if (current === null || current === undefined) return 0;
+    const delay = animation.effect?.getComputedTiming().delay ?? 0;
+    return ringPhase(Number(current), delay, period);
+  }
   private paint() {
     const container = document.getElementById('online-world-grid')!;
     const world = this.world!;
@@ -926,8 +942,14 @@ export class WorldView {
     svg.append(defs);
     // SOFT FOCUS (owner, 2026-10-28: "blur it slightly, so everything looks natural and organic
     // rather than rendered 2d basic stuff"). One Gaussian per depth, in map units, shared by every
-    // living layer: mist, motes, halos, the outline's glow and the grow ripple.
-    for (const [id, sd] of [['world-blur-mist', 0.9], ['world-blur-mote', 0.45], ['world-blur-glow', 1.1]] as const) {
+    // living layer: motes, halos and the outline's glow. The MIST is deliberately NOT in this list
+    // any more (owner, 2026-10-30, "should be smooth pulsating ... right now looks choppy and
+    // laggy"): its two ring groups animate opacity, and a filter on a layer whose child animates
+    // opacity has to re-rasterise the whole Gaussian every frame - measured at 4x CPU throttle as
+    // 80.3 ms of GPU render passes per 1.5 s of breathing against 33.3 ms without it, plus two
+    // extra raster queues per frame. The mist's softness is its own fill and hairline stroke now,
+    // so its breath is a composited opacity and nothing is filtered per frame.
+    for (const [id, sd] of [['world-blur-mote', 0.45], ['world-blur-glow', 1.1]] as const) {
       const filter = document.createElementNS(NS, 'filter');
       filter.id = id;
       for (const [k, v] of [['x', '-60%'], ['y', '-60%'], ['width', '220%'], ['height', '220%'], ['color-interpolation-filters', 'sRGB']]) filter.setAttribute(k!, v!);
@@ -977,7 +999,6 @@ export class WorldView {
     const fogLayer = document.createElementNS(NS, 'g');
     fogLayer.classList.add('world-fog-layer');
     fogLayer.setAttribute('aria-hidden', 'true');
-    fogLayer.setAttribute('filter', 'url(#world-blur-mist)');
     // Two groups, one per ring, so the mist can breathe as TWO animations, not one per hex.
     const fogRing = [1, 2].map((ring) => {
       const g = document.createElementNS(NS, 'g');
@@ -985,13 +1006,11 @@ export class WorldView {
       fogLayer.append(g);
       return g;
     });
-    // THE BREATH CONTINUES. A new node would start both loops at full strength (.42 / .16) on every
-    // repaint — the whole fog flashing brighter whenever anyone grows a tile, which is the other
-    // half of the owner's "sudden changes". The elapsed time is fed back as a negative delay.
-    if (this.mistAt === null) this.mistAt = nowMs;
-    const mistElapsed = nowMs - this.mistAt;
-    fogRing[0]!.style.animationDelay = loopPhase(mistElapsed, 9000);
-    fogRing[1]!.style.animationDelay = loopPhase(mistElapsed, 13000);
+    // THE BREATH CONTINUES, read off the ring that is already on screen. A new node would start both
+    // loops at full strength (.42 / .16) on every repaint — the whole fog flashing brighter whenever
+    // anyone grows a tile. The elapsed time is fed back as a negative delay.
+    fogRing[0]!.style.animationDelay = loopPhase(this.fogPhase(1, 9000), 9000);
+    fogRing[1]!.style.animationDelay = loopPhase(this.fogPhase(2, 13000), 13000);
     const fogPath = (id: string, ring: FogRing): SVGPathElement => {
       const [q, r] = id.split(',').map(Number) as [number, number];
       const at = coords(q, r);
@@ -1007,8 +1026,8 @@ export class WorldView {
       fogRing[ring - 1]!.append(fogPath(id, ring));
     }
     // The overlay: two halves, one clock each. `was` is the mist the eye last saw (fading away),
-    // `now` is the shade the coast has just reached (fading up). Both are blurred exactly like the
-    // ambient fog and both carry `pointer-events: none`.
+    // `now` is the shade the coast has just reached (fading up). Both are painted exactly like the
+    // ambient fog — no filter, so their opacity is composited too — and both ignore pointers.
     let fogShiftLayer: SVGGElement | null = null;
     if (shiftingCells.size) {
       fogShiftLayer = document.createElementNS(NS, 'g');
@@ -1016,10 +1035,8 @@ export class WorldView {
       fogShiftLayer.setAttribute('aria-hidden', 'true');
       const shiftWas = document.createElementNS(NS, 'g');
       shiftWas.classList.add('world-fog-shift-was');
-      shiftWas.setAttribute('filter', 'url(#world-blur-mist)');
       const shiftNow = document.createElementNS(NS, 'g');
       shiftNow.classList.add('world-fog-shift-now');
-      shiftNow.setAttribute('filter', 'url(#world-blur-mist)');
       if (resume > 0) {
         shiftWas.style.animationDelay = `-${resume}ms`;
         shiftNow.style.animationDelay = `-${resume}ms`;

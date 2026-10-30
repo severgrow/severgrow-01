@@ -150,8 +150,30 @@ describe('the roll-out is ONE motion, not two competing transition shorthands', 
   });
 });
 
-describe('ONE delay formula, mirrored, and every key carries an index', () => {
-  it('the row declares exactly one delay, one wave expression, one stagger', () => {
+describe('every key travels the same distance, so they all move at one speed', () => {
+  // MEASURED (2026-10-30, territory-keys' per-frame probe): the old rest pose was
+  // `translateX(calc(var(--key-i) * 52px + 52px))`, so the key farthest from MENU travelled 260px
+  // while the nearest travelled 52px, both in the same 150 ms. The farthest crossed 82px in a
+  // single 60 Hz frame (5x the nearest key's speed) - a whip the eye reads as "not smooth".
+  // The keys still unroll (the wave is the delay), but now every key covers exactly one row pitch.
+  it('the folded pose is ONE row pitch for every key, never a per-index distance', () => {
+    expect(keyBody, '.world-keys .world-key must exist').not.toBeNull();
+    expect(decl(keyBody!, 'transform').replace(/\s+/g, '')).toBe('translateX(52px)scale(.86)');
+    // The distance must not mention the key's index, and no other rule may reintroduce it.
+    expect(decl(keyBody!, 'transform'), 'no per-key travel distance').not.toMatch(/--key-i/);
+    const rowRules = rules(onlineCss).filter((r) => selectorsOf(r.prelude).some((s) => s.includes('.world-keys')));
+    for (const rule of rowRules) expect(rule.body, `${rule.prelude} must keep one travel`).not.toMatch(/--key-i\s*\*\s*52px/);
+  });
+
+  it('the pitch is the row’s own (44px key + 8px gap), so the travel is one slot', () => {
+    expect(onlineCss).toMatch(/\.world-keys \{[^}]*gap: 8px/);
+    expect(onlineCss).toMatch(/\.world-key[^{]*\{[^}]*width: 44px; height: 44px/);
+    // 52px is derived from those two, never a hand-picked number set against a different row.
+    expect(decl(keyBody!, 'transform').replace(/\s+/g, '')).toBe('translateX(52px)scale(.86)');
+  });
+});
+
+describe('ONE delay formula, mirrored, and every key carries an index', () => {  it('the row declares exactly one delay, one wave expression, one stagger', () => {
     const rowRules = rules(onlineCss).filter((r) => selectorsOf(r.prelude).some((s) => s.includes('.world-keys')));
     const delays = rowRules.flatMap((r) => [...r.body.matchAll(/transition-delay\s*:/g)]);
     expect(delays.length, 'the wave is declared once, on the row key').toBe(1);

@@ -201,13 +201,43 @@ export const fogShift = (
  * THE PHASE OF A LOOPING ANIMATION, as a negative `animation-delay`. A rebuilt map is a new node, so
  * its 9 s / 13 s fog breath would otherwise restart at full strength on every repaint — a shade
  * jump over the WHOLE map each time anyone grows a tile, which is the other half of the owner's
- * "sudden changes". Feeding elapsed time back into the delay keeps the breath where the eye left it.
+ * "sudden changes". Feeding the running phase back in keeps the breath where the eye left it.
+ *
+ * Milliseconds, not the old 10 ms step: a repaint must not shift the breath by even one frame's
+ * worth of shade.
  */
 export const loopPhase = (elapsedMs: number, periodMs: number): string => {
   const period = periodMs > 0 ? periodMs : 1;
   const elapsed = Number.isFinite(elapsedMs) ? elapsedMs : 0;
   const at = ((elapsed % period) + period) % period;
-  return `-${(at / 1000).toFixed(2)}s`;
+  return `-${(at / 1000).toFixed(3)}s`;
+};
+
+/**
+ * THE PHASE A RING IS ACTUALLY SHOWING, read from the animation that is already on screen.
+ *
+ * (Owner, 2026-10-30, still choppy after the 2026-10-28 pass: "should be smooth pulsating like
+ * changes ... right now looks choppy and laggy".) The old code fed `Date.now() - firstPaint` back
+ * into the delay. That clock knows nothing about when a CSS animation really starts: on this branch
+ * the map was painted while its screen was still hidden, and the animation only started ~800 ms
+ * later. So the first rebuild after that jumped the breath FORWARD by the whole startup gap — a
+ * measured 0.030 opacity step in a single frame, where one frame of the breath is 0.0006.
+ *
+ * `currentTime` is the animation's own local time (0 at its start) and `delay` is the negative
+ * offset it was born with, so `currentTime - delay` is the phase the eye is watching. A node that
+ * has not started yet (currentTime null) is showing the un-animated resting value, which is the
+ * 0 % frame: phase zero. Nothing here reads a wall clock, so nothing can drift from the eye.
+ */
+export const ringPhase = (
+  currentTimeMs: number | null | undefined,
+  delayMs: number,
+  periodMs: number,
+): number => {
+  const period = periodMs > 0 ? periodMs : 1;
+  // Not started: the element is showing its un-animated resting value, which is the 0 % frame.
+  if (currentTimeMs === null || currentTimeMs === undefined || !Number.isFinite(currentTimeMs)) return 0;
+  const delay = Number.isFinite(delayMs) ? delayMs : 0;
+  return (((currentTimeMs - delay) % period) + period) % period;
 };
 
 export type Standing = { rank: number; tiles: number; players: number; next: { name: string; tiles: number; gap: number } | null };
