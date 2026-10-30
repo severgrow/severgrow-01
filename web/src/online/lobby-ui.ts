@@ -7,6 +7,7 @@ import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
 import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
 import { createLobbyActionGuard } from './lobby-action.js';
+import { pollDue } from './poll-gate.js';
 import {
   countNeedingResponse,
   needsMyResponse,
@@ -190,6 +191,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let matches: MatchListEntry[] = [];
   let waiting: { matchId: string; inviteCode: string } | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  /** A waiting-screen request that is still out; a 2 s tick must not stack another (poll-gate.ts). */
+  let waitingInFlight = false;
   let serverOffset = 0;
   let worldView: WorldView | null = null;
 
@@ -232,6 +235,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   // and keeps running (its own timer) while the player is on the board playing the computer.
   let search: { token: string; matchId: string; startedAt: number } | null = null;
   let searchTimer: ReturnType<typeof setInterval> | null = null;
+  /** A search request that is still out (poll-gate.ts keeps the 2 s tick from stacking one). */
+  let searchInFlight = false;
   let computerGameActive = false;
   let pendingMatched: { token: string; payload: MatchViewPayload } | null = null;
 
@@ -601,6 +606,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         stopHubPoll();
         return;
       }
+      // A hidden tab does not need the list: no request, no repaint (poll-gate.ts's rule).
+      if (document.hidden) return;
       void reloadMatches();
     }, HUB_POLL_MS);
   };
@@ -656,8 +663,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   const pollWaiting = async () => {
     if (!waiting) return;
+    // A hidden tab asks nothing, and a request still out is never stacked on (poll-gate.ts).
+    if (!pollDue({ hidden: document.hidden, inFlight: waitingInFlight })) return;
     const id = identity.peek();
     if (!id) return;
+    waitingInFlight = true;
     try {
       const res = await client.getState(id.token, waiting.matchId);
       serverOffset = res.serverNow - now();
@@ -670,6 +680,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       }
     } catch {
       /* keep waiting; quiet */
+    } finally {
+      waitingInFlight = false;
     }
   };
 
@@ -771,6 +783,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   const pollSearch = async () => {
     if (!search) return;
+    // Same gate as the waiting screen: a hidden tab asks nothing and a stuck request is not stacked.
+    if (!pollDue({ hidden: document.hidden, inFlight: searchInFlight })) return;
+    searchInFlight = true;
     try {
       const res = await client.getState(search.token, search.matchId);
       serverOffset = res.serverNow - now();
@@ -792,6 +807,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       }
     } catch {
       /* quiet: a transient failure must not drop a parked search */
+    } finally {
+      searchInFlight = false;
     }
     renderSearch();
   };
@@ -1187,6 +1204,13 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     return menuPass;
   };
   window.addEventListener('futasaku:menu', () => { void refreshMenu(); });
+  // Coming back to the tab: the polls were silent while it was hidden, so ask once immediately
+  // rather than leaving the waiting screen (or the parked search) one tick stale.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    if (waiting) void pollWaiting();
+    else if (search) void pollSearch();
+  });
   if (menuEl?.hidden === false) void refreshMenu();
   $('online-create').addEventListener('click', () => void createMatch());
   // The "Your matches" disclosure. Opening also asks for the freshest list; the render it causes
