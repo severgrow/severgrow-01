@@ -105,21 +105,28 @@ export const PALETTE_SIZE = TILE_COLOURS.length;
 export const MIN_DELTA_E = 8;
 
 /**
- * ONE COLOUR CHANGE PER 24 HOURS (owner, 2026-10-30: "make sure players can change the color of
- * their tiles - but only once per 24h"). It is a RULE, so it lives beside the palette and the server
- * is its only authority; the client reads the same constant to say how long is left.
+ * COLOUR CHANGES ARE UNLIMITED (owner, 2026-10-30, after first asking for 24h: "remove color change
+ * 1 per 24h - let it be changed anytime for now"). The rule below is therefore switched OFF, not
+ * deleted: `COLOUR_CHANGE_WINDOW_MS = 0` makes `colourCooldownMs` always 0, so the server accepts
+ * every change and the client never shows a "changes again in …" line. Restoring the limit is one
+ * number — set it back to `24 * 60 * 60 * 1000` — which is why the arithmetic stayed.
  */
-export const COLOUR_CHANGE_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const COLOUR_CHANGE_WINDOW_MS = 0;
 
-/** When the next change is allowed, from the last stored `chosen_at` (null = never chosen → now). */
+/** The moment the next change is allowed (last choice + the window), or null when none was stored. */
 export const colourChangeAvailableAt = (chosenAt: number | null): number | null =>
   typeof chosenAt === 'number' && Number.isFinite(chosenAt) ? chosenAt + COLOUR_CHANGE_WINDOW_MS : null;
 
-/** How long is left before another change; 0 when there is no stored choice or the window passed. */
-export const colourCooldownMs = (chosenAt: number | null, now: number): number => {
-  const at = colourChangeAvailableAt(chosenAt);
-  if (at === null) return 0;
-  return Math.max(0, at - now);
+/** How long is left before another change; 0 when there is no stored choice or the window passed.
+ *  `windowMs` is an argument so the arithmetic can be unit-tested against a real 24 h window while
+ *  the shipped window is 0 — see `COLOUR_CHANGE_WINDOW_MS`. */
+export const colourCooldownMs = (
+  chosenAt: number | null,
+  now: number,
+  windowMs: number = COLOUR_CHANGE_WINDOW_MS,
+): number => {
+  if (typeof chosenAt !== 'number' || !Number.isFinite(chosenAt)) return 0;
+  return Math.max(0, chosenAt + windowMs - now);
 };
 
 export const isColourId = (value: unknown): value is number =>

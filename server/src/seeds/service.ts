@@ -116,7 +116,8 @@ export class WorldEconomyService {
       name: colourById(id).name,
       chosen: chosen !== null,
       canChange: remainingMs === 0,
-      changeAvailableAt: colourChangeAvailableAt(chosen?.chosenAt ?? null),
+      // A change available NOW has no "next change" time, whatever the window is.
+      changeAvailableAt: remainingMs === 0 ? null : colourChangeAvailableAt(chosen?.chosenAt ?? null),
       remainingMs,
     };
   }
