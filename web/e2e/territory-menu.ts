@@ -189,12 +189,15 @@ try {
     (await page.textContent('#world-key-achievements .world-deck-count'))?.trim() !== '' && await page.isVisible('#world-key-achievements .world-deck-count'));
   await page.click('#world-key-achievements');
   await page.waitForSelector('#online-world-panel[data-pane="achievements"]:not([hidden])');
-  check('ACHIEVEMENTS lists every goal', (await count(page, '.world-achievement')) === 8);
+  check('ACHIEVEMENTS lists all 35 goals in five sections', (await count(page, '.world-achievement')) === 35 && (await count(page, '.world-achievement-heading')) === 5);
+  check('no intro line and no reward teaser (owner, 2026-10-30)', (await count(page, '#world-achievements-intro, .world-achievement-reward')) === 0 && !(await page.textContent('#online-world-achievements'))?.toLowerCase().includes('seeds for your first'));
   const seedsBefore = Number((await page.textContent('#online-world-wallet'))?.replace(/\D/g, '') ?? 0);
+  check('an earned row is a CLAIM key; an unearned row has no action', (await page.getAttribute('.world-achievement.ready', 'data-state')) === 'ready' && (await count(page, '.world-achievement[data-state="open"] .world-achievement-claim')) === 0);
   await page.click('.world-achievement.ready .world-achievement-claim');
   await page.waitForSelector('.world-achievement.claimed', { timeout: 10_000 });
   const seedsAfter = Number((await page.textContent('#online-world-wallet'))?.replace(/\D/g, '') ?? 0);
   check('CLAIM pays the Seeds into the wallet at once', seedsAfter - seedsBefore === 100, `${seedsBefore} -> ${seedsAfter}`);
+  check('a claimed row is a tick, and the moment plays once', (await count(page, '.world-achievement.claimed .world-achievement-done')) === 1 && (await count(page, '.world-achievement.just-claimed')) <= 1);
   await page.screenshot({ path: `${SHOTS}/territory-achievements-390.png` });
   await page.click('#world-key-ranking');
   await page.waitForSelector('#online-world-panel:not([hidden])');

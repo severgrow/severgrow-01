@@ -326,11 +326,13 @@
                 <div id="world-standing" class="world-standing" hidden></div>
                 <ol id="online-world-ranking" class="world-ranking-list" aria-label="Ranking"></ol>
               </div>
-              <!-- ACHIEVEMENTS (owner, 2026-10-29): one-time Seeds for first steps, paid by the server
-                   (server/src/seeds/achievements.ts). The key stays hidden on a server without them. -->
+              <!-- ACHIEVEMENTS (owner, 2026-10-29; extended 2026-10-30): one-time Seeds paid by the
+                   server (server/src/seeds/achievements.ts). Five sections keep 35 rows readable;
+                   there is deliberately NO intro line and NO reward teaser on this surface (owner,
+                   2026-10-30: "keep it clean lean and elegant"). The key stays hidden on a server
+                   that predates them. -->
               <div class="world-pane" data-pane="achievements">
-                <p id="world-achievements-intro" class="world-pane-empty"></p>
-                <ol id="online-world-achievements" class="world-achievements" aria-label="Achievements"></ol>
+                <div id="online-world-achievements" class="world-achievements" role="list" aria-label="Achievements"></div>
               </div>
               <!-- YOUR COLOUR: the twenty swatches, four to a row, each NAMED for accessibility. -->
               <div class="world-pane" data-pane="colour">

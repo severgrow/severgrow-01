@@ -6,7 +6,17 @@ import { ALTERNATE_OPENINGS, campaignLevelById, campaignOpening } from '../../..
 import { FINAL_LESSON, finalLessonOpening } from '../../../web/src/lessons/final.js';
 
 export type OfflineProof = { actions: readonly Action[]; botVersion: string };
-export type VerifiedOffline = { winner: 0 | 1 | null; actionCount: number; result: State['result'] };
+/**
+ * `human` is measured while replaying, from actions whose ACTOR was seat 0: the shape of the clear
+ * the achievements page may name (migration 0021). It is never supplied by the browser.
+ */
+export type VerifiedOffline = {
+  winner: 0 | 1 | null;
+  actionCount: number;
+  turns: number;
+  human: { throwDraws: number; blooms: number; grows: number };
+  result: State['result'];
+};
 const MAX_ACTIONS = 1600;
 
 /**
@@ -22,6 +32,7 @@ export const verifyOfflineMatch = (
   const bot = botFor(proof.botVersion);
   if (!bot || !Number.isInteger(botLevel) || botLevel < 1 || botLevel > 9) return null;
   let state = opening;
+  const human = { throwDraws: 0, blooms: 0, grows: 0 };
   try {
     for (const action of proof.actions) {
       if (state.phase === 'GAME_OVER') return null;
@@ -29,6 +40,10 @@ export const verifyOfflineMatch = (
         const expected = bot(viewFor(state, 1), botLevel as 1|2|3|4|5|6|7|8|9,
           botSeed(state.seed, botLevel, state.turnNumber, state.history?.length ?? 0));
         if (JSON.stringify(action) !== JSON.stringify(expected)) return null;
+      } else {
+        if (action.t === 'Draw' && action.from === 'discard') human.throwDraws += 1;
+        else if (action.t === 'Bloom') human.blooms += 1;
+        else if (action.t === 'Sprout' || action.t === 'PlayFruit' || action.t === 'MegaBomb') human.grows += 1;
       }
       state = apply(state, action);
     }
@@ -36,7 +51,13 @@ export const verifyOfflineMatch = (
     return null;
   }
   if (state.phase !== 'GAME_OVER' || !state.result) return null;
-  return { winner: state.result.winner, actionCount: proof.actions.length, result: state.result };
+  return {
+    winner: state.result.winner,
+    actionCount: proof.actions.length,
+    turns: state.turnNumber,
+    human,
+    result: state.result,
+  };
 };
 
 export const verifyCampaignProof = (levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION): VerifiedOffline | null => {

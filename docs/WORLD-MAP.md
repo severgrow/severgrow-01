@@ -149,6 +149,56 @@ tapping empty tile should NOT open the menu and still have option to grow/sell/c
   `server/tests/territory-challenge-integrity.test.ts`.
 - **futasaku.com/test** is the staging copy; "promote" puts it live (docs/RELEASE-FLOW.md).
 
+## v3.7: 35 achievements across every mode (owner, 2026-10-30)
+
+- **The set.** The eight Territory achievements above are kept, and 27 more bring the total to **35**
+  (the owner said "around 35"). Five sections, in the order the window draws them:
+  **Territory 10**, **Duels 9**, **Craft 5**, **Company 4**, **Campaign 7**. Each entry below is
+  `id — rule — table it reads`; the first eight are marked *(existing)*.
+  - Territory: `roots` grow your first tile *(existing)*, `neighbours` hold a tile beside another
+    player *(existing)*, `throw-down` send a challenge *(existing)*, `stand-ground` accept one
+    *(existing)*, `holding` hold 3 *(existing)*, `conqueror` win a challenge *(existing)*, `podium`
+    reach the top 3 *(existing)*, `estate` hold 10 *(existing)*, `home-guard` win a challenge you
+    accepted, `ground-taken` win a challenge you sent — all from `world_claims` / `world_challenges`.
+  - Duels: `first-crossing`, `three-crossings`, `ten-crossings` win 1/3/10 online duels;
+    `running-sap` / `long-growth` win 3/5 in a row; `live-wood` win a live duel; `higher-branch`
+    beat a player at a higher campaign level; `unsevered` win without conceding a cut;
+    `caught-knock` win by undercutting a knock — `matches` (+ `seed_reward_receipts` for the level
+    comparison, `match_moves` for cuts). Resignations and timeouts count as wins for volume, but
+    the craft checks below require a game the engine actually finished.
+  - Craft: `bloom-and-nothing` every grow you made was a Bloom; `cut-and-standing` win after a cut
+    took a tile; `ringed-root` win with all six sides of your home held by the other player;
+    `last-light` win when the deck runs out; `quiet-table` finish a duel where nobody drew from the
+    throw pile — `match_moves` and the final board in `matches`.
+  - Company: `open-door` an invite you sent is accepted and played; `company` play a friend;
+    `grove-of-friends` play three different friends; `generous-host` invite a friend who then wins —
+    `matches` + `match_participants` (the creator is seat 0; a friend duel is `openQueue = false`).
+  - Campaign: `first-clearing` / `five-clearings` / `ten-clearings` / `whole-chapter` /
+    `last-lesson` read the ordered receipt keys (`campaign:cN-M`, `lesson:10`) in
+    `seed_reward_receipts`; `clean-hands` a clear with no draw from the throw pile and `quick-work`
+    a clear in twelve turns or fewer read the verified clear shape in **`campaign_clears`**.
+- **The smart ones, and why they are Futasaku.** They reward a way of playing, not a volume:
+  `caught-knock` is the undercut (a comeback that already exists in the result), `unsevered` and
+  `cut-and-standing` are the two sides of the cut, `ringed-root` is the home that survived a siege,
+  `quiet-table` is the table that never reached into the throw pile, `bloom-and-nothing` is a duel
+  built without a single Bomb or Fruit, and `generous-host` is wry about losing well. Every one is
+  measured from a server-owned row; none asks the browser for a number.
+- **No undo / first try.** The owner's two campaign examples are device-local gestures: Undo is a
+  client rewind, and only a WIN submits a campaign proof, so the server cannot honestly see either.
+  Rather than invent them, the two campaign craft achievements use the closest facts the verified
+  action log does contain: no throw-pile draw (`clean-hands`) and a short clear (`quick-work`).
+- **The panel.** Five section headings, each with an earned count (`TERRITORY · 3/10`), keep 35 rows
+  readable; the panel body scrolls vertically and never sideways. Unearned rows have no amount and
+  no reward teaser; earned rows show one `CLAIM` key; claimed rows show a tick. The intro line
+  ("Seeds for your first steps…") is removed per the owner's 2026-10-30 direction, and the claim's
+  amount is spoken only in the notice AFTER the claim. Earned-once is still the receipt; a claimed
+  achievement never re-arms when the tiles or match rows disappear.
+- **Rollout.** New migration **`server/migrations/0021_campaign_clears.sql`** adds the one table (a
+  quiet no-op if it is absent: the two clear-shape achievements read zero, the campaign reward is
+  untouched). The `duel` Edge Function **must be redeployed** (bundle rebuilt in this change) for the
+  new endpoint behaviour and the recording. Until the migration is applied, the rest of the 35 work
+  from data that already exists.
+
 ## Ownership and economy
 
 - The world is one versioned, frozen axial hex map. v2 (2026-10-21) is **274 cells** (21 rows, r −10…10): the 183-cell v1 landmass plus an irregular coastal growth, baked into `server/src/world.ts` by `scripts/gen-world-v2.mjs` (no runtime randomness). Its cell IDs are `q,r`. Expansions only ADD ids; every v1 id is unchanged, so an existing claim can never be orphaned — verified against the nine live claims when the coastline shape shipped (none dropped). Historical 8×8 `world_tiles` owners are copied into the central 64 positions by migration `0011_seeds_world.sql`; the historical table and migration remain intact.

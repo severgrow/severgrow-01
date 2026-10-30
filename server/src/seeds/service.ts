@@ -1,5 +1,5 @@
 import type { Action } from '../../../src/engine/index.js';
-import { CURRENT_RULES_VERSION, matchSetup, stateFromSetup } from '../../../src/engine/index.js';
+import { allNeighbors, coordKey, CURRENT_RULES_VERSION, homeCoord, matchSetup, stateFromSetup } from '../../../src/engine/index.js';
 import { campaignLevelById } from '../../../src/campaign/index.js';
 import { CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
 import { playerTag } from '../../../src/player-tag.js';
@@ -18,7 +18,7 @@ import type {
 } from './types.js';
 import { verifyCampaignProof, verifyLessonProof, verifyTrainingProof } from './verify.js';
 import { achievementById, achievementFacts, achievementSourceKey, achievementViews } from './achievements.js';
-import type { AchievementView } from './achievements.js';
+import type { AchievementHistory, AchievementView, ChallengeView, DuelView } from './achievements.js';
 import { FINAL_LESSON } from '../../../web/src/lessons/final.js';
 import { DailyTurnError, goalMet, playTurn } from '../../../src/daily/core.js';
 import { puzzleNoOn } from '../../../src/daily/calendar.js';
@@ -149,16 +149,130 @@ export class WorldEconomyService {
 
   async acknowledge(player: PlayerRecord): Promise<void> { await this.store.acknowledgeInvitation(player.id); }
 
-  // ---- Territory achievements (server/src/seeds/achievements.ts) -------------------------------
+  // ---- Achievements (server/src/seeds/achievements.ts) ------------------------------------------
 
-  /** The player's achievements: progress from the map and their own challenges, and which are paid. */
+  /**
+   * The player's achievements: progress from the map, their own challenge rows, their finished
+   * duels, and their campaign receipts/clears, plus which are paid. Every number comes from a
+   * server-owned table; the request supplies only the authenticated player.
+   */
   async achievements(player: PlayerRecord): Promise<AchievementView[]> {
-    const [snapshot, challenges, keys] = await Promise.all([
-      this.store.world(),
-      this.store.challengesInvolving(player.id, 0),
+    const [history, keys] = await Promise.all([
+      this.achievementHistory(player),
       this.store.receiptKeys(player.id, 'achievement:'),
     ]);
-    return achievementViews(achievementFacts(player.id, snapshot.claims, challenges), new Set(keys));
+    return achievementViews(achievementFacts(history), new Set(keys));
+  }
+
+  /** Assemble the one history the pure matcher reads. Reads only `FACTS_SOURCES`. */
+  private async achievementHistory(player: PlayerRecord): Promise<AchievementHistory> {
+    const [snapshot, challenges, receipts, clears, rows] = await Promise.all([
+      this.store.world(),
+      this.store.challengesInvolving(player.id, 0),
+      this.store.receiptRows(player.id),
+      this.store.campaignClears(player.id),
+      this.matches.listMatchesForPlayer(player.id),
+    ]);
+
+    let highestLevel: number | null = null;
+    let lessonCleared = false;
+    for (const receipt of receipts) {
+      const match = /^campaign:c\d+-(\d+)$/.exec(receipt.sourceKey);
+      const level = match ? Number(match[1]) : receipt.sourceKey === `lesson:${FINAL_LESSON.level}` ? FINAL_LESSON.level : null;
+      if (level === null) continue;
+      if (receipt.sourceKey === `lesson:${FINAL_LESSON.level}`) lessonCleared = true;
+      if (highestLevel === null || level > highestLevel) highestLevel = level;
+    }
+
+    const duels: DuelView[] = [];
+    for (const row of rows) {
+      const match = row.match;
+      if (match.status !== 'finished' || !match.result) continue;
+      const moves = await this.matches.movesOf(match.id, 0);
+      let myCuts = 0;
+      let myBlooms = 0;
+      let myOtherGrows = 0;
+      let throwDraws = 0;
+      let megaBomb = false;
+      for (const move of moves) {
+        // A cut is recorded against the player who LOST the tiles, whoever moved; so every move's
+        // events are inspected, not only this player's.
+        for (const event of move.events) {
+          if (event.t === 'Sever' && event.player === row.mySeat) myCuts += 1;
+        }
+        if (move.seat !== row.mySeat) {
+          if (move.action.t === 'Draw' && move.action.from === 'discard') throwDraws += 1;
+          continue;
+        }
+        if (move.action.t === 'Draw' && move.action.from === 'discard') throwDraws += 1;
+        if (move.action.t === 'Bloom') myBlooms += 1;
+        else if (move.action.t === 'Sprout' || move.action.t === 'PlayFruit' || move.action.t === 'MegaBomb') myOtherGrows += 1;
+        if (move.action.t === 'MegaBomb') megaBomb = true;
+      }
+      // The root's six sides, from the final authoritative board: every one held by the opponent.
+      const root = homeCoord(row.mySeat, match.config);
+      const home = match.state.board[coordKey(root)];
+      const rootSurrounded = !!home?.root && home.owner === row.mySeat &&
+        allNeighbors(root).every((side) => {
+          const tile = match.state.board[coordKey(side)];
+          return !!tile && tile.owner !== row.mySeat;
+        });
+      duels.push({
+        opponentId: row.opponentId,
+        kind: match.kind ?? 'duel',
+        openQueue: match.openQueue,
+        live: match.liveManaged === true,
+        finishedAt: match.finishedAt ?? match.updatedAt,
+        won: match.result.winner !== null && match.result.winner === row.mySeat,
+        draw: match.result.winner === null,
+        undercut: match.result.undercut === true,
+        reason: match.result.reason,
+        myCuts,
+        myBlooms,
+        myOtherGrows,
+        throwDraws,
+        megaBomb,
+        rootSurrounded,
+        creator: row.mySeat === 0 && !match.openQueue && (match.kind ?? 'duel') === 'duel',
+      });
+    }
+
+    const opponentLevels: Record<string, number | null> = {};
+    await Promise.all([...new Set(duels.map((d) => d.opponentId).filter((id): id is string => id !== null))]
+      .map(async (id) => {
+        opponentLevels[id] = await this.store.campaignHighestLevel(id).catch(() => null);
+      }));
+
+    return {
+      playerId: player.id,
+      claims: snapshot.claims,
+      challenges: challenges as ChallengeView[],
+      duels,
+      campaign: {
+        highestLevel,
+        chaptersCleared: highestLevel === null ? 0 : Math.min(7, Math.floor(highestLevel / 10)),
+        lessonCleared,
+        clears,
+      },
+      opponentLevels,
+    };
+  }
+
+  /**
+   * Record the shape of a verified Campaign clear (migration 0021). Best-effort: an unmigrated
+   * database answers with a quiet no-op, and a failure here never turns a paid win into an error.
+   */
+  private async recordClear(player: PlayerRecord, levelKey: string, levelNumber: number, verified: ReturnType<typeof verifyCampaignProof>): Promise<void> {
+    if (!verified) return;
+    await this.store.recordCampaignClear(player.id, {
+      levelKey,
+      levelNumber,
+      turns: verified.turns,
+      throwDraws: verified.human.throwDraws,
+      blooms: verified.human.blooms,
+      grows: verified.human.grows,
+      finishedAt: this.now(),
+    }).catch(() => undefined);
   }
 
   /**
@@ -216,10 +330,12 @@ export class WorldEconomyService {
     }
     const verified = verifyCampaignProof(levelId, actions, botVersion);
     if (!verified || verified.winner !== 0) throw new ApiError('INVALID_REQUEST', 'That Campaign result could not be verified.');
-    return this.store.settle({
+    const settled = await this.store.settle({
       playerId: player.id, sourceKey: `campaign:${levelId}`, mode: 'campaign', outcome: 'win',
       opponentId: null, now: this.now(), campaignLevel: level.number,
     });
+    await this.recordClear(player, levelId, level.number, verified);
+    return settled;
   }
 
   /**
@@ -234,10 +350,12 @@ export class WorldEconomyService {
     }
     const verified = verifyLessonProof(FINAL_LESSON.id, actions, botVersion);
     if (!verified || verified.winner !== 0) throw new ApiError('INVALID_REQUEST', 'That lesson result could not be verified.');
-    return this.store.settle({
+    const settled = await this.store.settle({
       playerId: player.id, sourceKey: `lesson:${FINAL_LESSON.level}`, mode: 'campaign', outcome: 'win',
       opponentId: null, now: this.now(), lessonLevel: FINAL_LESSON.level,
     });
+    await this.recordClear(player, FINAL_LESSON.id, FINAL_LESSON.level, verified);
+    return settled;
   }
 
   /**
