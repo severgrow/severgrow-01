@@ -130,11 +130,6 @@
                PLAY_MENU_ENTRIES) lists them, so the seen order, the tab order and the screen
                reader's order are all the same. -->
           <button id="menu-campaign" class="btn primary big" type="button" aria-label="Level" hidden>Campaign</button>
-          <!-- THE DAILY PUZZLE (owner, 2026-10-27): DAILY #042, the second entry of the PLAY submenu,
-               with its own caption (NEW TODAY · STREAK 6, kept in the PLAY submenu's markup)
-               moved under it at boot. Both are painted by web/src/daily/mount.ts and stay hidden
-               when there is no puzzle today. -->
-          <button id="menu-daily" class="btn ghost big menu-daily" type="button" hidden>Daily</button>
           <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
           <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
           <!-- DELETED (owner, 2026-10-16): the quiet "Levels" entry that opened the whole
@@ -222,8 +217,6 @@
                aria-live="off" so a menu visit is not announced. Empty until main.ts paints it from
                real progress; hidden when there is no level to describe. -->
           <p id="play-readout" class="play-readout" hidden aria-live="off"></p>
-          <!-- The Daily Puzzle's caption, the same kind of read-out, moved under DAILY #n at boot. -->
-          <p id="daily-readout" class="play-readout" hidden aria-live="off"></p>
         </div>
       </div>
     </section>
@@ -275,12 +268,6 @@
              screen, and the line is deleted from the markup rather than hidden so nothing can
              repaint it. The wallet above it carries the one number that matters. -->
         <div id="online-world-wallet" class="world-wallet" aria-live="polite"></div>
-        <!-- The Daily Puzzle's tile, waiting to be grown (web/src/daily/mount.ts). -->
-        <div id="daily-place" class="daily-place" role="status" hidden>
-          <p id="daily-place-title" class="daily-place-title"></p>
-          <p id="daily-place-line" class="daily-place-line"></p>
-          <button id="daily-place-back" class="btn primary" type="button" hidden>Back to games</button>
-        </div>
         <!-- A polite line for a player who cannot see the rail appear. The map itself never
              announces movement; this is the one sentence that says a challenge arrived. -->
         <p id="online-world-live" class="world-live" role="status" aria-live="polite"></p>
@@ -477,14 +464,6 @@
           <span class="duel-urgency" data-duel-urgency role="status" hidden></span>
           <span class="duel-presence" data-duel-presence data-presence="unknown"></span>
         </span>
-      </div>
-      <!-- The Daily Puzzle's header strip: the number, the goal in a few words and the tries left.
-           It sits in the header's empty middle (between the menu key and the logo), never over the
-           board, and it is not a control. -->
-      <div id="daily-hud" class="daily-hud" role="status" hidden>
-        <span id="daily-hud-no" class="daily-hud-no"></span>
-        <span id="daily-hud-goal" class="daily-hud-goal"></span>
-        <span id="daily-hud-tries" class="daily-hud-tries" aria-hidden="true"></span>
       </div>
       <div id="race" class="race" role="img" aria-label="Level at 0"><i class="race-fill"></i></div>
       <div id="score-pop" class="score-pop" role="status" hidden></div>
@@ -777,20 +756,6 @@
          `sheet('sheet-restart')`, so Escape/Close/Keep playing return to the pause face and the
          keyboard comes back to the key that asked. It only appears when there is real progress to
          lose; a restart on a fresh turn happens at once. -->
-    <!-- The Daily Puzzle's one sheet: the intro, a miss, the solve and the day's end are the same
-         card with different words and keys (web/src/daily/mount.ts). No close cross: each state is
-         answered with one of its keys. -->
-    <section id="sheet-daily" class="sheet confirm-sheet daily-sheet" role="dialog" aria-modal="true" aria-labelledby="daily-title" hidden data-ix-surface>
-      <header class="sheet-head"><h2 id="daily-title">Daily</h2></header>
-      <div class="sheet-body stack">
-        <p id="daily-kicker" class="daily-kicker"></p>
-        <p id="daily-goal" class="daily-goal"></p>
-        <p id="daily-tries" class="daily-tries" hidden></p>
-        <p id="daily-body" class="muted small daily-body"></p>
-        <div id="daily-actions" class="stack daily-actions"></div>
-      </div>
-    </section>
-
     <section id="sheet-restart" class="sheet confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="restart-title" hidden data-ix-surface>
       <header class="sheet-head"><h2 id="restart-title">Restart this level?</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body stack">

@@ -56,7 +56,7 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
 
 - `ci.yml` `check`: typecheck + every unit test + the futa04 and futa-test builds.
 - `ci.yml` `browser`: futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock,
-  futa04-motion, cut-severe, daily-puzzle, lessons-3, territory-menu, territory-challenges,
+  futa04-motion, cut-severe, lessons-3, territory-menu, territory-challenges,
   territory-gestures, and **territory-gestures-ios on WebKit** (the iPhone engine).
 - `extra-regressions.yml`: admin-dashboard, online-stale-token-recovery, online-soak-teardown,
   settings-visual.

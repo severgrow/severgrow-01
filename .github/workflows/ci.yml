@@ -28,14 +28,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Every suite here tests what this branch SHIPS: futa04-*, cut-severe, daily-puzzle and the
-        # territory suites build the product channel; lessons-3 (levels 1-10, the tutorial) builds futa05.
+        # Every suite here tests what this branch SHIPS: futa04-*, cut-severe and the territory
+        # suites build the product channel; lessons-3 (levels 1-10, the tutorial) builds futa05.
         # REMOVED 2026-10-29: smoke, painting, overhaul, monkey, emptyturn, fruitcards and propass built
         # the historic `live` channel (Main, now frozen at /firststep/ and rebuilt from its own SHA), which
         # this branch never publishes; smoke also flaked and cost a full re-run of a deploy. They still
         # run wherever that channel is developed. territory-gestures-ios runs on WebKit: it is the suite
         # that would have caught the iPhone pan/pinch freeze that Chromium missed (2026-10-28).
-        suite: [futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock, futa04-motion, cut-severe, daily-puzzle, lessons-3, territory-menu, territory-challenges, territory-gestures, territory-gestures-ios]
+        suite: [futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock, futa04-motion, cut-severe, lessons-3, territory-menu, territory-challenges, territory-gestures, territory-gestures-ios]
     # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
     # Playwright 1.56.1 refuses it ("Playwright does not support chromium on ubuntu26.04-x64"),
     # which failed EVERY browser job at `playwright-core install` before a single test ran. Pin the
@@ -62,7 +62,7 @@ jobs:
             # territory-challenges stubs every API call itself, against a build pointed at closed port 9.
             territory-challenges) CHANNEL=futa05 VITE_DUEL_API_URL=http://127.0.0.1:9/functions/v1/duel \
                 VITE_SUPABASE_URL=http://127.0.0.1:9 VITE_SUPABASE_ANON_KEY=local npm run web:build ;;
-            futa04-*|cut-severe|daily-puzzle|territory-*) CHANNEL=futa04 npm run web:build ;;
+            futa04-*|cut-severe|territory-*) CHANNEL=futa04 npm run web:build ;;
             # futa05 requires its online endpoints at build time; these placeholders are shaped
             # like the real ones and nothing in lessons-3 talks to them.
             lessons-3) CHANNEL=futa05 VITE_FIND_OPPONENT=1 VITE_DUEL_API_URL=https://ci.invalid/functions/v1/duel \

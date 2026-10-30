@@ -152,7 +152,7 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
     expect(menu.indexOf('id="menu-world"')).toBeLessThan(menu.indexOf('id="menu-tutorial"'));
   });
 
-  it('PLAY holds LEVEL n, then the Daily Puzzle, then Play online, then Practice match, in that order', () => {
+  it('PLAY holds LEVEL n, then Play online, then Practice match, in that order', () => {
     const main = read('../src/main.ts');
     const list = /const PLAY_MENU_ENTRIES = \[([^\]]*)\] as const;/.exec(main);
     expect(list, 'PLAY_MENU_ENTRIES must exist').toBeTruthy();
@@ -160,17 +160,13 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
     // the whole level list; LEVEL <n> opens the next uncompleted level instead.
     // ORDER (owner, 2026-10-20): LEVEL is the FIRST entry, above Play online. The array is the DOM
     // order (main.ts appends one by one), so this one assertion also pins what is seen and tabbed.
-    // THE DAILY PUZZLE (owner, 2026-10-27: "menu key in the PLAY submenu, DAILY #042") is the second
-    // entry, directly under LEVEL and its caption.
-    expect(list![1]!.replace(/['\s]/g, '')).toBe('menu-campaign,menu-daily,menu-online,menu-new');
+    expect(list![1]!.replace(/['\s]/g, '')).toBe('menu-campaign,menu-online,menu-new');
     // The markup that the move takes those nodes from lists them in the SAME order, so the source
     // reads in the order the submenu shows (no CSS `order` is involved anywhere).
     const menu = sectionById('menu');
     expect(menu.indexOf('id="menu-campaign"'), 'LEVEL must come before Play online in the markup').toBeLessThan(menu.indexOf('id="menu-online"'));
-    expect(menu.indexOf('id="menu-campaign"'), 'LEVEL must come before DAILY in the markup').toBeLessThan(menu.indexOf('id="menu-daily"'));
-    expect(menu.indexOf('id="menu-daily"'), 'DAILY must come before Play online in the markup').toBeLessThan(menu.indexOf('id="menu-online"'));
     // Every one is a real button in the menu markup, so the move can never append a missing node.
-    for (const id of ['menu-online', 'menu-campaign', 'menu-daily', 'menu-new']) expect(menu).toContain(`id="${id}"`);
+    for (const id of ['menu-online', 'menu-campaign', 'menu-new']) expect(menu).toContain(`id="${id}"`);
     expect(menu, 'the removed Levels entry must not be in the markup at all').not.toContain('menu-levels');
   });
 });

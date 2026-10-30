@@ -10,7 +10,7 @@
 //   2. "in 'paused' menu or any similar there should be no orphaned single button that's half the
 //      width of regular button". A table of every row that can lose a child to `[hidden]`, each
 //      rendered at 320x568, 390x844 and 1280x800, hiding children the way the app itself does
-//      (the same `hidden` writes main.ts / live/ui.ts / daily/mount.ts perform). A lone visible
+//      (the same `hidden` writes main.ts / live/ui.ts perform). A lone visible
 //      control must span its row within 1px; two visible controls must split it evenly.
 //
 // A real economy (memory) behind the real HTTP app; the product build points at it. The suite builds
@@ -152,7 +152,7 @@ const analyse = (frames: Frame[]): Glide => {
 // passed to `page.evaluate` in a `__name` helper the page does not have.
 const MEASURE = `(setup) => {
   const $ = function (id) { return document.getElementById(id); };
-  const sheetIds = ['sheet-menu', 'gameover', 'sheet-settings', 'sheet-tutorial', 'sheet-daily', 'online-matched', 'install-prompt', 'online-hub'];
+  const sheetIds = ['sheet-menu', 'gameover', 'sheet-settings', 'sheet-tutorial', 'online-matched', 'install-prompt', 'online-hub'];
   for (const id of sheetIds) { const el = $(id); if (el) el.hidden = true; }
   const stale = document.querySelector('#gm-leave-live'); if (stale) stale.remove();
   document.documentElement.classList.remove('live-on');
@@ -200,14 +200,6 @@ const MEASURE = `(setup) => {
       $('gameover').hidden = false;
       $('go-review-face').hidden = false;
       $('go-review-show').hidden = false; break;
-    case 'daily-two':
-      // daily/mount.ts paint: the row is emptied and refilled with this state's keys.
-      $('sheet-daily').hidden = false;
-      var daily = $('daily-actions'); daily.replaceChildren();
-      for (const label of ['Play', 'Share']) {
-        const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost'; b.textContent = label; daily.append(b);
-      }
-      break;
     case 'settings-one':
       // The Tutorial entry is the only direct BUTTON child of the settings body; it must fill the
       // column like every other settings key.
@@ -228,7 +220,6 @@ const MEASURE = `(setup) => {
   if (setup.indexOf('pause-tools') === 0) add('#sheet-menu .gm-tools', 'gm-tools');
   if (setup === 'gameover-buttons') add('#gameover .go-buttons', 'go-buttons', true);
   if (setup.indexOf('gameover-review') === 0) add('#gameover .go-review-keys', 'go-review-keys');
-  if (setup === 'daily-two') add('#daily-actions', 'daily-actions', true);
   if (setup === 'settings-one') add('#sheet-settings .sheet-body', 'settings-body', true);
   if (setup === 'matched') add('#online-matched .online-actions', 'online-actions', true);
   if (setup === 'install') add('#install-prompt .sheet-body', 'install-body', true);
@@ -543,7 +534,6 @@ try {
     { key: 'finish card keys (offline, extras folded)', setup: 'gameover-buttons' },
     { key: 'finish card review keys (Show me hidden)', setup: 'gameover-review-one' },
     { key: 'finish card review keys (two)', setup: 'gameover-review-two' },
-    { key: 'daily sheet actions (two keys)', setup: 'daily-two' },
     { key: 'settings sheet (Tutorial key alone)', setup: 'settings-one' },
     { key: 'matched prompt (two keys)', setup: 'matched' },
     { key: 'install prompt (three keys)', setup: 'install' },

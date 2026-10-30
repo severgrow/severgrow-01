@@ -94,17 +94,16 @@ describe('PLAY is a real screen, not a layer on the menu', () => {
   });
 });
 
-describe('PLAY holds exactly the four product entries, moved not copied', () => {
-  it('moves LEVEL n / DAILY #n / Play online / Practice match into #play-actions on a product channel', () => {
+describe('PLAY holds exactly the three product entries, moved not copied', () => {
+  it('moves LEVEL n / Play online / Practice match into #play-actions on a product channel', () => {
     // Three, not four: the "Levels" entry is gone (owner, 2026-10-16). The player does not get the
     // whole level list - LEVEL <n> starts the next UNCOMPLETED level and is the only way in.
     // ORDER (owner, 2026-10-20): LEVEL first, Play online second. The array is appended in order, so
     // it is the DOM, tab and screen-reader order too.
-    // THE DAILY PUZZLE (owner, 2026-10-27) joins as the second entry.
-    expect(mainSource).toMatch(/const PLAY_MENU_ENTRIES = \['menu-campaign', 'menu-daily', 'menu-online', 'menu-new'\] as const/);
+    expect(mainSource).toMatch(/const PLAY_MENU_ENTRIES = \['menu-campaign', 'menu-online', 'menu-new'\] as const/);
     expect(mainSource).toMatch(/if \(FEATURES\.campaign\) \{[\s\S]*?actions\.append\(\$\(id\)\)/);
     // Each entry keeps its ONE id, so there is no second copy of the online or campaign wiring.
-    for (const id of ['menu-online', 'menu-campaign', 'menu-daily', 'menu-new']) {
+    for (const id of ['menu-online', 'menu-campaign', 'menu-new']) {
       expect(html.match(new RegExp(`id="${id}"`, 'g')) ?? []).toHaveLength(1);
     }
     // And the removed entry is gone from BOTH the markup and the entry list - not merely hidden, so

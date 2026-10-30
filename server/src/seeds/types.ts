@@ -39,8 +39,6 @@ export type RewardInput = {
   lessonLevel?: number;
   /** Server-issued before a rewarded Training match starts. */
   trainingTicketId?: string;
-  /** Only for a server-verified Daily Puzzle solve (receipt `daily:<no>`): pays exactly one tile. */
-  dailyPuzzle?: number;
   /** Only for a server-verified Territory achievement (receipt `achievement:<id>`): its fixed amount. */
   achievementSeeds?: number;
 };
