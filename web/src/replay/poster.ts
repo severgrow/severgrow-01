@@ -13,8 +13,8 @@ import { fit } from '../logic/share.js';
 import type { TextBox } from '../logic/share.js';
 import {
   boardBottom,
+  brandWordmark,
   boardTop,
-  loadBoardArtUrls,
   layoutBoard,
   paintBoard,
   screenCoordsOf,
@@ -24,16 +24,28 @@ import {
 import type { BoardArt, BoardCell, BoardLayout, TileMotion } from './board-canvas.js';
 import type { ReplayModel } from './timeline.js';
 
+// THE FRAME (owner, 2026-10-30: "board as big as in the game, scoring small, the space between the
+// board and FUTASAKU.COM the same as between FUTASAKU.COM and the bottom edge … clean and elegant,
+// but also free advertisement"). A full phone screen, portrait 9:16 — what Stories, Reels, TikTok and
+// a phone's own player fill edge to edge — so a shared replay never sits in black bars.
 export const POSTER_W = 1080;
-export const POSTER_H = 1350;
-const M = 72;
-const BOARD_TOP = 392;
-const BOARD_H = 700;
-/** The gap from the board's lowest hex to the sign-off. */
-const MARK_GAP = 44;
+export const POSTER_H = 1920;
+/** The side margin of the score row; the board itself runs nearly edge to edge. */
+const M = 64;
+const BOARD_SIDE = 28;
+const BOARD_MAX_H = 1140;
+/** The slim score row: names at the edges, the score in the middle, all small. */
+const NAME_SIZE = 30;
+const SCORE_SIZE = 60;
+/** The sign-off lockup: the 双サク mark, the address, and one line that says what the game is. */
+const WORDMARK_H = 62;
+const SITE_SIZE = 44;
+const TAG_SIZE = 22;
+/** Half a capital's height, as a share of its font size (the gaps are measured to the ink). */
+const CAP = 0.36;
 
 /** The one extra line a video frame carries (centred in the gap between the score and the board). */
-export const TURN_H = 28;
+export const TURN_H = 40;
 
 /** The board's own pictures, handed over by the module the on-screen board already loaded. */
 export type PosterArt = BoardArt;
@@ -58,13 +70,18 @@ export type PosterData = {
 export type PosterCell = BoardCell;
 
 export type PosterLayout = {
-  /** The result line's box (the video's end hold), centred in the gap under the score. */
+  /** The result line's box (the video's end hold), centred in the gap under the score row. */
   turn: TextBox;
   width: number;
   height: number;
   names: readonly [TextBox, TextBox];
   score: { you: TextBox; dash: TextBox; opp: TextBox };
+  /** FUTASAKU.COM. */
   mark: TextBox;
+  /** The 双サク mark above it: its top-centre point and height. */
+  wordmark: { x: number; y: number; h: number };
+  /** One quiet line under the address that says what the game is. */
+  tagline: TextBox;
   board: BoardLayout;
 };
 
@@ -88,49 +105,51 @@ export const posterFor = (model: ReplayModel): PosterData => {
 /** A pure, testable description of the poster's text and hexes. */
 export const posterLayout = (d: PosterData): PosterLayout => {
   const inner = POSTER_W - 2 * M;
-  // EQUAL SPACING (owner, 2026-10-30): the board is fitted first, then the free height is shared in
-  // three equal parts — above the names, between the score and the board, and under the sign-off —
-  // measured to the INK (a capital is ~0.72 of its size, centred in its box), not to the text boxes,
-  // so the gaps the eye sees are the equal ones. FUTASAKU.COM sits a fixed gap under the lowest hex.
-  const fitted = layoutBoard(d, { w: inner, h: BOARD_H, cx: Math.round(POSTER_W / 2), cy: Math.round(BOARD_TOP + BOARD_H / 2) });
-  const hexTop = fitted.cells.length ? boardTop(fitted) : BOARD_TOP;
-  const hexBottom = fitted.cells.length ? boardBottom(fitted) : BOARD_TOP + BOARD_H;
-  const CAP = 0.36; // half a capital's height, as a share of the font size
-  const inkTop = 86 + 22 - 36 * CAP; // the names' ink top, at the original placement
-  const inkFoot = 154 + 90 + 148 * CAP; // the score's ink foot, at the original placement
-  const MARK_H = 40;
-  const markInk = MARK_H / 2 + 30 * CAP; // the sign-off's ink foot, below its box top
-  const gap = Math.max(48, Math.floor((POSTER_H - (inkFoot - inkTop) - (hexBottom - hexTop) - MARK_GAP - markInk) / 3));
-  const lift = gap - inkTop; // moves the names and the score
-  const shift = inkFoot + lift + gap - hexTop; // moves the board
+  // The board first, as large as the frame allows (the game's own size: nearly edge to edge).
+  const fitted = layoutBoard(d, { w: POSTER_W - 2 * BOARD_SIDE, h: BOARD_MAX_H, cx: POSTER_W / 2, cy: POSTER_H / 2 });
+  const hexTop = fitted.cells.length ? boardTop(fitted) : POSTER_H / 2 - BOARD_MAX_H / 2;
+  const hexBottom = fitted.cells.length ? boardBottom(fitted) : POSTER_H / 2 + BOARD_MAX_H / 2;
+  const boardInk = hexBottom - hexTop;
+  // The inks, top to bottom: the score row, the board, the sign-off lockup. The free height is
+  // shared in FOUR equal gaps — above the score row, score row to board, board to the lockup, and
+  // the lockup to the bottom edge — so the address sits exactly between the board and the edge.
+  const rowInk = 2 * SCORE_SIZE * CAP;
+  const lockInk = WORDMARK_H + 22 + 2 * SITE_SIZE * CAP + 20 + 2 * TAG_SIZE * CAP;
+  const gap = Math.max(40, Math.floor((POSTER_H - rowInk - boardInk - lockInk) / 4));
+  const rowMid = gap + rowInk / 2;
+  const shift = gap + rowInk + gap - hexTop;
   const board = { ...fitted, cells: fitted.cells.map((c) => ({ ...c, y: c.y + shift })) };
-  const name = (text: string, align: 'left' | 'right'): TextBox => ({
-    x: M,
-    y: 86 + lift,
-    w: inner,
-    h: 44,
-    text: fit(text.toUpperCase(), 22),
-    size: 36,
-    weight: 700,
+  const line = (y: number, size: number, text: string, weight: 400 | 600 | 700 | 800, align: 'left' | 'center' | 'right', x = M, w = inner): TextBox => ({
+    x,
+    y: Math.round(y - size * 0.6),
+    w,
+    h: Math.round(size * 1.2),
+    text,
+    size,
+    weight,
     align,
   });
-  const third = inner / 3;
+  // The score row: each name at its edge, the score in the middle ("8 – 10"), set small.
+  const half = inner / 2;
+  const nameW = half - 150;
+  const names: readonly [TextBox, TextBox] = [
+    line(rowMid, NAME_SIZE, fit(d.names[0].toUpperCase(), 16), 700, 'left', M, nameW),
+    line(rowMid, NAME_SIZE, fit(d.names[1].toUpperCase(), 16), 700, 'right', POSTER_W - M - nameW, nameW),
+  ];
   const score = {
-    you: { x: M, y: 154 + lift, w: third, h: 180, text: String(d.score[0]), size: 148, weight: 800 as const, align: 'center' as const },
-    dash: { x: M + third, y: 154 + lift, w: third, h: 180, text: '–', size: 88, weight: 400 as const, align: 'center' as const },
-    opp: { x: M + 2 * third, y: 154 + lift, w: third, h: 180, text: String(d.score[1]), size: 148, weight: 800 as const, align: 'center' as const },
+    you: line(rowMid, SCORE_SIZE, String(d.score[0]), 700, 'right', POSTER_W / 2 - 150, 120),
+    dash: line(rowMid, SCORE_SIZE * 0.6, '–', 400, 'center', POSTER_W / 2 - 30, 60),
+    opp: line(rowMid, SCORE_SIZE, String(d.score[1]), 700, 'left', POSTER_W / 2 + 30, 120),
   };
-  const mark: TextBox = { x: M, y: Math.round(hexBottom + shift + MARK_GAP), w: inner, h: MARK_H, text: d.mark, size: 30, weight: 800, align: 'center' };
-  const turn: TextBox = { x: M, y: Math.round(inkFoot + lift + (gap - TURN_H) / 2), w: inner, h: TURN_H, text: '', size: 22, weight: 600, align: 'center' };
-  return {
-    width: POSTER_W,
-    height: POSTER_H,
-    names: [name(d.names[0], 'left'), name(d.names[1], 'right')],
-    score,
-    mark,
-    turn,
-    board,
-  };
+  // The lockup, centred under the board: the mark, the address, one line of what the game is.
+  const lockTop = hexBottom + shift + gap;
+  const wordmark = { x: POSTER_W / 2, y: Math.round(lockTop), h: WORDMARK_H };
+  const siteMid = lockTop + WORDMARK_H + 22 + SITE_SIZE * CAP;
+  const mark = line(siteMid, SITE_SIZE, d.mark, 800, 'center');
+  const tagMid = siteMid + SITE_SIZE * CAP + 20 + TAG_SIZE * CAP;
+  const tagline = line(tagMid, TAG_SIZE, REPLAY.tagline, 600, 'center');
+  const turn = line(gap + rowInk + gap / 2, 30, '', 700, 'center');
+  return { width: POSTER_W, height: POSTER_H, names, score, mark, wordmark, tagline, turn, board };
 };
 
 /** `futasaku-<winner>-<score>` — the winner's own name, made safe for a file. */
@@ -160,6 +179,8 @@ export const drawReplayPoster = (
   canvas: HTMLCanvasElement = document.createElement('canvas'),
   turn?: PosterTurn,
   motion?: Readonly<Record<string, TileMotion>>,
+  /** The video's moment: whose move it is, and whether this is the final hold. */
+  opts?: { live?: Player | null; end?: boolean },
 ): HTMLCanvasElement => {
   const L = posterLayout(d);
   // A recording reuses one canvas for every frame, so the buffer is only resized when it must be.
@@ -197,25 +218,70 @@ export const drawReplayPoster = (
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   };
 
-  text(L.names[0], col.you, 3);
-  text(L.names[1], col.opp, 3);
-  text(L.score.you, col.you);
-  text(L.score.dash, col.dim);
-  text(L.score.opp, col.opp);
+  // A soft light behind the board: the picture's subject, lifted off the dark (the menu's own glow).
+  {
+    const ys = L.board.cells.map((c) => c.y);
+    const cy = ys.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : L.height / 2;
+    const glow = g.createRadialGradient(L.width / 2, cy, 40, L.width / 2, cy, L.width * 0.62);
+    glow.addColorStop(0, 'rgba(70, 82, 56, .26)');
+    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    g.fillStyle = glow;
+    g.fillRect(0, 0, L.width, L.height);
+  }
 
-  // The video's one extra line: whose turn the frame shows (the replay's own words), or the result
-  // once the board has stopped. The still poster passes no turn and keeps this whitespace empty.
+  // THE SCORE ROW: small, the way the replay screen sets it — each name at its edge in its own ink,
+  // the score in the middle. While the match plays, a pip marks whose move it is; at the end the
+  // winner's side is lit and the other steps back.
+  const ended = opts?.end === true;
+  const seatInk = (seat: Player) => (seat === 0 ? col.you : col.opp);
+  const quiet = (seat: Player) => ended && d.winner !== null && d.winner !== seat;
+  const withAlpha = (seat: Player, draw: () => void) => {
+    g.save();
+    if (quiet(seat)) g.globalAlpha = 0.38;
+    draw();
+    g.restore();
+  };
+  withAlpha(0, () => text(L.names[0], seatInk(0), 4));
+  withAlpha(1, () => text(L.names[1], seatInk(1), 4));
+  withAlpha(0, () => text(L.score.you, ended && d.winner === 0 ? col.you : col.ink));
+  text(L.score.dash, col.dim);
+  withAlpha(1, () => text(L.score.opp, ended && d.winner === 1 ? col.opp : col.ink));
+  const live = opts?.live;
+  if (!ended && (live === 0 || live === 1)) {
+    // the pip sits on the inner side of the mover's name, toward the score
+    g.font = `${L.names[live].weight} ${L.names[live].size}px ${font}`;
+    const ctx = g as CanvasRenderingContext2D & { letterSpacing?: string };
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '4px';
+    const w = Math.min(g.measureText(L.names[live].text).width, L.names[live].w);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    const y = L.names[live].y + L.names[live].h / 2;
+    const x = live === 0 ? L.names[0].x + w + 22 : L.names[1].x + L.names[1].w - w - 22;
+    g.save();
+    g.fillStyle = seatInk(live);
+    g.shadowColor = seatInk(live);
+    g.shadowBlur = 14;
+    g.beginPath();
+    g.arc(x, y, 7, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+
+  // The end hold's one line: the result, in the winner's ink, in the gap above the board.
   if (turn) {
-    text(
-      { ...L.turn, text: turn.text },
-      turn.seat === null ? col.ink : turn.seat === 0 ? col.you : col.opp,
-      4,
-    );
+    text({ ...L.turn, text: turn.text.toUpperCase() }, d.winner === null || d.winner === undefined ? col.ink : seatInk(d.winner), 8);
   }
 
   paintBoard(g, L.board, { me: d.me, line: col.line, font, motion });
-  // THE SIGN-OFF: FUTASAKU.COM in Besley and the game's cream, with the same low carved edge as the
-  // replay screen's footer (owner, 2026-10-26) — a warm edge cast under each letter, a soft shadow.
+
+  // THE SIGN-OFF LOCKUP, centred under the board: the 双サク mark, FUTASAKU.COM in Besley and the
+  // game's cream with the replay footer's low carved edge, and one quiet line of what the game is.
+  const mark = brandWordmark(col.ink, L.wordmark.h);
+  if (mark) {
+    g.save();
+    g.globalAlpha = 0.9;
+    g.drawImage(mark, Math.round(L.wordmark.x - mark.width / 2), L.wordmark.y);
+    g.restore();
+  }
   {
     const t = L.mark;
     const ctx = g as CanvasRenderingContext2D & { letterSpacing?: string };
@@ -223,9 +289,10 @@ export const drawReplayPoster = (
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     if ('letterSpacing' in ctx) ctx.letterSpacing = `${(t.size * 0.1).toFixed(1)}px`;
-    const x = t.x + t.w / 2;
+    // tracking also adds space after the last letter; this pulls the word back to true centre
+    const x = t.x + t.w / 2 + t.size * 0.05;
     const y = t.y + t.h / 2;
-    const k = t.size / 11.5; // the footer's 11.5px is the reference for the edge's depth
+    const k = t.size / 11.5 / 2.4; // the footer's carved edge, kept low at poster size
     g.save();
     g.shadowColor = 'rgba(0, 0, 0, .55)';
     g.shadowBlur = 6 * k;
@@ -239,6 +306,7 @@ export const drawReplayPoster = (
     g.fillText(t.text, x, y, t.w);
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   }
+  text({ ...L.tagline, text: L.tagline.text.toUpperCase(), x: L.tagline.x + 2 }, col.dim, 4);
   return canvas;
 };
 
@@ -260,32 +328,3 @@ export const paintPosterCells = (
 
 export const posterBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
   new Promise((ok) => canvas.toBlob(ok, 'image/png'));
-
-/** The phone's share sheet when it can take a file; otherwise a plain download. */
-export const shareReplayPoster = async (
-  d: PosterData,
-  artUrls: PosterArt | null = null,
-): Promise<'shared' | 'saved' | 'cancelled'> => {
-  // The board already decoded these pictures; if it did not, the warm-up is bounded by the image
-  // cache and the poster still draws (the board's own flat colour) rather than stalling the share.
-  await warmPosterArt(artUrls ?? (await loadBoardArtUrls()));
-  const blob = await posterBlob(drawReplayPoster(d));
-  if (!blob) return 'cancelled';
-  const file = new File([blob], posterFileName(d), { type: 'image/png' });
-  const nav = navigator as Navigator & { canShare?: (x: { files: File[] }) => boolean };
-  if (nav.share && nav.canShare?.({ files: [file] })) {
-    try {
-      await nav.share({ files: [file], title: d.mark });
-      return 'shared';
-    } catch {
-      return 'cancelled';
-    }
-  }
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: posterFileName(d) });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-  return 'saved';
-};

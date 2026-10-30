@@ -3,6 +3,9 @@
 // the exact thresholded silhouettes; the original art stays intact for icon/OG generation.
 import logoUrl from '../assets/futasaku-emblem-silhouette.webp?url';
 import wordmarkUrl from '../assets/futasaku-wordmark-silhouette.webp?url';
+
+/** The wordmark silhouette's URL, for the replay video's sign-off (one asset, owned here). */
+export const WORDMARK_URL: string = wordmarkUrl;
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
 

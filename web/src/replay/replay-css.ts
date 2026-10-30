@@ -385,6 +385,8 @@ export const REPLAY_CSS = `
   min-height: 48px;
 }
 #replay .rp-foot > .rp-actions { flex: none; width: 88px; gap: 0 !important; }
+/* The one share key sits in the middle of its 88px half, mirroring Close's own centre. */
+#replay .rp-foot > .rp-actions:not(.rp-actions-start) { justify-content: center; }
 #replay .rp-foot .rp-btn[data-rp='close'] { width: 88px; padding: 0; text-align: center; }
 /* A FIXED width (the widest "00:00 / 00:00"), so the bar beside it never changes length as the
    clock fills in or pauses: a bar that shifts under a thumb mid-drag seeks to the wrong moment. */

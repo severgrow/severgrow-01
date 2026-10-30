@@ -466,10 +466,8 @@ export const REPLAY = Object.freeze({
   close: 'Close',
   /** What a screen reader hears for the scrub bar. */
   scrub: 'Replay position',
-  /** The quiet control beside the footer mark: save or share the finished poster. */
+  /** The footer's one share key: it makes the replay's video and opens the share sheet. */
   share: 'Share replay',
-  /** The footer's export control: the whole replay as a silent video file. */
-  exportVideo: 'Export video',
   /** While recording: "Recording 12s / 50s" — the replay's own length, not the file's size. */
   recording: (done: string, total: string) => `Recording ${done} / ${total}`,
   /** The way out of a recording that is already running. */
@@ -496,6 +494,8 @@ export const REPLAY = Object.freeze({
   turningPointLabel: (tiles: number) => `Turning point · ${tiles} tile${tiles === 1 ? '' : 's'}`,
   /** Said only when this match never cut anything: there is no notch to press. */
   noTurningPoint: 'No turning point in this match',
+  /** The video's one line under the address: what the game is, in its own words (the site's own). */
+  tagline: 'Small board. Big decisions.',
   /** The wordmark on the poster and the video (the only brand words the image carries): the address. */
   mark: 'FUTASAKU.COM',
   /** The replay's signature under the mark (owner, 2026-10-26: "an elegant place to place futasaku.com"). */

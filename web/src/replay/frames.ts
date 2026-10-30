@@ -9,15 +9,15 @@
 //
 // The layout is a pure function of the model and a frame index, so a test can prove the frame at
 // index N carries frame N's board — and that the timing matches `ReplayModel.totalMs` exactly.
-import { drawReplayPoster, paintPosterCells, posterFor, posterLayout } from './poster.js';
+import { drawReplayPoster, paintPosterCells, posterFor, posterLayout, POSTER_H, POSTER_W } from './poster.js';
 import type { PosterData, PosterLayout, PosterTurn } from './poster.js';
 import type { ReplayModel } from './timeline.js';
-import type { Tile } from '../../../src/engine/index.js';
+import type { Player, Tile } from '../../../src/engine/index.js';
 import type { TileMotion } from './board-canvas.js';
 
 /** The video keeps the poster's own 4:5 portrait frame, at the size a phone screen wants. */
-export const VIDEO_W = 1080;
-export const VIDEO_H = 1350;
+export const VIDEO_W = POSTER_W;
+export const VIDEO_H = POSTER_H;
 
 /**
  * One painted position: when it goes on the canvas, and how long it stays there. `index` is the
@@ -80,6 +80,12 @@ export const videoFrameData = (model: ReplayModel, index: number): PosterData =>
 export const videoTurn = (model: ReplayModel, step: VideoStep): PosterTurn | undefined =>
   step.end && model.result ? { text: model.result.title, seat: null } : undefined;
 
+/** Whose move a video picture shows (the pip in the score row), and whether it is the final hold. */
+export const videoMoment = (model: ReplayModel, step: VideoStep): { live: Player | null; end: boolean } => ({
+  live: step.end ? null : (model.frames[step.index]?.turn ?? null),
+  end: step.end,
+});
+
 /** A pure, testable description of one video frame (identical geometry to the still poster). */
 export const videoLayoutAt = (model: ReplayModel, step: VideoStep): PosterLayout => posterLayout(videoFrameData(model, step.index));
 
@@ -88,7 +94,7 @@ export const paintVideoFrame = (
   canvas: HTMLCanvasElement,
   model: ReplayModel,
   step: VideoStep,
-): HTMLCanvasElement => drawReplayPoster(videoFrameData(model, step.index), canvas, videoTurn(model, step));
+): HTMLCanvasElement => drawReplayPoster(videoFrameData(model, step.index), canvas, videoTurn(model, step), undefined, videoMoment(model, step));
 
 // ---------- THE MOVING VIDEO (owner, 2026-10-30: "finish the replays … find a smart way to do it
 // super nice") ----------
@@ -209,7 +215,7 @@ export const paintMotionFrameCached = (
   if (cache.index !== f.step.index) {
     const bare = { ...f.board };
     for (const key of f.keys) bare[key] = null;
-    drawReplayPoster({ ...data, board: bare }, cache.canvas, videoTurn(model, f.step));
+    drawReplayPoster({ ...data, board: bare }, cache.canvas, videoTurn(model, f.step), undefined, videoMoment(model, f.step));
     cache.index = f.step.index;
   }
   if (canvas.width !== cache.canvas.width) canvas.width = cache.canvas.width;
@@ -222,4 +228,4 @@ export const paintMotionFrameCached = (
 
 /** Paint one moving frame (the same painter as every other picture of the match). */
 export const paintMotionFrame = (canvas: HTMLCanvasElement, model: ReplayModel, f: MotionFrame): HTMLCanvasElement =>
-  drawReplayPoster({ ...videoFrameData(model, f.step.index), board: f.board }, canvas, videoTurn(model, f.step), f.motion);
+  drawReplayPoster({ ...videoFrameData(model, f.step.index), board: f.board }, canvas, videoTurn(model, f.step), f.motion, videoMoment(model, f.step));

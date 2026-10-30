@@ -229,7 +229,7 @@ try {
   const video = page.locator('#replay [data-rp="video"]');
   const box = await video.boundingBox();
   check('the export control is a 44px target beside the share key', box?.width === 44 && box?.height === 44, JSON.stringify(box));
-  check('it is named for a screen reader', (await video.getAttribute('aria-label')) === 'Export video', (await video.getAttribute('aria-label')) ?? '');
+  check('it is named for a screen reader', (await video.getAttribute('aria-label')) === 'Share replay', (await video.getAttribute('aria-label')) ?? '');
   check('the recording line is hidden until a recording starts', await page.locator('#replay .rp-video').isHidden());
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${SHOTS}/replay-footer-video-390x844.png` });
@@ -276,7 +276,7 @@ try {
   const fast = await page.evaluate(async () => {
     const VE = (window as unknown as { VideoEncoder?: { isConfigSupported(c: unknown): Promise<{ supported?: boolean }> } }).VideoEncoder;
     if (!VE) return false;
-    return !!(await VE.isConfigSupported({ codec: 'avc1.42e028', width: 1080, height: 1350, bitrate: 8e6, framerate: 30, avc: { format: 'avc' } })).supported;
+    return !!(await VE.isConfigSupported({ codec: 'avc1.42e028', width: 1080, height: 1920, bitrate: 8e6, framerate: 30, avc: { format: 'avc' } })).supported;
   });
   console.log(`INFO  this browser takes the ${fast ? 'fast .mp4 export' : 'real-time recorder'}`);
   const started = Date.now();
@@ -312,7 +312,7 @@ try {
   check('the line clears itself afterwards', await page.locator('#replay .rp-video').isHidden());
 
   const probed = await probeVideo(page, saved);
-  check('the file decodes as a video', probed.error === null && probed.width === 1080 && probed.height === 1350, JSON.stringify(probed));
+  check('the file decodes as a video', probed.error === null && probed.width === 1080 && probed.height === 1920, JSON.stringify(probed));
   check('its length is the replay’s own length', probed.duration !== null && Math.abs(probed.duration - total) <= 1_500, `${probed.duration}ms vs ${total}ms`);
   check('it carries no audio', (probed.audioBytes ?? 0) === 0, `audio bytes ${probed.audioBytes}, tracks ${probed.audioTracks}`);
   if (fast) {
@@ -322,7 +322,7 @@ try {
     if (ff.status === 0 && ff.stdout) {
       const info = JSON.parse(ff.stdout) as { streams: { codec_name: string; codec_type: string; width?: number; height?: number; nb_frames?: string }[]; format: { duration: string; format_name: string } };
       const v = info.streams.filter((x) => x.codec_type === 'video');
-      check('ffprobe: one H.264 video stream, 1080×1350, no audio', v.length === 1 && v[0]!.codec_name === 'h264' && v[0]!.width === 1080 && v[0]!.height === 1350 && info.streams.every((x) => x.codec_type === 'video'), ff.stdout.replace(/\s+/g, ' '));
+      check('ffprobe: one H.264 video stream, 1080×1920, no audio', v.length === 1 && v[0]!.codec_name === 'h264' && v[0]!.width === 1080 && v[0]!.height === 1920 && info.streams.every((x) => x.codec_type === 'video'), ff.stdout.replace(/\s+/g, ' '));
       check('ffprobe: an MP4 of the replay’s length', /mp4/.test(info.format.format_name) && Math.abs(Number(info.format.duration) * 1000 - total) <= 100, `${info.format.duration}s vs ${total}ms`);
       check('ffprobe: the tiles move (many more pictures than beats)', Number(v[0]!.nb_frames ?? 0) > (plan?.frames.length ?? 0) * 2, `${v[0]!.nb_frames} pictures for ${plan?.frames.length} beats`);
       // Every picture decodes, start to finish.

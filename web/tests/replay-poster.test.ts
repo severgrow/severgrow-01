@@ -81,22 +81,33 @@ describe('the replay poster', () => {
   });
 });
 
-describe('the poster is evenly spaced (owner, 2026-10-30)', () => {
-  it('the gaps above the names, between the score and the board, and under FUTASAKU.COM are equal', async () => {
-    const { boardTop, boardBottom } = await import('../src/replay/board-canvas.js');
+describe('the video frame: a full phone screen, a big board, a small score (owner, 2026-10-30)', () => {
+  it('is portrait 9:16, the board nearly edge to edge, the score row small', () => {
     const L = posterLayout(posterFor(buildReplay(input())));
-    // measured to the ink: a capital is ~0.72 of its size, centred in its box
-    const top = L.names[0].y + L.names[0].h / 2 - 0.36 * L.names[0].size;
-    const scoreFoot = L.score.you.y + L.score.you.h / 2 + 0.36 * L.score.you.size;
-    const between = boardTop(L.board) - scoreFoot;
-    const under = L.height - (L.mark.y + L.mark.h / 2 + 0.36 * L.mark.size);
-    expect(Math.abs(top - between)).toBeLessThanOrEqual(2);
-    expect(Math.abs(top - under)).toBeLessThanOrEqual(4);
-    // the sign-off sits a fixed gap under the lowest hex, on the poster's centre line
-    expect(L.mark.y - boardBottom(L.board)).toBeCloseTo(44, 0);
+    expect([L.width, L.height]).toEqual([1080, 1920]);
+    const xs = L.board.cells.map((c) => c.x);
+    const span = Math.max(...xs) - Math.min(...xs) + 2 * L.board.hex;
+    expect(span).toBeGreaterThan(L.width * 0.85);
+    expect(L.score.you.size).toBeLessThanOrEqual(64);
+    expect(L.names[0].size).toBeLessThanOrEqual(32);
+  });
+
+  it('FUTASAKU.COM sits centred, with the same space above it (from the board) as below it (to the edge)', async () => {
+    const { boardBottom, boardTop } = await import('../src/replay/board-canvas.js');
+    const L = posterLayout(posterFor(buildReplay(input())));
+    const ink = (t: { y: number; h: number; size: number }, side: -1 | 1) => t.y + t.h / 2 + side * 0.36 * t.size;
+    const above = L.wordmark.y - boardBottom(L.board);
+    const below = L.height - ink(L.tagline, 1);
+    expect(Math.abs(above - below)).toBeLessThanOrEqual(3);
     expect(L.mark.x + L.mark.w / 2).toBe(L.width / 2);
-    // the result line sits inside the gap between the score and the board
-    expect(L.turn.y).toBeGreaterThan(scoreFoot);
+    expect(L.wordmark.x).toBe(L.width / 2);
+    // the gap above the score row and between it and the board are the same size too
+    const top = ink(L.score.you, -1);
+    const between = boardTop(L.board) - ink(L.score.you, 1);
+    expect(Math.abs(top - between)).toBeLessThanOrEqual(3);
+    expect(Math.abs(top - above)).toBeLessThanOrEqual(3);
+    // the result line sits inside the gap between the score row and the board
+    expect(L.turn.y).toBeGreaterThan(ink(L.score.you, 1));
     expect(L.turn.y + L.turn.h).toBeLessThan(boardTop(L.board));
   });
 });

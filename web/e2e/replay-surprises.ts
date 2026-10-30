@@ -13,7 +13,7 @@
 // Screenshots go to /tmp/morning (or $SHOTS).
 //   CHANNEL=futa04 npx tsx web/e2e/replay-surprises.ts
 import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { legalActions, viewFor } from '../../src/engine/index.js';
@@ -110,12 +110,6 @@ const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
   return `still playing after ${maxSteps} steps`;
 };
 
-/** A tiny PNG header read: enough to say the poster really is 1080x1350. */
-const pngSize = (file: string): { width: number; height: number; bytes: number } => {
-  const b = readFileSync(file);
-  return { width: b.readUInt32BE(16), height: b.readUInt32BE(20), bytes: b.length };
-};
-
 /** Build the product bundle this suite is about (CHANNEL=futa04, the deployed channel). */
 await new Promise<void>((resolve, reject) => {
   const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'build', '--config', 'web/vite.config.ts'], {
@@ -183,30 +177,14 @@ try {
   const resumed = await replayNow(page);
   check('a second press resumes playback from the turning point', !!resumed && resumed.playing && (resumed.index > tp.frame || resumed.elapsed > frame.at), JSON.stringify({ index: resumed?.index, elapsed: resumed?.elapsed, before: before?.index }));
 
-  // ---------- the share: download fallback first ----------
-  // Headless Chromium has no usable native share sheet, so the page takes its own fallback. The
-  // download it triggers is the real file a player would get.
-  const share = page.locator('#replay [data-rp="share"]');
-  check('the share control is a 44px target beside the mark', (await share.boundingBox())?.width === 44 && (await share.boundingBox())?.height === 44, JSON.stringify(await share.boundingBox()));
-  const downloadPromise = page.waitForEvent('download', { timeout: 15_000 });
-  await share.click();
-  const download = await downloadPromise;
-  const saved = `${SHOTS}/futasaku-poster-download.png`;
-  await download.saveAs(saved);
-  const png = pngSize(saved);
-  check('the fallback downloads a named PNG', /^futasaku-.+-\d+-\d+\.png$/.test(download.suggestedFilename()), download.suggestedFilename());
-  check('the poster is 1080x1350 and a real image', png.width === 1080 && png.height === 1350 && png.bytes > 20_000, JSON.stringify(png));
-  // Open the very file the download produced, so the screenshot is the generated poster.
-  const posterPage = await context.newPage();
-  const base64 = readFileSync(saved).toString('base64');
-  await posterPage.setContent(`<body style="margin:0;background:#000"><img src="data:image/png;base64,${base64}" style="width:540px;height:675px;display:block"></body>`);
-  await posterPage.waitForTimeout(200);
-  await posterPage.screenshot({ path: `${SHOTS}/replay-poster.png` });
-  await posterPage.close();
-
-  // ---------- the share door, stubbed at the API boundary ----------
-  // A STRING: the bundler's name-preserving transform would inject a `__name` helper into a
-  // serialized function, and the page does not define it.
+  // ---------- THE ONE SHARE KEY (owner, 2026-10-30: "remove the png sharing option … just 1 icon") ----------
+  // The footer carries ONE icon, and it makes the replay's video and hands it to the share sheet.
+  check('the image (PNG) share key is gone', (await page.locator('#replay [data-rp="share"]').count()) === 0);
+  const share = page.locator('#replay [data-rp="video"]');
+  check('there is exactly one share key, a 44px target', (await page.locator('#replay .rp-foot .rp-icon').count()) === 1 && (await share.boundingBox())?.width === 44, JSON.stringify(await share.boundingBox()));
+  check('it is named for a screen reader', (await share.getAttribute('aria-label')) === 'Share replay', (await share.getAttribute('aria-label')) ?? '');
+  // The share door, stubbed at the API boundary (a STRING: the bundler's name-preserving transform
+  // would inject a `__name` helper into a serialized function, and the page does not define it).
   await page.evaluate(`(() => {
     Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
     Object.defineProperty(navigator, 'share', {
@@ -220,11 +198,24 @@ try {
     });
   })()`);
   await share.click();
-  // The poster is painted before the share sheet opens; on a slow machine that is over half a second.
+  await page.waitForSelector('#replay .rp-video:not([hidden])', { timeout: 5_000 });
+  check('the key starts the video, with its progress line', /Making video|Recording/.test(((await page.locator('#replay .rp-video-text').textContent()) ?? '').trim()));
+  // A phone opens its share sheet only from a tap: once the file is ready, either the press still
+  // counts and the sheet opens at once, or a SHARE key waits for the tap.
+  await page.waitForFunction(
+    () => !!(window as unknown as { __shared?: unknown }).__shared || !!document.querySelector('#replay [data-rp="video-share"]:not([hidden])'),
+    undefined,
+    { timeout: 120_000 },
+  );
+  if (await page.locator('#replay [data-rp="video-share"]').isVisible()) {
+    await page.screenshot({ path: `${SHOTS}/replay-video-ready-390x844.png` });
+    await page.locator('#replay [data-rp="video-share"]').click();
+  }
   await page.waitForFunction(() => !!(window as unknown as { __shared?: unknown }).__shared, undefined, { timeout: 15_000 }).catch(() => undefined);
   const shared = (await page.evaluate(() => (window as unknown as { __shared?: unknown }).__shared ?? null)) as { title?: string; files?: { name: string; type: string; size: number }[] } | null;
-  check('when the phone takes a file, the share door is used', !!shared && shared.files?.length === 1, JSON.stringify(shared));
-  check('the shared File is the poster, with its name and type', !!shared && /^futasaku-.+-\d+-\d+\.png$/.test(shared.files![0]!.name) && shared.files![0]!.type === 'image/png' && shared.files![0]!.size > 20_000, JSON.stringify(shared?.files));
+  check('the share sheet gets one file', !!shared && shared.files?.length === 1, JSON.stringify(shared));
+  check('the shared file is the replay video, named for the match', !!shared && /^futasaku-.+-\d+-\d+\.(mp4|webm)$/.test(shared.files![0]!.name) && /^video\//.test(shared.files![0]!.type) && shared.files![0]!.size > 100_000, JSON.stringify(shared?.files));
+  await page.locator('#replay .rp-video').waitFor({ state: 'hidden', timeout: 6_000 }).catch(() => undefined);
 
   // ---------- the wide viewport ----------
   await page.setViewportSize({ width: 1280, height: 800 });

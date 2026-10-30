@@ -42,7 +42,7 @@ describe('the replay video', () => {
     const plan = videoPlan(model);
     expect(plan.totalMs).toBe(model.totalMs);
     expect(plan.width).toBe(1080);
-    expect(plan.height).toBe(1350);
+    expect(plan.height).toBe(1920);
     // One painted position per beat, plus the result resting at the end.
     expect(plan.steps).toHaveLength(model.frames.length + 1);
     // The beats keep the timeline's own start times and durations: nothing is re-timed.

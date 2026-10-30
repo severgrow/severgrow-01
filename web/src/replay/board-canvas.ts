@@ -15,6 +15,7 @@
 // picture is already decoded by the time a match ends, so this is a cache hit, never a download.
 // A picture that is missing leaves the board's own flat territory colour underneath, exactly as
 // `defaultArtBoard` does — so painting can never fail or stall.
+import { WORDMARK_URL } from '../player/branding.js';
 import { allCoords, coordKey, mirror, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
@@ -22,6 +23,34 @@ import { centerOf, hash, S, SQ3 } from '../ui/geom.js';
 import { GOLD_FRAME_ATLAS, goldFrameCrop } from '../ui/goldframes.js';
 import { SEED_STONE_ATLAS, seedStoneCrop } from '../ui/seedstone.js';
 import type { ReplayModel } from './timeline.js';
+
+/** The 双サク wordmark (the HUD's own asset): the video's sign-off carries the same mark. */
+const WORDMARK = WORDMARK_URL;
+const tinted = new Map<string, HTMLCanvasElement>();
+/**
+ * The wordmark as one flat colour (the HUD tints the same silhouette with a filter), at a size, or
+ * null before it is decoded. Cached per colour and size: a video asks for it on every picture.
+ */
+export const brandWordmark = (color: string, height: number): HTMLCanvasElement | null => {
+  const img = decoded.get(WORDMARK);
+  if (!img || typeof document === 'undefined') return null;
+  const h = Math.max(1, Math.round(height));
+  const w = Math.max(1, Math.round((img.naturalWidth / img.naturalHeight) * h));
+  const key = `${color}|${w}x${h}`;
+  const hit = tinted.get(key);
+  if (hit) return hit;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d');
+  if (!g) return null;
+  g.drawImage(img, 0, 0, w, h);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = color;
+  g.fillRect(0, 0, w, h);
+  tinted.set(key, c);
+  return c;
+};
 
 /** The board's own pictures, as URLs (the game decodes these before a match ends). */
 export type BoardArt = {
@@ -52,6 +81,7 @@ let source: BoardArt | null = null;
 export const warmBoardArt = (art: BoardArt | null = null): Promise<void> => {
   if (art) source = art;
   const urls = [
+    WORDMARK,
     ...(source?.sprites ?? []),
     source?.ground ?? '',
     ...(source?.rocks ?? []),

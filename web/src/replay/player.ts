@@ -19,7 +19,7 @@ import type { Player } from '../../../src/engine/index.js';
 import type { ReplayHighlight, ReplayModel, ReplayTurningPoint } from './timeline.js';
 import { boardAtIndex, frameAtTime, seekTo } from './seek.js';
 import { REPLAY_CSS } from './replay-css.js';
-import { posterFor, shareReplayPoster } from './poster.js';
+import { posterFor } from './poster.js';
 import type { PosterData } from './poster.js';
 import { loadBoardArtUrls, warmBoardArt } from './board-canvas.js';
 import { paintVideoFrame, videoPlan } from './frames.js';
@@ -233,26 +233,16 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   closeBtn.className = 'rp-btn';
   closeBtn.dataset.rp = 'close';
   closeBtn.textContent = REPLAY.close;
-  // ONE quiet icon beside the mark: the finished poster, shared or saved. It is the same 44px
-  // target and the same ink as everything else, and it never moves the footer's existing rows.
-  const shareBtn = document.createElement('button');
-  shareBtn.type = 'button';
-  shareBtn.className = 'rp-icon';
-  shareBtn.dataset.rp = 'share';
-  shareBtn.setAttribute('aria-label', REPLAY.share);
-  shareBtn.title = REPLAY.share;
-  shareBtn.innerHTML =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="m8 7 4-4 4 4"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>';
-  // THE VIDEO EXPORT (owner, 2026-10-26): the whole replay as a silent file, in the footer beside
-  // the poster's share key — the same 44px target and the same ink as everything else.
+  // THE ONE SHARE KEY (owner, 2026-10-30: "remove the png sharing option … so just 1 icon"): it
+  // makes the replay's video and hands it to the phone's share sheet. The same 44px target and ink.
   const videoBtn = document.createElement('button');
   videoBtn.type = 'button';
   videoBtn.className = 'rp-icon';
   videoBtn.dataset.rp = 'video';
-  videoBtn.setAttribute('aria-label', REPLAY.exportVideo);
-  videoBtn.title = REPLAY.exportVideo;
+  videoBtn.setAttribute('aria-label', REPLAY.share);
+  videoBtn.title = REPLAY.share;
   videoBtn.innerHTML =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="12" height="12" rx="2.5"/><path d="m15 10.5 5-3v9l-5-3"/></svg>';
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="m8 7 4-4 4 4"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>';
   // THE SIGNATURE (owner, 2026-10-26: "an elegant place to place futasaku.com"): the footer's centre
   // carries the mark and the address as one lockup — the 双サク mark above, FUTASAKU.COM below in
   // Besley, in the game's cream, with a low carved edge. It sits where a screenshot or a screen recording of
@@ -269,7 +259,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   brandSite.textContent = REPLAY.site;
   brand.append(brandMark, brandSite);
   leftActions.append(closeBtn);
-  actions.append(shareBtn, videoBtn);
+  actions.append(videoBtn);
   // The footer is two mirrored halves — Close on the left, the two keys on the right, the same
   // width — and the signature sits directly under the board (owner, 2026-10-30: "put the
   // futasaku.com directly under the board, all aligned and symmetric").
@@ -351,7 +341,6 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   let turnShown = -1;
   /** Signature of the board actually painted (a rebuild from the log differs from the frame list). */
   let painted = '';
-  let sharing = false;
   /**
    * DIAGNOSTIC ONLY (perf pass, 2026-10-26): one timing pair per step, read through `now().perf`.
    * Nothing in playback reads it; it exists so a measurement can name where a beat's time went
@@ -705,37 +694,6 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     jumpTo(model.turningPoint.frame, turnMark);
   });
 
-  // THE SHARE: the finished poster (names, score, final board, mark) through the phone's own share
-  // sheet when it takes a file, otherwise a plain download. The poster is built from the replay's
-  // data alone, so nothing hidden can ride along.
-  shareBtn.addEventListener('click', (event) => {
-    event.stopPropagation();
-    if (!model || sharing) return;
-    sharing = true;
-    shareBtn.setAttribute('aria-busy', 'true');
-    const data = posterFor(model);
-    // The poster draws the board's faces from the same loaded module; a channel without it (or a
-    // failed import) passes none, and the poster keeps its flat fallback.
-    void (async () => {
-      const mod = await art;
-      await shareReplayPoster(
-        data,
-        mod
-          ? {
-              sprites: mod.DEFAULT_ART_SPRITES,
-              ground: mod.BOARD_GROUND,
-              rocks: mod.BOARD_ROCKS,
-            }
-          : null,
-      );
-    })()
-      .catch(() => undefined)
-      .finally(() => {
-        sharing = false;
-        shareBtn.removeAttribute('aria-busy');
-      });
-  });
-
   // THE VIDEO EXPORT (owner, 2026-10-26): the whole replay as a silent file. The pictures are
   // painted from the model into the recorder's own canvas, so the recording is independent of what
   // the surface is doing: a scrub, a pause, or the end card cannot change a single recorded frame.
@@ -924,7 +882,6 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
         ...(again.hidden ? [] : [again]),
         ...(videoRow.hidden ? [] : [videoCancel]),
         closeBtn,
-        shareBtn,
         ...(videoBtn.disabled ? [] : [videoBtn]),
       ];
       const at = order.indexOf(document.activeElement as HTMLElement);
