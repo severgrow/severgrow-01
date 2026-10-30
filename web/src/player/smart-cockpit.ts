@@ -722,7 +722,18 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
       if (!button.disabled && button.dataset.kind && !byKind.has(button.dataset.kind)) byKind.set(button.dataset.kind,button);
     }
     const highestRank = (button: HTMLButtonElement) => Math.max(0,...[...button.querySelectorAll<HTMLElement>('.futa04-mini-card .c-num')].map(node=>Number(node.textContent?.trim())||0));
-    bloomSources = [...byKind.values()].sort((a,b)=>highestRank(b)-highestRank(a));
+    /**
+     * LONGEST FIRST (owner, 2026-10-30: "show the biggest/longest blooms first"). The order used to
+     * be by the HIGHEST CARD RANK a recipe holds, which is not the same thing: a 5-card run of 3-7
+     * sorted below a 3-card run of 8-9, so the biggest Bloom was not at the top of the menu. Every
+     * mini-card carries the card it plays, so the COUNT of them is the recipe's real size; the rank
+     * is only the tie-break, then the kind, so the same hand always lists in the same order.
+     * `moveButtons` already sorts its buttons this way — this list follows that order and only
+     * re-sorts where the cockpit builds its own, so the two surfaces can never disagree.
+     */
+    const cardCount = (button: HTMLButtonElement) => button.querySelectorAll('.futa04-mini-card').length;
+    bloomSources = [...byKind.values()].sort((a,b) =>
+      cardCount(b) - cardCount(a) || highestRank(b) - highestRank(a) || (a.dataset.kind ?? '').localeCompare(b.dataset.kind ?? '', 'en', { numeric: true }));
     const next = bloomSources.map(button => `${button.dataset.kind}:${button.getAttribute('aria-label')}`).join('|');
     bloom.hidden = bloomSources.length === 0;
     if (next === bloomSignature) return;
