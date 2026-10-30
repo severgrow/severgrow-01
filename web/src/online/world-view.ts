@@ -33,7 +33,7 @@ import { stakeName } from './challenge-copy.js';
 import { waitingActionCount } from './territory-attention.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import type { AchievementView } from '../../../server/src/seeds/achievements.js';
-import { ACHIEVEMENT_COPY, ACHIEVEMENTS_UI } from './achievement-copy.js';
+import { ACHIEVEMENT_COPY, ACHIEVEMENT_GROUP_TITLES, ACHIEVEMENTS_UI } from './achievement-copy.js';
 import { SWORD_PATH } from './swords-glyph.js';
 import { meLine, ownerLine, ownerSpokenLine } from './world-selection.js';
 import { storedDisplayName } from './identity.js';
@@ -1943,27 +1943,60 @@ export class WorldView {
     await this.refresh(true);
   }
 
-  /** The achievements page: each row a goal, its progress, and CLAIM when it is earned. */
+  /**
+   * The achievements page: five short sections, each row a goal and its progress, CLAIM when earned.
+   *
+   * THIRTY-FIVE WITHOUT CLUTTER (owner, 2026-10-30: "around 35 achievements" and "keep it clean lean
+   * and elegant"). The set is grouped by where it is earned — Territory, Duels, Craft, Company,
+   * Campaign — and each heading carries the earned count, so a glance answers "what is left here".
+   * Rows are one line of title plus one line of detail; a meter appears only when a goal is counted
+   * above one; an unearned row has NO reward teaser and NO amount. Earned-but-unclaimed is a CLAIM
+   * key, claimed is a tick, and nothing depends on colour to tell them apart.
+   */
   private paintAchievements() {
     const list = document.getElementById('online-world-achievements');
-    const intro = document.getElementById('world-achievements-intro');
     if (!list) return;
-    if (intro) intro.textContent = ACHIEVEMENTS_UI.intro;
     const views = this.achievements ?? [];
     const signature = `achievements|${this.claimingAchievement}|${this.justClaimed}|${JSON.stringify(views)}`;
     if (signature === this.paneSignature) return;
     this.paneSignature = signature;
-    list.replaceChildren(...views.map((view) => {
-      const copy = ACHIEVEMENT_COPY[view.id];
-      const item = document.createElement('li');
-      item.className = `world-achievement${view.claimed ? ' claimed' : view.done ? ' ready' : ''}${this.justClaimed === view.id ? ' just-claimed' : ''}`;
-      const text = document.createElement('span');
-      text.className = 'world-achievement-text';
-      const title = document.createElement('strong');
-      title.textContent = copy.title;
-      const detail = document.createElement('span');
-      detail.textContent = view.goal > 1 && !view.claimed ? `${copy.detail} · ${view.progress}/${view.goal}` : copy.detail;
-      text.append(title, detail);
+    const order = ['territory', 'duels', 'craft', 'company', 'campaign'] as const;
+    const nodes: HTMLElement[] = [];
+    for (const group of order) {
+      const rows = views.filter((view) => view.group === group);
+      if (rows.length === 0) continue;
+      const earned = rows.filter((view) => view.done).length;
+      const heading = document.createElement('h3');
+      heading.className = 'world-achievement-heading';
+      heading.setAttribute('role', 'presentation');
+      const name = document.createElement('span');
+      name.textContent = ACHIEVEMENT_GROUP_TITLES[group];
+      const count = document.createElement('span');
+      count.className = 'world-achievement-count';
+      count.textContent = `${earned}/${rows.length}`;
+      heading.append(name, count);
+      nodes.push(heading);
+      for (const view of rows) nodes.push(this.achievementRow(view));
+    }
+    list.replaceChildren(...nodes);
+  }
+
+  /** One row: title, one-sentence rule, optional counted meter, and the one action it allows. */
+  private achievementRow(view: AchievementView): HTMLElement {
+    const copy = ACHIEVEMENT_COPY[view.id];
+    const item = document.createElement('div');
+    item.className = `world-achievement${view.claimed ? ' claimed' : view.done ? ' ready' : ''}${this.justClaimed === view.id ? ' just-claimed' : ''}`;
+    item.dataset.state = view.claimed ? 'claimed' : view.done ? 'ready' : 'open';
+    item.dataset.achievement = view.id;
+    item.setAttribute('role', 'listitem');
+    const text = document.createElement('span');
+    text.className = 'world-achievement-text';
+    const title = document.createElement('strong');
+    title.textContent = copy.title;
+    const detail = document.createElement('span');
+    detail.textContent = view.goal > 1 && !view.claimed ? `${copy.detail} · ${view.progress}/${view.goal}` : copy.detail;
+    text.append(title, detail);
+    if (view.goal > 1 && !view.claimed) {
       const meter = document.createElement('span');
       meter.className = 'world-achievement-meter';
       meter.setAttribute('aria-hidden', 'true');
@@ -1971,29 +2004,25 @@ export class WorldView {
       fill.style.width = `${Math.round(100 * view.progress / view.goal)}%`;
       meter.append(fill);
       text.append(meter);
-      let action: HTMLElement;
-      if (view.claimed) {
-        action = document.createElement('span');
-        action.className = 'world-achievement-done';
-        action.textContent = '✓';
-        action.setAttribute('aria-label', ACHIEVEMENTS_UI.claimed);
-      } else if (view.done) {
-        const key = document.createElement('button');
-        key.type = 'button';
-        key.className = 'world-claim-button world-achievement-claim';
-        const busy = this.claimingAchievement === view.id;
-        key.textContent = busy ? ACHIEVEMENTS_UI.claiming : ACHIEVEMENTS_UI.claim(view.seeds);
-        key.disabled = busy;
-        key.addEventListener('click', () => void this.claimAchievement(view.id));
-        action = key;
-      } else {
-        action = document.createElement('span');
-        action.className = 'world-achievement-reward';
-        action.textContent = ACHIEVEMENTS_UI.reward(view.seeds);
-      }
-      item.append(text, action);
-      return item;
-    }));
+    }
+    item.append(text);
+    if (view.claimed) {
+      const done = document.createElement('span');
+      done.className = 'world-achievement-done';
+      done.textContent = '✓';
+      done.setAttribute('aria-label', ACHIEVEMENTS_UI.claimed);
+      item.append(done);
+    } else if (view.done) {
+      const key = document.createElement('button');
+      key.type = 'button';
+      key.className = 'world-claim-button world-achievement-claim';
+      const busy = this.claimingAchievement === view.id;
+      key.textContent = busy ? ACHIEVEMENTS_UI.claiming : ACHIEVEMENTS_UI.claim;
+      key.disabled = busy;
+      key.addEventListener('click', () => void this.claimAchievement(view.id));
+      item.append(key);
+    }
+    return item;
   }
 
   private async claimAchievement(id: string): Promise<void> {

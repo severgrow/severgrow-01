@@ -1071,11 +1071,20 @@ html.reduce-motion .world-selection { animation: none; }
 .world-key[hidden] { display: none; }
 /* a reward waiting: the lamp turns the ivory-gold of a coin, steady (never a loop) */
 .world-deck-count.ready { background: #f2c879; color: #1b1406; box-shadow: 0 0 8px #f2c87973; }
-.world-achievements { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.world-achievements { margin: 0; padding: 0; display: grid; gap: 4px; width: 100%; min-width: 0; }
+/* A section heading: the group's name left, its earned count right. The count is the only summary;
+   it keeps 35 rows from reading as one undifferentiated list. */
+.world-achievement-heading {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  margin: 9px 4px 1px; padding: 0; min-width: 0;
+  font-size: .58rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #cfc6ac;
+}
+.world-achievement-heading:first-child { margin-top: 0; }
+.world-achievement-count { letter-spacing: .12em; color: #e8ddc58a; font-variant-numeric: tabular-nums; }
 .world-achievement {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px;
-  min-height: 52px; padding: 7px 8px 7px 12px; border-radius: 10px; background: #e8ddc508;
-  transition: background var(--ix-open) ease;
+  min-width: 0; box-sizing: border-box; min-height: 52px; padding: 7px 8px 7px 12px; border-radius: 10px;
+  background: #e8ddc508; transition: background var(--ix-open) ease;
 }
 .world-achievement.ready { background: #f2c87914; box-shadow: inset 0 0 0 1px #f2c87933; }
 .world-achievement.claimed { opacity: .62; }
@@ -1085,7 +1094,6 @@ html.reduce-motion .world-selection { animation: none; }
 .world-achievement-meter { height: 3px; border-radius: 2px; background: #e8ddc514; overflow: hidden; margin-top: 2px; }
 .world-achievement-meter i { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #b8955099, #f2c879); }
 .world-achievement.claimed .world-achievement-meter { display: none; }
-.world-achievement-reward { font-size: .66rem; letter-spacing: .1em; color: #e8ddc58a; font-variant-numeric: tabular-nums; padding-right: 6px; }
 .world-achievement-done { font-size: .9rem; color: #f2c879; padding-right: 10px; }
 .world-achievement-claim { min-height: 40px; }
 /* the moment it pays: one warm flash across the row, finite */

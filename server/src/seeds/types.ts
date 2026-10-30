@@ -45,6 +45,38 @@ export type RewardInput = {
   achievementSeeds?: number;
 };
 export type RewardResult = { awarded: number; reason: string | null; wallet: SeedWallet; replayed: boolean };
+
+/**
+ * One recorded settlement receipt, as the achievements page reads it. The receipt table already
+ * stores exactly these fields (`seed_reward_receipts`); this is a read-only projection, never a new
+ * source of truth. `mode` keeps its stored value ('queue' | 'friend' | 'training' | 'campaign').
+ */
+export type ReceiptRow = {
+  sourceKey: string;
+  mode: RewardMode;
+  opponentId: string | null;
+  utcDay: string;
+  awarded: number;
+  createdAt: number;
+};
+
+/**
+ * One verified Campaign clear (migration `0021_campaign_clears.sql`). Only the first-clear proof the
+ * server actually replayed writes a row; the store keeps the BEST attempt per level. The values are
+ * measured from the verified action log, not reported by the browser.
+ */
+export type CampaignClear = {
+  levelKey: string;
+  levelNumber: number;
+  /** The engine's turn number when the win landed. */
+  turns: number;
+  /** Draws from the throw pile by the human player. 0 = a clean clear. */
+  throwDraws: number;
+  /** Bloom actions by the human player, and every other grow action (Sprout/Fruit/MegaBomb). */
+  blooms: number;
+  grows: number;
+  finishedAt: number;
+};
 export type ClaimResult =
   | { ok: true; cellId: string; revision: number; wallet: SeedWallet; replayed: boolean }
   | { ok: false; code: 'NO_FUNDS' | 'OCCUPIED' | 'NOT_ADJACENT' | 'INVALID_CELL'; revision: number; wallet: SeedWallet };
@@ -202,6 +234,16 @@ export interface WorldEconomyStore {
   campaignHighestLevel(playerId: string): Promise<number | null>;
   /** This player's recorded receipt keys that start with `prefix` (e.g. `achievement:`); own id only. */
   receiptKeys(playerId: string, prefix: string): Promise<string[]>;
+  /** This player's recorded settlement receipts, for campaign and duel facts. Own id only. */
+  receiptRows(playerId: string): Promise<ReceiptRow[]>;
+  /**
+   * The shape of every verified Campaign clear this player has (migration 0021). Empty when the
+   * table has not been applied yet: the achievements page then shows honest zeroes for the two
+   * clear-shape achievements rather than a broken read.
+   */
+  campaignClears(playerId: string): Promise<CampaignClear[]>;
+  /** Record one verified clear. Idempotent per level; keeps the best attempt's shape. */
+  recordCampaignClear(playerId: string, clear: CampaignClear): Promise<void>;
   world(): Promise<WorldSnapshot>;
   /**
    * The player's stored palette choice, or null when they have none. A READ: it never writes the

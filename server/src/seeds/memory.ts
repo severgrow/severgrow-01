@@ -11,11 +11,13 @@ import { planSeedReward } from './rewards.js';
 import type {
   AdminCellResult,
   AdminSeedAdjustResult,
+  CampaignClear,
   ChallengeRespondResult,
   ChallengeSendResult,
   ChallengeSettleResult,
   ClaimResult,
   SellResult,
+  ReceiptRow,
   RewardInput,
   RewardResult,
   SeedWallet,
@@ -56,6 +58,8 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   readonly colours = new Map<string, number>();
   /** When each choice was saved, for the one-change-per-24 h rule. Kept beside the slot. */
   readonly colourTimes = new Map<string, number>();
+  /** Verified Campaign clear shapes (migration 0021), one best row per level and player. */
+  readonly campaignClearRows = new Map<string, CampaignClear[]>();
   revision = 0;
 
   private current(playerId: string): SeedWallet {
@@ -112,6 +116,39 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     return [...this.receipts.values()]
       .filter((r) => r.input.playerId === playerId && r.input.sourceKey.startsWith(prefix))
       .map((r) => r.input.sourceKey);
+  }
+  async receiptRows(playerId: string): Promise<ReceiptRow[]> {
+    return [...this.receipts.values()]
+      .filter((r) => r.input.playerId === playerId)
+      .map((r) => ({
+        sourceKey: r.input.sourceKey,
+        mode: r.input.mode,
+        opponentId: r.input.opponentId,
+        utcDay: utcDay(r.input.now),
+        awarded: r.awarded,
+        createdAt: r.input.now,
+      }));
+  }
+  async campaignClears(playerId: string): Promise<CampaignClear[]> {
+    return (this.campaignClearRows.get(playerId) ?? []).map((clear) => ({ ...clear }));
+  }
+  async recordCampaignClear(playerId: string, clear: CampaignClear): Promise<void> {
+    const list = this.campaignClearRows.get(playerId) ?? [];
+    const at = list.findIndex((row) => row.levelKey === clear.levelKey);
+    if (at < 0) list.push({ ...clear });
+    else {
+      const old = list[at]!;
+      list[at] = {
+        ...old,
+        levelNumber: clear.levelNumber,
+        turns: Math.min(old.turns, clear.turns),
+        throwDraws: Math.min(old.throwDraws, clear.throwDraws),
+        blooms: Math.max(old.blooms, clear.blooms),
+        grows: Math.min(old.grows, clear.grows),
+        finishedAt: Math.max(old.finishedAt, clear.finishedAt),
+      };
+    }
+    this.campaignClearRows.set(playerId, list);
   }
   async sell(playerId: string, cellId: string, requestId: string, now: number): Promise<SellResult> {
     const wallet = this.current(playerId);

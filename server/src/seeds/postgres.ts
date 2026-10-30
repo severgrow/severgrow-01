@@ -13,11 +13,13 @@ import { stakedCellFor } from './stake.js';
 import type {
   AdminCellResult,
   AdminSeedAdjustResult,
+  CampaignClear,
   ChallengeRespondResult,
   ChallengeSendResult,
   ChallengeSettleResult,
   ClaimResult,
   SellResult,
+  ReceiptRow,
   RewardInput,
   RewardResult,
   SeedWallet,
@@ -145,6 +147,18 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
     ).then((result) => result.rows.length > 0).catch(() => false);
     return colourTable;
   };
+  /**
+   * Is `campaign_clears` present (migration 0021)? Probed once per store, exactly like the colour
+   * table. An unmigrated database must keep serving the achievements page: the two clear-shape
+   * achievements read zero, and recording a clear is a quiet no-op, never a lost campaign reward.
+   */
+  let campaignClearTable: Promise<boolean> | null = null;
+  const hasCampaignClearTable = (): Promise<boolean> => {
+    campaignClearTable ??= pool.query(
+      `select 1 from information_schema.tables where table_schema = 'public' and table_name = 'campaign_clears'`,
+    ).then((result) => result.rows.length > 0).catch(() => false);
+    return campaignClearTable;
+  };
   return {
   async wallet(playerId) {
     const { rows } = await pool.query('select * from seed_wallets where player_id = $1', [playerId]);
@@ -173,6 +187,55 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
       [playerId, prefix],
     );
     return rows.map((row) => String(row.source_key));
+  },
+  async receiptRows(playerId) {
+    const { rows } = await pool.query(
+      `select source_key, mode, opponent_id, utc_day, awarded, created_at
+         from seed_reward_receipts where player_id=$1 order by created_at asc`,
+      [playerId],
+    );
+    return rows.map((row): ReceiptRow => ({
+      sourceKey: String(row.source_key),
+      mode: String(row.mode) as ReceiptRow['mode'],
+      opponentId: row.opponent_id == null ? null : String(row.opponent_id),
+      utcDay: String(row.utc_day),
+      awarded: number(row.awarded),
+      createdAt: number(row.created_at),
+    }));
+  },
+  async campaignClears(playerId) {
+    if (!(await hasCampaignClearTable())) return [];
+    const { rows } = await pool.query('select * from campaign_clears where player_id=$1', [playerId]);
+    return rows.map((row): CampaignClear => ({
+      levelKey: String(row.level_key),
+      levelNumber: number(row.level_number),
+      turns: number(row.turns),
+      throwDraws: number(row.throw_draws),
+      blooms: number(row.blooms),
+      grows: number(row.grows),
+      finishedAt: number(row.finished_at),
+    }));
+  },
+  async recordCampaignClear(playerId, clear) {
+    if (!(await hasCampaignClearTable())) return;
+    try {
+      await pool.query(
+        `insert into campaign_clears(player_id, level_key, level_number, turns, throw_draws, blooms, grows, finished_at)
+         values($1,$2,$3,$4,$5,$6,$7,$8)
+         on conflict (player_id, level_key) do update set
+           level_number = excluded.level_number,
+           turns = least(campaign_clears.turns, excluded.turns),
+           throw_draws = least(campaign_clears.throw_draws, excluded.throw_draws),
+           blooms = greatest(campaign_clears.blooms, excluded.blooms),
+           grows = least(campaign_clears.grows, excluded.grows),
+           finished_at = greatest(campaign_clears.finished_at, excluded.finished_at)`,
+        [playerId, clear.levelKey, clear.levelNumber, clear.turns, clear.throwDraws, clear.blooms, clear.grows, clear.finishedAt],
+      );
+    } catch (error) {
+      // A table that vanishes between the probe and the write is housekeeping, never a reason to
+      // turn a verified campaign win into an error.
+      if ((error as { code?: unknown } | null)?.code !== '42P01') throw error;
+    }
   },
   async world() {
     // Probed OUTSIDE the transaction: it is a catalogue read, and it must not take a second
