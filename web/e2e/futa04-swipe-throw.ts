@@ -3,6 +3,10 @@
 //   - there are three throws: swipe up, drag the card onto the Throw pile, tap the pile;
 //   - the swipe-up gets one small boomerang (hand -> board -> pile), presentation only.
 //
+// OWNER, 2026-10-30: "make the pile bigger after player selects a card to throw". The swell is now
+// 1.16 (was 1.08) — still transform-only, still about the pile's own centre, still on the ack beat —
+// so the thresholds below moved with it. The flight still lands on the swollen rect.
+//
 // Real pointer gestures (page.mouse with steps) drive the recognition itself, not a helper call.
 // Screenshots land in /tmp/swipe-throw/. Build CHANNEL=futa04 first.
 //
@@ -404,7 +408,7 @@ try {
       const t = getComputedStyle(d).transform;
       if (!t || t === 'none') return false;
       const m = new DOMMatrixReadOnly(t);
-      return Math.hypot(m.a, m.b) >= 1.079;
+      return Math.hypot(m.a, m.b) >= 1.159;
     }, undefined, { timeout: 3000 });
     let s = await state(page);
     check(JSON.stringify(s) === JSON.stringify(before), `${tag}: the first tap does not throw`);
@@ -412,7 +416,7 @@ try {
     // The pile swells once, about its own centre-bottom, with transform only (no reflow).
     const picked = await pileLook(page);
     check(picked.target, `${tag}: selection marks the Throw pile as the target`);
-    check(picked.scale >= 1.06 && picked.scale <= 1.12, `${tag}: the target swells slightly (${picked.scale.toFixed(3)})`);
+    check(picked.scale >= 1.15 && picked.scale <= 1.20, `${tag}: the target swells to the bigger step (${picked.scale.toFixed(3)})`);
     check(picked.opacity === 1, `${tag}: the target stays fully opaque`);
     check(/brightness\(1\.[12]/.test(picked.filter), `${tag}: the target's edge light brightens (${picked.filter})`);
     check(Math.abs(picked.originX - picked.width / 2) <= 1, `${tag}: the swell is centred on the pile (${picked.originX} vs ${picked.width / 2})`);
@@ -490,10 +494,10 @@ try {
       const t = getComputedStyle(d).transform;
       if (!t || t === 'none') return false;
       const m = new DOMMatrixReadOnly(t);
-      return Math.hypot(m.a, m.b) >= 1.079;
+      return Math.hypot(m.a, m.b) >= 1.159;
     }, undefined, { timeout: 3000 });
     const swell = await pileLook(page);
-    check(swell.target && swell.scale >= 1.06, `${tag}: the picked card swells the pile before a swipe`);
+    check(swell.target && swell.scale >= 1.15, `${tag}: the picked card swells the pile before a swipe`);
     await page.screenshot({ path: `${SHOTS}/${tag}-09-selected-swell.png` });
     const pickedPt = await visiblePoint(page, card);
     await startFlyerTracking(page);
@@ -510,8 +514,8 @@ try {
     const pickedFlight = await readFlyerTracking(page);
     // The hold is captured when the flyer is born: a wall-clock check can land after the flight
     // on a slow renderer. The sampled frames are an additional witness when frames do run.
-    const held = pickedFlight.heldTarget && pickedFlight.heldScale >= 1.06;
-    const heldFrames = pickedFlight.samples.some((sample) => sample.target && sample.pileScale >= 1.06);
+    const held = pickedFlight.heldTarget && pickedFlight.heldScale >= 1.15;
+    const heldFrames = pickedFlight.samples.some((sample) => sample.target && sample.pileScale >= 1.15);
     check(held || heldFrames,
       `${tag}: the swollen pile is held while its card is away (held ${pickedFlight.heldTarget}/${pickedFlight.heldScale.toFixed(3)}; ${pickedFlight.samples.filter((sample) => sample.target).length}/${pickedFlight.samples.length} frames)`);
     const pickedMiss = Math.hypot(
@@ -640,12 +644,15 @@ try {
     await page.waitForFunction(() => document.documentElement.classList.contains('reduce-motion'), undefined, { timeout: 20000 });
     await idle(page);
     ({ before, card } = await toThrow(page, 810008 + w));
-    // Reduce motion keeps the static emphasis (the light), but never the swell.
+    // Reduce motion keeps the static emphasis AND the size — the size is information — and drops
+    // only the transition (owner, 2026-10-30).
     await tapCard(page, card, touch);
     await page.waitForTimeout(220);
     const still = await pileLook(page);
     check(still.target, `${tag}: Reduce motion still marks the Throw pile`);
-    check(Math.abs(still.scale - 1) <= 0.01, `${tag}: Reduce motion drops the swell (${still.scale.toFixed(3)})`);
+    check(Math.abs(still.scale - 1.16) <= 0.005, `${tag}: Reduce motion keeps the bigger size (${still.scale.toFixed(3)})`);
+    check(await page.locator('#discard').evaluate((el) => getComputedStyle(el).transitionProperty) === 'none',
+      `${tag}: Reduce motion drops only the transition`);
     check(still.opacity === 1 && /brightness\(1\.[12]/.test(still.filter), `${tag}: Reduce motion keeps the brighter target`);
     await page.screenshot({ path: `${SHOTS}/${tag}-11-reduce-motion-selected.png` });
     await tapCard(page, card, touch); // put it down; the swipe below is the no-flight proof

@@ -332,41 +332,57 @@ html.futa04-information[data-step='throw'] #futa04-box #discard {
   filter: brightness(1.14) saturate(1.03);
   transition: opacity 160ms ease, filter 160ms ease;
 }
-/* A picked card swells its target once, on the interface-motion vocabulary. Transform only:
-   nothing reflows, so the hand and the neighbouring deck never move. It scales about the
-   pile's own centre, never the page's. */
+/* A picked card swells its target once, on the acknowledgement beat (owner, 2026-10-30:
+   "make the pile bigger after player selects a card to throw"). Transform only: nothing reflows,
+   so the hand and the neighbouring deck never move. It scales about the pile's own centre, never
+   the page's.
+
+   WHY 1.16 and not more: the pile is a 50x92-96 box inside the cockpit plate, whose inner height
+   is 104px on a wide screen — 92 * 1.16 is 106.7, the same 1.3px lip the Draw step's own 1.16
+   swell has always had. At 1.24 the pile starts poking out of the plate (measured 6.5px), so this
+   is the honest maximum, not a taste value. The art stays crisp: the card is drawn from a
+   256x356px atlas cell into a ~58x82 CSS px box (still a 4.4x downscale) and the pile is not
+   promoted with will-change, so the resting state rasterises at the swollen size. */
 html.futa04-information:not([data-step='draw']) #futa04-box #discard {
   transform-origin: 50% 50%;
   transition:
-    transform var(--ix-close) var(--ix-ease-close),
+    transform var(--dur-ack) var(--ease-standard),
     opacity var(--ix-close) var(--ix-ease-close),
     filter var(--ix-close) var(--ix-ease-close);
 }
 html.futa04-information #futa04-box #discard.futa04-throw-target {
-  transform: scale(1.08);
+  transform: scale(1.16);
   opacity: 1;
   filter: brightness(1.18) saturate(1.04);
   z-index: 2;
   transition:
-    transform var(--ix-open) var(--ix-ease-open),
+    transform var(--dur-ack) var(--ease-standard),
     opacity var(--ix-open) var(--ix-ease-open),
     filter var(--ix-open) var(--ix-ease-open);
 }
-/* The existing edge light, a step stronger — never a second, invented one. */
+/* The existing edge light, a step stronger — but only its FALLOFF. Owner, 2026-10-30: "remove the
+   outer contour rectangle around discard pile" when throwing. The contour was this layer's hard,
+   zero-blur ring ( 0 0 0 1.5px rgba(232,150,120,.55) ): spread-only, so it painted a 1px rounded
+   rectangle hugging the card — measured in the browser as a sharp 1px spike at the pile's edges
+   (rgb 82,43,35 against a rgb 23,23,23 backdrop). Only the ring goes; the soft ember light stays. */
 html.futa04-information #futa04-box #discard.futa04-throw-target .gd-halo {
   opacity: 1;
-  box-shadow: 0 0 0 1.5px rgba(232,150,120,.55), 0 0 26px 4px rgba(190,80,60,.42);
+  box-shadow: 0 0 26px 4px rgba(190,80,60,.42);
 }
-/* Reduce motion: keep the brighter light, drop the swell. The target still reads as lit. */
+/* Reduce motion: the pile still ENDS bigger — the size is information, not decoration — and only
+   the transition is dropped, so it is simply bigger the moment the card is picked. */
 html.futa04-information.reduce-motion #futa04-box #discard.futa04-throw-target {
-  transform: none;
+  transform: scale(1.16);
+  transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  html.futa04-information #futa04-box #discard.futa04-throw-target { transform: none; }
+  html.futa04-information #futa04-box #discard.futa04-throw-target { transform: scale(1.16); transition: none; }
 }
+/* The resting throw light: the same contour removal as the picked state. The old ring was
+   0 0 0 1px rgba(218,104,80,.38); what is left is the ember falloff alone. */
 html.futa04-information[data-step='throw'] #discard .gd-halo {
   opacity: .62; transition: none;
-  box-shadow: 0 0 0 1px rgba(218,104,80,.38), 0 0 22px 2px rgba(173,64,47,.32);
+  box-shadow: 0 0 22px 2px rgba(173,64,47,.32);
 }
 html.futa04-information[data-step='throw'] #discard .gd-ring { animation: none !important; opacity: 0; }
 /* The hand is a drag surface (Grow and the new swipe-up Throw): it must own the vertical gesture,
