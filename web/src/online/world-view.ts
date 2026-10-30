@@ -377,8 +377,6 @@ export class WorldView {
   private colourSaving: number | null = null;
   private colourAvailable = true;
   private colourSignature = '';
-  /** When the server will allow another colour change (epoch ms), or null when one is available. */
-  private colourChangeAt: number | null = null;
   /** The map on screen came from the device's memory (./world-memory.ts), not this session's server. */
   private fromMemory = false;
   /** The player's identity has resolved (to someone, or to nobody). Until then the wallet line is blank. */
@@ -1792,9 +1790,10 @@ export class WorldView {
   //      key carries the player's CURRENT colour as its glyph, so the row answers "what colour am
   //      I?" without opening anything. CHOSEN.
   //
-  // THE 24 h WAIT is legible in the page itself: the note under the heading says "Changes again in
-  // N h" and the swatches are inert while the server's window is open (see `paintColourPane`). The
-  // server owns the clock (`player_tile_colours.chosen_at`), so another device cannot reset it.
+  // THE 24 h LIMIT WAS WITHDRAWN THE SAME DAY (owner, 2026-10-30: "remove color change 1 per 24h -
+  // let it be changed anytime for now"). The window ships as 0 (`COLOUR_CHANGE_WINDOW_MS`): the
+  // swatches are always live, the page shows no countdown, and the server accepts every change.
+  // The stored `chosen_at` clock is still written, so restoring the limit is one number.
   //
   // The key carries the player's CURRENT colour as its own glyph background, so the row also answers
   // "what colour am I?" without opening anything.
@@ -1805,7 +1804,6 @@ export class WorldView {
       const answer = await this.client.worldColour(identity.token);
       if (identity !== this.identity || !this.active) return;
       this.myColourId = answer.colourId;
-      this.colourChangeAt = answer.canChange ? null : answer.changeAvailableAt;
       this.colourAvailable = true;
       this.paintKeyColour();
       this.paintPanel();
@@ -1827,11 +1825,6 @@ export class WorldView {
     key.dataset.colour = String(this.myColourId);
   }
 
-  /** Milliseconds left on the 24 h colour window (0 = can change now). */
-  private colourCooldown(): number {
-    return this.colourChangeAt === null ? 0 : Math.max(0, this.colourChangeAt - Date.now());
-  }
-
   /**
    * The picker: twenty swatches, four to a row, each with its NAME under it (never colour alone).
    * Rebuilt only when the current colour, the saving state or the cooldown label changes — a 12 s
@@ -1843,17 +1836,14 @@ export class WorldView {
     const note = document.getElementById('world-colour-note');
     if (!grid) return;
     if (label) label.textContent = ONLINE.worldColourLabel;
-    // THE 24 h STATE IS VISIBLE BEFORE A PRESS (owner, 2026-10-30): the swatches are inert while the
-    // server's window is open, and the note says exactly how long is left. The label is floor-based
-    // and derived from the server's `changeAvailableAt`, so a wrong device clock cannot unlock it.
-    const cooldown = this.colourCooldown();
-    const cooldownLabel = cooldown > 0 ? remainingLabel(cooldown) : '';
+    // NO COUNTDOWN LINE (owner, 2026-10-30: "remove color change 1 per 24h - let it be changed
+    // anytime for now"). The note is the saving state while a save is in flight and the plain hint
+    // otherwise; the swatches are always live. The window constant is 0, so `colourCooldown()`
+    // returns 0 and there is nothing to report.
     if (note) {
-      note.textContent = this.colourSaving !== null
-        ? ONLINE.worldColourSaving
-        : cooldown > 0 ? ONLINE.worldColourCooldown(cooldownLabel) : ONLINE.worldColourHint;
+      note.textContent = this.colourSaving !== null ? ONLINE.worldColourSaving : ONLINE.worldColourHint;
     }
-    const signature = `colour|${this.myColourId ?? -1}|${this.colourSaving ?? -1}|${cooldownLabel}`;
+    const signature = `colour|${this.myColourId ?? -1}|${this.colourSaving ?? -1}`;
     if (signature === this.colourSignature) return;
     this.colourSignature = signature;
     const current = this.myColourId;
@@ -1868,9 +1858,8 @@ export class WorldView {
       const on = current === colour.id;
       swatch.classList.toggle('current', on);
       swatch.setAttribute('aria-pressed', String(on));
-      // THE 24 h RULE, legible on the grid: a swatch is a real disabled control while the window is
-      // closed, and the note beside the heading says when it opens again.
-      swatch.disabled = cooldown > 0;
+      // The swatch is always a live control: there is no window any more (see `worldColourHint`).
+      swatch.disabled = false;
       // The name is the accessible label AND the visible caption: a swatch is never colour alone.
       swatch.setAttribute('aria-label', on ? `${colour.name}. ${ONLINE.worldColourCurrent}` : colour.name);
       swatch.title = colour.name;
@@ -1897,13 +1886,9 @@ export class WorldView {
     // Tapping the colour you already have is not a change: the picker stays open, nothing is sent,
     // and the swatch's own "current" mark is the answer.
     if (colourId === this.myColourId) return;
-    // A press can only arrive while the grid is live, but the rule is the server's: say the wait
-    // here too, in the same words, rather than firing a request that is certain to be refused.
-    const cooldown = this.colourCooldown();
-    if (cooldown > 0) {
-      this.notice(ONLINE.worldColourCooldownNotice(remainingLabel(cooldown)));
-      return;
-    }
+    // NO COOLDOWN ANY MORE (owner, 2026-10-30: "remove color change 1 per 24h - let it be changed
+    // anytime for now"). The window ships as 0, so there is nothing to check before the press and
+    // nothing to refuse after it.
     this.colourSaving = colourId;
     this.myColourId = colourId;
     this.paintKeyColour();
@@ -1912,17 +1897,11 @@ export class WorldView {
       const saved = await this.client.chooseWorldColour(identity.token, colourId);
       if (identity !== this.identity) return;
       this.myColourId = saved.colourId;
-      this.colourChangeAt = saved.canChange ? null : saved.changeAvailableAt;
       this.cue('chime');
       this.notice(ONLINE.worldColourPicked(saved.name));
     } catch (error) {
-      if (identity === this.identity) {
-        const code = (error as { code?: string } | null)?.code;
-        const left = this.colourCooldown();
-        this.notice(code === 'COLOUR_COOLDOWN' && left > 0
-          ? ONLINE.worldColourCooldownNotice(remainingLabel(left))
-          : ONLINE.worldColourFailed);
-      }
+      // A refusal can now only be a real failure (the window is 0), so say only that.
+      if (identity === this.identity) this.notice(ONLINE.worldColourFailed);
       // Put the marks back on whatever the server actually has.
       void this.loadColour(identity);
     } finally {

@@ -1,13 +1,13 @@
-// ONE COLOUR CHANGE PER 24 HOURS (owner, 2026-10-30): "make sure players can change the color of
-// their tiles - but only once per 24h".
-//
-// The rule is the SERVER's, and this file is its gate:
-//   * a first change succeeds;
-//   * a second change inside 24 h is refused with a code the client can render, and nothing moves;
-//   * a change after 24 h succeeds;
-//   * choosing the colour you already have is not a change (a retry cannot cost the player a day);
-//   * the stored row carries the clock (`chosen_at`) on BOTH backends, so the rule cannot be
-//     bypassed by asking twice, or by using another device.
+// COLOUR CHANGES ARE UNLIMITED (owner, 2026-10-30). The 24 h rule was asked for and then withdrawn
+// the same day - "remove color change 1 per 24h - let it be changed anytime for now" - so this file
+// now asserts the ABSENCE of a limit, which is the rule that ships:
+//   * a change succeeds, and another change straight after ALSO succeeds;
+//   * the read never reports a wait, and `canChange` is never false;
+//   * changing to the colour you already have still succeeds (and is still a no-op on the stored
+//     clock, so restoring the window later needs no migration);
+//   * the stored row is still written on BOTH backends, so a future rule has its clock ready.
+// The window constant itself is kept at 0 (see `src/tile-colours.ts`) so restoring 24 h is one
+// number, and `colourCooldownMs` stays unit-tested against a non-zero window below.
 import { describe, expect, it } from 'vitest';
 import { MemoryStorage } from '../src/storage/memory.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
@@ -16,7 +16,7 @@ import { createWorldEconomyRouter } from '../src/seeds/router.js';
 import { postgresWorldEconomyStore } from '../src/seeds/postgres.js';
 import type { PgPool, PgQueryResult, PgRow } from '../src/storage/postgres.js';
 import type { PlayerRecord } from '../src/storage/types.js';
-import { COLOUR_CHANGE_WINDOW_MS, colourCooldownMs } from '../../src/tile-colours.js';
+import { colourCooldownMs } from '../../src/tile-colours.js';
 
 const START = Date.UTC(2026, 9, 30, 9);
 const HOUR = 60 * 60 * 1000;
@@ -58,29 +58,28 @@ describe('the 24 h colour rule', () => {
     const first = await h.call('POST', '/v1/world/colour', 'token-a', { colourId: 12 });
     expect(first?.status).toBe(200);
     expect(h.store.colours.get(h.a.id)).toBe(12);
-    expect(h.store.colourTimes.get(h.a.id)).toBe(START);
 
-    // Immediately after: refused, with a code the client can render, and nothing moved. (The router
-    // throws the ApiError; the fetch app maps it to a 409 with `code: 'COLOUR_COOLDOWN'`.)
-    await expect(h.call('POST', '/v1/world/colour', 'token-a', { colourId: 13 }))
-      .rejects.toMatchObject({ code: 'COLOUR_COOLDOWN', status: 409 });
-    expect(h.store.colours.get(h.a.id)).toBe(12);
-    expect(h.store.colourTimes.get(h.a.id)).toBe(START);
-
-    // 23 h later it is still the same day.
-    clock.now = START + 23 * HOUR;
-    await expect(h.service.chooseColour(h.a, 13)).rejects.toMatchObject({ code: 'COLOUR_COOLDOWN' });
-    expect(h.store.colours.get(h.a.id)).toBe(12);
-
-    // Exactly 24 h after the save, a new change is allowed.
-    clock.now = START + COLOUR_CHANGE_WINDOW_MS;
-    const later = await h.call('POST', '/v1/world/colour', 'token-a', { colourId: 13 });
-    expect(later?.status).toBe(200);
+    // Immediately after: another change is ALLOWED. This is the rule that ships.
+    const second = await h.call('POST', '/v1/world/colour', 'token-a', { colourId: 13 });
+    expect(second?.status).toBe(200);
     expect(h.store.colours.get(h.a.id)).toBe(13);
-    expect(h.store.colourTimes.get(h.a.id)).toBe(START + COLOUR_CHANGE_WINDOW_MS);
+
+    // ...and again, with no wait, on a fresh minute.
+    clock.now = START + 60_000;
+    const third = await h.service.chooseColour(h.a, 7);
+    expect(third.colourId).toBe(7);
+    expect(h.store.colourTimes.get(h.a.id)).toBe(START + 60_000);
   });
 
-  it('the read reports the wait BEFORE a press, so the picker can say how long is left', async () => {
+  it('the cooldown arithmetic still works, so the rule is one number away from returning', () => {
+    // The window ships as 0. The maths is exercised against a 24 h window so it cannot rot.
+    const DAY = 24 * HOUR;
+    expect(colourCooldownMs(START, START + 5 * HOUR, DAY)).toBe(19 * HOUR);
+    expect(colourCooldownMs(START, START + DAY, DAY)).toBe(0);
+    expect(colourCooldownMs(null, START, DAY)).toBe(0);
+  });
+
+  it('the read never reports a wait, so the picker shows no countdown', async () => {
     const clock = { now: START };
     const h = harness(clock);
     await h.register(h.a);
@@ -91,36 +90,36 @@ describe('the 24 h colour rule', () => {
     clock.now = START + 5 * HOUR;
     const after = await h.call('GET', '/v1/world/colour', 'token-a');
     const colour = (after?.body as { colour: { canChange: boolean; changeAvailableAt: number | null; remainingMs: number } }).colour;
-    expect(colour.canChange).toBe(false);
-    expect(colour.changeAvailableAt).toBe(START + COLOUR_CHANGE_WINDOW_MS);
-    expect(colour.remainingMs).toBe(19 * HOUR);
-    expect(colourCooldownMs(START, START + 5 * HOUR)).toBe(19 * HOUR);
+    // Five hours after a change, a 24 h rule would say 19 h. There is no rule, so there is no wait.
+    expect(colour.canChange).toBe(true);
+    expect(colour.remainingMs).toBe(0);
   });
 
-  it('choosing the colour you already have is NOT a change, and does not move the clock', async () => {
+  it('choosing the colour you already have changes nothing, and a real change is allowed', async () => {
     const clock = { now: START };
     const h = harness(clock);
     await h.register(h.a);
     await h.service.chooseColour(h.a, 12);
     clock.now = START + HOUR;
-    // A double tap or a retry: succeeds, but the day is not extended.
+    // A double tap or a retry: succeeds, and does not move the stored clock.
     await expect(h.service.chooseColour(h.a, 12)).resolves.toMatchObject({ colourId: 12 });
     expect(h.store.colourTimes.get(h.a.id)).toBe(START);
-    // A genuine change is still refused until the window closes.
-    await expect(h.service.chooseColour(h.a, 13)).rejects.toMatchObject({ code: 'COLOUR_COOLDOWN' });
+    // A genuine change is allowed too - there is no window any more.
+    await expect(h.service.chooseColour(h.a, 13)).resolves.toMatchObject({ colourId: 13 });
+    expect(h.store.colours.get(h.a.id)).toBe(13);
   });
 
-  it('cannot be bypassed by another device: the clock is the stored row, not the caller', async () => {
+  it('the stored row carries the clock on both backends, ready for any future rule', async () => {
     const clock = { now: START };
     const h = harness(clock);
     await h.register(h.a, h.b);
     await h.call('POST', '/v1/world/colour', 'token-a', { colourId: 1 });
-    // Same account, a fresh request from anywhere: still refused.
-    await expect(h.service.chooseColour(h.a, 2)).rejects.toMatchObject({ code: 'COLOUR_COOLDOWN' });
-    // Another player is unaffected (their own row has no clock yet).
+    // Another change from anywhere is accepted...
+    await expect(h.service.chooseColour(h.a, 2)).resolves.toMatchObject({ colourId: 2 });
+    // ...and the row records WHEN, so a window could be reinstated without a migration.
+    expect(h.store.colourTimes.get(h.a.id)).toBe(START);
+    // Another player is independent of it.
     await expect(h.service.chooseColour(h.b, 3)).resolves.toMatchObject({ colourId: 3 });
-    expect(h.store.colours.get(h.a.id)).toBe(1);
-    expect(h.store.colours.get(h.b.id)).toBe(3);
   });
 });
 

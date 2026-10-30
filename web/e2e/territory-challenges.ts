@@ -382,6 +382,12 @@ try {
     });
     check(`[${tag}] the challenges lamp counts only MY waiting move (1 of 3 open rows)`,
       lamp.hidden === false && lamp.text === '1', JSON.stringify(lamp));
+    const mapMenuLamp = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('#online-world-menu .world-deck-count')!;
+      return { hidden: el.hidden, text: (el.textContent ?? '').trim() };
+    });
+    check(`[${tag}] the map's MENU lamp reads the same count`, mapMenuLamp.hidden === false && mapMenuLamp.text === '1',
+      JSON.stringify(mapMenuLamp));
 
     // ---- 0b. MY NAME AND LEVEL ARE ALWAYS ON SCREEN (owner, 2026-10-30) ----------------------
     const meLine = await page.evaluate(() => {
@@ -682,6 +688,11 @@ try {
     });
     check(`[${tag}] nothing waiting: the lamp is gone on the same poll`,
       lampAfter.hidden === true, JSON.stringify(lampAfter));
+    const menuLampAfter = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('#online-world-menu .world-deck-count')!;
+      return { hidden: el.hidden, text: (el.textContent ?? '').trim() };
+    });
+    check(`[${tag}] ...and so is the MENU lamp`, menuLampAfter.hidden === true, JSON.stringify(menuLampAfter));
 
     // ---- 6. a finished linked duel SETTLES ITSELF (owner, 2026-10-29) ------------------------
     // "after the match, automatically give the tile to the winner." The sheet therefore offers NO

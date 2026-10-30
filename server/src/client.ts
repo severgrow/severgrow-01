@@ -53,7 +53,7 @@ export type WorldColour = {
   name: string;
   chosen: boolean;
   canChange: boolean;
-  /** Epoch ms of the next allowed change, or null when nothing has been chosen yet. */
+  /** Epoch ms of the next allowed change, or null when a change is available now. */
   changeAvailableAt: number | null;
   /** Milliseconds left on the 24 h window (0 when a change is available now). */
   remainingMs: number;
