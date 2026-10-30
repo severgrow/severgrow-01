@@ -39,3 +39,21 @@ export const finishLead = ({ online, campaign, won, hasNext, tutorial, replay }:
   if (campaign && won) return replay || !hasNext ? 'back-to-campaign' : 'next-level';
   return won ? 'play-again' : 'try-again';
 };
+
+/**
+ * Does the finish card's Territory key belong on this card? (owner, 2026-10-30: "under the
+ * notification of seeds payout say 'Grow tiles in Territory'").
+ *
+ * The owner put it WITH the payout, so the one rule is: a payout line is on the card AND Territory
+ * is actually reachable. A card with no payout (a duel that paid nothing) grows no key; a build or
+ * a card where Territory is not mounted grows none either, because a key that goes nowhere is
+ * worse than no key. Pure, so the two halves of that rule are a unit test.
+ */
+export type TerritoryLinkContext = {
+  /** The Seeds payout line is on the card (an award, or the one honest notice about it). */
+  payout: boolean;
+  /** Territory can be opened from this build: the lobby is mounted and the product ships it. */
+  reachable: boolean;
+};
+
+export const territoryLinkVisible = ({ payout, reachable }: TerritoryLinkContext): boolean => payout && reachable;

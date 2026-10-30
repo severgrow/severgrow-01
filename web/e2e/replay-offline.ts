@@ -17,6 +17,7 @@ import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { servePreview } from './helpers/preview-port.js';
 import { seedSettings } from './helpers/settings-seed.js';
+import { REPLAY_PACING } from '../src/replay/timeline.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -161,6 +162,13 @@ try {
   await waitVisible(page, '#replay', 20_000);
   const now = await replayNow(page);
   check('the practice replay mounts with a real clock', !!now && now.total > 0, JSON.stringify({ total: now?.total }));
+  // The owner's faster, move-aware curve (2026-10-30): the reported total is the new length and
+  // never leaves the curve's stated floor/cap. A match this long used to read 50 s.
+  check(
+    'the practice replay reports the shorter, move-aware total',
+    !!now && now.total >= REPLAY_PACING.minTotal && now.total <= REPLAY_PACING.maxTotal,
+    `${((now?.total ?? 0) / 1000).toFixed(1)}s (was capped at 50.0s)`,
+  );
   const names = (await page.evaluate(() =>
     [...document.querySelectorAll('#replay .rp-name')].map((n) => (n.textContent ?? '').trim()),
   )) as string[];

@@ -579,7 +579,7 @@ export const REPLAY_CSS = `
 .reduce-motion #replay .rp-video[data-live='1'] .rp-video-text::before,
 .reduce-motion #replay .rp-icon[aria-busy='true'] svg { animation: none !important; }
 .reduce-motion #replay .rp-board { transition: none !important; }
-.reduce-motion #replay .rp-caption { transition: opacity 120ms linear !important; translate: -50% 0 !important; }
+.reduce-motion #replay .rp-caption { transition: none !important; translate: -50% 0 !important; }
 .reduce-motion #replay .rp-pts { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
   #replay .rp-turn[data-change='1'],
@@ -587,7 +587,7 @@ export const REPLAY_CSS = `
   #replay .rp-video[data-live='1'] .rp-video-text::before,
   #replay .rp-icon[aria-busy='true'] svg { animation: none !important; }
   #replay .rp-board { transition: none !important; }
-  #replay .rp-caption { transition: opacity 120ms linear !important; translate: -50% 0 !important; }
+  #replay .rp-caption { transition: none !important; translate: -50% 0 !important; }
   #replay .rp-pts { animation: none !important; }
 }
 `;

@@ -1,9 +1,11 @@
 // THE REPLAY TIMELINE (owner brief, 2026-10-25).
 //
 // What is pinned here:
-//   * the band — a whole match plays in 25-50 s, and the clamps are the only reason it ever leaves;
+//   * the duration curve — the length follows the BEAT COUNT (a 50-beat game ~30 s, a short game
+//     held up by a floor, a very long one under a cap), and the clamps are the only way out;
 //   * beat awareness — a Bloom of four tiles is longer than a Sprout, a big cut is longer than a
-//     quiet grow, at EVERY scale (the weighting is never flattened);
+//     quiet grow, at EVERY scale (the weighting is never flattened, and big moments are held a
+//     little longer than ordinary grows so the replay feels dynamic rather than merely sped up);
 //   * the turn boundary is DATA (who moved, whose turn it is, where it changes);
 //   * a board-only replay: draws and discards take no screen time, so no frame ever carries a card.
 import { describe, expect, it } from 'vitest';
@@ -67,17 +69,17 @@ const totals = (model: ReplayModel) => ({
 });
 
 describe('replay timing', () => {
-  it('a real 12-action duel plays inside the 25-50 s band', () => {
+  it('a real 12-action duel is held at the stated floor (a short game is not a blur)', () => {
     const model = buildReplay(input(REAL_ACTIONS));
     const t = totals(model);
     expect(t.frames).toBeGreaterThan(4);
-    expect(t.total).toBeGreaterThanOrEqual(REPLAY_PACING.minTotal);
-    expect(t.total).toBeLessThanOrEqual(REPLAY_PACING.maxTotal);
+    expect(Math.round(t.total)).toBeGreaterThanOrEqual(REPLAY_PACING.minTotal - 1);
+    expect(Math.round(t.total)).toBeLessThanOrEqual(REPLAY_PACING.minTotal + 1);
     // The whole duration is the frames plus the final hold — no hidden time.
     expect(t.total).toBe(t.painted + REPLAY_PACING.endHold);
   });
 
-  it('a long real game (100+ actions) still lands in the band', () => {
+  it('a long real game (100+ actions) stays inside the stated cap', () => {
     // Seed 4 is a long, busy game in this ruleset; the exact length is asserted, not assumed.
     const actions = randomGame(4);
     expect(actions.length).toBeGreaterThan(60);
@@ -85,6 +87,26 @@ describe('replay timing', () => {
     const t = totals(model);
     expect(t.total).toBeGreaterThanOrEqual(REPLAY_PACING.minTotal);
     expect(t.total).toBeLessThanOrEqual(REPLAY_PACING.maxTotal);
+  });
+
+  it('the duration curve: 50 beats ~30 s, a floor at 10, a cap at 200, monotonic throughout', () => {
+    const at = (beats: number) => fitScale(Array.from({ length: beats }, () => 1)).total;
+    // A "50 s replay" today is any match past the old cap; the new curve lands 50 beats near 30 s.
+    expect(at(50)).toBeGreaterThanOrEqual(29_000);
+    expect(at(50)).toBeLessThanOrEqual(31_000);
+    // A ten-beat game is not compressed under the floor...
+    expect(at(10)).toBeCloseTo(REPLAY_PACING.minTotal, 0);
+    expect(REPLAY_PACING.minTotal).toBe(9_000);
+    // ...and a two-hundred-beat game never runs past the cap.
+    expect(at(200)).toBeCloseTo(REPLAY_PACING.maxTotal, 0);
+    expect(REPLAY_PACING.maxTotal).toBe(32_000);
+    // The total never falls as the match grows.
+    let previous = 0;
+    for (let beats = 1; beats <= 220; beats++) {
+      const total = at(beats);
+      expect(total, `${beats} beats`).toBeGreaterThanOrEqual(previous - 1e-6);
+      previous = total;
+    }
   });
 
   it('a very short game is not stretched into a crawl', () => {
@@ -106,8 +128,8 @@ describe('replay timing', () => {
     const short = buildReplay(input(REAL_ACTIONS));
     const long = buildReplay(input(randomGame(4), { seed: 4 }));
     for (const model of [short, long]) {
-      const blooms = model.frames.filter((f) => f.kind === 'grow' && f.weight > 2);
-      const sprouts = model.frames.filter((f) => f.kind === 'grow' && f.weight === 1);
+      const blooms = model.frames.filter((f) => f.kind === 'grow' && f.weight > 1.5);
+      const sprouts = model.frames.filter((f) => f.kind === 'grow' && f.weight === 0.85);
       expect(blooms.length).toBeGreaterThan(0);
       expect(sprouts.length).toBeGreaterThan(0);
       expect(Math.min(...blooms.map((f) => f.duration))).toBeGreaterThan(Math.max(...sprouts.map((f) => f.duration)));
@@ -118,7 +140,7 @@ describe('replay timing', () => {
   });
 
   it('weights a Bloom by its tile count and an overgrow above a plain Bloom', () => {
-    expect(weightOf({ k: 'grow', style: 'sprout', player: 0, tiles: [{ key: '0,0', strength: 3, replaced: false }] })).toBe(1);
+    expect(weightOf({ k: 'grow', style: 'sprout', player: 0, tiles: [{ key: '0,0', strength: 3, replaced: false }] })).toBe(0.85);
     expect(
       weightOf({
         k: 'grow',
@@ -130,11 +152,26 @@ describe('replay timing', () => {
           { key: '0,2', strength: 5, replaced: false },
         ],
       }),
-    ).toBeCloseTo(2.1, 5);
+    ).toBeCloseTo(1.85, 5);
     expect(
       weightOf({ k: 'grow', style: 'bloom', player: 0, tiles: [{ key: '0,0', strength: 3, replaced: true }] }),
-    ).toBeCloseTo(1.35, 5);
+    ).toBeCloseTo(1.15, 5);
     expect(weightOf({ k: 'draw', player: 0, from: 'deck' })).toBe(0);
+  });
+
+  it('holds the big moments longer than ordinary grows (cinematic, not merely sped up)', () => {
+    // Ordinary grow, the turn hand-over, a cut of four links and a Blast that clears six.
+    const grow = weightOf({ k: 'grow', style: 'sprout', player: 0, tiles: [{ key: '0,0', strength: 3, replaced: false }] });
+    const turn = weightOf({ k: 'turn', player: 1, final: false });
+    const cut = weightOf({ k: 'sever', player: 0, by: 0, origin: '0,0', keys: ['0,1', '0,2', '0,3', '0,4'] });
+    const blast = weightOf({ k: 'megaBomb', player: 0, target: '0,0', destroyed: ['0,1', '0,2', '0,3', '0,4', '0,5', '0,6'] });
+    // A turn is the quietest beat; a grow is roughly twice it.
+    expect(turn).toBeLessThan(grow);
+    expect(grow / turn).toBeGreaterThan(2);
+    // A four-link cut and a six-tile Blast are each held longer than a whole ordinary grow.
+    expect(cut).toBeGreaterThan(grow);
+    expect(blast).toBeGreaterThan(cut);
+    expect(blast / grow).toBeGreaterThan(3);
   });
 
   it('fitScale is monotonic and cannot run away at either end', () => {

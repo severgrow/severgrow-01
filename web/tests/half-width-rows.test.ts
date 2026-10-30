@@ -4,8 +4,8 @@
 // The defect is one CSS shape: a row with a FIXED column count (`1fr 1fr`, `repeat(2, …)`) whose
 // children can be `[hidden]`. The hidden child is not painted but its TRACK stays, so the one
 // visible key is laid out at half the row — the orphan. It bit the pause plate's pair (measured:
-// Main menu 163px in a 334px row in a duel, where Restart is hidden) and the finish card's review
-// keys (Back 161px in 330px when "Show me" has nothing to show).
+// Main menu 163px in a 334px row in a live duel, where Restart is hidden). The finish card's old
+// review keys had the same shape and were removed with the review itself (owner, 2026-10-30).
 //
 // The robust shape is the project's own (`.gm-leads` and `.gm-tools` already used it): derive the
 // columns from the row's items with `grid-auto-flow: column` + `grid-auto-columns: 1fr`. Because
@@ -49,7 +49,6 @@ const ROWS = [
   '#sheet-menu .gm-acts',
   '#sheet-menu .gm-leads',
   '#sheet-menu .gm-tools',
-  '.go-review-keys',
 ];
 
 describe('rows that can lose a child to [hidden]', () => {

@@ -15,7 +15,7 @@ import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { cutLoss } from './analysis.js';
 import { cardName, hexName, moveCards } from './names.js';
-import { AnimQueue, buildSteps, captionFor } from './logic/anim.js';
+import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { buildReplay } from './replay/timeline.js';
 import type { ReplayInput, ReplayModel } from './replay/timeline.js';
@@ -223,9 +223,7 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
 // V3 art is archived on this branch; always use the default painted board for Futa04.
 const defaultArt = IS_FUTA04 ? await import('./ui/defaultArtBoard.js') : null;
 import type { Overlay } from './ui/board.js';
-import { askBot, askReview } from './ui/botClient.js';
-import type { TurningPoint } from '../../src/bots/review.js';
-import { moveSentence } from '../../src/playtest/names.js';
+import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, heavyShakeFrames, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
 import { mountDragLayer } from './ui/drag-layer.js';
 import { PILE_GRAB_PX } from './logic/drag.js';
@@ -236,7 +234,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { SOUND_REMOVED, Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, REPLAY, RESULT, REVIEW, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL, TUTORIAL_REPLAY } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, REPLAY, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL, TUTORIAL_REPLAY } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -246,7 +244,7 @@ import type { NoteEvent, Notes } from './logic/playnotes.js';
 import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
 // The finish card's leading action per mode (online rematch / next level / try again), decided in
 // one pure place so the whole matrix is unit-tested (owner direction, 2026-10-16).
-import { finishLead } from './logic/finish-actions.js';
+import { finishLead, territoryLinkVisible } from './logic/finish-actions.js';
 import type { Beats } from './logic/emptyturn.js';
 // The product menu shows the world map only when this build really has an online endpoint to read
 // it from (the same predicate the lobby uses), so the entry can never open a dead screen.
@@ -7641,10 +7639,27 @@ function setGoExtrasOpen(open: boolean) {
   syncGoExtras();
 }
 
+/**
+ * The finish card's one way to Territory (owner, 2026-10-30), with the payout. The rule is pure
+ * (`territoryLinkVisible`); this owns the DOM's own evidence for it: the Seeds line is the payout,
+ * and `goTerritoryIntro` marks the level-10 card that already carries its own "Open Territory" key.
+ */
+let goTerritoryIntro = false;
+function syncTerritoryGrow(): void {
+  const btn = document.getElementById('go-territory-grow');
+  if (!btn) return;
+  if (btn.textContent !== RESULT.growTiles) btn.textContent = RESULT.growTiles;
+  const seeds = document.getElementById('go-seeds');
+  const payout = !!seeds && !seeds.hidden && (seeds.textContent ?? '').trim() !== '';
+  const reachable = FEATURES.campaign && onlineBuildEnabled() && !!onlineLobbyCtl && !goTerritoryIntro;
+  btn.hidden = !territoryLinkVisible({ payout, reachable });
+}
+
 /** Paints the shared Seeds line empty: a mode that pays no Seeds (a duel) shows no line at all. */
 function clearGoSeeds(): void {
   goSeedShown = null;
   paintSeedReward($('go-seeds'), { kind: 'none' }, { animate: false });
+  syncTerritoryGrow();
 }
 
 /**
@@ -7657,8 +7672,12 @@ function clearGoSeeds(): void {
 function paintGoSeeds(): void {
   // The card re-renders (a resize, a late history fetch, the board toggle). Repainting the same
   // line would rebuild the row and snap a running count to its end, so the message is the guard:
-  // unchanged means "already on the card", and only a real change paints again.
-  if (goSeedShown === seedRewardMessage) return;
+  // unchanged means "already on the card", and only a real change paints again. The Territory key
+  // is still synced on that path: its visibility depends on the line being there at all.
+  if (goSeedShown === seedRewardMessage) {
+    syncTerritoryGrow();
+    return;
+  }
   goSeedShown = seedRewardMessage;
   const view = seedReward(seedRewardMessage);
   const fresh = view.kind === 'award' && !goSeedSettled;
@@ -7668,6 +7687,7 @@ function paintGoSeeds(): void {
     scale: Math.max(timeScale(), 0.35),
     tick: (step, last) => { if (settings.sound) sound.seedTick(step, last); },
   });
+  syncTerritoryGrow();
 }
 
 /**
@@ -8006,14 +8026,16 @@ function paintVerdict(line: Inquest | null, figure: HarvestFigure | null): void 
   box.hidden = !line && !figure;
 }
 
-/** The verdict for a FINISHED offline match, from the same public events the highlights read. */
+/** The verdict for a FINISHED offline match: the line from the public events, the stamp from the board. */
 function offlineVerdict(st: State): { line: Inquest | null; figure: HarvestFigure | null } {
   // `eventsFor` is the public projection: the opponent's deck draws carry no card, so nothing here
-  // can read a hand or a deck order even if the local state happens to hold it.
-  const events = st.result ? eventsFor(st, HUMAN) : [];
-  if (!st.result || events.length === 0) return { line: null, figure: null };
+  // can read a hand or a deck order even if the local state happens to hold it. The STAMP does not
+  // go through it (owner, 2026-10-30): a finished match's final board is known even when the event
+  // record is not, so the little map always shows. The LINE is still the record's alone.
+  if (!st.result) return { line: null, figure: null };
+  const events = eventsFor(st, HUMAN);
   return {
-    line: inquest(events, st.result, HUMAN),
+    line: events.length ? inquest(events, st.result, HUMAN) : null,
     figure: harvestFigure(st.board, st.config, HUMAN, st.terrain),
   };
 }
@@ -8058,6 +8080,8 @@ function renderGameOver() {
     // "seeds pending or shit like that"). No payload carries that award yet, so this is silence in
     // practice — and it must be, because a daily cap pays 0 and a resignation pays nothing, so any
     // number the client worked out for itself would be a guess. See `duelSeedsMessage`.
+    goTerritoryIntro = false;
+    $('go-territory').hidden = true;
     clearGoSeeds();
     const snapshot = os.driver.snapshot();
     seedRewardMessage = duelSeedsMessage(snapshot.seeds ?? null);
@@ -8088,8 +8112,11 @@ function renderGameOver() {
     $('go-sub').textContent = info.sub;
     $('go-reason').textContent = info.reason;
     $('go-score').innerHTML = `<span class="you">${info.scores[0]}</span><span class="dash">–</span><span class="bot">${info.scores[1]}</span>`;
-    // THE INQUEST AND THE DOUBLE HARVEST: the duel's own record, or neither when it is withheld.
-    paintVerdict(info.inquest, info.harvest);
+    // THE INQUEST AND THE DOUBLE HARVEST: the duel's own record, and the final board. A pruned or
+    // refused history can withhold the LINE, but never the STAMP (owner, 2026-10-30): the position
+    // on screen is the match's own final board.
+    const harvest = info.harvest ?? harvestFigure(os.state.board, os.state.config, HUMAN, os.state.terrain);
+    paintVerdict(info.inquest, harvest);
     $('go-break').textContent = info.breakdown;
     $('go-moves').textContent = info.moves ?? '';
     setGoExtra('go-moves', !!info.moves);
@@ -8106,11 +8133,9 @@ function renderGameOver() {
     setGoExtra('go-stats', false);
     // A duel has no offline cut replay to offer, and no replayable log to review.
     setGoExtra('go-cut', false);
-    $('go-review').hidden = true;
     // It DOES have a replay of the whole match (owner brief, 2026-10-25), whenever at least one
     // move was committed — so the one entry sits on the card beside the ways forward.
     setReplayAvailable(snapshot.revision > 0);
-    if (wasHidden) closeReview();
     // The owner's ask: a REAL rematch leads the finish screen, ahead of the old "back out" that
     // used to sit in this slot. Back to matches and Menu stay, as secondary ways out
     // (`bind('go-rematch')` starts the rematch; `bind('go-other')` is Back to matches).
@@ -8224,13 +8249,17 @@ function renderGameOver() {
   // Lessons 1-9 pay no Seeds: no Seeds line at all on their finish card. Level 10 pays 100 once, and
   // its won card says what Seeds and Territory are, with the way there (owner, 2026-10-24).
   if (taught && taught.level !== FINAL_LESSON.level) seedRewardMessage = '';
-  paintGoSeeds();
   const territoryIntro = !!taught && taught.level === FINAL_LESSON.level && won && onlineBuildEnabled() && !!onlineLobbyCtl;
+  // The intro card already carries its own "Open Territory" key, so the payout's own key steps
+  // aside there instead of offering the same destination twice (owner, 2026-10-30).
+  goTerritoryIntro = territoryIntro;
+  paintGoSeeds();
   $('go-territory-earned').textContent = SEEDS_INTRO.earned;
   $('go-territory-spend').textContent = SEEDS_INTRO.spend;
   $('go-territory').hidden = !territoryIntro;
   $('go-territory-open').textContent = SEEDS_INTRO.open;
   $('go-territory-open').hidden = !territoryIntro;
+  syncTerritoryGrow();
   const other = $('go-other');
   // On the last level, on a replay and in the Tutorial the primary already IS the way back to the
   // list/Tutorial: one action, not two that do the same thing (the online rematch keeps its own
@@ -8262,8 +8291,6 @@ function renderGameOver() {
   // Every offline match — practice, campaign and a tutorial replay — can be watched back from its
   // own log in memory. There is no stored list offline (owner's decision, 2026-10-25).
   setReplayAvailable(!!session && session.log.length > 0);
-  if (wasHidden) closeReview();
-  syncReview(st);
   $('go-share').textContent = RESULT.share;
   $('go-reason').textContent = taught ? '' : resultReason(r, HUMAN);
   if (taught) $('go-sub').hidden = true;
@@ -8296,90 +8323,7 @@ function renderGameOver() {
   $('go-rematch').focus();
 }
 
-// ---------- game review (owner, 2026-10-23) ----------
-// After an offline game the bot worker replays it and finds the player's turning point (see
-// src/bots/review.ts). "Review" appears beside "See the board" once that answer is in; it opens a
-// small face in the same card: the move, the stronger one, and "Show me" plays the stronger one on
-// the board from that moment, holds it, and brings the card back.
-
-/** The finished state the review belongs to, and its answer (undefined: still being worked out). */
-let reviewFor: State | null = null;
-let reviewPoint: TurningPoint | null | undefined;
-
-function syncReview(st: State) {
-  const btn = $('go-review');
-  // Practice and level games only: never a lesson (it teaches its own moves), never a duel.
-  if (!IS_FUTA04 || lessonActive() || !session || session.state !== st) {
-    btn.hidden = true;
-    return;
-  }
-  if (reviewFor !== st) {
-    reviewFor = st;
-    reviewPoint = undefined;
-    const s = session;
-    void askReview(s.start, s.log, HUMAN, st).then((p) => {
-      if (reviewFor !== st) return;
-      reviewPoint = p;
-      if (!$('gameover').hidden) syncReview(st);
-    });
-  }
-  btn.textContent = REVIEW.open;
-  btn.hidden = reviewPoint === undefined;
-}
-
-function openReview() {
-  if (reviewPoint === undefined) return;
-  const p = reviewPoint;
-  $('go-review-kicker').textContent = p ? REVIEW.kicker(p.turn) : '';
-  $('go-review-kicker').hidden = !p;
-  $('go-review-played-label').textContent = REVIEW.played;
-  $('go-review-better-label').textContent = REVIEW.better;
-  const v = p ? viewFor(p.before, HUMAN) : null;
-  $('go-review-played').textContent = !p ? REVIEW.clean : p.played.t === 'EndAct' ? REVIEW.stopped : moveSentence(v!, p.played);
-  $('go-review-played-label').hidden = !p;
-  $('go-review-better').textContent = p ? moveSentence(v!, p.better) : '';
-  $('go-review-better').parentElement!.hidden = !p;
-  $('go-review-show').textContent = REVIEW.show;
-  $('go-review-show').hidden = !p;
-  $('go-review-back').textContent = REVIEW.back;
-  document.querySelector('#gameover .go-card')!.classList.add('reviewing');
-  $('go-review-face').hidden = false;
-  (p ? $('go-review-show') : $('go-review-back')).focus();
-}
-
-function closeReview() {
-  document.querySelector('#gameover .go-card')?.classList.remove('reviewing');
-  const face = document.getElementById('go-review-face');
-  if (face) face.hidden = true;
-}
-
-/** Plays the stronger move on the board from the turning point, holds it, then restores the end. */
-async function showBetterMove() {
-  const p = reviewPoint;
-  if (!session || !p || busy()) return;
-  closeReview();
-  gameOverDismissed = true;
-  replaying = true;
-  replaySpeed = CUT_REPLAY_SPEED;
-  const steps = buildSteps(p.before, p.better, apply(p.before, p.better), HUMAN);
-  queue.reset(p.before.board);
-  const v0 = viewFor(p.before, HUMAN);
-  shownScores = [v0.score, v0.opponentScore];
-  rememberRemoved(steps, p.before);
-  queue.push(steps.filter((x) => x.k !== 'end' && x.k !== 'turn' && x.k !== 'draw'));
-  render();
-  const my = epoch;
-  await pump();
-  // Let the stronger position be seen before the real ending comes back.
-  await wait(1600, my);
-  if (my !== epoch || !session) return;
-  reopenGameOver = true;
-  replaying = true;
-  const v = session.view;
-  queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);
-  render();
-  void pump();
-}
+// ---------- history ----------
 
 function renderHistory() {
   $('history').replaceChildren(
@@ -10214,12 +10158,11 @@ bind('go-territory-open', () => {
 });
 // The replay of the whole match (owner brief, 2026-10-25): one tap on the finish card, any mode.
 bind('go-replay', () => void openReplayForFinish());
-bind('go-review', () => openReview());
-bind('go-review-back', () => {
-  closeReview();
-  $('go-review').focus();
+bind('go-territory-grow', () => {
+  hideGameOver();
+  showScreen('menu');
+  onlineLobbyCtl?.openWorld('menu');
 });
-bind('go-review-show', () => void showBetterMove());
 // Overhaul item 20: replay the game's biggest cut (from the board just before it), then come back here
 bind('go-cut', () => {
   const p = session?.biggestCut;

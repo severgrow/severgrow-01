@@ -191,15 +191,6 @@ const MEASURE = `(setup) => {
       // The card as an offline game leaves it: Play again / the other key / Board, the two quiet
       // links under them, and the disclosure's extras still folded away.
       $('gameover').hidden = false; break;
-    case 'gameover-review-one':
-      // main.ts openReview: go-review-show.hidden = !p (no better move to show).
-      $('gameover').hidden = false;
-      $('go-review-face').hidden = false;
-      $('go-review-show').hidden = true; break;
-    case 'gameover-review-two':
-      $('gameover').hidden = false;
-      $('go-review-face').hidden = false;
-      $('go-review-show').hidden = false; break;
     case 'daily-two':
       // daily/mount.ts paint: the row is emptied and refilled with this state's keys.
       $('sheet-daily').hidden = false;
@@ -227,7 +218,6 @@ const MEASURE = `(setup) => {
   if (setup.indexOf('pause-leads') === 0) add('#sheet-menu .gm-leads', 'gm-leads');
   if (setup.indexOf('pause-tools') === 0) add('#sheet-menu .gm-tools', 'gm-tools');
   if (setup === 'gameover-buttons') add('#gameover .go-buttons', 'go-buttons', true);
-  if (setup.indexOf('gameover-review') === 0) add('#gameover .go-review-keys', 'go-review-keys');
   if (setup === 'daily-two') add('#daily-actions', 'daily-actions', true);
   if (setup === 'settings-one') add('#sheet-settings .sheet-body', 'settings-body', true);
   if (setup === 'matched') add('#online-matched .online-actions', 'online-actions', true);
@@ -541,8 +531,6 @@ try {
     { key: 'pause tools (History hidden)', setup: 'pause-tools-three' },
     { key: 'pause tools (four)', setup: 'pause-tools-four' },
     { key: 'finish card keys (offline, extras folded)', setup: 'gameover-buttons' },
-    { key: 'finish card review keys (Show me hidden)', setup: 'gameover-review-one' },
-    { key: 'finish card review keys (two)', setup: 'gameover-review-two' },
     { key: 'daily sheet actions (two keys)', setup: 'daily-two' },
     { key: 'settings sheet (Tutorial key alone)', setup: 'settings-one' },
     { key: 'matched prompt (two keys)', setup: 'matched' },
