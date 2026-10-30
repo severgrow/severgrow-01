@@ -330,6 +330,12 @@ const diff = (before: Board, after: Board): { changed: string[]; removed: string
   return { changed, removed };
 };
 
+/** `changed`, with the step's own tiles first and in its order; anything else keeps its place after. */
+export const revealOrder = (changed: readonly string[], order: readonly string[]): string[] => {
+  const at = new Map(order.map((key, i) => [key, i]));
+  return [...changed].sort((a, b) => (at.get(a) ?? order.length) - (at.get(b) ?? order.length));
+};
+
 /**
  * The scale that lands a match on the beat-count curve while keeping every beat's relative weight.
  *
@@ -418,6 +424,8 @@ type Pending = {
   weight: number;
   board: Board;
   scores: [number, number];
+  /** A Grow's tiles in reveal order (screen keys): the wave the live board shows. */
+  order?: string[];
 };
 
 /**
@@ -462,7 +470,8 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
       if (step.k === 'sever') cutByAction.set(index, (cutByAction.get(index) ?? 0) + step.keys.length);
       actor = actorOf(step, actor);
       if (step.k === 'turn') turn = step.player;
-      board = applyStep(board, me === 0 ? step : mapStepToScreen(step, me));
+      const shownStep = me === 0 ? step : mapStepToScreen(step, me);
+      board = applyStep(board, shownStep);
       const sc = scores(state);
       pending.push({
         kind: beatOf(step),
@@ -474,6 +483,7 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
         weight,
         board,
         scores: me === 0 ? [sc[0], sc[1]] : [sc[1], sc[0]],
+        ...(shownStep.k === 'grow' ? { order: shownStep.tiles.map((t) => t.key) } : {}),
       });
     });
     // The last beat of an action ends on the engine's own board (the step accumulation can differ
@@ -493,7 +503,9 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
     const duration = Math.round(
       Math.min(Math.max(REPLAY_PACING.unit * p.weight * fitted.scale, REPLAY_PACING.minFrame), REPLAY_PACING.maxFrame),
     );
-    const { changed, removed } = diff(previous, p.board);
+    const { changed: raw, removed } = diff(previous, p.board);
+    // A Grow's tiles change in its own reveal order (outward from the hex it grows from).
+    const changed = p.order ? revealOrder(raw, p.order) : raw;
     frames.push({
       index,
       kind: p.kind,

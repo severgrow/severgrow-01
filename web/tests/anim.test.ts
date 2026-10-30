@@ -43,20 +43,33 @@ describe('animation queue from engine events', () => {
     expect(mine).toBeGreaterThan(0);
   });
 
-  it('a Bloom ripples out from its first hex; Sprout pops', () => {
+  it('a Bloom grows out from the hex touching the network, each tile next to one shown; Sprout pops', () => {
+    // Owner rule change (2026-10-30): "make the bloom tiles appear always in order coming from the
+    // tile that it's growing from" — this used to pin CARD order.
     const styles = new Set<string>();
+    let blooms = 0;
     for (const p of played) {
       for (const s of buildSteps(p.before, p.action, p.after, 0)) {
         if (s.k !== 'grow') continue;
         styles.add(s.style);
         if (p.action.t === 'Bloom') {
+          blooms++;
           expect(s.style).toBe('bloom');
-          // the tiles are the Bloom's hexes, in card order (the ripple starts at the first)
-          expect(s.tiles.map((t) => t.key)).toEqual(p.action.hexes.map((h) => `${h.q},${h.r}`));
+          const keys = s.tiles.map((t) => t.key);
+          // the same hexes, each exactly once
+          expect([...keys].sort()).toEqual(p.action.hexes.map((h) => `${h.q},${h.r}`).sort());
+          // the first touches the mover's network as it stood before the Bloom
+          const network = Object.entries(p.before.board).filter(([, t]) => t?.owner === s.player).map(([k]) => parseKey(k));
+          expect(network.some((c) => hexDistance(c, parseKey(keys[0]!)) === 1)).toBe(true);
+          // and every later one touches a tile already shown
+          keys.slice(1).forEach((key, i) => {
+            expect(keys.slice(0, i + 1).some((shown) => hexDistance(parseKey(shown), parseKey(key)) === 1)).toBe(true);
+          });
         }
         if (p.action.t === 'Sprout') expect(s.style).toBe('sprout');
       }
     }
+    expect(blooms).toBeGreaterThan(0);
     expect([...styles].sort()).toEqual(['bloom', 'sprout']);
   });
 

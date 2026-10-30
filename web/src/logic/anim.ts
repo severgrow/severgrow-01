@@ -2,10 +2,11 @@
 // board through an AnimQueue: each step changes the shown board a little, and the
 // final "sync" step always sets it to the engine's real board, so skipping, cutting
 // short or turning off animations can never leave a wrong board on screen.
-import { coordKey, eventsOf, hexDistance, parseKey, scores } from '../../../src/engine/index.js';
+import { coordKey, eventsOf, hexDistance, homeCoord, parseKey, scores } from '../../../src/engine/index.js';
 import type { Action, Card, GameResult, Player, State, Tile } from '../../../src/engine/index.js';
 import { cardName } from '../../../src/playtest/names.js';
 import { FRUIT, HOME, OPP } from '../../../src/strings.js';
+import { growthOrder } from './growth-order.js';
 
 export type Board = Record<string, Tile | null>;
 export type GrowTile = { key: string; strength: number; replaced: boolean };
@@ -54,8 +55,12 @@ export const buildSteps = (before: State, action: Action, after: State, viewer: 
           const strength = now && now.owner === e.player ? now.strength : ranks[i]!;
           return { key, strength, replaced: before.board[key]?.owner === opp(e.player) };
         });
-        hits.push(...tiles.filter((t) => t.replaced).map((t) => t.key), ...tiles.map((t) => t.key));
-        steps.push({ k: 'grow', style: e.t === 'Bloom' ? 'bloom' : 'sprout', player: e.player, tiles });
+        // A Bloom is revealed as one wave outward from the hex it grows from (growth-order.ts),
+        // never in card order. Every reader of this step — the board, the replay — follows it.
+        const network = new Set(Object.entries(before.board).filter(([, t]) => t?.owner === e.player).map(([k]) => k));
+        const shown = e.t === 'Bloom' ? growthOrder(tiles, network, coordKey(homeCoord(e.player, before.config))) : tiles;
+        hits.push(...shown.filter((t) => t.replaced).map((t) => t.key), ...shown.map((t) => t.key));
+        steps.push({ k: 'grow', style: e.t === 'Bloom' ? 'bloom' : 'sprout', player: e.player, tiles: shown });
         break;
       }
       case 'Strengthen':
