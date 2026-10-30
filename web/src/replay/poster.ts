@@ -173,6 +173,43 @@ const css = (name: string, fallback: string) =>
 
 export type PosterTurn = { text: string; seat: Player | null };
 
+
+// The on-screen game has an analogue film overlay above every element. Canvas exports do not
+// capture DOM overlays, so replay stills and video frames need the same finish baked into pixels.
+// One small deterministic tile is generated once and reused across frames (no per-frame noise).
+let filmTile: HTMLCanvasElement | null = null;
+const replayFilmTile = (): HTMLCanvasElement => {
+  if (filmTile) return filmTile;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const pixels = g.createImageData(128, 128);
+  let seed = 0x51f07a5a;
+  for (let i = 0; i < pixels.data.length; i += 4) {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    const light = (seed >>> 0) & 1;
+    pixels.data[i] = light ? 234 : 18;
+    pixels.data[i + 1] = light ? 231 : 19;
+    pixels.data[i + 2] = light ? 223 : 18;
+    pixels.data[i + 3] = light ? 33 : 24;
+  }
+  g.putImageData(pixels, 0, 0);
+  filmTile = c;
+  return c;
+};
+
+/** Consistent, subtle film grain over the entire export — including artwork and lettering. */
+export const paintReplayFilm = (g: CanvasRenderingContext2D, width: number, height: number): void => {
+  const pattern = g.createPattern(replayFilmTile(), 'repeat');
+  if (!pattern) return;
+  g.save();
+  g.fillStyle = pattern;
+  g.fillRect(0, 0, width, height);
+  g.restore();
+};
+
 /** Paint the poster on a canvas. The one impure call; the layout above is pure. */
 export const drawReplayPoster = (
   d: PosterData,
@@ -181,6 +218,8 @@ export const drawReplayPoster = (
   motion?: Readonly<Record<string, TileMotion>>,
   /** The video's moment: whose move it is, and whether this is the final hold. */
   opts?: { live?: Player | null; end?: boolean },
+  /** Cache painters add the film after drawing their moving cells, never twice. */
+  withFilm = true,
 ): HTMLCanvasElement => {
   const L = posterLayout(d);
   // A recording reuses one canvas for every frame, so the buffer is only resized when it must be.
@@ -307,6 +346,7 @@ export const drawReplayPoster = (
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   }
   text({ ...L.tagline, text: L.tagline.text.toUpperCase(), x: L.tagline.x + 2 }, col.dim, 4);
+  if (withFilm) paintReplayFilm(g, L.width, L.height);
   return canvas;
 };
 
