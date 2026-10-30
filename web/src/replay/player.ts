@@ -1137,9 +1137,17 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     const bottom = (bb.y + bb.height) * m.d + m.f - box.top;
     const centre = (bb.x + bb.width / 2) * m.a + m.e - box.left;
     const room = box.height - brand.offsetHeight;
-    brand.style.top = `${Math.round(Math.max(0, Math.min(bottom + BRAND_GAP, room)))}px`;
+    const top = Math.round(Math.max(0, Math.min(bottom + BRAND_GAP, room)));
+    brand.style.top = `${top}px`;
     brand.style.left = `${Math.round(centre)}px`;
     brand.dataset.placed = '1';
+    // "Replay again" shares the board's centre line: under the signature when there is room (a
+    // phone), otherwise just above it, over the board's foot (a wide screen) — never on top of it.
+    const AGAIN_H = 44;
+    const below = top + brand.offsetHeight + 10;
+    again.style.left = `${Math.round(centre)}px`;
+    again.style.bottom = 'auto';
+    again.style.top = `${below + AGAIN_H <= box.height ? below : Math.max(0, top - 10 - AGAIN_H)}px`;
   };
   const brandWatch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => placeBrand());
   brandWatch?.observe(boardBox);

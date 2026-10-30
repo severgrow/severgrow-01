@@ -71,7 +71,7 @@ const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
     }, undefined, { timeout: 15_000 })
     .catch(() => undefined);
   const read = () => page.evaluate('(() => window.__severgrow.state())()') as Promise<State | null>;
-  const idle = () => page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
+  const idle = () => page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
   let waiting = 0;
   let refused = 0;
   for (let i = 0; i < maxSteps; i++) {
@@ -142,7 +142,7 @@ try {
   });
   await settingsInit(page);
   await page.goto(`${origin}/?seed=1004`);
-  await page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 60_000 });
+  await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 60_000 });
   await waitVisible(page, '#game', 30_000);
   const ended = await toGameOver(page);
   check('a real practice match reaches its finish card', ended === 'ended', ended);
@@ -220,7 +220,8 @@ try {
     });
   })()`);
   await share.click();
-  await page.waitForTimeout(500);
+  // The poster is painted before the share sheet opens; on a slow machine that is over half a second.
+  await page.waitForFunction(() => !!(window as unknown as { __shared?: unknown }).__shared, undefined, { timeout: 15_000 }).catch(() => undefined);
   const shared = (await page.evaluate(() => (window as unknown as { __shared?: unknown }).__shared ?? null)) as { title?: string; files?: { name: string; type: string; size: number }[] } | null;
   check('when the phone takes a file, the share door is used', !!shared && shared.files?.length === 1, JSON.stringify(shared));
   check('the shared File is the poster, with its name and type', !!shared && /^futasaku-.+-\d+-\d+\.png$/.test(shared.files![0]!.name) && shared.files![0]!.type === 'image/png' && shared.files![0]!.size > 20_000, JSON.stringify(shared?.files));
