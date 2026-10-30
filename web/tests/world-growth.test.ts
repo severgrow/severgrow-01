@@ -2,7 +2,7 @@
 // recent-activity strip, "find my land", and which cells are new since the last look.
 import { describe, expect, it } from 'vitest';
 import { seenCellIds } from '../../server/src/world.js';
-import { agoLabel, borderSegments, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ownPatches, ranking, recentActivity, standing } from '../src/online/world-growth.js';
+import { agoLabel, borderSegments, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ownPatches, ranking, recentActivity, ringPhase, standing } from '../src/online/world-growth.js';
 
 type Claim = { cellId: string; ownerId: string; ownerName: string | null; ownerTag: string; colour: string; claimedAt: number };
 const claim = (cellId: string, ownerId: string, claimedAt: number, ownerName: string | null = ownerId.toUpperCase()): Claim =>
@@ -126,14 +126,68 @@ describe('the mist changing between two looks', () => {
 // sudden shading change every time anyone grew a tile.
 describe('keeping a loop where it was across a rebuild', () => {
   it('turns elapsed time into a negative delay, wrapped to the loop', () => {
-    expect(loopPhase(0, 9000)).toBe('-0.00s');
-    expect(loopPhase(4500, 9000)).toBe('-4.50s');
-    expect(loopPhase(9000, 9000)).toBe('-0.00s');
-    expect(loopPhase(10_250, 9000)).toBe('-1.25s');
+    expect(loopPhase(0, 9000)).toBe('-0.000s');
+    expect(loopPhase(4500, 9000)).toBe('-4.500s');
+    expect(loopPhase(9000, 9000)).toBe('-0.000s');
+    expect(loopPhase(10_250, 9000)).toBe('-1.250s');
   });
   it('never returns a positive delay (a loop is only ever moved forward)', () => {
-    expect(loopPhase(-500, 9000)).toBe('-8.50s');
-    expect(loopPhase(Number.NaN, 9000)).toBe('-0.00s');
+    expect(loopPhase(-500, 9000)).toBe('-8.500s');
+    expect(loopPhase(Number.NaN, 9000)).toBe('-0.000s');
+  });
+
+  // THE BREATH IS READ FROM THE LOOP THAT IS ALREADY ON SCREEN, not from a clock the page keeps.
+  // The old form fed `Date.now() - firstPaint` back in, but a CSS animation does not start when the
+  // node is created: on this branch it started ~800 ms later (the map screen was still hidden), so
+  // the first repaint jumped the breath forward by that gap - the stutter the owner still saw.
+  // `ringPhase` takes the animation's OWN clock, so a rebuild continues exactly where the eye was.
+  it('reads the phase out of the running animation’s own clock', () => {
+    // currentTime counts from the animation's start; the delay is the negative offset it was born
+    // with, so the phase the eye is seeing is currentTime - delay (wrapped to one period).
+    expect(ringPhase(0, 0, 9000), 'a fresh loop starts at zero').toBe(0);
+    expect(ringPhase(0, -1740, 9000), 'a loop born 1.74 s in shows 1.74 s').toBe(1740);
+    expect(ringPhase(1250, -40, 9000), 'both halves of the clock add up').toBe(1290);
+    // Not started yet (the screen was hidden): nothing is animating, so the eye is on the 0 % frame.
+    expect(ringPhase(null, -500, 9000)).toBe(0);
+    expect(ringPhase(Number.NaN, -500, 9000)).toBe(0);
+    expect(ringPhase(100, Number.NaN, 9000)).toBe(100);
+    // It wraps, and it never goes negative.
+    expect(ringPhase(9000, 0, 9000)).toBe(0);
+    expect(ringPhase(10_250, 0, 9000)).toBe(1250);
+    expect(ringPhase(0, -500, 9000)).toBe(500);
+    expect(ringPhase(0, 500, 9000)).toBe(8500);
+  });
+
+  it('a phase fed a growing clock never makes the opacity jump, across several wraps', () => {
+    // The keyframes: 0 % and 100 % at the resting shade, 50 % at the trough (ease-in-out).
+    const shade = (phase: number, period: number, rest: number, low: number) => {
+      const p = phase / period;
+      const half = p <= 0.5 ? p / 0.5 : (1 - p) / 0.5;
+      // ease-in-out(cubic-bezier(.42,0,.58,1)) is symmetric: a smoothstep is enough for a bound.
+      const eased = half * half * (3 - 2 * half);
+      return rest + (low - rest) * eased;
+    };
+    const period = 9000;
+    let worst = 0;
+    let previous = shade(ringPhase(0, 0, period), period, 0.42, 0.26);
+    for (let t = 16; t <= period * 3; t += 16) {
+      const now = shade(ringPhase(t, 0, period), period, 0.42, 0.26);
+      worst = Math.max(worst, Math.abs(now - previous));
+      previous = now;
+    }
+    // One frame of a 9 s breath is ~0.0004 of opacity; the wrap must be no worse than any other
+    // frame. (The old clock-fed form stepped ~0.030 in one frame after a rebuild.)
+    expect(worst).toBeLessThan(0.002);
+  });
+
+  it('a rebuild at any moment gives the SAME phase the eye was already watching', () => {
+    // A repaint happens at t; the new node is given ringPhase(t, delay) as its negative delay, so
+    // its own clock restarts at that phase. The value the eye sees is therefore continuous.
+    for (const t of [0, 1, 999, 4500, 8999, 9001, 27_333]) {
+      const phase = ringPhase(t, 0, 9000);
+      // The rebuilt node's phase at its own time 0 is the delay it was given.
+      expect(ringPhase(0, -phase, 9000), `rebuild at ${t} ms`).toBeCloseTo(phase, 6);
+    }
   });
 });
 

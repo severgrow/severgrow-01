@@ -1178,7 +1178,13 @@ html.reduce-motion .world-achievement.just-claimed { animation: none; }
      keep a row sane if it were ever built without the stamp. */
   --key-order: calc(var(--key-count, 1) - 1 - var(--key-i, 0));
   --key-wave: calc(var(--key-order) * var(--key-stagger));
-  position: relative; opacity: 0; transform: translateX(calc(var(--key-i, 0) * 52px + 52px)) scale(.86);
+  /* ONE TRAVEL FOR EVERY KEY (owner, 2026-10-30, "the animation of the submenu ... isnt smooth"):
+     the folded pose used to be translateX(i * 52px + 52px), so the key farthest from MENU covered
+     260px while the nearest covered 52px in the SAME 150ms - five times the speed, an 82px jump in
+     one 60Hz frame, which the eye reads as a whip, not a roll. Every key now covers exactly one row
+     pitch (44px key + 8px gap), so they all move at one speed; the roll-out is carried by the
+     stagger alone, which is what makes it read as a wave. */
+  position: relative; opacity: 0; transform: translateX(52px) scale(.86);
   /* ONE transition list, three jobs: transform/opacity roll the key out, scale/translate answer the
      press, colour and the lamp ease. This is the fix for the old "random speed": two transition
      shorthands used to fight on this element, the later one dropped the other's properties, and its
