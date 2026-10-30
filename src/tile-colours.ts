@@ -104,6 +104,24 @@ export const PALETTE_SIZE = TILE_COLOURS.length;
 /** The worst pair this palette may contain, in CIEDE2000 units, under EACH of the three visions. */
 export const MIN_DELTA_E = 8;
 
+/**
+ * ONE COLOUR CHANGE PER 24 HOURS (owner, 2026-10-30: "make sure players can change the color of
+ * their tiles - but only once per 24h"). It is a RULE, so it lives beside the palette and the server
+ * is its only authority; the client reads the same constant to say how long is left.
+ */
+export const COLOUR_CHANGE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** When the next change is allowed, from the last stored `chosen_at` (null = never chosen → now). */
+export const colourChangeAvailableAt = (chosenAt: number | null): number | null =>
+  typeof chosenAt === 'number' && Number.isFinite(chosenAt) ? chosenAt + COLOUR_CHANGE_WINDOW_MS : null;
+
+/** How long is left before another change; 0 when there is no stored choice or the window passed. */
+export const colourCooldownMs = (chosenAt: number | null, now: number): number => {
+  const at = colourChangeAvailableAt(chosenAt);
+  if (at === null) return 0;
+  return Math.max(0, at - now);
+};
+
 export const isColourId = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < PALETTE_SIZE;
 

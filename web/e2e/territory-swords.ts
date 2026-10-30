@@ -59,7 +59,7 @@ const WORLD = { ok: true, world: { version: 2, revision: 5, cost: 100, challenge
 const base = {
   challengerId: 'p1', defenderId: 'r1', challengerName: 'BloomHeron', defenderName: 'RYK',
   fromMe: true, stake: 0, stakeCellId: null, respondedAt: null, matchId: null, matchFinished: false,
-  matchWinnerId: null, winnerId: null, resolvedAt: null, remainingMs: 0, serverNow: NOW,
+  matchWinnerId: null, matchWaitingForMe: false, winnerId: null, resolvedAt: null, remainingMs: 0, serverNow: NOW,
 };
 /** The ONE mutable list the mock serves; the send/answer steps edit it as the server would. */
 const state: { incoming: WorldChallengeWire[]; outgoing: WorldChallengeWire[] } = {

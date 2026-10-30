@@ -1,9 +1,13 @@
-// The Territory's selection line: `NAME #TAG · LEVEL 22 · YOURS`.
+// The Territory's selection line: `NAME · LEVEL 22 · YOURS`.
 //
 // Owner (2026-10-16): selecting a tile should show the holder's campaign level. The level comes from
 // the server (its ownerLevel field), read from recorded campaign receipts, so the client only has to
 // render it — and to render NOTHING when it is absent, so a player who never played the campaign is
 // never shown a made-up `LEVEL 1`.
+//
+// 2026-10-30 — THE TAG LEAVES THE VISIBLE LINE: "after clicking someone's tile - it still shows it's
+// tag id". `ownerLine` is now tag-free; `ownerSpokenLine` is the same line with `#TAG` for an
+// accessible name or title, exactly as the ranking row and the territory chat already do.
 //
 // 2026-10-24 — THE OWNER'S OWN REPORT: "on my account - im at level 23 - but on territory it says
 // im level 11 - should never happen". The server's `ownerLevel` is the highest Campaign level they
@@ -12,7 +16,7 @@
 // fact the server has) and WRONG for your own, where the device knows exactly where you are. So an
 // own tile now shows the number this device can stand behind, and never an older one.
 import { describe, expect, it } from 'vitest';
-import { ownLevel, ownerLine } from '../src/online/world-selection.js';
+import { ownLevel, ownerLine, ownerSpokenLine } from '../src/online/world-selection.js';
 import type { WorldClaimView } from '../src/online/world-selection.js';
 
 const claim = (overrides: Partial<WorldClaimView> = {}): WorldClaimView => ({
@@ -28,20 +32,27 @@ const claim = (overrides: Partial<WorldClaimView> = {}): WorldClaimView => ({
 
 describe('the world selection line', () => {
   it('shows the owner’s campaign level when the server recorded one', () => {
-    expect(ownerLine(claim(), false)).toBe('RYK #VJJM · LEVEL 22');
+    expect(ownerLine(claim(), false)).toBe('RYK · LEVEL 22');
   });
 
   it('omits the level entirely when there is none (never invents LEVEL 1)', () => {
-    expect(ownerLine(claim({ ownerLevel: null }), false)).toBe('RYK #VJJM');
+    expect(ownerLine(claim({ ownerLevel: null }), false)).toBe('RYK');
   });
 
   it('keeps YOURS, with the level in front of it', () => {
-    expect(ownerLine(claim(), true)).toBe('RYK #VJJM · LEVEL 22 · YOURS');
-    expect(ownerLine(claim({ ownerLevel: null }), true)).toBe('RYK #VJJM · YOURS');
+    expect(ownerLine(claim(), true)).toBe('RYK · LEVEL 22 · YOURS');
+    expect(ownerLine(claim({ ownerLevel: null }), true)).toBe('RYK · YOURS');
   });
 
   it('falls back to a neutral name when the server has no display name', () => {
-    expect(ownerLine(claim({ ownerName: null, ownerLevel: null }), false)).toBe('Player #VJJM');
+    expect(ownerLine(claim({ ownerName: null, ownerLevel: null }), false)).toBe('Player');
+  });
+
+  it('keeps the #tag for the SPOKEN line, out of the visible one (owner, 2026-10-30)', () => {
+    expect(ownerLine(claim(), false)).toBe('RYK · LEVEL 22');
+    expect(ownerSpokenLine(claim(), false)).toBe('RYK #VJJM · LEVEL 22');
+    expect(ownerSpokenLine(claim(), true, 23)).toBe('RYK #VJJM · LEVEL 23 · YOURS');
+    expect(ownerSpokenLine(claim({ ownerName: null, ownerLevel: null }), false)).toBe('Player #VJJM');
   });
 });
 
@@ -49,7 +60,7 @@ describe('your own ground shows where you actually are, not where you were last 
   it('shows this device’s level over a stale paid level — the reported bug', () => {
     // The live shape of the report: the account is at level 23, the last campaign clear the server
     // was ever told about is level 11, so the map said LEVEL 11.
-    expect(ownerLine(claim({ ownerLevel: 11 }), true, 23)).toBe('RYK #VJJM · LEVEL 23 · YOURS');
+    expect(ownerLine(claim({ ownerLevel: 11 }), true, 23)).toBe('RYK · LEVEL 23 · YOURS');
   });
 
   it('never goes BACKWARDS on a device with older local progress', () => {
@@ -57,23 +68,23 @@ describe('your own ground shows where you actually are, not where you were last 
     // server only if the player has played there; otherwise the server's paid level is the higher
     // true fact and must win. Both numbers are "at least this far", so the larger one is the only
     // honest answer.
-    expect(ownerLine(claim({ ownerLevel: 22 }), true, 1)).toBe('RYK #VJJM · LEVEL 22 · YOURS');
+    expect(ownerLine(claim({ ownerLevel: 22 }), true, 1)).toBe('RYK · LEVEL 22 · YOURS');
   });
 
   it('keeps YOURS when neither number is known, and never invents one', () => {
-    expect(ownerLine(claim({ ownerLevel: null }), true, null)).toBe('RYK #VJJM · YOURS');
-    expect(ownerLine(claim({ ownerLevel: null }), true, undefined)).toBe('RYK #VJJM · YOURS');
+    expect(ownerLine(claim({ ownerLevel: null }), true, null)).toBe('RYK · YOURS');
+    expect(ownerLine(claim({ ownerLevel: null }), true, undefined)).toBe('RYK · YOURS');
   });
 
   it('a first-time player sees LEVEL 1 on their own tile, the same number PLAY offers', () => {
-    expect(ownerLine(claim({ ownerLevel: null }), true, 1)).toBe('RYK #VJJM · LEVEL 1 · YOURS');
+    expect(ownerLine(claim({ ownerLevel: null }), true, 1)).toBe('RYK · LEVEL 1 · YOURS');
   });
 
   it('somebody else’s tile is untouched: only what the server recorded', () => {
     // The client can never know another player's real progress, so a local level must not leak onto
     // their line even if one is passed in.
-    expect(ownerLine(claim({ ownerLevel: 11 }), false, 23)).toBe('RYK #VJJM · LEVEL 11');
-    expect(ownerLine(claim({ ownerLevel: null }), false, 23)).toBe('RYK #VJJM');
+    expect(ownerLine(claim({ ownerLevel: 11 }), false, 23)).toBe('RYK · LEVEL 11');
+    expect(ownerLine(claim({ ownerLevel: null }), false, 23)).toBe('RYK');
   });
 
   it('the rule itself: the larger of two true lower bounds, and nothing from junk', () => {

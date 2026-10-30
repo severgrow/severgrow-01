@@ -548,6 +548,12 @@ export const ONLINE_CSS = `
   min-height: 30px; max-width: 720px; width: 100%; margin-inline: auto;
   color: #e8ddbe; font-size: .86rem; font-weight: 700; letter-spacing: .12em;
 }
+/* YOUR NAME AND LEVEL, ALWAYS ON SCREEN (owner, 2026-10-30): the left end of the wallet line,
+   opposite the Seeds balance. The name truncates rather than pushing the balance off the edge, and
+   a signed-out player (or one with no identity yet) keeps the single centred line exactly as before. */
+.world-wallet.has-me { justify-content: space-between; gap: 12px; }
+.world-me { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-seeds { display: inline-flex; align-items: center; gap: 7px; flex: none; }
 .seed-icon { flex: none; color: #e8ddbe; }
 /* The map window FILLS the column (owner, 2026-10-16). He looked at the fitted screen and saw the
    void had simply moved outside the window: the square map sat at the top of a tall column with
@@ -1032,6 +1038,11 @@ html.reduce-motion .world-selection { animation: none; }
   cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .world-colour-swatch:active { background: #e8ddc514; }
+/* THE 24 h WINDOW: the grid is closed, and it must LOOK closed without shouting. The colour chips
+   keep their true colour (they are still the palette you will pick from); the plate recedes. */
+.world-colour-swatch:disabled { cursor: default; opacity: .5; }
+.world-colour-swatch:disabled:active { background: #e8ddc508; }
+.world-colour-swatch:disabled.current { opacity: .86; }
 .world-colour-chip {
   display: block; height: 32px; border-radius: 7px;
   background: linear-gradient(135deg, var(--swatch-light), var(--swatch) 55%, var(--swatch-dark));

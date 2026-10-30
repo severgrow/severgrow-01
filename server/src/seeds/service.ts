@@ -7,7 +7,7 @@ import { ApiError } from '../errors.js';
 import { newId, newInviteCode, newSeed } from '../ids.js';
 import type { MatchRecord, PlayerRecord, Storage } from '../storage/types.js';
 import { WORLD_VERSION, seenWorld } from '../world.js';
-import { colourById, colourIdFor, isColourId, resolveTileColours } from '../../../src/tile-colours.js';
+import { colourById, colourChangeAvailableAt, colourCooldownMs, colourIdFor, isColourId, resolveTileColours } from '../../../src/tile-colours.js';
 import { SEED_ECONOMY, WORLD_CHALLENGE_LIST_WINDOW_MS } from './config.js';
 import type {
   ChallengeSendFailure,
@@ -92,25 +92,60 @@ export class WorldEconomyService {
    * THE PLAYER'S COLOUR (owner, 2026-10-30). Reading never writes: with no stored choice the answer
    * is derived from the player id, which is the same derivation the public map uses, so the picker
    * can mark the current swatch before the player ever chooses.
+   *
+   * The 24 h state rides this read so the picker can say "changes again in 19 h" BEFORE a press
+   * (owner, 2026-10-30: "only once per 24h"). `canChange` is the server's own answer, not a client
+   * timer: a client clock that is wrong cannot unlock the picker.
    */
   async colour(player: PlayerRecord) {
     const chosen = await this.store.colourChoice(player.id);
-    const id = colourIdFor(player.id, chosen);
-    return { colourId: id, colour: colourById(id).css, name: colourById(id).name, chosen: chosen !== null };
+    return this.colourState(player, chosen);
+  }
+
+  /** The wire shape of a colour, with the 24 h rule applied to the stored row (if any). */
+  private colourState(
+    player: PlayerRecord,
+    chosen: { colourId: number; chosenAt: number } | null,
+  ) {
+    const id = colourIdFor(player.id, chosen?.colourId ?? null);
+    const now = this.now();
+    const remainingMs = colourCooldownMs(chosen?.chosenAt ?? null, now);
+    return {
+      colourId: id,
+      colour: colourById(id).css,
+      name: colourById(id).name,
+      chosen: chosen !== null,
+      canChange: remainingMs === 0,
+      changeAvailableAt: colourChangeAvailableAt(chosen?.chosenAt ?? null),
+      remainingMs,
+    };
   }
 
   /**
    * Save a choice. It is a preference, not a game action: no Seeds, no revision bump (the map's
-   * ownership did not change), one row per player, idempotent.
+   * ownership did not change), one row per player.
+   *
+   * ONE CHANGE PER 24 HOURS, SERVER-SIDE (owner, 2026-10-30). The row's `chosen_at` is the clock;
+   * this method is the only writer, so no client can bypass the rule by posting again. Choosing the
+   * colour you already have is not a change: it succeeds without touching the clock, so a double tap
+   * or a retry can never cost the player their day.
    */
   async chooseColour(player: PlayerRecord, colourId: unknown) {
     if (!isColourId(colourId)) throw new ApiError('INVALID_REQUEST', 'Choose one of the tile colours.');
-    const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
+    const now = this.now();
+    const current = await this.store.colourChoice(player.id);
+    if (current && current.colourId === colourId) return this.colourState(player, current);
+    const remainingMs = colourCooldownMs(current?.chosenAt ?? null, now);
+    if (remainingMs > 0) {
+      const hours = Math.max(1, Math.ceil(remainingMs / 3_600_000));
+      throw new ApiError('COLOUR_COOLDOWN', `You can change your colour again in ${hours} h.`);
+    }
+    const bucket = Math.floor(now / 3_600_000) * 3_600_000;
     if (!(await this.matches.hitRateLimit(`seeds:colour:${player.id}`, bucket, 60)).ok) {
       throw new ApiError('RATE_LIMITED', 'Please wait before changing colour again.');
     }
     try {
-      await this.store.setColourChoice(player.id, colourId, this.now());
+      await this.store.setColourChoice(player.id, colourId, now);
     } catch (error) {
       // The table lives in migration 0020. Refuse honestly rather than pretend it saved.
       if ((error as { code?: unknown } | null)?.code === 'COLOUR_MIGRATION_PENDING') {
@@ -118,7 +153,7 @@ export class WorldEconomyService {
       }
       throw error;
     }
-    return { colourId, colour: colourById(colourId).css, name: colourById(colourId).name };
+    return this.colourState(player, { colourId, chosenAt: now });
   }
 
   /**
@@ -348,9 +383,20 @@ export class WorldEconomyService {
     const match = c.matchId === null ? null : await this.matches.matchById(c.matchId);
     // Only a finished duel has a winner to name; a running match or a draw reports none.
     let matchWinnerId: string | null = null;
-    if (match?.status === 'finished' && match.result && match.result.winner !== null) {
+    // WHO MOVES IN THE LINKED DUEL (owner, 2026-10-30). Read from the match's own actor and the
+    // viewer's seat, so a Territory lamp never lights for the opponent's turn. The seats are read
+    // once and shared with the winner lookup above; only an ACCEPTED row can be waiting.
+    let matchWaitingForMe = false;
+    if (match && (c.status === 'accepted' || match.status === 'finished')) {
       const participants = await this.matches.participantsOf(match.id);
-      matchWinnerId = participants.find((p) => p.seat === match.result!.winner)?.playerId ?? null;
+      const result = match.result;
+      if (match.status === 'finished' && result && result.winner !== null) {
+        matchWinnerId = participants.find((p) => p.seat === result.winner)?.playerId ?? null;
+      }
+      if (c.status === 'accepted' && match.status === 'active' && match.state.phase !== 'GAME_OVER') {
+        const seat = participants.find((p) => p.playerId === viewerId)?.seat;
+        matchWaitingForMe = seat !== undefined && match.state.actor === seat;
+      }
     }
     return {
       id: c.id,
@@ -370,6 +416,7 @@ export class WorldEconomyService {
       // Only a FINISHED linked duel has a result. The server settles it on this very read, so the
       // client never has to offer a primary CONFIRM key.
       matchFinished: match?.status === 'finished' && match.result !== null,
+      matchWaitingForMe,
       matchWinnerId,
       winnerId: c.winnerId,
       resolvedAt: c.resolvedAt,

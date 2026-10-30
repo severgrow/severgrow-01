@@ -215,8 +215,9 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
   },
   async colourChoice(playerId) {
     if (!(await hasColourTable())) return null;
-    const { rows } = await pool.query('select colour_id from player_tile_colours where player_id = $1', [playerId]);
-    return rows[0] ? number(rows[0].colour_id) : null;
+    const { rows } = await pool.query('select colour_id, chosen_at from player_tile_colours where player_id = $1', [playerId]);
+    const row = rows[0];
+    return row ? { colourId: number(row.colour_id), chosenAt: number(row.chosen_at) } : null;
   },
   async setColourChoice(playerId, colourId, now) {
     // Refused, never silently dropped, when the table is missing: the picker says so instead of

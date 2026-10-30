@@ -54,6 +54,8 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   readonly challengeRequests = new Map<string, string>();
   /** Chosen palette slot per player (src/tile-colours.ts). Absent = derived from the player id. */
   readonly colours = new Map<string, number>();
+  /** When each choice was saved, for the one-change-per-24 h rule. Kept beside the slot. */
+  readonly colourTimes = new Map<string, number>();
   revision = 0;
 
   private current(playerId: string): SeedWallet {
@@ -70,8 +72,15 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     }
     return { revision: this.revision, claims };
   }
-  async colourChoice(playerId: string): Promise<number | null> { return this.colours.get(playerId) ?? null; }
-  async setColourChoice(playerId: string, colourId: number): Promise<void> { this.colours.set(playerId, colourId); }
+  async colourChoice(playerId: string): Promise<{ colourId: number; chosenAt: number } | null> {
+    const colourId = this.colours.get(playerId);
+    if (colourId === undefined) return null;
+    return { colourId, chosenAt: this.colourTimes.get(playerId) ?? 0 };
+  }
+  async setColourChoice(playerId: string, colourId: number, now: number): Promise<void> {
+    this.colours.set(playerId, colourId);
+    this.colourTimes.set(playerId, now);
+  }
   async campaignHighestLevel(playerId: string): Promise<number | null> {
     let highest: number | null = null;
     for (const receipt of this.receipts.values()) {

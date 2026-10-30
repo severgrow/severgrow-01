@@ -38,6 +38,7 @@ const challenge = (over: Partial<WorldChallengeWire> = {}): WorldChallengeWire =
   matchId: null,
   matchFinished: false,
   matchWinnerId: null,
+  matchWaitingForMe: false,
   winnerId: null,
   resolvedAt: null,
   remainingMs: TTL,

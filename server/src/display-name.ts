@@ -20,7 +20,16 @@
 import { ApiError } from './errors.js';
 
 export const DISPLAY_NAME_MIN = 1;
-export const DISPLAY_NAME_MAX = 40;
+/**
+ * THE OWNER'S LIMIT (2026-10-30): "make the account names be max 8 characters".
+ *
+ * "Existing longer names are LEFT ALONE; enforce 8 only on NEW names and RENAMES." That is why the
+ * length check runs only when the candidate actually DIFFERS from the name already stored: a
+ * legacy player may re-save their own long name unchanged, and nothing ever re-validates a name
+ * that is already in the database. Guests' generated nature names are not chosen names and are
+ * untouched by this rule.
+ */
+export const DISPLAY_NAME_MAX = 8;
 
 /**
  * Letters (any script, accents included), digits, space and the small punctuation set `- _ '`.
@@ -122,12 +131,25 @@ export type NameProblem = 'empty' | 'length' | 'chars' | 'blocked';
 export type DisplayNameCheck = { ok: true; value: string } | { ok: false; problem: NameProblem };
 
 /** The one decision. Returns the NORMALISED name to store, or the problem to report. */
-export const checkDisplayName = (raw: unknown): DisplayNameCheck => {
+export const checkDisplayName = (
+  raw: unknown,
+  options: {
+    /**
+     * The name already stored for this player. A candidate that normalises to exactly this value is
+     * not a NEW name, so a legacy name longer than `DISPLAY_NAME_MAX` can be kept as it is. Every
+     * other check (characters, blocklist, non-empty) still applies.
+     */
+    current?: string | null;
+  } = {},
+): DisplayNameCheck => {
   if (typeof raw !== 'string') return { ok: false, problem: 'empty' };
   if (CONTROL_OR_FORMAT.test(raw)) return { ok: false, problem: 'chars' };
   const value = normalizeDisplayName(raw);
   if (value.length < DISPLAY_NAME_MIN) return { ok: false, problem: 'empty' };
-  if (value.length > DISPLAY_NAME_MAX) return { ok: false, problem: 'length' };
+  const unchanged = typeof options.current === 'string'
+    && options.current.length > 0
+    && value === normalizeDisplayName(options.current);
+  if (!unchanged && value.length > DISPLAY_NAME_MAX) return { ok: false, problem: 'length' };
   if (!ALLOWED.test(value)) return { ok: false, problem: 'chars' };
   if (!HAS_LETTER_OR_DIGIT.test(value)) return { ok: false, problem: 'chars' };
   if (isBlockedName(value)) return { ok: false, problem: 'blocked' };
@@ -135,15 +157,15 @@ export const checkDisplayName = (raw: unknown): DisplayNameCheck => {
 };
 
 const MESSAGES: Record<NameProblem, string> = {
-  empty: 'Pick a name of 1 to 40 characters.',
+  empty: `Pick a name of ${DISPLAY_NAME_MIN} to ${DISPLAY_NAME_MAX} characters.`,
   length: `A name can be at most ${DISPLAY_NAME_MAX} characters.`,
   chars: "Use letters, numbers, spaces or - _ ' only.",
   blocked: 'That name cannot be used.',
 };
 
 /** The service's entry point: the normalised name, or an ApiError the route already knows how to send. */
-export const assertDisplayName = (raw: unknown): string => {
-  const checked = checkDisplayName(raw);
+export const assertDisplayName = (raw: unknown, current: string | null = null): string => {
+  const checked = checkDisplayName(raw, { current });
   if (checked.ok) return checked.value;
   throw new ApiError('INVALID_REQUEST', MESSAGES[checked.problem]);
 };

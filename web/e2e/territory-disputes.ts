@@ -84,7 +84,7 @@ const world = () => ({
 const base = {
   challengerId: 'p1', defenderId: 'r1', challengerName: 'BloomHeron', defenderName: 'RYK',
   fromMe: true, stake: 0, stakeCellId: hub.id, respondedAt: NOW - 2 * HOUR, matchId: 'm-1', matchFinished: false,
-  matchWinnerId: null, winnerId: null, resolvedAt: null, remainingMs: 0, serverNow: NOW,
+  matchWinnerId: null, matchWaitingForMe: false, winnerId: null, resolvedAt: null, remainingMs: 0, serverNow: NOW,
 };
 /** MY accepted challenge: the live duel the owner was in, with no swords before this change. */
 const myChallenge: WorldChallengeWire = {

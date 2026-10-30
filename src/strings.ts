@@ -92,6 +92,9 @@ export const ONLINE = Object.freeze({
   worldColourLabel: 'Your tiles',
   worldColourHint: 'Tap a colour. Your tiles change at once.',
   worldColourSaving: 'Changing colour…',
+  /** The 24 h rule (owner, 2026-10-30), shown BEFORE a press and after a refusal. */
+  worldColourCooldown: (left: string) => `Changes again in ${left}.`,
+  worldColourCooldownNotice: (left: string) => `You can change your colour again in ${left}.`,
   worldColourFailed: 'That colour could not be saved. Try again.',
   worldColourCurrent: 'Current colour',
   worldColourPicked: (name: string) => `${name}. Your tiles are that colour now.`,
@@ -1399,7 +1402,7 @@ export const ACCOUNT = Object.freeze({
   nicknameSave: 'Save',
   nicknameSkip: 'Skip for now',
   nicknameSaved: 'Name saved.',
-  nicknameError: "That name cannot be used. Use 1 to 40 letters, numbers, spaces or - _ '.",
+  nicknameError: "That name cannot be used. Use 1 to 8 letters, numbers, spaces or - _ '.",
   nicknameSettings: 'Change nickname',
   linked: (name: string) => `Signed in. Your matches are saved to your account, ${name}.`,
   welcomeBack: (name: string) => `Signed in. Welcome back, ${name}.`,
