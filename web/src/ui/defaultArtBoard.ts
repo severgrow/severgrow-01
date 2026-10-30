@@ -6,7 +6,6 @@ import { getOrient, toScreen } from '../logic/orient.js';
 import { BoardView } from './board.js';
 import { S, centerOf, el, hash, hexPath } from './geom.js';
 import { drawLandmark } from './landmarks.js';
-import { mountHomeGrowth, playHomeGrowth } from './home-growth.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
@@ -158,21 +157,7 @@ export class DefaultArtBoardView extends BoardView {
     this.artCell(art, index);
     const ring = home.querySelector('.lm-ring');
     if (ring) home.appendChild(ring);
-    // The player's own home grows with this device's history (logic/home-growth.ts). The
-    // opponent's home keeps its fixed art: their history is not on this device.
-    if (player === 0) mountHomeGrowth(home, key, materialsOf(this.paletteId).colors);
     return home;
-  }
-
-  /**
-   * The growth moment waits for the board to be genuinely on screen and settled: this is called by
-   * every render, so a home set up behind the menu (or under the Who-starts ritual) simply plays
-   * the moment on the first render after it is visible. After that there is nothing pending, so it
-   * can never replay.
-   */
-  override setHomes(states: Parameters<BoardView['setHomes']>[0]) {
-    super.setHomes(states);
-    playHomeGrowth(this.homeEls[0]);
   }
 
   protected override drawTile(parent: SVGGElement, key: string, tile: Tile, _maxRank: number) {

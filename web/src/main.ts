@@ -97,8 +97,6 @@ import { mountInstallPrompt } from './logic/install.js';
 import { mountAppWindowButton } from './logic/app-window.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
 import { PLAY_KEY, parsePlay, recordPlay } from './logic/play-record.js';
-import { GROWTH_SEEN_KEY, growthHistoryFrom, growthMomentAllowed, serializeGrowthSeen, stageFor } from './logic/home-growth.js';
-import { playHomeGrowth, setHomeGrowthSource } from './ui/home-growth.js';
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 // LEVEL_INFO is deliberately NOT imported: its names (the classic bot levels' labels) were only
@@ -904,9 +902,6 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   $('levels').hidden = name !== 'levels';
   $('campaign').hidden = name !== 'campaign';
   $('game').hidden = name !== 'game';
-  // The player's home grows (ui/home-growth.ts): a game set up behind the menu plays its one
-  // growth moment on the first frame the board is actually on screen. Nothing is pending after it.
-  if (name === 'game') playHomeGrowth(board.homeEls[0]);
   // An invitation deferred out of a live match is offered here, now that a menu owns the screen.
   if (name !== 'game') drainInstallInvite();
   // A full-screen change gets the same quiet arrival as a surface, EXCEPT the game: the board is
@@ -3390,21 +3385,6 @@ let pendingInstallOutcome: 'won' | 'lost' | 'draw' | null = null;
 /** The campaign progress record (level 1 open; a win unlocks the next; a loss removes nothing). */
 let campaignProgress: CampaignProgress = parseProgress(store.get(CAMPAIGN_PROGRESS_KEY));
 const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializeProgress(campaignProgress));
-/**
- * THE HOME GROWS. The player's own home carries the history of this device's play: campaign levels
- * won, finished games and lifetime Grow moves (logic/home-growth.ts has the exact sources and the
- * ladder). Read lazily on every board setup, so a threshold crossed by the game that just finished
- * reaches the next board; the opponent's home is left fixed because their history is not here.
- */
-if (IS_FUTA04) {
-  setHomeGrowthSource(() => ({
-    earned: stageFor(growthHistoryFrom({ campaign: campaignProgress, stats, play: parsePlay(store.get(PLAY_KEY)) })),
-    seenRaw: store.get(GROWTH_SEEN_KEY),
-    motion: growthMomentAllowed(settings.reduceMotion, timeScale()),
-    ready: shownScreen === 'game' && !pregameHold && !document.hidden,
-    record: (stage) => store.set(GROWTH_SEEN_KEY, serializeGrowthSeen(stage)),
-  }));
-}
 /**
  * An ACCOUNT's place lives on the server (owner report, 2026-10-25: level 35 on the phone, level 1
  * on the desktop). Campaign progress is still device-local for a guest; for a signed-in account one
