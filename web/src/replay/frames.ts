@@ -9,7 +9,7 @@
 //
 // The layout is a pure function of the model and a frame index, so a test can prove the frame at
 // index N carries frame N's board — and that the timing matches `ReplayModel.totalMs` exactly.
-import { drawReplayPoster, paintPosterCells, posterFor, posterLayout, POSTER_H, POSTER_W } from './poster.js';
+import { drawReplayPoster, paintPosterCells, paintReplayFilm, posterFor, posterLayout, POSTER_H, POSTER_W } from './poster.js';
 import type { PosterData, PosterLayout, PosterTurn } from './poster.js';
 import type { ReplayModel } from './timeline.js';
 import type { Player, Tile } from '../../../src/engine/index.js';
@@ -215,7 +215,7 @@ export const paintMotionFrameCached = (
   if (cache.index !== f.step.index) {
     const bare = { ...f.board };
     for (const key of f.keys) bare[key] = null;
-    drawReplayPoster({ ...data, board: bare }, cache.canvas, videoTurn(model, f.step), undefined, videoMoment(model, f.step));
+    drawReplayPoster({ ...data, board: bare }, cache.canvas, videoTurn(model, f.step), undefined, videoMoment(model, f.step), false);
     cache.index = f.step.index;
   }
   if (canvas.width !== cache.canvas.width) canvas.width = cache.canvas.width;
@@ -223,6 +223,7 @@ export const paintMotionFrameCached = (
   const g = canvas.getContext('2d')!;
   g.drawImage(cache.canvas, 0, 0);
   paintPosterCells(data, canvas, new Set(f.keys), f.motion);
+  paintReplayFilm(g, canvas.width, canvas.height);
   return canvas;
 };
 
