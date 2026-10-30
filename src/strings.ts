@@ -521,6 +521,14 @@ export const REPLAY = Object.freeze({
   videoSaved: 'Video saved',
   /** Said plainly when this browser cannot record, or the encoder stopped. */
   videoFailed: 'Could not make the video',
+  /** The fast export (the phone's own encoder): "Making video 40%". */
+  making: (percent: number) => `Making video ${percent}%`,
+  /** The file is ready and waiting for a tap (a phone only opens its share sheet from a tap). */
+  videoDone: 'Video ready',
+  /** The key that hands the finished file to the phone's share sheet. */
+  shareVideo: 'Share',
+  /** The key that saves the finished file to the device instead. */
+  saveVideo: 'Save',
   /** The notch on the scrub bar at the play that turned the match. */
   turningPoint: 'Turning point',
   /** The notch's own name, with the honest count of tiles the cut took. */

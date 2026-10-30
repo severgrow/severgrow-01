@@ -214,6 +214,18 @@ const hexAt = (g: CanvasRenderingContext2D, x: number, y: number, r: number) => 
   g.closePath();
 };
 
+/** The lowest drawn point of the board (its lowest hex corner), in canvas pixels. */
+export const boardBottom = (L: BoardLayout): number => {
+  let low = -Infinity;
+  for (const cell of L.cells) {
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 180) * (60 * i - 30);
+      low = Math.max(low, cell.y + toScreen(L.hex * Math.cos(a), L.hex * Math.sin(a)).y);
+    }
+  }
+  return low;
+};
+
 /** The live board's frame padding inside its atlas crop (`drawGoldFrame`'s `pad`). */
 export const GOLD_FRAME_PAD = 6;
 
@@ -259,7 +271,14 @@ export const goldFramePlacements = (L: BoardLayout): GoldFramePlacement[] => {
 /** The frame's warm glow on the live board (`drop-shadow` on `.gold-frame`), empty and occupied. */
 const GOLD_GLOW = { empty: 'rgba(236, 187, 88, .40)', occupied: 'rgba(231, 181, 83, .32)' };
 
+/** One tile caught mid-arrival (or mid-departure) in a video frame: how solid and how big. */
+export type TileMotion = { alpha: number; scale: number };
+
 export type BoardPaint = {
+  /** Tiles in motion this frame, by screen key (the rest are drawn plainly). */
+  motion?: Readonly<Record<string, TileMotion>> | undefined;
+  /** Paint only these cells (and their frames) over a picture that already has the rest. */
+  only?: ReadonlySet<string> | undefined;
   me: Player;
   /** The rim/edge ink (the surface's `--rp-line`), used for the quiet seam between cells. */
   line: string;
@@ -283,6 +302,7 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
   const rocks = source?.rocks ?? [];
 
   for (const cell of L.cells) {
+    if (o.only && !o.only.has(cell.key)) continue;
     const r = L.hex;
     g.save();
     hexAt(g, cell.x, cell.y, r);
@@ -290,6 +310,14 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     if (pattern) {
       g.fillStyle = pattern;
       g.fillRect(cell.x - r, cell.y - r, r * 2, r * 2);
+    }
+    const moving = cell.owner !== null ? o.motion?.[cell.key] : undefined;
+    if (moving) {
+      // A tile arriving (or leaving) grows from, or shrinks to, its own centre over the bare ground.
+      g.globalAlpha = Math.max(0, Math.min(1, moving.alpha));
+      g.translate(cell.x, cell.y);
+      g.scale(moving.scale, moving.scale);
+      g.translate(-cell.x, -cell.y);
     }
     if (cell.owner !== null) {
       // The territory colour only shows through the art's own edges, exactly as on the board.
@@ -339,6 +367,14 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     g.lineWidth = Math.max(1, 0.75 * k);
     g.stroke();
 
+    const stoneMotion = cell.owner !== null ? o.motion?.[cell.key] : undefined;
+    if (stoneMotion) {
+      g.save();
+      g.globalAlpha = Math.max(0, Math.min(1, stoneMotion.alpha));
+      g.translate(cell.x, cell.y);
+      g.scale(stoneMotion.scale, stoneMotion.scale);
+      g.translate(-cell.x, -cell.y);
+    }
     if (cell.owner !== null && !cell.root && cell.strength > 0) {
       if (atlas) {
         // The same carved counter the board places, cropped from the same atlas, at the board's
@@ -377,6 +413,7 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
       g.lineWidth = Math.max(2, L.hex * 0.045);
       g.stroke();
     }
+    if (stoneMotion) g.restore();
   }
 
   // The bonus hexes' metal frames, over the tiles, with the live board's warm glow. They are a rim
@@ -384,6 +421,7 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
   const gold = picture(source?.gold ?? GOLD_FRAME_ATLAS);
   if (gold) {
     for (const f of goldFramePlacements(L)) {
+      if (o.only && !o.only.has(f.key)) continue;
       g.save();
       g.translate(f.x, f.y);
       if (f.rotate) g.rotate(f.rotate);

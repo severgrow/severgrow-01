@@ -188,3 +188,60 @@ describe('the replay video', () => {
     }
   });
 });
+
+describe('the moving video (fast .mp4 export)', () => {
+  const model = buildReplay(input());
+
+  it('covers the replay exactly, with no gap and no overlap', async () => {
+    const { motionFrames } = await import('../src/replay/frames.js');
+    const frames = motionFrames(model);
+    expect(frames[0]!.at).toBe(0);
+    frames.forEach((f, i) => {
+      expect(f.duration).toBeGreaterThan(0);
+      if (i > 0) expect(f.at).toBe(frames[i - 1]!.at + frames[i - 1]!.duration);
+    });
+    const last = frames.at(-1)!;
+    expect(last.at + last.duration).toBe(model.totalMs);
+  });
+
+  it('a Bloom beat pops its tiles one by one, in the beat’s own reveal order, and ends on the real board', async () => {
+    const { motionFrames } = await import('../src/replay/frames.js');
+    const frames = motionFrames(model);
+    const beat = model.frames.find((f) => f.kind === 'grow' && f.changed.length >= 3)!;
+    expect(beat).toBeTruthy();
+    const mine = frames.filter((f) => f.step.index === beat.index && !f.step.end);
+    expect(mine.length).toBeGreaterThan(3);
+    // the moment each tile first shows (as its new owner)
+    const firstSeen = beat.changed.map((key) =>
+      mine.findIndex((f) => {
+        const t = f.board[key];
+        const want = beat.board[key];
+        return !!t && !!want && t.owner === want.owner && t.strength === want.strength;
+      }),
+    );
+    firstSeen.forEach((at) => expect(at).toBeGreaterThanOrEqual(0));
+    for (let i = 1; i < firstSeen.length; i++) expect(firstSeen[i]!).toBeGreaterThanOrEqual(firstSeen[i - 1]!);
+    expect(firstSeen.at(-1)!).toBeGreaterThan(firstSeen[0]!);
+    // the beat's last picture is the beat's real board, with nothing still moving
+    const end = mine.at(-1)!;
+    expect(Object.keys(end.motion)).toEqual([]);
+    expect(end.board).toEqual(beat.board);
+  });
+
+  it('a quiet stretch is one long still, not thirty pictures a second', async () => {
+    const { motionFrames, VIDEO_FPS } = await import('../src/replay/frames.js');
+    const frames = motionFrames(model);
+    expect(frames.length).toBeLessThan((model.totalMs / 1000) * VIDEO_FPS * 0.6);
+    expect(frames.some((f) => f.duration > 400)).toBe(true);
+  });
+});
+
+describe('the moving video keeps a steady 30 fps clock', () => {
+  it('every picture starts on its own 30 fps slot', async () => {
+    const { motionFrames } = await import('../src/replay/frames.js');
+    const frames = motionFrames(buildReplay(input()));
+    const slots = frames.map((f) => Math.round((f.at * 30) / 1000));
+    frames.forEach((f) => expect(Math.abs((f.at * 30) / 1000 - Math.round((f.at * 30) / 1000))).toBeLessThan(0.02));
+    expect(new Set(slots).size).toBe(slots.length);
+  });
+});

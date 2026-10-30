@@ -10428,6 +10428,7 @@ let appReady = false;
    * recorder's own painter as a PNG data URL. It never drives the replay or starts a recording.
    */
   replayVideoFrame: (step = -1) => replayPlayer?.videoFrame(step) ?? null,
+  replayLastVideo: () => replayPlayer?.lastVideo() ?? null,
   /** Tests/screenshots: the install invitation's memory (games counted) and a way to show it. */
   install: () => installPrompt.memory(),
   showInstall: () => installPrompt.showNow(),

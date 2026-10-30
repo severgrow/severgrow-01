@@ -14,7 +14,7 @@
 //
 // Screenshots go to docs/screens/replay/ (or $SHOTS).
 //   CHANNEL=futa05 npx tsx web/e2e/replay-video.ts
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
@@ -78,7 +78,7 @@ const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
     }, undefined, { timeout: 15_000 })
     .catch(() => undefined);
   const read = () => page.evaluate('(() => window.__severgrow.state())()') as Promise<State | null>;
-  const idle = () => page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
+  const idle = () => page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
   let waiting = 0;
   let refused = 0;
   for (let i = 0; i < maxSteps; i++) {
@@ -136,7 +136,7 @@ const PROBE_SRC = `(async (data) => {
   const raw = atob(data);
   const bytes = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  const blob = new Blob([bytes], { type: 'video/webm' });
+  const blob = new Blob([bytes]);
   const url = URL.createObjectURL(blob);
   const video = document.createElement('video');
   video.muted = true;
@@ -210,7 +210,7 @@ try {
   });
   await settingsInit(page);
   await page.goto(`${origin}/?seed=1004`);
-  await page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 60_000 });
+  await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 60_000 });
   await waitVisible(page, '#game', 30_000);
   const ended = await toGameOver(page);
   check('a real practice match reaches its finish card', ended === 'ended', ended);
@@ -268,45 +268,44 @@ try {
   await pair.screenshot({ path: `${SHOTS}/replay-video-vs-game-board.png` });
   await pair.close();
 
-  // ---------- record the whole replay ----------
+  // ---------- export the whole replay ----------
+  // THE FAST EXPORT (owner, 2026-10-30): a browser with an H.264 encoder (this Chromium has one)
+  // paints and encodes every picture itself, so the .mp4 is ready long before the replay's own
+  // length; a browser without one keeps the real-time recorder and its "Recording 3s / 20s" line.
+  const PROGRESS = /^(Recording \d+s \/ \d+s|Making video \d+%)$/;
+  const fast = await page.evaluate(async () => {
+    const VE = (window as unknown as { VideoEncoder?: { isConfigSupported(c: unknown): Promise<{ supported?: boolean }> } }).VideoEncoder;
+    if (!VE) return false;
+    return !!(await VE.isConfigSupported({ codec: 'avc1.42e028', width: 1080, height: 1350, bitrate: 8e6, framerate: 30, avc: { format: 'avc' } })).supported;
+  });
+  console.log(`INFO  this browser takes the ${fast ? 'fast .mp4 export' : 'real-time recorder'}`);
   const started = Date.now();
   const downloadPromise = page.waitForEvent('download', { timeout: Math.max(90_000, total * 5) });
   await video.click();
   // Progress, and a way out, appear at once; the control is disabled while it runs.
   await page.waitForSelector('#replay .rp-video:not([hidden])', { timeout: 5_000 });
   const firstLine = ((await page.locator('#replay .rp-video-text').textContent()) ?? '').trim();
-  check('the recording line says it is recording, and how long', /^Recording \d+s \/ \d+s$/.test(firstLine), firstLine);
-  check('a cancel control is offered while it records', await page.locator('#replay [data-rp="video-cancel"]').isVisible());
-  check('the export control is disabled while it records', await video.isDisabled());
+  check('the export line says what it is doing', PROGRESS.test(firstLine) || /Video (saved|ready)|Preparing/.test(firstLine), firstLine);
+  check('the export control is disabled while it runs', await video.isDisabled());
   check(
-    'the replay’s own controls are still there while it records',
+    'the replay’s own controls are still there while it runs',
     (await page.locator('#replay .rp-scrub').isVisible()) && (await page.locator('#replay [data-rp="close"]').isVisible()),
   );
-  await page.waitForFunction(
-    () => {
-      const el = document.querySelector('#replay .rp-video-text');
-      const m = (el?.textContent ?? '').match(/Recording (\d+)s/);
-      return !!m && Number(m[1]) >= 3;
-    },
-    undefined,
-    { timeout: Math.max(20_000, total) },
-  );
-  const laterLine = ((await page.locator('#replay .rp-video-text').textContent()) ?? '').trim();
-  check('the progress line advances with the recording', /^Recording \d+s \/ \d+s$/.test(laterLine) && laterLine !== firstLine, `${firstLine} → ${laterLine}`);
   await page.screenshot({ path: `${SHOTS}/replay-video-recording-390x844.png` });
 
   const download = await downloadPromise;
   const waited = Date.now() - started;
-  const saved = `${SHOTS}/futasaku-replay-download.webm`;
+  const name = download.suggestedFilename();
+  const saved = `${SHOTS}/futasaku-replay-download.${name.endsWith('.mp4') ? 'mp4' : 'webm'}`;
   await download.saveAs(saved);
   const bytes = statSync(saved).size;
-  const name = download.suggestedFilename();
-  check('the recording downloads a named video file', /^futasaku-.+-\d+-\d+\.(webm|mp4)$/.test(name), name);
+  check('the export downloads a named video file', /^futasaku-.+-\d+-\d+\.(webm|mp4)$/.test(name), name);
+  if (fast) check('a browser with an H.264 encoder gets an .mp4 (what phones and chat apps take)', name.endsWith('.mp4'), name);
   check('the file is not empty', bytes > 100_000, `${bytes} bytes`);
 
   // The control comes back, and the line clears itself.
   await page.waitForFunction(() => !(document.querySelector('#replay [data-rp="video"]') as HTMLButtonElement | null)?.disabled, undefined, { timeout: 15_000 });
-  check('the export control re-enables after the recording', !(await video.isDisabled()));
+  check('the export control re-enables afterwards', !(await video.isDisabled()));
   const says = ((await page.locator('#replay .rp-video-text').textContent()) ?? '').trim();
   check('it says where the file went', /Video (saved|shared)/i.test(says), says);
   await page.locator('#replay .rp-video').waitFor({ state: 'hidden', timeout: 6_000 }).catch(() => undefined);
@@ -316,20 +315,45 @@ try {
   check('the file decodes as a video', probed.error === null && probed.width === 1080 && probed.height === 1350, JSON.stringify(probed));
   check('its length is the replay’s own length', probed.duration !== null && Math.abs(probed.duration - total) <= 1_500, `${probed.duration}ms vs ${total}ms`);
   check('it carries no audio', (probed.audioBytes ?? 0) === 0, `audio bytes ${probed.audioBytes}, tracks ${probed.audioTracks}`);
-  check('recording took about as long as the replay itself', waited >= total * 0.8 && waited <= total * 3, `${waited}ms for a ${total}ms replay`);
-  const mime = (await page.evaluate(() => (typeof MediaRecorder === 'undefined' ? null : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find((m) => MediaRecorder.isTypeSupported(m)) ?? null))) as string | null;
-  console.log(`INFO  container the browser reported: ${mime ?? 'none'} · ${bytes} bytes · ${Math.round(bytes / 1024)}KB for ${(total / 1000).toFixed(1)}s`);
+  if (fast) {
+    check('the fast export is quicker than the replay itself', waited < total, `${waited}ms for a ${total}ms replay`);
+    // A second, independent reader of the file: ffmpeg's own probe (skipped where it is not installed).
+    const ff = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,codec_type,width,height,nb_frames:format=duration,format_name', '-of', 'json', saved], { encoding: 'utf8' });
+    if (ff.status === 0 && ff.stdout) {
+      const info = JSON.parse(ff.stdout) as { streams: { codec_name: string; codec_type: string; width?: number; height?: number; nb_frames?: string }[]; format: { duration: string; format_name: string } };
+      const v = info.streams.filter((x) => x.codec_type === 'video');
+      check('ffprobe: one H.264 video stream, 1080×1350, no audio', v.length === 1 && v[0]!.codec_name === 'h264' && v[0]!.width === 1080 && v[0]!.height === 1350 && info.streams.every((x) => x.codec_type === 'video'), ff.stdout.replace(/\s+/g, ' '));
+      check('ffprobe: an MP4 of the replay’s length', /mp4/.test(info.format.format_name) && Math.abs(Number(info.format.duration) * 1000 - total) <= 100, `${info.format.duration}s vs ${total}ms`);
+      check('ffprobe: the tiles move (many more pictures than beats)', Number(v[0]!.nb_frames ?? 0) > (plan?.frames.length ?? 0) * 2, `${v[0]!.nb_frames} pictures for ${plan?.frames.length} beats`);
+      // Every picture decodes, start to finish.
+      const dec = spawnSync('ffmpeg', ['-v', 'error', '-i', saved, '-f', 'null', '-'], { encoding: 'utf8' });
+      check('ffmpeg decodes every picture without an error', dec.status === 0 && !dec.stderr.trim(), dec.stderr.trim().slice(0, 200));
+      // Two stills from inside the first Bloom beat, to see the wave arriving.
+      const bloom = plan?.frames.find((f) => f.kind === 'grow' && f.duration > 600);
+      if (bloom) {
+        for (const [tag, ms] of [['a', bloom.at + 120], ['b', bloom.at + 380]] as const) {
+          spawnSync('ffmpeg', ['-v', 'error', '-y', '-ss', String(ms / 1000), '-i', saved, '-frames:v', '1', `${SHOTS}/replay-video-bloom-${tag}.png`]);
+        }
+      }
+    } else {
+      console.log('INFO  ffprobe not available: skipped the independent file check');
+    }
+  } else {
+    check('recording took about as long as the replay itself', waited >= total * 0.8 && waited <= total * 3, `${waited}ms for a ${total}ms replay`);
+  }
+  const stats = await page.evaluate(() => (window as unknown as { __severgrow?: { replayLastVideo?: () => unknown } }).__severgrow?.replayLastVideo?.() ?? null);
+  console.log(`INFO  export stats: ${JSON.stringify(stats)}`);
+  console.log(`INFO  ${name} · ${bytes} bytes · ${Math.round(bytes / 1024)}KB for ${(total / 1000).toFixed(1)}s · made in ${waited}ms`);
 
-  // ---------- cancel a recording ----------
+  // ---------- cancel an export ----------
   const cancelled = page.waitForEvent('download', { timeout: 4_000 }).then(() => 'downloaded').catch(() => 'none');
   await video.click();
-  await page.waitForSelector('#replay .rp-video:not([hidden])', { timeout: 5_000 });
-  await page.waitForTimeout(1_500);
+  await page.waitForSelector('#replay [data-rp="video-cancel"]:not([hidden])', { timeout: 5_000 });
   await page.locator('#replay [data-rp="video-cancel"]').click();
   await page.locator('#replay .rp-video').waitFor({ state: 'hidden', timeout: 5_000 });
-  check('cancel stops the recording and takes the line away', await page.locator('#replay .rp-video').isHidden());
+  check('cancel stops the export and takes the line away', await page.locator('#replay .rp-video').isHidden());
   check('cancel leaves the export control usable', !(await video.isDisabled()));
-  check('a cancelled recording saves no file', (await cancelled) === 'none');
+  check('a cancelled export saves no file', (await cancelled) === 'none');
 
   // A recording never outlives the surface: start one, close the replay, and it must stop.
   await video.click();
@@ -353,11 +377,11 @@ try {
   await waitVisible(page, '#replay', 20_000);
   await page.waitForTimeout(400);
   await page.locator('#replay [data-rp="video"]').click();
-  await page.waitForSelector('#replay .rp-video:not([hidden])', { timeout: 5_000 });
+  await page.waitForSelector('#replay [data-rp="video-cancel"]:not([hidden])', { timeout: 5_000 });
   const rmLine = ((await page.locator('#replay .rp-video-text').textContent()) ?? '').trim();
   check(
     'reduce motion gets the same progress line and cancel',
-    /^Recording \d+s \/ \d+s$/.test(rmLine) && (await page.locator('#replay [data-rp="video-cancel"]').isVisible()),
+    PROGRESS.test(rmLine) && (await page.locator('#replay [data-rp="video-cancel"]').isVisible()),
     rmLine,
   );
   const rmBoard = await page.locator('#replay .rp-board > svg').isVisible();

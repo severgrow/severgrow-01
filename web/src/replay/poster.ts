@@ -12,6 +12,7 @@ import { REPLAY } from '../../../src/strings.js';
 import { fit } from '../logic/share.js';
 import type { TextBox } from '../logic/share.js';
 import {
+  boardBottom,
   loadBoardArtUrls,
   layoutBoard,
   paintBoard,
@@ -19,7 +20,7 @@ import {
   SIGNATURE_FONT,
   warmBoardArt,
 } from './board-canvas.js';
-import type { BoardArt, BoardCell, BoardLayout } from './board-canvas.js';
+import type { BoardArt, BoardCell, BoardLayout, TileMotion } from './board-canvas.js';
 import type { ReplayModel } from './timeline.js';
 
 export const POSTER_W = 1080;
@@ -28,6 +29,8 @@ const M = 72;
 const BOARD_TOP = 392;
 const BOARD_H = 700;
 const MARK_TOP = 1204;
+/** The gap from the board's lowest hex to the sign-off. */
+const MARK_GAP = 44;
 
 /** The one extra line a video frame carries (the poster's own whitespace above the board). */
 export const TURN_TOP = 344;
@@ -100,14 +103,18 @@ export const posterLayout = (d: PosterData): PosterLayout => {
     dash: { x: M + third, y: 154, w: third, h: 180, text: '–', size: 88, weight: 400 as const, align: 'center' as const },
     opp: { x: M + 2 * third, y: 154, w: third, h: 180, text: String(d.score[1]), size: 148, weight: 800 as const, align: 'center' as const },
   };
-  const mark: TextBox = { x: M, y: MARK_TOP, w: inner, h: 40, text: d.mark, size: 30, weight: 800, align: 'center' };
+  const board = layoutBoard(d, { w: inner, h: BOARD_H, cx: Math.round(POSTER_W / 2), cy: Math.round(BOARD_TOP + BOARD_H / 2) });
+  // FUTASAKU.COM directly under the board, on its centre line (owner, 2026-10-30), never lower
+  // than the old fixed sign-off line.
+  const under = board.cells.length ? Math.round(boardBottom(board) + MARK_GAP) : MARK_TOP;
+  const mark: TextBox = { x: M, y: Math.min(under, MARK_TOP), w: inner, h: 40, text: d.mark, size: 30, weight: 800, align: 'center' };
   return {
     width: POSTER_W,
     height: POSTER_H,
     names: [name(d.names[0], 'left'), name(d.names[1], 'right')],
     score,
     mark,
-    board: layoutBoard(d, { w: inner, h: BOARD_H, cx: Math.round(POSTER_W / 2), cy: Math.round(BOARD_TOP + BOARD_H / 2) }),
+    board,
   };
 };
 
@@ -137,6 +144,7 @@ export const drawReplayPoster = (
   d: PosterData,
   canvas: HTMLCanvasElement = document.createElement('canvas'),
   turn?: PosterTurn,
+  motion?: Readonly<Record<string, TileMotion>>,
 ): HTMLCanvasElement => {
   const L = posterLayout(d);
   // A recording reuses one canvas for every frame, so the buffer is only resized when it must be.
@@ -190,7 +198,7 @@ export const drawReplayPoster = (
     );
   }
 
-  paintBoard(g, L.board, { me: d.me, line: col.line, font });
+  paintBoard(g, L.board, { me: d.me, line: col.line, font, motion });
   // THE SIGN-OFF: FUTASAKU.COM in Besley and the game's cream, with the same low carved edge as the
   // replay screen's footer (owner, 2026-10-26) — a warm edge cast under each letter, a soft shadow.
   {
@@ -217,6 +225,22 @@ export const drawReplayPoster = (
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   }
   return canvas;
+};
+
+/**
+ * Repaint just these cells of a poster already on the canvas (the video's moving tiles over a
+ * picture of everything that holds still). Same layout and painter as the whole poster.
+ */
+export const paintPosterCells = (
+  d: PosterData,
+  canvas: HTMLCanvasElement,
+  keys: ReadonlySet<string>,
+  motion?: Readonly<Record<string, TileMotion>>,
+): void => {
+  const L = posterLayout(d);
+  const g = canvas.getContext('2d')!;
+  const font = getComputedStyle(document.body).fontFamily || 'ui-monospace, monospace';
+  paintBoard(g, L.board, { me: d.me, line: css('--rp-line', 'rgba(233, 216, 173, .16)'), font, motion, only: keys });
 };
 
 export const posterBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>

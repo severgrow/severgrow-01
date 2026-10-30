@@ -20,9 +20,12 @@ import type { ReplayHighlight, ReplayModel, ReplayTurningPoint } from './timelin
 import { boardAtIndex, frameAtTime, seekTo } from './seek.js';
 import { REPLAY_CSS } from './replay-css.js';
 import { posterFor, shareReplayPoster } from './poster.js';
+import type { PosterData } from './poster.js';
 import { loadBoardArtUrls, warmBoardArt } from './board-canvas.js';
 import { paintVideoFrame, videoPlan } from './frames.js';
-import { durationLabel, recordReplayVideo, shareOrSaveVideo } from './video.js';
+import { durationLabel, recordReplayVideo, saveVideo, shareOrSaveVideo, videoFile } from './video.js';
+import type { RecordedVideo } from './video.js';
+import { encodeReplayMp4, pickMp4Codec } from './encode.js';
 
 export type ReplayDeps = {
   theme: () => { style: ThemeStyle; id: ThemeId };
@@ -85,6 +88,8 @@ export type ReplayHandle = {
    * with the board on screen.
    */
   videoFrame: (step?: number) => Promise<string | null>;
+  /** Test/diagnostic hook: how the last video export went (time, paint time, pictures, size). */
+  lastVideo: () => { ms: number; paintMs: number | null; painted: number; mime: string; bytes: number } | null;
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -265,7 +270,10 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   brand.append(brandMark, brandSite);
   leftActions.append(closeBtn);
   actions.append(shareBtn, videoBtn);
-  foot.append(leftActions, brand, actions);
+  // The footer is two mirrored halves — Close on the left, the two keys on the right, the same
+  // width — and the signature sits directly under the board (owner, 2026-10-30: "put the
+  // futasaku.com directly under the board, all aligned and symmetric").
+  foot.append(leftActions, actions);
 
   // The recording's own line: progress and the way out. It sits between the scrub bar and the
   // footer, so it never covers a control; while it is hidden nothing moves.
@@ -281,7 +289,21 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   videoCancel.className = 'rp-btn';
   videoCancel.dataset.rp = 'video-cancel';
   videoCancel.textContent = REPLAY.cancel;
-  videoRow.append(videoText, videoCancel);
+  // Once the file is ready on a phone: one tap opens the share sheet (a phone only allows that from
+  // a tap), or saves it instead. Both are the row's own 44px keys; while recording they are hidden.
+  const videoShare = document.createElement('button');
+  videoShare.type = 'button';
+  videoShare.className = 'rp-btn rp-btn-go';
+  videoShare.dataset.rp = 'video-share';
+  videoShare.textContent = REPLAY.shareVideo;
+  videoShare.hidden = true;
+  const videoSave = document.createElement('button');
+  videoSave.type = 'button';
+  videoSave.className = 'rp-btn';
+  videoSave.dataset.rp = 'video-save';
+  videoSave.textContent = REPLAY.saveVideo;
+  videoSave.hidden = true;
+  videoRow.append(videoText, videoCancel, videoSave, videoShare);
 
   // THE MOMENT CAPTION: when the replay arrives at one of the bar's moments (by a tap on its pin, or
   // as playback passes it), one small glass plate over the top of the board says what happened —
@@ -296,7 +318,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   const captionLine = document.createElement('span');
   captionLine.className = 'rp-caption-line';
   caption.append(captionEyebrow, captionLine);
-  boardBox.append(again, caption);
+  boardBox.append(again, caption, brand);
   stage.append(head, turn, boardBox, bar, videoRow, foot);
   root.append(stage);
   document.body.append(root);
@@ -731,6 +753,9 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   };
   const settleVideo = (): void => {
     window.clearTimeout(videoTimer);
+    readyVideo = null;
+    videoShare.hidden = true;
+    videoSave.hidden = true;
     videoRow.hidden = true;
     videoRow.dataset.live = '0';
     videoCancel.hidden = true;
@@ -744,6 +769,44 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     running?.abort();
     settleVideo();
   };
+
+  /** Diagnostics for the test hook: how the last export went (never shown, never sent). */
+  let lastVideo: { ms: number; paintMs: number | null; painted: number; mime: string; bytes: number } | null = null;
+  /** The finished file, waiting for the player's tap on Share or Save. */
+  let readyVideo: { video: RecordedVideo; data: PosterData } | null = null;
+  const canShareFile = (file: File): boolean => {
+    const nav = navigator as Navigator & { canShare?: (x: { files: File[] }) => boolean };
+    return !!nav.share && !!nav.canShare?.({ files: [file] });
+  };
+  /** True while the press that started the export still counts as a tap (Chrome says so). */
+  const hasTapNow = (): boolean =>
+    !!(navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive;
+  const handOver = async (video: RecordedVideo, data: PosterData, mode: 'auto' | 'save' = 'auto'): Promise<void> => {
+    const outcome = mode === 'save' ? saveVideo(video, data) : await shareOrSaveVideo(video, data, REPLAY.mark);
+    if (outcome === 'cancelled') {
+      // The share sheet was dismissed: keep the file ready for another try rather than lose it.
+      readyVideo = { video, data };
+      showVideo(REPLAY.videoDone, false);
+      videoShare.hidden = !canShareFile(videoFile(video, data));
+      videoSave.hidden = false;
+      return;
+    }
+    videoShare.hidden = true;
+    videoSave.hidden = true;
+    readyVideo = null;
+    showVideo(outcome === 'shared' ? REPLAY.videoShared : REPLAY.videoSaved, false);
+    videoTimer = window.setTimeout(settleVideo, 2600);
+  };
+  videoShare.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const ready = readyVideo;
+    if (ready) void handOver(ready.video, ready.data);
+  });
+  videoSave.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const ready = readyVideo;
+    if (ready) void handOver(ready.video, ready.data, 'save');
+  });
 
   const startVideo = async (): Promise<void> => {
     if (!model || recording) return;
@@ -759,24 +822,43 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     setPlaying(false);
     try {
       const art = await loadBoardArtUrls();
-      const video = await recordReplayVideo({
-        model: current,
-        art,
-        signal: controller.signal,
-        onProgress: (done, total) => writeVideoProgress(REPLAY.recording(durationLabel(done), durationLabel(total))),
-      });
+      // THE FAST WAY FIRST: the phone's own H.264 encoder, a moving .mp4 in a few seconds. Only a
+      // browser without it records the screen in real time (the old .webm path).
+      const codec = await pickMp4Codec();
+      if (controller.signal.aborted) return;
+      if (codec) showVideo(REPLAY.making(0), true);
+      const video = codec
+        ? await encodeReplayMp4({
+            model: current,
+            art,
+            codec,
+            signal: controller.signal,
+            onProgress: (fraction) => writeVideoProgress(REPLAY.making(Math.round(fraction * 100))),
+          })
+        : await recordReplayVideo({
+            model: current,
+            art,
+            signal: controller.signal,
+            onProgress: (done, total) => writeVideoProgress(REPLAY.recording(durationLabel(done), durationLabel(total))),
+          });
       if (!video || controller.signal.aborted) {
         settleVideo();
         return;
       }
+      lastVideo = { ms: video.ms, paintMs: video.paintMs ?? null, painted: video.painted, mime: video.mime, bytes: video.blob.size };
       const data = posterFor(current);
-      showVideo(REPLAY.videoReady, false);
-      const outcome = await shareOrSaveVideo(video, data, REPLAY.mark);
-      if (outcome === 'cancelled') settleVideo();
-      else {
-        showVideo(outcome === 'shared' ? REPLAY.videoShared : REPLAY.videoSaved, false);
-        videoTimer = window.setTimeout(settleVideo, 2600);
+      const file = videoFile(video, data);
+      if (canShareFile(file) && !hasTapNow()) {
+        // A phone opens its share sheet only from a tap: the file waits here for one.
+        readyVideo = { video, data };
+        showVideo(REPLAY.videoDone, false);
+        videoShare.hidden = false;
+        videoSave.hidden = false;
+        videoShare.focus({ preventScroll: true });
+        return;
       }
+      showVideo(REPLAY.videoReady, false);
+      await handOver(video, data);
     } catch {
       // The one honest line: this browser could not record, or the encoder stopped. Never a fake
       // "saved".
@@ -1025,6 +1107,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     board = view;
     setupView(board, next);
     paintOpening(next);
+    placeBrand();
     // One beat for the surface to arrive, then the match plays.
     window.setTimeout(() => {
       if (!model || root.hidden || seq !== openSeq) return;
@@ -1035,6 +1118,31 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
       restart();
     }, reduce() ? 0 : 180);
   };
+
+  // THE SIGNATURE'S PLACE: the board's own drawn extent, read from the SVG, so the lockup sits a
+  // fixed gap under the lowest hex and on the board's own centre line — on every board shape, and
+  // however the box letterboxes it. Re-read only when the box changes size (never per frame).
+  const BRAND_GAP = 14;
+  const placeBrand = (): void => {
+    if (root.hidden) return;
+    let bb: DOMRect;
+    try {
+      bb = svg.getBBox();
+    } catch {
+      return;
+    }
+    const m = svg.getScreenCTM();
+    if (!m || bb.width <= 0 || bb.height <= 0) return;
+    const box = boardBox.getBoundingClientRect();
+    const bottom = (bb.y + bb.height) * m.d + m.f - box.top;
+    const centre = (bb.x + bb.width / 2) * m.a + m.e - box.left;
+    const room = box.height - brand.offsetHeight;
+    brand.style.top = `${Math.round(Math.max(0, Math.min(bottom + BRAND_GAP, room)))}px`;
+    brand.style.left = `${Math.round(centre)}px`;
+    brand.dataset.placed = '1';
+  };
+  const brandWatch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => placeBrand());
+  brandWatch?.observe(boardBox);
 
   const close = (): void => {
     // A recording never outlives the surface it was started from.
@@ -1087,6 +1195,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
             })),
           }
         : null,
+    lastVideo: () => lastVideo,
     videoFrame: async (step = -1) => {
       if (!model) return null;
       const plan = videoPlan(model);

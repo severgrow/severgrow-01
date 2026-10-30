@@ -56,6 +56,8 @@ export type RecordedVideo = {
   height: number;
   /** How many positions were painted into the encoder. */
   painted: number;
+  /** Time spent painting pictures (the fast export reports it; the rest was the encoder). */
+  paintMs?: number;
 };
 
 /** How far behind its own clock a recording may fall before it is called a failure. */
@@ -200,6 +202,12 @@ export const shareOrSaveVideo = async (
       return 'cancelled';
     }
   }
+  return saveVideo(video, data);
+};
+
+/** Save the file to the device (a plain download), never through the share sheet. */
+export const saveVideo = (video: RecordedVideo, data: PosterData): 'saved' => {
+  const file = videoFile(video, data);
   const url = URL.createObjectURL(video.blob);
   const a = Object.assign(document.createElement('a'), { href: url, download: file.name });
   document.body.append(a);

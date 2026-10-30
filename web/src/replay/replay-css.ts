@@ -169,6 +169,9 @@ export const REPLAY_CSS = `
   align-items: center;
   justify-content: center;
   margin: 2px 0 4px;
+  /* room for the signature under the board, so the board never sits on top of it */
+  padding-bottom: var(--rp-brand-room, 44px);
+  box-sizing: border-box;
 }
 /* ONLY the board's own outer SVG ("> svg"). The board nests small <svg> windows inside it — each
    strength stone and each bonus hex's gold frame is a cropped window onto a sprite atlas, sized by
@@ -369,14 +372,18 @@ export const REPLAY_CSS = `
 #replay .rp-icon:disabled { opacity: .45; cursor: default; }
 #replay .rp-icon[aria-busy='true'] svg { animation: rp-rec 1.6s ease-in-out infinite; }
 
+/* Two mirrored halves: Close on the left and the share + video keys on the right, each 88px wide,
+   so the footer is symmetric about the board's centre line (owner, 2026-10-30). */
 #replay .rp-foot {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   padding: 0 2px;
   min-height: 48px;
 }
+#replay .rp-foot > .rp-actions { flex: none; width: 88px; gap: 0 !important; }
+#replay .rp-foot .rp-btn[data-rp='close'] { width: 88px; padding: 0; text-align: center; }
 /* A FIXED width (the widest "00:00 / 00:00"), so the bar beside it never changes length as the
    clock fills in or pauses: a bar that shifts under a thumb mid-drag seeks to the wrong moment. */
 #replay .rp-meta {
@@ -427,6 +434,8 @@ export const REPLAY_CSS = `
   white-space: nowrap;
 }
 #replay .rp-btn:focus-visible { outline: 2px solid #e8ddc9; outline-offset: 2px; }
+/* The one key that finishes the export: the game's cream, so the next tap is obvious. */
+#replay .rp-btn.rp-btn-go { background: var(--rp-ink); border-color: var(--rp-ink); color: #0b0d0c; font-weight: 700; }
 #replay .rp-btn[hidden] { display: none !important; }
 /* THE SIGNATURE: the 双サク mark over FUTASAKU.COM, set in Besley — the menu title's own face — in
    the game's classic cream (owner, 2026-10-26: "Besley … the classic cream colour we use", no gold,
@@ -434,12 +443,20 @@ export const REPLAY_CSS = `
    pixel under each letter, and a soft shadow beneath. Quiet under the match, present in every
    screenshot of it. */
 #replay .rp-brand {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
 }
+/* It shows once it has been placed under the board, so it never flashes at the box's top. */
+#replay .rp-brand[data-placed='1'] { opacity: 1; }
 #replay .rp-brand-mark {
   display: block;
   height: 15px;
