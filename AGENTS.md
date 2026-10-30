@@ -25,7 +25,7 @@ Full guide: [`docs/RELEASE-FLOW.md`](docs/RELEASE-FLOW.md).
 
 ## Branches and lines
 
-- **0.5 online** (the live game: online + live duels, Territory, campaign, Daily) lands on
+- **0.5 online** (the live game: online + live duels, Territory, campaign) lands on
   **`futa0.5-online`**; start at [`docs/ONLINE.md`](docs/ONLINE.md). `live` is moved only by promote.
 - The locked **0.4** line lands on **`futa0.4`** (`/futa0.4/`). Pre-cleanup snapshot:
   `archive/futa0.4-before-cleanup`.

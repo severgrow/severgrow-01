@@ -15,14 +15,6 @@ export const planSeedReward = (input: RewardInput, day: {
   pairPaid: number;
   totalEarned: number;
 }): { amount: number; reason: string | null } => {
-  // THE DAILY PUZZLE (owner, 2026-10-27): the reward is ONE Territory tile, not Seeds — so it pays
-  // exactly a tile's price, which the PLACE IT step spends at once. Never multiplied by the beta
-  // payout (a doubled tile would be two tiles), and outside the daily cap like a campaign clear.
-  if (input.mode === 'campaign' && input.dailyPuzzle !== undefined) {
-    return input.outcome === 'win' && Number.isInteger(input.dailyPuzzle) && input.dailyPuzzle >= 1
-      ? { amount: SEED_ECONOMY.tileCost, reason: null }
-      : { amount: 0, reason: 'not_a_solve' };
-  }
   // TERRITORY ACHIEVEMENTS (owner, 2026-10-29): a fixed, one-time amount the service verified
   // (server/src/seeds/achievements.ts). Outside the daily cap like a campaign clear, and not multiplied:
   // the number on the card is the number paid.

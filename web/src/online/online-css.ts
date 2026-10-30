@@ -1360,7 +1360,7 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
   /* a deeper vignette: the stage's edges fall away into the dark, the centre holds the light */
   .online-world .world-grid::after { background: radial-gradient(ellipse 72% 70% at 50% 48%, transparent 46%, #060807d9 100%); }
   /* the floating HUD: every pill sits in the stage's own cell, above the map */
-  .online-world :is(#online-world-wallet, #daily-place, #online-world-live, #online-world-notice) {
+  .online-world :is(#online-world-wallet, #online-world-live, #online-world-notice) {
     grid-row: 2; position: relative; z-index: 5; width: auto; max-width: min(680px, calc(var(--world-w) - 200px)); margin: 0;
   }
   .online-world #online-world-live { position: absolute; }
@@ -1369,7 +1369,6 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
     background: rgba(10, 13, 11, .56); -webkit-backdrop-filter: blur(10px) saturate(1.1); backdrop-filter: blur(10px) saturate(1.1);
     box-shadow: inset 0 1px 0 #e8ddc514, 0 8px 22px #0005;
   }
-  .online-world #daily-place { align-self: start; margin-top: 92px; }
   .online-world .world-selection { bottom: 14px; min-height: 52px; padding: 6px 7px 6px 20px; border-radius: 16px; font-size: .78rem; }
   .online-world .world-selection:not(.has-action) { padding: 6px 20px; }
   .online-world #online-world-notice {

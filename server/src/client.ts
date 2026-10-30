@@ -530,13 +530,6 @@ export class DuelClient {
     return response.reward;
   }
 
-  /** Submit a Daily Puzzle solve (the turn's actions); the server replays it and pays one tile. */
-  async submitDailySolve(token: string, no: number, actions: readonly Action[], options: { signal?: AbortSignal } = {}): Promise<RewardResult> {
-    const response = await this.request<{ reward: RewardResult }>(
-      'POST', '/v1/seeds/daily', { token, body: { no, actions }, ...(options.signal ? { signal: options.signal } : {}) });
-    return response.reward;
-  }
-
   // ---- transport ----
 
   chatHistory(token: string, matchId: string, cursor: { after?: number; before?: number } = {}, signal?: AbortSignal): Promise<ChatResult> {
