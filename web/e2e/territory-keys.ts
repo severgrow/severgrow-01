@@ -252,7 +252,10 @@ try {
   };
   check('the tap path is a pure write: the click handler itself finishes inside a frame', handlerMs >= 0 && handlerMs < 16, `${handlerMs.toFixed(1)}ms synchronous`);
   check('the nearest key starts on the very next frame (transitionstart <= 34ms)', firstStart(keyIds[nearest]!) <= 34, `${Math.round(firstStart(keyIds[nearest]!))}ms`);
-  check('the farthest key starts one wave later, and only that (36-90ms)', firstStart(keyIds[0]!) >= 30 && firstStart(keyIds[0]!) <= 90, `${Math.round(firstStart(keyIds[0]!))}ms`);
+  // ONE WAVE PER KEY, derived from the row's own count (never a magic number tuned to four keys):
+  // the farthest key waits (count - 1) × 18ms, then waits for its first frame.
+  const farthestWave = (keysInDom - 1) * 18;
+  check('the farthest key starts one wave later, and only that', firstStart(keyIds[0]!) >= farthestWave - 12 && firstStart(keyIds[0]!) <= farthestWave + 45, `${Math.round(firstStart(keyIds[0]!))}ms, wave ${farthestWave}ms`);
 
   // (b) A REAL TRANSITION, NOT A SNAP: the engine starts transform AND opacity on EVERY key.
   for (const id of keyIds) {
@@ -337,7 +340,14 @@ try {
     const sample = againSamples.find((s) => s.keys[index]!.o > 0.001);
     return sample ? sample.at - openAgain.click : Infinity;
   });
-  check('a second open is the same motion (same start frames, all settled)', againSamples.at(-1)!.keys.every((k) => k.o >= 0.999) && againMoves.every((ms, index) => Math.abs(ms - firstMoves[index]!) <= 40), `${JSON.stringify(againMoves.map((ms) => Math.round(ms)))} vs ${JSON.stringify(firstMoves.map((ms) => Math.round(ms)))}`);
+  // THE SAME WAVE, not the same absolute frame: samples land on frames (~17ms apart), so the two
+  // runs are compared by their SHAPE — each key's distance from the first key to move.
+  const waveOf = (moves: number[]) => { const base = Math.min(...moves); return moves.map((ms) => ms - base); };
+  const firstWave = waveOf(firstMoves), againWave = waveOf(againMoves);
+  // Three frames of the harness's own cadence (16.7ms): the recorder samples opacity per frame, so a
+  // key's "first visible" sample can be a frame or two late. The exact delays themselves are pinned
+  // to the millisecond by the audit checks above; this one is about the SHAPE repeating.
+  check('a second open is the same motion (same wave shape, all settled)', againSamples.at(-1)!.keys.every((k) => k.o >= 0.999) && againWave.every((ms, index) => Math.abs(ms - firstWave[index]!) <= 50), `${JSON.stringify(againWave.map((ms) => Math.round(ms)))} vs ${JSON.stringify(firstWave.map((ms) => Math.round(ms)))}`);
 
   await arm(page);
   await tapMenu(page);

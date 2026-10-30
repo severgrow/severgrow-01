@@ -17,6 +17,12 @@ export type WorldClaim = {
    */
   ownerLevel: number | null;
   claimedAt: number;
+  /**
+   * The owner's CHOSEN palette slot (`src/tile-colours.ts`), or null when they have never chosen one
+   * — in which case their colour is derived from their id and nothing is written. Kept as an id, not
+   * a colour string, so the map and the picker can never disagree; the service resolves it.
+   */
+  colourId: number | null;
 };
 export type WorldSnapshot = { revision: number; claims: WorldClaim[] };
 export type RewardMode = 'queue' | 'friend' | 'training' | 'campaign';
@@ -190,6 +196,14 @@ export interface WorldEconomyStore {
   /** This player's recorded receipt keys that start with `prefix` (e.g. `achievement:`); own id only. */
   receiptKeys(playerId: string, prefix: string): Promise<string[]>;
   world(): Promise<WorldSnapshot>;
+  /**
+   * The player's stored palette choice, or null when they have none. A READ: it never writes the
+   * derived default, so "no choice" stays "no row" and the map's colours do not depend on who read
+   * them first.
+   */
+  colourChoice(playerId: string): Promise<number | null>;
+  /** Persist a palette choice (`src/tile-colours.ts`). Idempotent: the same id twice is one write. */
+  setColourChoice(playerId: string, colourId: number, now: number): Promise<void>;
   claim(playerId: string, cellId: string, requestId: string, now: number): Promise<ClaimResult>;
   /** Sell one of the player's own tiles back for `SEED_ECONOMY.tileSaleReturn`; idempotent by request. */
   sell(playerId: string, cellId: string, requestId: string, now: number): Promise<SellResult>;

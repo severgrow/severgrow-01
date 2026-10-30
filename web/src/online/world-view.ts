@@ -2,6 +2,15 @@ import type { DuelClient } from '../../../server/src/client.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
 import { worldNeighbours } from '../../../server/src/world.js';
+import {
+  HELD_DARK,
+  HELD_LIGHT,
+  MINE_DARK,
+  MINE_LIGHT,
+  MINE_MID,
+  TILE_COLOURS,
+  shiftLightness,
+} from '../../../src/tile-colours.js';
 import { CHALLENGE } from './challenge-copy.js';
 import type { ChallengeMarker } from './challenge-view.js';
 import {
@@ -80,8 +89,11 @@ const WORLD_KEY_ICONS = {
   // ACHIEVEMENTS (owner, 2026-10-29): a medal on its ribbon, the star in the key's own ink.
   achievements: KEY_ICON('<path class="line" d="M8.2 3.5 12 9.2l3.8-5.7"/><circle class="line" cx="12" cy="15" r="5.6"/>' +
     '<path class="fill" d="m12 11.9 1 2 2.2.3-1.6 1.5.4 2.2-2-1.1-2 1.1.4-2.2-1.6-1.5 2.2-.3Z"/>'),
+  // YOUR COLOUR (owner, 2026-10-30): a paint drop, half filled — the key's own ink, like the rest.
+  colour: KEY_ICON('<path class="line" d="M12 3.6c3.5 3.9 5.9 6.9 5.9 9.4a5.9 5.9 0 0 1-11.8 0c0-2.5 2.4-5.5 5.9-9.4Z"/>' +
+    '<path class="fill" d="M12 11.2a3.6 3.6 0 0 1 3.6 3.6H8.4A3.6 3.6 0 0 1 12 11.2Z"/>'),
 } as const;
-type Pane = 'ranking' | 'challenges' | 'achievements';
+type Pane = 'ranking' | 'challenges' | 'achievements' | 'colour';
 /**
  * HOW LONG THE GLIDE TAKES, AND HOW IT MOVES (owner, 2026-10-29: "the 'out of map' territory
  * animation is too fast and too jumpy - a bit slower, way smoother, without costing much CPU at all").
@@ -327,14 +339,25 @@ const hexPath = (x: number, y: number) => {
   return points.map(([dx, dy], index) => `${index ? 'L' : 'M'}${(x + dx! * R).toFixed(2)},${(y + dy! * R).toFixed(2)}`).join(' ') + 'Z';
 };
 /**
- * An owner colour at a different lightness: `territoryColour` hands out `hsl(<h> 34% 49%)`, so one
- * hue and saturation is all a tile's own gradient needs. Shading in JS from the colour the server
- * already sent keeps the palette closed — no new tokens, and it cannot drift from `--territory`.
+ * TILE JITTER (owner, 2026-10-30: "a slight per-tile hue/brightness jitter derived from the CELL id
+ * (so a mass of one colour is not a single flat slab)"). `TILE_JITTER` are lightness offsets in
+ * points; a cell picks its band from its own id, so the patchwork is stable for ever (no flicker
+ * between polls, no random re-roll on a repaint) and costs no per-frame work — the band only selects
+ * one of the gradients already built in `<defs>`.
  */
-const shade = (colour: string, lightness: number): string => {
-  const m = /hsl\(\s*([\d.]+)\s+([\d.]+)%\s+[\d.]+%/.exec(colour);
-  return m ? `hsl(${m[1]} ${m[2]}% ${lightness}%)` : colour;
+export const TILE_JITTER = [-2.6, -0.9, 0.9, 2.6] as const;
+/** FNV-1a over the CELL id → which jitter band that tile wears. Pure, so both paints agree. */
+export const jitterBand = (cellId: string): number => {
+  let hash = 2166136261;
+  for (const character of cellId) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  return (hash >>> 0) % TILE_JITTER.length;
 };
+/**
+ * An owner colour at a different lightness. Everything a tile's gradient needs is its own hue and
+ * saturation; the ladder (`HELD_*` / `MINE_*` in `src/tile-colours.ts`) is shared with the palette,
+ * so one definition dresses both a swatch and a tile (`shiftLightness`). Shading in JS from the
+ * colour the server already sent keeps the palette closed — it cannot drift from `--territory`.
+ */
 
 /** One shared map, with a stable viewport and revision-only refresh. No game-state logic here. */
 export class WorldView {
@@ -343,6 +366,15 @@ export class WorldView {
   private identity: Identity | null = null;
   private wallet: SeedWallet | null = null;
   private world: World | null = null;
+  /**
+   * THIS PLAYER'S COLOUR (owner, 2026-10-30): the palette slot the server reports (a stored choice or
+   * the derived default), the slot a save is in flight for, and whether this server knows the route
+   * at all (a server that predates the palette hides the key instead of failing).
+   */
+  private myColourId: number | null = null;
+  private colourSaving: number | null = null;
+  private colourAvailable = true;
+  private colourSignature = '';
   /** The map on screen came from the device's memory (./world-memory.ts), not this session's server. */
   private fromMemory = false;
   /** The player's identity has resolved (to someone, or to nobody). Until then the wallet line is blank. */
@@ -539,7 +571,10 @@ export class WorldView {
     const order = keyRowOrder(rowKeys.length);
     rowKeys.forEach((key, index) => key.style.setProperty('--key-i', String(order[index] ?? 0)));
     row?.style.setProperty('--key-count', String(rowKeys.length));
-    const names: Record<Pane | 'chat', string> = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, achievements: ACHIEVEMENTS_UI.title, chat: ONLINE.worldChat };
+    const names: Record<Pane | 'chat', string> = {
+      ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges,
+      achievements: ACHIEVEMENTS_UI.title, colour: ONLINE.worldColour, chat: ONLINE.worldChat,
+    };
     for (const key of rowKeys) {
       const pane = key.dataset.pane as Pane | undefined;
       key.insertAdjacentHTML('afterbegin', WORLD_KEY_ICONS[pane ?? 'chat']);
@@ -623,6 +658,7 @@ export class WorldView {
       this.identityKnown = true;
       if (!this.active) return;
       this.identity = identity;
+      if (identity) void this.loadColour(identity);
       void this.refresh(true);
     }).catch(() => {
       // Public world remains usable without an identity; the wallet line may now say so.
@@ -684,11 +720,17 @@ export class WorldView {
           return !previous || previous.cellId !== claim.cellId || previous.ownerName !== claim.ownerName ||
             previous.ownerId !== claim.ownerId;
         });
+      // A COLOUR IS NOT OWNERSHIP (owner, 2026-10-30): choosing a colour moves no tile and bumps no
+      // revision, so the map must notice the colour itself or another device would keep showing the
+      // old one until something unrelated happened. Comparing the colours costs one string compare
+      // per claim on a read that already happened.
+      const colourChanged = this.world?.claims.length !== map.world.claims.length ||
+        map.world.claims.some((claim, index) => this.world?.claims[index]?.colour !== claim.colour);
       // The ground that changed hands, captured BEFORE the new map replaces the old one: this is the
       // only moment that knows both answers, and it is what the takeover ceremony points at.
       const moved = takeovers(this.world?.claims ?? null, map.world.claims, interfaceMotionAllowed());
       if (this.fromMemory || !this.world || map.world.revision > this.world.revision ||
-        (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged))) {
+        (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged || colourChanged))) {
         this.world = map.world;
         this.fromMemory = false;
         // Keep the takeover as DATA before the paint, so `paint()` can draw the hand-off (and a later
@@ -786,6 +828,18 @@ export class WorldView {
     // some life"). One gradient per distinct owner colour, built from that colour's own hue and
     // saturation, plus ONE deliberately flat dark one for unclaimed ground so empty tiles stay
     // recessive. Nothing here changes geometry: the paths and the viewBox maths are untouched.
+    //
+    // LESS PLAIN, FOR NO PER-FRAME COST (owner, 2026-10-30: "add another 2 things that make them
+    // less 'plain' but wont take any time to load / cpu"). Two additions, both pure paint:
+    //
+    //  1. TILE JITTER. Each colour gets `JITTER_BANDS` gradients whose lightness is nudged a couple
+    //     of points apart, and each CELL picks its band from its own id. A territory therefore reads
+    //     as land rather than as one flat slab — the highest-value change for a big blob of one
+    //     colour. It costs a few more gradients in `<defs>` (built once, with the map) and NOTHING
+    //     per frame: the same path still references a static `url(#…)`.
+    //  2. A TOP-LEFT RIM. One shared white-to-transparent gradient used as the FACE's stroke, so the
+    //     light catches the upper-left arc of every held tile. One extra `<linearGradient>` for the
+    //     WHOLE map and no new nodes at all — it rides the paths that already exist.
     const defs = document.createElementNS(NS, 'defs');
     let seq = 0;
     const face = (from: string, mid: string, to: string): string => {
@@ -804,13 +858,42 @@ export class WorldView {
       return `url(#${id})`;
     };
     const EMPTY_FACE = face('#2b322c', '#242a25', '#1a1f1b');
-    const heldFace = new Map<string, string>();
-    const mineFace = new Map<string, string>();
+    // THE RIM: one gradient for the whole map, from the top-left corner to the bottom-right, used as
+    // a stroke on every held face. White at the light end, gone by the middle, so only the arc that
+    // faces the light is drawn. No filter, no blur, no new path.
+    const rim = document.createElementNS(NS, 'linearGradient');
+    rim.setAttribute('id', 'world-rim');
+    rim.setAttribute('x1', '0'); rim.setAttribute('y1', '0');
+    rim.setAttribute('x2', '1'); rim.setAttribute('y2', '1');
+    for (const [offset, opacity] of [['0', '0.42'], ['.5', '0.06'], ['1', '0']] as const) {
+      const stop = document.createElementNS(NS, 'stop');
+      stop.setAttribute('offset', offset);
+      stop.setAttribute('stop-color', '#fff6e2');
+      stop.setAttribute('stop-opacity', opacity);
+      rim.append(stop);
+    }
+    defs.append(rim);
+    /** The rim as a `stroke` value, and how thick it is: 0.7 world units ≈ 1.9 CSS px at 46 px cells. */
+    const RIM = 'url(#world-rim)';
+    const RIM_WIDTH = '0.7';
+    /** `TILE_JITTER` bands of one colour: the SAME hue, a couple of lightness points apart. */
+    const faceBands = (colour: string, mine: boolean): string[] => {
+      const mid = mine ? MINE_MID : 0;
+      const light = mine ? MINE_LIGHT : HELD_LIGHT;
+      const dark = mine ? MINE_DARK : HELD_DARK;
+      return TILE_JITTER.map((offset) => face(
+        shiftLightness(colour, light + mid + offset),
+        shiftLightness(colour, mid + offset),
+        shiftLightness(colour, -dark + mid + offset),
+      ));
+    };
+    const heldFace = new Map<string, string[]>();
+    const mineFace = new Map<string, string[]>();
     for (const claim of world.claims) {
-      if (!heldFace.has(claim.colour)) heldFace.set(claim.colour, face(shade(claim.colour, 60), shade(claim.colour, 49), shade(claim.colour, 34)));
+      if (!heldFace.has(claim.colour)) heldFace.set(claim.colour, faceBands(claim.colour, false));
       // Your own territory: the same hue one step brighter, so it is spotted at a glance without a
       // second colour entering the palette.
-      if (!mineFace.has(claim.colour)) mineFace.set(claim.colour, face(shade(claim.colour, 71), shade(claim.colour, 57), shade(claim.colour, 40)));
+      if (!mineFace.has(claim.colour)) mineFace.set(claim.colour, faceBands(claim.colour, true));
     }
     svg.append(defs);
     // SOFT FOCUS (owner, 2026-10-28: "blur it slightly, so everything looks natural and organic
@@ -975,7 +1058,11 @@ export class WorldView {
       }
       if (owner) {
         face.classList.add(mine ? 'mine' : 'held');
-        face.style.fill = (mine ? mineFace : heldFace).get(owner.colour)!;
+        // The tile's own jitter band, then the light catching its top-left arc (the shared rim).
+        const bands = (mine ? mineFace : heldFace).get(owner.colour)!;
+        face.style.fill = bands[jitterBand(cell.id)]!;
+        face.style.stroke = RIM;
+        face.style.strokeWidth = RIM_WIDTH;
         // THE GLINT: your own tiles catch the light now and then, one after another.
         if (mine) face.style.setProperty('--glint-delay', `${-((glint++ * 1.37) % 11).toFixed(2)}s`);
       } else {
@@ -1593,6 +1680,9 @@ export class WorldView {
     }
     const achievementsKey = document.getElementById('world-key-achievements');
     if (achievementsKey) achievementsKey.hidden = this.achievements === null;
+    // The colour key exists only where the server has the palette route.
+    const colourKey = document.getElementById('world-key-colour');
+    if (colourKey) colourKey.hidden = !this.colourAvailable;
     for (const key of document.querySelectorAll<HTMLButtonElement>('#online-world-keys .world-key[data-pane]')) {
       const on = key.dataset.pane === this.pane;
       key.setAttribute('aria-expanded', String(on));
@@ -1601,7 +1691,7 @@ export class WorldView {
     panel.dataset.pane = this.pane ?? '';
     if (!this.pane) return;
     const title = document.getElementById('world-panel-title');
-    if (title) title.textContent = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, achievements: ACHIEVEMENTS_UI.title }[this.pane];
+    if (title) title.textContent = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, achievements: ACHIEVEMENTS_UI.title, colour: ONLINE.worldColour }[this.pane];
     if (this.pane === 'challenges') {
       const history = this.allChallenges.filter((c) => !isOpen(c));
       const empty = document.getElementById('world-challenges-empty');
@@ -1611,6 +1701,7 @@ export class WorldView {
     }
     if (this.pane === 'ranking') this.paintRanking(me);
     if (this.pane === 'achievements') this.paintAchievements();
+    if (this.pane === 'colour') this.paintColourPane();
   }
 
   /** Re-read achievements (only on a change that could move them; see `refresh`). */
@@ -1628,6 +1719,123 @@ export class WorldView {
       else return;
     }
     this.paintPanel();
+  }
+
+  // ---- YOUR COLOUR (owner, 2026-10-30) ------------------------------------------------------
+  //
+  // WHERE IT LIVES, AND WHY: a 5th key in the MENU row. The row is the map's only menu, is already
+  // where the personal pages live (ranking, achievements, chat), and is open to the whole map by
+  // one tap. The alternatives were worse for a PREFERENCE rather than an action:
+  //   · the tile bar (tap your own tile) would put a cosmetic key beside GROW and SELL, on every
+  //     tap of your own ground, and it is where in-game decisions live;
+  //   · the standing card sits inside the ranking page — two taps in, and invisible before you
+  //     hold a tile at all;
+  //   · the lobby is a different screen, so it could not be reached "from the map".
+  // The key carries the player's CURRENT colour as its own glyph background, so the row also answers
+  // "what colour am I?" without opening anything.
+
+  /** Read the player's colour (a stored choice, or the palette default). Once per visit. */
+  private async loadColour(identity: Identity): Promise<void> {
+    try {
+      const answer = await this.client.worldColour(identity.token);
+      if (identity !== this.identity || !this.active) return;
+      this.myColourId = answer.colourId;
+      this.colourAvailable = true;
+      this.paintKeyColour();
+      this.paintPanel();
+    } catch (error) {
+      // A server that predates the palette answers 404: the key goes away rather than lying.
+      const status = (error as { status?: number } | null)?.status;
+      if (status !== 404 && (error as { code?: string } | null)?.code !== 'NOT_FOUND') return;
+      this.colourAvailable = false;
+      this.paintPanel();
+      if (this.pane === 'colour') this.setPane(null, false);
+    }
+  }
+
+  /** Paint the key's own swatch: a 2px bar of the player's colour, under the drop. */
+  private paintKeyColour(): void {
+    const key = document.getElementById('world-key-colour');
+    if (!key || this.myColourId === null) return;
+    key.style.setProperty('--territory', TILE_COLOURS[this.myColourId]!.css);
+    key.dataset.colour = String(this.myColourId);
+  }
+
+  /**
+   * The picker: twenty swatches, four to a row, each with its NAME under it (never colour alone).
+   * Rebuilt only when the current colour or the saving state changes — a 12 s poll must not reset a
+   * press or the grid's scroll.
+   */
+  private paintColourPane() {
+    const grid = document.getElementById('world-colour-grid');
+    const label = document.getElementById('world-colour-label');
+    const note = document.getElementById('world-colour-note');
+    if (!grid) return;
+    if (label) label.textContent = ONLINE.worldColourLabel;
+    if (note) note.textContent = this.colourSaving === null ? ONLINE.worldColourHint : ONLINE.worldColourSaving;
+    const signature = `colour|${this.myColourId ?? -1}|${this.colourSaving ?? -1}`;
+    if (signature === this.colourSignature) return;
+    this.colourSignature = signature;
+    const current = this.myColourId;
+    grid.replaceChildren(...TILE_COLOURS.map((colour) => {
+      const swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.className = 'world-colour-swatch';
+      swatch.dataset.colourId = String(colour.id);
+      swatch.style.setProperty('--swatch', colour.css);
+      swatch.style.setProperty('--swatch-light', colour.light);
+      swatch.style.setProperty('--swatch-dark', colour.dark);
+      const on = current === colour.id;
+      swatch.classList.toggle('current', on);
+      swatch.setAttribute('aria-pressed', String(on));
+      // The name is the accessible label AND the visible caption: a swatch is never colour alone.
+      swatch.setAttribute('aria-label', on ? `${colour.name}. ${ONLINE.worldColourCurrent}` : colour.name);
+      swatch.title = colour.name;
+      const chip = document.createElement('span');
+      chip.className = 'world-colour-chip';
+      chip.setAttribute('aria-hidden', 'true');
+      const name = document.createElement('span');
+      name.className = 'world-colour-name';
+      name.textContent = colour.name;
+      swatch.append(chip, name);
+      swatch.addEventListener('click', () => void this.chooseColour(colour.id));
+      return swatch;
+    }));
+  }
+
+  /**
+   * Save a colour, then re-read the map: the tiles themselves are the server's answer, so the map
+   * must not be re-coloured optimistically from this side (a collision nudge can change one tile).
+   * The swatch marks update at once, so the press feels immediate.
+   */
+  private async chooseColour(colourId: number): Promise<void> {
+    const identity = this.identity;
+    if (!identity || this.colourSaving !== null) return;
+    // Tapping the colour you already have is not a change: the picker stays open, nothing is sent,
+    // and the swatch's own "current" mark is the answer.
+    if (colourId === this.myColourId) return;
+    this.colourSaving = colourId;
+    this.myColourId = colourId;
+    this.paintKeyColour();
+    this.paintColourPane();
+    try {
+      const saved = await this.client.chooseWorldColour(identity.token, colourId);
+      if (identity !== this.identity) return;
+      this.myColourId = saved.colourId;
+      this.cue('chime');
+      this.notice(ONLINE.worldColourPicked(saved.name));
+    } catch {
+      if (identity === this.identity) this.notice(ONLINE.worldColourFailed);
+      // Put the marks back on whatever the server actually has.
+      void this.loadColour(identity);
+    } finally {
+      this.colourSaving = null;
+      this.colourSignature = '';
+      this.paintColourPane();
+      this.paintKeyColour();
+    }
+    // The tiles: one map read, which also refreshes the picker's marks on a failure path.
+    await this.refresh(true);
   }
 
   /** The achievements page: each row a goal, its progress, and CLAIM when it is earned. */
@@ -2127,7 +2335,7 @@ export class WorldView {
       const was = document.createElementNS(NS, 'path');
       was.setAttribute('d', d);
       was.classList.add('world-takeover-was');
-      was.style.fill = shade(tile.fromColour, 49);
+      was.style.fill = tile.fromColour;
       was.style.animationDelay = delay;
       const edge = document.createElementNS(NS, 'path');
       edge.setAttribute('d', d);

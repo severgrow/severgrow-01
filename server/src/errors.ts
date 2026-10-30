@@ -41,6 +41,9 @@ export type ApiErrorCode =
   // setup: migration 0019 (the challenge tile stake) has not been applied. Sends are refused rather
   // than guessed, so a deploy can never silently apply the wrong property rule.
   | 'CHALLENGE_MIGRATION_PENDING'
+  // setup: migration 0020 (a player's tile colour) has not been applied. The choice is refused
+  // rather than silently dropped, and the map keeps working on the derived colour.
+  | 'COLOUR_MIGRATION_PENDING'
   // everything else
   | 'INTERNAL';
 
@@ -75,6 +78,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   // not a client error, and not the catch-all 500 that hides the cause.
   ADMIN_MIGRATION_PENDING: 503,
   CHALLENGE_MIGRATION_PENDING: 503,
+  COLOUR_MIGRATION_PENDING: 503,
   INTERNAL: 500,
 };
 

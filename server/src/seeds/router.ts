@@ -40,6 +40,16 @@ export const createWorldEconomyRouter = (deps: {
   if (req.method === 'GET' && path === '/v1/seeds/achievements') {
     return ok(200, { achievements: await economy.achievements(player) });
   }
+  // ---- Your tile colour (owner, 2026-10-30): a preference, not a game action ----------------
+  // Authenticated, and read from the TOKEN only — there is no player id in the request, so one
+  // account can only ever read or change its own colour.
+  if (req.method === 'GET' && path === '/v1/world/colour') {
+    return ok(200, { colour: await economy.colour(player) });
+  }
+  if (req.method === 'POST' && path === '/v1/world/colour') {
+    const body = await bodyOf(req);
+    return ok(200, { colour: await economy.chooseColour(player, body.colourId) });
+  }
   if (req.method === 'POST' && path === '/v1/seeds/achievements/claim') {
     const body = await bodyOf(req);
     if (typeof body.id !== 'string') throw new ApiError('INVALID_REQUEST', 'Choose an achievement.');

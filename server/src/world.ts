@@ -1,4 +1,6 @@
 /** Frozen shared world geometry. IDs are axial coordinates; expansion only ADDS IDs. */
+import { colourFor } from '../../src/tile-colours.js';
+
 export type WorldCell = { id: string; q: number; r: number };
 
 // v2 (2026-10-21, owner's Territory brief): v1's landmass grew by ~50% to 274 cells along a COASTLINE.
@@ -117,9 +119,12 @@ export const seenWorld = (claimIds: Iterable<string>): WorldCell[] =>
 /** Stable mapping for the 64 historical automatically awarded cells. Unchanged in v2. */
 export const legacyWorldCell = (oldCell: number): string => `${oldCell % 8 - 4},${Math.floor(oldCell / 8) - 4}`;
 
-/** Presentation only: names may change, identity and colour do not. */
-export const territoryColour = (playerId: string): string => {
-  let hash = 2166136261;
-  for (const character of playerId) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
-  return `hsl(${(hash >>> 0) % 360} 34% 49%)`;
-};
+/**
+ * Presentation only: names may change, identity and colour do not.
+ *
+ * Since 2026-10-30 this is the palette's DERIVED default (`src/tile-colours.ts`): one of twenty
+ * curated colours instead of a continuous hue, so two players with nearby hashes no longer read as
+ * "the same green". A player who has CHOSEN a colour is handled by the economy service, which knows
+ * the stored row; this helper stays for surfaces that only have an owner id (the admin map).
+ */
+export const territoryColour = (playerId: string): string => colourFor(playerId);

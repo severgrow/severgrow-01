@@ -979,7 +979,8 @@ html.reduce-motion .world-selection { animation: none; }
 .world-pane { display: none; flex-direction: column; gap: 8px; }
 .world-panel[data-pane='challenges'] .world-pane[data-pane='challenges'],
 .world-panel[data-pane='ranking'] .world-pane[data-pane='ranking'],
-.world-panel[data-pane='achievements'] .world-pane[data-pane='achievements'] { display: flex; }
+.world-panel[data-pane='achievements'] .world-pane[data-pane='achievements'],
+.world-panel[data-pane='colour'] .world-pane[data-pane='colour'] { display: flex; }
 .world-pane > .world-pane-label:first-child { margin-top: 0; }
 .world-pane-label { margin: 4px 4px 0; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: #e8ddc58f; text-align: center; }
 .world-pane-empty { margin: 2px 0 6px; text-align: center; font-size: .74rem; color: #e8ddc5a6; }
@@ -1013,6 +1014,47 @@ html.reduce-motion .world-selection { animation: none; }
   box-shadow: 0 0 8px color-mix(in srgb, var(--territory, #cfc6ac) 60%, transparent);
   transition: width 600ms cubic-bezier(.2, .8, .3, 1);
 }
+/* ---- YOUR COLOUR (owner, 2026-10-30) -------------------------------------------------------
+   Twenty swatches, four to a row. Each is a small preview of the TILE it paints — the same
+   light-to-dark ladder the map draws — with its NAME underneath, because a colour alone is not an
+   accessible choice. Nothing here animates and nothing is filtered: a swatch is one gradient and two
+   lines of text, so the grid costs the same as the four lines it replaces.
+   At 320 px the panel body is 280 px wide, so a cell is ~65 px: wide enough for the longest name
+   ("Periwinkle") at .55rem, and the grid never scrolls sideways (minmax(0,1fr), no fixed widths). */
+.world-colours {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+  width: 100%; min-width: 0; box-sizing: border-box; padding: 0;
+}
+.world-colour-swatch {
+  display: grid; grid-template-rows: auto auto; gap: 4px; justify-items: stretch; align-content: start;
+  min-width: 0; margin: 0; padding: 4px; border: 0; border-radius: 10px;
+  background: #e8ddc508; color: #e8ddc5; font: inherit; text-align: center;
+  cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.world-colour-swatch:active { background: #e8ddc514; }
+.world-colour-chip {
+  display: block; height: 32px; border-radius: 7px;
+  background: linear-gradient(135deg, var(--swatch-light), var(--swatch) 55%, var(--swatch-dark));
+  box-shadow: inset 0 1px 0 #ffffff26, inset 0 0 0 1px #0007;
+}
+.world-colour-name {
+  display: block; min-width: 0; font-size: .55rem; letter-spacing: .07em; text-transform: uppercase;
+  color: #e8ddc5b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* THE CURRENT ONE: the plate warms, the name brightens, and the chip wears a cream ring — three
+   quiet marks, so "current" never depends on one of them being noticed. */
+.world-colour-swatch.current { background: #f2c87918; box-shadow: inset 0 0 0 1px #f2c87959; }
+.world-colour-swatch.current .world-colour-name { color: #f6ecd2; }
+.world-colour-swatch.current .world-colour-chip { box-shadow: inset 0 1px 0 #ffffff3d, 0 0 0 2px #f6ecd2; }
+.world-colour-swatch:focus { outline: none; }
+.world-colour-swatch:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+/* the drop on the COLOUR key is filled with the player's own colour (the map's --territory), so
+   the row answers "what colour am I?" without opening anything. Mixed toward cream so a dark slot
+   still reads on the key's near-black plate. */
+#world-key-colour .world-key-icon .fill {
+  fill: color-mix(in srgb, var(--territory, currentColor) 72%, #f6ecd2);
+}
+
 /* the ranking */
 /* ---- ACHIEVEMENTS (owner, 2026-10-29): one-time Seeds for first steps ---- */
 .world-key[hidden] { display: none; }
@@ -1123,6 +1165,12 @@ html.reduce-motion .world-achievement.just-claimed { animation: none; }
   pointer-events: auto;
   --key-move: var(--ix-open);
   --key-ease: var(--ix-ease-open);
+}
+/* FIVE keys at 44px and 8px apart is 252px. On a 320px phone that row would reach past the map
+   window's own edge, so the ROW tightens its gaps — never the keys, because 44px is the touch
+   minimum and the row must stay tappable one-handed. (The COLOUR key made the row five, 2026-10-30.) */
+@media (max-width: 360px) {
+  .world-keys { gap: 0; right: 58px; }
 }
 .world-keys .world-key {
   /* The travel order, stamped from the live row (WorldView): 0 is the key nearest MENU. Closed it

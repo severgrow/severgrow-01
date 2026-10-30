@@ -125,12 +125,12 @@ try {
   // ---- at rest: MENU is the only key -------------------------------------------------------------
   check('Fit map and My land are gone', (await count(page, '#online-world-fit, #online-world-mine, .world-menu-tools')) === 0);
   check('at rest MENU is the only key visible on the map', (await visible(page, '.world-grid button')) === 1 && await page.isVisible('#online-world-menu'));
-  check('the four keys are not reachable at rest', await page.evaluate(() => document.getElementById('online-world-keys')!.hasAttribute('inert')));
+  check('the five keys are not reachable at rest', await page.evaluate(() => document.getElementById('online-world-keys')!.hasAttribute('inert')));
   const grid0 = await page.evaluate(() => { const g = document.getElementById('online-world-grid')!.getBoundingClientRect(); return { l: g.left, r: innerWidth - g.right }; });
   check('the map window is centred on the screen', Math.abs(grid0.l - grid0.r) <= 1, JSON.stringify(grid0));
   await page.screenshot({ path: `${SHOTS}/territory-rest-390.png` });
 
-  // ---- MENU slides out four icon keys ------------------------------------------------------------
+  // ---- MENU slides out five icon keys -------------------------------------------------------------
   await page.click('#online-world-menu');
   await page.waitForTimeout(320);
   check('MENU slides out its row', await keysOut(page) && (await page.getAttribute('#online-world-menu', 'aria-expanded')) === 'true');
@@ -143,7 +143,7 @@ try {
         top: Math.round(r.top - menu.top), w: Math.round(r.width), h: Math.round(r.height), left: r.left, right: r.right, gridL: grid.left, menuL: menu.left };
     });
   });
-  check('four keys: ranking, challenges, achievements, chat (LATEST removed)', row.map((k) => k.id).join(',') === 'world-key-ranking,world-key-challenges,world-key-achievements,online-world-chat' && (await count(page, '#world-key-latest, #online-world-activity')) === 0, JSON.stringify(row.map((k) => k.id)));
+  check('five keys: ranking, challenges, achievements, colour, chat (LATEST removed)', row.map((k) => k.id).join(',') === 'world-key-ranking,world-key-challenges,world-key-achievements,world-key-colour,online-world-chat' && (await count(page, '#world-key-latest, #online-world-activity')) === 0, JSON.stringify(row.map((k) => k.id)));
   check('each key is an icon only, with a spoken name', row.every((k) => k.icon && !k.text && !!k.label), JSON.stringify(row.map((k) => [k.label, k.text])));
   check('the row sits on MENU\'s line, every key 44px', row.every((k) => k.top === 0 && k.w === 44 && k.h === 44), JSON.stringify(row.map((k) => [k.top, k.w, k.h])));
   check('the row runs left to right in order and ends at MENU', row.every((k, i) => i === 0 || k.left > row[i - 1]!.right) && row[row.length - 1]!.right < row[row.length - 1]!.menuL && row[0]!.left >= row[0]!.gridL, JSON.stringify(row.map((k) => Math.round(k.left))));
@@ -163,7 +163,7 @@ try {
   check('the open key is lit', await page.evaluate(() => document.getElementById('world-key-ranking')!.classList.contains('on')));
   const under = await page.evaluate(() => { const p = document.getElementById('online-world-panel')!.getBoundingClientRect(); const k = document.getElementById('online-world-menu')!.getBoundingClientRect(); return p.top - k.bottom; });
   check('the window hangs under the key row, so the keys stay in reach', under >= 4 && under <= 12, String(under));
-  check('the keys stay out while a page is open', (await visible(page, '#online-world-keys .world-key')) === 4);
+  check('the keys stay out while a page is open', (await visible(page, '#online-world-keys .world-key')) === 5);
   await page.screenshot({ path: `${SHOTS}/territory-ranking-390.png` });
   await page.click('#world-key-challenges');
   await page.waitForTimeout(200);
