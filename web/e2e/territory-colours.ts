@@ -221,8 +221,31 @@ try {
   check('...and the other open device follows on its next poll', onOtherLive.every((colour) => colour === target.css), onOtherLive.join(','));
   check('...without reloading it either', otherNavigations === otherLoads, `${otherNavigations - otherLoads} navigations`);
 
-  const savedServer = await (await fetch(`${apiBase}/v1/world/colour`, { headers: { authorization: `Bearer ${me.token}` } })).json() as { colour: { colourId: number } };
+  const savedServer = await (await fetch(`${apiBase}/v1/world/colour`, { headers: { authorization: `Bearer ${me.token}` } })).json() as { colour: { colourId: number; canChange: boolean; remainingMs: number } };
   check('the choice is stored on the server', savedServer.colour.colourId === target.id, `${savedServer.colour.colourId} vs ${target.id}`);
+
+  // ---- 5b. ONE CHANGE PER 24 H (owner, 2026-10-30) -----------------------------------------
+  // The wait is shown BEFORE the next pick, on the grid and its note — not only after a refusal.
+  const cooldown = await page.evaluate(() => ({
+    note: (document.getElementById('world-colour-note')?.textContent ?? '').trim(),
+    disabled: [...document.querySelectorAll<HTMLButtonElement>('#world-colour-grid .world-colour-swatch')]
+      .filter((el) => el.disabled).length,
+    total: document.querySelectorAll('#world-colour-grid .world-colour-swatch').length,
+  }));
+  check('the picker says when a change is possible again, BEFORE a press',
+    /^Changes again in \d+ h\.$/.test(cooldown.note), cooldown.note);
+  check('...and the whole grid is closed until the window reopens',
+    cooldown.total === 20 && cooldown.disabled === 20, `${cooldown.disabled}/${cooldown.total} disabled`);
+  check('the server agrees the window is closed', savedServer.colour.canChange === false && savedServer.colour.remainingMs > 0,
+    `canChange ${savedServer.colour.canChange}, ${savedServer.colour.remainingMs} ms left`);
+  // A press on a closed swatch cannot reach the server: the colour does not move.
+  const blockedTarget = TILE_COLOURS[(target.id + 5) % 20]!;
+  await page.evaluate((id) => (document.querySelector(`#world-colour-grid [data-colour-id="${id}"]`) as HTMLButtonElement | null)?.click(), blockedTarget.id);
+  await page.waitForTimeout(600);
+  const stillTarget = await (await fetch(`${apiBase}/v1/world/colour`, { headers: { authorization: `Bearer ${me.token}` } })).json() as { colour: { colourId: number } };
+  check('...so a second change inside 24 h never happens', stillTarget.colour.colourId === target.id,
+    `${stillTarget.colour.colourId} vs ${target.id}`);
+
   await page.screenshot({ path: `${OUT}recoloured-390x844.png` });
 
   // ---- 6. it survives a reload ----
@@ -236,6 +259,9 @@ try {
   await openPicker(page);
   const marked = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#world-colour-grid .world-colour-swatch[aria-pressed="true"]')].map((el) => Number(el.dataset.colourId)));
   check('after a reload the picker still marks it', marked.length === 1 && marked[0] === target.id, marked.join(','));
+  const reloadNote = (await page.textContent('#world-colour-note'))?.trim() ?? '';
+  check('after a reload the 24 h wait is still stated (it is the server\'s, not a local flag)',
+    /^Changes again in \d+ h\.$/.test(reloadNote), reloadNote);
 
   // ---- 7. a DEVICE THAT WAS NEVER HERE still opens on the choice ----
   const fresh = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

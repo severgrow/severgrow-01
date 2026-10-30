@@ -30,11 +30,13 @@ import {
 } from './challenge-view.js';
 import { stakedCellFor } from '../../../server/src/seeds/stake.js';
 import { stakeName } from './challenge-copy.js';
+import { waitingActionCount } from './territory-attention.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import type { AchievementView } from '../../../server/src/seeds/achievements.js';
 import { ACHIEVEMENT_COPY, ACHIEVEMENTS_UI } from './achievement-copy.js';
 import { SWORD_PATH } from './swords-glyph.js';
-import { ownerLine } from './world-selection.js';
+import { meLine, ownerLine, ownerSpokenLine } from './world-selection.js';
+import { storedDisplayName } from './identity.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
@@ -375,6 +377,8 @@ export class WorldView {
   private colourSaving: number | null = null;
   private colourAvailable = true;
   private colourSignature = '';
+  /** When the server will allow another colour change (epoch ms), or null when one is available. */
+  private colourChangeAt: number | null = null;
   /** The map on screen came from the device's memory (./world-memory.ts), not this session's server. */
   private fromMemory = false;
   /** The player's identity has resolved (to someone, or to nobody). Until then the wallet line is blank. */
@@ -780,15 +784,39 @@ export class WorldView {
   private challengeNow(): number {
     return (this.challenges.serverNow || Date.now()) + Math.max(0, Date.now() - this.challengeReceivedAt);
   }
-    private paintWallet() {
-      const node = document.getElementById('online-world-wallet')!;
-      node.replaceChildren();
-      const line = walletLine({ identityKnown: this.identityKnown, hasIdentity: this.identity !== null, wallet: this.wallet });
-      if (line) node.append(seedIcon(22), document.createTextNode(line));
-      // The old "N / 183 grown - one shared world" caption is GONE (owner, 2026-10-16): the map shows
-      // the world, so a caption counting it was noise. The element no longer exists in the markup, and
-      // this method no longer writes to it.
+    private walletSignature = '';
+  private paintWallet() {
+    const node = document.getElementById('online-world-wallet')!;
+    // THE ALWAYS-ON NAME AND LEVEL (owner, 2026-10-30): "make sure in territory the name and level
+    // is always visible". The wallet line is the one read-out that is on screen at every viewport
+    // and every pane, so it carries the player's own name and Campaign level on its left, beside
+    // the Seeds balance. The name comes from this device's identity record (no request); the level
+    // is the SAME record the PLAY entry and the tile bar read, so the three cannot disagree.
+    const identity = this.identity;
+    const mine = identity
+      ? meLine(storedDisplayName(identity.playerId), this.myLevel())
+      : null;
+    const line = walletLine({ identityKnown: this.identityKnown, hasIdentity: identity !== null, wallet: this.wallet });
+    const signature = `${mine ?? ''}|${line ?? ''}`;
+    // A poll that brings back the same pair rewrites nothing: the line is a live region, and
+    // rebuilding it every 12 s would make a screen reader repeat it.
+    if (signature === this.walletSignature) return;
+    this.walletSignature = signature;
+    node.replaceChildren();
+    node.classList.toggle('has-me', !!mine);
+    if (mine) {
+      const who = document.createElement('span');
+      who.className = 'world-me';
+      who.textContent = mine;
+      node.append(who);
     }
+    if (line) {
+      const seeds = document.createElement('span');
+      seeds.className = 'world-seeds';
+      seeds.append(seedIcon(22), document.createTextNode(line));
+      node.append(seeds);
+    }
+  }
   /** Everything `paint` draws from: the ground, its owners, who is looking and whether they can grow. */
   private paintSignatureOf(): string {
     const world = this.world;
@@ -1415,10 +1443,12 @@ export class WorldView {
     const world = this.world;
     const cellId = this.selected;
     let line = '';
+    let spoken = '';
     let action: { label: string; run: () => void; armed?: boolean; working?: boolean } | null = null;
     if (world && cellId && this.working) {
       const tile = world.claims.find((claim) => claim.cellId === cellId);
       line = tile ? ownerLine(tile, true, this.myLevel()) : `FREE TILE · ${world.cost} SEEDS`;
+      spoken = tile ? ownerSpokenLine(tile, true, this.myLevel()) : line;
       action = { label: this.working === 'grow' ? ONLINE.worldGrowing : ONLINE.worldSelling, run: () => undefined, working: true };
     } else if (world && cellId) {
       const tile = world.claims.find((claim) => claim.cellId === cellId);
@@ -1427,6 +1457,9 @@ export class WorldView {
         const mine = tile.ownerId === this.identity?.playerId;
         // Own ground: this device's real level beats the server's last-paid one (2026-10-24 report).
         line = ownerLine(tile, mine, mine ? this.myLevel() : null);
+        // The #tag is not printed (owner, 2026-10-30) but is kept for the title, the way the
+        // ranking row and the territory chat do: two players can share a name.
+        spoken = ownerSpokenLine(tile, mine, mine ? this.myLevel() : null);
         if (challenge) {
           action = { label: CHALLENGE.viewKey, run: () => this.openChallengeSheet(challenge) };
         } else if (mine && !this.busy && world.version >= 3) {
@@ -1454,14 +1487,18 @@ export class WorldView {
         }
       }
     }
+    if (!spoken) spoken = line;
     bar.hidden = !line;
     bar.classList.toggle('has-action', !!action);
-    const signature = `${cellId}|${line}|${action?.label ?? ''}`;
+    const signature = `${cellId}|${line}|${spoken}|${action?.label ?? ''}`;
     if (signature !== this.selectionSignature) {
       this.selectionSignature = signature;
       const text = document.createElement('span');
       text.className = 'world-selection-line';
       text.textContent = line;
+      // The tag stays in the TITLE only: visible text never carries it, and the live region still
+      // announces just the line a sighted player reads.
+      if (spoken) text.title = spoken;
       bar.replaceChildren(text);
       if (action) {
         const key = document.createElement('button');
@@ -1471,6 +1508,8 @@ export class WorldView {
         bar.append(key);
       }
     }
+    if (spoken) bar.title = spoken;
+    else bar.removeAttribute('title');
     const key = bar.querySelector<HTMLButtonElement>('.world-claim-button');
     if (key && action) {
       key.onclick = action.run;
@@ -1665,23 +1704,33 @@ export class WorldView {
     const me = this.identity?.playerId ?? null;
     const isOpen = (c: WorldChallengeWire) => c.status === 'pending' || c.status === 'accepted';
     const open = this.allChallenges.filter(isOpen);
-    const waiting = this.allChallenges.some((c) => c.status === 'pending' && !c.fromMe);
+    // THE ONE NOTIFICATION RULE (owner, 2026-10-30): a lamp means a move of MINE is waiting — an
+    // incoming challenge to answer, or my turn in a linked duel. `needsMyAction` is the whole rule
+    // (`territory-attention.ts`); nothing here counts "open challenges" any more, because an
+    // outgoing challenge and a duel waiting for the opponent must stay quiet.
+    const waiting = waitingActionCount(this.challenges);
     for (const count of document.querySelectorAll<HTMLElement>('#world-key-challenges .world-deck-count')) {
-      count.hidden = open.length === 0;
-      count.textContent = String(open.length);
-      count.classList.toggle('waiting', waiting);
+      count.hidden = waiting === 0;
+      count.textContent = String(waiting);
+      count.classList.toggle('waiting', waiting > 0);
+    }
+    const challengesKey = document.getElementById('world-key-challenges');
+    if (challengesKey) {
+      challengesKey.setAttribute('aria-label', waiting > 0
+        ? `${ONLINE.worldChallenges}. ${CHALLENGE.actionsWaiting(waiting)}`
+        : ONLINE.worldChallenges);
     }
     // Achievements ready to claim light their own key, and MENU carries the sum of everything that
-    // wants the player: open challenges plus rewards waiting.
+    // wants the player: waiting actions plus rewards waiting.
     const ready = (this.achievements ?? []).filter((a) => a.done && !a.claimed).length;
     const reward = document.querySelector<HTMLElement>('#world-key-achievements .world-deck-count');
     if (reward) { reward.hidden = ready === 0; reward.textContent = String(ready); reward.classList.toggle('ready', ready > 0); }
     const menuCount = document.querySelector<HTMLElement>('#online-world-menu .world-deck-count');
     if (menuCount) {
-      menuCount.hidden = open.length + ready === 0;
-      menuCount.textContent = String(open.length + ready);
-      menuCount.classList.toggle('waiting', waiting);
-      menuCount.classList.toggle('ready', !waiting && ready > 0);
+      menuCount.hidden = waiting + ready === 0;
+      menuCount.textContent = String(waiting + ready);
+      menuCount.classList.toggle('waiting', waiting > 0);
+      menuCount.classList.toggle('ready', waiting === 0 && ready > 0);
     }
     const achievementsKey = document.getElementById('world-key-achievements');
     if (achievementsKey) achievementsKey.hidden = this.achievements === null;
@@ -1728,14 +1777,30 @@ export class WorldView {
 
   // ---- YOUR COLOUR (owner, 2026-10-30) ------------------------------------------------------
   //
-  // WHERE IT LIVES, AND WHY: a 5th key in the MENU row. The row is the map's only menu, is already
-  // where the personal pages live (ranking, achievements, chat), and is open to the whole map by
-  // one tap. The alternatives were worse for a PREFERENCE rather than an action:
-  //   · the tile bar (tap your own tile) would put a cosmetic key beside GROW and SELL, on every
-  //     tap of your own ground, and it is where in-game decisions live;
-  //   · the standing card sits inside the ranking page — two taps in, and invisible before you
-  //     hold a tile at all;
-  //   · the lobby is a different screen, so it could not be reached "from the map".
+  // WHERE IT LIVES, AND WHY: a 5th key in the MENU row. The owner left the place to us ("i dont know
+  // where to put that setting so come up with the best idea and report back where is it"). FIVE
+  // candidates were judged on discoverability, clutter, thumb reach, "in-game action vs personal
+  // preference" and whether the 24 h wait is legible there:
+  //   1. the tile bar (tap your own tile) — most discoverable of all, but it puts a cosmetic key
+  //      beside GROW and SELL on EVERY tap of your own ground. The bar is where in-game decisions
+  //      live, and the owner has rejected clutter repeatedly. Rejected.
+  //   2. the player's standing card in Ranking — two taps in, off-screen before you hold a tile (the
+  //      standing card is `hidden` until you have land), and the card's job is the ladder to the
+  //      player above. Rejected.
+  //   3. the profile / account sheet — it is a different screen, and the colour belongs to the MAP,
+  //      not to the account page; also unreachable from Territory. Rejected.
+  //   4. a long-press on your own home — invisible (nothing tells a player to try it), and a long
+  //      press on a tile is not a gesture this map has anywhere else. Rejected.
+  //   5. the MENU key row (a 5th key) — ONE tap from the map, where every other personal page
+  //      (RANKING, ACHIEVEMENTS, CHAT) already lives; icon-only so it adds no text clutter; at
+  //      thumb height, under the MENU key that is already the map's corner of the screen; and the
+  //      key carries the player's CURRENT colour as its glyph, so the row answers "what colour am
+  //      I?" without opening anything. CHOSEN.
+  //
+  // THE 24 h WAIT is legible in the page itself: the note under the heading says "Changes again in
+  // N h" and the swatches are inert while the server's window is open (see `paintColourPane`). The
+  // server owns the clock (`player_tile_colours.chosen_at`), so another device cannot reset it.
+  //
   // The key carries the player's CURRENT colour as its own glyph background, so the row also answers
   // "what colour am I?" without opening anything.
 
@@ -1745,6 +1810,7 @@ export class WorldView {
       const answer = await this.client.worldColour(identity.token);
       if (identity !== this.identity || !this.active) return;
       this.myColourId = answer.colourId;
+      this.colourChangeAt = answer.canChange ? null : answer.changeAvailableAt;
       this.colourAvailable = true;
       this.paintKeyColour();
       this.paintPanel();
@@ -1766,10 +1832,15 @@ export class WorldView {
     key.dataset.colour = String(this.myColourId);
   }
 
+  /** Milliseconds left on the 24 h colour window (0 = can change now). */
+  private colourCooldown(): number {
+    return this.colourChangeAt === null ? 0 : Math.max(0, this.colourChangeAt - Date.now());
+  }
+
   /**
    * The picker: twenty swatches, four to a row, each with its NAME under it (never colour alone).
-   * Rebuilt only when the current colour or the saving state changes — a 12 s poll must not reset a
-   * press or the grid's scroll.
+   * Rebuilt only when the current colour, the saving state or the cooldown label changes — a 12 s
+   * poll must not reset a press or the grid's scroll.
    */
   private paintColourPane() {
     const grid = document.getElementById('world-colour-grid');
@@ -1777,8 +1848,17 @@ export class WorldView {
     const note = document.getElementById('world-colour-note');
     if (!grid) return;
     if (label) label.textContent = ONLINE.worldColourLabel;
-    if (note) note.textContent = this.colourSaving === null ? ONLINE.worldColourHint : ONLINE.worldColourSaving;
-    const signature = `colour|${this.myColourId ?? -1}|${this.colourSaving ?? -1}`;
+    // THE 24 h STATE IS VISIBLE BEFORE A PRESS (owner, 2026-10-30): the swatches are inert while the
+    // server's window is open, and the note says exactly how long is left. The label is floor-based
+    // and derived from the server's `changeAvailableAt`, so a wrong device clock cannot unlock it.
+    const cooldown = this.colourCooldown();
+    const cooldownLabel = cooldown > 0 ? remainingLabel(cooldown) : '';
+    if (note) {
+      note.textContent = this.colourSaving !== null
+        ? ONLINE.worldColourSaving
+        : cooldown > 0 ? ONLINE.worldColourCooldown(cooldownLabel) : ONLINE.worldColourHint;
+    }
+    const signature = `colour|${this.myColourId ?? -1}|${this.colourSaving ?? -1}|${cooldownLabel}`;
     if (signature === this.colourSignature) return;
     this.colourSignature = signature;
     const current = this.myColourId;
@@ -1793,6 +1873,9 @@ export class WorldView {
       const on = current === colour.id;
       swatch.classList.toggle('current', on);
       swatch.setAttribute('aria-pressed', String(on));
+      // THE 24 h RULE, legible on the grid: a swatch is a real disabled control while the window is
+      // closed, and the note beside the heading says when it opens again.
+      swatch.disabled = cooldown > 0;
       // The name is the accessible label AND the visible caption: a swatch is never colour alone.
       swatch.setAttribute('aria-label', on ? `${colour.name}. ${ONLINE.worldColourCurrent}` : colour.name);
       swatch.title = colour.name;
@@ -1819,6 +1902,13 @@ export class WorldView {
     // Tapping the colour you already have is not a change: the picker stays open, nothing is sent,
     // and the swatch's own "current" mark is the answer.
     if (colourId === this.myColourId) return;
+    // A press can only arrive while the grid is live, but the rule is the server's: say the wait
+    // here too, in the same words, rather than firing a request that is certain to be refused.
+    const cooldown = this.colourCooldown();
+    if (cooldown > 0) {
+      this.notice(ONLINE.worldColourCooldownNotice(remainingLabel(cooldown)));
+      return;
+    }
     this.colourSaving = colourId;
     this.myColourId = colourId;
     this.paintKeyColour();
@@ -1827,13 +1917,20 @@ export class WorldView {
       const saved = await this.client.chooseWorldColour(identity.token, colourId);
       if (identity !== this.identity) return;
       this.myColourId = saved.colourId;
+      this.colourChangeAt = saved.canChange ? null : saved.changeAvailableAt;
       this.cue('chime');
-      // NO TEXT CONFIRMATION (owner, 2026-10-30: "'glacier. your tiles are that colour now.' type
+      // NO SUCCESS MESSAGE (owner, 2026-10-30: "'glacier. your tiles are that colour now.' type
       // message - remove completely"). The picker already answers: the chosen swatch is marked as
       // current and the map repaints in the new colour as it happens. A sentence naming the colour
       // told the player what they had just done with their own finger.
-    } catch {
-      if (identity === this.identity) this.notice(ONLINE.worldColourFailed);
+    } catch (error) {
+      if (identity === this.identity) {
+        const code = (error as { code?: string } | null)?.code;
+        const left = this.colourCooldown();
+        this.notice(code === 'COLOUR_COOLDOWN' && left > 0
+          ? ONLINE.worldColourCooldownNotice(remainingLabel(left))
+          : ONLINE.worldColourFailed);
+      }
       // Put the marks back on whatever the server actually has.
       void this.loadColour(identity);
     } finally {

@@ -32,10 +32,12 @@ export type TerritoryCounts = Readonly<{
   tiles: number;
   cells: number;
   /**
-   * Challenges waiting for THIS player's answer, or 0. It is a count, never a guess: when the
-   * challenge list could not be read it stays 0 and the entry simply shows nothing new.
+   * Actions waiting for THIS player in Territory (owner, 2026-10-30): an incoming challenge to
+   * answer, or a linked duel where it is the player's turn. It is computed by the shared predicate
+   * (`territory-attention.ts`), never widened to "open challenges"; when the list could not be read
+   * it stays 0 and the entry simply shows no lamp.
    */
-  incoming?: number;
+  waiting?: number;
 }>;
 
 /** A sanity ceiling on both reads, so a malformed payload can never paint a broken number. */
@@ -56,10 +58,10 @@ export const territoryCounts = (
   wallet: SeedWallet | null,
   world: WorldMapPayload['world'] | null,
   playerId: string | null,
-  /** Challenges waiting for this player's answer. An unreadable list is 0, never a guess. */
-  incoming = 0,
-): TerritoryCounts | null => {
-  if (!wallet || !world || !playerId) return null;
+  /** Actions waiting for this player (an incoming challenge or a duel of their turn). An unreadable
+   *  list is 0, never a guess. */
+  waitingCount = 0,
+): TerritoryCounts | null => {  if (!wallet || !world || !playerId) return null;
   if (!Number.isFinite(wallet.balance) || wallet.balance < 0 || wallet.balance > MAX_SEEDS) return null;
   // A malformed payload is treated as unknown, never as an empty world that would claim 0 tiles.
   if (!Array.isArray(world.claims)) return null;
@@ -70,8 +72,8 @@ export const territoryCounts = (
   if (owned.size > MAX_TILES) return null;
   const cells = Array.isArray(world.cells) ? world.cells.length : 0;
   if (!cells) return null;
-  const waiting = Number.isFinite(incoming) ? Math.max(0, Math.min(99, Math.floor(incoming))) : 0;
-  return { seeds: Math.floor(wallet.balance), tiles: owned.size, cells, incoming: waiting };
+  const waiting = Number.isFinite(waitingCount) ? Math.max(0, Math.min(99, Math.floor(waitingCount))) : 0;
+  return { seeds: Math.floor(wallet.balance), tiles: owned.size, cells, waiting };
 };
 
 export type TerritoryCountsUI = {
@@ -123,7 +125,7 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
       button.setAttribute('aria-label', counts
         // The screen-reader line reuses the Territory screen's own words for both counts.
         ? `${MENU.world}. ${seedBalanceLabel(counts.seeds)}. ${ONLINE.worldHeld(counts.tiles, counts.cells)}${
-          counts.incoming ? `. ${CHALLENGE.incomingAnnounceCount(counts.incoming)}` : ''}`
+          counts.waiting ? `. ${CHALLENGE.actionsWaiting(counts.waiting)}` : ''}`
         : MENU.world);
       if (!counts) {
         seeds.hidden = true;
@@ -140,9 +142,9 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
       seeds.hidden = false;
       tiles.hidden = false;
       if (waiting) {
-        // THE LOOP'S SIGNAL: a challenge waiting for your answer is the reason to open this screen,
+        // THE LOOP'S SIGNAL: an action waiting for THIS player is the reason to open this screen,
         // so the key itself says so. Quiet by design — one lamp, not a badge with a number in it.
-        const waitingCount = counts.incoming ?? 0;
+        const waitingCount = counts.waiting ?? 0;
         waiting.hidden = waitingCount === 0;
         if (waitingCount > 0 && waiting.dataset.count !== String(waitingCount)) {
           waiting.dataset.count = String(waitingCount);

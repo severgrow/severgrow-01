@@ -106,6 +106,14 @@ export const CHALLENGE = Object.freeze({
   incomingAnnounceCount: (count: number) => (count === 1
     ? '1 challenge is waiting for your answer.'
     : `${count} challenges are waiting for your answer.`),
+  /**
+   * THE ONLY NOTIFICATION SENTENCE for Territory (owner, 2026-10-30): the lamp means "a move of
+   * YOURS is waiting", which is an incoming challenge OR your turn in a linked duel. It never
+   * promises an "answer" when the waiting thing is a turn.
+   */
+  actionsWaiting: (count: number) => (count === 1
+    ? 'Something in Territory is waiting for you.'
+    : `${count} things in Territory are waiting for you.`),
   /** The crossed swords on a contested tile: the glyph's one spoken name, who and which side. */
   markerFrom: (name: string) => `Challenge on this tile. ${name} challenged you.`,
   markerTo: (name: string) => `Challenge on this tile. You challenged ${name}.`,

@@ -58,6 +58,26 @@ const parseIdentity = (raw: string | null): OnlineIdentityRecord | null => {
   }
 };
 
+/**
+ * The name stored on THIS device for exactly `playerId`, or null.
+ *
+ * Territory's always-on identity line (owner, 2026-10-30) needs the player's own name without a new
+ * request: the identity record already carries it (a guest's generated nature name, or the account's
+ * chosen one), and a record belonging to another player is never borrowed. The channel's storage
+ * prefix is applied below us (`channel.ts` patches `Storage.prototype`), so the plain key is right.
+ */
+export const storedDisplayName = (playerId: string): string | null => {
+  try {
+    const raw = globalThis.localStorage?.getItem(IDENTITY_STORAGE_KEY) ?? null;
+    const parsed = raw ? JSON.parse(raw) as { playerId?: unknown; displayName?: unknown } : null;
+    if (!parsed || parsed.playerId !== playerId || typeof parsed.displayName !== 'string') return null;
+    const name = parsed.displayName.trim();
+    return name ? name : null;
+  } catch {
+    return null;
+  }
+};
+
 export const createIdentityStore = (options: {
   client: DuelClient;
   storage?: KeyValue | null;

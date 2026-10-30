@@ -20,6 +20,7 @@ import { leaveLobbyForMatch } from './lobby-exit.js';
 import { WorldView } from './world-view.js';
 import { installTerritoryCountUI, territoryCounts } from './menu-territory.js';
 import type { TerritoryCounts } from './menu-territory.js';
+import { waitingActionCount } from './territory-attention.js';
 import { cachedTerritory, registerTerritoryReader, rememberTerritory } from './territory-cache.js';
 import { seedIcon } from './seed-icon.js';
 import type { SeedFlushResult } from './seed-rewards.js';
@@ -1101,24 +1102,23 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     let wallet: SeedWallet | null = null;
     let world: WorldMapPayload['world'] | null = null;
-    let incoming = 0;
+    let waiting = 0;
     try {
       const [readWallet, map, challenges] = await Promise.all([
         client.seedWallet(id.token),
         client.worldMap(),
-        // The menu's own signal: a challenge waiting for an answer. It is read in the SAME pass as
-        // the wallet and the map, and a failure here only means the entry shows no signal.
+        // The menu's own signal: the shared "is anything waiting for me" predicate.
         client.worldChallenges(id.token).catch(() => null),
       ]);
       wallet = readWallet;
       world = map.world;
-      incoming = challenges?.incoming?.length ?? 0;
+      waiting = waitingActionCount(challenges);
     } catch {
       // Offline, signed out, or a failed request: both read-outs stay hidden, together.
       wallet = null;
       world = null;
     }
-    const counts = territoryCounts(wallet, world, id.playerId, incoming);
+    const counts = territoryCounts(wallet, world, id.playerId, waiting);
     rememberTerritory(id.playerId, counts);
     if (menuEl?.hidden === false) territoryUI.paint(counts);
     // The invitation reads the SAME wallet response; it never costs a second request.

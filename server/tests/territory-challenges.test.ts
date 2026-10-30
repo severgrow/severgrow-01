@@ -346,6 +346,29 @@ describe('the winner takes the loser’s tile', () => {
     expect(await h.store.challenge(sent.challenge.id)).toMatchObject({ status: 'resolved', winnerId: h.a.id });
     expect(h.store.claims.get(pair.target)?.ownerId).toBe(h.a.id);
   });
+
+  // THE ONE NOTIFICATION RULE (owner, 2026-10-30): a Territory lamp lights only for a move of the
+  // viewer's own. The wire says whose turn the linked duel is on, computed from the match's actor —
+  // exactly one of the two participants sees `true`, and it is the one whose seat is acting.
+  it('the wire says whose turn the linked duel is on, for both seats', async () => {
+    const h = makeHarness();
+    await h.register(h.a, h.b);
+    h.own(pair.near, h.a.id);
+    h.own(pair.target, h.b.id);
+    const sent = await send(h, h.a, pair.target, 'wire-turn-request');
+    if (!sent.ok) throw new Error('send failed');
+    const accepted = await accept(h, sent.challenge.id);
+    const match = await h.storage.matchById(accepted.matchId!);
+    const actorSeat = match!.state.actor;
+
+    const challengerList = await h.service.challenges(h.a);
+    const defenderList = await h.service.challenges(h.b);
+    const challengerView = challengerList.outgoing.find((c) => c.id === sent.challenge.id)!;
+    const defenderView = defenderList.incoming.find((c) => c.id === sent.challenge.id)!;
+    expect(challengerView.matchWaitingForMe).toBe(actorSeat === 0);
+    expect(defenderView.matchWaitingForMe).toBe(actorSeat === 1);
+    expect(challengerView.matchWaitingForMe).not.toBe(defenderView.matchWaitingForMe);
+  });
 });
 
 describe('expiry is still a forfeit, and the staked tile is not lost', () => {

@@ -11,6 +11,7 @@ import type { KeyValue } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
 import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
+import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
 import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
 import { glassBaseCss } from '../player/glass-surface.js';
 import { installProfileUI } from './profile.js';
@@ -723,7 +724,10 @@ export const mountAccounts = async (): Promise<void> => {
     status.setAttribute('role', 'status');
     const input = el('input', 'acct-input');
     input.type = 'text';
-    input.maxLength = 40;
+    // The server's own limit, imported rather than repeated: 8 on NEW names and renames (owner,
+    // 2026-10-30). A legacy longer name may still be stored on this device; typing over it counts
+    // as a new name, and the server refuses anything past the same bound.
+    input.maxLength = DISPLAY_NAME_MAX;
     // A new account types its own name: the generated guest name is never offered as a suggestion.
     input.value = required ? '' : s.identity.displayName ?? '';
     input.placeholder = ACCOUNT.nicknamePlaceholder;

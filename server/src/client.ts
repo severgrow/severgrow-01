@@ -42,6 +42,23 @@ import type { Action, Event } from '../../src/engine/index.js';
 /** Protocol version the browser/build reports (P-5 handshake). */
 export const DUEL_CLIENT_VERSION = '0.5.0';
 
+/**
+ * A player's tile colour on the wire (`GET`/`POST /v1/world/colour`). `canChange` and
+ * `remainingMs` are the SERVER's answer to the one-change-per-24 h rule (owner, 2026-10-30), so the
+ * picker can say how long is left before a press and can never unlock itself on a wrong clock.
+ */
+export type WorldColour = {
+  colourId: number;
+  colour: string;
+  name: string;
+  chosen: boolean;
+  canChange: boolean;
+  /** Epoch ms of the next allowed change, or null when nothing has been chosen yet. */
+  changeAvailableAt: number | null;
+  /** Milliseconds left on the 24 h window (0 when a change is available now). */
+  remainingMs: number;
+};
+
 /** The minimal transport shape this client needs (window.fetch, undici, or a test double). */
 export type FetchLike = (
   url: string,
@@ -398,15 +415,14 @@ export class DuelClient {
    * from the player id. `chosen` is false when nothing has ever been saved — the picker still marks
    * the current swatch, because the map is already drawing that colour.
    */
-  async worldColour(token: string): Promise<{ colourId: number; colour: string; name: string; chosen: boolean }> {
-    const response = await this.request<{ colour: { colourId: number; colour: string; name: string; chosen: boolean } }>(
-      'GET', '/v1/world/colour', { token });
+  async worldColour(token: string): Promise<WorldColour> {
+    const response = await this.request<{ colour: WorldColour }>('GET', '/v1/world/colour', { token });
     return response.colour;
   }
 
   /** Save a palette choice so it follows the player to another device. */
-  async chooseWorldColour(token: string, colourId: number): Promise<{ colourId: number; colour: string; name: string }> {
-    const response = await this.request<{ colour: { colourId: number; colour: string; name: string } }>(
+  async chooseWorldColour(token: string, colourId: number): Promise<WorldColour> {
+    const response = await this.request<{ colour: WorldColour }>(
       'POST', '/v1/world/colour', { token, body: { colourId } });
     return response.colour;
   }

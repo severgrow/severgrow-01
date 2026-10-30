@@ -161,7 +161,7 @@ export class MatchService {
     if (player.kind !== 'account') {
       throw new ApiError('FORBIDDEN', 'Sign in with Google to choose your own name.');
     }
-    const name = assertDisplayName(displayName);
+    const name = assertDisplayName(displayName, player.displayName);
     const updated: PlayerRecord = { ...player, displayName: name };
     await this.storage.updatePlayer(updated);
     return playerSummary(updated);

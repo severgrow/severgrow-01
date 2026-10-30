@@ -146,6 +146,13 @@ export type WorldChallengeWire = {
   /** True once the linked duel is over: the signal that `confirm` may be used. */
   matchFinished: boolean;
   /**
+   * True only while the linked duel is ACTIVE and the seat to act is THIS viewer's (owner,
+   * 2026-10-30). It is the server's answer to "is there a move of mine waiting in this challenge?",
+   * so every Territory lamp can be gated on one predicate without a second read. False for a
+   * finished/no duel, and false when the opponent is to move.
+   */
+  matchWaitingForMe: boolean;
+  /**
    * The finished duel's winner, before settlement (null for a draw or a running match). It lets the
    * confirmation sheet say who actually won without exposing anything about the board.
    */
@@ -199,9 +206,9 @@ export interface WorldEconomyStore {
   /**
    * The player's stored palette choice, or null when they have none. A READ: it never writes the
    * derived default, so "no choice" stays "no row" and the map's colours do not depend on who read
-   * them first.
+   * them first. `chosenAt` is when the choice was last saved, which is what the 24 h rule reads.
    */
-  colourChoice(playerId: string): Promise<number | null>;
+  colourChoice(playerId: string): Promise<{ colourId: number; chosenAt: number } | null>;
   /** Persist a palette choice (`src/tile-colours.ts`). Idempotent: the same id twice is one write. */
   setColourChoice(playerId: string, colourId: number, now: number): Promise<void>;
   claim(playerId: string, cellId: string, requestId: string, now: number): Promise<ClaimResult>;

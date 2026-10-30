@@ -97,7 +97,7 @@ const SAMPLE = { ok: true, world: { version: 2, revision: 5, cost: 100, challeng
 const base = {
   challengerId: 'p1', defenderId: 'r1', challengerName: 'BloomHeron', defenderName: 'RYK',
   fromMe: true, stake: 0, stakeCellId: null, respondedAt: null, matchId: null, matchFinished: false,
-  matchWinnerId: null, winnerId: null, resolvedAt: null, remainingMs: 0, serverNow: NOW,
+  matchWinnerId: null, matchWaitingForMe: false, winnerId: null, resolvedAt: null, remainingMs: 0, serverNow: NOW,
 };
 const challenges: { incoming: WorldChallengeWire[]; outgoing: WorldChallengeWire[] } = {
   incoming: [{
@@ -358,12 +358,43 @@ try {
     // hardware-key icons when it is constructed, and that is the moment `#menu-world` has a handler.
     // (The old signal was the FIT icon, which the 2026-10-28 redesign removed.)
     await page.waitForFunction(() => !!document.querySelector('#online-world-keys .world-key svg'), undefined, { timeout: 20_000 });
+    // THE MAIN MENU'S TERRITORY LAMP reads the same predicate through its own single menu pass.
+    // This player has one incoming pending challenge, so it must be lit before the map is opened.
+    const menuLamp = await page.waitForFunction(() => {
+      const el = document.getElementById('menu-world-waiting');
+      return !!el && !el.hidden;
+    }, undefined, { timeout: 15_000 }).then(() => true).catch(() => false);
+    check(`[${tag}] the main menu's Territory lamp is lit by the same waiting action`, menuLamp);
     await activate(page, '#menu-world');
     await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 20_000 });
     await page.locator('.world-hex').first().waitFor({ state: 'attached', timeout: 45_000 });
     // The challenge list lives in the one window now (owner, 2026-10-28), opened below.
     await page.waitForSelector('.world-challenge-chip', { state: 'attached', timeout: 20_000 });
     await page.waitForTimeout(300);
+
+    // ---- 0a. THE LAMPS SAY ONLY WHAT WAITS FOR ME (owner, 2026-10-30) -------------------------
+    // This fixture holds THREE open rows: one incoming pending (mine to answer), one outgoing
+    // pending (theirs to answer) and one accepted duel that has FINISHED. Only the first is a move
+    // of mine, so the lamp must read 1 — not 3.
+    const lamp = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('#world-key-challenges .world-deck-count')!;
+      return { hidden: el.hidden, text: (el.textContent ?? '').trim() };
+    });
+    check(`[${tag}] the challenges lamp counts only MY waiting move (1 of 3 open rows)`,
+      lamp.hidden === false && lamp.text === '1', JSON.stringify(lamp));
+
+    // ---- 0b. MY NAME AND LEVEL ARE ALWAYS ON SCREEN (owner, 2026-10-30) ----------------------
+    const meLine = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('#online-world-wallet .world-me');
+      if (!el) return null;
+      const box = el.getBoundingClientRect();
+      return { text: (el.textContent ?? '').trim(), w: box.width, h: box.height,
+        inside: box.left >= 0 && box.right <= window.innerWidth && box.top >= 0 && box.bottom <= window.innerHeight,
+        visible: getComputedStyle(el).visibility !== 'hidden' && box.width > 0 && box.height > 0 };
+    });
+    check(`[${tag}] the wallet line carries MY name and level, at every viewport`,
+      !!meLine && meLine.visible && meLine.inside && meLine.text.includes('BloomHeron') && meLine.text.includes('LEVEL 23'),
+      JSON.stringify(meLine));
 
     // ---- 0. THE OWNER'S OWN GROUND SHOWS WHERE THEY ACTUALLY ARE (2026-10-24) ------------------
     // The server's number for these tiles is 11 (a stale "last clear it was told about"); this
@@ -374,9 +405,20 @@ try {
     check(`[${tag}] my own ground shows my real level, not the last one the server was paid for`,
       mineLine.includes('LEVEL 23') && !mineLine.includes('LEVEL 11') && mineLine.includes('YOURS'), mineLine);
     await tapCell(page, rival);
-    const rivalLine = await page.evaluate(() => (document.getElementById('online-world-selection')?.textContent ?? '').trim());
+    const rivalLine = await page.evaluate(() => {
+      const bar = document.getElementById('online-world-selection')!;
+      const line = bar.querySelector('.world-selection-line');
+      return {
+        text: (bar.textContent ?? '').trim(),
+        title: line?.getAttribute('title') ?? bar.getAttribute('title') ?? '',
+      };
+    });
     check(`[${tag}] a neighbour's line is untouched: no local level leaks onto it`,
-      rivalLine.includes('RYK') && !rivalLine.includes('LEVEL'), rivalLine);
+      rivalLine.text.includes('RYK') && !rivalLine.text.includes('LEVEL'), rivalLine.text);
+    // THE TAG IS NOT PRINTED (owner, 2026-10-30): "after clicking someone's tile - it still shows
+    // it's tag id". It is kept in the title, the way the ranking row and the territory chat keep it.
+    check(`[${tag}] a tapped tile's visible name carries NO #tag, and the title still does`,
+      !rivalLine.text.includes('#') && rivalLine.title.includes('#1002'), JSON.stringify(rivalLine));
     // the rival tap opened the challenge offer; shut it, then open the one window's list
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => (document.querySelector('.world-challenge-sheet') as HTMLElement | null)?.hidden !== false);
@@ -632,6 +674,14 @@ try {
     check(`[${tag}] DECLINE clears the swords and the ring from that tile`,
       !afterDecline.swords && !afterDecline.ring && afterDecline.markers === 2,
       JSON.stringify(afterDecline));
+    // ...and the lamp clears ON THE SAME POLL that closed the challenge: no timer, no fade. The
+    // outgoing pending and the finished duel that remain are not my moves.
+    const lampAfter = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('#world-key-challenges .world-deck-count')!;
+      return { hidden: el.hidden, text: (el.textContent ?? '').trim() };
+    });
+    check(`[${tag}] nothing waiting: the lamp is gone on the same poll`,
+      lampAfter.hidden === true, JSON.stringify(lampAfter));
 
     // ---- 6. a finished linked duel SETTLES ITSELF (owner, 2026-10-29) ------------------------
     // "after the match, automatically give the tile to the winner." The sheet therefore offers NO
@@ -722,6 +772,58 @@ try {
     JSON.stringify(reducedSwords ?? {}));
   await page.screenshot({ path: join(OUT, 'challenges-reduced-motion.png') });
   await page.close();
+
+  // ---- 9. LANDSCAPE (844x390): my name and level are STILL on screen ------------------------
+  // Owner, 2026-10-30: "make sure in territory the name and level is always visible ... at every
+  // viewport". 844x390 is below the desktop-stage breakpoint (960px), so it is the phone column on
+  // its side — the same wallet line, and the same rule.
+  console.log('\n=== 844x390 ===');
+  const land = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+  await land.addInitScript(() => localStorage.clear());
+  await land.addInitScript({ content: 'window.__name = (f) => f;' });
+  await land.addInitScript(({ progress }) => {
+    for (const prefix of ['', 'futa05:', 'futa04:', 'main2:']) {
+      localStorage.setItem(`${prefix}severgrow.seen`, '1');
+      localStorage.setItem(`${prefix}severgrow.campaign.progress.v3`, progress);
+    }
+  }, { progress: progressAt22() });
+  const landErrors: string[] = [];
+  land.on('pageerror', (error) => landErrors.push(error.message));
+  land.on('console', (message) => {
+    if (message.type() === 'error' && !message.text().includes('ERR_UNSAFE_PORT')) landErrors.push(`console: ${message.text()}`);
+  });
+  await land.route('**/v1/world/challenges*', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, ...challenges, serverNow: NOW }),
+  }));
+  await land.route('**/v1/world', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE) }));
+  await land.route('**/v1/seeds/achievements', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, achievements: [] }) }));
+  await land.route('**/v1/seeds/wallet', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, wallet: { balance: 150, lifetimeEarned: 150, lifetimeSpent: 0, worldInvitationSeen: true } }),
+  }));
+  await land.route('**/v1/guests*', (route) => route.fulfill({
+    status: 201, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, token: 'stub-token', player: { id: 'p1', kind: 'guest', displayName: 'BloomHeron' }, serverNow: NOW }),
+  }));
+  await land.goto(BASE, { waitUntil: 'load' });
+  await land.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20_000 });
+  await land.waitForFunction(() => !!document.querySelector('#online-world-keys .world-key svg'), undefined, { timeout: 20_000 });
+  await activate(land, '#menu-world');
+  await land.waitForSelector('.world-hex.mine', { timeout: 20_000 });
+  await land.waitForTimeout(400);
+  const landscapeMe = await land.evaluate(() => {
+    const el = document.querySelector<HTMLElement>('#online-world-wallet .world-me');
+    if (!el) return null;
+    const box = el.getBoundingClientRect();
+    return { text: (el.textContent ?? '').trim(), box: { x: box.x, y: box.y, w: box.width, h: box.height },
+      inside: box.left >= 0 && box.right <= window.innerWidth && box.top >= 0 && box.bottom <= window.innerHeight };
+  });
+  check('[844x390] my name and level are visible in landscape too',
+    !!landscapeMe && landscapeMe.inside && landscapeMe.text.includes('BloomHeron') && landscapeMe.text.includes('LEVEL 23'),
+    JSON.stringify(landscapeMe));
+  check('[844x390] no page errors', landErrors.length === 0, landErrors.slice(0, 2).join(' | '));
+  await land.screenshot({ path: join(OUT, 'territory-landscape-844x390.png') });
+  await land.close();
 
   await browser.close();
   await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
