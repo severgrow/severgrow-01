@@ -84,6 +84,18 @@ export const ONLINE = Object.freeze({
   worldNoChallenges: 'No open challenges.',
   worldNoHistory: 'No past challenges yet.',
   worldMenu: 'Territory menu',
+  /**
+   * YOUR COLOUR (owner, 2026-10-30). The swatches' names live in `src/tile-colours.ts` with the
+   * colours themselves, so the picker, the map and the server can never name a colour differently.
+   */
+  worldColour: 'Colour',
+  worldColourLabel: 'Your tiles',
+  worldColourHint: 'Tap a colour. Your tiles change at once.',
+  worldColourSaving: 'Changing colour…',
+  worldColourFailed: 'That colour could not be saved. Try again.',
+  worldColourCurrent: 'Current colour',
+  worldColourPicked: (name: string) => `${name}. Your tiles are that colour now.`,
+  worldColourUnavailable: 'Colours are not available on this server yet.',
   /** Territory chat (owner, 2026-10-28): one shared channel, newest 30 messages. */
   worldChat: 'Territory chat',
   worldChatPlaceholder: 'Say something',

@@ -394,6 +394,24 @@ export class DuelClient {
   }
 
   /**
+   * THE PLAYER'S TILE COLOUR (owner, 2026-10-30): the stored choice, or the palette default derived
+   * from the player id. `chosen` is false when nothing has ever been saved — the picker still marks
+   * the current swatch, because the map is already drawing that colour.
+   */
+  async worldColour(token: string): Promise<{ colourId: number; colour: string; name: string; chosen: boolean }> {
+    const response = await this.request<{ colour: { colourId: number; colour: string; name: string; chosen: boolean } }>(
+      'GET', '/v1/world/colour', { token });
+    return response.colour;
+  }
+
+  /** Save a palette choice so it follows the player to another device. */
+  async chooseWorldColour(token: string, colourId: number): Promise<{ colourId: number; colour: string; name: string }> {
+    const response = await this.request<{ colour: { colourId: number; colour: string; name: string } }>(
+      'POST', '/v1/world/colour', { token, body: { colourId } });
+    return response.colour;
+  }
+
+  /**
    * The account's place: the furthest Campaign level its verified first-clear receipts show. It
    * rides the same authenticated wallet read, so no new route and no extra round trip is invented;
    * `null` means the player has never cleared a level (or an older server did not send the field).

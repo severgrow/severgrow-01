@@ -6,7 +6,8 @@ import { playerTag } from '../../../src/player-tag.js';
 import { ApiError } from '../errors.js';
 import { newId, newInviteCode, newSeed } from '../ids.js';
 import type { MatchRecord, PlayerRecord, Storage } from '../storage/types.js';
-import { WORLD_VERSION, seenWorld, territoryColour } from '../world.js';
+import { WORLD_VERSION, seenWorld } from '../world.js';
+import { colourById, colourIdFor, isColourId, resolveTileColours } from '../../../src/tile-colours.js';
 import { SEED_ECONOMY, WORLD_CHALLENGE_LIST_WINDOW_MS } from './config.js';
 import type {
   ChallengeSendFailure,
@@ -54,6 +55,13 @@ export class WorldEconomyService {
     // decoration: if this read fails (an unmigrated table, a replica blip) the map must still
     // answer, exactly like the two housekeeping calls above.
     const disputes = await this.store.disputedCells().catch(() => []);
+    // THE COLOURS (owner, 2026-10-30). Each owner's stored choice (or the palette default derived
+    // from their id) is resolved ACROSS THE WHOLE MAP first, so no two adjacent tiles of different
+    // owners can wear the same colour — see `resolveTileColours`. Done here, in the service, so the
+    // memory and Postgres backends answer identically by construction.
+    const colours = resolveTileColours(snapshot.claims.map((claim) => ({
+      cellId: claim.cellId, ownerId: claim.ownerId, claimedAt: claim.claimedAt, chosen: claim.colourId,
+    })));
     return {
       // The SEEN map: the v2 coast plus two rings around every tile (server/src/world.ts).
       version: WORLD_VERSION, revision: snapshot.revision, cells: seenWorld(snapshot.claims.map((c) => c.cellId)),
@@ -62,7 +70,9 @@ export class WorldEconomyService {
         // Only a level NUMBER crosses the wire: no id, no email, no progress detail. `null` when the
         // owner has no recorded campaign receipts, so the pane shows nothing rather than "LEVEL 1".
         ownerLevel: claim.ownerLevel,
-        ownerTag: playerTag(claim.ownerId), colour: territoryColour(claim.ownerId), claimedAt: claim.claimedAt,
+        ownerTag: playerTag(claim.ownerId),
+        colour: colourById(colours.get(claim.cellId) ?? colourIdFor(claim.ownerId, claim.colourId)).css,
+        claimedAt: claim.claimedAt,
       })),
       cost: SEED_ECONOMY.tileCost,
       /**
@@ -77,6 +87,39 @@ export class WorldEconomyService {
   }
 
   wallet(player: PlayerRecord) { return this.store.wallet(player.id); }
+
+  /**
+   * THE PLAYER'S COLOUR (owner, 2026-10-30). Reading never writes: with no stored choice the answer
+   * is derived from the player id, which is the same derivation the public map uses, so the picker
+   * can mark the current swatch before the player ever chooses.
+   */
+  async colour(player: PlayerRecord) {
+    const chosen = await this.store.colourChoice(player.id);
+    const id = colourIdFor(player.id, chosen);
+    return { colourId: id, colour: colourById(id).css, name: colourById(id).name, chosen: chosen !== null };
+  }
+
+  /**
+   * Save a choice. It is a preference, not a game action: no Seeds, no revision bump (the map's
+   * ownership did not change), one row per player, idempotent.
+   */
+  async chooseColour(player: PlayerRecord, colourId: unknown) {
+    if (!isColourId(colourId)) throw new ApiError('INVALID_REQUEST', 'Choose one of the tile colours.');
+    const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
+    if (!(await this.matches.hitRateLimit(`seeds:colour:${player.id}`, bucket, 60)).ok) {
+      throw new ApiError('RATE_LIMITED', 'Please wait before changing colour again.');
+    }
+    try {
+      await this.store.setColourChoice(player.id, colourId, this.now());
+    } catch (error) {
+      // The table lives in migration 0020. Refuse honestly rather than pretend it saved.
+      if ((error as { code?: unknown } | null)?.code === 'COLOUR_MIGRATION_PENDING') {
+        throw new ApiError('COLOUR_MIGRATION_PENDING', 'Colours are being updated. Try again shortly.');
+      }
+      throw error;
+    }
+    return { colourId, colour: colourById(colourId).css, name: colourById(colourId).name };
+  }
 
   /**
    * The signed-in account's place (owner report, 2026-10-25). Takes the AUTHENTICATED player, never

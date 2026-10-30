@@ -297,6 +297,10 @@
             <button id="world-key-ranking" class="world-key" type="button" data-pane="ranking" aria-expanded="false" aria-controls="online-world-panel"></button>
             <button id="world-key-challenges" class="world-key" type="button" data-pane="challenges" aria-expanded="false" aria-controls="online-world-panel"><span class="world-deck-count" hidden></span></button>
             <button id="world-key-achievements" class="world-key" type="button" data-pane="achievements" aria-expanded="false" aria-controls="online-world-panel" hidden><span class="world-deck-count" hidden></span></button>
+            <!-- YOUR COLOUR (owner, 2026-10-30): a preference, so it lives with the other personal
+                 pages in the MENU row rather than on the tile bar, where every tap of your own tile
+                 would meet it. One key, one window, twenty swatches. -->
+            <button id="world-key-colour" class="world-key" type="button" data-pane="colour" aria-expanded="false" aria-controls="online-world-panel"></button>
             <button id="online-world-chat" class="world-key world-chat-key" type="button" aria-expanded="false" aria-controls="online-world-chat-panel"></button>
           </nav>
           <!-- THE WINDOW: one dark glass drawer under the key row, showing whichever key is lit. -->
@@ -327,6 +331,12 @@
               <div class="world-pane" data-pane="achievements">
                 <p id="world-achievements-intro" class="world-pane-empty"></p>
                 <ol id="online-world-achievements" class="world-achievements" aria-label="Achievements"></ol>
+              </div>
+              <!-- YOUR COLOUR: the twenty swatches, four to a row, each NAMED for accessibility. -->
+              <div class="world-pane" data-pane="colour">
+                <p id="world-colour-label" class="world-pane-label"></p>
+                <div id="world-colour-grid" class="world-colours" role="group" aria-labelledby="world-colour-label"></div>
+                <p id="world-colour-note" class="world-pane-empty" role="status" aria-live="polite"></p>
               </div>
             </div>
           </section>

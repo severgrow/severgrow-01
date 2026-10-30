@@ -38,9 +38,12 @@ type Receipt = { input: RewardInput; awarded: number; reason: string | null };
  */
 type LedgerEntry = { id: string; playerId: string; delta: number; category: string; sourceKey: string; balanceAfter: number; createdAt: number };
 
+/** A claim as the memory store holds it: the owner colour is added on read, never stored twice. */
+type StoredClaim = Omit<WorldClaim, 'colourId'>;
+
 /** Synchronous critical sections under Node's event loop; the Postgres store uses row locks. */
 export class MemoryWorldEconomyStore implements WorldEconomyStore {
-  readonly claims = new Map<string, WorldClaim>();
+  readonly claims = new Map<string, StoredClaim>();
   readonly receipts = new Map<string, Receipt>();
   readonly ledger: LedgerEntry[] = [];
   readonly tickets = new Map<string, TrainingTicket>();
@@ -49,6 +52,8 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   readonly challenges = new Map<string, WorldChallenge>();
   /** `${challengerId}:${requestId}` → challenge id, the idempotency key of a send. */
   readonly challengeRequests = new Map<string, string>();
+  /** Chosen palette slot per player (src/tile-colours.ts). Absent = derived from the player id. */
+  readonly colours = new Map<string, number>();
   revision = 0;
 
   private current(playerId: string): SeedWallet {
@@ -61,10 +66,12 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   async world(): Promise<WorldSnapshot> {
     const claims = [];
     for (const claim of this.claims.values()) {
-      claims.push({ ...claim, ownerLevel: await this.campaignHighestLevel(claim.ownerId) });
+      claims.push({ ...claim, ownerLevel: await this.campaignHighestLevel(claim.ownerId), colourId: this.colours.get(claim.ownerId) ?? null });
     }
     return { revision: this.revision, claims };
   }
+  async colourChoice(playerId: string): Promise<number | null> { return this.colours.get(playerId) ?? null; }
+  async setColourChoice(playerId: string, colourId: number): Promise<void> { this.colours.set(playerId, colourId); }
   async campaignHighestLevel(playerId: string): Promise<number | null> {
     let highest: number | null = null;
     for (const receipt of this.receipts.values()) {
