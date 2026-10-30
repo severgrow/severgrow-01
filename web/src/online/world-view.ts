@@ -1022,7 +1022,10 @@ export class WorldView {
       .map((id) => { const [q, r] = id.split(',').map(Number) as [number, number]; const at = cellXY(q, r); return { id, d: Math.hypot(at.x - from.x, at.y - from.y) }; })
       .sort((a, b) => a.d - b.d)
       .map((entry, index) => [entry.id, index] as const));
-    if (fresh.length && !this.fromMemory) this.notice(ONLINE.worldNewLand(fresh.length));
+    // NO "N NEW TILES UNCOVERED" BANNER (owner, 2026-10-30: "if theres any other completely
+    // redundant messages showing up - clean up as well"). The land RISES IN one cell at a time,
+    // nearest the newest tile first, and the mist lifts off it — the discovery is the animation.
+    // A line of text counted what the player had just watched happen.
     this.knownCells = seenIds;
     const faces = document.createElementNS(NS, 'g');
     faces.classList.add('world-faces');
@@ -1586,7 +1589,9 @@ export class WorldView {
     this.paintSelection();
     try {
       await this.client.sellWorld(this.identity.token, cellId, crypto.randomUUID());
-      this.notice(ONLINE.worldSold(this.world?.cost ?? 100));
+      // No "Tile sold · +100" line (owner, 2026-10-30: "clean up redundant messages"). The tile
+      // leaves the map and the wallet beside it updates to the new number in the same beat, so the
+      // sentence was repeating both halves of what the player had just done and just seen.
       if (this.selected === cellId) this.selected = null;
     } catch (error) {
       const code = (error as { code?: string }).code;
@@ -1823,7 +1828,10 @@ export class WorldView {
       if (identity !== this.identity) return;
       this.myColourId = saved.colourId;
       this.cue('chime');
-      this.notice(ONLINE.worldColourPicked(saved.name));
+      // NO TEXT CONFIRMATION (owner, 2026-10-30: "'glacier. your tiles are that colour now.' type
+      // message - remove completely"). The picker already answers: the chosen swatch is marked as
+      // current and the map repaints in the new colour as it happens. A sentence naming the colour
+      // told the player what they had just done with their own finger.
     } catch {
       if (identity === this.identity) this.notice(ONLINE.worldColourFailed);
       // Put the marks back on whatever the server actually has.

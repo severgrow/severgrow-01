@@ -94,7 +94,6 @@ export const ONLINE = Object.freeze({
   worldColourSaving: 'Changing colour…',
   worldColourFailed: 'That colour could not be saved. Try again.',
   worldColourCurrent: 'Current colour',
-  worldColourPicked: (name: string) => `${name}. Your tiles are that colour now.`,
   worldColourUnavailable: 'Colours are not available on this server yet.',
   /** Territory chat (owner, 2026-10-28): one shared channel, newest 30 messages. */
   worldChat: 'Territory chat',
@@ -118,14 +117,12 @@ export const ONLINE = Object.freeze({
   worldSellConfirm: 'Confirm sell',
   worldGrowing: 'Growing…',
   worldSelling: 'Selling…',
-  worldSold: (price: number) => `Tile sold · +${price}`,
   worldSellBusy: 'This tile is being challenged. It can be sold once the challenge is over.',
   worldSellFailed: 'That tile could not be sold. The map has refreshed; nothing was taken.',
   worldRankingTitle: 'Territory ranking',
   worldTiles: (n: number) => `${n} ${n === 1 ? 'TILE' : 'TILES'}`,
   worldMe: 'YOU',
   worldActivity: 'Recent tiles',
-  worldNewLand: (n: number) => `${n} NEW ${n === 1 ? 'TILE' : 'TILES'} UNCOVERED`,
   /** the Seeds invitation card's button that opens the Territory (uppercase, like its LATER sibling) */
   worldInviteOpen: 'OPEN TERRITORY',
   playWithFriend: 'Play with a friend',
