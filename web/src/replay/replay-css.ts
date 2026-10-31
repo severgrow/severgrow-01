@@ -428,7 +428,7 @@ export const REPLAY_CSS = `
   min-height: 44px;
   padding: 0 13px;
   border: 1px solid var(--rp-line);
-  border-radius: 11px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, .05);
   color: var(--rp-ink);
   font: 500 11.5px/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);

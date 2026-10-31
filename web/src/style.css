@@ -446,6 +446,9 @@ button {
   white-space: nowrap;
 }
 #menu .menu-footer #menu-settings { grid-column: 2; grid-row: 1; }
+/* A lone key is never a half-width orphan (owner, 2026-10-29 rule for every menu): with no account
+   key on this channel, Settings spans the row like every key above it. */
+#menu .menu-footer:not(:has(> #menu-login:not([hidden]))) #menu-settings { grid-column: 1 / -1; }
 /* One button system for the whole surface: a quiet 1px cream frame for the default, and a single
    cream fill (Continue) as the only emphasis. No gradient, no glow, no drop shadow.
    Difficulty tiles reuse the same frame so New game → pick level keeps one rhythm; the online
@@ -2144,7 +2147,8 @@ html.futasaku-product .install-prompt-scrim {
   min-height: 52px;
   height: 52px;
   margin: 0;
-  border-radius: calc(var(--radius) * 1.4);
+  /* One key shape across the game: the menu's own 10px corner (owner, 2026-10-31). */
+  border-radius: 10px;
   font-family: var(--font-ui);
   font-size: 0.86rem;
   font-weight: var(--w-text);
@@ -2185,7 +2189,7 @@ html.futasaku-product .install-prompt-scrim {
   height: auto;
   padding: 4px 10px;
   border: 1px solid var(--gm-hair);
-  border-radius: calc(var(--radius) * 1.4);
+  border-radius: 10px;
   background: color-mix(in srgb, var(--c-text) 4%, transparent);
   font-family: var(--font-ui);
   font-size: 0.76rem;
@@ -3247,13 +3251,18 @@ html.futasaku-product .install-prompt-scrim {
   gap: 14px;
 }
 .levels-head {
-  display: flex;
+  /* The title sits on the panel's centre line: the back key on the left is balanced by an empty
+     cell of the same width on the right (owner, 2026-10-31: "symmetry"). */
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center;
   gap: 8px;
   margin: 0;
   min-height: 44px;
 }
 .levels-head h2 {
+  grid-column: 2;
+  text-align: center;
   margin: 0;
   font-size: 1.4rem;
   line-height: 1.15;
@@ -7566,10 +7575,20 @@ body.result .corner-tools {
 }
 #gameover .go-buttons .btn {
   min-height: 46px;
-  border-radius: 9px;
-  justify-content: flex-start;
+  /* One key across the game (owner, 2026-10-31): the menu's 10px corner, every label uppercase and
+     tracked like PLAY / RESUME, on the card's centre line. */
+  border-radius: 10px;
+  justify-content: center;
   padding: 0 16px;
-  letter-spacing: 0.06em;
+  font-size: 0.86rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+/* The two quiet ways out read as small instrument labels, not underlined prose. */
+#gameover .go-buttons .btn.link {
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-decoration: none;
 }
 #gameover .go-buttons .btn.primary {
   min-height: 50px;
@@ -7721,7 +7740,9 @@ body.result .corner-tools {
   /* The column's gap separates entries; the negative step tucks the caption to the key above, so
      the pair reads as ONE entry while the next entry keeps the column's full rhythm. */
   margin: -3px 0 0;
-  padding: 0 20px; /* aligns with the key's own label, not its frame */
+  padding: 0 20px;
+  /* On the key's own centre line: the key's label is centred, so its caption is too (2026-10-31). */
+  text-align: center;
   /* Readable at arm's length (2026-10-27): it was 0.56rem in the muted grey with 0.2em tracking —
      about 9px — and read as texture rather than words. Still a quiet caption, one step down from the
      key label, in the menu's own 62% cream. */

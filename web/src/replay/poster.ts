@@ -175,9 +175,13 @@ export type PosterTurn = { text: string; seat: Player | null };
 
 
 // The on-screen game has an analogue film overlay above every element. Canvas exports do not
-// capture DOM overlays, so replay stills and video frames need the same finish baked into pixels.
+// capture DOM overlays, so replay stills and video frames carry the same finish baked into pixels.
 // One small deterministic tile is generated once and reused across frames (no per-frame noise).
+// It is a TEXTURE, not a veil (owner, 2026-10-31: clean and premium): mid-grey noise blended with
+// soft-light, so blacks stay black and the board keeps its contrast — and the encoder spends its
+// bits on the game, not on noise.
 let filmTile: HTMLCanvasElement | null = null;
+const FILM_SPREAD = 22; // ± around mid-grey; soft-light makes it a gentle grain
 const replayFilmTile = (): HTMLCanvasElement => {
   if (filmTile) return filmTile;
   const c = document.createElement('canvas');
@@ -189,11 +193,11 @@ const replayFilmTile = (): HTMLCanvasElement => {
     seed ^= seed << 13;
     seed ^= seed >>> 17;
     seed ^= seed << 5;
-    const light = (seed >>> 0) & 1;
-    pixels.data[i] = light ? 234 : 18;
-    pixels.data[i + 1] = light ? 231 : 19;
-    pixels.data[i + 2] = light ? 223 : 18;
-    pixels.data[i + 3] = light ? 33 : 24;
+    const v = 128 + (((seed >>> 0) % (2 * FILM_SPREAD + 1)) - FILM_SPREAD);
+    pixels.data[i] = v;
+    pixels.data[i + 1] = v;
+    pixels.data[i + 2] = v;
+    pixels.data[i + 3] = 255;
   }
   g.putImageData(pixels, 0, 0);
   filmTile = c;
@@ -205,6 +209,8 @@ export const paintReplayFilm = (g: CanvasRenderingContext2D, width: number, heig
   const pattern = g.createPattern(replayFilmTile(), 'repeat');
   if (!pattern) return;
   g.save();
+  g.globalCompositeOperation = 'soft-light';
+  g.globalAlpha = 0.55;
   g.fillStyle = pattern;
   g.fillRect(0, 0, width, height);
   g.restore();

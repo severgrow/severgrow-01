@@ -118,7 +118,7 @@ const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
   await waitStarterRitual(page);
   let refused = 0;
   const read = () => page.evaluate('(() => { const h = window.__severgrow; return h.state(); })()') as Promise<State | null>;
-  const idle = () => page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
+  const idle = () => page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
   let waiting = 0;
   for (let i = 0; i < maxSteps; i++) {
     const s = await read();
@@ -308,7 +308,7 @@ try {
     if (MODES.includes('classic')) {
       const { context, page, errors } = await bootScreen(browser, vp);
       await page.goto(`${origin}/?seed=219682080`);
-      await page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
+      await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
       const ended = await toGameOver(page);
       check(`classic ${vp.key}: the game reached its end`, ended === 'ended', ended);
       await waitFinish(page);
@@ -335,12 +335,12 @@ try {
       // to pick from any more), so this waits for whichever comes up: the screen if the list ever
       // returns, the board today. Waiting only on the screen made this block time out.
       await page.waitForFunction(
-        `(() => { const h = window.__severgrow; return !!h.state() || !document.getElementById('campaign').hidden; })()`,
+        `(() => { const h = window.__severgrow; return !!h && !!h.state() || !document.getElementById('campaign').hidden; })()`,
         undefined,
         { timeout: 20_000 },
       );
       if (await page.locator('#campaign-continue').isVisible().catch(() => false)) await page.click('#campaign-continue');
-      await page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
+      await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
       // The campaign's own leading button IS the campaign entry point the tutorial now uses, so this
       // also proves the handoff lands in a REAL level: a fresh profile opens level 1 — on the seed
       // that level actually deals, which for a lesson is the lesson's own authored seed (96001).
@@ -378,7 +378,7 @@ try {
           check(`campaign ${vp.key}: the leading button is tappable`, led);
           // Level 2 is a lesson too, so it deals ITS authored seed (96002), not its campaign seed.
           await page.waitForFunction(
-            `(() => { const h = window.__severgrow; return !!h.state() && h.state().seed === ${openingSeed(second)} && !h.busy(); })()`,
+            `(() => { const h = window.__severgrow; return !!h && !!h.state() && h.state().seed === ${openingSeed(second)} && !h.busy(); })()`,
             undefined,
             { timeout: 40_000 },
           );
@@ -407,7 +407,7 @@ try {
       const vp = VIEWPORTS[0]!; // 360x640: the tightest real phone, the one the rule is about
       const { context, page, errors } = await bootScreen(browser, vp, moving);
       await page.goto(`${origin}/?seed=219682080`);
-      await page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
+      await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
       const ended = await toGameOver(page);
       check(`seeds ${label}: the game reached its end`, ended === 'ended', ended);
       await waitFinish(page);
@@ -460,7 +460,7 @@ if (MODES.includes('online')) {
       a.page.on('pageerror', (e) => errors.push(e.message));
       // The lobby list resumes the running match; the board (and the duel HUD) come up from there.
       await openDuel(a, match.matchId);
-      await a.page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
+      await a.page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
       // Keep the confirm() out of the way, then resign: a real end to a real duel.
       await a.page.evaluate('(() => { window.confirm = () => true; })()');
       await a.page.evaluate(`(() => { const x = document.getElementById('gm-resign'); if (x) x.click(); })()`);
