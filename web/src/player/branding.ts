@@ -34,10 +34,13 @@ html.futa04-branding.home-screen-app #game { padding: 0; }
 /* Reserve the home indicator once, inside the play grid; its background still
    paints to the physical screen edge while the dock stays above the gesture. */
 html.futa04-branding.home-screen-app #game > .play { padding-bottom: env(safe-area-inset-bottom); }
+/* iOS 26 (iPhone 17, owner 2026-10-31) can report a viewport shorter than the app's own window,
+   leaving a bar under the game. A home-screen app has no browser bars, so its LARGEST viewport
+   (100lvh) is its whole window: never be shorter than that. */
 html.futa04-branding.home-screen-app,
-html.futa04-branding.home-screen-app body { height:var(--futasaku-app-height,100dvh); }
+html.futa04-branding.home-screen-app body { height:max(var(--futasaku-app-height,100dvh),100lvh); }
 html.futa04-branding.home-screen-app :is(#game,#texture) {
-  height:var(--futasaku-app-height,100dvh); bottom:auto;
+  height:max(var(--futasaku-app-height,100dvh),100lvh); bottom:auto;
 }
 html.futa04-branding .play { --board-margin: 2px; }
 html.futa04-branding[data-layout='stack'] .board-wrap {

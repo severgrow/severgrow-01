@@ -9,8 +9,8 @@ import { duelApiUrl, duelRegion } from '../online/config.js';
 import { getOnlineSession } from '../online/duel-runtime.js';
 import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
 import { glassBaseCss } from '../player/glass-surface.js';
-import { buildContext, cleanStack, createCrashGate, createQueue, safePath } from './core.js';
-import type { FeedbackKind, FeedbackPayload } from './core.js';
+import { buildContext, cleanStack, createCrashGate, createQueue, iosVersion, safePath } from './core.js';
+import type { FeedbackKind, FeedbackPayload, ScreenFit } from './core.js';
 import { paintBetaLine, replayEarlyTap } from './beta-line.js';
 import { ICONS } from '../ui/icons.js';
 
@@ -71,7 +71,7 @@ const context = (): Record<string, unknown> => {
     channel: typeof __CHANNEL__ !== 'undefined' ? __CHANNEL__ : '',
     path: safePath(location.pathname),
     screen: visibleScreen(),
-    viewport: { w: innerWidth, h: innerHeight, dpr: devicePixelRatio || 1 },
+    viewport: { w: innerWidth, h: innerHeight, dpr: devicePixelRatio || 1, ...screenFit() },
     standalone: matchMedia?.('(display-mode: standalone)').matches ?? false,
     touch: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
     lang: navigator.language,
@@ -90,6 +90,33 @@ const context = (): Record<string, unknown> => {
     errors: crashMessages,
     uptimeMs: performance.now() - started,
   });
+};
+
+/** The page against the physical screen: what iOS reports, for the "does the game fill the screen" case. */
+const screenFit = (): ScreenFit | Record<string, never> => {
+  try {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)';
+    document.body.append(probe);
+    const cs = getComputedStyle(probe);
+    const insetTop = Math.round(parseFloat(cs.paddingTop) || 0);
+    const insetBottom = Math.round(parseFloat(cs.paddingBottom) || 0);
+    probe.remove();
+    const vv = window.visualViewport;
+    return {
+      screenW: screen.width,
+      screenH: screen.height,
+      vvH: vv ? Math.round(vv.height) : null,
+      vvTop: vv ? Math.round(vv.offsetTop) : null,
+      insetTop,
+      insetBottom,
+      appH: document.documentElement.style.getPropertyValue('--futasaku-app-height') || null,
+      homeApp: document.documentElement.classList.contains('home-screen-app'),
+      ios: iosVersion(navigator.userAgent),
+    };
+  } catch {
+    return {};
+  }
 };
 
 const token = (): string | null => {

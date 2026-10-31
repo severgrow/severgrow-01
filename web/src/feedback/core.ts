@@ -10,7 +10,7 @@ export type ContextSources = {
   channel: string;
   path: string;
   screen: string; // 'menu' | 'levels' | 'game' | 'online' | 'other'
-  viewport: { w: number; h: number; dpr: number };
+  viewport: { w: number; h: number; dpr: number } & Partial<ScreenFit>;
   standalone: boolean;
   touch: boolean;
   lang: string;
@@ -22,6 +22,29 @@ export type ContextSources = {
   recent: unknown[];
   errors: string[];
   uptimeMs: number;
+};
+
+/**
+ * How the page fits the physical screen (owner, 2026-10-31: an iPhone 17 home-screen app showed a
+ * bar at the bottom the game did not cover). Plain numbers only — sizes, insets and the iOS major
+ * version — so a report says exactly what the phone reported, with nothing that identifies anyone.
+ */
+export type ScreenFit = {
+  screenW: number;
+  screenH: number;
+  vvH: number | null;
+  vvTop: number | null;
+  insetTop: number;
+  insetBottom: number;
+  appH: string | null;
+  homeApp: boolean;
+  ios: string | null;
+};
+
+/** The iOS major.minor from a user-agent string, or null (never the rest of the string). */
+export const iosVersion = (ua: string): string | null => {
+  const m = /\bOS (\d+)[_.](\d+)/.exec(ua);
+  return m && /iPhone|iPad|iPod/.test(ua) ? `${m[1]}.${m[2]}` : null;
 };
 
 const SETTINGS_KEEP = ['reduceMotion', 'largeText', 'speed', 'sound', 'vibration', 'effects', 'materialDetail'];
