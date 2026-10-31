@@ -7038,8 +7038,9 @@ html.futa04-branding[data-layout='side'] .board-wrap {
   margin-bottom: calc(var(--side-air) - 8px);
 }
 html.futa04-branding[data-layout='side'] .dock {
-  /* the dock's rows have fixed heights, so it is lifted as a whole (it sits at the grid's end) */
-  margin-bottom: calc(var(--side-air) - 10px);
+  /* centred on the board's own centre line (the board rises into the header band by the same
+     amount it gives back below, so the grid's middle is the board's middle) */
+  margin-block: 0;
   translate: var(--side-dock-shift, 0px) 0;
 }
 

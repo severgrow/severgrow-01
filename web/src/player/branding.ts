@@ -44,7 +44,9 @@ html.futa04-branding[data-layout='stack'] .board-wrap {
   margin-left: 2px;
   margin-right: 2px;
 }
-html.futa04-branding[data-layout='side'] .dock { align-self: end; row-gap: 8px; }
+/* The instrument panel (cockpit + hand) sits on the board's centre line, not pinned to the floor:
+   board and panel read as one balanced composition (owner, 2026-10-31). */
+html.futa04-branding[data-layout='side'] .dock { align-self: center; row-gap: 8px; }
 /* The screen already reserves the notch/home-indicator insets. */
 html.futa04-branding .dock { padding-bottom: 4px; }
 html.futa04-branding[data-thumb] .dock { padding: 0; }
