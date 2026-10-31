@@ -169,6 +169,31 @@ try {
     !!now && now.total >= REPLAY_PACING.minTotal && now.total <= REPLAY_PACING.maxTotal,
     `${((now?.total ?? 0) / 1000).toFixed(1)}s (was capped at 50.0s)`,
   );
+  await page.locator('#replay .rp-scrub').focus();
+  await page.keyboard.press('ArrowRight');
+  check('keyboard seek pauses playback', (await replayNow(page))?.playing === false);
+  const held=(await replayNow(page))!.elapsed;await page.waitForTimeout(250);
+  check('keyboard seek stays at the chosen beat', (await replayNow(page))?.elapsed === held);
+  const scrubBox=await page.locator('#replay .rp-scrub').boundingBox();
+  if(scrubBox){
+    await page.mouse.move(scrubBox.x+scrubBox.width*.6,scrubBox.y+scrubBox.height/2);await page.mouse.down();
+    const atCancel=(await replayNow(page))!.elapsed;
+    await page.locator('#replay .rp-scrub').dispatchEvent('pointercancel',{pointerId:1,clientX:0,button:0});
+    check('cancelled scrub preserves its last position',(await replayNow(page))?.elapsed === atCancel);
+    await page.mouse.up();
+  }
+  // Exercise the real ready-file controls without spending time encoding a video in this suite.
+  await page.evaluate(()=>{
+    const root=document.querySelector('#replay')!;
+    (root.querySelector('.rp-video') as HTMLElement).hidden=false;
+    (root.querySelector('[data-rp="video-cancel"]') as HTMLElement).hidden=true;
+    for(const key of ['video-share','video-save'])(root.querySelector(`[data-rp="${key}"]`) as HTMLElement).hidden=false;
+  });
+  const reached=new Set<string>();
+  for(let n=0;n<15;n++){await page.keyboard.press('Tab');reached.add(await page.evaluate(()=> (document.activeElement as HTMLElement)?.dataset.rp??''));}
+  check('keyboard focus reaches ready Share and Save',reached.has('video-share')&&reached.has('video-save'));
+  await page.evaluate(()=>{(document.querySelector('#replay .rp-video') as HTMLElement).hidden=true;});
+  await page.locator('#replay .rp-scrub').focus();await page.keyboard.press('Home');await page.keyboard.press('Space');
   const names = (await page.evaluate(() =>
     [...document.querySelectorAll('#replay .rp-name')].map((n) => (n.textContent ?? '').trim()),
   )) as string[];

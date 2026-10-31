@@ -1023,8 +1023,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         await navigator.share({ title: ONLINE.brand, text, url: link });
         return;
       }
-    } catch {
-      /* fall through to copy */
+    } catch (error) {
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') return;
+      /* A real sharing failure can still fall through to copy. */
     }
     try {
       await navigator.clipboard.writeText(link);

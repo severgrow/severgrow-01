@@ -476,6 +476,7 @@ export const REPLAY = Object.freeze({
   videoReady: 'Preparing the video…',
   /** What the player sees when the file has gone through the share sheet. */
   videoShared: 'Video shared',
+  videoSendFailed: 'Could not send the video. Try again or save it.',
   /** What the player sees when the file went to their downloads. */
   videoSaved: 'Video saved',
   /** Said plainly when this browser cannot record, or the encoder stopped. */

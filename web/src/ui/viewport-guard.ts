@@ -23,12 +23,21 @@ export const settleViewport = (win: Window = window): void => {
 export const mountViewportGuard = (win: Window = window): (() => void) => {
   // focusout fires before the next element takes focus; wait a frame so moving from one text box to
   // another (or to its Send key, then back) is not treated as "the keyboard closed".
-  const later = () => win.requestAnimationFrame(() => win.requestAnimationFrame(() => settleViewport(win)));
+  let frame = 0, disposed = false;
+  const later = () => {
+    if (frame || disposed) return;
+    frame = win.requestAnimationFrame(() => {
+      frame = win.requestAnimationFrame(() => { frame = 0; if (!disposed) settleViewport(win); });
+    });
+  };
   const vv = win.visualViewport;
   win.document.addEventListener('focusout', later, true);
   vv?.addEventListener('resize', later);
   win.addEventListener('orientationchange', later);
   return () => {
+    disposed = true;
+    if (frame) win.cancelAnimationFrame(frame);
+    frame = 0;
     win.document.removeEventListener('focusout', later, true);
     vv?.removeEventListener('resize', later);
     win.removeEventListener('orientationchange', later);

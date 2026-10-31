@@ -7,6 +7,10 @@ describe('email code sign-in', () => {
     expect(emailCode('12345678')).toBe('12345678');
     expect(emailCode(' 123456 ')).toBe('123456');
     expect(emailCode('abc123')).toBeNull();
+    expect(emailCode('１２３４ ５６７８')).toBe('12345678');
+    expect(emailCode('1234-5678')).toBe('12345678');
+    expect(emailCode('12345-67890')).toBe('1234567890');
+    expect(emailCode('code: 123456')).toBeNull();
   });
   it('requests a code and verifies without a redirect, password, or user-controlled identity', async () => {
     const calls: {url:string; body:unknown}[] = [];

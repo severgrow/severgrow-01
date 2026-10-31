@@ -372,6 +372,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   let index = -1;
   let elapsed = 0;
   let playing = false;
+  let autoplayPending = false;
   let ended = false;
   let raf = 0;
   let lastTick = 0;
@@ -650,6 +651,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
 
   const setPlaying = (on: boolean): void => {
     if (!model) return;
+    autoplayPending = false;
     playing = on;
     root.dataset.paused = on ? '0' : '1';
     syncTurnMark();
@@ -703,6 +705,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
 
   const restart = (): void => {
     if (!model) return;
+    autoplayPending = false;
     ended = false;
     root.dataset.ended = '0';
     again.hidden = true;
@@ -724,6 +727,8 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     if (!model) return;
     const { index: target, ms } = seekTo(model, fraction);
     if (target < 0) return;
+    autoplayPending = false;
+    if (!keepPlaying) setPlaying(false);
     elapsed = ms;
     ended = false;
     root.dataset.ended = '0';
@@ -770,8 +775,8 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   const endDrag = (event: PointerEvent): void => {
     if (!dragging) return;
     dragging = false;
-    scrub.releasePointerCapture?.(event.pointerId);
-    seek(fractionAt(event.clientX), false);
+    if (scrub.hasPointerCapture?.(event.pointerId)) scrub.releasePointerCapture(event.pointerId);
+    if (event.type !== 'pointercancel' && event.type !== 'lostpointercapture') seek(fractionAt(event.clientX), false);
     if (resumeAfterDrag) {
       resumeAfterDrag = false;
       setPlaying(true);
@@ -779,6 +784,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   };
   scrub.addEventListener('pointerup', endDrag);
   scrub.addEventListener('pointercancel', endDrag);
+  scrub.addEventListener('lostpointercapture', endDrag);
 
   again.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -844,21 +850,39 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   /** True while the press that started the export still counts as a tap (Chrome says so). */
   const hasTapNow = (): boolean =>
     !!(navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive;
+  let handingOver = false;
   const handOver = async (video: RecordedVideo, data: PosterData, mode: 'auto' | 'save' = 'auto'): Promise<void> => {
-    const outcome = mode === 'save' ? saveVideo(video, data) : await shareOrSaveVideo(video, data, REPLAY.mark);
-    if (outcome === 'cancelled') {
-      // The share sheet was dismissed: keep the file ready for another try rather than lose it.
-      readyVideo = { video, data };
-      showVideo(REPLAY.videoDone, false);
-      videoShare.hidden = !canShareFile(videoFile(video, data));
-      videoSave.hidden = false;
-      return;
+    if (handingOver || root.hidden || !model) return;
+    handingOver = true;
+    const current = model;
+    videoShare.disabled = videoSave.disabled = true;
+    try {
+      const outcome = mode === 'save' ? saveVideo(video, data) : await shareOrSaveVideo(video, data, REPLAY.mark);
+      if (root.hidden || model !== current) return;
+      if (outcome === 'cancelled') {
+        // The share sheet was dismissed: keep the file ready for another try rather than lose it.
+        readyVideo = { video, data };
+        showVideo(REPLAY.videoDone, false);
+        videoShare.hidden = !canShareFile(videoFile(video, data));
+        videoSave.hidden = false;
+        return;
+      }
+      videoShare.hidden = true;
+      videoSave.hidden = true;
+      readyVideo = null;
+      showVideo(outcome === 'shared' ? REPLAY.videoShared : REPLAY.videoSaved, false);
+      videoTimer = window.setTimeout(settleVideo, 2600);
+    } catch {
+      if (!root.hidden && model === current) {
+        readyVideo = {video,data};
+        showVideo(REPLAY.videoSendFailed, false);
+        videoShare.hidden = !canShareFile(videoFile(video,data));
+        videoSave.hidden = false;
+      }
+    } finally {
+      handingOver = false;
+      videoShare.disabled = videoSave.disabled = false;
     }
-    videoShare.hidden = true;
-    videoSave.hidden = true;
-    readyVideo = null;
-    showVideo(outcome === 'shared' ? REPLAY.videoShared : REPLAY.videoSaved, false);
-    videoTimer = window.setTimeout(settleVideo, 2600);
   };
   videoShare.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -872,7 +896,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   });
 
   const startVideo = async (): Promise<void> => {
-    if (!model || recording) return;
+    if (!model || recording || handingOver) return;
     const current = model;
     const controller = new AbortController();
     recording = controller;
@@ -983,10 +1007,10 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
           (a, b) => parseFloat(a.style.left) - parseFloat(b.style.left),
         ),
         ...(again.hidden ? [] : [again]),
-        ...(videoRow.hidden ? [] : [videoCancel]),
+        ...(videoRow.hidden ? [] : [videoCancel, videoSave, videoShare]),
         closeBtn,
         ...(videoBtn.disabled ? [] : [videoBtn]),
-      ];
+      ].filter(el => !el.matches(':disabled') && el.getClientRects().length > 0);
       const at = order.indexOf(document.activeElement as HTMLElement);
       const dir = event.shiftKey ? -1 : 1;
       const next = at < 0 ? order[event.shiftKey ? order.length - 1 : 0]! : order[(at + dir + order.length) % order.length]!;
@@ -1125,6 +1149,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     elapsed = 0;
     ended = false;
     playing = false;
+    autoplayPending = true;
     turnShown = -1;
     root.dataset.ended = '0';
     root.dataset.paused = '0';
@@ -1167,11 +1192,12 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     if (seq !== openSeq || model !== next) return;
     board = view;
     setupView(board, next);
-    paintOpening(next);
+    if (index >= 0) paint(index);
+    else paintOpening(next);
     placeBrand();
     // One beat for the surface to arrive, then the match plays.
     window.setTimeout(() => {
-      if (!model || root.hidden || seq !== openSeq) return;
+      if (!model || root.hidden || seq !== openSeq || !autoplayPending) return;
       if (next.frames.length === 0) {
         finish();
         return;

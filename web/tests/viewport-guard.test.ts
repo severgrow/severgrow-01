@@ -1,7 +1,7 @@
 // THE VIEWPORT GUARD (owner, 2026-10-31): after iOS's keyboard closes, the page is put back at its
 // origin — unless the player is still typing.
 import { describe, expect, it } from 'vitest';
-import { settleViewport } from '../src/ui/viewport-guard.js';
+import { mountViewportGuard, settleViewport } from '../src/ui/viewport-guard.js';
 
 const fakeWindow = (active: { matches: (s: string) => boolean; isContentEditable?: boolean } | null, x = 0, y = 56) => {
   const calls: [number, number][] = [];
@@ -34,5 +34,30 @@ describe('settleViewport', () => {
     const { win, calls } = fakeWindow(null, 0, 0);
     settleViewport(win);
     expect(calls).toEqual([]);
+  });
+});
+
+
+describe('viewport recovery lifecycle', () => {
+  const setup = () => {
+    const {win,calls}=fakeWindow(button);
+    const doc=new EventTarget(), viewport=new EventTarget(), events=new EventTarget();
+    Object.assign(win.document,{addEventListener:doc.addEventListener.bind(doc),removeEventListener:doc.removeEventListener.bind(doc)});
+    const frames=new Map<number,FrameRequestCallback>(); let id=0;
+    Object.assign(win,{visualViewport:viewport,addEventListener:events.addEventListener.bind(events),removeEventListener:events.removeEventListener.bind(events),
+      requestAnimationFrame:(f:FrameRequestCallback)=>{frames.set(++id,f);return id;},cancelAnimationFrame:(n:number)=>frames.delete(n)});
+    const flush=()=>{const batch=[...frames.values()];frames.clear();batch.forEach(f=>f(0));};
+    return {win,calls,doc,viewport,frames,flush};
+  };
+  it('coalesces a burst into one double-frame recovery',()=>{
+    const t=setup(),dispose=mountViewportGuard(t.win);
+    t.doc.dispatchEvent(new Event('focusout'));t.viewport.dispatchEvent(new Event('resize'));t.viewport.dispatchEvent(new Event('resize'));
+    expect(t.frames.size).toBe(1);t.flush();expect(t.frames.size).toBe(1);t.flush();expect(t.calls).toEqual([[0,0]]);dispose();
+  });
+  it('cancels a queued recovery when unmounted, including between frames',()=>{
+    const t=setup(),dispose=mountViewportGuard(t.win);
+    t.viewport.dispatchEvent(new Event('resize'));t.flush();dispose();
+    expect(t.frames.size).toBe(0);t.flush();expect(t.calls).toEqual([]);
+    t.viewport.dispatchEvent(new Event('resize'));expect(t.frames.size).toBe(0);
   });
 });

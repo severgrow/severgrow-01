@@ -3,7 +3,10 @@ export const emailAddress = (value: string): string | null => {
   const email = value.trim();
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 };
-export const emailCode = (value: string): string | null => /^\d{6,10}$/.test(value.trim()) ? value.trim() : null;
+export const emailCode = (value: string): string | null => {
+  const code = value.normalize('NFKC').replace(/[\s-]/g, '');
+  return /^\d{6,10}$/.test(code) ? code : null;
+};
 
 /** Bound the whole response body, not just receipt of its headers. */
 type AuthFetch = (url:string,init?:RequestInit)=>Promise<Response>;

@@ -15,7 +15,7 @@ export const mountEmailPanel = (panel: HTMLElement, hooks: {
   email.type='email'; email.autocomplete='email'; email.required=true; email.maxLength=254;
   email.id='acct-email-address'; emailLabel.htmlFor=email.id; email.spellcheck=false; email.autocapitalize='none';
   const codeLabel = make('label',ACCOUNT.emailCodeLabel), code = make('input');
-  code.type='text'; code.inputMode='numeric'; code.autocomplete='one-time-code'; code.maxLength=10;
+  code.type='text'; code.inputMode='numeric'; code.autocomplete='one-time-code'; code.maxLength=32;
   code.id='acct-email-code'; codeLabel.htmlFor=code.id;
   const status = make('p'); status.className='acct-status'; status.setAttribute('role','status');
   const key = (text:string) => {const b=make('button',text); b.type='button'; b.className='acct-btn'; return b;};
@@ -27,7 +27,7 @@ export const mountEmailPanel = (panel: HTMLElement, hooks: {
   form.append(emailLabel,email,codeLabel,code,status,send,extra);
   if(hooks.alternative)form.append(hooks.alternative);
   form.append(close); panel.append(title,intro,form);
-  let address:string|null=null, busy=false, nextSend=0, pendingAccess:string|null=null;
+  let address:string|null=null, busy=false, pendingAccess:string|null=null;
   const setStatus=(text:string,bad=false) => {status.textContent=text;status.dataset.tone=bad?'bad':'';};
   const paint=() => {
     email.readOnly=address!==null; code.hidden=codeLabel.hidden=extra.hidden=address===null;
@@ -37,11 +37,14 @@ export const mountEmailPanel = (panel: HTMLElement, hooks: {
     if(hooks.alternative)hooks.alternative.disabled=busy;
     form.setAttribute('aria-busy',String(busy));
   };
+  const resendAt=new Map<string,number>();
   const request=async (target:string) => {
-    if(Date.now()<nextSend) {setStatus(ACCOUNT.emailLimited,true);return;}
+    if(Date.now()<(resendAt.get(target.toLowerCase())??0)) {setStatus(ACCOUNT.emailLimited,true);return;}
     busy=true;paint();
     try {
-      await auth.send(target); pendingAccess=null; address=target; nextSend=Date.now()+60_000;
+      await auth.send(target); pendingAccess=null; address=target; code.value='';
+      for(const [email,until] of resendAt)if(until<=Date.now())resendAt.delete(email);
+      resendAt.set(target.toLowerCase(),Date.now()+60_000);
       setStatus(ACCOUNT.emailSent(target)); paint(); code.focus({preventScroll:true});
     } catch(error) {setStatus(error instanceof Error&&error.message==='rate-limited'?ACCOUNT.emailLimited:ACCOUNT.emailSendFailed,true);}
     finally {busy=false;paint(); if(address&&!panel.hidden&&!panel.inert)code.focus({preventScroll:true});}

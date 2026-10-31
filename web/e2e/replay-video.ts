@@ -202,12 +202,13 @@ mkdirSync(SHOTS, { recursive: true });
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, acceptDownloads: true });
   const page = await context.newPage();
-  await page.addInitScript(() => {
-    // Headless Chromium has no share sheet: the page takes its own download fallback, which is the
-    // real file a player on a desktop would get.
-    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
-    Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true });
-  });
+  await page.addInitScript(`
+    window.__name = f => f;
+    window.__shareCount = 0;
+    Object.defineProperty(navigator, 'userActivation', {value:{isActive:false}, configurable:true});
+    Object.defineProperty(navigator, 'canShare', {value:()=>true, configurable:true});
+    Object.defineProperty(navigator, 'share', {value:()=>{window.__shareCount++;return new Promise((resolve,reject)=>{window.__rejectShare=reject;});}, configurable:true});
+  `);
   await settingsInit(page);
   await page.goto(`${origin}/?seed=1004`);
   await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 60_000 });
@@ -293,6 +294,20 @@ try {
   );
   await page.screenshot({ path: `${SHOTS}/replay-video-recording-390x844.png` });
 
+  const readyShare=page.locator('#replay [data-rp="video-share"]');
+  const readySave=page.locator('#replay [data-rp="video-save"]');
+  await readyShare.waitFor({state:'visible',timeout:Math.max(90_000,total*5)});
+  await readyShare.dispatchEvent('click');await readyShare.dispatchEvent('click');
+  check('rapid Share taps start only one native handoff',await page.evaluate('window.__shareCount')===1);
+  check('ready controls are disabled during the handoff',await readyShare.isDisabled()&&await readySave.isDisabled());
+  await page.evaluate("window.__rejectShare(new DOMException('Cancelled','AbortError'))");
+  await readySave.waitFor({state:'visible'});await page.waitForFunction("!document.querySelector('[data-rp=video-save]').disabled");
+  check('cancelled sharing preserves the file for retry',await readyShare.isVisible()&&await readySave.isVisible());
+  await page.evaluate("window.__originalCreateURL=URL.createObjectURL;URL.createObjectURL=()=>{throw new Error('Save unavailable')}");
+  await readySave.click();await page.waitForFunction("document.querySelector('.rp-video-text').textContent.includes('Could not send')");
+  check('failed saving preserves a usable retry',await readySave.isVisible()&&!(await readySave.isDisabled()));
+  await page.evaluate('URL.createObjectURL=window.__originalCreateURL');
+  await readySave.click();
   const download = await downloadPromise;
   const waited = Date.now() - started;
   const name = download.suggestedFilename();
