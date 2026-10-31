@@ -39,6 +39,8 @@ import { meLine, ownerLine, ownerSpokenLine } from './world-selection.js';
 import { storedDisplayName } from './identity.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
+import { lastCamera, rememberCamera } from './world-camera.js';
+import { mountSheetViewport } from '../ui/sheet-viewport.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { TerritoryChat } from './territory-chat.js';
 import { borderSegments, cellXY, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ranking, ringPhase, standing, takeovers } from './world-growth.js';
@@ -511,6 +513,7 @@ export class WorldView {
     primary: HTMLButtonElement;
     secondary: HTMLButtonElement;
     notice: HTMLElement;
+    fitViewport: () => void;
   } | null = null;
   private sheetMode: 'send' | 'defend' | 'wait' | 'duel' | 'settling' | 'resolved' | 'closed' = 'closed';
   private sheetCellId: string | null = null;
@@ -567,6 +570,8 @@ export class WorldView {
     // the key nearest MENU, the last is the farthest, and `--key-count` lets the closed state use
     // the SAME stagger formula mirrored. A fourth or fifth key therefore joins the wave the moment
     // it is added to the markup - the old `:nth-last-child(1..3)` list silently left it unindexed.
+    window.addEventListener('pagehide', () => this.saveCamera());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.saveCamera(); });
     const rowKeys = [...(row?.querySelectorAll<HTMLButtonElement>('.world-key') ?? [])];
     const order = keyRowOrder(rowKeys.length);
     rowKeys.forEach((key, index) => key.style.setProperty('--key-i', String(order[index] ?? 0)));
@@ -636,10 +641,10 @@ export class WorldView {
 
   async open() {
     this.active = true;
-    // A fresh visit starts FRAMED to the window (see `boundsFor`), not wherever the last visit was
-    // panned to, and re-frames itself if the window's shape changes.
-    this.touched = false;
-    this.box = null;
+    // The deliberate camera is restored after the world version is known; live bounds still win.
+    const camera = this.world ? lastCamera(browserStorage(), this.world.version) : null;
+    this.touched = camera !== null;
+    this.box = camera;
     this.notice('');
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
@@ -647,6 +652,8 @@ export class WorldView {
       const remembered = lastWorld(browserStorage());
       if (remembered) {
         this.world = remembered;
+        this.box = lastCamera(browserStorage(), remembered.version);
+        this.touched = this.box !== null;
         this.fromMemory = true;
         this.paint();
       }
@@ -667,7 +674,13 @@ export class WorldView {
     });
     await publicRefresh;
   }
+  private saveCamera() {
+    if (this.active && this.touched && this.world && this.box)
+      rememberCamera(browserStorage(), this.world.version, this.reconcile(this.box, this.aspect));
+  }
   close(instant = false) {
+    this.stopGlide();
+    this.saveCamera();
     this.active = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
@@ -679,7 +692,6 @@ export class WorldView {
     this.closeSheet(false, instant);
     // Leaving folds everything away, so the next visit opens on the bare map with only MENU.
     this.setKeys(false, false);
-    this.stopGlide();
   }
   private notice(text: string) { document.getElementById('online-world-notice')!.textContent = text; }
   private schedule() {
@@ -731,6 +743,10 @@ export class WorldView {
       const moved = takeovers(this.world?.claims ?? null, map.world.claims, interfaceMotionAllowed());
       if (this.fromMemory || !this.world || map.world.revision > this.world.revision ||
         (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged || colourChanged))) {
+        if (this.world?.version !== map.world.version) {
+          this.box = lastCamera(browserStorage(), map.world.version);
+          this.touched = this.box !== null;
+        }
         this.world = map.world;
         this.fromMemory = false;
         // Keep the takeover as DATA before the paint, so `paint()` can draw the hand-off (and a later
@@ -1144,7 +1160,7 @@ export class WorldView {
       path.classList.toggle('selected', this.selected === cell.id);
       path.tabIndex = 0;
       path.setAttribute('aria-label', owner
-        ? `${owner.ownerName ?? 'Player'} #${owner.ownerTag} territory` : `Free world tile ${cell.id}`);
+        ? ownerSpokenLine(owner, mine, mine ? this.myLevel() : null) : `Free world tile ${cell.id}`);
       // NO per-path click handler: a tap is resolved once, on the SVG, by snapping to the nearest
       // cell centre (see `tapAt`). That is the touch-target guarantee — a tap never lands on the
       // wrong neighbour and never selects nothing. Keyboard selection stays per tile.
@@ -1347,7 +1363,7 @@ export class WorldView {
   /**
    * THE VIEW, RECOVERED IF IT IS EVER MISSING OR POISONED (see the note at `usableView`).
    *
-   * `open()` drops the view so a visit re-frames itself to the window, but that re-frame lives in
+   * A missing view needs a fresh frame, but that frame lives in
    * `paint()`, and a paint is SKIPPED when the world has not changed (see `refresh`). The second
    * visit therefore used to leave `this.box === null` while the map was still on screen: every
    * gesture guarded on it and returned, so the wheel and the double tap stopped answering — for the
@@ -1871,6 +1887,7 @@ export class WorldView {
       swatch.type = 'button';
       swatch.className = 'world-colour-swatch';
       swatch.dataset.colourId = String(colour.id);
+      swatch.dataset.picking = String(this.colourSaving === colour.id);
       swatch.style.setProperty('--swatch', colour.css);
       swatch.style.setProperty('--swatch-light', colour.light);
       swatch.style.setProperty('--swatch-dark', colour.dark);
@@ -2697,7 +2714,7 @@ export class WorldView {
     root.addEventListener('pointerdown', (event) => { if (event.target === root && this.sheetSettled()) this.closeSheet(); });
     primary.addEventListener('click', () => { if (this.sheetSettled()) void this.sheetPrimary(); });
     secondary.addEventListener('click', () => { if (this.sheetSettled()) void this.sheetSecondary(); });
-    this.sheet = { root, card, glyph, glyphPath, line, meta, primary, secondary, notice };
+    this.sheet = { root, card, glyph, glyphPath, line, meta, primary, secondary, notice, fitViewport: mountSheetViewport(card, root) };
     return this.sheet;
   }
 
@@ -2747,6 +2764,7 @@ export class WorldView {
     const sheet = this.ensureSheet();
     this.sheetShownAt = performance.now();
     sheet.root.hidden = false;
+    sheet.fitViewport();
     // The same two-part arrival every other surface in the game uses: the scrim only changes
     // density (no travel, no scale), and the card becomes present — it is never a hard cut.
     enterSurface(sheet.root, { travel: 0, scale: 1, duration: 150 });
@@ -3391,17 +3409,17 @@ export class WorldView {
         this.aspect = aspect;
         this.pixels = r.width;
         this.bounds = next;
-        // A MISSING OR POISONED VIEW IS RE-FRAMED HERE, not skipped. `open()` drops the view so a
-        // visit frames itself afresh; when it is shown again this callback is the only thing that
+        // A MISSING OR POISONED VIEW IS RE-FRAMED HERE, not skipped. A missing stored camera needs
+        // a fresh frame; when the map is shown again this callback may be the only thing that
         // runs, and the old `!this.box` guard made it a no-op — the second visit was a map that
         // could not be zoomed or panned at all (see `recoverBox`).
         if (!this.touched || !prev || !usableView(this.box)) {
           // The large view is re-derived too, so a rotated phone keeps the 44px floor.
           this.box = [...(this.detailFor(aspect, r.width) ?? next)];
         } else {
-          const z = prev[2] > 0 ? this.box[2] / prev[2] : 1;
-          this.box[2] = next[2] * z;
-          this.box[3] = next[3] * z;
+          // A changing notice or keyboard changes the aspect, not the player's chosen zoom.
+          // Reconcile around the same centre; `set` still enforces current bounds/touch limits.
+          this.box = this.reconcile(this.box, aspect);
         }
         set();
       });

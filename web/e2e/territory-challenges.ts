@@ -621,6 +621,14 @@ try {
       sendSheet.visiblePrimary && sendSheet.primaries === 1 && sendSheet.primary === 'CHALLENGE', sendSheet.primary);
     check(`[${tag}] the sheet's primary key is 44px tall`, sendSheet.primaryHeight >= 44, `${n2(sendSheet.primaryHeight)}px`);
     check(`[${tag}] the sheet does not scroll the page`, sendSheet.y === 0);
+    await page.evaluate(()=>{
+      Object.defineProperty(visualViewport,'height',{configurable:true,value:240});
+      Object.defineProperty(visualViewport,'offsetTop',{configurable:true,value:80});
+      visualViewport!.dispatchEvent(new Event('resize'));
+    });
+    check(`[${tag}] the challenge card fits the visual viewport above the keyboard`,await page.locator('.world-challenge-sheet:not([hidden]) .world-challenge-card').evaluate(e=>{const r=e.getBoundingClientRect();return r.top>=80&&r.bottom<=320&&scrollY===0;}));
+    await page.evaluate(()=>{delete (visualViewport as any).height;delete (visualViewport as any).offsetTop;visualViewport!.dispatchEvent(new Event('resize'));});
+
     await activate(page, '.world-challenge-sheet:not([hidden]) .world-challenge-primary');
     // The exit choreography is 180ms (interface-motion), so the settled state is read after it.
     await page.waitForTimeout(600);

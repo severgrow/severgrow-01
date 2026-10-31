@@ -64,6 +64,8 @@ export const ONLINE = Object.freeze({
   playOnline: 'Play online',
   playOffline: 'Play offline',
   pageTitleBase: 'FUTASAKU',
+  connectionOffline: 'Offline',
+  connectionReconnecting: 'Reconnecting',
   hubTitle: 'Play online',
   hubBack: 'Back',
   // The shared Territory: one tile per won duel, the same map for everyone. Read as "Territory"

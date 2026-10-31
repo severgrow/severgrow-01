@@ -1,4 +1,5 @@
 export const CHAT_CSS = `
+.match-chat-phrase-toggle > svg {transform-origin:center;transform-box:fill-box;}
 .match-chat { --chat-ink: #e8ddc5; color: var(--chat-ink); font-family: var(--font-ui, ui-monospace, monospace);
   /* THE CHAT'S OWN GLASS (owner, 2026-10-26: "decrease the blur behind it by 18% so the board is
      still visible"). The shared --dark-glass-blur is 9px and every other surface — the pause plate,
@@ -33,7 +34,7 @@ export const CHAT_CSS = `
 .match-chat-head h2 {font:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:0;}
 .match-chat button {font:inherit;color:inherit;border:1px solid #e8ddc529;background:transparent;border-radius:7px;min-height:44px;padding:6px 10px;cursor:pointer;touch-action:manipulation;}
 .match-chat button:hover {background:#e8ddc50c;}
-.match-chat button:active {transform:translateY(1px);background:#e8ddc51a;}
+.match-chat button:active:not([data-pressed='true']) {background:#e8ddc51a;}
 .match-chat button:focus-visible,.match-chat input:focus-visible,.match-chat select:focus-visible {outline:2px solid #e8ddc5;outline-offset:-3px;}
 .match-chat button:disabled {opacity:.36;cursor:default;transform:none;}
 .match-chat-head button:focus-visible{outline:none;color:#fff1cf;filter:drop-shadow(0 0 4px #e8ddc570);}

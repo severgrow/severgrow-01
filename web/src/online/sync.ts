@@ -1,3 +1,4 @@
+import { ONLINE } from '../../../src/strings.js';
 // Sync engine: ping hint + poll safety net (P-11). Missed pings never leave the board stale.
 
 import { DuelClient, DuelError } from '../../../server/src/client.js';
@@ -120,9 +121,9 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
           return;
         }
         if (!networkOnline) {
-          setConnection('offline', 'Reconnecting');
+          setConnection('offline', ONLINE.connectionOffline);
         } else {
-          setConnection('reconnecting', 'Reconnecting');
+          setConnection('reconnecting', ONLINE.connectionReconnecting);
         }
         return;
       } finally {
@@ -216,10 +217,10 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
     setOnline(next) {
       networkOnline = next;
       if (next) {
-        setConnection('reconnecting', 'Reconnecting');
+        setConnection('reconnecting', ONLINE.connectionReconnecting);
         void fetchView('online').catch(logApplyError);
       } else {
-        setConnection('offline', 'Reconnecting');
+        setConnection('offline', ONLINE.connectionOffline);
       }
     },
 

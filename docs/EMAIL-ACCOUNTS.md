@@ -69,3 +69,32 @@ re-verifying the consumed OTP, recovery, nickname, small layout, and old-server 
 Verification: full check passed 3,553 tests (1 expected failure, 66 optional skips); final focused checks 62,
 email browser checks 18, Google/nickname checks 33, and both production builds passed. The full audit
 and physical-device limitations are in [REVIEW-2026-10-31.md](REVIEW-2026-10-31.md).
+
+## Activation handoff — 31 October quiet polish
+
+The owner confirmed production SMTP is **not configured yet**. Keep `EMAIL_ACCOUNTS_ENABLED=false`
+until delivery is configured and the real-mail checks above pass. The cloud development environment
+has no Supabase administration identity or SMTP credentials, so it cannot safely perform that setup.
+The rest of the web release works against the current server independently.
+
+Ready-to-paste template: [server/templates/email-signin.html](../server/templates/email-signin.html).
+Use subject **FUTASAKU — your sign-in code**. Paste the HTML into the Supabase **Magic Link** email
+(the template Supabase uses for `signInWithOtp`), including its literal `{{ .Token }}` placeholder.
+Retain the same code placeholder in **Confirm signup** if that template is used for new users in
+this project's current Auth configuration. The template has no images, tracking, remote fonts or
+magic link dependency. Code expiry is configured in Auth; the email deliberately does not promise
+a duration the server may change later.
+
+Operator checklist:
+
+- Configure a production mail provider in Supabase Auth → SMTP, with a verified sender/domain.
+  Set the provider's required DNS records (SPF/DKIM and its recommended DMARC policy).
+- Enable Email with confirmation, paste the template, use 6–10 digit OTPs and a 10-minute expiry.
+  Keep mail/verification limits enabled. No SMTP or service credentials belong in browser config.
+- Deploy the existing Edge bundle, then enable `EMAIL_ACCOUNTS_ENABLED=true` after real delivery
+  is verified. Follow the full rollout steps above; there is no new migration in this polish batch.
+- Verify new-account signup and returning-account recovery on `/test/`, including an actual phone,
+  a second device, an expired code, resend, an interrupted exchange and account deletion.
+
+Turning the flag off hides new email sign-ins while preserving Google, guest play and existing
+account-management access. The UI automatically reveals email once both server and Auth advertise it.

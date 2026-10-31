@@ -1,3 +1,4 @@
+import { ONLINE } from '../../../src/strings.js';
 /** Futasaku 0.4 cockpit presentation. Game-owned buttons remain the action source. */
 import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeSpan, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage, ledToken } from './led-cells.js';
 import type { LedTone } from './led-cells.js';
@@ -1020,7 +1021,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
   }, { capture:true });
   document.addEventListener('keydown', event => {
     machine.interact();
-    if (event.key !== 'Escape') return;
+    if (event.isComposing || event.keyCode === 229 || event.key !== 'Escape') return;
     if (!bloomSelector.hidden) { event.preventDefault(); closeBloom(); bloomButton.focus(); }
     else if (!selector.hidden) { event.preventDefault(); close(); context.focus(); }
   });
@@ -1053,7 +1054,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     // The slot's current action, so CSS can light a key that is the move (e.g. Skip).
     context.dataset.action = first?.icon ?? '';
     context.setAttribute('aria-haspopup',current.length > 1 ? 'menu' : 'false');
-    context.setAttribute('aria-label',first ? current.length > 1 ? `${first.label}. ${current.length} actions available` : first.label : 'No action available');
+    context.setAttribute('aria-label',first ? current.length > 1 ? `${first.label}. ${current.length} actions available` : first.label : phase === 'opp' ? ONLINE.statusTheirTurn : 'No action available');
     context.title = context.getAttribute('aria-label') ?? '';
     for (const b of moves.querySelectorAll<HTMLButtonElement>('button')) b.tabIndex = -1;
     refreshMessage();

@@ -92,7 +92,7 @@ describe('lobby buckets and sort', () => {
 
     const trimmed = trimLobbyList(list);
     expect(trimmed.filter((e) => lobbyBucket(e) === 'finished')).toHaveLength(10);
-    expect(trimmed.slice(0, 2).map((e) => e.matchId)).toEqual(['y2', 'y1']);
+    expect(trimmed.slice(0, 2).map((e) => e.matchId)).toEqual(['y1', 'y2']); // actual moves now lead unseen replay history (owner's quiet-polish brief)
     expect(yourTurnCount(trimmed)).toBe(2);
     expect(pageTitleForLobby(2)).toBe('(2) FUTASAKU — your turn');
     expect(pageTitleForLobby(0)).toBe('FUTASAKU');
@@ -334,9 +334,18 @@ describe('joining a duel shows the SPECIFIC message the server really sends', ()
 });
 
 describe('sortLobbyEntries stable buckets', () => {
+  it('puts actual moves before unseen history, then the nearest authoritative deadline',()=>{
+    const soon=entry({matchId:'soon',turnDeadlineAt:100,lastActivityAt:1});
+    const later=entry({matchId:'later',turnDeadlineAt:200,lastActivityAt:999});
+    const unseen=entry({matchId:'unseen',turnPlayer:1,unseenTurn:true,turnDeadlineAt:50});
+    const untimed=entry({matchId:'untimed',turnDeadlineAt:null,lastActivityAt:1000});
+    const input=[later,unseen,untimed,soon];
+    expect(sortLobbyEntries(input).map(e=>e.matchId)).toEqual(['soon','later','untimed','unseen']);
+    expect(input[0]).toBe(later);
+  });
   it('keeps activity order inside a bucket', () => {
-    const a = entry({ matchId: 'a', lastActivityAt: 10, turnPlayer: 0 });
-    const b = entry({ matchId: 'b', lastActivityAt: 20, turnPlayer: 0 });
+    const a = entry({ matchId: 'a', lastActivityAt: 10, turnPlayer: 0, turnDeadlineAt: 100 });
+    const b = entry({ matchId: 'b', lastActivityAt: 20, turnPlayer: 0, turnDeadlineAt: 100 });
     expect(sortLobbyEntries([a, b]).map((e) => e.matchId)).toEqual(['b', 'a']);
   });
 });

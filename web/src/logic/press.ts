@@ -230,7 +230,7 @@ export const installPress = (options: PressOptions = {}): (() => void) => {
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (!isPressKey(e.key) || e.repeat) return;
+    if (e.isComposing || e.keyCode === 229 || !isPressKey(e.key) || e.repeat) return;
     const el = resolve(e.target);
     if (!el) return;
     clearAll();

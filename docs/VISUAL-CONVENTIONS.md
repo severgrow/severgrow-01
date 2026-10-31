@@ -2,8 +2,8 @@
 
 Current shared finish, 28 October 2026. Applies to future UI work and to the five changes in this pass.
 
-- **Controls:** use the existing native button/hardware classes. A press answers over `--ix-press`
-  (90ms), compresses by 1.5% and dims by 4%; release returns through the same easing. Keep 44px hit
+- **Controls:** use the existing native button/hardware classes. A press uses the delegated native depth
+  (`logic/press.ts`); the shared surface finish answers over `--ix-press` (90ms). Keep 44px hit
   areas, visible keyboard focus and existing disabled-state behavior. Account and chat keys share
   this response through `web/src/ui/instrument.css`.
 - **Panels:** use `enterSurface`/`exitSurface` from `web/src/ui/interface-motion.ts`. Shared open/close
@@ -82,3 +82,19 @@ Latest screenshots: [one menu and your land](screens/instrument-polish/territory
 [desktop drawer](screens/instrument-polish/territory-menu-desktop.png).
 
 Final TypeScript, futa04/futa05 production builds and asset-isolation checks passed (102/103 files). No server source, migration or Daily code changed in this pass.
+
+## Quiet interaction contract — 31 October 2026
+
+- The delegated native press (`logic/press.ts`, `data-pressed`) owns physical depth. A CSS `:active`
+  fallback must exclude `[data-pressed="true"]`; prefer omitting a local spatial fallback entirely.
+  Stacking transform scale and the native scale
+  makes apparently identical keys compress differently. Keep existing base positioning transforms.
+- A turn handoff uses the existing cockpit pulse and readout; do not restore a second screen overlay.
+- Keyboard-facing centred sheets reuse `ui/sheet-viewport.ts`; full game layout continues to use
+  `ui/app-viewport.ts`. Safe-area padding and a reduced visual viewport must be accounted for together.
+- Decorative acknowledgements belong to an explicit interaction, run once, then release their effect.
+  Use the existing shared open/press durations. Reduced motion keeps the settled selected state.
+- Navigation memory stores presentation only. Never restore membership, wallet balance, legal moves,
+  turn deadlines or any other authoritative gameplay state from it.
+- Prefer an existing status lane, an accessible control label, shape/weight or brief light feedback
+  over new captions, banners, badges or permanent instructions.

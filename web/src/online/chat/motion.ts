@@ -1,15 +1,15 @@
 import { INTERFACE_MOTION } from '../../ui/interface-motion.js';
 /** Finite compositor-only chat motion. No timers, polling or animation loops. */
 export const createChatMotion = (reduced: () => boolean) => {
-  const running = new Map<HTMLElement, Animation>();
+  const running = new Map<Element, Animation>();
   const targets = new WeakMap<HTMLElement, boolean>();
   let stopped = false;
-  const cancel = (element: HTMLElement) => {
+  const cancel = (element: Element) => {
     running.get(element)?.cancel();
     running.delete(element);
   };
   const play = (
-    element: HTMLElement,
+    element: Element,
     frames: Keyframe[],
     duration: number,
     done?: () => void,
@@ -41,6 +41,9 @@ export const createChatMotion = (reduced: () => boolean) => {
     );
   };
   return {
+    wink(element: Element) {
+      play(element, [{transform:'rotate(0deg)'},{transform:'rotate(-5deg)',offset:.4},{transform:'rotate(0deg)'}], INTERFACE_MOTION.open);
+    },
     visible(element: HTMLElement, visible: boolean) {
       if (targets.get(element) === visible) return;
       targets.set(element, visible);

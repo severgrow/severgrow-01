@@ -240,6 +240,33 @@ try {
   check('whitespace-only chat has a disabled Send control',await sender.locator('.match-chat-send').isDisabled());
   await input(sender).dispatchEvent('keydown',{key:'Escape',isComposing:true,keyCode:229,bubbles:true});
   check('IME Escape preserves the open match chat',await input(sender).isVisible());
+  await sender.evaluate(()=>document.documentElement.classList.remove('reduce-motion'));
+  const phraseKey=sender.locator('.match-chat-phrase-toggle');
+  const phraseBox=(await phraseKey.boundingBox())!;
+  await sender.mouse.move(phraseBox.x+phraseBox.width/2,phraseBox.y+phraseBox.height/2);await sender.mouse.down();await sender.waitForTimeout(180);
+  check('chat keys use one native press depth without stacked compression',await phraseKey.evaluate(e=>{const s=getComputedStyle(e);return s.transform==='none'&&Math.abs(Number(s.scale)-.97)<.002;}));
+  await sender.mouse.up();
+  check('the phrase glyph gives a finite playful nod',await phraseKey.locator('svg').evaluate(e=>e.getAnimations().some(a=>a.effect?.getTiming().iterations===1)));
+  await sender.waitForTimeout(200);
+  check('the phrase glyph rests without retained animations',await phraseKey.locator('svg').evaluate(e=>e.getAnimations().length===0));
+  await sender.keyboard.press('Escape');
+  await sender.evaluate(()=>document.documentElement.classList.add('reduce-motion'));
+  await phraseKey.dispatchEvent('keydown',{key:'Enter',isComposing:true,keyCode:229,bubbles:true});
+  check('IME confirmation does not create a visual button press',await phraseKey.getAttribute('data-pressed')===null);
+  await sender.mouse.move(phraseBox.x+phraseBox.width/2,phraseBox.y+phraseBox.height/2);await sender.mouse.down();await sender.waitForTimeout(180);
+  check('reduced motion keeps native key geometry still',await phraseKey.evaluate(e=>{const s=getComputedStyle(e);return s.transform==='none'&&(s.scale==='none'||Number(s.scale)===1);}));
+  await sender.mouse.up();
+  check('reduced motion suppresses the playful glyph nod',await phraseKey.locator('svg').evaluate(e=>e.getAnimations().length===0));
+  await sender.keyboard.press('Escape');
+  await sender.evaluate(()=>document.documentElement.classList.remove('reduce-motion'));
+  await sender.mouse.move(phraseBox.x+phraseBox.width/2,phraseBox.y+phraseBox.height/2);await sender.mouse.down();
+  await sender.mouse.move(phraseBox.x+phraseBox.width/2+18,phraseBox.y+phraseBox.height/2);await sender.waitForTimeout(180);
+  check('a cancelled drag cannot revive a legacy CSS button press',await phraseKey.evaluate(e=>{const s=getComputedStyle(e);return !e.hasAttribute('data-pressed')&&s.transform==='none'&&(s.scale==='none'||Number(s.scale)===1);}));
+  await sender.mouse.up();await sender.keyboard.press('Escape');
+  await sender.evaluate(()=>document.documentElement.classList.add('reduce-motion'));
+
+
+
   await input(sender).fill('Remember after reload');
   await sender.reload();
   await openMenuEntry(sender, 'menu-online');

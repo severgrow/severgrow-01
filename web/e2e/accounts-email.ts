@@ -84,6 +84,15 @@ try {
   mkdirSync('/tmp/account-polish-shots',{recursive:true});
   await page.screenshot({path:'/tmp/account-polish-shots/email-code-phone.png'});
   const fit=await page.locator('#acct-email').boundingBox();check('phone panel stays inside screen',fit&&fit.x>=0&&fit.y>=0&&fit.x+fit.width<=393&&fit.y+fit.height<=852);
+  await page.evaluate(()=>{
+    (window as any).__savedViewport=window.visualViewport;
+    Object.defineProperty(window,'visualViewport',{configurable:true,value:{height:340,offsetTop:80}});
+    window.dispatchEvent(new Event('resize'));
+  });
+  const keyboard=await page.locator('#acct-email').boundingBox();
+  check('email sheet fits the visible viewport above a phone keyboard',keyboard&&keyboard.y>=80&&keyboard.y+keyboard.height<=420);
+  check('the code remains a native autofill field',await page.locator('#acct-email-code').getAttribute('autocomplete')==='one-time-code');
+  await page.evaluate(()=>{Object.defineProperty(window,'visualViewport',{configurable:true,value:(window as any).__savedViewport});window.dispatchEvent(new Event('resize'));});
   await page.fill('#acct-email-code','12345678');loseExchange=true;
   await page.click('[data-acct="email-submit"]');await page.waitForSelector('#acct-email .acct-status[data-tone="bad"]');
   check('failed server exchange remains retryable',await page.inputValue('#acct-email-code')==='12345678');

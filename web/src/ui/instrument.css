@@ -9,8 +9,7 @@
 html.futasaku-product :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button) {
   transition: transform var(--ix-press) var(--ix-ease-open), filter var(--ix-press) var(--ix-ease-open);
 }
-html.futasaku-product :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) {
-  transform: scale(.985);
+html.futasaku-product :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled):not([data-pressed="true"]) {
   filter: brightness(.96);
 }
 html.futasaku-product :is(.world-chat-who,.match-chat-meta,.match-chat-status,.world-chat-status) {
@@ -24,7 +23,7 @@ html.futasaku-product #hand .card.lifted:not(:focus-visible) {
   outline: 1px solid var(--instrument-selection);
   outline-offset: 1px;
 }
-html.reduce-motion :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) { transform: none; }
+html.reduce-motion :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled):not([data-pressed="true"]) { transform: none; }
 @media(prefers-reduced-motion:reduce) {
-  html.futasaku-product :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled) { transform:none; }
+  html.futasaku-product :is(.acct-btn,.world-corner,.world-chat-send,.world-chat-mod button,.match-chat button):active:not(:disabled):not([data-pressed="true"]) { transform:none; }
 }

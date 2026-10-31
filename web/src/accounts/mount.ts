@@ -1,3 +1,4 @@
+import { mountSheetViewport } from '../ui/sheet-viewport.js';
 import { authJson } from './email-auth.js';
 import { mountEmailPanel } from './email-panel.js';
 import { enterSurface, exitSurface } from '../ui/interface-motion.js';
@@ -140,13 +141,7 @@ const sheet = (id: string, label: string) => {
   // Escape do not dismiss it; only the sheet's own action closes it.
   let locked = false;
   let trigger: HTMLElement | null = null;
-  const viewport = () => {
-    const v = window.visualViewport;
-    panel.style.top = `${(v?.offsetTop ?? 0) + (v?.height ?? innerHeight) / 2}px`;
-    panel.style.maxHeight = `${Math.max(100, (v?.height ?? innerHeight) - 32)}px`;
-  };
-  window.visualViewport?.addEventListener('resize', viewport);
-  window.visualViewport?.addEventListener('scroll', viewport);
+  const viewport = mountSheetViewport(panel);
   const close = () => {
     if (panel.hidden) return;
     locked = false;
@@ -172,10 +167,10 @@ const sheet = (id: string, label: string) => {
     panel,
     open: (then?: () => void, options: { locked?: boolean } = {}) => {
       trigger = document.activeElement as HTMLElement | null;
-      viewport();
       onClose = then ?? null;
       locked = options.locked === true;
       scrim.hidden = panel.hidden = false;
+      viewport();
       enterSurface(panel);
       (panel.querySelector('button') as HTMLButtonElement | null)?.focus({ preventScroll: true });
     },

@@ -618,7 +618,7 @@ export const ONLINE_CSS = `
 /* Your own territory: the same colour, one step brighter in the gradient (world-view.ts), plus a
    quietly lifted edge. No new colour — the owner asked to spot his own at a glance, not to be told
    by a different hue. */
-.world-hex.mine { stroke: color-mix(in srgb, var(--territory) 62%, #e8ddc5); }
+.world-hex.mine { stroke-width: .8; stroke: color-mix(in srgb, var(--territory) 62%, #e8ddc5); }
 
 .world-hex.same-owner { stroke-width: 1.1; }
 /* THE SELECTION, drawn ONCE above every edge (the .world-accent group in world-view.ts), so no
@@ -772,7 +772,6 @@ html.reduce-motion .world-selection { animation: none; }
   transition: border-color 160ms ease, background-color 160ms ease, scale 90ms ease;
 }
 /* The chip is a key like any other: it answers a press the way the rest of the game does. */
-.world-challenge-chip:active { scale: .975; }
 .world-challenge-chip[data-status='pending'] { border-color: #d5c89b59; }
 .world-challenge-chip:focus { outline: none; }
 .world-challenge-chip:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
@@ -1043,6 +1042,11 @@ html.reduce-motion .world-selection { animation: none; }
 .world-colour-swatch:disabled { cursor: default; opacity: .5; }
 .world-colour-swatch:disabled:active { background: #e8ddc508; }
 .world-colour-swatch:disabled.current { opacity: .86; }
+/* One chip acknowledgement when explicitly picked, then still. No new UI or idle loop. */
+.world-colour-swatch[data-picking='true'] .world-colour-chip { animation: world-colour-pick var(--ix-open,150ms) var(--ix-ease-open); }
+@keyframes world-colour-pick { 0% {transform:scale(.97);} 55% {transform:scale(1.035);} 100% {transform:scale(1);} }
+html.reduce-motion .world-colour-chip { animation:none!important; }
+@media(prefers-reduced-motion:reduce) { .world-colour-chip {animation:none!important;} }
 .world-colour-chip {
   display: block; height: 32px; border-radius: 7px;
   background: linear-gradient(135deg, var(--swatch-light), var(--swatch) 55%, var(--swatch-dark));
@@ -1135,9 +1139,8 @@ html.reduce-motion .world-achievement.just-claimed { animation: none; }
    press layer (.press-shade, web/src/logic/press.ts): made relative it became a second grid row and
    pushed every icon ~5px up after the first press. The glyph and the lamp place themselves. */
 .world-key > svg { position: relative; z-index: 1; }
-.world-grid > .world-corner:active { transform: translateY(1px); }
 /* a row key presses with translate and scale, leaving transform to its slide */
-.world-key:active { translate: 0 1px; scale: .985; filter: brightness(.96); }
+.world-key:active { filter: brightness(.96); }
 .world-grid > .world-corner:is(:focus-visible, .on, [aria-expanded='true']),
 .world-key:focus-visible {
   color: #fff1cf; box-shadow: 0 0 9px var(--light-bloom, rgba(196, 150, 88, .22)), 0 2px 8px #0007;
@@ -1274,7 +1277,6 @@ html.reduce-motion .world-keys .world-key { will-change: auto; }
   color: #161a16; background: linear-gradient(#efe4c8, #ddd1b2); box-shadow: inset 0 1px 0 #fff8, inset 0 -2px 0 #0000002e;
   font: inherit; font-size: .62rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
 }
-.world-chat-send:active { transform: translateY(1px); }
 .world-chat-status { margin: 0; min-height: 0; font-size: .64rem; text-align: center; color: #e8ddc5a6; }
 .world-chat-status:empty { display: none; }
 @media (prefers-reduced-motion: reduce) { .world-chat { animation: none; } }

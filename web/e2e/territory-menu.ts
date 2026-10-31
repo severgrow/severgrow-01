@@ -132,6 +132,10 @@ try {
   const before = await count(page, '.world-hex');
   check('the map opens at the v2 coast plus the land around the tiles', before >= WORLD_CELL_IDS.size, `${before} cells`);
 
+  check('own tiles have a distinct static edge without relying on hue',await page.evaluate(()=>{
+    const mine=document.querySelector('.world-hex.mine')!,other=document.querySelector('.world-hex.held')!;
+    return parseFloat(getComputedStyle(mine).strokeWidth)>parseFloat(getComputedStyle(other).strokeWidth)&&(mine.getAttribute('aria-label')?.includes('YOURS')??false);
+  }));
   // ---- at rest: MENU is the only key -------------------------------------------------------------
   check('Fit map and My land are gone', (await count(page, '#online-world-fit, #online-world-mine, .world-menu-tools')) === 0);
   check('at rest MENU is the only key visible on the map', (await visible(page, '.world-grid button')) === 1 && await page.isVisible('#online-world-menu'));
@@ -141,7 +145,10 @@ try {
   await page.screenshot({ path: `${SHOTS}/territory-rest-390.png` });
 
   // ---- MENU slides out five icon keys -------------------------------------------------------------
-  await page.click('#online-world-menu');
+  const menuKey=page.locator('#online-world-menu');const menuRect=(await menuKey.boundingBox())!;
+  await page.mouse.move(menuRect.x+menuRect.width/2,menuRect.y+menuRect.height/2);await page.mouse.down();await page.waitForTimeout(180);
+  check('Territory hardware uses one native press depth',await menuKey.evaluate(e=>{const s=getComputedStyle(e);return s.transform==='none'&&Math.abs(Number(s.scale)-Number((e as HTMLElement).style.getPropertyValue('--press-depth')))<.002;}));
+  await page.mouse.up();
   await page.waitForTimeout(320);
   check('MENU slides out its row', await keysOut(page) && (await page.getAttribute('#online-world-menu', 'aria-expanded')) === 'true');
   const row = await page.evaluate(() => {
@@ -300,6 +307,11 @@ try {
   await page.click('#online-world-menu');
   await page.waitForTimeout(250);
 
+  // Return through normal navigation to clear the completed grow/sell notice before comparing
+  // identical viewports. Resizing the reading area legitimately changes the viewBox height.
+  await page.click('#online-world-back');await page.click('#menu-world');
+  await page.waitForSelector('.world-map-svg');await page.waitForTimeout(350);
+
   // ---- gestures ---------------------------------------------------------------------------------
   const rect = (await page.locator('.world-map-svg').boundingBox())!;
   const x = rect.x + rect.width * .5, y = rect.y + rect.height * .5;
@@ -317,6 +329,33 @@ try {
   check('pinch release does not select a tile', await page.isHidden('#online-world-selection'));
   await page.waitForTimeout(200);
   check('the soft focus returns once the map rests', !(await page.evaluate(() => document.getElementById('online-world-grid')!.classList.contains('moving'))));
+
+  const cameraBefore=await page.getAttribute('.world-map-svg','viewBox');
+  await page.click('#online-world-back');await page.click('#menu-world');
+  await page.waitForSelector('.world-map-svg');await page.waitForTimeout(350);
+  const sameCamera=async()=>page.locator('.world-map-svg').evaluate((svg,expected)=>svg.getAttribute('viewBox')!.split(' ').every((v,i)=>Math.abs(Number(v)-Number(expected!.split(' ')[i]))<.01),cameraBefore);
+  check('returning to Territory preserves the deliberate camera',await sameCamera(),JSON.stringify({before:cameraBefore,after:await page.getAttribute('.world-map-svg','viewBox'),stored:await page.evaluate(()=>localStorage.getItem('futasaku.world.camera.v1'))}));
+  await page.reload();await page.waitForFunction(()=>(window as any).__severgrow?.ready?.()===true);
+  await page.click('#menu-world');await page.waitForSelector('.world-map-svg');await page.waitForTimeout(350);
+  check('reloading also restores the Territory camera',await sameCamera(),JSON.stringify({before:cameraBefore,after:await page.getAttribute('.world-map-svg','viewBox')}));
+  await page.click('#online-world-menu');await page.click('#world-key-colour');
+  await page.waitForSelector('.world-colour-swatch');
+  await page.evaluate(()=>{
+    (window as any).__chipNods=[];
+    const observer=new MutationObserver(()=>{for(const node of document.querySelectorAll('.world-colour-chip'))for(const a of node.getAnimations())(window as any).__chipNods.push(a.effect?.getTiming().iterations);});
+    observer.observe(document.getElementById('online-world-panel')!,{childList:true,subtree:true});
+    (window as any).__chipObserver=observer;
+  });
+  await page.locator('.world-colour-swatch:not(.current)').first().click();
+  await page.waitForFunction(()=>(window as any).__chipNods.length>0);
+  check('a picked colour chip has one finite playful acknowledgement',await page.evaluate(()=>(window as any).__chipNods.every((n:number)=>n===1)));
+  await page.waitForTimeout(250);
+  check('colour chips return to rest with no retained animation',await page.locator('.world-colour-chip').evaluateAll(nodes=>nodes.every(n=>n.getAnimations().length===0)));
+  await page.evaluate(()=>{(window as any).__chipObserver.disconnect();document.documentElement.classList.add('reduce-motion');});
+  await page.locator('.world-colour-swatch:not(.current)').first().click();
+  check('reduced motion keeps colour selection still',await page.locator('.world-colour-chip').evaluateAll(nodes=>nodes.every(n=>n.getAnimations().length===0)));
+  await page.evaluate(()=>document.documentElement.classList.remove('reduce-motion'));
+  await page.click('#online-world-menu');await page.waitForTimeout(250);
 
   // ---- small, landscape and desktop ---------------------------------------------------------------
   await page.setViewportSize({ width: 320, height: 568 });

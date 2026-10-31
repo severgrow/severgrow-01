@@ -327,6 +327,20 @@ describe('draft + session storage', () => {
 });
 
 describe('sync engine (poll + ping)', () => {
+  it('distinguishes offline from reconnecting and quietly clears the notice after recovery',async()=>{
+    const payload=samplePayload({revision:1});
+    const {fetchImpl}=makeFetch({
+      'GET /v1/matches/m1/view?since=0':{status:200,body:{ok:true,player:payload,serverNow:1000}},
+      'GET /v1/matches/m1/view?since=1':{status:200,body:{ok:true,player:payload,serverNow:1001}},
+    });
+    const states:Array<[string,string|null]>=[];
+    const sync=createSyncEngine({client:new DuelClient({baseUrl:'https://api.example',fetch:fetchImpl,storage:memoryStore()}),token:'tok',matchId:'m1',channel:createFakeChannel().channel,
+      setTimer:()=>1,clearTimer:()=>undefined,onConnection:(state,notice)=>{states.push([state,notice]);}});
+    await sync.start();sync.setOnline(false);expect(states.at(-1)).toEqual(['offline','Offline']);
+    sync.setOnline(true);expect(states.at(-1)).toEqual(['reconnecting','Reconnecting']);
+    await sync.refresh();expect(states.at(-1)).toEqual(['online',null]);sync.stop();
+  });
+
   it('polls fast when visible, slow when hidden; ping and visibility force a refresh', async () => {
     const timers: { fn: () => void; ms: number }[] = [];
     let visible = true;

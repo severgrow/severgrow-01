@@ -79,6 +79,16 @@ export const sortLobbyEntries = (entries: readonly MatchListEntry[]): MatchListE
   return [...entries].sort((a, b) => {
     const d = rank(lobbyBucket(a)) - rank(lobbyBucket(b));
     if (d !== 0) return d;
+    if (lobbyBucket(a) === 'your_turn') {
+      const actionable = (e: MatchListEntry) => e.status === 'active' && e.turnPlayer === e.mySeat;
+      const actual = Number(actionable(b)) - Number(actionable(a));
+      if (actual) return actual;
+      if (actionable(a) && actionable(b)) {
+        const deadline = (e: MatchListEntry) => Number.isFinite(e.turnDeadlineAt) ? e.turnDeadlineAt! : Infinity;
+        const first = deadline(a), second = deadline(b);
+        if (first !== second) return first < second ? -1 : 1;
+      }
+    }
     return b.lastActivityAt - a.lastActivityAt;
   });
 };

@@ -226,6 +226,7 @@ export const mountMatchChat = (o: {
   phraseToggle.innerHTML =
     '<svg viewBox="0 0 24 24" aria-hidden="true" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5h10a3.5 3.5 0 0 1 3.5 3.5v6a3.5 3.5 0 0 1-3.5 3.5h-5.5L6 21v-3.8A3.5 3.5 0 0 1 3.5 14V8A3.5 3.5 0 0 1 7 4.5Z"/><g fill="currentColor" stroke="none"><circle cx="8" cy="11" r=".9"/><circle cx="12" cy="11" r=".9"/><circle cx="16" cy="11" r=".9"/></g></svg>';
   function setPhrases(open: boolean) {
+    if (open && !phrasesOpen) motion.wink(phraseToggle.querySelector('svg')!);
     phrasesOpen = open;
     phrases.inert = !open;
     motion.visible(phrases, open);

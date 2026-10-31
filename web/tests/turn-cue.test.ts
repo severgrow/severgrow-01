@@ -1,5 +1,5 @@
-// Turn hand-off (owner, 2026-10-24): when the turn comes back to me, a soft light runs round the
-// board's edge and the display says YOUR TURN — once per hand-off, never in lessons or the
+// Quiet-polish brief (owner, 2026-10-31): the existing YOUR TURN word gets one cockpit pulse,
+// replacing the former screen-wide edge effect — once per hand-off, never in lessons or the
 // tutorial, and with reduced motion the display word alone. The display also names a held move
 // (GROW 1 / BLOOM 3 / BOMB) instead of CANCEL.
 import { readFileSync } from 'node:fs';
@@ -21,15 +21,11 @@ describe('the turn hand-off cue', () => {
   });
   it('stays out of lessons and the tutorial, and reduced motion keeps only the display word', () => {
     expect(fn).toMatch(/lessonActive\(\) \|\| coach\.tutorial\) return;/);
-    expect(fn.indexOf("message: 'YOUR TURN'")).toBeLessThan(fn.indexOf('reduce-motion'));
-    expect(css).toMatch(/html\.reduce-motion #turn-cue \{ display: none; \}/);
-    expect(css).toMatch(/prefers-reduced-motion: reduce\) \{ html\.futasaku-product #turn-cue \{ display: none; \} \}/);
+    expect(fn).toContain("message: 'YOUR TURN'");
+    expect(fn).toContain('pulse: true');
+    expect(fn).not.toContain("createElement");
   });
-  it('is light: opacity only, pointer-transparent', () => {
-    const block = css.slice(css.indexOf('html.futasaku-product #turn-cue {'), css.indexOf('html.reduce-motion #turn-cue'));
-    expect(block).toMatch(/pointer-events: none/);
-    expect(block.match(/@keyframes turn-cue \{[\s\S]*?\n\}/)![0]).not.toMatch(/transform|filter|box-shadow/);
-  });
+  it('uses the cockpit pulse without a second screen overlay',()=>{expect(fn).not.toContain("id = 'turn-cue'");expect(css).not.toContain('#turn-cue');});
 });
 
 describe('the display names the held move', () => {

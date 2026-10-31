@@ -4743,8 +4743,8 @@ function renderRevealTile(): void {
 }
 
 /**
- * Turn hand-off (owner, 2026-10-24): the moment the turn comes back to me, a soft light runs round
- * the board's edge and the display says YOUR TURN. Not in lessons or the tutorial (they say it in
+ * Turn hand-off (owner, 2026-10-24): the turn returns with one restrained cockpit pulse
+ * and the existing YOUR TURN display. No screen-wide effect or extra label. Not in lessons or the tutorial (they say it in
  * words); with reduced motion the display word alone carries it.
  */
 let turnWasMine: boolean | null = null;
@@ -4753,18 +4753,8 @@ function cueTurnHandOff(v: View): void {
   const was = turnWasMine;
   turnWasMine = v.turnPlayer === HUMAN && !v.result;
   if (was !== false || !turnWasMine || !IS_FUTA04 || lessonActive() || coach.tutorial) return;
-  smartCockpit?.event({ message: 'YOUR TURN', priority: 20, duration: 1300, mode: 'green' });
-  if (document.documentElement.classList.contains('reduce-motion') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  let cue = document.getElementById('turn-cue');
-  if (!cue) {
-    cue = document.createElement('div');
-    cue.id = 'turn-cue';
-    cue.setAttribute('aria-hidden', 'true');
-    $('game').append(cue);
-  }
-  cue.classList.remove('on');
-  void cue.offsetWidth; // restart the sweep
-  cue.classList.add('on');
+  smartCockpit?.event({ message: 'YOUR TURN', priority: 20, duration: 1300, mode: 'green', pulse: true });
+
 }
 
 /** A Bloom's cards all lift as one: the height of a middle card. */
