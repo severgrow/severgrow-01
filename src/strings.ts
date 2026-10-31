@@ -1203,12 +1203,12 @@ export const FEEDBACK = Object.freeze({
   close: 'Close',
   betaVersion: '0.7',
   /**
-   * The beta line on the main menu, between the wordmark and the buttons: one calm sentence with the
-   * version. Owner (2026-10-27): no date or time stamp on the main menu.
+   * The beta line on the main menu, between the wordmark and the buttons: ONE quiet instrument
+   * label — the version, then the way to say something (owner, 2026-10-31: minimal; the four-line
+   * sentence was the heaviest thing on the menu). Owner (2026-10-27): no date or time stamp.
    */
-  betaNote: (version: string) =>
-    `This is a beta version (${version}) of an evolving game. If you spot any problems or have suggestions for improvement,`,
-  betaLink: 'let us know here.',
+  betaNote: (version: string) => `Beta ${version} ·`,
+  betaLink: 'Feedback',
 });
 
 /** The one-page tester guide (futasaku.com/#beta). Each section: a heading and a few lines. */

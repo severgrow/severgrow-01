@@ -54,8 +54,9 @@ describe('the beta line is a quiet version line between the wordmark and the ent
     // silent drift (0.7 -> 0.8 half-deployed) must fail here rather than ship. Bump this in the same
     // commit that bumps FEEDBACK.betaVersion.
     expect(FEEDBACK.betaVersion).toBe('0.7');
-    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('(0.7)');
-    expect(FEEDBACK.betaLink).toBe('let us know here.');
+    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('0.7');
+    // Owner (2026-10-31): one quiet line, not a sentence — "BETA 0.7 · FEEDBACK".
+    expect(FEEDBACK.betaLink).toBe('Feedback');
     expect(lineSource).toContain('FEEDBACK.betaLink');
     // No second copy of the sentence in the markup or the modules.
     expect(html).not.toContain('This is a beta version');
@@ -67,9 +68,7 @@ describe('the beta line is a quiet version line between the wordmark and the ent
   // from 2026-10-22; the owner took it off.) The build still records when it was made — deploy.ts
   // and vite's __DEPLOYED_AT__ are untouched — it is just no longer shown on the menu.
   it('shows no date or time on the main menu', () => {
-    expect(FEEDBACK.betaNote('0.7')).toBe(
-      'This is a beta version (0.7) of an evolving game. If you spot any problems or have suggestions for improvement,',
-    );
+    expect(FEEDBACK.betaNote('0.7')).toBe('Beta 0.7 ·');
     expect(FEEDBACK.betaNote('0.7')).not.toMatch(/last update|\d{1,2}:\d{2}|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/);
     expect(lineSource).not.toMatch(/deployLabel|DEPLOYED_AT/);
     // the deploy stamp itself still works for anything that wants it later

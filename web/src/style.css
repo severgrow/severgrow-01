@@ -319,6 +319,9 @@ button {
    scrollbar must never be the answer; the column below is what makes the content fit. */
 .menu {
   display: grid;
+  /* One full-width track, so the column's `min(420px, 100% - 32px)` is measured against the screen,
+     never against whatever its widest child happens to be. */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   overflow: hidden;
 }

@@ -154,14 +154,16 @@ ${glassBaseCss('.fb-glass')}
 .fb-glass .fb-status { min-height:1.4em; color:#c9e4a8; }
 .fb-glass .fb-status[data-tone='bad'] { color:#e0735c; }
 .large-text .fb-glass p, .large-text .fb-glass li { font-size:16px; }
-#menu-beta { text-wrap: pretty; max-width: 44ch; margin: 0; color: var(--fu-cream-62); }
-@media (max-height: 700px) { #menu-beta { font-size: 0.78rem; line-height: 1.4; } }
+#menu-beta { text-wrap: pretty; max-width: 44ch; margin: 0; color: var(--fu-cream-62);
+  /* one instrument label: the menu's small tracked uppercase, like the game's other captions */
+  font-family: var(--font-ui); font-size: 0.68rem; line-height: 1.35; letter-spacing: 0.16em; text-transform: uppercase; }
 /* A real 44px tap target that costs almost no column height: the box is 44px tall and the negative
    block margins pull it back into the text line, so the version line stays ONE quiet line while the
    link is comfortably tappable (owner, 2026-10-20). */
 #menu-beta button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
   padding: 0 4px; margin: -13px 0; border: 0; background: none; color: inherit;
-  font: inherit; letter-spacing: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  font: inherit; letter-spacing: inherit; text-transform: inherit; text-decoration: underline; text-underline-offset: 4px;
+  text-decoration-thickness: 1px; cursor: pointer; }
 #menu-beta button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 4px; }
 `;
 

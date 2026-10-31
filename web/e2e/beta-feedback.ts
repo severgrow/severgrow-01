@@ -91,7 +91,7 @@ try {
     check(`${label}: Tab goes from the beta link straight to the first entry (${nextFocus || 'nothing'})`, nextFocus === seen[0]);
     await shot(page, `menu-${label}`);
     await page.locator('#menu-beta button').click();
-    check(`${label}: "let us know here" opens Report a problem`, await waitFor(() => page.locator('#fb-report').isVisible()));
+    check(`${label}: the beta line's Feedback link opens Report a problem`, await waitFor(() => page.locator('#fb-report').isVisible()));
     await page.locator('#fb-report button', { hasText: 'Cancel' }).click();
     await page.goto(`${origin}/?seed=4242`);
     await page.waitForSelector('#game:not([hidden])');

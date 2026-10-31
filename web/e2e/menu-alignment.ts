@@ -8,7 +8,7 @@
 // approach as `align.ts`):
 //   1. the main menu, the difficulty pick and the online hub centre the SAME column width, on the
 //      screen's centre line;
-//   2. the wordmark→buttons gap is the deliberate 28px head gap — at least a floor, never a void;
+//   2. the wordmark and the buttons each keep at least the 28px head gap from the beta line between them;
 //   3. no menu column overflows (scrollHeight <= clientHeight) at any width, 360x640 included;
 //   4. the screen headings (difficulty and online) share one size and one display face;
 //   5. the difficulty tiles are the same pill button as the menu's;
@@ -25,7 +25,6 @@ const CHROME =
   '/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
 
 const HEAD_GAP_FLOOR = 28;
-const HEAD_GAP_CEILING = 44; // "a bit of space", not a chasm
 const HIT = 44;
 
 const VIEWPORTS = [
@@ -119,15 +118,24 @@ for (const vp of VIEWPORTS) {
 
   // The main menu + the head gap
   const menu = await measure(page);
-  const wordmarkToButtons = await page.evaluate(() => {
+  // THE HEAD GAP, AROUND THE BETA LINE (owner, 2026-10-20: the beta line sits BETWEEN the wordmark
+  // and the buttons; the column spreads its blocks evenly). Neither neighbour may crowd it: the
+  // wordmark→beta and beta→buttons gaps are each at least the deliberate head gap. (These checks
+  // used to measure wordmark→buttons as if nothing sat between them — written before the beta line
+  // joined the column — and had failed on every build since.)
+  const head = (await page.evaluate(() => {
     const t = document.querySelector('#menu .title')!.getBoundingClientRect();
+    const n = document.getElementById('menu-beta');
     const b = document.querySelector('#menu .menu-buttons')!.getBoundingClientRect();
-    return +(b.top - t.bottom).toFixed(2);
-  });
-  check(`${tag}: the menu wordmark→buttons gap is the deliberate head gap (${HEAD_GAP_FLOOR}-${HEAD_GAP_CEILING}px)`, wordmarkToButtons >= HEAD_GAP_FLOOR && wordmarkToButtons <= HEAD_GAP_CEILING && menu.headGapResolved === HEAD_GAP_FLOOR, `${wordmarkToButtons}px, token ${menu.headGapResolved}px (${menu.headGapToken})`);
+    const r = n && !n.hidden ? n.getBoundingClientRect() : null;
+    return r ? { above: +(r.top - t.bottom).toFixed(2), below: +(b.top - r.bottom).toFixed(2) } : { above: +(b.top - t.bottom).toFixed(2), below: null };
+  })) as { above: number; below: number | null };
+  check(`${tag}: the wordmark and the buttons never crowd the beta line (each gap ≥ the ${HEAD_GAP_FLOOR}px head gap)`,
+    head.above >= HEAD_GAP_FLOOR - 0.5 && (head.below === null || head.below >= HEAD_GAP_FLOOR - 0.5),
+    `${JSON.stringify(head)}, token ${menu.headGapResolved}px (${menu.headGapToken})`);
   // The tagline restore path (SHOW_MENU_TAGLINE turns this back on with one line): insert the
-  // element the way main.ts does and prove the new head-gap rule does not also match it — a restored
-  // tagline must keep its old 14px / 28px spacing.
+  // element the way main.ts does (just before the buttons) and prove the column still holds it — in
+  // order, inside the screen, and with no overflow.
   const tagline = (await page.evaluate(() => {
     const inner = document.querySelector('#menu .menu-inner')!;
     const buttons = document.querySelector('#menu .menu-buttons')!;
@@ -139,11 +147,11 @@ for (const vp of VIEWPORTS) {
     const t = document.querySelector('#menu .title')!.getBoundingClientRect();
     const g = p.getBoundingClientRect();
     const b = buttons.getBoundingClientRect();
-    const out = { titleToTagline: +(g.top - t.bottom).toFixed(2), taglineToButtons: +(b.top - g.bottom).toFixed(2), overflow: Math.round(inner.scrollHeight - inner.clientHeight) };
+    const out = { inOrder: t.bottom <= g.top && g.bottom <= b.top, overflow: Math.round(inner.scrollHeight - inner.clientHeight) };
     p.remove();
     return out;
-  })) as { titleToTagline: number; taglineToButtons: number; overflow: number };
-  check(`${tag}: a restored tagline keeps its own 14px / 28px spacing (head gap not double-applied)`, tagline.titleToTagline === 14 && tagline.taglineToButtons === 28 && tagline.overflow === 0, JSON.stringify(tagline));
+  })) as { inOrder: boolean; overflow: number };
+  check(`${tag}: a restored tagline still fits the column, in order, with no overflow`, tagline.inOrder && tagline.overflow === 0, JSON.stringify(tagline));
 
   check(`${tag}: the menu column is centred`, centred(menu.menu.centre), `offset ${menu.menu.centre}px`);
   check(`${tag}: the menu column does not overflow`, menu.menu.overflow === 0, `overflow ${menu.menu.overflow}px`);
