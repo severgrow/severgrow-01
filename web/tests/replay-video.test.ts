@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { Action } from '../../src/engine/index.js';
 import { CURRENT_RULES_VERSION, rulesConfig } from '../../src/engine/versions.js';
 import { buildReplay } from '../src/replay/timeline.js';
+import { FILM_GRAIN_OPACITY, FILM_GRAIN_URL } from '../src/player/atmosphere.js';
 import type { ReplayInput } from '../src/replay/timeline.js';
 import { posterFor, posterLayout } from '../src/replay/poster.js';
 import { videoFrameData, videoLayoutAt, videoPlan, videoTurn } from '../src/replay/frames.js';
@@ -37,6 +38,11 @@ const input = (over: Partial<ReplayInput> = {}): ReplayInput => ({
 });
 
 describe('the replay video', () => {
+  it('paints the game\'s own film grain: the same tile at the same strength', () => {
+    expect(FILM_GRAIN_OPACITY).toBe(0.085);
+    expect(FILM_GRAIN_URL).toMatch(/^data:image\/svg\+xml,.*feTurbulence/);
+  });
+
   it('is the replay, to the millisecond: every beat, then the end hold', () => {
     const model = buildReplay(input());
     const plan = videoPlan(model);
