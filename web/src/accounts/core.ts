@@ -23,7 +23,7 @@ export const PENDING_MAX_AGE_MS = 15 * 60 * 1000;
 export type ReturnTo = 'online' | 'settings' | 'menu';
 export type Pending = { verifier: string; returnTo: ReturnTo; at: number };
 /** What this device remembers about the sign-in, for Settings. The email never goes to our server. */
-export type AccountRecord = { provider: 'google'; email: string | null; playerId: string };
+export type AccountRecord = { provider: 'google' | 'email'; email: string | null; playerId: string };
 export type Flash = { kind: 'signed-in' | 'failed'; text: string; returnTo: ReturnTo };
 
 export const base64Url = (bytes: Uint8Array): string => {
@@ -108,8 +108,8 @@ export const takePending = (kv: KeyValue | null, now: number): Pending | null =>
 
 export const readAccount = (kv: KeyValue | null): AccountRecord | null => {
   const a = readJson<Partial<AccountRecord>>(kv, ACCOUNT_KEY);
-  if (!a || a.provider !== 'google' || typeof a.playerId !== 'string') return null;
-  return { provider: 'google', email: typeof a.email === 'string' ? a.email : null, playerId: a.playerId };
+  if (!a || (a.provider !== 'google' && a.provider !== 'email') || typeof a.playerId !== 'string') return null;
+  return { provider: a.provider, email: typeof a.email === 'string' ? a.email : null, playerId: a.playerId };
 };
 export const writeAccount = (kv: KeyValue | null, a: AccountRecord): boolean => writeJson(kv, ACCOUNT_KEY, a);
 export const clearAccount = (kv: KeyValue | null) => drop(kv, ACCOUNT_KEY);

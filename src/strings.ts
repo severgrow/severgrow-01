@@ -1321,23 +1321,40 @@ export const SETTINGS = Object.freeze({
 /** Accounts: "Continue with Google" (web/src/accounts/, docs/ACCOUNTS.md). */
 export const ACCOUNT = Object.freeze({
   continueGoogle: 'Continue with Google',
+  continueEmail: 'Continue with email',
+  emailTitle: 'Your FUTASAKU account',
+  emailBody: 'New here or returning? Enter your email. We’ll send a one-time code. No password needed.',
+  emailLabel: 'Email',
+  emailCodeLabel: 'One-time code',
+  emailSend: 'Send code',
+  emailVerify: 'Sign in',
+  emailSent: (email: string) => `Enter the code sent to ${email}. Check spam too.`,
+  emailInvalid: 'Enter a valid email address.',
+  emailCodeInvalid: 'Enter the code from your email.',
+  emailRetry: 'Sign-in could not finish. Tap Sign in to retry.',
+  emailCodeFailed: 'That code could not be verified. Try again or request a new one.',
+  emailSendFailed: 'Could not send a code. Please try again.',
+  emailLimited: 'Too many tries. Wait a little before trying again.',
+  emailResend: 'Resend code',
+  emailChange: 'Use another email',
+  emailClose: 'Close',
   playAsGuest: 'Play as guest',
   welcomeTitle: 'Keep your games',
-  welcomeBody: 'Sign in with Google to keep your online matches safe and pick them up on any phone or computer.',
+  welcomeBody: 'Sign in to keep your online matches safe and pick them up on any phone or computer.',
   welcomeSmall: 'Games against the computer never need an account. You can sign in later from Settings.',
   privacy: 'Privacy',
   hubGuest: 'Playing as a guest: your matches live only on this device.',
   settingsTitle: 'Account',
   youAre: (name: string) => `You are ${name}`,
-  signedIn: (email: string | null) => (email ? `Signed in with Google · ${email}` : 'Signed in with Google'),
-  guestNote: 'Guest on this device. Sign in with Google to keep your matches on every device.',
+  signedIn: (email: string | null, provider: 'google' | 'email' = 'google') => email ? `Signed in${provider === 'google' ? ' with Google' : ''} · ${email}` : 'Signed in',
+  guestNote: 'Guest on this device. Sign in to keep your matches on every device.',
   signOut: 'Sign out',
   signOutTitle: 'Sign out on this device?',
-  signOutBody: 'Your matches stay in your account. Sign in with Google again to get them back.',
+  signOutBody: 'Your matches stay in your account. Sign in again to get them back.',
   deleteAccount: 'Delete my account',
   deleteTitle: 'Delete your account?',
   deleteLines: Object.freeze([
-    'Your Google sign-in and your email address are deleted from FUTASAKU.',
+    'Your sign-in and your email address are deleted from FUTASAKU.',
     'Every other phone or computer signed in to this account is signed out.',
     'This device keeps playing as a guest. Finished matches stay in your opponents’ history under your nature name.',
   ]),
@@ -1377,7 +1394,7 @@ export const PROFILE = Object.freeze({
   open: (name: string): string => `${name}. Your profile`,
   name: 'Name',
   signIn: 'Sign-in',
-  signedIn: 'Signed in with Google',
+  signedIn: 'Signed in',
   guest: 'Guest on this device',
   /** The Seeds line's label is the ECONOMY's word, and it lives with the wallet's own wording in
    *  web/src/online/seed-icon.ts (`SEEDS_WORD`): this file must stay free of that word
@@ -1408,7 +1425,7 @@ export const PROFILE = Object.freeze({
  */
 export const PRIVACY = Object.freeze({
   title: 'Privacy',
-  updated: 'Last updated 15 October 2026',
+  updated: 'Last updated 31 October 2026',
   intro:
     'FUTASAKU is a small independent game. We collect as little as we can, we never sell data, and there are no ads or tracking.',
   sections: Object.freeze([
@@ -1427,9 +1444,10 @@ export const PRIVACY = Object.freeze({
       ]),
     }),
     Object.freeze({
-      heading: 'Signing in with Google',
+      heading: 'Signing in',
       lines: Object.freeze([
-        'Sign-in runs through Supabase Auth. It receives from Google your email address, your name, your profile picture link and your Google account id.',
+        'Email sign-in uses a one-time code sent by Supabase Auth. We do not store passwords. Google sign-in remains optional.',
+        'For Google sign-in, Supabase Auth receives from Google your email address, your name, your profile picture link and your Google account id.',
         'We use them only to recognise you when you sign in again. Our game database keeps just a link between your sign-in and your player. Your email is shown only to you, in Settings.',
         'We never see your Google password, and we never post anything or read anything else from your Google account.',
       ]),
@@ -1453,7 +1471,7 @@ export const PRIVACY = Object.freeze({
     Object.freeze({
       heading: 'Deleting your data',
       lines: Object.freeze([
-        'Settings → Delete my account removes your Google sign-in and your email from FUTASAKU at once, and signs out your other devices.',
+        'Settings → Delete my account removes your sign-in and your email from FUTASAKU at once, and signs out your other devices.',
         'Finished matches stay in your opponents’ history under your generated name, which is not linked to you any more.',
         'To have everything removed, matches included, or to ask what we hold about you, use Report a problem and say so, or email info@futasaku.com.',
         'You can also remove FUTASAKU from your Google account at myaccount.google.com/permissions.',

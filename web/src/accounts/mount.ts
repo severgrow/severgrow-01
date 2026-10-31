@@ -1,5 +1,7 @@
+import { authJson } from './email-auth.js';
+import { mountEmailPanel } from './email-panel.js';
 import { enterSurface, exitSurface } from '../ui/interface-motion.js';
-// Accounts — the DOM side, mounted once from main.ts (docs/ACCOUNTS.md). Adds "Continue with Google"
+// Accounts — mounted once from main.ts (docs/ACCOUNTS.md and docs/EMAIL-ACCOUNTS.md). Email codes and Google
 // where it helps: a one-time welcome before the first online visit, a line in the online hub for
 // guests, and an Account block in Settings (sign out, delete my account). Offline play never sees
 // any of it. Nothing shows until the Google provider is switched on in Supabase, so this is safe to
@@ -15,7 +17,7 @@ import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
 import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
 import { glassBaseCss } from '../player/glass-surface.js';
 import { installProfileUI } from './profile.js';
-import { GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
+import { EMAIL_ON_KEY, GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
 import type { ProfileFacts } from './profile.js';
 import { PLAY_KEY, parsePlay, playRows } from '../logic/play-record.js';
 import { STATS_KEY, parseStats } from '../logic/stats.js';
@@ -66,6 +68,11 @@ ${glassBaseCss('.acct-glass')}
 .acct-glass p, .acct-glass li { margin:0; color:#e2d4b4; line-height:1.45; }
 .acct-glass ul { margin:0; padding-left:18px; display:grid; gap:6px; }
 .acct-small { font-size:12px; color:#b7a98a !important; }
+.acct-email-form { display:flex; flex-direction:column; gap:12px; }
+.acct-email-form input { min-height:48px; width:100%; border:1px solid rgba(214,204,177,.28); border-radius:8px; padding:10px 12px; background:rgba(255,255,255,.04); color:#f0e9dc; font:inherit; font-size:max(16px,1rem); }
+.acct-email-form input:focus-visible { outline:2px solid #f0e9dc; outline-offset:2px; }
+.acct-email-form .acct-actions { justify-content:space-between; gap:8px; }
+.acct-email-form label { color:var(--instrument-muted); }
 .acct-actions { display:flex; flex-direction:column; gap:8px; }
 .acct-actions.row { flex-direction:row; justify-content:flex-end; flex-wrap:wrap; }
 .acct-btn { min-height:44px; padding:0 16px; border-radius:999px; cursor:pointer; border:1px solid rgba(214,204,177,.28);
@@ -203,7 +210,7 @@ const apiUrl = (path: string): string | null => {
 const apiRequest = async (method: 'POST' | 'PATCH', path: string, body: unknown, token: string | null): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> => {
   const url = apiUrl(path);
   if (!url) return { ok: false, status: 0, json: {} };
-  const res = await fetch(url, {
+  return authJson(url, {
     method,
     headers: {
       'content-type': 'application/json',
@@ -214,13 +221,6 @@ const apiRequest = async (method: 'POST' | 'PATCH', path: string, body: unknown,
     },
     body: JSON.stringify(body),
   });
-  let json: Record<string, unknown> = {};
-  try {
-    json = (await res.json()) as Record<string, unknown>;
-  } catch {
-    json = {};
-  }
-  return { ok: res.ok, status: res.status, json };
 };
 const apiPost = (path: string, body: unknown, token: string | null) => apiRequest('POST', path, body, token);
 /** Does this identity have any online match at all? null when it cannot be told (offline, error). */
@@ -228,9 +228,9 @@ const hasMatches = async (token: string): Promise<boolean | null> => {
   const url = apiUrl('/v1/players/me/matches');
   if (!url) return null;
   try {
-    const res = await fetch(url, { headers: { accept: 'application/json', authorization: `Bearer ${token}`, 'x-futasaku-client-version': DUEL_CLIENT_VERSION, 'x-futasaku-rules-version': CURRENT_RULES_VERSION } });
+    const res = await authJson(url, { headers: { accept: 'application/json', authorization: `Bearer ${token}`, 'x-futasaku-client-version': DUEL_CLIENT_VERSION, 'x-futasaku-rules-version': CURRENT_RULES_VERSION } });
     if (!res.ok) return null;
-    const body = (await res.json()) as { matches?: unknown };
+    const body = res.json as { matches?: unknown };
     return Array.isArray(body.matches) ? body.matches.length > 0 : null;
   } catch {
     return null;
@@ -246,7 +246,7 @@ const SETTINGS_CACHE = 'futasaku.auth.google.v1';
  * visit (./menu-key.ts), and it is re-asked in the background once per session so a change in the
  * dashboard still reaches the device. Only a first visit waits for the network.
  */
-const probeGoogle = async (supa: { url: string; key: string }, kv: KeyValue | null): Promise<boolean> => {
+const probeGoogle = async (settings: ReturnType<typeof authJson>, kv: KeyValue | null): Promise<boolean> => {
   let askedThisSession = false;
   try {
     askedThisSession = sessionStorage.getItem(SETTINGS_CACHE) !== null;
@@ -255,9 +255,9 @@ const probeGoogle = async (supa: { url: string; key: string }, kv: KeyValue | nu
   }
   const ask = async (): Promise<boolean | null> => {
     try {
-      const res = await fetch(`${supa.url}/auth/v1/settings`, { headers: { apikey: supa.key } });
+      const res = await settings;
       if (!res.ok) return null;
-      const on = googleEnabled(await res.json());
+      const on = googleEnabled(res.json);
       try {
         sessionStorage.setItem(SETTINGS_CACHE, on ? '1' : '0');
         kv?.set(GOOGLE_ON_KEY, on ? '1' : '0');
@@ -383,6 +383,32 @@ export const mountAccounts = async (): Promise<void> => {
     tryTap();
   };
 
+  const completeSignIn = async (access: string, provider: 'google' | 'email', returnTo: ReturnTo): Promise<void> => {
+    let before = readIdentity(kv);
+    // Establish the usual local player before an email upgrade. Even a lost FIRST response then
+    // recovers the same player and its required name step; no second identity system is needed.
+    if (provider === 'email' && !before) {
+      const guest = await apiPost('/v1/guests', {}, null);
+      const identity = guest.ok ? identityFromSignIn(guest.json) : null;
+      if (!identity || !writeIdentity(kv, identity)) throw new Error('account-storage-failed');
+      before = identity;
+    }
+    const guestHadMatches = before ? await hasMatches(before.token) : null;
+    const res = await apiPost(`/v1/auth/${provider}`, {accessToken:access}, before?.token ?? null);
+    const identity = res.ok ? identityFromSignIn(res.json) : null;
+    if (!identity) throw new Error(res.status === 401 ? 'account-session-expired' : 'account-exchange-failed');
+    // Do not reload onto a forgotten identity if browser storage is blocked.
+    if (!writeAccount(kv, {provider,email:typeof res.json.email === 'string'?res.json.email:null,playerId:identity.playerId}) || !writeIdentity(kv,identity))
+      throw new Error('account-storage-failed');
+    window.dispatchEvent(new Event('futasaku:identity'));
+    kv?.set(WELCOME_KEY,'1');
+    if (res.json.outcome === 'created' || res.json.outcome === 'linked' || (before?.kind === 'guest' && before.playerId === identity.playerId)) setNicknamePrompt(kv,identity.playerId);
+    setFlash(kv,{kind:'signed-in',text:signInMessage({outcome:res.json.outcome,name:shownName(identity)??'',beforePlayerId:before?.playerId??null,afterPlayerId:identity.playerId,guestHadMatches}),returnTo});
+    // Keep the verified session for a failed exchange's retry. Close it only after success.
+    void authJson(`${supa.url}/auth/v1/logout?scope=local`,{method:'POST',headers:{apikey:supa.key,authorization:`Bearer ${access}`}}).catch(()=>undefined);
+    location.reload();
+  };
+
   // ---- 1. coming back from Google (?code=…) ----
   const callback = readCallback(location.search, location.hash);
   if (callback) {
@@ -400,53 +426,19 @@ export const mountAccounts = async (): Promise<void> => {
       try {
         if ('error' in callback) fail(ACCOUNT.failed, { stage: 'callback', error: callback.error });
         else {
-          const ex = await fetch(`${supa.url}/auth/v1/token?grant_type=pkce`, {
+          const ex = await authJson(`${supa.url}/auth/v1/token?grant_type=pkce`, {
             method: 'POST',
             headers: { apikey: supa.key, 'content-type': 'application/json' },
             body: JSON.stringify({ auth_code: callback.code, code_verifier: pending.verifier }),
           });
-          const session = ex.ok ? ((await ex.json()) as { access_token?: unknown }) : null;
+          const session = ex.ok ? (ex.json as { access_token?: unknown }) : null;
           const access = typeof session?.access_token === 'string' ? session.access_token : null;
           if (!access) {
-            const body = ex.ok ? null : await ex.text().catch(() => null);
+            const body = ex.ok ? null : String(ex.status);
             fail(ACCOUNT.failed, { stage: 'token-exchange', status: ex.status, body: body?.slice(0, 300) });
           } else {
-            const before = readIdentity(kv);
-            // Asked BEFORE the token is handed over (a switch retires the guest's token): did this
-            // device's earlier identity actually play? It decides the toast (signInMessage).
-            const guestHadMatches = before ? await hasMatches(before.token) : null;
-            const res = await apiPost('/v1/auth/google', { accessToken: access }, before?.token ?? null);
-            // Our server has its own token now; the Supabase session is not needed any more.
-            void fetch(`${supa.url}/auth/v1/logout`, { method: 'POST', headers: { apikey: supa.key, authorization: `Bearer ${access}` } }).catch(() => undefined);
-            const identity = res.ok ? identityFromSignIn(res.json) : null;
-            if (!identity) {
-              fail(
-                res.status === 403 || res.status === 404 ? ACCOUNT.unavailable : ACCOUNT.failed,
-                { stage: 'our-server', status: res.status, body: JSON.stringify(res.json).slice(0, 300) },
-              );
-            } else {
-              writeIdentity(kv, identity);
-              writeAccount(kv, { provider: 'google', email: typeof res.json.email === 'string' ? res.json.email : null, playerId: identity.playerId });
-              // The account's campaign place may be ahead of this device's: let the page reconcile it
-              // now (the reload below runs the same boot read, so this is only the no-reload path).
-              window.dispatchEvent(new Event('futasaku:identity'));
-              try {
-                kv?.set(WELCOME_KEY, '1');
-              } catch {
-                /* fine */
-              }
-              const name = shownName(identity) ?? '';
-              const outcome = res.json.outcome;
-              // The sign-in that FORMED this account (a brand-new one, or a guest upgraded in place)
-              // invites the player to choose a name. The step is shown once, right after the reload
-              // below; skipping consumes the invitation. A later sign-in is 'signed-in'/'same'.
-              if (outcome === 'created' || outcome === 'linked') setNicknamePrompt(kv, identity.playerId);
-              const text = signInMessage({ outcome, name, beforePlayerId: before?.playerId ?? null, afterPlayerId: identity.playerId, guestHadMatches });
-              setFlash(kv, { kind: 'signed-in', text, returnTo: pending.returnTo });
-              // Start clean on the new identity: every online screen re-reads it from storage.
-              location.reload();
-              return;
-            }
+            await completeSignIn(access, 'google', pending.returnTo);
+            return;
           }
         }
       } catch {
@@ -458,17 +450,31 @@ export const mountAccounts = async (): Promise<void> => {
   // The main menu's account key (section 4b). Looked up once: the menu's first layout may already have
   // painted it from the device's memory (./menu-key.ts).
   const menuLogin = document.getElementById('menu-login') as HTMLButtonElement | null;
-  // ---- 2. is Google switched on? Nothing below shows until it is. ----
-  const available = await probeGoogle(supa, kv);
+  // ---- 2. Supported sign-in methods (one shared settings request). ----
+  const authSettings = authJson(`${supa.url}/auth/v1/settings`,{headers:{apikey:supa.key}});
+  const [available, emailAvailable] = await Promise.all([
+    probeGoogle(authSettings, kv),
+    (async () => {
+      try {
+        const [server, settings] = await Promise.all([
+          authJson(apiUrl('/v1/auth/methods')!),
+          authSettings,
+        ]);
+        const external = settings.json.external as Record<string,unknown>|undefined;
+        return server.ok && server.json.email === true && settings.ok && external?.email === true;
+      } catch { return false; }
+    })(),
+  ]);
+  try { kv?.set(EMAIL_ON_KEY,emailAvailable?'1':'0'); } catch { /* blocked storage */ }
   const flash = takeFlash(kv);
   if (flash) {
     say(flash.text, flash.kind === 'failed');
     setTimeout(() => go(flash.returnTo), 0);
   }
-  if (!available) {
+  if (!available && !emailAvailable && !signedIn()) {
     // The menu may have painted the key early from the device's memory (./menu-key.ts); Google is
     // off, so take it away rather than leave a key that cannot work.
-    if (menuLogin) menuLogin.hidden = true;
+    if (menuLogin) { menuLogin.hidden = true; menuLogin.dataset.owned = '1'; }
     return;
   }
   document.body.classList.add('acct-on');
@@ -494,6 +500,21 @@ export const mountAccounts = async (): Promise<void> => {
     location.assign(authorizeUrl(supa.url, redirectTarget(location), await challengeFor(verifier)));
   };
 
+  const emailSheet = sheet('acct-email', ACCOUNT.emailTitle);
+  let emailReturnTo: ReturnTo = 'menu';
+  const emailGoogle = googleButton('email-google'); emailGoogle.hidden=!available;
+  emailGoogle.addEventListener('click',()=>void start(emailReturnTo,emailGoogle,null));
+  const emailPanel = mountEmailPanel(emailSheet.panel,{supabase:supa,alternative:emailGoogle,
+    complete:access=>completeSignIn(access,'email',emailReturnTo),close:()=>emailSheet.close()});
+  const openEmail = (returnTo:ReturnTo) => {
+    welcome.close(); emailReturnTo=returnTo; emailPanel.reset(); emailSheet.open();
+    emailSheet.panel.querySelector<HTMLInputElement>('input:not([hidden])')?.focus({preventScroll:true});
+  };
+  const emailButton = (returnTo:ReturnTo) => {
+    const b=button('acct-btn',ACCOUNT.continueEmail,`${returnTo}-email`);
+    b.hidden=!emailAvailable; b.addEventListener('click',()=>openEmail(returnTo)); return b;
+  };
+
   const privacyLink = () => {
     const b = button('acct-linkbtn', ACCOUNT.privacy, 'privacy');
     b.addEventListener('click', () => {
@@ -512,10 +533,10 @@ export const mountAccounts = async (): Promise<void> => {
   {
     const status = el('p', 'acct-status');
     status.setAttribute('role', 'status');
-    const g = googleButton('welcome-google');
+    const g = googleButton('welcome-google'); g.hidden=!available;
     const guest = button('acct-btn', ACCOUNT.playAsGuest, 'welcome-guest');
     const actions = el('div', 'acct-actions');
-    actions.append(g, guest);
+    actions.append(emailButton('online'), g, guest);
     welcome.panel.append(el('h2', '', ACCOUNT.welcomeTitle), el('p', '', ACCOUNT.welcomeBody), actions, status, el('p', 'acct-small', ACCOUNT.welcomeSmall), privacyLink());
     g.addEventListener('click', () => void start('online', g, status));
     guest.addEventListener('click', () => {
@@ -553,8 +574,8 @@ export const mountAccounts = async (): Promise<void> => {
   {
     const status = el('p', 'acct-status');
     status.setAttribute('role', 'status');
-    const g = googleButton('hub-google');
-    hub.append(el('p', 'muted small', ACCOUNT.hubGuest), g, status);
+    const g = googleButton('hub-google'); g.hidden=!available;
+    hub.append(el('p', 'muted small', ACCOUNT.hubGuest), emailButton('online'), g, status);
     g.addEventListener('click', () => void start('online', g, status));
     hubHead?.after(hub);
   }
@@ -608,6 +629,7 @@ export const mountAccounts = async (): Promise<void> => {
 
   menuLogin?.addEventListener('click', () => {
     if (signedIn()) openProfile();
+    else if(emailAvailable)openEmail('menu');
     else void start('menu', menuLogin, null);
   });
 
@@ -662,7 +684,7 @@ export const mountAccounts = async (): Promise<void> => {
       const s = signedIn();
       if (!s) return true;
       try {
-        const res = await apiPost('/v1/auth/google/delete', {}, s.identity.token);
+        const res = await apiPost(`/v1/auth/${readAccount(kv)?.provider ?? 'google'}/delete`, {}, s.identity.token);
         if (!res.ok) throw new Error(String(res.status));
         clearAccount(kv);
         writeIdentity(kv, { ...s.identity, kind: 'guest' });
@@ -760,7 +782,7 @@ export const mountAccounts = async (): Promise<void> => {
     const name = shownName(id);
     if (name) box.append(el('p', 'acct-who', ACCOUNT.youAre(name)));
     if (s) {
-      box.append(el('p', 'muted small', ACCOUNT.signedIn(s.email)));
+      box.append(el('p', 'muted small', ACCOUNT.signedIn(s.email,readAccount(kv)?.provider)));
       // The Settings entry for the name: reuses the same sheet as the first-login step.
       const nameRow = el('div', 'acct-actions row');
       const rename = button('acct-btn', ACCOUNT.nicknameSettings, 'change-nickname');
@@ -777,9 +799,9 @@ export const mountAccounts = async (): Promise<void> => {
     } else {
       const status = el('p', 'acct-status');
       status.setAttribute('role', 'status');
-      const g = googleButton('settings-google');
+      const g = googleButton('settings-google'); g.hidden=!available;
       g.addEventListener('click', () => void start('settings', g, status));
-      box.append(el('p', 'muted small', ACCOUNT.guestNote), g, status);
+      box.append(el('p', 'muted small', ACCOUNT.guestNote), emailButton('settings'), g, status);
     }
     const p = privacyLink();
     p.style.alignSelf = 'flex-start';

@@ -1,3 +1,5 @@
+> Current email-code sign-in and rollout: [EMAIL-ACCOUNTS.md](EMAIL-ACCOUNTS.md). Google remains available.
+
 # Accounts — "Continue with Google" (FUTASAKU 0.5, branch `futa0.5-online`)
 
 The proposed world economy attaches wallets and claims to the same canonical player ID preserved by guest upgrade and account recovery; see [WORLD-MAP.md](WORLD-MAP.md). A nickname change does not transfer ownership.

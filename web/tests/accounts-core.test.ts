@@ -84,6 +84,8 @@ describe('device records', () => {
     const { m, kv } = memory();
     writeAccount(kv, { provider: 'google', email: 'a@gmail.com', playerId: 'p1' });
     expect(readAccount(kv)).toEqual({ provider: 'google', email: 'a@gmail.com', playerId: 'p1' });
+    writeAccount(kv, { provider: 'email', email: 'a@example.com', playerId: 'p1' });
+    expect(readAccount(kv)).toEqual({ provider: 'email', email: 'a@example.com', playerId: 'p1' });
     m.set(ACCOUNT_KEY, JSON.stringify({ provider: 'facebook', playerId: 'p1' }));
     expect(readAccount(kv)).toBeNull();
     expect(readAccount(null)).toBeNull();

@@ -14,6 +14,7 @@ import { duelApiUrl } from '../online/config.js';
 
 /** The remembered answer to "is Google on?" ('1' / '0'), kept across visits. */
 export const GOOGLE_ON_KEY = 'futasaku.auth.google-on.v1';
+export const EMAIL_ON_KEY = 'futasaku.auth.email-on.v1';
 /** The online identity's storage key — the SAME string as IDENTITY_STORAGE_KEY (pinned by a test). */
 export const IDENTITY_KEY = 'severgrow.duel.identity.v1';
 
@@ -60,15 +61,18 @@ export const signedInNickname = (): string | null => {
 export const accountKeyNow = (kv: KeyValue | null, configured: boolean): { show: boolean; name: string | null } => {
   if (!configured) return { show: false, name: null };
   let known: string | null = null;
+  let emailKnown: string | null = null;
   try {
     known = kv?.get(GOOGLE_ON_KEY) ?? null;
+    emailKnown = kv?.get(EMAIL_ON_KEY) ?? null;
   } catch {
     known = null;
   }
   // Unknown (a first visit) shows the key: the live build has Google on, and the background check
   // hides it again if not. Known-off never shows it.
-  if (known === '0') return { show: false, name: null };
-  return { show: true, name: signedInName(kv) };
+  const name = signedInName(kv);
+  if (known === '0' && emailKnown !== '1' && !name) return { show: false, name: null };
+  return { show: true, name };
 };
 
 /** LOG IN for a guest, the name for a signed-in player — the one way the key is ever painted. */

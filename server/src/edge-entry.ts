@@ -146,6 +146,7 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
   const supaUrl = Deno.env.get('SUPABASE_URL') ?? '';
   const supaKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
   const accounts = createAccountsRouter({
+    emailEnabled: Deno.env.get('EMAIL_ACCOUNTS_ENABLED') === 'true',
     links: postgresIdentityLinkStore(pool),
     storage: live.storage,
     auth: supaUrl && supaKey ? supabaseAuthProvider({ url: supaUrl, anonKey: supaKey, serviceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? null }) : null,

@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { accountKeyNow, accountsConfigured, GOOGLE_ON_KEY, IDENTITY_KEY, paintAccountKey } from '../src/accounts/menu-key.js';
+import { accountKeyNow, accountsConfigured, EMAIL_ON_KEY, GOOGLE_ON_KEY, IDENTITY_KEY, paintAccountKey } from '../src/accounts/menu-key.js';
 import { IDENTITY_STORAGE_KEY } from '../src/online/identity.js';
 import { ACCOUNT_KEY } from '../src/accounts/core.js';
 import { taggedName } from '../../src/player-tag.js';
@@ -43,6 +43,8 @@ describe('the account key knows what to say before any network', () => {
     expect(accountKeyNow(store({ [GOOGLE_ON_KEY]: '1' }), true)).toEqual({ show: true, name: null });
     expect(accountKeyNow(signedInStore({ [GOOGLE_ON_KEY]: '1' }), true)).toEqual({ show: true, name: taggedName('MapleFox', PLAYER) });
     expect(accountKeyNow(store({ [GOOGLE_ON_KEY]: '0' }), true)).toEqual({ show: false, name: null });
+    expect(accountKeyNow(store({ [GOOGLE_ON_KEY]: '0', [EMAIL_ON_KEY]: '1' }), true)).toEqual({ show: true, name: null });
+    expect(accountKeyNow(signedInStore({ [GOOGLE_ON_KEY]: '0', [EMAIL_ON_KEY]: '0' }), true)).toEqual({ show: true, name: taggedName('MapleFox', PLAYER) });
     expect(accountKeyNow(signedInStore(), false)).toEqual({ show: false, name: null });
     // A guest identity, or an account record for someone else, is not "signed in".
     const guest = store({ [IDENTITY_KEY]: JSON.stringify({ token: 't'.repeat(20), playerId: PLAYER, kind: 'guest', displayName: 'Guest' }) });
@@ -68,6 +70,6 @@ describe('the account key knows what to say before any network', () => {
     const mount = read('../src/accounts/mount.ts');
     expect(mount).toContain('GOOGLE_ON_KEY');
     // A key shown early but then found to be off is taken away again, so no dead key stays up.
-    expect(mount).toMatch(/if \(!available\) \{[\s\S]{0,400}hidden = true/);
+    expect(mount).toMatch(/if \(!available && !emailAvailable && !signedIn\(\)\) \{[\s\S]{0,400}hidden = true/);
   });
 });

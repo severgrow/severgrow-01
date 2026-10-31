@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [admin-dashboard, online-stale-token-recovery, online-soak-teardown, settings-visual]
+        suite: [admin-dashboard, online-stale-token-recovery, online-soak-teardown, settings-visual, accounts-email, pwa-viewport-layout]
     env:
       # These suites only use their own in-process API; never touch a live wallet or project.
       VITE_SUPABASE_URL: http://127.0.0.1:9
@@ -47,6 +47,9 @@ jobs:
       - run: npx playwright-core install --with-deps chromium
       - name: Select the pinned browser
         run: node --input-type=module -e 'import {chromium} from "playwright-core"; console.log("PW_CHROMIUM=" + chromium.executablePath())' >> "$GITHUB_ENV"
+      - name: Build the installed-app viewport fixture
+        if: matrix.suite == 'pwa-viewport-layout'
+        run: CHANNEL=futa04 npm run web:build
       - name: Run the regression suite
         run: |
           set -o pipefail

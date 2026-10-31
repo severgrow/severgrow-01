@@ -59,7 +59,7 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
   futa04-motion, cut-severe, lessons-3, territory-menu, territory-challenges,
   territory-gestures, and **territory-gestures-ios on WebKit** (the iPhone engine).
 - `extra-regressions.yml`: admin-dashboard, online-stale-token-recovery, online-soak-teardown,
-  settings-visual.
+  settings-visual, accounts-email, pwa-viewport-layout.
 
 Removed as redundant: the seven suites that tested the old `live` (Main) channel this branch never
 ships (smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass), the `futa05-preview-build`
