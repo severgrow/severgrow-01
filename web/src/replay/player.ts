@@ -20,6 +20,7 @@ import type { ReplayHighlight, ReplayModel, ReplayTurningPoint } from './timelin
 import { boardAtIndex, frameAtTime, seekTo } from './seek.js';
 import { REPLAY_CSS } from './replay-css.js';
 import { posterFor } from './poster.js';
+import { ledFrameUrl, ledPlateLayout, paintLedScore } from './led-plate.js';
 import type { PosterData } from './poster.js';
 import { loadBoardArtUrls, warmBoardArt } from './board-canvas.js';
 import { paintVideoFrame, videoPlan } from './frames.js';
@@ -149,7 +150,42 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   scoreMe.dataset.seat = '0';
   scoreOpp.className = 'rp-pts';
   scoreOpp.dataset.seat = '1';
-  score.append(scoreMe, dash, scoreOpp);
+  // THE SCORE IS THE COCKPIT'S DISPLAY (owner, 2026-10-31): the same dot-matrix plate the match
+  // was played under, painted from the same alphabet and inks (led-plate.ts). The numbers above stay
+  // in the DOM for screen readers and the winner's styling; the plate is what the eye reads.
+  const led = document.createElement('canvas');
+  led.className = 'rp-led';
+  led.setAttribute('aria-hidden', 'true');
+  score.append(scoreMe, dash, scoreOpp, led);
+  const ledFrame = new Image();
+  ledFrame.decoding = 'async';
+  ledFrame.src = ledFrameUrl();
+  let ledScore: readonly [number, number] = [0, 0];
+  const paintLed = (): void => {
+    const h = 40;
+    const plate = ledPlateLayout(0, 0, h);
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const w = Math.ceil(plate.w);
+    if (led.width !== Math.round(w * dpr)) {
+      led.width = Math.round(w * dpr);
+      led.height = Math.round(h * dpr);
+      led.style.width = `${w}px`;
+      led.style.height = `${h}px`;
+    }
+    const g = led.getContext('2d');
+    if (!g) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    paintLedScore(g, ledPlateLayout(w / 2, h / 2, h), ledScore, ledFrame.complete && ledFrame.naturalWidth ? ledFrame : null);
+  };
+  ledFrame.addEventListener('load', paintLed, { once: true });
+  const setScore = (a: number, b: number): void => {
+    scoreMe.textContent = String(a);
+    scoreOpp.textContent = String(b);
+    if (ledScore[0] === a && ledScore[1] === b && led.width) return;
+    ledScore = [a, b];
+    paintLed();
+  };
   const nameOpp = document.createElement('span');
   nameOpp.className = 'rp-name';
   nameOpp.dataset.seat = '1';
@@ -529,8 +565,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     }
     if (forward) fadeGhosts(frame.duration);
     index = i;
-    scoreMe.textContent = String(frame.scores[0]);
-    scoreOpp.textContent = String(frame.scores[1]);
+    setScore(frame.scores[0], frame.scores[1]);
     const tTurn = performance.now();
     paintTurn(i);
     sample(perf.turn, performance.now() - tTurn);
@@ -606,8 +641,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     index = -1;
     turnShown = -1;
     board.render(model.from.board, NO_OVERLAY);
-    scoreMe.textContent = String(model.from.scores[0]);
-    scoreOpp.textContent = String(model.from.scores[1]);
+    setScore(model.from.scores[0], model.from.scores[1]);
     paint(0);
     elapsed = 0;
     playing = true;
@@ -1029,8 +1063,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     painted = '';
     nameMe.textContent = next.names[0];
     nameOpp.textContent = next.names[1];
-    scoreMe.textContent = String(next.from.scores[0]);
-    scoreOpp.textContent = String(next.from.scores[1]);
+    setScore(next.from.scores[0], next.from.scores[1]);
     // The turn line is set here too, so the surface never shows a blank line while it fades in.
     setTurnLine(next.frames[0]?.turn ?? next.from.turn);
     buildMoments();

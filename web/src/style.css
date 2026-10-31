@@ -58,6 +58,12 @@ body {
    taken as "go back" and leaves the game (found by the monkey test). */
 html {
   overscroll-behavior: none;
+  /* The game is one fixed screen: nothing may ever widen the page or let it pan sideways (owner,
+     2026-10-31, iPhone 17). `clip` (not hidden) creates no scroll container for iOS to scroll. */
+  overflow-x: clip;
+  /* The page's own ground is the game's ground: whatever a browser leaves uncovered (iOS 26 Safari
+     draws its glass bar over the page's bottom edge) is the same dark, never a light box. */
+  background: var(--c-bg);
 }
 body {
   background: var(--c-bg);

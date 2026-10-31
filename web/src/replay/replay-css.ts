@@ -96,6 +96,14 @@ export const REPLAY_CSS = `
   letter-spacing: .02em;
 }
 #replay .rp-score .rp-dash { font-size: 13px; color: var(--rp-faint); font-weight: 400; }
+/* The plate is what the eye reads; the numbers stay for screen readers (and keep the winner's
+   styling hooks), out of sight. */
+#replay .rp-score > .rp-pts,
+#replay .rp-score > .rp-dash {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+#replay .rp-score { position: relative; }
+#replay .rp-led { display: block; }
 
 /* ---------- the winner, at the end ----------
    One settle, never a loop: the winner's score swells in their ink with a soft halo and lands; their

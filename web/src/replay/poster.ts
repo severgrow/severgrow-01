@@ -7,12 +7,15 @@
 // same painter — that is what keeps the still and the video from drifting apart. The layout is a
 // pure function, so a test can prove the image carries the names, the score and the board — and
 // nothing else (no ids, no tokens, no hidden player records).
+import { ledFrameUrl, ledPlateLayout, paintLedScore } from './led-plate.js';
+import type { LedPlateLayout } from './led-plate.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { REPLAY } from '../../../src/strings.js';
 import { fit } from '../logic/share.js';
 import type { TextBox } from '../logic/share.js';
 import {
   boardBottom,
+  decodedPicture,
   brandWordmark,
   boardTop,
   layoutBoard,
@@ -35,8 +38,9 @@ const M = 64;
 const BOARD_SIDE = 28;
 const BOARD_MAX_H = 1140;
 /** The slim score row: names at the edges, the score in the middle, all small. */
-const NAME_SIZE = 30;
-const SCORE_SIZE = 60;
+const NAME_SIZE = 26;
+/** The score is the cockpit's own dot-matrix display (led-plate.ts), this tall. */
+const PLATE_H = 104;
 /** The sign-off lockup: the 双サク mark, the address, and one line that says what the game is. */
 const WORDMARK_H = 62;
 const SITE_SIZE = 44;
@@ -75,7 +79,8 @@ export type PosterLayout = {
   width: number;
   height: number;
   names: readonly [TextBox, TextBox];
-  score: { you: TextBox; dash: TextBox; opp: TextBox };
+  /** The cockpit's score display: where it sits, and the two numbers it shows. */
+  score: { plate: LedPlateLayout; value: readonly [number, number] };
   /** FUTASAKU.COM. */
   mark: TextBox;
   /** The 双サク mark above it: its top-centre point and height. */
@@ -113,9 +118,9 @@ export const posterLayout = (d: PosterData): PosterLayout => {
   // The inks, top to bottom: the score row, the board, the sign-off lockup. The free height is
   // shared in FOUR equal gaps — above the score row, score row to board, board to the lockup, and
   // the lockup to the bottom edge — so the address sits exactly between the board and the edge.
-  const rowInk = 2 * SCORE_SIZE * CAP;
+  const rowInk = PLATE_H;
   const lockInk = WORDMARK_H + 22 + 2 * SITE_SIZE * CAP + 20 + 2 * TAG_SIZE * CAP;
-  const gap = Math.max(40, Math.floor((POSTER_H - rowInk - boardInk - lockInk) / 4));
+  const gap = Math.max(40, (POSTER_H - rowInk - boardInk - lockInk) / 4);
   const rowMid = gap + rowInk / 2;
   const shift = gap + rowInk + gap - hexTop;
   const board = { ...fitted, cells: fitted.cells.map((c) => ({ ...c, y: c.y + shift })) };
@@ -129,18 +134,15 @@ export const posterLayout = (d: PosterData): PosterLayout => {
     weight,
     align,
   });
-  // The score row: each name at its edge, the score in the middle ("8 – 10"), set small.
-  const half = inner / 2;
-  const nameW = half - 150;
+  // The score row: each name at its edge in the game's label type, the cockpit's score display in
+  // the middle — the same instrument the player watched during the match.
+  const plate = ledPlateLayout(POSTER_W / 2, rowMid, PLATE_H);
+  const nameW = (POSTER_W - 2 * M - plate.w) / 2 - 28;
   const names: readonly [TextBox, TextBox] = [
-    line(rowMid, NAME_SIZE, fit(d.names[0].toUpperCase(), 16), 700, 'left', M, nameW),
-    line(rowMid, NAME_SIZE, fit(d.names[1].toUpperCase(), 16), 700, 'right', POSTER_W - M - nameW, nameW),
+    line(rowMid, NAME_SIZE, fit(d.names[0].toUpperCase(), 14), 600, 'left', M, nameW),
+    line(rowMid, NAME_SIZE, fit(d.names[1].toUpperCase(), 14), 600, 'right', POSTER_W - M - nameW, nameW),
   ];
-  const score = {
-    you: line(rowMid, SCORE_SIZE, String(d.score[0]), 700, 'right', POSTER_W / 2 - 150, 120),
-    dash: line(rowMid, SCORE_SIZE * 0.6, '–', 400, 'center', POSTER_W / 2 - 30, 60),
-    opp: line(rowMid, SCORE_SIZE, String(d.score[1]), 700, 'left', POSTER_W / 2 + 30, 120),
-  };
+  const score = { plate, value: [d.score[0], d.score[1]] as const };
   // The lockup, centred under the board: the mark, the address, one line of what the game is.
   const lockTop = hexBottom + shift + gap;
   const wordmark = { x: POSTER_W / 2, y: Math.round(lockTop), h: WORDMARK_H };
@@ -176,44 +178,68 @@ export type PosterTurn = { text: string; seat: Player | null };
 
 // The on-screen game has an analogue film overlay above every element. Canvas exports do not
 // capture DOM overlays, so replay stills and video frames carry the same finish baked into pixels.
-// One small deterministic tile is generated once and reused across frames (no per-frame noise).
-// It is a TEXTURE, not a veil (owner, 2026-10-31: clean and premium): mid-grey noise blended with
-// soft-light, so blacks stay black and the board keeps its contrast — and the encoder spends its
-// bits on the game, not on noise.
-let filmTile: HTMLCanvasElement | null = null;
-const FILM_SPREAD = 22; // ± around mid-grey; soft-light makes it a gentle grain
-const replayFilmTile = (): HTMLCanvasElement => {
-  if (filmTile) return filmTile;
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const g = c.getContext('2d')!;
-  const pixels = g.createImageData(128, 128);
+// Two layers from one small deterministic tile, made once and reused on every frame:
+//   * a soft-light pass, which gives the board and lettering their grain without lifting anything;
+//   * a sparse whisper of light, which is what makes grain visible on the near-black frame at all
+//     (soft-light leaves pure black untouched — the owner saw "no grain" on 2026-10-31).
+// The tile is drawn at 2× (each grain 2 px): a phone's video encoder smooths single-pixel noise to
+// nothing, a 2 px grain survives it. The black level rises by under 2%: the frame stays dark.
+let filmTiles: { soft: HTMLCanvasElement; light: HTMLCanvasElement } | null = null;
+const TILE = 128;
+const GRAIN = 2;
+const replayFilmTiles = () => {
+  if (filmTiles) return filmTiles;
+  const make = () => {
+    const c = document.createElement('canvas');
+    c.width = c.height = TILE;
+    return c;
+  };
+  const soft = make();
+  const light = make();
+  const gs = soft.getContext('2d')!;
+  const gl = light.getContext('2d')!;
+  const ps = gs.createImageData(TILE, TILE);
+  const pl = gl.createImageData(TILE, TILE);
   let seed = 0x51f07a5a;
-  for (let i = 0; i < pixels.data.length; i += 4) {
+  const next = () => {
     seed ^= seed << 13;
     seed ^= seed >>> 17;
     seed ^= seed << 5;
-    const v = 128 + (((seed >>> 0) % (2 * FILM_SPREAD + 1)) - FILM_SPREAD);
-    pixels.data[i] = v;
-    pixels.data[i + 1] = v;
-    pixels.data[i + 2] = v;
-    pixels.data[i + 3] = 255;
+    return (seed >>> 0) / 0xffffffff;
+  };
+  for (let i = 0; i < ps.data.length; i += 4) {
+    const v = 128 + Math.round((next() - 0.5) * 70);
+    ps.data[i] = ps.data[i + 1] = ps.data[i + 2] = v;
+    ps.data[i + 3] = 255;
+    const lit = next() < 0.34;
+    pl.data[i] = 236;
+    pl.data[i + 1] = 228;
+    pl.data[i + 2] = 212;
+    pl.data[i + 3] = lit ? 13 + Math.round(next() * 10) : 0;
   }
-  g.putImageData(pixels, 0, 0);
-  filmTile = c;
-  return c;
+  gs.putImageData(ps, 0, 0);
+  gl.putImageData(pl, 0, 0);
+  filmTiles = { soft, light };
+  return filmTiles;
 };
 
 /** Consistent, subtle film grain over the entire export — including artwork and lettering. */
 export const paintReplayFilm = (g: CanvasRenderingContext2D, width: number, height: number): void => {
-  const pattern = g.createPattern(replayFilmTile(), 'repeat');
-  if (!pattern) return;
-  g.save();
-  g.globalCompositeOperation = 'soft-light';
-  g.globalAlpha = 0.55;
-  g.fillStyle = pattern;
-  g.fillRect(0, 0, width, height);
-  g.restore();
+  const { soft, light } = replayFilmTiles();
+  const fill = (tile: HTMLCanvasElement, op: GlobalCompositeOperation, alpha: number) => {
+    const pattern = g.createPattern(tile, 'repeat');
+    if (!pattern) return;
+    pattern.setTransform?.(new DOMMatrix().scale(GRAIN, GRAIN));
+    g.save();
+    g.imageSmoothingEnabled = false;
+    g.globalCompositeOperation = op;
+    g.globalAlpha = alpha;
+    g.fillStyle = pattern;
+    g.fillRect(0, 0, width, height);
+    g.restore();
+  };
+  fill(soft, 'soft-light', 0.7);
+  fill(light, 'source-over', 1);
 };
 
 /** Paint the poster on a canvas. The one impure call; the layout above is pure. */
@@ -232,7 +258,8 @@ export const drawReplayPoster = (
   if (canvas.width !== L.width) canvas.width = L.width;
   if (canvas.height !== L.height) canvas.height = L.height;
   const g = canvas.getContext('2d')!;
-  const font = getComputedStyle(document.body).fontFamily || 'ui-monospace, monospace';
+  // The game's UI face (Fragment Mono), the one every label in the game is set in.
+  const font = css('--font-ui', "'Fragment Mono', ui-monospace, monospace");
   const col = {
     bg: '#070908',
     ink: css('--rp-ink', '#f0e9dc'),
@@ -286,17 +313,15 @@ export const drawReplayPoster = (
     draw();
     g.restore();
   };
-  withAlpha(0, () => text(L.names[0], seatInk(0), 4));
-  withAlpha(1, () => text(L.names[1], seatInk(1), 4));
-  withAlpha(0, () => text(L.score.you, ended && d.winner === 0 ? col.you : col.ink));
-  text(L.score.dash, col.dim);
-  withAlpha(1, () => text(L.score.opp, ended && d.winner === 1 ? col.opp : col.ink));
+  withAlpha(0, () => text(L.names[0], seatInk(0), 5));
+  withAlpha(1, () => text(L.names[1], seatInk(1), 5));
+  paintLedScore(g, L.score.plate, L.score.value, decodedPicture(ledFrameUrl()));
   const live = opts?.live;
   if (!ended && (live === 0 || live === 1)) {
     // the pip sits on the inner side of the mover's name, toward the score
     g.font = `${L.names[live].weight} ${L.names[live].size}px ${font}`;
     const ctx = g as CanvasRenderingContext2D & { letterSpacing?: string };
-    if ('letterSpacing' in ctx) ctx.letterSpacing = '4px';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '5px';
     const w = Math.min(g.measureText(L.names[live].text).width, L.names[live].w);
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
     const y = L.names[live].y + L.names[live].h / 2;

@@ -39,10 +39,11 @@ describe('the replay poster', () => {
     const model = buildReplay(input());
     const data = posterFor(model);
     const layout = posterLayout(data);
-    const texts = [layout.names[0].text, layout.names[1].text, layout.score.you.text, layout.score.dash.text, layout.score.opp.text, layout.mark.text];
-    expect(texts).toEqual(['RYK', 'JADEBADGER', '9', '–', '0', 'FUTASAKU.COM']);
-    // Six pieces of text: the names, the score pair and the mark. No title, no timestamp, no id.
-    expect(texts).toHaveLength(6);
+    const texts = [layout.names[0].text, layout.names[1].text, layout.mark.text];
+    expect(texts).toEqual(['RYK', 'JADEBADGER', 'FUTASAKU.COM']);
+    // The score is the cockpit's own display, carrying exactly the final score (owner, 2026-10-31).
+    expect(layout.score.value).toEqual([9, 0]);
+    // No title, no timestamp, no id.
     // The board is the match's last position, not the opening one.
     const final = model.frames.at(-1)!.board;
     const cells = new Map(layout.board.cells.map((cell) => [cell.key, cell]));
@@ -88,7 +89,11 @@ describe('the video frame: a full phone screen, a big board, a small score (owne
     const xs = L.board.cells.map((c) => c.x);
     const span = Math.max(...xs) - Math.min(...xs) + 2 * L.board.hex;
     expect(span).toBeGreaterThan(L.width * 0.85);
-    expect(L.score.you.size).toBeLessThanOrEqual(64);
+    expect(L.score.plate.h).toBeLessThanOrEqual(110);
+    // the plate is centred on the frame, between the two names
+    expect(L.score.plate.x + L.score.plate.w / 2).toBe(L.width / 2);
+    expect(L.names[0].x + L.names[0].w).toBeLessThan(L.score.plate.x);
+    expect(L.names[1].x).toBeGreaterThan(L.score.plate.x + L.score.plate.w);
     expect(L.names[0].size).toBeLessThanOrEqual(32);
   });
 
@@ -102,12 +107,12 @@ describe('the video frame: a full phone screen, a big board, a small score (owne
     expect(L.mark.x + L.mark.w / 2).toBe(L.width / 2);
     expect(L.wordmark.x).toBe(L.width / 2);
     // the gap above the score row and between it and the board are the same size too
-    const top = ink(L.score.you, -1);
-    const between = boardTop(L.board) - ink(L.score.you, 1);
+    const top = L.score.plate.y;
+    const between = boardTop(L.board) - (L.score.plate.y + L.score.plate.h);
     expect(Math.abs(top - between)).toBeLessThanOrEqual(3);
     expect(Math.abs(top - above)).toBeLessThanOrEqual(3);
     // the result line sits inside the gap between the score row and the board
-    expect(L.turn.y).toBeGreaterThan(ink(L.score.you, 1));
+    expect(L.turn.y).toBeGreaterThan(L.score.plate.y + L.score.plate.h);
     expect(L.turn.y + L.turn.h).toBeLessThan(boardTop(L.board));
   });
 });

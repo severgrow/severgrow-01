@@ -16,6 +16,7 @@
 // A picture that is missing leaves the board's own flat territory colour underneath, exactly as
 // `defaultArtBoard` does — so painting can never fail or stall.
 import { WORDMARK_URL } from '../player/branding.js';
+import { ledFrameUrl } from './led-plate.js';
 import { allCoords, coordKey, mirror, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
@@ -82,6 +83,7 @@ export const warmBoardArt = (art: BoardArt | null = null): Promise<void> => {
   if (art) source = art;
   const urls = [
     WORDMARK,
+    ledFrameUrl(),
     ...(source?.sprites ?? []),
     source?.ground ?? '',
     ...(source?.rocks ?? []),
@@ -142,6 +144,9 @@ export const loadBoardArtUrls = (): Promise<BoardArt | null> => {
     .catch(() => null);
   return artUrls;
 };
+
+/** A picture the warm-up decoded (or null), for the other canvas painters (the score plate). */
+export const decodedPicture = (url: string): HTMLImageElement | null => decoded.get(url) ?? null;
 
 /** What the painter has to work with (a test can ask; the share path uses it to report). */
 export const boardArtSource = (): BoardArt | null => source;
