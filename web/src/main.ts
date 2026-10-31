@@ -1,5 +1,6 @@
 // first: the release channel (the test copy keeps its own storage)
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
+import { readAppViewport } from './ui/app-viewport.js';
 import { mountMatchChat } from './online/chat/view.js';
 import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
 import { hideLobbySurfaces } from './online/lobby-exit.js';
@@ -1910,7 +1911,7 @@ function feedCamera(v: View) {
 
 function checkOverlap(v: View) {
   if (!session || !thumbLayout) return;
-  const { w, h } = gameViewport();
+  const { w, h } = readAppViewport();
   const cfg = session.state.config;
   const maxHand = cfg.handSize + 1;
   const side = thumbLayout.side;
@@ -6155,23 +6156,6 @@ function safeArea() {
   return { safeTop: px(cs.paddingTop), safeBottom: px(cs.paddingBottom), safeLeft: px(cs.paddingLeft), safeRight: px(cs.paddingRight) };
 }
 
-/** The iPhone Home Screen web view can report a content viewport ending above
- * the physical screen. `screen.height` supplies the missing bottom strip when
- * its width matches this full-screen portrait app. Safari tabs keep their
- * visual viewport, including the browser's own bars. */
-function gameViewport() {
-  const vv = window.visualViewport;
-  const w = Math.round(vv?.width ?? window.innerWidth);
-  const homeScreen = document.documentElement.classList.contains('home-screen-app');
-  const screenFits = homeScreen && w <= 600 && window.innerHeight > w &&
-    Math.abs(window.screen.width - w) <= 2 &&
-    window.screen.height >= window.innerHeight &&
-    window.screen.height - window.innerHeight < window.innerHeight * .16;
-  const h = Math.round(homeScreen
-    ? Math.max(window.innerHeight, screenFits ? window.screen.height : 0)
-    : (vv?.height ?? window.innerHeight));
-  return { w, h };
-}
 
 let firstToolTips: () => void = () => {};
 let layoutKey = '';
@@ -6272,7 +6256,7 @@ function oppSeat(): HTMLElement | null {
 }
 /** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
 function applyLayout() {
-  const { w, h } = gameViewport();
+  const { w, h } = readAppViewport();
   if (document.documentElement.classList.contains('home-screen-app'))
     document.documentElement.style.setProperty('--futasaku-app-height', `${h}px`);
   const radius = session?.state.config.boardRadius ?? 3;
