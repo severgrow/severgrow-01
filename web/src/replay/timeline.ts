@@ -17,7 +17,7 @@
 // the curve below turns 50 beats into ~30 s. Clamps keep a tiny game from being compressed into a
 // blur and a very long match under a sensible ceiling, and the relative weighting is never
 // flattened — a cut or a Blast is still held longer than an ordinary Grow at every scale.
-import { apply, coordKey, mirror, parseKey, scores, stateFromSetup } from '../../../src/engine/index.js';
+import { allNeighbors, apply, coordKey, mirror, parseKey, scores, stateFromSetup } from '../../../src/engine/index.js';
 import type { Action, Player, RulesConfig, State, Terrain, Tile } from '../../../src/engine/index.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/versions.js';
 import { applyStep, buildSteps } from '../logic/anim.js';
@@ -68,10 +68,13 @@ export const weightOf = (step: Step): number => {
       // A cut is a big moment: held longer than a grow, and longer again per link it severs.
       return 1.3 + 0.14 * step.keys.length;
     case 'megaBomb':
-      // The Blast is the biggest single picture: a base beat plus every tile it clears.
-      return 1.6 + 0.3 * step.destroyed.length;
+      // The Blast is the biggest single picture: a base beat plus every tile it clears. It carries
+      // its two Bomb cards and the burst (strike.ts), so its base is long enough to read them.
+      return 2.6 + 0.3 * step.destroyed.length;
     case 'fruit':
-      return 1.2;
+      // A Bomb shows its card land, the burst and the tile go (owner, 2026-10-31): ~1 s at the
+      // usual scale, long enough to read, still quicker than a Blast.
+      return 2.1;
     case 'strengthen':
       return 0.6;
     case 'remove':
@@ -120,7 +123,15 @@ export type ReplayFrame = {
   changed: string[];
   /** Tiles this beat removed (for the quiet ghost fade). */
   removed: string[];
+  /**
+   * A Bomb or a Blast (owner, 2026-10-31: "it's confusing when bomb is used … it should be clear on
+   * replay"): where it struck (screen key), the cells its burst covers (the target, or the target and
+   * its six neighbours) and how many Bomb cards it took (1, or 2 for a Blast).
+   */
+  strike?: Strike;
 };
+
+export type Strike = { target: string; area: string[]; cards: 1 | 2 };
 
 export type ReplayResult = {
   /** Winner in SCREEN seats (0 = the phone's owner), or null for a draw. */
@@ -426,6 +437,7 @@ type Pending = {
   scores: [number, number];
   /** A Grow's tiles in reveal order (screen keys): the wave the live board shows. */
   order?: string[];
+  strike?: Strike;
 };
 
 /**
@@ -484,6 +496,10 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
         board,
         scores: me === 0 ? [sc[0], sc[1]] : [sc[1], sc[0]],
         ...(shownStep.k === 'grow' ? { order: shownStep.tiles.map((t) => t.key) } : {}),
+        ...(shownStep.k === 'fruit' ? { strike: { target: shownStep.target, area: [shownStep.target], cards: 1 as const } } : {}),
+        ...(shownStep.k === 'megaBomb'
+          ? { strike: { target: shownStep.target, area: [shownStep.target, ...allNeighbors(parseKey(shownStep.target)).map(coordKey)], cards: 2 as const } }
+          : {}),
       });
     });
     // The last beat of an action ends on the engine's own board (the step accumulation can differ
@@ -521,6 +537,7 @@ export const buildReplay = (input: ReplayInput): ReplayModel => {
       scores: p.scores,
       changed,
       removed,
+      ...(p.strike ? { strike: p.strike } : {}),
     });
     previous = p.board;
     at += duration;

@@ -380,14 +380,28 @@ button {
    the `title + .menu-buttons` pair is now a chain: the wordmark keeps its own step above the beta
    line, and the beta line carries the full head gap to the buttons. Either way the logo never
    crowds the actions, and the beta line adds no second void. */
-#menu .menu-inner > .title + .menu-buttons,
-#menu .menu-inner > .title + #menu-beta + .menu-buttons {
-  margin-top: calc(var(--menu-head-gap) - var(--menu-rhythm));
+/* The wordmark, the beta line and the entries are one group (.menu-stack, owner 2026-10-31): the
+   beta line sits ONE equal step from the wordmark and from the entries — never in a band of its own.
+   The step is the head gap and a quarter, so the wordmark still never crowds the actions. */
+#menu .menu-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
 }
-#menu .menu-inner > .title + #menu-beta { margin-top: 0; }
+#menu .menu-stack > .title + .menu-buttons {
+  margin-top: var(--menu-head-gap);
+}
+#menu .menu-stack > .title + #menu-beta { margin-top: calc(var(--menu-head-gap) * 1.25); }
 /* The beta line itself: quiet cream, one size under the entries, and never a box of its own. Its
    link's tap target and type live in feedback/mount.ts (that module owns the line). */
-#menu .menu-inner > #menu-beta + .menu-buttons { margin-top: calc(var(--menu-head-gap) - var(--menu-rhythm)); }
+#menu .menu-stack > #menu-beta + .menu-buttons { margin-top: calc(var(--menu-head-gap) * 1.25); }
+/* The step never drops under the 28px head gap where there is height for it (a short landscape
+   phone still compresses it, like every other gap). */
+@media (min-height: 600px) {
+  #menu .menu-stack > .title + #menu-beta,
+  #menu .menu-stack > #menu-beta + .menu-buttons { margin-top: max(28px, calc(var(--menu-head-gap) * 1.25)); }
+}
 .title {
   font-size: clamp(2.6rem, 12vw, 3.6rem);
   font-weight: var(--w-num);

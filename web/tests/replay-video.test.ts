@@ -245,3 +245,35 @@ describe('the moving video keeps a steady 30 fps clock', () => {
     expect(new Set(slots).size).toBe(slots.length);
   });
 });
+
+describe('a Bomb or Blast is shown, not just a tile going missing (owner, 2026-10-31)', () => {
+  it('the card lands, the burst goes off after it, the card leaves, and the burst fades', async () => {
+    const { strikeLook, STRIKE_TIMING: T } = await import('../src/replay/strike.js');
+    expect(strikeLook(0).card.alpha).toBeLessThan(0.05);
+    expect(strikeLook(T.landEnd).card.alpha).toBeGreaterThan(0.95);
+    expect(strikeLook(T.burst - 0.01).burst).toBe(0);
+    expect(strikeLook(T.burst + 0.06).burst).toBeGreaterThan(0.95);
+    expect(strikeLook(T.cardOutEnd).card.alpha).toBeLessThan(0.05);
+    expect(strikeLook(T.burstEnd).burst).toBeLessThan(0.05);
+    expect(T.landEnd).toBeLessThan(T.burst);
+  });
+
+  it('the video holds a struck tile until the burst, then it goes', async () => {
+    const { motionFrames } = await import('../src/replay/frames.js');
+    const { STRIKE_TIMING } = await import('../src/replay/strike.js');
+    const model = buildReplay(input());
+    // take a beat that removes nothing and make it a Bomb on a tile that is there before it
+    const i = model.frames.findIndex((f, n) => n > 0 && Object.values(model.frames[n - 1]!.board).some(Boolean) && f.kind === 'grow');
+    const before = model.frames[i - 1]!.board;
+    const target = Object.keys(before).find((k) => before[k] && !before[k]!.root)!;
+    const frames = model.frames.map((f, n) => (n === i ? { ...f, removed: [target], changed: [], board: { ...f.board, [target]: null }, strike: { target, area: [target], cards: 1 as const } } : f));
+    const pics = motionFrames({ ...model, frames }).filter((f) => f.step.index === i && !f.step.end);
+    const beat = frames[i]!;
+    const burstAt = beat.at + beat.duration * STRIKE_TIMING.burst;
+    const early = pics.filter((f) => f.at + f.duration <= burstAt);
+    expect(early.length).toBeGreaterThan(1);
+    early.forEach((f) => expect(f.board[target]).toBeTruthy());
+    expect(pics.every((f) => !!f.strike || f.at >= beat.at + beat.duration * STRIKE_TIMING.burstEnd - 40)).toBe(true);
+    expect(pics.at(-1)!.board[target]).toBeFalsy();
+  });
+});

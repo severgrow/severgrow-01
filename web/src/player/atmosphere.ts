@@ -2,6 +2,11 @@
 // noise/blur filter, animation clock, gameplay input, state or per-frame drawing.
 import { cornerPts, S } from '../ui/geom.js';
 import { publishLight, restoreDisplayLight } from './light.js';
+/** THE ONE FILM GRAIN: the tile and its strength. The on-screen film below and the replay's video
+ *  (replay/poster.ts) both use exactly these, so a shared video has the grain the player saw. */
+export const FILM_GRAIN_URL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1024' height='1024'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75  0 0 0 0 .75  0 0 0 0 .75  0 0 0 1.1 -.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E";
+export const FILM_GRAIN_OPACITY = 0.085;
+
 export const ATMOSPHERE_CSS = `
 /* THE ANALOGUE FILM GRAIN. This is the ONE grain in the app, and it goes on top of EVERYTHING,
    always (owner's rule, 2026-10-16: "always on top top top layer - even when we add new things").
@@ -35,9 +40,9 @@ export const ATMOSPHERE_CSS = `
    noise degenerates to flat grey - sd 0.61 - so .7 keeps a margin below the ceiling.) */
 #futa04-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none !important;
-  opacity: .085; background-repeat: repeat; background-size: 1024px 1024px;
+  opacity: ${FILM_GRAIN_OPACITY}; background-repeat: repeat; background-size: 1024px 1024px;
   mix-blend-mode: normal; user-select: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1024' height='1024'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75  0 0 0 0 .75  0 0 0 0 .75  0 0 0 1.1 -.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-image: url("${FILM_GRAIN_URL}");
 }
 /* One tile is 1024 DEVICE pixels wide on every screen, so the grain is always rasterised at the
    display's own resolution: never upscaled (blocky), never needlessly downsampled (washed out).

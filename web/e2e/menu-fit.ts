@@ -207,9 +207,18 @@ const checkFit = (m: Measure, tag: string, tall: boolean) => {
     check(tiny === 0, `${tag}: every gap uses the spare height (${m.gaps.join('/')}px)`);
     // …but never stretched into a sparse ladder.
     check(Math.max(...m.gaps) <= 220, `${tag}: the spread stays calm (max ${Math.max(...m.gaps)}px)`);
-    // And the rhythm is even (the head gap may stand one step proud, never a chasm).
-    const spread = Math.max(...m.gaps) - Math.min(...m.gaps);
+    // And the rhythm is even (the head gap may stand one step proud, never a chasm). Since the owner's
+    // 2026-10-31 call ("the space under and above the beta text is too large, equal spacing") the
+    // wordmark, beta line and entries are ONE group: its two inner steps are equal to each other and
+    // tight, and the evenness applies to the column's own gaps around the group.
+    const beta = m.gaps.length === 5 ? m.gaps.slice(2, 4) : [];
+    const outer = beta.length ? [m.gaps[0]!, m.gaps[1]!, m.gaps[4]!] : m.gaps;
+    const spread = Math.max(...outer) - Math.min(...outer);
     check(spread <= 60, `${tag}: the rhythm is even (spread ${spread}px)`);
+    if (beta.length) {
+      check(Math.abs(beta[0]! - beta[1]!) <= 1, `${tag}: the beta line sits one equal step from the wordmark and the entries (${beta.join('/')}px)`);
+      check(Math.max(...beta) < Math.min(...outer), `${tag}: the beta steps are tighter than the column's gaps (${beta.join('/')} vs ${outer.join('/')}px)`);
+    }
   }
 };
 

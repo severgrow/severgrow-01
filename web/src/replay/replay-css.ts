@@ -104,6 +104,8 @@ export const REPLAY_CSS = `
 }
 #replay .rp-score { position: relative; }
 #replay .rp-led { display: block; }
+/* The Bomb / Blast moment (strike.ts): one canvas over the board, never a tap target. */
+#replay .rp-strike { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
 
 /* ---------- the winner, at the end ----------
    One settle, never a loop: the winner's score swells in their ink with a soft halo and lands; their

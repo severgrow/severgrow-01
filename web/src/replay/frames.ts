@@ -11,7 +11,9 @@
 // index N carries frame N's board — and that the timing matches `ReplayModel.totalMs` exactly.
 import { drawReplayPoster, paintPosterCells, paintReplayFilm, posterFor, posterLayout, POSTER_H, POSTER_W } from './poster.js';
 import type { PosterData, PosterLayout, PosterTurn } from './poster.js';
-import type { ReplayModel } from './timeline.js';
+import type { ReplayModel, Strike } from './timeline.js';
+import { BOMB_ART_URL, paintStrike, STRIKE_TIMING } from './strike.js';
+import { decodedPicture, hexCorner } from './board-canvas.js';
 import type { Player, Tile } from '../../../src/engine/index.js';
 import type { TileMotion } from './board-canvas.js';
 
@@ -124,6 +126,8 @@ export type MotionFrame = {
   motion: Record<string, TileMotion>;
   /** A moving picture: the cells that change during its beat (the rest of the beat holds still). */
   keys?: string[];
+  /** A Bomb / Blast beat: what struck, and how far through the beat (0 … 1) this picture is. */
+  strike?: { s: Strike; p: number };
 };
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -148,14 +152,18 @@ export const motionFrames = (model: ReplayModel, fps = VIDEO_FPS): MotionFrame[]
     const frame = step.index >= 0 && !step.end ? model.frames[step.index] : undefined;
     const after = videoFrameData(model, step.index).board;
     const still = (at: number, duration: number) => out.push({ step, at, duration, board: after, motion: {} });
-    if (!frame || (!frame.changed.length && !frame.removed.length)) {
+    if (!frame || (!frame.changed.length && !frame.removed.length && !frame.strike)) {
       still(step.at, step.duration);
       continue;
     }
     const before = step.index > 0 ? model.frames[step.index - 1]!.board : model.from.board;
     const { stagger, motionMs } = arrivals(frame.changed.length, step.duration);
     const fadeMs = Math.min(VIDEO_FADE_MS, step.duration * 0.6);
-    const moving = Math.min(step.duration, Math.max(motionMs, frame.removed.length ? fadeMs : 0));
+    // A strike holds its tiles until the burst, then they go; its card and burst need the beat.
+    const burstAt = frame.strike ? Math.round(step.duration * STRIKE_TIMING.burst) : 0;
+    const moving = frame.strike
+      ? Math.min(step.duration, Math.round(step.duration * STRIKE_TIMING.burstEnd))
+      : Math.min(step.duration, Math.max(motionMs, frame.removed.length ? fadeMs : 0));
     const count = Math.max(1, Math.ceil(moving / tick));
     const moverKeys = [...new Set([...frame.changed, ...frame.removed])];
     for (let i = 0; i < count; i++) {
@@ -167,7 +175,7 @@ export const motionFrames = (model: ReplayModel, fps = VIDEO_FPS): MotionFrame[]
         if (p <= 0) board[key] = before[key] ?? null;
         else if (p < 1) motion[key] = popAt(p);
       });
-      const gone = clamp01(t / fadeMs);
+      const gone = clamp01((t - burstAt) / fadeMs);
       for (const key of frame.removed) {
         if (gone >= 1) continue;
         board[key] = before[key] ?? null;
@@ -175,7 +183,11 @@ export const motionFrames = (model: ReplayModel, fps = VIDEO_FPS): MotionFrame[]
       }
       const at = step.at + Math.round(t);
       const next = i + 1 < count ? step.at + Math.round((i + 1) * tick) : step.at + Math.round(moving);
-      out.push({ step, at, duration: next - at, board, motion, keys: moverKeys });
+      out.push({
+        step, at, duration: next - at, board, motion,
+        keys: frame.strike ? [...new Set([...moverKeys, ...frame.strike.area])] : moverKeys,
+        ...(frame.strike ? { strike: { s: frame.strike, p: t / step.duration } } : {}),
+      });
     }
     if (step.duration - moving > 0) still(step.at + Math.round(moving), step.duration - Math.round(moving));
   }
@@ -223,10 +235,24 @@ export const paintMotionFrameCached = (
   const g = canvas.getContext('2d')!;
   g.drawImage(cache.canvas, 0, 0);
   paintPosterCells(data, canvas, new Set(f.keys), f.motion);
+  if (f.strike) paintStrikeOver(g, data, f.strike);
   paintReplayFilm(g, canvas.width, canvas.height);
   return canvas;
 };
 
+/** The Bomb card(s) and burst over a painted frame (the same layout as the board under it). */
+const paintStrikeOver = (g: CanvasRenderingContext2D, data: PosterData, strike: { s: Strike; p: number }): void => {
+  paintStrike(g, posterLayout(data).board, strike.s, strike.p, decodedPicture(BOMB_ART_URL), hexCorner);
+};
+
 /** Paint one moving frame (the same painter as every other picture of the match). */
-export const paintMotionFrame = (canvas: HTMLCanvasElement, model: ReplayModel, f: MotionFrame): HTMLCanvasElement =>
-  drawReplayPoster({ ...videoFrameData(model, f.step.index), board: f.board }, canvas, videoTurn(model, f.step), f.motion, videoMoment(model, f.step));
+export const paintMotionFrame = (canvas: HTMLCanvasElement, model: ReplayModel, f: MotionFrame): HTMLCanvasElement => {
+  const data = { ...videoFrameData(model, f.step.index), board: f.board };
+  drawReplayPoster(data, canvas, videoTurn(model, f.step), f.motion, videoMoment(model, f.step), !f.strike);
+  if (f.strike) {
+    const g = canvas.getContext('2d')!;
+    paintStrikeOver(g, data, f.strike);
+    paintReplayFilm(g, canvas.width, canvas.height);
+  }
+  return canvas;
+};

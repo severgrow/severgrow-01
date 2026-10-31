@@ -15,6 +15,7 @@ import { loadBoardArtUrls, warmBoardArt } from './board-canvas.js';
 import type { BoardArt } from './board-canvas.js';
 import { motionFrames, paintMotionFrameCached, VIDEO_H, VIDEO_W } from './frames.js';
 import { muxMp4 } from './mp4.js';
+import { warmReplayFilm } from './poster.js';
 import type { Mp4Sample } from './mp4.js';
 import type { RecordedVideo } from './video.js';
 import type { ReplayModel } from './timeline.js';
@@ -77,7 +78,7 @@ export type EncodeOptions = {
 export const encodeReplayMp4 = async (o: EncodeOptions): Promise<RecordedVideo | null> => {
   const codec = o.codec ?? (await pickMp4Codec());
   if (!codec) throw new Error('this browser cannot encode H.264');
-  await warmBoardArt(o.art ?? (await loadBoardArtUrls()));
+  await Promise.all([warmBoardArt(o.art ?? (await loadBoardArtUrls())), warmReplayFilm()]);
   if (o.signal?.aborted) return null;
 
   const frames = motionFrames(o.model);

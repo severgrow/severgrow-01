@@ -17,6 +17,7 @@
 // `defaultArtBoard` does — so painting can never fail or stall.
 import { WORDMARK_URL } from '../player/branding.js';
 import { ledFrameUrl } from './led-plate.js';
+import { BOMB_ART_URL } from './strike.js';
 import { allCoords, coordKey, mirror, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
@@ -84,6 +85,7 @@ export const warmBoardArt = (art: BoardArt | null = null): Promise<void> => {
   const urls = [
     WORDMARK,
     ledFrameUrl(),
+    BOMB_ART_URL,
     ...(source?.sprites ?? []),
     source?.ground ?? '',
     ...(source?.rocks ?? []),
@@ -235,6 +237,13 @@ export const layoutBoard = (d: BoardData, area: BoardArea): BoardLayout => {
     };
   });
   return { hex, cells };
+};
+
+/** Corner `i` of the hex at (x, y) with radius r, in the board's own orientation. */
+export const hexCorner = (x: number, y: number, r: number, i: number): { x: number; y: number } => {
+  const a = (Math.PI / 180) * (60 * i - 30);
+  const o = toScreen(r * Math.cos(a), r * Math.sin(a));
+  return { x: x + o.x, y: y + o.y };
 };
 
 /** One hex outline, in the board's own screen units (the same six corners `cornerPts` uses). */

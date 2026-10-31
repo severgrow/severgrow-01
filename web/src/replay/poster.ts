@@ -7,6 +7,7 @@
 // same painter — that is what keeps the still and the video from drifting apart. The layout is a
 // pure function, so a test can prove the image carries the names, the score and the board — and
 // nothing else (no ids, no tokens, no hidden player records).
+import { FILM_GRAIN_OPACITY, FILM_GRAIN_URL } from '../player/atmosphere.js';
 import { ledFrameUrl, ledPlateLayout, paintLedScore } from './led-plate.js';
 import type { LedPlateLayout } from './led-plate.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
@@ -177,29 +178,22 @@ export type PosterTurn = { text: string; seat: Player | null };
 
 
 // The on-screen game has an analogue film overlay above every element. Canvas exports do not
-// capture DOM overlays, so replay stills and video frames carry the same finish baked into pixels.
-// Two layers from one small deterministic tile, made once and reused on every frame:
-//   * a soft-light pass, which gives the board and lettering their grain without lifting anything;
-//   * a sparse whisper of light, which is what makes grain visible on the near-black frame at all
-//     (soft-light leaves pure black untouched — the owner saw "no grain" on 2026-10-31).
-// The tile is drawn at 2× (each grain 2 px): a phone's video encoder smooths single-pixel noise to
-// nothing, a 2 px grain survives it. The black level rises by under 2%: the frame stays dark.
-let filmTiles: { soft: HTMLCanvasElement; light: HTMLCanvasElement } | null = null;
-const TILE = 128;
-const GRAIN = 2;
-const replayFilmTiles = () => {
-  if (filmTiles) return filmTiles;
-  const make = () => {
-    const c = document.createElement('canvas');
-    c.width = c.height = TILE;
-    return c;
-  };
-  const soft = make();
-  const light = make();
-  const gs = soft.getContext('2d')!;
-  const gl = light.getContext('2d')!;
-  const ps = gs.createImageData(TILE, TILE);
-  const pl = gl.createImageData(TILE, TILE);
+// capture DOM overlays, so replay stills and video frames carry the SAME film baked into pixels
+// (owner, 2026-10-31: "the grain looks stronger on downloaded video — should be the same"): the
+// game's own tile (player/atmosphere.ts — fractal noise, sparse cream specks), drawn one grain per
+// pixel at the game's own 8.5% strength, exactly as the screen draws it.
+//
+// The tile is the game's SVG rendered once into a canvas. Should a browser refuse to let that be
+// read back (an SVG image can taint a canvas, and a tainted canvas cannot become a video frame), a
+// tile with the same statistics is made in code instead.
+let filmTile: HTMLCanvasElement | null = null;
+let filmLoading: Promise<void> | null = null;
+const FILM_TILE = 1024;
+const codeFilmTile = (): HTMLCanvasElement => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d')!;
+  const px = g.createImageData(512, 512);
   let seed = 0x51f07a5a;
   const next = () => {
     seed ^= seed << 13;
@@ -207,39 +201,51 @@ const replayFilmTiles = () => {
     seed ^= seed << 5;
     return (seed >>> 0) / 0xffffffff;
   };
-  for (let i = 0; i < ps.data.length; i += 4) {
-    const v = 128 + Math.round((next() - 0.5) * 70);
-    ps.data[i] = ps.data[i + 1] = ps.data[i + 2] = v;
-    ps.data[i + 3] = 255;
-    const lit = next() < 0.34;
-    pl.data[i] = 236;
-    pl.data[i + 1] = 228;
-    pl.data[i + 2] = 212;
-    pl.data[i + 3] = lit ? 13 + Math.round(next() * 10) : 0;
+  for (let i = 0; i < px.data.length; i += 4) {
+    // fractal noise sits near .5 with a narrow spread; the game maps it through a = 1.1n - .42
+    const n = 0.5 + (next() + next() + next() - 1.5) * 0.17;
+    const a = Math.max(0, Math.min(1, 1.1 * n - 0.42));
+    px.data[i] = px.data[i + 1] = px.data[i + 2] = 191;
+    px.data[i + 3] = Math.round(a * 255);
   }
-  gs.putImageData(ps, 0, 0);
-  gl.putImageData(pl, 0, 0);
-  filmTiles = { soft, light };
-  return filmTiles;
+  g.putImageData(px, 0, 0);
+  return c;
+};
+/** Make the film tile ready (the warm-up awaits this; painting never waits). */
+export const warmReplayFilm = (): Promise<void> => {
+  if (filmTile) return Promise.resolve();
+  filmLoading ??= new Promise<void>((done) => {
+    if (typeof Image === 'undefined') { done(); return; }
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = c.height = FILM_TILE;
+        const g = c.getContext('2d')!;
+        g.drawImage(img, 0, 0, FILM_TILE, FILM_TILE);
+        g.getImageData(0, 0, 1, 1); // throws if the SVG tainted it
+        filmTile = c;
+      } catch {
+        filmTile = codeFilmTile();
+      }
+      done();
+    };
+    img.onerror = () => { filmTile = codeFilmTile(); done(); };
+    img.src = FILM_GRAIN_URL;
+  });
+  return filmLoading;
 };
 
-/** Consistent, subtle film grain over the entire export — including artwork and lettering. */
+/** The game's film over the entire export — artwork and lettering included. */
 export const paintReplayFilm = (g: CanvasRenderingContext2D, width: number, height: number): void => {
-  const { soft, light } = replayFilmTiles();
-  const fill = (tile: HTMLCanvasElement, op: GlobalCompositeOperation, alpha: number) => {
-    const pattern = g.createPattern(tile, 'repeat');
-    if (!pattern) return;
-    pattern.setTransform?.(new DOMMatrix().scale(GRAIN, GRAIN));
-    g.save();
-    g.imageSmoothingEnabled = false;
-    g.globalCompositeOperation = op;
-    g.globalAlpha = alpha;
-    g.fillStyle = pattern;
-    g.fillRect(0, 0, width, height);
-    g.restore();
-  };
-  fill(soft, 'soft-light', 0.7);
-  fill(light, 'source-over', 1);
+  const tile = filmTile ?? (filmTile = codeFilmTile());
+  const pattern = g.createPattern(tile, 'repeat');
+  if (!pattern) return;
+  g.save();
+  g.globalAlpha = FILM_GRAIN_OPACITY;
+  g.fillStyle = pattern;
+  g.fillRect(0, 0, width, height);
+  g.restore();
 };
 
 /** Paint the poster on a canvas. The one impure call; the layout above is pure. */

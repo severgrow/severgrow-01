@@ -16,11 +16,14 @@ import type { MaterialLook } from '../logic/materials.js';
 import type { ThemeId, ThemeStyle } from '../logic/themes.js';
 import type { Board } from '../logic/anim.js';
 import type { Player } from '../../../src/engine/index.js';
-import type { ReplayHighlight, ReplayModel, ReplayTurningPoint } from './timeline.js';
+import type { ReplayHighlight, ReplayModel, ReplayTurningPoint, Strike } from './timeline.js';
 import { boardAtIndex, frameAtTime, seekTo } from './seek.js';
 import { REPLAY_CSS } from './replay-css.js';
 import { posterFor } from './poster.js';
 import { ledFrameUrl, ledPlateLayout, paintLedScore } from './led-plate.js';
+import { BOMB_ART_URL, paintStrike, STRIKE_TIMING } from './strike.js';
+import { hexCorner } from './board-canvas.js';
+import { centerOf, S as GEOM_S } from '../ui/geom.js';
 import type { PosterData } from './poster.js';
 import { loadBoardArtUrls, warmBoardArt } from './board-canvas.js';
 import { paintVideoFrame, videoPlan } from './frames.js';
@@ -414,6 +417,66 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     }
   };
 
+  // THE STRIKE ON SCREEN (owner, 2026-10-31): a Bomb / Blast beat shows the Bomb card landing on the
+  // tile it hit and the burst over the cells it covers — the same curve the video uses (strike.ts),
+  // painted on one canvas over the board. It runs for the beat and stops; nothing loops.
+  const strikeCanvas = document.createElement('canvas');
+  strikeCanvas.className = 'rp-strike';
+  strikeCanvas.setAttribute('aria-hidden', 'true');
+  boardBox.append(strikeCanvas);
+  const bombArt = new Image();
+  bombArt.decoding = 'async';
+  bombArt.src = BOMB_ART_URL;
+  let strikeRaf = 0;
+  let strikeTimer = 0;
+  const stopStrike = (): void => {
+    if (strikeRaf) cancelAnimationFrame(strikeRaf);
+    window.clearTimeout(strikeTimer);
+    strikeRaf = 0;
+    const g = strikeCanvas.getContext('2d');
+    g?.clearRect(0, 0, strikeCanvas.width, strikeCanvas.height);
+  };
+  const playStrike = (strike: Strike, ms: number): void => {
+    stopStrike();
+    const box = boardBox.getBoundingClientRect();
+    const m = svg.getScreenCTM();
+    if (!m || box.width < 2) return;
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    strikeCanvas.width = Math.round(box.width * dpr);
+    strikeCanvas.height = Math.round(box.height * dpr);
+    const at = (key: string) => {
+      const c = centerOf(key);
+      return { x: c.x * m.a + m.e - box.left, y: c.y * m.d + m.f - box.top };
+    };
+    const layout = {
+      hex: GEOM_S * m.a,
+      cells: strike.area.map((key) => ({ key, ...at(key), owner: null, strength: 0, root: false, terrain: 'normal' as const })),
+    };
+    const g = strikeCanvas.getContext('2d');
+    if (!g) return;
+    const frame = (p: number) => {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, strikeCanvas.width, strikeCanvas.height);
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintStrike(g, layout, strike, p, bombArt.complete && bombArt.naturalWidth ? bombArt : null, hexCorner);
+    };
+    if (reduce()) {
+      // Reduce motion: the card, still, for the beat — no landing, no burst.
+      frame(STRIKE_TIMING.landEnd + 0.02);
+      strikeTimer = window.setTimeout(stopStrike, ms);
+      return;
+    }
+    const start = performance.now();
+    const span = Math.max(1, ms * STRIKE_TIMING.burstEnd);
+    const tick = () => {
+      const p = (performance.now() - start) / ms;
+      frame(Math.min(p, STRIKE_TIMING.burstEnd));
+      if (performance.now() - start < span) strikeRaf = requestAnimationFrame(tick);
+      else stopStrike();
+    };
+    strikeRaf = requestAnimationFrame(tick);
+  };
+
   const fadeGhosts = (ms: number): void => {
     if (!ghostLayer.childElementCount) return;
     const duration = Math.min(260, Math.max(120, ms * 0.5));
@@ -563,7 +626,13 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
         });
       });
     }
-    if (forward) fadeGhosts(frame.duration);
+    stopStrike();
+    if (forward && frame.strike) {
+      playStrike(frame.strike, frame.duration);
+      // the struck tiles hold until the burst, then go (the same order as the video)
+      const burst = reduce() ? 0 : frame.duration * STRIKE_TIMING.burst;
+      window.setTimeout(() => fadeGhosts(frame.duration), burst);
+    } else if (forward) fadeGhosts(frame.duration);
     index = i;
     setScore(frame.scores[0], frame.scores[1]);
     const tTurn = performance.now();
@@ -1184,6 +1253,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   brandWatch?.observe(boardBox);
 
   const close = (): void => {
+    stopStrike();
     // A recording never outlives the surface it was started from.
     cancelVideo();
     stop();

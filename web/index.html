@@ -101,6 +101,11 @@
       <div class="menu-inner">
         <div id="terrarium" class="terrarium" aria-hidden="true"></div>
         <div id="logo" class="logo" aria-hidden="true"></div>
+        <!-- THE STACK (owner, 2026-10-31: "equal spacing" around the beta line): the wordmark, the beta
+             line and the entries are ONE group with equal fixed steps between them; the column spreads
+             only the logo and this group over the screen, so the small beta line never gets a band of
+             empty screen to itself. -->
+        <div class="menu-stack">
         <h1 class="title">FUTASAKU</h1>
         <!-- The beta line: IN SOURCE ORDER between the wordmark and the entries, so it is seen and
              tabbed to in that order (logo → beta line → PLAY …). feedback/mount.ts fills it from
@@ -188,6 +193,7 @@
             <button id="menu-login" class="btn ghost" type="button" aria-label="Log in" hidden>LOG IN</button>
             <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
           </div>
+        </div>
         </div>
       </div>
     </section>

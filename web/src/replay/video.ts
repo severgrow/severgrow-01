@@ -9,6 +9,7 @@
 // No dependency: the browser's own encoder, the best container it admits to supporting
 // (VP9 → VP8 → WebM → MP4), and the same share-then-download rule the poster uses.
 import { loadBoardArtUrls, warmBoardArt } from './board-canvas.js';
+import { warmReplayFilm } from './poster.js';
 import type { BoardArt } from './board-canvas.js';
 import { paintVideoFrame, videoPlan } from './frames.js';
 import { replayFileBase } from './poster.js';
@@ -84,7 +85,7 @@ export const recordReplayVideo = async (o: RecordVideoOptions): Promise<Recorded
   const g = canvas.getContext('2d');
   if (!g) throw new Error('this browser cannot draw the video');
 
-  await warmBoardArt(o.art ?? (await loadBoardArtUrls()));
+  await Promise.all([warmBoardArt(o.art ?? (await loadBoardArtUrls())), warmReplayFilm()]);
   if (o.signal?.aborted) return null;
 
   // `captureStream(0)` means "only when I ask": one frame per painted position, frame-accurate.
