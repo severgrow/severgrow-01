@@ -159,6 +159,7 @@ const sheet = (id: string, label: string) => {
   };
   scrim.addEventListener('click', () => { if (!locked) close(); });
   panel.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape') { e.stopPropagation(); if (!locked) close(); }
     if (e.key === 'Tab') {
       const controls = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),a[href]')].filter(e => e.getClientRects().length);
@@ -383,18 +384,23 @@ export const mountAccounts = async (): Promise<void> => {
     tryTap();
   };
 
-  const completeSignIn = async (access: string, provider: 'google' | 'email', returnTo: ReturnTo): Promise<void> => {
+  const completeSignIn = async (access: string, provider: 'google' | 'email', returnTo: ReturnTo, active:()=>boolean = ()=>true): Promise<void> => {
+    const checkActive=()=>{if(!active())throw new Error('account-cancelled');};
+    checkActive();
     let before = readIdentity(kv);
     // Establish the usual local player before an email upgrade. Even a lost FIRST response then
     // recovers the same player and its required name step; no second identity system is needed.
     if (provider === 'email' && !before) {
       const guest = await apiPost('/v1/guests', {}, null);
+      checkActive();
       const identity = guest.ok ? identityFromSignIn(guest.json) : null;
       if (!identity || !writeIdentity(kv, identity)) throw new Error('account-storage-failed');
       before = identity;
     }
     const guestHadMatches = before ? await hasMatches(before.token) : null;
+    checkActive();
     const res = await apiPost(`/v1/auth/${provider}`, {accessToken:access}, before?.token ?? null);
+    checkActive();
     const identity = res.ok ? identityFromSignIn(res.json) : null;
     if (!identity) throw new Error(res.status === 401 ? 'account-session-expired' : 'account-exchange-failed');
     // Do not reload onto a forgotten identity if browser storage is blocked.
@@ -505,9 +511,9 @@ export const mountAccounts = async (): Promise<void> => {
   const emailGoogle = googleButton('email-google'); emailGoogle.hidden=!available;
   emailGoogle.addEventListener('click',()=>void start(emailReturnTo,emailGoogle,null));
   const emailPanel = mountEmailPanel(emailSheet.panel,{supabase:supa,alternative:emailGoogle,
-    complete:access=>completeSignIn(access,'email',emailReturnTo),close:()=>emailSheet.close()});
+    complete:(access,active)=>completeSignIn(access,'email',emailReturnTo,active),close:()=>emailSheet.close()});
   const openEmail = (returnTo:ReturnTo) => {
-    welcome.close(); emailReturnTo=returnTo; emailPanel.reset(); emailSheet.open();
+    welcome.close(); emailReturnTo=returnTo; emailPanel.reset(); emailSheet.open(()=>emailPanel.cancel());
     emailSheet.panel.querySelector<HTMLInputElement>('input:not([hidden])')?.focus({preventScroll:true});
   };
   const emailButton = (returnTo:ReturnTo) => {

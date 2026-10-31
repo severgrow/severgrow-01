@@ -10110,6 +10110,7 @@ for (const input of document.querySelectorAll<HTMLInputElement>('[data-volume]')
 // Keyboard: arrows move over the board, Enter picks, Esc cancels or closes; 1-9 pick cards.
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 document.addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229) return;
   if (e.key === 'Escape') {
     if (openSheet) sheet(null);
     // Esc skips an animation, but never the enemy's turn: that is the Skip control's job alone.

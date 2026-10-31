@@ -199,8 +199,9 @@ export const shareOrSaveVideo = async (
     try {
       await nav.share({ files: [file], title });
       return 'shared';
-    } catch {
-      return 'cancelled';
+    } catch (error) {
+      if (error && typeof error === 'object' && (('name' in error && error.name === 'AbortError') || ('message' in error && error.message === 'AbortError'))) return 'cancelled';
+      throw error;
     }
   }
   return saveVideo(video, data);
@@ -212,8 +213,9 @@ export const saveVideo = (video: RecordedVideo, data: PosterData): 'saved' => {
   const url = URL.createObjectURL(video.blob);
   const a = Object.assign(document.createElement('a'), { href: url, download: file.name });
   document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  try { a.click(); } finally {
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
   return 'saved';
 };

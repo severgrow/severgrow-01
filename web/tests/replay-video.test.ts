@@ -2,7 +2,7 @@
 // The recording itself needs a browser; everything this suite pins is pure, so it can be proved
 // without one: the frames are the replay's own frames, the timeline adds up to `totalMs`, the file
 // is named after the winner and the score, and the container is chosen in a fixed order.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Action } from '../../src/engine/index.js';
 import { CURRENT_RULES_VERSION, rulesConfig } from '../../src/engine/versions.js';
 import { buildReplay } from '../src/replay/timeline.js';
@@ -10,7 +10,7 @@ import { FILM_GRAIN_OPACITY, FILM_GRAIN_URL } from '../src/player/atmosphere.js'
 import type { ReplayInput } from '../src/replay/timeline.js';
 import { posterFor, posterLayout } from '../src/replay/poster.js';
 import { videoFrameData, videoLayoutAt, videoPlan, videoTurn } from '../src/replay/frames.js';
-import { durationLabel, pickVideoMime, shareOrSaveVideo, videoExtension, videoFile, videoFileName } from '../src/replay/video.js';
+import { durationLabel, pickVideoMime, saveVideo, shareOrSaveVideo, videoExtension, videoFile, videoFileName } from '../src/replay/video.js';
 
 const CONFIG = rulesConfig(CURRENT_RULES_VERSION)!;
 const REAL_ACTIONS: Action[] = [
@@ -189,6 +189,8 @@ describe('the replay video', () => {
         throw new Error('AbortError');
       };
       expect(await shareOrSaveVideo(video, posterFor(model), 'FUTASAKU')).toBe('cancelled');
+      nav.share = async () => { throw new Error('Share unavailable'); };
+      await expect(shareOrSaveVideo(video, posterFor(model), 'FUTASAKU')).rejects.toThrow('Share unavailable');
     } finally {
       if (original) Object.defineProperty(globalThis, 'navigator', original);
     }
@@ -282,4 +284,19 @@ describe('a Bomb or Blast is shown, not just a tile going missing (owner, 2026-1
     expect(pics.every((f) => !!f.strike || f.at >= beat.at + beat.duration * STRIKE_TIMING.burstEnd - 40)).toBe(true);
     expect(pics.at(-1)!.board[target]).toBeFalsy();
   });
+});
+
+
+it('removes a failed download anchor and releases its blob URL', () => {
+  vi.useFakeTimers();
+  const remove=vi.fn();
+  vi.stubGlobal('document',{createElement:()=>({click:()=>{throw new Error('download denied');},remove}),body:{append:vi.fn()}});
+  vi.spyOn(URL,'createObjectURL').mockReturnValue('blob:replay-test');
+  const revoke=vi.spyOn(URL,'revokeObjectURL').mockImplementation(()=>undefined);
+  try {
+    const video={blob:new Blob(['video']),mime:'video/webm',ms:1,width:1080,height:1920,painted:1};
+    expect(()=>saveVideo(video,posterFor(buildReplay(input())))).toThrow('download denied');
+    expect(remove).toHaveBeenCalledOnce();
+    vi.runAllTimers();expect(revoke).toHaveBeenCalledWith('blob:replay-test');
+  } finally {vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();}
 });

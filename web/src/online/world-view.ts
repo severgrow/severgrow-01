@@ -528,6 +528,7 @@ export class WorldView {
    */
   private sheetClock = 0;
   private readonly onSheetKey = (event: KeyboardEvent): void => {
+    if (event.isComposing || event.keyCode === 229) return;
     const sheet = this.sheet;
     if (!sheet || sheet.root.hidden) return;
     if (event.key === 'Escape') {
@@ -587,7 +588,7 @@ export class WorldView {
     for (const [id, text] of labels) { const node = document.getElementById(id); if (node) node.textContent = text; }
     // Escape steps back one layer: the window, then the row of keys, then the tile.
     document.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape' || !this.active || (this.sheet && !this.sheet.root.hidden)) return;
+      if (event.isComposing || event.keyCode === 229 || event.key !== 'Escape' || !this.active || (this.sheet && !this.sheet.root.hidden)) return;
       if (this.pane) this.setPane(null);
       else if (this.keysOpen) this.setKeys(false);
       else if (this.selected) this.deselect();

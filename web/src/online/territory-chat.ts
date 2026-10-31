@@ -15,6 +15,7 @@ export class TerritoryChat {
   private open = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private busy = false;
+  private moderating = false;
   private pending: { text: string; id: string } | null = null;
   private generation = 0;
   private failures = 0;
@@ -74,6 +75,7 @@ export class TerritoryChat {
     this.input?.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229)) e.preventDefault(); });
     document.getElementById('world-chat-form')?.addEventListener('submit', (event) => { event.preventDefault(); void this.send(); });
     document.addEventListener('keydown', (event) => {
+      if (event.isComposing || event.keyCode === 229) return;
       if (event.key === 'Escape' && this.open) { this.setOpen(false); event.stopImmediatePropagation(); }
     });
   }
@@ -161,7 +163,8 @@ export class TerritoryChat {
 
   private async block(id: string) {
     const token = this.token();
-    if (!token) return;
+    if (!token || this.moderating) return;
+    this.moderating=true;this.paint();
     try {
       this.messages = (await this.client.territoryChatBlock(token, id)).messages;
       this.picked = null;
@@ -169,12 +172,13 @@ export class TerritoryChat {
       this.paint();
     } catch {
       this.say(ONLINE.worldChatFailed);
-    }
+    } finally { this.moderating=false;this.paint(); }
   }
 
   private async report(id: string) {
     const token = this.token();
-    if (!token) return;
+    if (!token || this.moderating) return;
+    this.moderating=true;this.paint();
     try {
       await this.client.territoryChatReport(token, id, 'abuse');
       this.picked = null;
@@ -182,7 +186,7 @@ export class TerritoryChat {
       this.paint();
     } catch {
       this.say(ONLINE.worldChatFailed);
-    }
+    } finally { this.moderating=false;this.paint(); }
   }
 
   private say(text: string) { if (this.status) this.status.textContent = text; }
@@ -191,7 +195,7 @@ export class TerritoryChat {
   private paint(forceBottom = false) {
     const list = this.list;
     if (!list) return;
-    const signature = JSON.stringify([this.messages, this.picked, this.blockArmed]);
+    const signature = JSON.stringify([this.messages, this.picked, this.blockArmed, this.moderating]);
     if (signature === this.signature && !forceBottom) return;
     this.signature = signature;
     const focused = document.activeElement as HTMLElement | null;
@@ -226,14 +230,14 @@ export class TerritoryChat {
         const keys = document.createElement('span');
         keys.className = 'world-chat-mod';
         const block = document.createElement('button');
-        block.type = 'button'; block.dataset.action = 'block';
+        block.type = 'button'; block.dataset.action = 'block'; block.disabled=this.moderating;
         block.textContent = this.blockArmed ? ONLINE.worldChatBlockConfirm : ONLINE.worldChatBlock;
         block.addEventListener('click', () => {
           if (!this.blockArmed) { this.blockArmed = true; this.paint(); return; }
           void this.block(m.id);
         });
         const report = document.createElement('button');
-        report.type = 'button'; report.dataset.action = 'report';
+        report.type = 'button'; report.dataset.action = 'report'; report.disabled=this.moderating;
         report.textContent = ONLINE.worldChatReport;
         report.addEventListener('click', () => void this.report(m.id));
         keys.append(block, report);

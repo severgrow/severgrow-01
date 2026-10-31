@@ -174,6 +174,11 @@ try {
   check('keyboard seek pauses playback', (await replayNow(page))?.playing === false);
   const held=(await replayNow(page))!.elapsed;await page.waitForTimeout(250);
   check('keyboard seek stays at the chosen beat', (await replayNow(page))?.elapsed === held);
+  const primaryOnly=(await replayNow(page))!.elapsed;
+  await page.locator('#replay .rp-scrub').dispatchEvent('pointerdown',{pointerId:88,button:2,isPrimary:true,clientX:0});
+  check('secondary mouse buttons do not move the replay',(await replayNow(page))?.elapsed===primaryOnly);
+  await page.locator('#replay .rp-scrub').dispatchEvent('pointerdown',{pointerId:89,button:0,isPrimary:false,clientX:0});
+  check('a second touch does not steal the replay scrub',(await replayNow(page))?.elapsed===primaryOnly);
   const scrubBox=await page.locator('#replay .rp-scrub').boundingBox();
   if(scrubBox){
     await page.mouse.move(scrubBox.x+scrubBox.width*.6,scrubBox.y+scrubBox.height/2);await page.mouse.down();
@@ -220,6 +225,16 @@ try {
   );
   await page.waitForTimeout(1400);
   await page.screenshot({ path: `${SHOTS}/replay-practice-mid-390x844.png` });
+
+  const backgroundScrub=await page.locator('#replay .rp-scrub').boundingBox();
+  if(backgroundScrub){await page.mouse.move(backgroundScrub.x+backgroundScrub.width*.5,backgroundScrub.y+backgroundScrub.height/2);await page.mouse.down();}
+  await page.evaluate("Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'))");
+  await page.mouse.up();
+  const hiddenAt=(await replayNow(page))!.elapsed;
+  await page.waitForTimeout(100);
+  check('a hidden replay pauses at its current position',!(await replayNow(page))?.playing&&(await replayNow(page))?.elapsed===hiddenAt);
+  await page.evaluate("delete document.hidden;document.dispatchEvent(new Event('visibilitychange'))");
+  await page.locator('#replay .rp-scrub').focus();await page.keyboard.press('Space');
 
   // THE TURNING-POINT NOTCH is honest about this match: when the plan has no cut there is no
   // control at all (never one that does nothing); when it has one, the notch is present.

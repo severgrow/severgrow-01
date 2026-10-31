@@ -9,6 +9,8 @@
 //
 //   PW_CHROMIUM=/opt/pw-browsers/chromium npx tsx web/e2e/territory-menu.ts
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { ONLINE } from '../../src/strings.js';
 import type { AddressInfo } from 'node:net';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
@@ -38,7 +40,14 @@ const config = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'] };
 const store = new MemoryWorldEconomyStore();
 const economy = new WorldEconomyService(store, storage);
 const service = new MatchService({ storage, config, economy });
-const api = createHttpServer({ service, config, live: chainRouters(createTerritoryChatRouter({ store: memoryTerritoryChatStore(storage), service, storage }), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) })) });
+const moderation={calls:0,release:null as null|(()=>void),reached:null as null|(()=>void)};
+const chatRouter=createTerritoryChatRouter({store:memoryTerritoryChatStore(storage),service,storage});
+const api = createHttpServer({service,config,live:chainRouters(async(req,path)=>{
+  if(req.method==='POST'&&/^\/v1\/territory\/chat\/(report|block)$/.test(path)){
+    moderation.calls++;await new Promise<void>(resolve=>{moderation.release=resolve;moderation.reached?.();});
+  }
+  return chatRouter(req,path);
+},createWorldEconomyRouter({economy,authenticate:t=>service.authenticate(t)}))});
 await new Promise<void>((resolve) => api.listen(0, '127.0.0.1', resolve));
 const apiBase = `http://127.0.0.1:${(api.address() as AddressInfo).port}`;
 
@@ -51,6 +60,7 @@ for (const [i, g] of others.entries()) {
   await fund(g.player.id, otherCells[i]!.length);
   for (const [j, cell] of otherCells[i]!.entries()) await store.claim(g.player.id, cell, `other-${i}-${j}-req`, Date.now() - (10 - j) * 60_000);
 }
+await fetch(`${apiBase}/v1/territory/chat`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${others[0]!.token}`},body:JSON.stringify({text:'Moderation fixture',requestId:randomUUID()})});
 const me = await guestOf();
 await fund(me.player.id, 3);
 await store.claim(me.player.id, '-2,-4', 'menu-owned-fixture', Date.now());
@@ -176,6 +186,26 @@ try {
   await page.click('#online-world-chat');
   await page.waitForSelector('#online-world-chat-panel:not([hidden])');
   check('CHAT opens the chat on its own', await page.isHidden('#online-world-panel') && (await page.getAttribute('#online-world-chat', 'aria-expanded')) === 'true');
+  await page.locator('#world-chat-input').dispatchEvent('keydown',{key:'Escape',isComposing:true,keyCode:229,bubbles:true});
+  check('IME Escape preserves Territory chat',await page.isVisible('#online-world-chat-panel'));
+  await page.locator('.world-chat-line').first().click();
+  let reached=new Promise<void>(resolve=>{moderation.reached=resolve;});
+  await page.locator('.world-chat-mod [data-action="report"]').dispatchEvent('click');
+  await page.locator('.world-chat-mod [data-action="report"]').dispatchEvent('click');
+  await reached;
+  check('rapid reporting makes one request',moderation.calls===1);
+  check('moderation controls show their pending state',await page.locator('.world-chat-mod [data-action="report"]').isDisabled()&&await page.locator('.world-chat-mod [data-action="block"]').isDisabled());
+  moderation.release?.();
+  await page.waitForFunction(expected=>document.getElementById('world-chat-status')?.textContent===expected,ONLINE.worldChatReported);
+  await page.locator('.world-chat-line').first().click();
+  await page.locator('.world-chat-mod [data-action="block"]').click();
+  reached=new Promise<void>(resolve=>{moderation.reached=resolve;});
+  await page.locator('.world-chat-mod [data-action="block"]').dispatchEvent('click');
+  await page.locator('.world-chat-mod [data-action="block"]').dispatchEvent('click');
+  await reached;check('confirmed rapid blocking makes one request',moderation.calls===2);
+  moderation.release?.();await page.locator('.world-chat-line').waitFor({state:'hidden'});
+  check('blocking still filters the opponent messages',await page.locator('.world-chat-line').count()===0);
+
   await page.click('#world-key-ranking');
   await page.waitForTimeout(200);
   check('one window at a time: a page shuts the chat', await page.isHidden('#online-world-chat-panel') && await page.isVisible('#online-world-panel'));

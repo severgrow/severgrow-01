@@ -17,6 +17,7 @@ const port = (server: ReturnType<typeof createServer>) => (server.address() as A
 let mailRequests=0, enabled=true, loseExchange=false, googleOn=false;
 const consumed=new Set<string>();
 const tokens = new Map<string,string>();
+let holdExchange=false, releaseExchange:(()=>void)|null=null, reachedExchange:(()=>void)|null=null;
 const mail = createServer((req,res)=>{
   const headers={'access-control-allow-origin':'*','access-control-allow-headers':'apikey,authorization,content-type','content-type':'application/json'};
   const reply=(status:number,body:unknown)=>{res.writeHead(status,headers);res.end(JSON.stringify(body));};
@@ -48,6 +49,7 @@ const router=createAccountsRouter({storage,links,emailEnabled:true,auth:supabase
 const api=createHttpServer({service,config:{...DEFAULT_SERVER_CONFIG,corsOrigins:['*']},live:async(req,path)=>{
   if(path==='/v1/auth/methods'&&!enabled)return {status:404,body:{}};
   const result=await router(req,path);
+  if(path==='/v1/auth/email'&&holdExchange){holdExchange=false;await new Promise<void>(resolve=>{releaseExchange=resolve;reachedExchange?.();});}
   if(path==='/v1/auth/email'&&loseExchange){loseExchange=false;return {status:503,body:{code:'INTERNAL'}};}
   return result;
 }});
@@ -124,6 +126,19 @@ try {
   await typo.waitForSelector('#acct-email .acct-status[data-tone="bad"]');
   check('switching addresses cannot reset their individual resend cooldown',mailRequests===mailsBefore+2);
   await typo.close();
+  const dismiss=await browser.newPage();await dismiss.goto(origin);await dismiss.waitForSelector('#menu-login[data-owned="1"]');await dismiss.click('#menu-login');
+  await dismiss.locator('#acct-email-address').dispatchEvent('keydown',{key:'Escape',isComposing:true,keyCode:229,bubbles:true});
+  check('IME Escape keeps the account form open',await dismiss.locator('#acct-email').isVisible());
+  await dismiss.fill('#acct-email-address','dismiss@example.com');await dismiss.click('[data-acct="email-submit"]');await dismiss.waitForSelector('#acct-email-code:not([hidden]):not(:disabled)');
+  await dismiss.fill('#acct-email-code','12345678');holdExchange=true;
+  const reached=new Promise<void>(resolve=>{reachedExchange=resolve;});
+  let navigations=0;dismiss.on('framenavigated',frame=>{if(frame===dismiss.mainFrame())navigations++;});
+  await dismiss.click('[data-acct="email-submit"]');await reached;
+  check('Close stays usable while sign-in is pending',!(await dismiss.locator('[data-acct="email-close"]').isDisabled()));
+  await dismiss.click('[data-acct="email-close"]');await dismiss.waitForSelector('#acct-email',{state:'hidden'});
+  releaseExchange!();await dismiss.waitForTimeout(400);
+  check('a dismissed sign-in cannot reload or switch this device',navigations===0&&await dismiss.evaluate(()=>localStorage.getItem('futasaku.account.v1'))===null);
+  await dismiss.close();
   googleOn=true;
   const desktop=await browser.newPage({viewport:{width:1280,height:800}});
   await desktop.goto(origin);await desktop.waitForSelector('#menu-login[data-owned="1"]');await desktop.click('#menu-login');

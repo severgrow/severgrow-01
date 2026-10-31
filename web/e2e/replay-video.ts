@@ -303,6 +303,10 @@ try {
   await page.evaluate("window.__rejectShare(new DOMException('Cancelled','AbortError'))");
   await readySave.waitFor({state:'visible'});await page.waitForFunction("!document.querySelector('[data-rp=video-save]').disabled");
   check('cancelled sharing preserves the file for retry',await readyShare.isVisible()&&await readySave.isVisible());
+  await readyShare.click();
+  await page.evaluate("window.__rejectShare(new Error('Share unavailable'))");
+  await page.waitForFunction("document.querySelector('.rp-video-text').textContent.includes('Could not send')");
+  check('a real sharing error is shown and preserves the file',await readySave.isVisible()&&!(await readySave.isDisabled()));
   await page.evaluate("window.__originalCreateURL=URL.createObjectURL;URL.createObjectURL=()=>{throw new Error('Save unavailable')}");
   await readySave.click();await page.waitForFunction("document.querySelector('.rp-video-text').textContent.includes('Could not send')");
   check('failed saving preserves a usable retry',await readySave.isVisible()&&!(await readySave.isDisabled()));

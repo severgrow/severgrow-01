@@ -377,6 +377,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   let raf = 0;
   let lastTick = 0;
   let dragging = false;
+  let scrubPointer: number | null = null;
   let resumeAfterDrag = false;
   let turnShown = -1;
   /** Signature of the board actually painted (a rebuild from the log differs from the frame list). */
@@ -757,10 +758,11 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   };
 
   scrub.addEventListener('pointerdown', (event) => {
-    if (!model) return;
+    if (!model || event.button !== 0 || !event.isPrimary || dragging) return;
     event.preventDefault();
     event.stopPropagation();
     dragging = true;
+    scrubPointer = event.pointerId;
     resumeAfterDrag = playing && !ended;
     playing = false;
     stop();
@@ -768,19 +770,27 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     seek(fractionAt(event.clientX), false);
   });
   scrub.addEventListener('pointermove', (event) => {
-    if (!dragging) return;
+    if (!dragging || event.pointerId !== scrubPointer) return;
     event.preventDefault();
     seek(fractionAt(event.clientX), false);
   });
   const endDrag = (event: PointerEvent): void => {
-    if (!dragging) return;
+    if (!dragging || event.pointerId !== scrubPointer) return;
     dragging = false;
+    scrubPointer = null;
     if (scrub.hasPointerCapture?.(event.pointerId)) scrub.releasePointerCapture(event.pointerId);
     if (event.type !== 'pointercancel' && event.type !== 'lostpointercapture') seek(fractionAt(event.clientX), false);
     if (resumeAfterDrag) {
       resumeAfterDrag = false;
       setPlaying(true);
     }
+  };
+  const resetScrub = (): void => {
+    const pointer = scrubPointer;
+    dragging = false;
+    scrubPointer = null;
+    resumeAfterDrag = false;
+    if (pointer !== null && scrub.hasPointerCapture?.(pointer)) scrub.releasePointerCapture(pointer);
   };
   scrub.addEventListener('pointerup', endDrag);
   scrub.addEventListener('pointercancel', endDrag);
@@ -1037,6 +1047,11 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     }
   });
 
+  // A silent visual replay rests while the app is away; returning never skips unseen turns.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && !root.hidden) { resetScrub(); setPlaying(false); }
+  });
+
   let captionTimer = 0;
   const CAPTION_HOLD_MS = 2400;
   const hideCaption = (): void => {
@@ -1284,8 +1299,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     cancelVideo();
     stop();
     playing = false;
-    dragging = false;
-    resumeAfterDrag = false;
+    resetScrub();
     clearGhosts();
     hideCaption();
     model = null;

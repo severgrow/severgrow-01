@@ -188,15 +188,20 @@ export const mountMatchChat = (o: {
     void ctl.send();
   };
   let composing = false;
+  const updateDraft = () => {
+    ctl.draft(input.value);
+    const s = ctl.state();
+    send.disabled = input.disabled || s.loading || !input.value.trim();
+  };
   input.addEventListener('compositionstart', () => {
     composing = true;
   });
   input.addEventListener('compositionend', () => {
     composing = false;
-    ctl.draft(input.value);
+    updateDraft();
   });
   input.oninput = () => {
-    ctl.draft(input.value);
+    updateDraft();
   };
   form.onsubmit = (e) => {
     e.preventDefault();
@@ -504,7 +509,7 @@ export const mountMatchChat = (o: {
     older.disabled = s.loading;
     if (input.value !== s.draft && !composing) input.value = s.draft;
     input.disabled = !s.canSend || s.outgoing !== null;
-    send.disabled = input.disabled || s.loading;
+    send.disabled = input.disabled || s.loading || !s.draft.trim();
     for (const b of phrases.querySelectorAll('button'))
       b.disabled = input.disabled;
     const snap = o.snapshot();
@@ -606,6 +611,7 @@ export const mountMatchChat = (o: {
   }
   toggle.onclick = () => setOpen(!ctl.state().open);
   const keydown = (e: KeyboardEvent) => {
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape' && !reportForm.hidden) {
       e.preventDefault();
       e.stopPropagation();
@@ -683,8 +689,8 @@ export const mountMatchChat = (o: {
       o.host.querySelector('#smart-context')?.getBoundingClientRect().top ??
       key.top;
     const desktopTop = Math.max(
-      64,
-      o.header.getBoundingClientRect().bottom + 24,
+      48,
+      o.header.getBoundingClientRect().bottom + 4,
     );
     const horizontalRoom = area
       ? 2 *

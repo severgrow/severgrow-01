@@ -235,6 +235,11 @@ try {
       !(document.querySelector('.match-chat-form input') as HTMLInputElement)
         .disabled,
   );
+  check('empty chat has a disabled Send control',await sender.locator('.match-chat-send').isDisabled());
+  await input(sender).fill('   ');
+  check('whitespace-only chat has a disabled Send control',await sender.locator('.match-chat-send').isDisabled());
+  await input(sender).dispatchEvent('keydown',{key:'Escape',isComposing:true,keyCode:229,bubbles:true});
+  check('IME Escape preserves the open match chat',await input(sender).isVisible());
   await input(sender).fill('Remember after reload');
   await sender.reload();
   await openMenuEntry(sender, 'menu-online');
