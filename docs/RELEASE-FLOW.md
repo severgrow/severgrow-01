@@ -28,6 +28,25 @@ Both are rebuilt by one workflow, `.github/workflows/futasaku04-preview.yml` ("P
 Agents: only promote when the owner says so. Pushing to `futa0.5-online` is the normal end of a task
 (it reaches /test/ only); promoting is the owner's call.
 
+## Production environment branch policy
+
+Observed 31 October 2026: the `github-pages` environment accepts publications triggered from
+`futa0.5-online`, but rejects a deploy job triggered directly from `live`. The root build and CI
+can both pass before that final environment rejection. A moved `live` ref alone is therefore not
+proof that the site deployed.
+
+Use the documented manual **Run workflow → promote** on `futa0.5-online` for an approved-source
+promotion. The publisher reads the `live` and `futa0.5-online` heads independently of the trigger:
+a publication from the approved release branch also publishes an already-selected `live` SHA.
+An ordinary release-branch update uses that same publication path. All exact-SHA CI gates, build
+checks and the GitHub environment policy remain active. Leave `main` on its separate product line.
+
+The combined `baa26bf1` release passed CI and staging. Its direct-live attempt
+[41223279871](https://github.com/severgrow/severgrow-01/actions/runs/41223279871) passed resolve,
+CI and build, then the environment rejected its trigger branch. The `live` ref already selects the
+tested release; the approved release-branch publisher can complete publication without changing
+that selection or the environment's allowed branches.
+
 ## What /test/ is
 
 The same game as the root (same channel, same API and database, same saves and account, so your own

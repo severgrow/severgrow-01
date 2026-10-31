@@ -66,3 +66,14 @@ an immediate keyboard seek. The existing opening timer now yields to deliberate 
 input, and a late art setup repaints that selected frame. The regression test waits beyond the
 opening beat and verifies both the paused state and unchanged elapsed position. No timing token
 or gameplay animation was changed. Both offline replay and real video suites were rerun green.
+
+
+## Hosted release handoff
+
+Both CI runs, the extra regressions and staging publisher succeeded for `baa26bf1`. The `live`
+ref was fast-forwarded to that exact commit. The resulting live-triggered publisher passed its
+build but GitHub rejected deployment because `live` is not an allowed environment trigger branch.
+The approved `futa0.5-online` publisher reads the already-selected live head and can publish it;
+this documentation update records that operational requirement and runs through the normal
+release-branch publication path. No protection setting, workflow or runtime code was changed.
+See [RELEASE-FLOW.md](RELEASE-FLOW.md#production-environment-branch-policy).
