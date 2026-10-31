@@ -7,6 +7,7 @@ import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { servePreview } from './helpers/preview-port.js';
 import { apply, legalActions, viewFor } from '../../src/engine/index.js';
+import { skipPlan } from '../src/logic/emptyturn.js';
 import type { State } from '../../src/engine/index.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 // Run the focused sort/pile regression after the board-turn suite. Both suites now take a FREE
@@ -22,7 +23,16 @@ const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executab
 let checks = 0;
 const check = (value: unknown, name: string) => { assert(value, name); checks++; };
 const state = (p: Page) => p.evaluate(() => (window as any).__severgrow.state() as State);
-const idle = (p: Page) => p.waitForFunction(() => { const h = (window as any).__severgrow; return h && !h.busy() && h.state()?.actor === 0; }, undefined, { timeout: 30000 });
+const idle = async (p: Page) => {
+  await p.waitForFunction(() => { const h = (window as any).__severgrow; return h && !h.busy() && h.state()?.actor === 0; }, undefined, { timeout: 30000 });
+  const s = await state(p), view = viewFor(s, 0);
+  const autoSkip = await p.evaluate(() => (window as any).__severgrow.settings().autoSkip as boolean);
+  // The owner's essentials-only policy fixes autoSkip ON, ignoring the old saved false value.
+  // busy() can clear one render before that automatic EndAct: wait for the actual settled state.
+  if (s.phase === 'ACT' && skipPlan(legalActions(view), view.hand.length, autoSkip).kind === 'auto') {
+    await p.waitForFunction(() => { const h = (window as any).__severgrow; return !h.busy() && h.state()?.actor === 0 && h.state()?.phase !== 'ACT'; }, undefined, { timeout: 30000 });
+  }
+};
 // Fanned cards intentionally overlap. Click a visible piece of the requested card,
 // rather than Playwright's centre point, which can belong to the next card.
 const clickVisibleCard = async (p: Page, id: number) => {
@@ -85,9 +95,12 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   check(obscured.length===0,`${w}: tip leaves all playable hexes and both homes clear (${obscured})`);
   await target.click();
   await idle(page);
-  check(JSON.stringify(await state(page)) === JSON.stringify(apply(grown, action)), `${w}: first valid target tap places exact action`);
+  let expectedGrow = apply(grown, action);
+  const expectedView = viewFor(expectedGrow, 0);
+  if (skipPlan(legalActions(expectedView), expectedView.hand.length, true).kind === 'auto') expectedGrow = apply(expectedGrow, {t:'EndAct'});
+  check(JSON.stringify(await state(page)) === JSON.stringify(expectedGrow), `${w}: first valid target tap places exact action, including the automatic step`);
   await target.click(); await idle(page);
-  check(JSON.stringify(await state(page)) === JSON.stringify(apply(grown, action)), `${w}: repeated target tap cannot duplicate the action`);
+  check(JSON.stringify(await state(page)) === JSON.stringify(expectedGrow), `${w}: repeated target tap cannot duplicate the action`);
   check(await page.locator('#board .mark-line,#board .mark-ink').count() === 0, `${w}: artwork communicates ownership without shapes`);
   await page.click('#tool-undo'); await idle(page);
   check(JSON.stringify(await state(page)) === JSON.stringify(grown), `${w}: Undo restores exact state`);
