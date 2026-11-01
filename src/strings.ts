@@ -1401,10 +1401,8 @@ export const PROFILE = Object.freeze({
   title: 'Profile',
   /** The account key's spoken label while signed in; the name is part of the label. */
   open: (name: string): string => `${name}. Your profile`,
-  name: 'Name',
-  signIn: 'Sign-in',
-  signedIn: 'Signed in',
-  guest: 'Guest on this device',
+  /** The identity line names the tag too, because that is what the value carries (`name #TAG`). */
+  nameTag: 'Name & tag',
   /** The Seeds line's label is the ECONOMY's word, and it lives with the wallet's own wording in
    *  web/src/online/seed-icon.ts (`SEEDS_WORD`): this file must stay free of that word
    *  (web/tests/seed-words.test.ts), and the profile takes it from the one place the currency is
@@ -1413,18 +1411,14 @@ export const PROFILE = Object.freeze({
   matchesWon: 'Matches won',
   /** An em dash is a FACT: this value is not known. It is never a made-up 0. */
   unknown: '—',
-  /** Player stats (owner, 2026-10-23): the record against the computer, kept on this device. */
+  /** Player stats (owner, 2026-11-01): two rows of three, the offline record above the online one. */
   playTitle: 'Your games',
-  playNote: 'Against the computer, on this device',
+  offline: 'Offline',
+  online: 'Online',
   games: 'Games',
   winRate: 'Win rate',
-  streak: 'Win streak',
-  /** The streak tile's label once there is a record: the value is the current run. */
-  streakBest: (best: number): string => `Win streak · best ${best}`,
-  bestScore: 'Best score',
-  favourite: 'Favourite move',
-  longestBloom: 'Longest Bloom',
-  tilesCount: (n: number): string => `${n} tile${n === 1 ? '' : 's'}`,
+  /** The longest winning run ever, not the current one: the tile says what its value means. */
+  longestStreak: 'Longest streak',
 });
 
 /**

@@ -195,11 +195,33 @@ try {
     await page.waitForTimeout(400);
     const rows = (await page.evaluate(`(() => {
       const sheet = document.getElementById('sheet-profile');
-      const ids = ['profile-name', 'profile-signin', 'profile-seeds', 'profile-tiles', 'profile-wins'];
+      const ids = ['profile-name', 'profile-seeds', 'profile-tiles', 'profile-wins'];
+      const tiles = (id) => [...(document.getElementById(id)?.querySelectorAll('.sp-tile') ?? [])]
+        .map((t) => [t.querySelector('dt')?.textContent.trim(), t.querySelector('dd')?.textContent.trim()]);
       return {
         n: sheet.querySelectorAll('.sp-row').length,
         labels: [...sheet.querySelectorAll('.sp-row dt')].map((d) => d.textContent.trim()),
         values: ids.map((id) => (document.getElementById(id)?.textContent ?? '').trim()),
+        offline: tiles('profile-play-offline'),
+        online: tiles('profile-play-online'),
+        sides: [...sheet.querySelectorAll('.sp-play-side')].map((s) => s.textContent.trim()),
+        note: sheet.querySelector('.sp-play-note') ? 1 : 0,
+        signIn: /sign.?in/i.test(sheet.textContent ?? '') ? 1 : 0,
+        brand: sheet.querySelector('#profile-brand svg') ? 1 : 0,
+        // The row words are rotated, so they can overflow sideways in a way a vertical scroll check
+        // would never see: measure that each stays inside the sheet and inside its own row band.
+        sides: [...sheet.querySelectorAll('.sp-play-side')].map((s) => {
+          const r = s.getBoundingClientRect();
+          const sheetR = sheet.getBoundingClientRect();
+          return {
+            text: s.textContent.trim(),
+            insideX: r.left >= sheetR.left - 0.5 && r.right <= sheetR.right + 0.5,
+            insideY: r.top >= sheetR.top - 0.5 && r.bottom <= sheetR.bottom + 0.5,
+            w: +r.width.toFixed(1),
+            h: +r.height.toFixed(1),
+          };
+        }),
+        hScroll: Math.max(0, sheet.scrollWidth - sheet.clientWidth),
         role: sheet.getAttribute('role'),
         modal: sheet.getAttribute('aria-modal'),
         scroll: Math.max(0, sheet.scrollHeight - sheet.clientHeight),
@@ -207,16 +229,29 @@ try {
         bottom: +sheet.getBoundingClientRect().bottom.toFixed(1),
         vh: innerHeight,
       };
-    })()`)) as { n: number; labels: string[]; values: string[]; role: string; modal: string | null; scroll: number; pageScroll: number; bottom: number; vh: number };
-    check(`${label}: the profile has exactly five rows`, rows.n === 5, String(rows.n));
-    check(`${label}: the five rows are name, sign-in, Seeds, tiles, matches won`,
-      JSON.stringify(rows.labels) === JSON.stringify([PROFILE.name, PROFILE.signIn, SEEDS_WORD, PROFILE.tiles, PROFILE.matchesWon]), rows.labels.join(' | '));
+    })()`)) as { n: number; labels: string[]; values: string[]; offline: [string, string][]; online: [string, string][]; sides: { text: string; insideX: boolean; insideY: boolean; w: number; h: number }[]; hScroll: number; note: number; signIn: number; brand: number; role: string; modal: string | null; scroll: number; pageScroll: number; bottom: number; vh: number };
+    check(`${label}: the identity block is four rows`, rows.n === 4, String(rows.n));
+    check(`${label}: the rows are name & tag, Seeds, tiles, matches won`,
+      JSON.stringify(rows.labels) === JSON.stringify([PROFILE.nameTag, SEEDS_WORD, PROFILE.tiles, PROFILE.matchesWon]), rows.labels.join(' | '));
     check(`${label}: the first row is the player's name`, rows.values[0] === name, rows.values[0] ?? '');
-    check(`${label}: the sign-in row says signed in`, rows.values[1] === PROFILE.signedIn, rows.values[1] ?? '');
     // No API in this build: all three numbers are unknown, so all three are em dashes — never 0.
-    check(`${label}: unknown Seeds are an em dash`, rows.values[2] === PROFILE.unknown, rows.values[2] ?? '');
-    check(`${label}: unknown tiles are an em dash`, rows.values[3] === PROFILE.unknown, rows.values[3] ?? '');
-    check(`${label}: an unknowable matches-won count is an em dash (never an invented 0)`, rows.values[4] === PROFILE.unknown, rows.values[4] ?? '');
+    check(`${label}: unknown Seeds are an em dash`, rows.values[1] === PROFILE.unknown, rows.values[1] ?? '');
+    check(`${label}: unknown tiles are an em dash`, rows.values[2] === PROFILE.unknown, rows.values[2] ?? '');
+    check(`${label}: an unknowable matches-won count is an em dash (never an invented 0)`, rows.values[3] === PROFILE.unknown, rows.values[3] ?? '');
+    // Two records of the same three tiles: offline above, online below, each with its word on the edge.
+    const labels3 = [PROFILE.games, PROFILE.winRate, PROFILE.longestStreak];
+    check(`${label}: the offline row is games / win rate / longest streak`,
+      JSON.stringify(rows.offline.map((t) => t[0])) === JSON.stringify(labels3), JSON.stringify(rows.offline));
+    check(`${label}: the online row is the same three tiles`,
+      JSON.stringify(rows.online.map((t) => t[0])) === JSON.stringify(labels3), JSON.stringify(rows.online));
+    check(`${label}: each row is named down its edge`,
+      JSON.stringify(rows.sides.map((s) => s.text)) === JSON.stringify([PROFILE.offline, PROFILE.online]), rows.sides.map((s) => s.text).join(' | '));
+    check(`${label}: the row words stay inside the sheet`,
+      rows.sides.every((s) => s.insideX && s.insideY), JSON.stringify(rows.sides.map((s) => [s.w, s.h])));
+    check(`${label}: the profile never scrolls sideways`, rows.hScroll <= 1, String(rows.hScroll));
+    check(`${label}: the old footer note is gone and nothing replaced it`, rows.note === 0);
+    check(`${label}: the sign-in line is gone`, rows.signIn === 0);
+    check(`${label}: the Futasaku mark is in the nameplate`, rows.brand === 1);
     check(`${label}: the profile reads as a dialog that traps nothing`, rows.role === 'dialog' && rows.modal === null, `${rows.role}/${rows.modal}`);
     check(`${label}: the profile does not scroll`, rows.scroll <= 1 && rows.pageScroll <= 1, `${rows.scroll}/${rows.pageScroll}`);
     check(`${label}: the profile is fully inside the screen`, rows.bottom <= rows.vh + 0.5, `${rows.bottom} ≤ ${rows.vh}`);

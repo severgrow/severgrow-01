@@ -671,7 +671,12 @@ function drawTerrarium() {
     <rect x="30" y="112" width="160" height="12" rx="6" class="tr-base"/>
     ${tiles.map(([x, y, f, cls]) => hex(x, y, 9.5, f, cls)).join('')}
     <path d="M86 104 L95 89 L104 104" stroke="${c.you}" stroke-width="2" fill="none" opacity=".7"/>
-    <circle class="tr-spore" cx="80" cy="70" r="1.6" fill="${c.text}"/><circle class="tr-spore d1" cx="130" cy="60" r="1.3" fill="${c.text}"/><circle class="tr-spore d2" cx="105" cy="48" r="1.2" fill="${c.text}"/>
+    <defs><radialGradient id="tr-spore-soft">
+      <stop offset="0%" stop-color="${c.text}" stop-opacity="1"/>
+      <stop offset="42%" stop-color="${c.text}" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="${c.text}" stop-opacity="0"/>
+    </radialGradient></defs>
+    <circle class="tr-spore" cx="80" cy="70" r="2.8" fill="url(#tr-spore-soft)"/><circle class="tr-spore d1" cx="130" cy="60" r="2.3" fill="url(#tr-spore-soft)"/><circle class="tr-spore d2" cx="105" cy="48" r="2.1" fill="url(#tr-spore-soft)"/>
     <path d="M52 40 Q70 28 92 27" class="tr-shine"/>
   </svg>`;
 }
@@ -2978,6 +2983,10 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
     if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
       stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
+      // The offline record just changed. The account panel listens for this and tells the server, so
+      // the same numbers show on the player's other devices (web/src/accounts/mount.ts); signed out,
+      // there is no listener doing anything and this costs one dispatched event.
+      window.dispatchEvent(new Event('futasaku:offline-game'));
       // The install invitation counts EVERY finished game — offline here, online at the finish
       // screen — and never a tutorial step (the guard above already excludes the tutorial).
       noteFinishedForInstall(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');

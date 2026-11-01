@@ -20,8 +20,12 @@ import { glassBaseCss } from '../player/glass-surface.js';
 import { installProfileUI } from './profile.js';
 import { EMAIL_ON_KEY, GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
 import type { ProfileFacts } from './profile.js';
-import { PLAY_KEY, parsePlay, playRows } from '../logic/play-record.js';
 import { STATS_KEY, parseStats } from '../logic/stats.js';
+import { accountRecord, offlineRecord, onlineRecord } from '../logic/match-record.js';
+import { DEVICE_KEY, deviceIdFrom, matchesWonEver, newDeviceId, offlineCounters } from '../logic/offline-sync.js';
+import { browserCountry } from '../logic/country.js';
+import { TILE_COLOURS } from '../../../src/tile-colours.js';
+import type { MatchListEntry, OfflineSummary } from '../../../server/src/protocol.js';
 import {
   WELCOME_KEY,
   authorizeUrl,
@@ -590,9 +594,12 @@ export const mountAccounts = async (): Promise<void> => {
 
   /**
    * The profile's facts. Seeds and tiles are the SAME pair the Territory entry shows: the cache is
-   * the lobby's own menu-show read, and an empty cache costs ONE more pair read, never a poll. The
-   * matches-won line has no player-facing source in this build (the server's win count is
-   * admin-only), so its fact is honestly null and the panel renders an em dash.
+   * the lobby's own menu-show read, and an empty cache costs ONE more pair read, never a poll.
+   *
+   * The rest arrives after the sheet is already on screen (owner, 2026-11-01): the offline record is
+   * this device's own counters to begin with, then the account's totals across every device; the
+   * online record comes from the match list the server returns unbounded; the flag is derived on the
+   * device and costs nothing. Nothing here polls, and every read paints as it lands.
    */
   /** This device's saved record (the game writes it under the same keys); blocked storage reads as none. */
   const readLocal = (key: string): string | null => {
@@ -602,31 +609,126 @@ export const mountAccounts = async (): Promise<void> => {
       return null;
     }
   };
+  const writeLocal = (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Blocked storage: the device simply stays anonymous and its offline games stay local.
+    }
+  };
+
+  /** GET with the player's own token; null when the API is absent, offline or unhappy. */
+  const apiGet = async (path: string, token: string): Promise<Record<string, unknown> | null> => {
+    const url = apiUrl(path);
+    if (!url) return null;
+    try {
+      const res = await authJson(url, {
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${token}`,
+          'x-futasaku-client-version': DUEL_CLIENT_VERSION,
+          'x-futasaku-rules-version': CURRENT_RULES_VERSION,
+        },
+      });
+      return res.ok ? (res.json as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /** This browser's id for itself, minted once. Two devices on one account stay two rows. */
+  const deviceId = (): string => {
+    const known = deviceIdFrom(readLocal(DEVICE_KEY));
+    if (known) return known;
+    const fresh = newDeviceId(Math.random);
+    writeLocal(DEVICE_KEY, fresh);
+    return fresh;
+  };
+
+  /**
+   * Send THIS device's totals and take back the account's aggregate. The POST both writes and reads,
+   * so a device that has played offline needs one request, not two; the counters are cumulative and
+   * the server never lowers them, which makes a repeat safe. A device that has played nothing only
+   * reads, so it does not create an empty row.
+   */
+  const syncOffline = async (token: string, device: string): Promise<OfflineSummary | null> => {
+    const counters = offlineCounters(parseStats(readLocal(STATS_KEY)), device);
+    const body = counters.played > 0
+      ? await apiPost('/v1/players/me/offline', counters, token)
+      : { ok: true, json: (await apiGet('/v1/players/me/offline', token)) ?? {} };
+    const offline = (body.json as { offline?: OfflineSummary }).offline;
+    return offline && typeof offline.games === 'number' ? offline : null;
+  };
+
+  const localRecord = () => offlineRecord(parseStats(readLocal(STATS_KEY)));
 
   const profileFacts = (identity: Identity): ProfileFacts => {
     const pair = cachedTerritory(identity.playerId);
+    const offline = localRecord();
     return {
       name: shownName(identity),
-      signedIn: true,
+      country: browserCountry(),
+      colour: null,
       seeds: pair?.seeds ?? null,
       tiles: pair?.tiles ?? null,
-      matchesWon: null,
-      play: playRows(parseStats(readLocal(STATS_KEY)), parsePlay(readLocal(PLAY_KEY))),
+      matchesWon: matchesWonEver(offline, null),
+      offline,
+      online: null,
     };
   };
+
+  /** The player's tile colour, for the one tile the profile draws beside their name. */
+  const readColour = (token: string): Promise<ProfileFacts['colour']> =>
+    apiGet('/v1/world/colour', token).then((body) => {
+      const colour = (body as { colour?: { colourId?: unknown; colour?: unknown } } | null)?.colour;
+      const id = typeof colour?.colourId === 'number' ? colour.colourId : null;
+      const css = typeof colour?.colour === 'string' ? colour.colour : null;
+      if (id === null || !css) return null;
+      return { css, name: TILE_COLOURS[id]?.name ?? css };
+    });
 
   const openProfile = () => {
     const s = signedIn();
     if (!s) return;
-    const facts = profileFacts(s.identity);
+    const { identity } = s;
+    const token = identity.token;
+    let facts = profileFacts(identity);
+    // One painter for every read: each answer repaints the sheet it is already looking at, and the
+    // all-time win total is recomputed from whichever halves are known.
+    const paint = (patch: Partial<ProfileFacts>) => {
+      facts = { ...facts, ...patch };
+      facts.matchesWon = matchesWonEver(facts.offline, facts.online);
+      profile.show(facts);
+    };
+    facts.matchesWon = matchesWonEver(facts.offline, facts.online);
     profile.open(facts, menuLogin);
+
+    const device = deviceId();
+    void syncOffline(token, device).then((offline) => {
+      if (offline) paint({ offline: accountRecord(offline) });
+    });
+    void apiGet('/v1/players/me/matches', token).then((body) => {
+      const list = body?.matches;
+      if (Array.isArray(list)) paint({ online: onlineRecord(list as MatchListEntry[]) });
+    });
+    void readColour(token).then((colour) => {
+      if (colour) paint({ colour });
+    });
     // At most one pair read, and only when the Territory entry's read has not landed. The same
     // request also paints the Territory entry (web/src/online/lobby-ui.ts), so nothing is doubled.
-    void readTerritory(s.identity.playerId).then((counts) => {
+    void readTerritory(identity.playerId).then((counts) => {
       if (!counts) return;
-      profile.show({ ...facts, seeds: counts.seeds, tiles: counts.tiles });
+      paint({ seeds: counts.seeds, tiles: counts.tiles });
     });
   };
+
+  // A finished OFFLINE game (main.ts dispatches this after it saves the record): tell the account, so
+  // the same numbers show on the player's other devices. Signed out, or with no API, this is a no-op.
+  window.addEventListener('futasaku:offline-game', () => {
+    const s = signedIn();
+    if (!s) return;
+    void syncOffline(s.identity.token, deviceId());
+  });
 
   menuLogin?.addEventListener('click', () => {
     if (signedIn()) openProfile();

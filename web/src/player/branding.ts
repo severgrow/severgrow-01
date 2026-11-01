@@ -212,6 +212,14 @@ export function createHudBrandMark(id = 'futasaku-hud-white'): SVGSVGElement {
   return whiteLogo(id, true, true);
 }
 
+/**
+ * The square Futasaku emblem, same asset and tint as the wordmark above, for the places that want a
+ * seal rather than a signature (the Profile nameplate). `id` must be unique: it names the filter.
+ */
+export function createEmblemMark(id = 'futasaku-emblem-white'): SVGSVGElement {
+  return whiteLogo(id, false, false);
+}
+
 /** The badge is measured from the HUD's own menu ink; main.ts asks for a re-measure on screen change. */
 let alignBrand: (() => void) | null = null;
 

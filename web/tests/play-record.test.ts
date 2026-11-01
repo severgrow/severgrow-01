@@ -1,14 +1,14 @@
-// PLAYER STATS (owner, 2026-10-23: "we have player profiles already so this can live there"). The
-// profile shows the player's record against the computer: games, win rate, streak, best score, favourite move
-// and longest Bloom. The win/loss record already exists (logic/stats.ts); the moves are a separate
-// small record, so nothing already saved changes shape. Every value is a fact or an em dash.
+// THE MOVE RECORD (owner, 2026-10-23: "we have player profiles already so this can live there").
+//
+// Owner, 2026-11-01 narrowed the profile to three numbers per half (games, win rate, longest streak),
+// so the move record is no longer PRINTED. It is still COLLECTED — the history it holds cannot be
+// recovered from anywhere else — and these tests pin that it keeps being written and parsed.
+// The printed lines now live in web/tests/match-record.test.ts.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { Event } from '../../src/engine/index.js';
-import { BLAST, BLOOM, FRUIT, PROFILE, SPROUT } from '../../src/strings.js';
-import { EMPTY_PLAY, PLAY_KEY, parsePlay, playRows, recordPlay } from '../src/logic/play-record.js';
-import { EMPTY_STATS, recordResult } from '../src/logic/stats.js';
+import { EMPTY_PLAY, PLAY_KEY, parsePlay, recordPlay } from '../src/logic/play-record.js';
 
 const c = (q: number, r: number) => ({ q, r });
 const game: Event[] = [
@@ -47,49 +47,16 @@ describe('the play record', () => {
   });
 });
 
-describe('the profile lines', () => {
-  it('a player who has not finished a game sees em dashes, never a made-up 0%', () => {
-    const rows = playRows(EMPTY_STATS, EMPTY_PLAY);
-    expect(rows.map((r) => r.label)).toEqual([PROFILE.games, PROFILE.winRate, PROFILE.streak, PROFILE.bestScore, PROFILE.favourite, PROFILE.longestBloom]);
-    expect(rows[0]!.value).toBe('0');
-    for (const r of rows.slice(1)) expect(r.value, r.label).toBe(PROFILE.unknown);
-    expect(rows).toHaveLength(6);
-  });
-
-  it('a real record reads as facts', () => {
-    const res = (winner: 0 | 1 | null) => ({ winner, reason: 'turn_limit' as const, scores: [10, 5] as [number, number] });
-    let s = EMPTY_STATS;
-    for (const w of [0, 0, 1, 0] as const) s = recordResult(s, res(w), 0, 5);
-    const rows = playRows(s, recordPlay(EMPTY_PLAY, game, 0));
-    expect(rows.map((r) => r.value)).toEqual(['4', '75%', '1', '10', SPROUT.Name, PROFILE.tilesCount(3)]);
-    expect(rows[2]!.label).toBe(PROFILE.streakBest(2));
-  });
-
-  it('the favourite move uses the player names, and a tie goes to the bigger move', () => {
-    const tie = { ...EMPTY_PLAY, grow: 2, bloom: 2, bomb: 2, blast: 2 };
-    expect(playRows(EMPTY_STATS, tie)[4]!.value).toBe(BLAST.Name);
-    expect(playRows(EMPTY_STATS, { ...tie, blast: 0 })[4]!.value).toBe(BLOOM.Name);
-    expect(playRows(EMPTY_STATS, { ...tie, blast: 0, bloom: 0 })[4]!.value).toBe(FRUIT.card);
-  });
-});
-
 describe('where it is wired', () => {
   const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
-  it('every finished game against the computer adds its moves, beside the win/loss record', () => {
-    expect(main).toMatch(/stats = recordResult\(stats, p\.after\.result, HUMAN, gameLevel\);\s*store\.set\(STATS_KEY, JSON\.stringify\(stats\)\);[\s\S]{0,800}store\.set\(PLAY_KEY, JSON\.stringify\(recordPlay\(parsePlay\(store\.get\(PLAY_KEY\)\), p\.after\.history \?\? \[\], HUMAN\)\)\);/);
-  });
-});
 
-describe('the profile shows them', () => {
-  const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
-  const mount = readFileSync(fileURLToPath(new URL('../src/accounts/mount.ts', import.meta.url)), 'utf8');
-  it('as their own block under the five identity lines (which stay five)', () => {
-    const profile = html.slice(html.indexOf('<section id="sheet-profile"'), html.indexOf('</section>', html.indexOf('<section id="sheet-profile"')));
-    expect(profile).toMatch(/<\/dl>\s*<!--[\s\S]*?-->\s*<div class="sp-play">\s*<h3 id="profile-play-title"/);
-    expect(profile).toContain('<dl id="profile-play" class="sp-play-grid"');
-    expect(profile.match(/class="sp-row"/g) ?? []).toHaveLength(5);
+  it('every finished game against the computer still adds its moves, beside the win/loss record', () => {
+    expect(main).toMatch(/stats = recordResult\(stats, p\.after\.result, HUMAN, gameLevel\);\s*store\.set\(STATS_KEY, JSON\.stringify\(stats\)\);[\s\S]{0,900}store\.set\(PLAY_KEY, JSON\.stringify\(recordPlay\(parsePlay\(store\.get\(PLAY_KEY\)\), p\.after\.history \?\? \[\], HUMAN\)\)\);/);
   });
-  it('read from this device\'s own record, the same keys the game writes', () => {
-    expect(mount).toMatch(/play: playRows\(parseStats\(readLocal\(STATS_KEY\)\), parsePlay\(readLocal\(PLAY_KEY\)\)\)/);
+
+  it('tells the account a finished offline game happened, so other devices can see it', () => {
+    expect(main).toContain("window.dispatchEvent(new Event('futasaku:offline-game'))");
+    // Exactly once, in the one place the record is written.
+    expect(main.match(/futasaku:offline-game/g) ?? []).toHaveLength(1);
   });
 });

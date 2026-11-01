@@ -1,14 +1,19 @@
-// The player's profile (owner brief, 2026-10-21) — a SKELETON with exactly five read-only lines.
+// The player's profile (owner brief, 2026-10-21; redesigned 2026-11-01).
 //
-// "if logged in it says name on it - clicked shows a draft of players profile - built just skeleton
-//  for it now, showing basic info about the player"
+// Owner, 2026-11-01: "keep NAME but say NAME & TAG and remove sign in signed in - that's silly",
+// "matches won should be summary of any matches ever - keep seeds and tiles", "3 on top become
+// offline and 3 bottom online", "the sections changed to games / win rate / longest streak",
+// "remove text from the bottom that now says 'against the computer on this device'", "add a flag of
+// the country they're at", "add 1 tile with their chosen colour", "make sure futasaku logo is
+// visible somewhere where it makes sense".
 //
-// These tests pin the facts that matter and cannot be checked by eye in a diff:
-//   1. exactly five lines, in the owner's order: name, sign-in status, Seeds, tiles, matches won;
-//   2. an unknown value is an EM DASH — never a made-up 0. A real 0 is shown as 0;
-//   3. the sheet is a read-out (no editing, no sign-out, no avatar) in the pause panel's language;
-//   4. Seeds and tiles read the SAME remembered pair the Territory entry uses, and matches won has
-//      no player-facing source in this build (so it is unknown, not invented).
+// These tests pin what a diff cannot show by eye:
+//   1. four identity lines in the owner's order — name & tag, Seeds, tiles, matches won — and NO
+//      sign-in line;
+//   2. two record rows of the SAME three tiles, offline above online, each labelled down its edge;
+//   3. an unknown value is an EM DASH; a real 0 is 0;
+//   4. the flag and the colour tile are decoration: absent when unknown, never a placeholder;
+//   5. the sheet stays a read-out in the pause panel's language, with the Futasaku mark in it.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -29,36 +34,45 @@ const profileSection = html.slice(html.indexOf('<section id="sheet-profile"'), h
 
 const facts = (over: Partial<ProfileFacts> = {}): ProfileFacts => ({
   name: 'Ann #7QK2',
-  signedIn: true,
+  country: 'PL',
+  colour: { css: 'hsl(341 42% 53%)', name: 'Rose' },
   seeds: 128,
   tiles: 3,
-  matchesWon: null,
+  matchesWon: 9,
+  offline: { games: 24, wins: 14, longestStreak: 7 },
+  online: { games: 9, wins: 4, longestStreak: 3 },
   ...over,
 });
 
-describe('the profile is exactly five lines, in the owner’s order', () => {
-  it('names the five lines from the one strings module', () => {
-    expect(PROFILE.name).toBe('Name');
-    expect(PROFILE.signIn).toBe('Sign-in');
+describe('the identity block is four lines, in the owner’s order', () => {
+  it('names the lines from the one strings module', () => {
+    expect(PROFILE.nameTag).toBe('Name & tag');
     // The currency's word lives with the wallet's own wording (web/src/online/seed-icon.ts): the
     // strings module and the page markup stay free of it (web/tests/seed-words.test.ts).
     expect(SEEDS_WORD).toBe('Seeds');
     expect(PROFILE.tiles).toBe('Tiles');
     expect(PROFILE.matchesWon).toBe('Matches won');
-    expect(profileRows(facts()).map((r) => r.label)).toEqual(['Name', 'Sign-in', SEEDS_WORD, 'Tiles', 'Matches won']);
+    expect(profileRows(facts()).map((r) => r.label)).toEqual(['Name & tag', SEEDS_WORD, 'Tiles', 'Matches won']);
   });
 
-  it('shows the player’s name (with its #TAG) and the sign-in state', () => {
-    const rows = profileRows(facts());
-    expect(rows[0]!.value).toBe('Ann #7QK2');
-    expect(rows[1]!.value).toBe(PROFILE.signedIn);
-    expect(profileRows(facts({ signedIn: false }))[1]!.value).toBe(PROFILE.guest);
+  it('shows the name with its #TAG', () => {
+    expect(profileRows(facts())[0]!.value).toBe('Ann #7QK2');
   });
 
-  it('has no sixth line, no control and no sign-out in the sheet', () => {
-    // The markup's five value nodes are the whole content; Close is the only control.
-    expect(profileSection.match(/class="sp-row"/g) ?? []).toHaveLength(5);
-    for (const id of ['profile-name', 'profile-signin', 'profile-seeds', 'profile-tiles', 'profile-wins']) {
+  it('has dropped the sign-in line completely (owner: "that’s silly")', () => {
+    // Not hidden — gone: no label, no value node, no markup, no PROFILE string. (ACCOUNT keeps its
+    // own "signed in" wording for Settings; that is a different surface saying a different thing.)
+    expect(profileRows(facts()).map((r) => r.label)).not.toContain('Sign-in');
+    expect(profileSection).not.toContain('profile-signin');
+    expect(profileSection).not.toMatch(/Sign-in/i);
+    const strings = read('../../src/strings.ts');
+    const profileStrings = strings.slice(strings.indexOf('export const PROFILE'), strings.indexOf('export const PRIVACY'));
+    expect(profileStrings).not.toMatch(/signIn:|signedIn:|guest:/);
+  });
+
+  it('has no fifth line, no control and no sign-out in the sheet', () => {
+    expect(profileSection.match(/class="sp-row[ "]/g) ?? []).toHaveLength(4);
+    for (const id of ['profile-name', 'profile-seeds', 'profile-tiles', 'profile-wins']) {
       expect(profileSection).toContain(`id="${id}"`);
     }
     expect(profileSection).not.toMatch(/<input|<textarea|<select|contenteditable/i);
@@ -67,26 +81,93 @@ describe('the profile is exactly five lines, in the owner’s order', () => {
   });
 });
 
+describe('two records: offline on top, online below, the same three tiles', () => {
+  it('keeps one row of three for each half, each labelled down its edge', () => {
+    const rows = profileSection.match(/class="sp-play-row"/g) ?? [];
+    expect(rows).toHaveLength(2);
+    const offlineAt = profileSection.indexOf('profile-play-offline');
+    const onlineAt = profileSection.indexOf('profile-play-online');
+    expect(offlineAt).toBeGreaterThan(-1);
+    expect(onlineAt).toBeGreaterThan(offlineAt); // offline ABOVE online
+    expect(profileSection).toContain('id="profile-play-offline-label"');
+    expect(profileSection).toContain('id="profile-play-online-label"');
+    // The row word is a label for the tiles, never a fourth tile.
+    expect(profileSection).toMatch(/class="sp-play-side"/g);
+  });
+
+  it('uses the same three metrics for both halves, and no other section', () => {
+    expect(PROFILE.games).toBe('Games');
+    expect(PROFILE.winRate).toBe('Win rate');
+    expect(PROFILE.longestStreak).toBe('Longest streak');
+    expect([PROFILE.offline, PROFILE.online]).toEqual(['Offline', 'Online']);
+    // The tiles the owner no longer shows are gone from the strings, not merely unrendered.
+    const strings = read('../../src/strings.ts');
+    expect(strings).not.toMatch(/bestScore|favourite|longestBloom|streakBest|tilesCount/);
+  });
+
+  it('has removed the old footer note and put nothing in its place', () => {
+    expect(profileSection).not.toContain('profile-play-note');
+    expect(profileSection).not.toMatch(/against the computer/i);
+    expect(styleCss).not.toContain('.sp-play-note');
+    expect(profileSection).not.toMatch(/sp-play-note/);
+  });
+
+  it('reads the two halves from the one row builder (so they cannot drift)', () => {
+    const source = read('../src/accounts/profile.ts');
+    expect(source).toContain("import { recordRows } from '../logic/match-record.js'");
+    const calls = source.match(/recordRows\(/g) ?? [];
+    expect(calls).toHaveLength(1); // one builder, used for BOTH grids
+  });
+});
+
 describe('an unknown value is an em dash — never a made-up 0', () => {
   it('uses the em dash for a missing name or count', () => {
     expect(PROFILE.unknown).toBe('—');
     const rows = profileRows(facts({ name: null, seeds: null, tiles: null, matchesWon: null }));
-    expect(rows.map((r) => r.value)).toEqual(['—', PROFILE.signedIn, '—', '—', '—']);
+    expect(rows.map((r) => r.value)).toEqual(['—', '—', '—', '—']);
     expect(profileRows(facts({ name: '   ' }))[0]!.value).toBe('—');
   });
 
   it('rejects values that cannot be a count (NaN, negative, Infinity) instead of printing them', () => {
     const rows = profileRows(facts({ seeds: Number.NaN, tiles: -2, matchesWon: Number.POSITIVE_INFINITY }));
+    expect(rows[1]!.value).toBe('—');
     expect(rows[2]!.value).toBe('—');
     expect(rows[3]!.value).toBe('—');
-    expect(rows[4]!.value).toBe('—');
   });
 
   it('shows a REAL zero as 0: an empty wallet is a fact, not an unknown', () => {
     const rows = profileRows(facts({ seeds: 0, tiles: 0, matchesWon: 0 }));
+    expect(rows[1]!.value).toBe('0');
     expect(rows[2]!.value).toBe('0');
     expect(rows[3]!.value).toBe('0');
-    expect(rows[4]!.value).toBe('0');
+  });
+});
+
+describe('the flag and the colour tile are decoration, never a placeholder', () => {
+  it('has a place for both, inside the name line', () => {
+    const nameRow = profileSection.slice(profileSection.indexOf('sp-row-name'), profileSection.indexOf('profile-seeds'));
+    expect(nameRow).toContain('id="profile-flag"');
+    expect(nameRow).toContain('id="profile-colour"');
+    // Both start hidden: nothing is drawn until the client knows what to draw.
+    expect(nameRow).toMatch(/id="profile-flag"[^>]*hidden/);
+    expect(nameRow).toMatch(/id="profile-colour"[^>]*hidden/);
+  });
+
+  it('hides each mark when its fact is unknown', () => {
+    const source = read('../src/accounts/profile.ts');
+    expect(source).toMatch(/flag\.hidden = glyph === ''/);
+    expect(source).toMatch(/swatch\.hidden = !facts\.colour/);
+    // The colour is painted through one custom property, so the swatch shares the map's colour.
+    expect(source).toMatch(/swatch\.style\.setProperty\('--tile', facts\.colour\.css\)/);
+  });
+
+  it('draws the Futasaku mark with the game’s own asset, not a new logo', () => {
+    expect(profileSection).toContain('id="profile-brand"');
+    const source = read('../src/accounts/profile.ts');
+    expect(source).toContain("import { createEmblemMark } from '../player/branding.js'");
+    expect(source).toMatch(/createEmblemMark\('futasaku-profile-white'\)/);
+    // aria-hidden in the markup: the sheet already says Profile, a logo read aloud is noise.
+    expect(profileSection).toMatch(/id="profile-brand"[^>]*aria-hidden="true"/);
   });
 });
 
@@ -97,7 +178,7 @@ describe('the numbers are the Territory entry’s own reads, reused', () => {
     expect(mountSource).toMatch(/seeds: pair\?\.seeds \?\? null/);
     expect(mountSource).toMatch(/tiles: pair\?\.tiles \?\? null/);
     // An empty cache asks the registered reader ONCE; it never fetches on its own.
-    expect(mountSource).toMatch(/void readTerritory\(s\.identity\.playerId\)/);
+    expect(mountSource).toMatch(/void readTerritory\(identity\.playerId\)/);
     expect(mountSource).not.toMatch(/seedWallet|worldMap/);
   });
 
@@ -107,11 +188,17 @@ describe('the numbers are the Territory entry’s own reads, reused', () => {
     expect(lobbySource).toContain('registerTerritoryReader');
   });
 
-  it('never invents a matches-won counter: there is no player-facing source in this build', () => {
-    // The lobby's match list carries recent matches only; the server's win count is an admin read.
-    // The skeleton therefore says "unknown" and the panel shows an em dash, which is a fact.
-    expect(mountSource).toMatch(/matchesWon: null/);
-    expect(profileRows(facts())[4]!.value).toBe('—');
+  it('builds the all-time win total from both halves, and says unknown when one is missing', () => {
+    expect(mountSource).toContain('matchesWonEver(facts.offline, facts.online)');
+    expect(mountSource).not.toMatch(/matchesWon: null\s*,\s*\n\s*offline/); // no longer hard-coded
+  });
+
+  it('asks the account for its offline record once per open, and never polls', () => {
+    expect(mountSource).toContain("apiPost('/v1/players/me/offline'");
+    expect(mountSource).toContain("apiGet('/v1/players/me/offline'");
+    // The offline push happens on a finished game and on open — never on a timer.
+    expect(mountSource).not.toMatch(/setInterval\([^)]*offline/i);
+    expect(mountSource).toContain("addEventListener('futasaku:offline-game'");
   });
 });
 
@@ -119,9 +206,7 @@ describe('the sheet speaks the pause panel’s language', () => {
   it('is a non-modal dialog labelled by its own title', () => {
     // Read the ATTRIBUTES, never one literal string (2026-10-22). The contract is "a sheet, a
     // dialog, labelled by profile-title, not modal" — the byte order of those attributes is not
-    // part of it. The literal form broke the moment the interface-motion layer started marking
-    // surfaces (`data-ix-surface` inserted between `class` and `role`), which is exactly the kind
-    // of unrelated markup change this test must survive: it is about the reading, not the order.
+    // part of it.
     const tag = /<section\b[^>]*\bid="sheet-profile"[^>]*>/.exec(profileSection)?.[0] ?? '';
     expect(tag, 'the profile is a <section> with its own id').not.toBe('');
     const attr = (name: string): string | null =>
@@ -141,7 +226,7 @@ describe('the sheet speaks the pause panel’s language', () => {
     expect(block).toContain('--sp-hair: color-mix(in srgb, var(--c-line) 58%, transparent)');
     expect(block).toMatch(/\.sp-row \+ \.sp-row \{\s*border-top: 1px solid var\(--sp-hair\)/);
     expect(block).toContain('font-variant-numeric: lining-nums tabular-nums');
-    // No new colour is coined: every colour is an existing token.
+    // No new colour is coined: every colour is an existing token (the swatch reads --tile).
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgb\(|hsl\(/);
   });
 });
