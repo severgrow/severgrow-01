@@ -167,6 +167,20 @@ const MEASURE = `(() => {
     label: svg ? svg.getAttribute('aria-label') : null,
     cells: svg ? svg.querySelectorAll('.hv-you path, .hv-them path').length : 0,
     hasRim: svg ? svg.querySelectorAll('.hv-outline line').length > 0 : false,
+    homeDots: svg ? [...svg.querySelectorAll('.hv-home')].map((g) => {
+      const dot = g.querySelector('.hv-home-dot');
+      const b = dot ? dot.getBoundingClientRect() : null;
+      return { you: g.classList.contains('hv-home-you'), x: b ? b.x + b.width / 2 : null, y: b ? b.y + b.height / 2 : null };
+    }) : [],
+    stampBox: svg ? (() => { const r = svg.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })() : null,
+    slotBox: fig ? (() => { const r = fig.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })() : null,
+    contentBox: svg ? (() => {
+      const rim = svg.querySelector('.hv-outline');
+      if (!rim) return null;
+      const b = rim.getBBox();
+      const vb = (svg.getAttribute('viewBox') || '').split(/\\s+/).map(Number);
+      return { x: b.x, y: b.y, w: b.width, h: b.height, vbW: vb[2] || 0, vbH: vb[3] || 0 };
+    })() : null,
     moreOpen: shown(id('go-highlights')),
     title: (id('go-title') || {}).textContent || '',
     score: (id('go-score') || {}).textContent || '',
@@ -180,6 +194,8 @@ const MEASURE = `(() => {
   };
 })()`;
 
+type Box = { x: number; y: number; w: number; h: number };
+type HomeDot = { you: boolean; x: number | null; y: number | null };
 type Measure = {
   viewport: { w: number; h: number };
   cardOverflow: number | null;
@@ -197,6 +213,10 @@ type Measure = {
   label: string | null;
   cells: number;
   hasRim: boolean;
+  homeDots: HomeDot[];
+  stampBox: Box | null;
+  slotBox: Box | null;
+  contentBox: (Box & { vbW: number; vbH: number }) | null;
   moreOpen: boolean;
   title: string;
   score: string;
@@ -269,6 +289,37 @@ try {
     `${labelCounts?.[1]}/${labelCounts?.[2]} vs board ${base.tiles[0]}/${base.tiles[1]}`,
   );
   check('the stamp draws the board it is cut from', base.cells >= 2 && base.hasRim, `cells ${base.cells}`);
+  // The owner's turn (2026-11-01): the reader's home directly under the opponent's, as closely as
+  // the lattice allows (see harvest.ts: the ring-2 homes are one hex-row apart, so the closest legal
+  // turn leaves |ΔX| = |ΔY|/√3 — 30° off vertical — never 0).
+  const youDot = base.homeDots.find((d) => d.you);
+  const themDot = base.homeDots.find((d) => !d.you);
+  check('the stamp draws both homes', !!youDot && !!themDot, `${base.homeDots.length} homes`);
+  if (youDot && themDot && youDot.x !== null && youDot.y !== null && themDot.x !== null && themDot.y !== null) {
+    const dx = Math.abs(themDot.x - youDot.x);
+    const dy = Math.abs(themDot.y - youDot.y);
+    check(
+      "the opponent's home is ABOVE the reader's",
+      themDot.y < youDot.y,
+      `opponent y ${themDot.y.toFixed(1)}, reader y ${youDot.y.toFixed(1)}`,
+    );
+    check(
+      'the homes sit as close to one vertical line as the lattice allows',
+      dy > 0 && dx / dy <= 0.58,
+      `|Δx| ${dx.toFixed(1)}px · |Δy| ${dy.toFixed(1)}px · ratio ${(dx / dy).toFixed(3)}`,
+    );
+  }
+  const box = base.contentBox;
+  check(
+    'the stamp stays inside its viewBox (nothing clipped)',
+    !!box && box.x >= -0.01 && box.y >= -0.01 && box.x + box.w <= box.vbW + 0.01 && box.y + box.h <= box.vbH + 0.01,
+    box ? `rim ${box.w.toFixed(1)}x${box.h.toFixed(1)} at ${box.x.toFixed(1)},${box.y.toFixed(1)} in ${box.vbW}x${box.vbH}` : 'no rim',
+  );
+  check(
+    'the stamp stays inside its card slot (no overflow)',
+    !!base.stampBox && !!base.slotBox && base.stampBox.x >= base.slotBox.x - 1 && base.stampBox.x + base.stampBox.w <= base.slotBox.x + base.slotBox.w + 1,
+    base.stampBox && base.slotBox ? `stamp ${base.stampBox.w.toFixed(1)}px in slot ${base.slotBox.w.toFixed(1)}px` : '',
+  );
   check('neither piece waits behind "More"', base.verdict && !base.moreOpen);
   // The owner removed the review face entirely (2026-10-30): no key, no face, no state.
   check('the review face is gone from the card', base.reviewIds === 0 && !base.cardReviewing, `ids ${base.reviewIds}`);
@@ -290,6 +341,18 @@ try {
     const m = await measure(page);
     check(`${size.key}: no one-line summary`, m.inquest === null, m.inquest ?? '');
     check(`${size.key}: the harvest stamp still renders`, m.harvest && m.cells >= 2, `cells ${m.cells}`);
+    const sizeYou = m.homeDots.find((d) => d.you);
+    const sizeThem = m.homeDots.find((d) => !d.you);
+    check(
+      `${size.key}: the reader's home is below the opponent's`,
+      !!sizeYou && !!sizeThem && sizeYou.y !== null && sizeThem.y !== null && sizeThem.y < sizeYou.y,
+    );
+    const sizeBox = m.contentBox;
+    check(
+      `${size.key}: the stamp is not clipped (rim inside its viewBox)`,
+      !!sizeBox && sizeBox.x >= -0.01 && sizeBox.y >= -0.01 && sizeBox.x + sizeBox.w <= sizeBox.vbW + 0.01 && sizeBox.y + sizeBox.h <= sizeBox.vbH + 0.01,
+      sizeBox ? `${sizeBox.w.toFixed(1)}x${sizeBox.h.toFixed(1)} in ${sizeBox.vbW}x${sizeBox.vbH}` : 'no rim',
+    );
     check(`${size.key}: the card does not scroll`, (m.cardOverflow ?? 1) <= 0, `overflow ${m.cardOverflow}px`);
     check(`${size.key}: the page does not widen`, !m.pageWide);
     check(`${size.key}: the outcome, the score and the reason are still legible`, !!m.title && !!m.score && !!m.reason);

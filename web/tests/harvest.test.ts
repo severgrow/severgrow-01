@@ -3,9 +3,20 @@
 // the engine's own definition) and the sides where the two networks touch. The figure must describe
 // the real final board of a real match — never a generic shape — and must read the board only.
 import { describe, expect, it } from 'vitest';
-import { applyAs, connectedKeys, legalActions, newGame, viewFor } from '../../src/engine/index.js';
+import { allCoords, applyAs, connectedKeys, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Coord, Player, State, Tile } from '../../src/engine/index.js';
-import { harvestFigure, harvestSvg, joinedMass } from '../src/logic/harvest.js';
+import {
+  cellPath,
+  harvestFigure,
+  harvestSvg,
+  joinedMass,
+  orientationFor,
+  orientCoord,
+  orientPoint,
+  rotateCoord,
+  rotatePoint,
+} from '../src/logic/harvest.js';
+import type { HarvestFigure } from '../src/logic/harvest.js';
 
 const boardOf = (st: State): Record<string, Tile | null> => ({ ...st.board });
 
@@ -193,3 +204,219 @@ describe('the figure cannot leak a hidden hand', () => {
     expect(harvestFigure(scrambled.board, scrambled.config, 0, scrambled.terrain)).toEqual(figure);
   });
 });
+
+// THE OWNER'S TURN (2026-11-01): "player directly under opp". The stamp is turned by one of the
+// lattice's own rigid symmetries so the reader's home is as close as the lattice allows to directly
+// below the opponent's. These tests pin the helper itself, the honesty of its limit, and the fact
+// that a turn is a view — never a recount.
+const S = 10;
+const SQ3 = Math.sqrt(3);
+/** The lattice, written here independently of the module: centre of one axial coord. */
+const pt = (c: Coord): { x: number; y: number } => ({
+  x: SQ3 * S * c.q + (SQ3 / 2) * S * c.r,
+  y: 1.5 * S * c.r,
+});
+const TURNS = Array.from({ length: 12 }, (_, i) => ({ rotation: i % 6, mirrored: i >= 6 }));
+
+describe('orientation: the reader is put under the opponent', () => {
+  it('rotates a coord and a point by exactly the same rigid turn', () => {
+    for (const c of [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: -2, r: 2 }, { q: 3, r: -1 }, { q: -1, r: -2 }]) {
+      for (const o of TURNS) {
+        const byCoord = pt(orientCoord(c, o));
+        const byPoint = orientPoint(pt(c), o);
+        expect(byCoord.x).toBeCloseTo(byPoint.x, 9);
+        expect(byCoord.y).toBeCloseTo(byPoint.y, 9);
+        // The plain rotation helper agrees too, so `rotateCoord` can never drift from the points.
+        const raw = rotateCoord(c, o.rotation);
+        expect(rotatePoint(pt(c), o.rotation).x).toBeCloseTo(pt(raw).x, 9);
+        expect(rotatePoint(pt(c), o.rotation).y).toBeCloseTo(pt(raw).y, 9);
+      }
+    }
+  });
+
+  it('keeps the lattice rigid: every pairwise distance survives the chosen turn', () => {
+    const cluster: Coord[] = [
+      { q: 0, r: 0 },
+      { q: 1, r: 0 },
+      { q: 0, r: 1 },
+      { q: -1, r: 2 },
+      { q: 2, r: -1 },
+      { q: -2, r: 2 },
+      { q: 3, r: -3 },
+    ];
+    const o = orientationFor({ q: -2, r: 2 }, { q: 2, r: -2 });
+    for (let i = 0; i < cluster.length; i++) {
+      for (let j = i + 1; j < cluster.length; j++) {
+        const a = pt(cluster[i]!);
+        const b = pt(cluster[j]!);
+        const A = orientPoint(a, o);
+        const B = orientPoint(b, o);
+        expect(Math.hypot(B.x - A.x, B.y - A.y)).toBeCloseTo(Math.hypot(b.x - a.x, b.y - a.y), 9);
+      }
+    }
+  });
+
+  it('for every plausible home pair: the opponent is above, |ΔX| is the lattice minimum, deterministically', () => {
+    const homes = allCoords(3);
+    for (const reader of homes) {
+      for (const opponent of homes) {
+        if (reader.q === opponent.q && reader.r === opponent.r) continue;
+        const chosen = orientationFor(reader, opponent);
+        // (d) deterministic, and a legal lattice turn.
+        expect(orientationFor(reader, opponent)).toEqual(chosen);
+        expect(Number.isInteger(chosen.rotation)).toBe(true);
+        expect(chosen.rotation).toBeGreaterThanOrEqual(0);
+        expect(chosen.rotation).toBeLessThan(6);
+        expect(typeof chosen.mirrored).toBe('boolean');
+        const rp = orientPoint(pt(reader), chosen);
+        const op = orientPoint(pt(opponent), chosen);
+        // (a) the reader is the lower home.
+        expect(op.y).toBeLessThan(rp.y);
+        // (b) |ΔX| is the smallest any legal transform can produce. A 180° turn is in the group,
+        // so whichever transform is flattest can always be flipped to put the opponent above.
+        let flattest = Infinity;
+        for (const o of TURNS) {
+          const a = orientPoint(pt(reader), o);
+          const b = orientPoint(pt(opponent), o);
+          flattest = Math.min(flattest, Math.abs(b.x - a.x));
+        }
+        expect(Math.abs(op.x - rp.x)).toBeCloseTo(flattest, 6);
+        // Reflecting is part of the search but can never beat the six turns on this lattice; the
+        // plain turn wins the tie so a board always reads the same way.
+        expect(chosen.mirrored).toBe(false);
+      }
+    }
+  });
+
+  it("the product's ring-2 homes cannot share X, and the best is 30° off vertical", () => {
+    // (-2,2) and (2,-2) are exactly one hex-row apart: (34.64, -60) drawing units, 60° below the
+    // horizontal. Every 60° turn keeps their separation on that six-direction star, so no legal turn
+    // can make their X equal — the honest limit, recorded with the real numbers.
+    const reader: Coord = { q: -2, r: 2 };
+    const opponent: Coord = { q: 2, r: -2 };
+    for (const o of TURNS) {
+      const a = orientPoint(pt(reader), o);
+      const b = orientPoint(pt(opponent), o);
+      expect(Math.abs(b.x - a.x)).toBeGreaterThan(1);
+    }
+    const chosen = orientationFor(reader, opponent);
+    // The two closest turns are equal (34.64 either side of the vertical), so the plain, lowest
+    // index one wins: the reader is already below the opponent, no turn is needed.
+    expect(chosen).toEqual({ rotation: 0, mirrored: false });
+
+    const fig = harvestFigure(newGame(11).board, newGame(11).config, 0)!;
+    const mine = fig.cells.find((c) => c.home && c.owner === 0)!;
+    const theirs = fig.cells.find((c) => c.home && c.owner === 1)!;
+    expect(theirs.y).toBeLessThan(mine.y);
+    // 30° from vertical: |ΔX| = |ΔY| / √3, the closest this orientation allows.
+    expect(Math.abs(theirs.x - mine.x)).toBeCloseTo(Math.abs(theirs.y - mine.y) / SQ3, 6);
+    expect(fig.orientation).toEqual(chosen);
+  });
+
+  it('both seats read the same canonical orientation: the reader is at the bottom', () => {
+    const st = newGame(11);
+    const board = boardWith(st, [
+      [{ q: -1, r: 2 }, 0],
+      [{ q: 2, r: -1 }, 1],
+    ]);
+    const mine = harvestFigure(board, st.config, 0)!;
+    const theirs = harvestFigure(board, st.config, 1)!;
+    const myHome = mine.cells.find((c) => c.home && c.owner === 0)!;
+    const theirHome = theirs.cells.find((c) => c.home && c.owner === 0)!;
+    const myOpponent = mine.cells.find((c) => c.home && c.owner === 1)!;
+    const theirOpponent = theirs.cells.find((c) => c.home && c.owner === 1)!;
+    // The same game, read from opposite seats: each reader's home lands on the same pixel, under
+    // the opponent's, with the same chosen turn.
+    expect({ x: theirHome.x, y: theirHome.y }).toEqual({ x: myHome.x, y: myHome.y });
+    expect({ x: theirOpponent.x, y: theirOpponent.y }).toEqual({ x: myOpponent.x, y: myOpponent.y });
+    expect(myOpponent.y).toBeLessThan(myHome.y);
+    expect(theirOpponent.y).toBeLessThan(theirHome.y);
+    expect(theirs.orientation).toEqual(mine.orientation);
+  });
+
+  it('a turn never changes who owns what: counts and the cut line are board facts', () => {
+    const st = playOut(96001);
+    const occupied = Object.keys(st.board).filter((k) => !!st.board[k]);
+    const ownerOf = (k: string) => st.board[k]!.owner;
+    const counts: [number, number] = [
+      occupied.filter((k) => ownerOf(k) === 0).length,
+      occupied.filter((k) => ownerOf(k) === 1).length,
+    ];
+    const keys = new Set(occupied);
+    let cut = 0;
+    for (const k of occupied) {
+      const [q, r] = k.split(',').map(Number) as [number, number];
+      // One direction from each undirected pair, so every shared side is counted exactly once.
+      for (const [dq, dr] of [[1, 0], [1, -1], [0, -1]] as const) {
+        const nk = `${q + dq},${r + dr}`;
+        if (keys.has(nk) && ownerOf(nk) !== ownerOf(k)) cut += 1;
+      }
+    }
+    const figures: [HarvestFigure, HarvestFigure] = [
+      harvestFigure(st.board, st.config, 0, st.terrain)!,
+      harvestFigure(st.board, st.config, 1, st.terrain)!,
+    ];
+    for (const fig of figures) {
+      expect(fig.cells).toHaveLength(occupied.length);
+      expect(fig.cells.map((c) => c.key).sort()).toEqual([...occupied].sort());
+      expect(fig.frontier).toHaveLength(cut);
+    }
+    // Counts stay by seat as the reader sees them; the turn moves nothing between owners.
+    expect(figures[0].tiles).toEqual(counts);
+    expect(figures[1].tiles).toEqual([counts[1], counts[0]]);
+    expect(figures[1].masses).toEqual([figures[0].masses[1], figures[0].masses[0]]);
+  });
+});
+
+// The owner's other half of the request: "with flat edges on sides". The −30° vertex start already
+// gives flat left/right sides (points top/bottom). These tests pin it so a later refactor cannot
+// silently turn every tile 30° into the pointy-left/right family.
+describe('the hexes keep flat sides', () => {
+  const pointsOf = (d: string): { x: number; y: number }[] =>
+    [...d.matchAll(/(-?\d+\.\d),(-?\d+\.\d)/g)].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
+  const angleOf = (p: { x: number; y: number }, c: { x: number; y: number }): number =>
+    ((Math.atan2(p.y - c.y, p.x - c.x) * 180) / Math.PI + 360) % 360;
+  const FLAT = [30, 90, 150, 210, 270, 330];
+
+  it('cellPath is the flat-sided hex: vertical left and right edges, points top and bottom', () => {
+    const pts = pointsOf(cellPath(0, 0));
+    expect(pts).toHaveLength(6);
+    for (const p of pts) expect(Math.hypot(p.x, p.y)).toBeCloseTo(S, 1);
+    const angles = pts.map((p) => angleOf(p, { x: 0, y: 0 })).sort((a, b) => a - b);
+    FLAT.forEach((want, i) => expect(Math.abs(angles[i]! - want)).toBeLessThan(0.6));
+    // The leftmost and rightmost features are EDGES: exactly two vertices share each extreme X.
+    const maxX = Math.max(...pts.map((p) => p.x));
+    const minX = Math.min(...pts.map((p) => p.x));
+    const right = pts.filter((p) => Math.abs(p.x - maxX) < 0.05);
+    const left = pts.filter((p) => Math.abs(p.x - minX) < 0.05);
+    expect(right).toHaveLength(2);
+    expect(left).toHaveLength(2);
+    expect(Math.abs(right[0]!.y - right[1]!.y)).toBeGreaterThan(1);
+    expect(Math.abs(left[0]!.y - left[1]!.y)).toBeGreaterThan(1);
+    // No vertex at 0°/180° (that would be the pointy-left/right family, a 30° drift).
+    expect(pts.some((p) => Math.abs(p.x) > 9.9 && Math.abs(p.y) < 0.05)).toBe(false);
+    // Taller than wide is this family's signature (across points vs across flats).
+    const height = Math.max(...pts.map((p) => p.y)) - Math.min(...pts.map((p) => p.y));
+    expect(height).toBeGreaterThan(maxX - minX);
+  });
+
+  it('every tile the stamp draws carries that same flat-sided signature', () => {
+    const st = newGame(11);
+    const figure = harvestFigure(st.board, st.config, 0)!;
+    const svg = harvestSvg(figure);
+    for (const c of figure.cells.slice(0, 4)) expect(svg).toContain(cellPath(c.x, c.y));
+    const paths = [...svg.matchAll(/<path d="(M[^"]+)"/g)].map((m) => m[1]!);
+    expect(paths.length).toBeGreaterThan(4);
+    for (const d of paths) {
+      const pts = pointsOf(d);
+      expect(pts).toHaveLength(6);
+      const c = {
+        x: pts.reduce((s, p) => s + p.x, 0) / 6,
+        y: pts.reduce((s, p) => s + p.y, 0) / 6,
+      };
+      const angles = pts.map((p) => angleOf(p, c)).sort((a, b) => a - b);
+      FLAT.forEach((want, i) => expect(Math.abs(angles[i]! - want)).toBeLessThan(0.8));
+    }
+  });
+});
+

@@ -16,9 +16,24 @@
 //
 // GEOMETRY. Pointy-top hexes on the product's own lattice (web/src/logic/pixelgrid.ts): the centre
 // of (q, r) is (√3·S·q + √3/2·S·r, 1.5·S·r), and a cell's vertices sit at 60°·i − 30° — the shape
-// the board itself uses. S is 10 drawing units; the card scales the SVG with CSS. For a seat-1
-// viewer the whole picture is mirrored through the centre, exactly as a duel paints their board
-// (`online/perspective.ts`), so each player reads their own network from their own side.
+// the board itself uses, with FLAT LEFT AND RIGHT SIDES (owner's choice; pinned by a test). S is 10
+// drawing units; the card scales the SVG with CSS. For a seat-1 viewer the whole picture is mirrored
+// through the centre, exactly as a duel paints their board (`online/perspective.ts`), so each player
+// reads their own network from their own side.
+//
+// ORIENTATION (owner, 2026-11-01): "player directly under opp". After the viewer's mirror, the figure
+// is turned by ONE of the lattice's own rigid symmetries — whole 60° steps, optionally reflected — so
+// the reader's home sits below the opponent's with the smallest possible horizontal offset. The turn
+// is applied to the geometry itself (points, edges, homes, box and viewBox), never with an SVG
+// `transform`, so the hexes stay axis-correct and the stamp stays crisp.
+//
+// The honest limit: a hex lattice may only turn in 60° steps (and mirrors), and a hexagon has no
+// neighbour straight above it (its flat sides are left/right, its points top/bottom). So "same X"
+// is often impossible. The product's own ring-2 homes are at (-2, 2) and (2, -2): their separation in
+// drawing units is (34.64, -60) — exactly one hex-row direction, 60° below the horizontal. Every
+// allowed turn keeps it on that same 6-direction star, so the closest two orientations are mirror
+// images 30° off vertical (|ΔX| = half the home separation). The helper chooses the deterministic
+// best of the twelve, and a test pins that no legal turn shares X exactly on that board.
 import { allNeighbors, boardCoords, boardNeighbors, coordKey, homeCoord, onBoard } from '../../../src/engine/index.js';
 import { isStrangled } from '../../../src/engine/index.js';
 import type { Coord, Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
@@ -62,6 +77,8 @@ export type HarvestFigure = {
   tiles: [number, number];
   /** Homes the final position has sealed, by display seat. */
   sealed: Player[];
+  /** The rigid turn chosen for this card (see `orientationFor`), applied to every point above. */
+  orientation: HexOrientation;
   width: number;
   height: number;
   /** The one-sentence alternative: both masses, the touching sides, any sealed home. */
@@ -78,6 +95,93 @@ const vertices = (x: number, y: number, size = S): { x: number; y: number }[] =>
     const a = (Math.PI / 180) * (60 * i - 30);
     return { x: x + size * Math.cos(a), y: y + size * Math.sin(a) };
   });
+
+/** A rigid turn of the drawing: whole 60° steps, optionally mirrored across its vertical axis. */
+export type HexOrientation = { rotation: number; mirrored: boolean };
+
+/** cos/sin of 60°·k, k = 0..5, written out so a truly vertical or 30° case lands on 0. */
+const TURN = [
+  { c: 1, s: 0 },
+  { c: 0.5, s: SQ3 / 2 },
+  { c: -0.5, s: SQ3 / 2 },
+  { c: -1, s: 0 },
+  { c: -0.5, s: -SQ3 / 2 },
+  { c: 0.5, s: -SQ3 / 2 },
+] as const;
+
+/** A turn count normalised into 0..5. */
+const turnOf = (steps: number): number => ((Math.round(steps) % 6) + 6) % 6;
+
+/**
+ * Rotate a lattice coordinate by `steps` × 60°. A symmetry of the hex lattice: every distance is
+ * preserved and the flat-sided hexes never change shape. (q, r) → (−r, q + r) is one step, the same
+ * turn as `rotatePoint` below when the coord is drawn at `centre(q, r)`.
+ */
+export const rotateCoord = (c: Coord, steps: number): Coord => {
+  let out: Coord = { q: c.q + 0, r: c.r + 0 };
+  for (let i = 0, k = turnOf(steps); i < k; i++) out = { q: -out.r + 0, r: out.q + out.r + 0 };
+  return out;
+};
+
+/** Reflect a lattice coordinate across the drawing's vertical axis (x → −x). */
+export const reflectCoord = (c: Coord): Coord => ({ q: -c.q - c.r + 0, r: c.r + 0 });
+
+/** The coordinate this viewer sees after `orientation`: mirror first, then the turn. */
+export const orientCoord = (c: Coord, o: HexOrientation): Coord =>
+  rotateCoord(o.mirrored ? reflectCoord(c) : c, o.rotation);
+
+/** Rotate a drawing point by `steps` × 60° (the same turn as `rotateCoord`). */
+export const rotatePoint = (p: { x: number; y: number }, steps: number): { x: number; y: number } => {
+  const { c, s } = TURN[turnOf(steps)]!;
+  return { x: c * p.x - s * p.y + 0, y: s * p.x + c * p.y + 0 };
+};
+
+/** The point this viewer sees after `orientation`: mirror across the vertical axis, then the turn. */
+export const orientPoint = (p: { x: number; y: number }, o: HexOrientation): { x: number; y: number } =>
+  rotatePoint(o.mirrored ? { x: -p.x + 0, y: p.y } : p, o.rotation);
+
+/** True when key `a` sorts before key `b` (lexicographic, fixed length). */
+const before = (a: readonly number[], b: readonly number[]): boolean => {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! < b[i]!;
+  return false;
+};
+
+/**
+ * The turn that puts the reader's home directly below the opponent's, as closely as the lattice
+ * allows. It first insists the opponent is above (smaller y; the drawing's y grows downward), then
+ * minimises |Δx| between the two homes, then prefers the unmirrored, lowest-index turn so the same
+ * board always reads the same way.
+ *
+ * Inputs are DISPLAY coords (already after the viewer's mirror). Reflections are searched because
+ * they are legal lattice symmetries; on this lattice they can only tie the six turns, but the caller
+ * still gets the decision stated rather than implied. An equal pair answers the identity.
+ */
+export const orientationFor = (reader: Coord, opponent: Coord): HexOrientation => {
+  const r = centre(reader.q, reader.r);
+  const o = centre(opponent.q, opponent.r);
+  let best: HexOrientation = { rotation: 0, mirrored: false };
+  let bestKey: [number, number, number, number] = [1, Infinity, 1, 0];
+  for (let m = 0; m < 2; m++) {
+    for (let rotation = 0; rotation < 6; rotation++) {
+      const candidate: HexOrientation = { rotation, mirrored: m === 1 };
+      const rp = orientPoint(r, candidate);
+      const op = orientPoint(o, candidate);
+      // Priority: a real "above" (0), then the smallest |Δx|, then the plain turn, then the lowest
+      // index — a total order, so the same board can never choose two different pictures.
+      const key: [number, number, number, number] = [
+        op.y - rp.y < -1e-9 ? 0 : 1,
+        Math.round(Math.abs(op.x - rp.x) * 1e6),
+        m,
+        rotation,
+      ];
+      if (before(key, bestKey)) {
+        best = candidate;
+        bestKey = key;
+      }
+    }
+  }
+  return best;
+};
 
 /** A hex as an SVG path, at drawing-unit precision. */
 export const cellPath = (x: number, y: number, size = S): string =>
@@ -136,10 +240,15 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
   /** Engine coord → the coord this viewer sees (a duel mirrors seat 1's board). */
   const seenAs = (c: Coord): Coord => (mirror ? { q: -c.q + 0, r: -c.r + 0 } : c);
   const displayOwner = (owner: Player): Player => (owner === viewer ? 0 : 1);
-  const displayCentre = (c: Coord): { x: number; y: number } => {
-    const d = seenAs(c);
-    return centre(d.q, d.r);
-  };
+  // The owner's one turn: the reader's home under the opponent's (see `orientationFor`). It is read
+  // from the two HOME centres in display coords, before anything is drawn, then applied to every
+  // point the figure draws — points, edges, homes, box and viewBox — so nothing is left un-turned.
+  const orientation = orientationFor(
+    seenAs(homeCoord(viewer, config)),
+    seenAs(homeCoord(viewer === 0 ? 1 : 0, config)),
+  );
+  /** Engine coord → the coord this viewer sees, after the chosen turn. */
+  const shownAs = (c: Coord): Coord => orientCoord(seenAs(c), orientation);
 
   const massesBySeat: [Set<string>, Set<string>] = [joinedMass(board, config, 0), joinedMass(board, config, 1)];
   const tilesByOwner: [number, number] = [0, 0];
@@ -153,10 +262,11 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
 
   for (const c of coords) {
     const key = coordKey(c);
-    const p = displayCentre(c);
+    const d = shownAs(c);
+    const p = centre(d.q, d.r);
     pointOf.set(key, p);
     const tile: Tile | null = board[key] ?? null;
-    hexes.push({ q: seenAs(c).q, r: seenAs(c).r, x: p.x, y: p.y, rock: terrain?.[key] === 'rock', occupied: !!tile });
+    hexes.push({ q: d.q, r: d.r, x: p.x, y: p.y, rock: terrain?.[key] === 'rock', occupied: !!tile });
     if (!tile) continue;
     const owner = displayOwner(tile.owner);
     tilesByOwner[owner] += 1;
@@ -164,8 +274,8 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
     if (joined) masses[owner] += 1;
     const cell: HarvestCell = {
       key,
-      q: seenAs(c).q,
-      r: seenAs(c).r,
+      q: d.q,
+      r: d.r,
       x: p.x,
       y: p.y,
       owner,
@@ -205,7 +315,8 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
     const p = pointOf.get(coordKey(c))!;
     for (const n of allNeighbors(c)) {
       if (onBoard(n, config)) continue;
-      outline.push(sharedEdge(p, centre(seenAs(n).q, seenAs(n).r)));
+      const d = shownAs(n);
+      outline.push(sharedEdge(p, centre(d.q, d.r)));
     }
   }
 
@@ -232,6 +343,7 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
     masses,
     tiles: tilesByOwner,
     sealed,
+    orientation,
     width,
     height,
     label: HARVEST.sentence(
@@ -260,7 +372,8 @@ export const harvestSvg = (f: HarvestFigure): string => {
     .filter((c) => c.home)
     .map((c) => {
       const sealed = f.sealed.includes(c.owner);
-      return `<g class="hv-home${sealed ? ' hv-sealed' : ''}"><circle cx="${n(c.x)}" cy="${n(c.y)}" r="4.6"/><circle class="hv-home-dot" cx="${n(c.x)}" cy="${n(c.y)}" r="1.5"/></g>`;
+      const who = c.owner === 0 ? 'hv-home-you' : 'hv-home-them';
+      return `<g class="hv-home ${who}${sealed ? ' hv-sealed' : ''}"><circle cx="${n(c.x)}" cy="${n(c.y)}" r="4.6"/><circle class="hv-home-dot" cx="${n(c.x)}" cy="${n(c.y)}" r="1.5"/></g>`;
     })
     .join('');
   const frontier = f.frontier.map((e) => `<line x1="${n(e.x1)}" y1="${n(e.y1)}" x2="${n(e.x2)}" y2="${n(e.y2)}"/>`).join('');
