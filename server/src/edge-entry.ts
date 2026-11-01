@@ -13,7 +13,7 @@ import { DEFAULT_SERVER_CONFIG, adminPlayerIdsFromEnv, productionCorsOrigins } f
 import type { ServerConfig } from './config.js';
 import { corsHeadersForRequest } from './cors.js';
 import { ApiError } from './errors.js';
-import { createFetchApp } from './fetch-app.js';
+import { SERVER_FEATURES, createFetchApp } from './fetch-app.js';
 import { MatchService } from './service.js';
 import { createSupabaseBroadcaster } from './broadcast-supabase.js';
 import type { MatchBroadcaster } from './broadcast.js';
@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
     const dbConfigured = Boolean(Deno.env.get('DATABASE_URL'));
     if (url.searchParams.get('db') !== '1') {
       return new Response(
-        JSON.stringify({ ok: true, rulesVersion: CURRENT_RULES_VERSION, serverNow: Date.now(), dbConfigured }),
+        JSON.stringify({ ok: true, rulesVersion: CURRENT_RULES_VERSION, serverNow: Date.now(), dbConfigured, features: SERVER_FEATURES }),
         { status: 200, headers: corsJson },
       );
     }
@@ -225,6 +225,7 @@ Deno.serve(async (req) => {
         ok: true,
         rulesVersion: runtime.service.rulesVersion,
         serverNow: runtime.service.serverNow(),
+        features: SERVER_FEATURES,
         db: { ok: true, ms: Date.now() - startedDb, pooler: runtime.dbInfo.kind, port: runtime.dbInfo.port },
       };
       return new Response(JSON.stringify(body), { status: 200, headers: corsJson });
