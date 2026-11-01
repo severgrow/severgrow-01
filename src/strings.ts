@@ -1718,26 +1718,32 @@ export const LESSON = Object.freeze({
   bloomMatch: 'SAME NUMBER, OR COUNTING UP',
   theirTurnNow: 'WAIT',
   /**
-   * The tutorial's lesson names, one short chapter title per teaching beat (owner, 2026-11-01:
-   * "in tutorial in settings in level 1-9 give each lesson a short name"). Shown beside the
-   * lesson's number in Settings → Tutorial, and nowhere else: the info box never carries a level
-   * name (docs/LESSON-SCRIPTS.md). A name says what the lesson leaves you able to do, in the
-   * game's quiet garden register, never the rule read back.
+   * The tutorial's lesson names, one per teaching beat (owner, 2026-11-01: "in tutorial in settings
+   * in level 1-9 give each lesson a short name", then "make the names of lessons match the action
+   * they re teaching in each"). Shown beside the lesson's number in Settings → Tutorial, and
+   * nowhere else: the info box never carries a level name (docs/LESSON-SCRIPTS.md).
+   *
+   * Owner, 2026-11-01 (second direction): a name NAMES THE ACTION the lesson drills, in the player's
+   * own words — Draw / Grow / Throw, Strengthen / Take, Cut, Bloom, Surround, Bomb, Blast, the Throw
+   * pile. It is deliberately not a poetic chapter title: a player scanning Settings should be able
+   * to see which lesson teaches the move they are stuck on. So a name may be a single word when the
+   * action IS one word ("Bloom", "Bomb", "Blast"), and it must never be the rule read back as a
+   * sentence.
    *
    * Level 10 is the send-off, not a teaching beat, so it has no name and no placeholder. This is
    * the ONE map: a component reads it, never a name of its own. Pinned by
    * web/tests/lesson-names.test.ts.
    */
   names: Object.freeze({
-    1: 'First Steps',
-    2: 'Higher Ground',
-    3: 'Stone and Gold',
-    4: 'Severed Branch',
-    5: 'First Bloom',
-    6: 'The Ring Closes',
-    7: 'The Ninth Falls',
-    8: 'The Great Sweep',
-    9: 'The Other Pile',
+    1: 'Draw and Throw',
+    2: 'Strengthen',
+    3: 'Rock and Gold',
+    4: 'Cut the Link',
+    5: 'Bloom',
+    6: 'Surround',
+    7: 'Bomb',
+    8: 'Blast',
+    9: 'Throw Pile',
   } as Readonly<Record<number, string>>),
 });
 
