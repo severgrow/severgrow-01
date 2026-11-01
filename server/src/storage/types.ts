@@ -2,7 +2,7 @@
 // `commitMove`: no two moves may be applied on the same revision, and a repeated requestId must
 // return the original outcome without applying again.
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
-import type { MatchStatus, OnlineGameResult, PlayerSummary } from '../protocol.js';
+import type { MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult, PlayerSummary } from '../protocol.js';
 import type { RetentionRow } from '../retention.js';
 
 export type PlayerRecord = {
@@ -212,6 +212,19 @@ export interface Storage {
   updatePlayer(player: PlayerRecord): Promise<void>;
   issueToken(token: TokenRecord): Promise<void>;
   playerByTokenHash(tokenHash: string): Promise<PlayerRecord | null>;
+
+  /**
+   * The caller's OFFLINE record over every device (migration 0022), in ONE aggregate read: games,
+   * wins and draws summed, `longestStreak` taken as the maximum per-device best. A player with no
+   * rows reads all zeroes, and reading never creates a row.
+   */
+  offlineSummaryOf(playerId: string): Promise<OfflineSummary>;
+  /**
+   * Store ONE device's cumulative offline snapshot and return the fresh account aggregate. This is
+   * an upsert that never lets a counter go down (`greatest`): counters are running totals, so a
+   * stale or racing request may repeat progress but must not erase it.
+   */
+  mergeOfflineStats(playerId: string, counters: OfflineCounters, now: number): Promise<OfflineSummary>;
 
   createMatch(match: MatchRecord): Promise<{ ok: true } | Fail>;
   /**

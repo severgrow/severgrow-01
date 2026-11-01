@@ -29,6 +29,7 @@ import type {
   MatchListEntry,
   MatchSummary,
   MatchViewPayload,
+  OfflineSummary,
   OnlineGameResult,
   PlayerSummary,
   ReplayPayload,
@@ -36,6 +37,7 @@ import type {
   SubmitActionRequest,
   SubmitActionResponse,
 } from './protocol.js';
+import { parseOfflineCounters } from './offline.js';
 import { fromEngineResult } from './protocol.js';
 import { actorChanged, gatedRevisionFor, gatedStateFor, turnBoundaryAdvanced } from './turn-boundary.js';
 import { graceSpentBetween } from './grace.js';
@@ -148,6 +150,23 @@ export class MatchService {
 
   async getMe(player: PlayerRecord): Promise<PlayerSummary> {
     return playerSummary(player);
+  }
+
+  /**
+   * The account's OFFLINE record over every device (migration 0022). The player comes from the
+   * token, never the request, so one account can only ever read its own numbers. A player who has
+   * never posted an offline game reads zeroes.
+   */
+  async offlineStats(player: PlayerRecord): Promise<OfflineSummary> {
+    return this.storage.offlineSummaryOf(player.id);
+  }
+
+  /**
+   * One device posts its RUNNING totals. They are cumulative, so storage keeps the highest value
+   * each counter has seen; the response is the fresh aggregate for the whole account.
+   */
+  async putOfflineStats(player: PlayerRecord, body: Record<string, unknown>): Promise<OfflineSummary> {
+    return this.storage.mergeOfflineStats(player.id, parseOfflineCounters(body), this.now());
   }
 
   /**

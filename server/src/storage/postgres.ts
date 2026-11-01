@@ -17,7 +17,7 @@ import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
 import { prunableMatches } from '../retention.js';
 import type { RetentionRow } from '../retention.js';
-import type { MatchStatus, OnlineGameResult } from '../protocol.js';
+import type { MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult } from '../protocol.js';
 import type {
   CommitBatchInput,
   CommitInput,
@@ -107,6 +107,35 @@ const rowToParticipant = (row: PgRow): Participant => ({
   joinedAt: asNumber(row.joined_at),
   lastSeenAt: asNumber(row.last_seen_at ?? row.joined_at ?? 0),
 });
+
+/**
+ * ONE aggregate read of a player's offline record (migration 0022). Games, wins and draws are sums
+ * over the player's device rows; `longest_streak` is the MAX of the per-device bests, because a
+ * run on one device is not continued on another and a sum would invent a streak nobody had.
+ * `coalesce` makes a player with no rows read all zeroes, and the `::bigint` cast keeps the sums
+ * exact before they become JS numbers.
+ */
+const readOfflineSummary = async (
+  query: { query(text: string, values?: readonly unknown[]): Promise<PgQueryResult> },
+  playerId: string,
+): Promise<OfflineSummary> => {
+  const { rows } = await query.query(
+    `select coalesce(sum(played), 0)::bigint as games,
+            coalesce(sum(wins), 0)::bigint as wins,
+            coalesce(sum(draws), 0)::bigint as draws,
+            coalesce(max(best_streak), 0)::bigint as longest_streak
+       from offline_stats
+      where player_id = $1`,
+    [playerId],
+  );
+  const row = rows[0] ?? {};
+  return {
+    games: asNumber(row.games ?? 0),
+    wins: asNumber(row.wins ?? 0),
+    draws: asNumber(row.draws ?? 0),
+    longestStreak: asNumber(row.longest_streak ?? 0),
+  };
+};
 
 const rowToMove = (row: PgRow): MoveRecord => ({
   matchId: asString(row.match_id),
@@ -1017,6 +1046,42 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     );
     if (!rows[0]) return null;
     return { playerId: asString(rows[0].player_id) };
+  },
+
+  async offlineSummaryOf(playerId: string): Promise<OfflineSummary> {
+    return readOfflineSummary(pool, playerId);
+  },
+
+  /**
+   * A device's cumulative snapshots are stored, never subtracted: `greatest` keeps every counter
+   * monotonic in ONE upsert, so a stale or racing request can repeat progress but not erase it.
+   * The read and the write share a transaction, so the returned aggregate includes this update.
+   */
+  async mergeOfflineStats(playerId: string, counters: OfflineCounters, now: number): Promise<OfflineSummary> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      await client.query(
+        `insert into offline_stats(player_id, device_id, played, wins, losses, draws, best_streak, updated_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)
+         on conflict (player_id, device_id) do update set
+           played = greatest(offline_stats.played, excluded.played),
+           wins = greatest(offline_stats.wins, excluded.wins),
+           losses = greatest(offline_stats.losses, excluded.losses),
+           draws = greatest(offline_stats.draws, excluded.draws),
+           best_streak = greatest(offline_stats.best_streak, excluded.best_streak),
+           updated_at = excluded.updated_at`,
+        [playerId, counters.deviceId, counters.played, counters.wins, counters.losses, counters.draws, counters.bestStreak, now],
+      );
+      const summary = await readOfflineSummary(client, playerId);
+      await client.query('commit');
+      return summary;
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release?.();
+    }
   },
 
   async commitMove(input: CommitInput): Promise<CommitResult> {

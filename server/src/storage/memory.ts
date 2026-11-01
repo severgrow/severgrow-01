@@ -7,7 +7,8 @@ import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
 import { prunableMatches } from '../retention.js';
 import type { RetentionRow } from '../retention.js';
-import type { OnlineGameResult } from '../protocol.js';
+import type { OfflineCounters, OfflineSummary, OnlineGameResult } from '../protocol.js';
+import { aggregateOfflineStats, mergeOfflineCounters } from '../offline.js';
 import type {
   CommitBatchInput,
   CommitInput,
@@ -65,6 +66,8 @@ export class MemoryStorage implements Storage {
   private readonly moves = new Map<string, MoveRecord[]>();
   private readonly rateLimits = new Map<string, { windowStart: number; count: number }>();
   private readonly linkCodes = new Map<string, DeviceLinkCode>();
+  /** player id → device id → that device's cumulative offline counters (migration 0022). */
+  private readonly offlineByPlayer = new Map<string, Map<string, OfflineCounters>>();
 
   /** Synchronous copy boundary for the local chat adapter; no async gap before its write. */
   chatAuthority(id: string): { match: MatchRecord | null; participants: Participant[] } {
@@ -107,6 +110,21 @@ export class MemoryStorage implements Storage {
       }
     }
     return n;
+  }
+
+  // ---- offline record (migration 0022) ----
+
+  async offlineSummaryOf(playerId: string): Promise<OfflineSummary> {
+    return aggregateOfflineStats([...(this.offlineByPlayer.get(playerId)?.values() ?? [])]);
+  }
+
+  async mergeOfflineStats(playerId: string, counters: OfflineCounters, _now: number): Promise<OfflineSummary> {
+    // No await between the read and the write, so the merge is atomic exactly like the SQL upsert.
+    const devices = this.offlineByPlayer.get(playerId) ?? new Map<string, OfflineCounters>();
+    const stored = devices.get(counters.deviceId);
+    devices.set(counters.deviceId, copy(stored ? mergeOfflineCounters(stored, counters) : counters));
+    this.offlineByPlayer.set(playerId, devices);
+    return aggregateOfflineStats([...devices.values()]);
   }
 
   // ---- matches ----

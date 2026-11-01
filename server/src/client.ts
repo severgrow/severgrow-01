@@ -20,6 +20,8 @@ import type {
   MatchSummaryResponse,
   MatchViewPayload,
   MeResponse,
+  OfflineCounters,
+  OfflineSummaryResponse,
   ReconnectResponse,
   ReplayResponse,
   ResignResponse,
@@ -212,6 +214,16 @@ export class DuelClient {
 
   getMe(token: string): Promise<MeResponse> {
     return this.request<MeResponse>('GET', '/v1/players/me', { token });
+  }
+
+  /** The account's OFFLINE record over every device (migration 0022). */
+  offlineStats(token: string): Promise<OfflineSummaryResponse> {
+    return this.request<OfflineSummaryResponse>('GET', '/v1/players/me/offline', { token });
+  }
+
+  /** Post THIS device's cumulative offline totals; the answer is the fresh account aggregate. */
+  putOfflineStats(token: string, counters: OfflineCounters): Promise<OfflineSummaryResponse> {
+    return this.request<OfflineSummaryResponse>('POST', '/v1/players/me/offline', { token, body: counters });
   }
 
   upgrade(token: string, displayName: string): Promise<UpgradeResponse> {

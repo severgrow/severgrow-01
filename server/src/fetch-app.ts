@@ -122,6 +122,21 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       };
     }
 
+    // The Profile screen's three OFFLINE numbers (migration 0022). Authenticated and player-agnostic
+    // in its inputs: the token names the account, so a request can never read or write someone
+    // else's record. GET is one aggregate over all devices; POST stores one device's cumulative
+    // snapshot and answers with the same aggregate.
+    if (method === 'GET' && path === '/v1/players/me/offline') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      return { status: 200, body: { ok: true, offline: await service.offlineStats(player), serverNow: service.serverNow() } };
+    }
+
+    if (method === 'POST' && path === '/v1/players/me/offline') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      const body = asRecord(await readJson(req, config.maxBodyBytes));
+      return { status: 200, body: { ok: true, offline: await service.putOfflineStats(player, body), serverNow: service.serverNow() } };
+    }
+
     if (method === 'POST' && path === '/v1/players/me/upgrade') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
       const body = asRecord(await readJson(req, config.maxBodyBytes));

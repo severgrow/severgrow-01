@@ -153,6 +153,21 @@ export type UpgradeResponse = { ok: true; player: PlayerSummary; serverNow: numb
 export type MeResponse = { ok: true; player: PlayerSummary; serverNow: number };
 export type MatchListResponse = { ok: true; matches: MatchListEntry[]; serverNow: number };
 
+/**
+ * ONE device's cumulative OFFLINE record (migration 0022), exactly as the device posts it. The
+ * counters are running totals, never deltas: the server keeps the greatest value each has seen,
+ * so a stale snapshot can only repeat progress, never erase it.
+ */
+export type OfflineCounters = { deviceId: string; played: number; wins: number; losses: number; draws: number; bestStreak: number };
+
+/**
+ * The account's offline record over ALL its devices: games/wins/draws are sums, while
+ * `longestStreak` is the largest single-device best — a run on one device is not continued on
+ * another, so a sum would invent a streak nobody had.
+ */
+export type OfflineSummary = { games: number; wins: number; draws: number; longestStreak: number };
+export type OfflineSummaryResponse = { ok: true; offline: OfflineSummary; serverNow: number };
+
 /** One seat of a replay: who played it. Never a token, never anything private. */
 export type ReplaySeat = { seat: Player; playerId: string; displayName: string | null; tag: string | null };
 
