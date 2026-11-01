@@ -79,6 +79,8 @@ export type HarvestFigure = {
   sealed: Player[];
   /** The rigid turn chosen for this card (see `orientationFor`), applied to every point above. */
   orientation: HexOrientation;
+  /** The extra rigid turn (radians) that puts the reader's home exactly under the opponent's. */
+  tilt: number;
   width: number;
   height: number;
   /** The one-sentence alternative: both masses, the touching sides, any sealed home. */
@@ -89,12 +91,47 @@ const centre = (q: number, r: number): { x: number; y: number } => ({
   x: SQ3 * S * q + (SQ3 / 2) * S * r,
   y: 1.5 * S * r,
 });
-/** Six vertices of one hex, starting at the product's own corner (−30°). */
-const vertices = (x: number, y: number, size = S): { x: number; y: number }[] =>
+/** Six vertices of one hex. `turn` rotates the hexagon itself (radians): the card draws its plate at
+ *  a 30° tilt so the two homes can share one vertical line (see `tiltFor`), and the hexes have to
+ *  come with it or the ground would tear away from the homes drawn on it. */
+const vertices = (x: number, y: number, size = S, turn = 0): { x: number; y: number }[] =>
   Array.from({ length: 6 }, (_, i) => {
-    const a = (Math.PI / 180) * (60 * i - 30);
+    const a = (Math.PI / 180) * (60 * i - 30) + turn;
     return { x: x + size * Math.cos(a), y: y + size * Math.sin(a) };
   });
+
+/** Rotate a drawing point about the board centre (0, 0) by `turn` radians. */
+export const tiltPoint = (p: { x: number; y: number }, turn: number): { x: number; y: number } => ({
+  x: p.x * Math.cos(turn) - p.y * Math.sin(turn),
+  y: p.x * Math.sin(turn) + p.y * Math.cos(turn),
+});
+
+/**
+ * THE LAST 30° (owner, 2026-11-01). The homes sit on a hex lattice, so they are always a whole number
+ * of 60° steps apart and `orientationFor` can never make them share an X: the best a lattice turn
+ * reaches is 30° off vertical. The owner was shown that and chose "rotate it 30° so you sit exactly
+ * under them", accepting that the plate's hexes then show a flat edge on TOP and BOTTOM rather than
+ * on the sides.
+ *
+ * This returns that remaining turn in radians, so applying it puts the reader's home exactly below
+ * the opponent's. Rotating the whole figure rigidly keeps every distance, every shared side and
+ * every count exactly as it was — only the angle changes.
+ */
+export const tiltFor = (
+  reader: { x: number; y: number },
+  opponent: { x: number; y: number },
+): number => {
+  const dx = opponent.x - reader.x;
+  const dy = opponent.y - reader.y;
+  if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) return 0;
+  // Point the reader → opponent direction straight up (the drawing's y grows downward, so "up" is
+  // −π/2). Normalised into (−π, π] so the same board always produces the same angle.
+  const target = -Math.PI / 2;
+  let turn = target - Math.atan2(dy, dx);
+  while (turn <= -Math.PI) turn += 2 * Math.PI;
+  while (turn > Math.PI) turn -= 2 * Math.PI;
+  return turn;
+};
 
 /** A rigid turn of the drawing: whole 60° steps, optionally mirrored across its vertical axis. */
 export type HexOrientation = { rotation: number; mirrored: boolean };
@@ -184,8 +221,8 @@ export const orientationFor = (reader: Coord, opponent: Coord): HexOrientation =
 };
 
 /** A hex as an SVG path, at drawing-unit precision. */
-export const cellPath = (x: number, y: number, size = S): string =>
-  `M${vertices(x, y, size)
+export const cellPath = (x: number, y: number, size = S, turn = 0): string =>
+  `M${vertices(x, y, size, turn)
     .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
     .join('L')}Z`;
 
@@ -249,6 +286,16 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
   );
   /** Engine coord → the coord this viewer sees, after the chosen turn. */
   const shownAs = (c: Coord): Coord => orientCoord(seenAs(c), orientation);
+  // The last 30°: a lattice turn can only get the two homes 30° off vertical, so the whole drawing
+  // takes one more rigid turn to put the reader's home exactly under the opponent's (owner chose
+  // this over keeping the hexes' flat sides; see `tiltFor`).
+  const homeOf = (seat: Player) => {
+    const d = shownAs(homeCoord(seat, config));
+    return centre(d.q, d.r);
+  };
+  const tilt = tiltFor(homeOf(viewer), homeOf(viewer === 0 ? 1 : 0));
+  /** A lattice point, in the card's own frame: turned about the board centre by `tilt`. */
+  const place = (q: number, r: number): { x: number; y: number } => tiltPoint(centre(q, r), tilt);
 
   const massesBySeat: [Set<string>, Set<string>] = [joinedMass(board, config, 0), joinedMass(board, config, 1)];
   const tilesByOwner: [number, number] = [0, 0];
@@ -263,7 +310,7 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
   for (const c of coords) {
     const key = coordKey(c);
     const d = shownAs(c);
-    const p = centre(d.q, d.r);
+    const p = place(d.q, d.r);
     pointOf.set(key, p);
     const tile: Tile | null = board[key] ?? null;
     hexes.push({ q: d.q, r: d.r, x: p.x, y: p.y, rock: terrain?.[key] === 'rock', occupied: !!tile });
@@ -316,24 +363,28 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
     for (const n of allNeighbors(c)) {
       if (onBoard(n, config)) continue;
       const d = shownAs(n);
-      outline.push(sharedEdge(p, centre(d.q, d.r)));
+      outline.push(sharedEdge(p, place(d.q, d.r)));
     }
   }
 
+  // Bounds measured from the ACTUAL corners of every hex at this tilt: a tilted hexagon is wider or
+  // taller than an untilted one, so the old fixed padding would crop the plate.
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
   let maxY = -Infinity;
   for (const h of hexes) {
-    minX = Math.min(minX, h.x);
-    maxX = Math.max(maxX, h.x);
-    minY = Math.min(minY, h.y);
-    maxY = Math.max(maxY, h.y);
+    for (const v of vertices(h.x, h.y, S, tilt)) {
+      minX = Math.min(minX, v.x);
+      maxX = Math.max(maxX, v.x);
+      minY = Math.min(minY, v.y);
+      maxY = Math.max(maxY, v.y);
+    }
   }
-  const width = maxX - minX + S * SQ3 + PAD * 2;
-  const height = maxY - minY + S * 2 + PAD * 2;
-  const dx = PAD + (S * SQ3) / 2 - minX;
-  const dy = PAD + S - minY;
+  const width = maxX - minX + PAD * 2;
+  const height = maxY - minY + PAD * 2;
+  const dx = PAD - minX;
+  const dy = PAD - minY;
 
   return {
     hexes: hexes.map((h) => ({ ...h, x: h.x + dx, y: h.y + dy })),
@@ -344,6 +395,7 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
     tiles: tilesByOwner,
     sealed,
     orientation,
+    tilt,
     width,
     height,
     label: HARVEST.sentence(
@@ -362,11 +414,11 @@ export const harvestSvg = (f: HarvestFigure): string => {
   const cells = (owner: Player) =>
     f.cells
       .filter((c) => c.owner === owner && c.joined)
-      .map((c) => `<path d="${cellPath(c.x, c.y)}"/>`)
+      .map((c) => `<path d="${cellPath(c.x, c.y, S, f.tilt)}"/>`)
       .join('');
   const cutOff = f.cells
     .filter((c) => !c.joined)
-    .map((c) => `<path class="hv-cutoff" d="${cellPath(c.x, c.y)}"/>`)
+    .map((c) => `<path class="hv-cutoff" d="${cellPath(c.x, c.y, S, f.tilt)}"/>`)
     .join('');
   const homes = f.cells
     .filter((c) => c.home)
@@ -383,7 +435,7 @@ export const harvestSvg = (f: HarvestFigure): string => {
     `<defs><pattern id="go-harvest-hatch" width="2.6" height="2.6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="2.6"/></pattern></defs>`,
     `<g class="hv-plate">${f.hexes
       .filter((h) => !h.occupied)
-      .map((h) => `<path d="${cellPath(h.x, h.y)}"/>`)
+      .map((h) => `<path d="${cellPath(h.x, h.y, S, f.tilt)}"/>`)
       .join('')}</g>`,
     `<g class="hv-them">${cells(1)}</g>`,
     `<g class="hv-hatch">${cells(1)}</g>`,

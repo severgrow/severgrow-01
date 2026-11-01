@@ -7518,11 +7518,11 @@ body.result .corner-tools {
 #gameover .go-card:has(#go-territory-grow:not([hidden])) .go-territory-grow {
   margin-top: 0;
 }
+
 #gameover .go-score {
   justify-content: flex-start;
   gap: 9px;
-  margin: 12px 0 2px;
-  font-size: clamp(2.2rem, 9vw, 2.9rem);
+  margin: 12px 0 2px;  font-size: clamp(2.2rem, 9vw, 2.9rem);
   line-height: 1;
 }
 #gameover .go-score .dash {
@@ -7556,11 +7556,23 @@ body.result .corner-tools {
   flex: 0 0 auto;
   margin: 0;
   width: 112px;
+  /* A SQUARE slot: the plate is drawn a 30° round so the reader sits exactly under the opponent
+     (owner, 2026-11-01), which makes its silhouette taller than wide. Sized by width alone it grew
+     7px taller and pushed the card over on a 320×568 phone; a square keeps the height it had before
+     the turn, and the viewBox fits the drawing inside without distorting it. */
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 #gameover .go-harvest-svg {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  /* The plate is drawn a 30° round so the reader sits exactly under the opponent (owner,
+     2026-11-01), which makes this hexagon TALLER than wide where it used to be wider than tall.
+     Capping the height keeps the card's own envelope (it overflowed by 7px at 320×568 without
+     this); the viewBox keeps the drawing undistorted, it simply scales down to fit. */
   overflow: visible;
 }
 /* The plate: every hex of the board the match was played on, faint enough to sit under the inks. */

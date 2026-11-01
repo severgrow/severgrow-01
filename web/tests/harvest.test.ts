@@ -288,10 +288,11 @@ describe('orientation: the reader is put under the opponent', () => {
     }
   });
 
-  it("the product's ring-2 homes cannot share X, and the best is 30° off vertical", () => {
+  it("the product's ring-2 homes cannot share X on the lattice — and the card's 30° tilt makes them", () => {
     // (-2,2) and (2,-2) are exactly one hex-row apart: (34.64, -60) drawing units, 60° below the
-    // horizontal. Every 60° turn keeps their separation on that six-direction star, so no legal turn
-    // can make their X equal — the honest limit, recorded with the real numbers.
+    // horizontal. Every 60° turn keeps their separation on that six-direction star, so no LATTICE
+    // turn can make their X equal. That is why the card adds a rigid 30° tilt on top (owner,
+    // 2026-11-01: "rotate it 30° so you sit exactly under them").
     const reader: Coord = { q: -2, r: 2 };
     const opponent: Coord = { q: 2, r: -2 };
     for (const o of TURNS) {
@@ -307,10 +308,12 @@ describe('orientation: the reader is put under the opponent', () => {
     const fig = harvestFigure(newGame(11).board, newGame(11).config, 0)!;
     const mine = fig.cells.find((c) => c.home && c.owner === 0)!;
     const theirs = fig.cells.find((c) => c.home && c.owner === 1)!;
+    // Opponent above, reader below, and now EXACTLY the same column.
     expect(theirs.y).toBeLessThan(mine.y);
-    // 30° from vertical: |ΔX| = |ΔY| / √3, the closest this orientation allows.
-    expect(Math.abs(theirs.x - mine.x)).toBeCloseTo(Math.abs(theirs.y - mine.y) / SQ3, 6);
+    expect(Math.abs(theirs.x - mine.x)).toBeLessThan(0.05);
     expect(fig.orientation).toEqual(chosen);
+    // The tilt is the remaining 30° (to drawing precision), not an arbitrary spin.
+    expect(Math.abs(fig.tilt)).toBeCloseTo(Math.PI / 6, 6);
   });
 
   it('both seats read the same canonical orientation: the reader is at the bottom', () => {
@@ -371,7 +374,11 @@ describe('orientation: the reader is put under the opponent', () => {
 // The owner's other half of the request: "with flat edges on sides". The −30° vertex start already
 // gives flat left/right sides (points top/bottom). These tests pin it so a later refactor cannot
 // silently turn every tile 30° into the pointy-left/right family.
-describe('the hexes keep flat sides', () => {
+// The MAP's hexes are flat-sided (flat left/right edges); `cellPath`'s default is that family.
+// The finish CARD deliberately draws its plate a further 30° round, because that is what puts the
+// reader exactly under the opponent (owner, 2026-11-01) — so the card's tiles show a flat edge on
+// top and bottom. Both facts are pinned below.
+describe('hex geometry: the map family, and the card\u2019s own tilt', () => {
   const pointsOf = (d: string): { x: number; y: number }[] =>
     [...d.matchAll(/(-?\d+\.\d),(-?\d+\.\d)/g)].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
   const angleOf = (p: { x: number; y: number }, c: { x: number; y: number }): number =>
@@ -400,13 +407,18 @@ describe('the hexes keep flat sides', () => {
     expect(height).toBeGreaterThan(maxX - minX);
   });
 
-  it('every tile the stamp draws carries that same flat-sided signature', () => {
+  it('every tile the stamp draws carries the figure’s own tilt (one family, no mixed angles)', () => {
     const st = newGame(11);
     const figure = harvestFigure(st.board, st.config, 0)!;
     const svg = harvestSvg(figure);
-    for (const c of figure.cells.slice(0, 4)) expect(svg).toContain(cellPath(c.x, c.y));
+    // The stamp's hexes are drawn at the card's tilt, so the default (untilted) path must NOT match.
+    for (const c of figure.cells.slice(0, 4)) expect(svg).toContain(cellPath(c.x, c.y, S, figure.tilt));
     const paths = [...svg.matchAll(/<path d="(M[^"]+)"/g)].map((m) => m[1]!);
     expect(paths.length).toBeGreaterThan(4);
+    // Owner, 2026-11-01: the 30° tilt is what puts the reader exactly under the opponent, so the
+    // plate's hexes show a flat edge on TOP and BOTTOM. Every tile must agree on that — a mixed set
+    // would mean the ground and the homes had drifted apart.
+    const tiltDeg = (figure.tilt * 180) / Math.PI;
     for (const d of paths) {
       const pts = pointsOf(d);
       expect(pts).toHaveLength(6);
@@ -414,9 +426,21 @@ describe('the hexes keep flat sides', () => {
         x: pts.reduce((s, p) => s + p.x, 0) / 6,
         y: pts.reduce((s, p) => s + p.y, 0) / 6,
       };
-      const angles = pts.map((p) => angleOf(p, c)).sort((a, b) => a - b);
-      FLAT.forEach((want, i) => expect(Math.abs(angles[i]! - want)).toBeLessThan(0.8));
+      const angles = pts.map((p) => ((angleOf(p, c) % 360) + 360) % 360);
+      // The six expected angles, turned by the card's tilt.
+      const expected = FLAT.map((w) => ((w + tiltDeg) % 360 + 360) % 360);
+      // Match as a SET (each expected angle has a nearby observed one), because a value sitting on
+      // the 0°/360° seam would otherwise line up with the wrong partner.
+      const unmatched = [...angles];
+      for (const want of expected) {
+        const i = unmatched.findIndex((a) => Math.min(Math.abs(a - want), 360 - Math.abs(a - want)) < 0.8);
+        expect(i, `no tile corner near ${want}°`).toBeGreaterThanOrEqual(0);
+        unmatched.splice(i, 1);
+      }
     }
+    // This board's tilt is the 30° the lattice could not supply (its sign says which way the
+    // homes lean before the turn).
+    expect(Math.abs(tiltDeg)).toBeCloseTo(30, 6);
   });
 });
 

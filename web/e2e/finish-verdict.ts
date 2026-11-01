@@ -304,8 +304,8 @@ try {
       `opponent y ${themDot.y.toFixed(1)}, reader y ${youDot.y.toFixed(1)}`,
     );
     check(
-      'the homes sit as close to one vertical line as the lattice allows',
-      dy > 0 && dx / dy <= 0.58,
+      'the reader sits DIRECTLY under the opponent (one vertical line)',
+      dy > 0 && dx / dy <= 0.05,
       `|Δx| ${dx.toFixed(1)}px · |Δy| ${dy.toFixed(1)}px · ratio ${(dx / dy).toFixed(3)}`,
     );
   }
