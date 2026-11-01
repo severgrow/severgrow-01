@@ -31,3 +31,6 @@ web/dist-futa05/
 # The consistency sweep's own futa05 build (web/e2e/consistency-surfaces.ts). Same rule as the
 # siblings above: generated, never committed.
 web/dist-sweep/
+# The tutorial-names suite's own futa04 build (web/e2e/tutorial-names.ts). Same rule as the
+# siblings above: generated, never committed.
+web/dist-tutorial-names/

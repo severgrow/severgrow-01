@@ -1270,8 +1270,13 @@ export const TUTORIAL_REPLAY = Object.freeze({
   levelsWord: 'Levels 1–9',
   /** what the sheet says the replay is, in one line */
   hint: 'Play the first nine levels again. Your place in the campaign stays where it is.',
-  /** a tutorial tile's spoken label (the tile itself is its number, exactly like a campaign tile) */
-  levelAria: (number: number): string => `Level ${number}. Play the tutorial lesson.`,
+  /**
+   * A tutorial tile's spoken label. The tile carries its number and, from level 1 to 9, the
+   * lesson's name (the visible `.ct-name`); both are in the spoken label, because the name is
+   * copy a screen reader must not lose. Lesson 10 has no name and no tile.
+   */
+  levelAria: (number: number, name?: string): string =>
+    `Level ${number}.${name ? ` ${name}.` : ''} Play the tutorial lesson.`,
   /** the finish card's leading action after a tutorial lesson: back to where they came from */
   back: 'Back to Tutorial',
 });
@@ -1712,6 +1717,28 @@ export const LESSON = Object.freeze({
   bloomNeeds: 'THREE CARDS OR MORE',
   bloomMatch: 'SAME NUMBER, OR COUNTING UP',
   theirTurnNow: 'WAIT',
+  /**
+   * The tutorial's lesson names, one short chapter title per teaching beat (owner, 2026-11-01:
+   * "in tutorial in settings in level 1-9 give each lesson a short name"). Shown beside the
+   * lesson's number in Settings → Tutorial, and nowhere else: the info box never carries a level
+   * name (docs/LESSON-SCRIPTS.md). A name says what the lesson leaves you able to do, in the
+   * game's quiet garden register, never the rule read back.
+   *
+   * Level 10 is the send-off, not a teaching beat, so it has no name and no placeholder. This is
+   * the ONE map: a component reads it, never a name of its own. Pinned by
+   * web/tests/lesson-names.test.ts.
+   */
+  names: Object.freeze({
+    1: 'First Steps',
+    2: 'Higher Ground',
+    3: 'Stone and Gold',
+    4: 'Severed Branch',
+    5: 'First Bloom',
+    6: 'The Ring Closes',
+    7: 'The Ninth Falls',
+    8: 'The Great Sweep',
+    9: 'The Other Pile',
+  } as Readonly<Record<number, string>>),
 });
 
 /** Match chat: stable phrase IDs are stored, labels are translated at render time.

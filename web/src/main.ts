@@ -1387,7 +1387,17 @@ function renderTutorialSheet() {
       num.className = 'ct-num';
       num.textContent = String(level.number).padStart(2, '0');
       b.append(num);
-      b.setAttribute('aria-label', TUTORIAL_REPLAY.levelAria(level.number));
+      // The lesson's short name (owner, 2026-11-01), from the ONE map in src/strings.ts. It sits
+      // under the number inside the same 56px plate, so the row, the 44px target and the sheet's
+      // shape do not change. Level 10 is the send-off, has no name, and is not in this list.
+      const name = LESSON.names[level.number];
+      if (name) {
+        const label = document.createElement('span');
+        label.className = 'ct-name';
+        label.textContent = name;
+        b.append(label);
+      }
+      b.setAttribute('aria-label', TUTORIAL_REPLAY.levelAria(level.number, name));
       b.addEventListener('click', () => {
         sound.unlock();
         startTutorialLevel(level);
