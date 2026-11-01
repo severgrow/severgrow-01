@@ -34,7 +34,8 @@ const recordedProbe = (source: HTMLCanvasElement, target: HTMLCanvasElement, mim
           if(disposed)return;
           try{target.getContext('2d')!.drawImage(video,0,0);resolve();}catch(error){reject(error);}
         };
-        video.currentTime=0;
+        // A nonzero position avoids browsers treating a seek to the current zero as a no-op.
+        video.currentTime=.001;
       };
       video.src=url;
     };
@@ -88,6 +89,8 @@ export const matchReplayFilm = async (
   };
   let timer:ReturnType<typeof setTimeout>|undefined;
   let interrupt=()=>{};
+  // A slow later probe must not erase a completed match; incomplete runs remain uncached.
+  let measured:ReplayFilmMatch=original;
   const deadline=new Promise<never>((_,reject)=>{
     interrupt=()=>{close();reject(new Error('film probe interrupted'));};
     timer=setTimeout(interrupt,5000);signal?.addEventListener('abort',interrupt,{once:true});
@@ -137,6 +140,7 @@ export const matchReplayFilm = async (
       if(!first||!last)throw new Error('no film measurements');
       if(error(first)<keyError){keyError=error(first);bestKey=gain;}
       if(error(last)<frameError){frameError=error(last);bestFrame=gain;}
+      measured={key:bestKey,frame:bestFrame};
       if(matches(first)&&matches(last))break;
     }
     return {key:bestKey,frame:bestFrame};
@@ -145,6 +149,6 @@ export const matchReplayFilm = async (
     const gain=await Promise.race([measure(),deadline]);
     if(!signal?.aborted){if(gains.size>=4)gains.clear();gains.set(key,gain);}
     return gain;
-  }catch{return original;}
+  }catch{return signal?.aborted?original:measured;}
   finally{clearTimeout(timer);signal?.removeEventListener('abort',interrupt);close();decoded.width=decoded.height=1;}
 };

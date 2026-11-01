@@ -12,6 +12,8 @@ did not solve it. The fallback recorder also needed its own measurement.
   its own actual file; it does not borrow the MP4 encoder's setting.
 - Cache only the measured gains, with at most four configurations. The entire probe has a
   five-second ceiling, responds to Cancel, and closes codecs, tracks, timers and object URLs.
+  If a later probe runs out of time, keep the best completed measurement without caching it;
+  cancellation still discards the result.
   There is no idle work, new dependency, polling or gameplay render loop. Bitrate caps are unchanged.
 - Reset and seed the native capture surface before recording, then publish its first picture
   inside a rendering frame. Short/unchanged replays must not start black or produce header-only files.

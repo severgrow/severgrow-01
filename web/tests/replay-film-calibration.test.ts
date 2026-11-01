@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 beforeEach(()=>vi.resetModules());
-afterEach(()=>vi.unstubAllGlobals());
+afterEach(()=>{vi.unstubAllGlobals();vi.useRealTimers();});
 const fixture=(predictive=false)=>{
- let gain=1,decoded=0,hang=false,frameIndex=0;
+ let gain=1,decoded=0,hang=false,frameIndex=0,hangAt=Infinity;
  const encoders:{state:string}[]=[],decoders:{state:string}[]=[];
  const pixels=(amplitude:number)=>{const data=new Uint8ClampedArray(40*80*4);for(let i=0;i<data.length;i+=4){data[i]=data[i+1]=data[i+2]=20+(i/4%40%2?amplitude:-amplitude);data[i+3]=255;}return {data};};
  const source={width:1080,height:1920,getContext:()=>({getImageData:()=>pixels(gain*2)})} as unknown as HTMLCanvasElement;
@@ -14,7 +14,7 @@ const fixture=(predictive=false)=>{
   constructor(private callbacks:any){encoders.push(this);}
   configure(){this.state='configured';frameIndex=0;}
   encode(frame:{gain:number}){this.callbacks.output({gain:frame.gain,index:frameIndex++},{decoderConfig:{codec:'test'}});}
-  flush(){return hang?new Promise<void>((_,reject)=>{this.reject=reject;}):Promise.resolve();}
+  flush(){return (hang||gain===hangAt)?new Promise<void>((_,reject)=>{this.reject=reject;}):Promise.resolve();}
   close(){this.state='closed';this.reject?.(new Error('closed'));}
  });
  vi.stubGlobal('VideoDecoder',class{
@@ -23,7 +23,7 @@ const fixture=(predictive=false)=>{
   decode(chunk:{gain:number;index:number}){this.callbacks.output({...chunk,close:vi.fn()});}
   flush(){return Promise.resolve();}close(){this.state='closed';}
  });
- return {source,paint:vi.fn((value:number)=>{gain=value;}),encoders,decoders,setHang:(value:boolean)=>{hang=value;}};
+ return {source,paint:vi.fn((value:number)=>{gain=value;}),encoders,decoders,setHang:(value:boolean)=>{hang=value;},setHangAt:(value:number)=>{hangAt=value;}};
 };
 const config={codec:'test',width:1080,height:1920};
 it('does no calibration work when the decoder is unavailable',async()=>{
@@ -49,4 +49,16 @@ it('matches keyframes and predictive frames independently to avoid increasing gr
  const f=fixture(true);const {matchReplayFilm}=await import('../src/replay/film-calibration.js');
  expect(await matchReplayFilm(f.source,config,f.paint)).toEqual({key:2.4,frame:1.7});
  expect([...f.encoders,...f.decoders].every(c=>c.state==='closed')).toBe(true);
+});
+
+it('keeps a completed measurement if a later probe exceeds its time budget, without caching it',async()=>{
+ vi.useFakeTimers();const f=fixture(true);f.setHangAt(1.7);
+ const {matchReplayFilm}=await import('../src/replay/film-calibration.js');
+ const pending=matchReplayFilm(f.source,config,f.paint);
+ await vi.advanceTimersByTimeAsync(5001);
+ expect(await pending).toEqual({key:2.4,frame:1});
+ expect([...f.encoders,...f.decoders].every(c=>c.state==='closed')).toBe(true);
+ f.setHangAt(Infinity);f.paint.mockClear();
+ expect(await matchReplayFilm(f.source,config,f.paint)).toEqual({key:2.4,frame:1.7});
+ expect(f.paint).toHaveBeenCalled();
 });
