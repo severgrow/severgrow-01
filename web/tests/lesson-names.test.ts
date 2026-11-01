@@ -96,12 +96,9 @@ describe('tutorial lesson names', () => {
         `${number}: "${name}" names none of the lesson's actions (${allowed.join(', ')})`,
       ).toBe(true);
     }
-    // Every lesson's script heading carries the action, so the map above is grounded in the doc.
-    for (const [number, heading] of [
-      [1, 'LEVEL 1'], [2, 'LEVEL 2'], [3, 'LEVEL 3'], [4, 'LEVEL 4'], [5, 'LEVEL 5'],
-      [6, 'LEVEL 6'], [7, 'LEVEL 7'], [8, 'LEVEL 8'], [9, 'LEVEL 9'],
-    ] as const) {
-      expect(scripts, `docs/LESSON-SCRIPTS.md must still have ${heading}`).toContain(heading);
+    // Every lesson's script heading still exists, so the action map above is grounded in the doc.
+    for (let level = 1; level <= 9; level++) {
+      expect(scripts, `docs/LESSON-SCRIPTS.md must still have LEVEL ${level}`).toContain(`LEVEL ${level}`);
     }
     // And the retired "seed" vocabulary never reaches the player (web/tests/seed-words.test.ts):
     // "First Seed" was the document's heading for level 1, not a name this game may show.
