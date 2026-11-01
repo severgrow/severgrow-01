@@ -1,11 +1,15 @@
 // A codec can erase the game's one-pixel grain even at a high bitrate. Match the decoded
 // result once per encoder configuration; don't globally strengthen the game or guess that
 // every phone's hardware encoder behaves like Chromium's software encoder.
-const gains = new Map<string, number>();
+export type ReplayFilmMatch = { key: number; frame: number };
+const original: ReplayFilmMatch = { key: 1, frame: 1 };
+const gains = new Map<string, ReplayFilmMatch>();
 const candidates = [1, 2.4, 1.7] as const;
 
 /** The recorder has its own codec preprocessing; measure it rather than borrowing AVC's gain. */
 const recordedProbe = (source: HTMLCanvasElement, target: HTMLCanvasElement, mime: string, bitrate: number, paint:()=>void) => {
+  source.width = source.width;
+  paint();
   let stream=source.captureStream(0);
   let track=stream.getVideoTracks()[0] as MediaStreamTrack & {requestFrame?:()=>void};
   if(!track?.requestFrame){stream.getTracks().forEach(t=>t.stop());stream=source.captureStream(30);track=stream.getVideoTracks()[0]!;}
@@ -69,9 +73,9 @@ export const matchReplayFilm = async (
   canvas: HTMLCanvasElement, config: VideoEncoderConfig,
   paint: (gain: number) => void, signal?: AbortSignal,
   recordMime?: string,
-): Promise<number> => {
-  if(signal?.aborted)return 1;
-  if(recordMime?typeof MediaRecorder==='undefined':typeof VideoEncoder==='undefined'||typeof VideoDecoder==='undefined')return 1;
+): Promise<ReplayFilmMatch> => {
+  if(signal?.aborted)return original;
+  if(recordMime?typeof MediaRecorder==='undefined':typeof VideoEncoder==='undefined'||typeof VideoDecoder==='undefined')return original;
   const key=JSON.stringify({config,recordMime}),cached=gains.get(key);
   if(cached!==undefined)return cached;
   const decoded=document.createElement('canvas');decoded.width=canvas.width;decoded.height=canvas.height;
@@ -90,43 +94,57 @@ export const matchReplayFilm = async (
   });
   const measure=async()=>{
     paint(1);const reference=texture(canvas);
-    if(reference.spread<.1)return 1;
-    let best=1,bestError=Infinity;
+    if(reference.spread<.1)return original;
+    let bestKey=1,bestFrame=1,keyError=Infinity,frameError=Infinity;
+    const error=(observed:ReturnType<typeof texture>)=>Math.abs(1-observed.spread/reference.spread)+Math.abs(observed.mean-reference.mean)/12;
+    const matches=(observed:ReturnType<typeof texture>)=>observed.spread/reference.spread>=.8&&observed.spread/reference.spread<=1.2&&Math.abs(observed.mean-reference.mean)<3;
     for(const gain of recordMime ? [1, 4.5, 2.75] : candidates){
       if(signal?.aborted)throw new Error('film probe interrupted');
       paint(gain);
+      let first:ReturnType<typeof texture>|undefined,last:ReturnType<typeof texture>|undefined;
       if(recordMime){
         native=recordedProbe(canvas,decoded,recordMime,config.bitrate??5_000_000,()=>paint(gain));
         await native.done;native.dispose();native=null;
+        first=last=texture(decoded);
       }else{
       const chunks:EncodedVideoChunk[]=[];let description:VideoDecoderConfig|undefined;
       let failure:DOMException|null=null;
       encoder=new VideoEncoder({output:(chunk,meta)=>{chunks.push(chunk);description??=meta?.decoderConfig;},error:e=>{failure=e;}});
       encoder.configure(config);
-      const frame=new VideoFrame(canvas,{timestamp:0,duration:33333});
-      try{encoder.encode(frame,{keyFrame:true});}finally{frame.close();}
+      // The initial keyframe and subsequent predictive frames can retain very different
+      // amounts of fine detail. Measure both so the film doesn't strengthen during playback.
+      for(let i=0;i<12;i++){
+        const frame=new VideoFrame(canvas,{timestamp:i*33333,duration:33333});
+        try{encoder.encode(frame,{keyFrame:i===0});}finally{frame.close();}
+        while(encoder.encodeQueueSize>3&&!failure)await new Promise(r=>setTimeout(r,0));
+      }
       await encoder.flush();encoder.close();encoder=null;
       if(failure||!description||!chunks.length)throw failure??new Error('no film probe frame');
       let frames=0;
       decoder=new VideoDecoder({output:picture=>{
-        try{if(!frames++)decoded.getContext('2d')!.drawImage(picture,0,0);}finally{picture.close();}
+        try{
+          decoded.getContext('2d')!.drawImage(picture,0,0);frames++;
+          last=texture(decoded);first??=last;
+        }finally{picture.close();}
       },error:e=>{failure=e;}});
-      decoder.configure(description);for(const chunk of chunks)decoder.decode(chunk);
+      decoder.configure(description);for(const chunk of chunks){
+        decoder.decode(chunk);
+        while(decoder.decodeQueueSize>3&&!failure)await new Promise(r=>setTimeout(r,0));
+      }
       await decoder.flush();decoder.close();decoder=null;
       if(failure||!frames)throw failure??new Error('no decoded film probe');
       }
-      const observed=texture(decoded);
-      const ratio=observed.spread/reference.spread;
-      const error=Math.abs(1-ratio)+Math.abs(observed.mean-reference.mean)/12;
-      if(error<bestError){bestError=error;best=gain;}
-      if(ratio>=.8&&ratio<=1.2&&Math.abs(observed.mean-reference.mean)<3)break;
+      if(!first||!last)throw new Error('no film measurements');
+      if(error(first)<keyError){keyError=error(first);bestKey=gain;}
+      if(error(last)<frameError){frameError=error(last);bestFrame=gain;}
+      if(matches(first)&&matches(last))break;
     }
-    return best;
+    return {key:bestKey,frame:bestFrame};
   };
   try{
     const gain=await Promise.race([measure(),deadline]);
     if(!signal?.aborted){if(gains.size>=4)gains.clear();gains.set(key,gain);}
     return gain;
-  }catch{return 1;}
+  }catch{return original;}
   finally{clearTimeout(timer);signal?.removeEventListener('abort',interrupt);close();decoded.width=decoded.height=1;}
 };

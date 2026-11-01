@@ -128,13 +128,13 @@ export const encodeReplayMp4 = async (o: EncodeOptions): Promise<RecordedVideo |
       if (o.signal?.aborted) break;
       if (failure) throw failure;
       const f = frames[i]!;
-      const p0 = performance.now();
-      paintMotionFrameCached(canvas, o.model, f, cache, filmGain);
-      paintMs += performance.now() - p0;
       const timestamp = f.at * 1000;
       const duration = f.duration * 1000;
       const key = timestamp - lastKey >= KEY_EVERY_US;
       if (key) lastKey = timestamp;
+      const p0 = performance.now();
+      paintMotionFrameCached(canvas, o.model, f, cache, key ? filmGain.key : filmGain.frame);
+      paintMs += performance.now() - p0;
       const vf = new VideoFrame(canvas, { timestamp, duration });
       encoder.encode(vf, { keyFrame: key });
       vf.close();

@@ -93,6 +93,12 @@ export const recordReplayVideo = async (o: RecordVideoOptions): Promise<Recorded
     width: plan.width, height: plan.height, bitrate: 5_000_000, framerate: 30, contentHint: 'detail',
   }, gain => { paintVideoFrame(canvas, o.model, plan.steps[0]!, gain); }, o.signal, mime);
   if (o.signal?.aborted) return null;
+  // Start the real capture with a fresh backing surface, as before calibration. An
+  // unchanged probe image can otherwise be treated as already presented by captureStream.
+  canvas.width = plan.width;
+  canvas.height = plan.height;
+
+  paintVideoFrame(canvas, o.model, plan.steps[0]!, filmGain.frame);
 
   // `captureStream(0)` means "only when I ask": one frame per painted position, frame-accurate.
   // A browser without `requestFrame` gets a timed stream instead, and the encoder samples it.
@@ -123,18 +129,17 @@ export const recordReplayVideo = async (o: RecordVideoOptions): Promise<Recorded
     recorder.addEventListener('error', () => resolve(null));
   });
 
-  const startedAt = performance.now();
+  let startedAt = 0;
   let painted = 0;
   let next = 0;
   const paint = (index: number) => {
-    paintVideoFrame(canvas, o.model, plan.steps[index]!, filmGain);
+    paintVideoFrame(canvas, o.model, plan.steps[index]!, filmGain.frame);
     painted++;
     next = index + 1;
     requestFrame();
   };
 
   recorder.start();
-  paint(0);
 
   let fell = false;
   await new Promise<void>((resolve) => {
@@ -145,6 +150,9 @@ export const recordReplayVideo = async (o: RecordVideoOptions): Promise<Recorded
         resolve();
         return;
       }
+      // Publish inside the rendering frame: a synchronous pre-frame paint can be lost
+      // on a short/unchanged replay. Recorder's start event itself waits for that capture.
+      if (!startedAt) { startedAt = performance.now(); paint(0); }
       const t = performance.now() - startedAt;
       while (next < plan.steps.length && plan.steps[next]!.at <= t) paint(next);
       o.onProgress?.(Math.min(t, plan.totalMs), plan.totalMs);
