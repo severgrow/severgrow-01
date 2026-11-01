@@ -111,3 +111,6 @@ Final TypeScript, futa04/futa05 production builds and asset-isolation checks pas
 - Replay Close reuses `ICONS.close` and a 44px target; an active video action row replaces its idle
   Share key. Paused boards keep full contrast for reading. Prefer typography and spacing over nested
   panel frames; preserve the Territory YOU highlight and keyboard focus indicators.
+- Replay names align to the rendered hex map's outer edges, using the existing board sizing pass.
+  When a very short landscape map cannot fit the names and score together, keep the names directly
+  outside those same edges. The score stays centred; resize/export layout updates share this rule.

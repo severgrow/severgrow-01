@@ -47,6 +47,7 @@ export const REPLAY_CSS = `
 
 /* ---------- the match-up line ---------- */
 #replay .rp-head {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
@@ -66,6 +67,15 @@ export const REPLAY_CSS = `
 }
 #replay .rp-name[data-seat='0'] { text-align: left; color: var(--rp-me); }
 #replay .rp-name[data-seat='1'] { text-align: right; color: var(--rp-opp); }
+/* A very short landscape map cannot fit two names and the score inside its width.
+   Keep the score centred and hang the labels directly outside the same map edges. */
+#replay .rp-head[data-tight='1'] { padding-inline: 0 !important; }
+#replay .rp-head[data-tight='1'] .rp-name {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  max-width: max(0px, calc(var(--rp-map-inset) - 4px));
+}
+#replay .rp-head[data-tight='1'] .rp-name[data-seat='0'] { right: calc(100% - var(--rp-map-inset)); }
+#replay .rp-head[data-tight='1'] .rp-name[data-seat='1'] { left: calc(100% - var(--rp-map-inset)); }
 #replay .rp-name[data-live='1'] { color: var(--rp-ink); }
 /* WHOSE MOVE, without a sentence (owner, 2026-10-26): the mover's name is lit and carries one small
    pip in their own ink, on the inner side, toward the score. It moves on the hand-over and nowhere else. */
@@ -88,6 +98,7 @@ export const REPLAY_CSS = `
   box-shadow: 0 0 8px color-mix(in srgb, var(--rp-opp) 70%, transparent);
 }
 #replay .rp-score {
+  grid-column: 2;
   display: flex;
   align-items: baseline;
   gap: 7px;

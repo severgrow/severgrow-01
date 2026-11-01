@@ -124,6 +124,20 @@ const { server, origin } = await servePreview(4331, { logLevel: 'error' });
 const browser = await chromium.launch({ executablePath: CHROME });
 mkdirSync(SHOTS, { recursive: true });
 
+// Name edges follow the rendered hex map, including height-constrained layouts.
+const namesAligned = async (page: Page, label: string) => {
+  const edges = await page.evaluate(() => {
+    const cells = [...document.querySelectorAll('#replay .rp-board .hex-cell')].map(e=>e.getBoundingClientRect());
+    const left = Math.min(...cells.map(r=>r.left)), right = Math.max(...cells.map(r=>r.right));
+    const you = document.querySelector('#replay .rp-name[data-seat="0"]')!.getBoundingClientRect();
+    const opponent = document.querySelector('#replay .rp-name[data-seat="1"]')!.getBoundingClientRect();
+    return {left,right,you:{left:you.left,right:you.right,width:you.width},opponent:{left:opponent.left,right:opponent.right,width:opponent.width}};
+  });
+  const alignedInside=Math.abs(edges.you.left-edges.left)<=1&&Math.abs(edges.opponent.right-edges.right)<=1;
+  const alignedOutside=Math.abs(edges.you.right-edges.left)<=1&&Math.abs(edges.opponent.left-edges.right)<=1;
+  check(`${label}: names align with the map's outer edges`,(alignedInside||alignedOutside)&&edges.you.width>20&&edges.opponent.width>20,JSON.stringify(edges));
+};
+
 let failedHere = false;
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, acceptDownloads: true });
@@ -172,6 +186,7 @@ try {
   check('the notch seeks to the biggest-cut beat', !!parked && parked.index === tp.frame, `${parked?.index} vs ${tp.frame}`);
   check('it pauses there, on the beat\'s own board', !!parked && !parked.playing && parked.elapsed === frame.at && parked.board === plan!.frames[tp.frame]!.board, JSON.stringify({ playing: parked?.playing, elapsed: parked?.elapsed, at: frame.at }));
   check('paused board keeps its full contrast',await page.locator('#replay .rp-board').evaluate(e=>getComputedStyle(e).opacity)==='1');
+  await namesAligned(page,'Phone');
   await page.screenshot({ path: `${SHOTS}/replay-turning-point-paused-390x844.png` });
   await notch.click();
   await page.waitForTimeout(700);
@@ -211,6 +226,7 @@ try {
   if (await page.locator('#replay [data-rp="video-share"]').isVisible()) {
     check('ready video replaces the idle share key',!await share.isVisible());
     check('Close stays available beside video actions',await page.locator('#replay [data-rp="close"]').isVisible());
+    await namesAligned(page,'Phone with video actions');
     await page.screenshot({ path: `${SHOTS}/replay-video-ready-390x844.png` });
     await page.locator('#replay [data-rp="video-share"]').click();
   }
@@ -223,10 +239,16 @@ try {
   // ---------- the wide viewport ----------
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.waitForTimeout(350);
+  await namesAligned(page,'Desktop');
   await page.screenshot({ path: `${SHOTS}/replay-surprises-1280x800.png` });
   const notchWide = await notch.boundingBox();
   const barWide = await page.locator('#replay .rp-scrub').boundingBox();
   check('the notch keeps its exact place on a wide screen', !!notchWide && !!barWide && Math.abs(notchWide.x + notchWide.width / 2 - (barWide.x + barWide.width * (frame.at / plan!.total))) <= 4);
+  for(const [width,height] of [[320,568],[844,390]] as const){
+    await page.setViewportSize({width,height});await page.waitForTimeout(350);
+    await namesAligned(page,`${width}x${height}`);
+    await page.screenshot({path:`${SHOTS}/replay-names-${width}x${height}.png`});
+  }
 } finally {
   await browser.close();
   await server.close();

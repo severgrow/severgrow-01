@@ -1267,6 +1267,12 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     const scale = Math.max(0.01, Math.min(box.width / U.w, (avail - BRAND_GAP - brandH - 3 * MIN_SPACE) / U.h));
     const boardW = U.w * scale;
     const boardH = U.h * scale;
+    // The names share the map's outer edges, rather than the wider stage/viewport.
+    // Reuse this sizing pass so rotation and the video row keep them aligned too.
+    const nameInset = Math.max(0, (box.width - boardW) / 2);
+    head.style.paddingInline = `${nameInset}px`;
+    head.style.setProperty('--rp-map-inset', `${nameInset}px`);
+    head.dataset.tight = boardW < 180 ? '1' : '0';
     const space = Math.max(MIN_SPACE, Math.floor((avail - boardH - BRAND_GAP - brandH) / 3));
     if (space !== headSpace) {
       headSpace = space;
