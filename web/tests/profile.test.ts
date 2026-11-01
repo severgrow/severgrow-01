@@ -164,10 +164,28 @@ describe('the flag and the colour tile are decoration, never a placeholder', () 
   it('draws the Futasaku mark with the game’s own asset, not a new logo', () => {
     expect(profileSection).toContain('id="profile-brand"');
     const source = read('../src/accounts/profile.ts');
-    expect(source).toContain("import { createEmblemMark } from '../player/branding.js'");
-    expect(source).toMatch(/createEmblemMark\('futasaku-profile-white'\)/);
+    // The WORDMARK (tree-less), the same mark the HUD badge carries.
+    expect(source).toContain("import { createWordmarkMark } from '../player/branding.js'");
+    expect(source).toMatch(/createWordmarkMark\('futasaku-profile-white'\)/);
+    expect(source).not.toContain('createEmblemMark');
     // aria-hidden in the markup: the sheet already says Profile, a logo read aloud is noise.
     expect(profileSection).toMatch(/id="profile-brand"[^>]*aria-hidden="true"/);
+  });
+
+  it('draws the colour tile as a MAP HEX, not a rounded square', () => {
+    // Owner, 2026-11-01: "change the color icon in profile to actual hex shape, in right direction
+    // like game map - with 'flat' edges on sides".
+    const nameRow = profileSection.slice(profileSection.indexOf('sp-row-name'), profileSection.indexOf('profile-seeds'));
+    expect(nameRow).toMatch(/<svg id="profile-colour"[^>]*class="sp-swatch"/);
+    expect(nameRow).toContain('<polygon class="sp-swatch-face"');
+    const source = read('../src/accounts/profile.ts');
+    // The silhouette is the board's own geometry, written once into the polygon.
+    expect(source).toContain("import { HEX_TILE_POINTS } from '../player/hex-tile.js'");
+    expect(source).toMatch(/swatchFace\.setAttribute\('points', HEX_TILE_POINTS\)/);
+    // And the CSS no longer fakes a tile with a rounded box.
+    const swatchCss = /\.sp-swatch \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    expect(swatchCss).not.toContain('border-radius');
+    expect(styleCss).toMatch(/\.sp-swatch-face \{\s*fill: var\(--tile/);
   });
 });
 

@@ -2455,7 +2455,7 @@ html.futasaku-product .install-prompt-scrim {
   justify-self: end;
   color: var(--c-muted);
 }
-/* The Futasaku emblem in the nameplate's left cell — the same tinted mark the HUD badge and the
+/* The Futasaku wordmark in the nameplate's left cell — the tree-less mark the HUD badge and the
    online submenu header carry (web/src/player/branding.ts), so the sheet is signed like the game.
    It is aria-hidden: the sheet already says Profile, and a logo read aloud is noise. */
 #sheet-profile .sp-brand {
@@ -2469,8 +2469,7 @@ html.futasaku-product .install-prompt-scrim {
 #sheet-profile .sp-brand svg {
   display: block;
   width: 22px;
-  height: 22px;
-  object-fit: contain;
+  height: auto;
 }
 /* The five rows: full width, one hairline between neighbours (never a box around each), label on
    the left in the pause panel's small tracked caps and the value on the right in tabular digits. */
@@ -2543,15 +2542,21 @@ html.futasaku-product .install-prompt-scrim {
   line-height: 1;
   letter-spacing: 0;
 }
-/* One tile's worth of the player's own colour: the same square the map draws, at the size of a
-   full stop. The hairline keeps a pale colour visible on the sheet's own ground. */
+/* One tile's worth of the player's own colour, as the MAP draws a hex: a flat vertical edge on the
+   left and right, a point at the top and bottom (web/src/player/hex-tile.ts). The silhouette is an
+   SVG polygon, so it stays crisp at any density; the hairline keeps a pale colour visible on the
+   sheet's own ground. */
 #sheet-profile .sp-swatch {
   flex: none;
   width: 13px;
-  height: 13px;
-  border-radius: 3px;
-  background: var(--tile, var(--c-muted));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-text) 22%, transparent);
+  height: 15px;
+  overflow: visible;
+}
+#sheet-profile .sp-swatch-face {
+  fill: var(--tile, var(--c-muted));
+  stroke: color-mix(in srgb, var(--c-text) 26%, transparent);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
 }
 
 /* Short screens (320x568, 360x640): the air comes out first; every row stays at least 44px. */

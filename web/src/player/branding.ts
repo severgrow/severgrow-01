@@ -213,11 +213,11 @@ export function createHudBrandMark(id = 'futasaku-hud-white'): SVGSVGElement {
 }
 
 /**
- * The square Futasaku emblem, same asset and tint as the wordmark above, for the places that want a
- * seal rather than a signature (the Profile nameplate). `id` must be unique: it names the filter.
+ * The tree-less WORDMARK alone, not read aloud: for a surface that already names itself and only
+ * wants the game's signature on it (the Profile nameplate). Same asset, same tint as the HUD badge.
  */
-export function createEmblemMark(id = 'futasaku-emblem-white'): SVGSVGElement {
-  return whiteLogo(id, false, false);
+export function createWordmarkMark(id = 'futasaku-wordmark-white'): SVGSVGElement {
+  return whiteLogo(id, false, true);
 }
 
 /** The badge is measured from the HUD's own menu ink; main.ts asks for a re-measure on screen change. */

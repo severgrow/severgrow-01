@@ -95,7 +95,7 @@ import { guideTarget } from './logic/guide.js';
 import { howToReferenceHtml } from './logic/howto-reference.js';
 import { mountInstallPrompt } from './logic/install.js';
 import { mountAppWindowButton } from './logic/app-window.js';
-import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
+import { STATS_KEY, countsTowardRecord, parseStats, recordResult, statsLine } from './logic/stats.js';
 import { PLAY_KEY, parsePlay, recordPlay } from './logic/play-record.js';
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
@@ -2980,7 +2980,13 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   noteCampaignDealPlay(by, p.after);
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
-    if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
+    const counts = countsTowardRecord({
+      watching: !!watching,
+      tutorial: !!coach.tutorial,
+      campaign: campaignLevel !== null,
+      replay: tutorialReplay || campaignReplay,
+    });
+    if (p.before.phase !== 'GAME_OVER' && counts) {
       stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
       // The offline record just changed. The account panel listens for this and tells the server, so

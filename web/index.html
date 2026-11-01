@@ -807,7 +807,11 @@
             <dd class="sp-name-line">
               <span id="profile-name">—</span>
               <span id="profile-flag" class="sp-flag" hidden></span>
-              <span id="profile-colour" class="sp-swatch" hidden></span>
+              <!-- One tile in this player's own colour, drawn as the MAP draws a hex: flat edges
+                   left and right, a point top and bottom (web/src/player/hex-tile.ts). -->
+              <svg id="profile-colour" class="sp-swatch" viewBox="0 0 24 24" aria-hidden="true" hidden>
+                <polygon class="sp-swatch-face" points=""></polygon>
+              </svg>
             </dd>
           </div>
           <!-- The Seeds label is filled by web/src/accounts/profile.ts from the economy's own word

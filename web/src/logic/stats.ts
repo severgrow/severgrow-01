@@ -46,6 +46,32 @@ export const recordResult = (s: Stats, r: GameResult, me: Player, level: number)
 
 const plural = (n: number, w: string, ws = `${w}s`) => `${n} ${n === 1 ? w : ws}`;
 
+/**
+ * DOES A FINISHED GAME JOIN THE OFFLINE RECORD? (owner, 2026-11-01: "make the campaign games also
+ * count in offline wins in profile").
+ *
+ * Every real game counts: a practice match, a Blitz match, and a CAMPAIGN level. Three things do
+ * not, and none of them is a game the player chose to play for its own sake:
+ *   - the lab's watch mode (`watching`), which plays itself;
+ *   - a step of the guided tutorial that is not a campaign level, which teaches by instruction;
+ *   - a REPLAY of a level already passed, on either line — replaying cannot inflate the record.
+ *
+ * The rule lives here, pure, so the finish handler cannot drift from it.
+ */
+export type RecordSource = {
+  /** The lab playing a board by itself. */
+  watching: boolean;
+  /** The active match is a guided tutorial step. */
+  tutorial: boolean;
+  /** The active match is a campaign level (the lessons are levels 1-10 of chapter 1). */
+  campaign: boolean;
+  /** Replaying a level already passed: a lesson replay or a campaign replay. */
+  replay: boolean;
+};
+
+export const countsTowardRecord = (source: RecordSource): boolean =>
+  !source.watching && !source.replay && (!source.tutorial || source.campaign);
+
 /** e.g. "3 wins, 2 losses · best score 21 · 2 wins in a row" ('' before the first game). */
 export const statsLine = (s: Stats): string => {
   if (s.played === 0) return '';

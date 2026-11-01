@@ -20,7 +20,8 @@ import type { Record3 } from '../logic/match-record.js';
 import { recordRows } from '../logic/match-record.js';
 import { countryName, flagOf } from '../logic/country.js';
 import { SEEDS_WORD } from '../online/seed-icon.js';
-import { createEmblemMark } from '../player/branding.js';
+import { createWordmarkMark } from '../player/branding.js';
+import { HEX_TILE_POINTS } from '../player/hex-tile.js';
 import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 
 export type ProfileFacts = {
@@ -104,10 +105,15 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
   setText('profile-play-offline-label', PROFILE.offline);
   setText('profile-play-online-label', PROFILE.online);
 
-  // The Futasaku mark, the same asset and the same tinted-SVG treatment the HUD badge and the
-  // online submenu header use — one brand, built once, not a second logo for this sheet.
+  // The Futasaku WORDMARK — the tree-less mark the HUD badge and the online header carry — rather
+  // than the emblem: the owner asked for "the logo without tree like one in game".
   const brand = doc.getElementById('profile-brand');
-  if (brand && !brand.firstChild) brand.append(createEmblemMark('futasaku-profile-white'));
+  if (brand && !brand.firstChild) brand.append(createWordmarkMark('futasaku-profile-white'));
+
+  // The colour swatch's silhouette: the board's own hex, filled once here (the markup carries the
+  // SVG, this writes the points).
+  const swatchFace = doc.querySelector('#profile-colour .sp-swatch-face');
+  if (swatchFace) swatchFace.setAttribute('points', HEX_TILE_POINTS);
 
   const flag = doc.getElementById('profile-flag');
   const swatch = doc.getElementById('profile-colour');
@@ -151,7 +157,8 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
       }
     }
 
-    // The player's own tile colour, so the profile answers "what colour am I?" without the map.
+    // The player's own tile colour, drawn as the MAP draws a hex (flat left/right edges, a point
+    // top and bottom), so the profile shows the same object as the board.
     if (swatch) {
       swatch.hidden = !facts.colour;
       if (facts.colour) {

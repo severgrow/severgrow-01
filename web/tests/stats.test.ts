@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { EMPTY_STATS, parseStats, recordResult, statsLine } from '../src/logic/stats.js';
+import { EMPTY_STATS, countsTowardRecord, parseStats, recordResult, statsLine } from '../src/logic/stats.js';
 import type { GameResult } from '../../src/engine/index.js';
 
 const res = (winner: 0 | 1 | null, scores: [number, number]): GameResult => ({ winner, reason: 'deck_exhaustion', scores });
@@ -36,3 +38,42 @@ describe('your record (saved in this browser)', () => {
   });
 });
 
+
+describe('which finished games join the offline record', () => {
+  // Owner, 2026-11-01: "make the campaign games also count in offline wins in profile". The lessons
+  // ARE campaign chapter 1, so a campaign match counts even while the guide is on screen.
+  const base = { watching: false, tutorial: false, campaign: false, replay: false };
+
+  it('counts a practice match', () => {
+    expect(countsTowardRecord(base)).toBe(true);
+  });
+
+  it('counts a CAMPAIGN level, guide or no guide', () => {
+    expect(countsTowardRecord({ ...base, campaign: true })).toBe(true);
+    expect(countsTowardRecord({ ...base, campaign: true, tutorial: true })).toBe(true);
+  });
+
+  it('does not count a guided step that is not a campaign level', () => {
+    expect(countsTowardRecord({ ...base, tutorial: true })).toBe(false);
+  });
+
+  it('does not count the lab watching a board play itself', () => {
+    expect(countsTowardRecord({ ...base, watching: true })).toBe(false);
+    expect(countsTowardRecord({ ...base, watching: true, campaign: true })).toBe(false);
+  });
+
+  it('does not count a REPLAY of a level already passed, on either line', () => {
+    expect(countsTowardRecord({ ...base, replay: true })).toBe(false);
+    expect(countsTowardRecord({ ...base, replay: true, campaign: true })).toBe(false);
+    expect(countsTowardRecord({ ...base, replay: true, tutorial: true, campaign: true })).toBe(false);
+  });
+
+  it('is wired into the finish handler, not restated there', () => {
+    const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
+    expect(main).toContain('countsTowardRecord({');
+    // The old inline guard is gone: the rule lives in one place.
+    expect(main).not.toMatch(/if \(p\.before\.phase !== 'GAME_OVER' && !watching && !coach\.tutorial\) \{/);
+    // A campaign match stops the guide's early return: the record is written below it.
+    expect(main).toMatch(/stats = recordResult\(stats, p\.after\.result, HUMAN, gameLevel\)/);
+  });
+});
