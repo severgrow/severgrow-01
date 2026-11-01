@@ -99,3 +99,21 @@ WebKit CI covers the engine, not a physical home-screen installation. The cloud 
 embedded-browser/port-publishing tool; port 5187 is workspace-local, not a public preview URL.
 Production geography was not fetched in this environment; integration tests use a real local HTTP
 world and production rendering code. Shipping uses the existing configured production endpoint.
+
+## PR creation status
+
+The feature branch is pushed to GitHub. This cloud environment rejected `gh pr create` with
+`Post https://api.github.com/graphql: Forbidden`, so no PR number was created here.
+
+[Open the PR creation form](https://github.com/severgrow/severgrow-01/compare/futa0.5-online...feature/living-territory-menu?expand=1)
+or, from your normally authenticated Cursor terminal, run:
+
+```sh
+gh pr create --repo severgrow/severgrow-01 --base futa0.5-online \
+  --head feature/living-territory-menu \
+  --title "Living Territory menu with continuous map navigation" \
+  --body-file docs/LIVING-TERRITORY-PR.md
+```
+
+The description is already committed. Creating a PR is not merging or deploying it; retain the
+owner-approval step. Review CI on the latest feature-branch head before integrating.
