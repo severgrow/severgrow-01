@@ -3494,8 +3494,9 @@ html.futasaku-product .install-prompt-scrim {
   letter-spacing: 0.02em;
   color: var(--fu-cream-70);
 }
-/* `.ct-name` was removed with the level names (owner, 2026-10-16: numbers only). The tile is now a
-   single centred number, so the old two-column grid and its second cell are gone with it. */
+/* `.ct-name` was removed from the CAMPAIGN with the level names (owner, 2026-10-16: numbers only),
+   so a campaign tile is a single centred number. It returns ONLY inside Settings → Tutorial, below;
+   the campaign screen still says nothing. */
 .campaign-tile[data-state='current'] .ct-num { color: inherit; }
 .campaign-tile .ct-mark {
   position: absolute;
@@ -3523,6 +3524,25 @@ html.futasaku-product .install-prompt-scrim {
   cursor: default;
 }
 .campaign-tile[data-state='locked'] .ct-num { color: var(--fu-cream-28); }
+/* THE TUTORIAL'S LESSON NAMES (owner, 2026-11-01: "in tutorial in settings in level 1-9 give each
+   lesson a short name"). Scoped to Settings → Tutorial: the campaign screen stays numbers-only.
+   The name is a quiet second line inside the same plate — number above, name below, a 2px
+   `row-gap` the only new spacing. The plate keeps its 56px min-height (a 44px target with room to
+   spare) and does not grow: both lines and the 9px padding measure under it at 320px, including
+   Large text (web/e2e/tutorial-names.ts). The side padding drops from 12px to 8px so the longest
+   name stays on ONE line at 320px; the number is centred, so nothing else moves. */
+#sheet-tutorial .campaign-tile { row-gap: 2px; padding-inline: 8px; }
+#sheet-tutorial .campaign-tile .ct-name {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: var(--fu-cream-55);
+}
+/* if a state ever reaches this sheet, the name follows the number's ink */
+#sheet-tutorial .campaign-tile[data-state='current'] .ct-name {
+  color: color-mix(in srgb, var(--fu-ink) 62%, transparent);
+}
 .campaign-hint,
 .campaign-progress {
   margin: 0;
