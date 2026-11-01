@@ -22,6 +22,7 @@ import { countryName, flagOf } from '../logic/country.js';
 import { SEEDS_WORD } from '../online/seed-icon.js';
 import { createWordmarkMark } from '../player/branding.js';
 import { HEX_TILE_POINTS } from '../player/hex-tile.js';
+import { groupDigits } from '../logic/format.js';
 import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 
 export type ProfileFacts = {
@@ -47,7 +48,7 @@ export type ProfileRow = Readonly<{ label: string; value: string }>;
 
 /** A known, sane count, or the honest em dash. A count is a whole, non-negative number. */
 const count = (n: number | null): string =>
-  typeof n === 'number' && Number.isFinite(n) && n >= 0 ? String(Math.floor(n)) : PROFILE.unknown;
+  typeof n === 'number' && Number.isFinite(n) && n >= 0 ? groupDigits(Math.floor(n)) : PROFILE.unknown;
 
 /**
  * The four identity lines, in the owner's order. Pure: the panel's DOM writes these strings verbatim,

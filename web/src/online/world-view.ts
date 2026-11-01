@@ -2016,9 +2016,14 @@ export class WorldView {
     const order = ['territory', 'duels', 'craft', 'company', 'campaign'] as const;
     const nodes: HTMLElement[] = [];
     for (const group of order) {
-      const rows = views.filter((view) => view.group === group);
-      if (rows.length === 0) continue;
-      const earned = rows.filter((view) => view.done).length;
+      const inGroup = views.filter((view) => view.group === group);
+      if (inGroup.length === 0) continue;
+      // What can be claimed comes first, then what is still being worked on, then the settled ones
+      // (owner, 2026-11-01 polish pass): the reward you can collect should never be below the fold
+      // just because its group sits low. Within a band the authored order is kept.
+      const band = (view: AchievementView) => (view.done && !view.claimed ? 0 : view.claimed ? 2 : 1);
+      const rows = [...inGroup].sort((a, b) => band(a) - band(b));
+      const earned = inGroup.filter((view) => view.done).length;
       const heading = document.createElement('h3');
       heading.className = 'world-achievement-heading';
       heading.setAttribute('role', 'presentation');

@@ -18,6 +18,7 @@ import type { SeedWallet, WorldChallengesPayload } from '../../../server/src/see
 import { MENU, ONLINE } from '../../../src/strings.js';
 import { EASE, MOTION } from '../logic/motion.js';
 import { formatRemaining } from './clock.js';
+import { groupDigits } from '../logic/format.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { CHALLENGE } from './challenge-copy.js';
 
@@ -186,7 +187,7 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
   /** Write the right-hand value from the ONE state: the countdown while one is live, else tiles. */
   const writeTiles = () => {
     if (!shown) return;
-    const text = answerText ?? String(shown.tiles);
+    const text = answerText ?? groupDigits(shown.tiles);
     if (tilesValue.textContent !== text) tilesValue.textContent = text;
   };
   return {
@@ -205,7 +206,9 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
         return;
       }
       const changed = !shown || shown.seeds !== counts.seeds || shown.tiles !== counts.tiles;
-      seedsValue.textContent = String(counts.seeds);
+      // Five-digit balances are grouped the way the profile groups them ("12 400"): the same number
+      // reads the same way in both places (owner, 2026-11-01 polish pass).
+      seedsValue.textContent = groupDigits(counts.seeds);
       shown = counts;
       writeTiles();
       // The `hidden` attribute comes off BOTH sides in the same frame, so the entry never shows a
