@@ -8131,11 +8131,11 @@ html.futasaku-product #sheet-settings .sheet-fade {
   position: sticky;
   bottom: calc(-1 * max(18px, env(safe-area-inset-bottom)));
   display: block;
-  height: 34px;
-  margin-top: -34px;
+  height: 18px;
+  margin-top: -18px;
   pointer-events: none;
   z-index: 1;
-  background: linear-gradient(to bottom, rgba(8, 10, 10, 0), rgba(8, 10, 10, 0.96) 76%);
+  background: linear-gradient(to bottom, rgba(8, 10, 10, 0), rgba(8, 10, 10, 0.72));
   opacity: 0;
   transition: opacity 160ms ease;
 }

@@ -1001,12 +1001,10 @@ html.reduce-motion .world-selection { animation: none; }
 #online-world-history .world-challenge-chip { opacity: .78; }
 .world-panel .world-challenge-more { align-self: center; }
 
-/* YOUR STANDING: the one number to chase, on a recessed plate */
+/* YOUR STANDING: type and a quiet separator, without a second frame inside the panel. */
 .world-standing {
   display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 10px; row-gap: 6px;
-  padding: 11px 13px 12px; border-radius: 11px;
-  background: linear-gradient(#0c0f0dcc, #111512cc);
-  box-shadow: inset 0 1px 0 #000a, inset 0 0 0 1px #e8ddc50f;
+  padding: 8px 8px 12px; border-bottom: 1px solid #e8ddc514;
 }
 .world-standing[hidden] { display: none; }
 .world-standing-place { font-size: 1.15rem; letter-spacing: .1em; color: #f2e7cb; text-transform: uppercase; font-variant-numeric: tabular-nums; }
@@ -1053,8 +1051,8 @@ html.reduce-motion .world-colour-chip { animation:none!important; }
   box-shadow: inset 0 1px 0 #ffffff26, inset 0 0 0 1px #0007;
 }
 .world-colour-name {
-  display: block; min-width: 0; font-size: .55rem; letter-spacing: .07em; text-transform: uppercase;
-  color: #e8ddc5b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: block; min-width: 0; font-size: .625rem; letter-spacing: .04em; text-transform: uppercase;
+  color: #e8ddc5cc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* THE CURRENT ONE: the plate warms, the name brightens, and the chip wears a cream ring — three
    quiet marks, so "current" never depends on one of them being noticed. */

@@ -171,6 +171,7 @@ try {
   const parked = await replayNow(page);
   check('the notch seeks to the biggest-cut beat', !!parked && parked.index === tp.frame, `${parked?.index} vs ${tp.frame}`);
   check('it pauses there, on the beat\'s own board', !!parked && !parked.playing && parked.elapsed === frame.at && parked.board === plan!.frames[tp.frame]!.board, JSON.stringify({ playing: parked?.playing, elapsed: parked?.elapsed, at: frame.at }));
+  check('paused board keeps its full contrast',await page.locator('#replay .rp-board').evaluate(e=>getComputedStyle(e).opacity)==='1');
   await page.screenshot({ path: `${SHOTS}/replay-turning-point-paused-390x844.png` });
   await notch.click();
   await page.waitForTimeout(700);
@@ -178,10 +179,10 @@ try {
   check('a second press resumes playback from the turning point', !!resumed && resumed.playing && (resumed.index > tp.frame || resumed.elapsed > frame.at), JSON.stringify({ index: resumed?.index, elapsed: resumed?.elapsed, before: before?.index }));
 
   // ---------- THE ONE SHARE KEY (owner, 2026-10-30: "remove the png sharing option … just 1 icon") ----------
-  // The footer carries ONE icon, and it makes the replay's video and hands it to the share sheet.
+  // The footer carries ONE share icon (Close now uses the shared close glyph), and it makes the replay's video and hands it to the share sheet.
   check('the image (PNG) share key is gone', (await page.locator('#replay [data-rp="share"]').count()) === 0);
   const share = page.locator('#replay [data-rp="video"]');
-  check('there is exactly one share key, a 44px target', (await page.locator('#replay .rp-foot .rp-icon').count()) === 1 && (await share.boundingBox())?.width === 44, JSON.stringify(await share.boundingBox()));
+  check('there is exactly one share key, a 44px target', (await page.locator('#replay .rp-foot [data-rp="video"]').count()) === 1 && (await share.boundingBox())?.width === 44, JSON.stringify(await share.boundingBox()));
   check('it is named for a screen reader', (await share.getAttribute('aria-label')) === 'Share replay', (await share.getAttribute('aria-label')) ?? '');
   // The share door, stubbed at the API boundary (a STRING: the bundler's name-preserving transform
   // would inject a `__name` helper into a serialized function, and the page does not define it).
@@ -208,6 +209,8 @@ try {
     { timeout: 120_000 },
   );
   if (await page.locator('#replay [data-rp="video-share"]').isVisible()) {
+    check('ready video replaces the idle share key',!await share.isVisible());
+    check('Close stays available beside video actions',await page.locator('#replay [data-rp="close"]').isVisible());
     await page.screenshot({ path: `${SHOTS}/replay-video-ready-390x844.png` });
     await page.locator('#replay [data-rp="video-share"]').click();
   }

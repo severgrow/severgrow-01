@@ -397,7 +397,7 @@ export const REPLAY_CSS = `
 #replay .rp-foot > .rp-actions { flex: none; width: 88px; gap: 0 !important; }
 /* The one share key sits in the middle of its 88px half, mirroring Close's own centre. */
 #replay .rp-foot > .rp-actions:not(.rp-actions-start) { justify-content: center; }
-#replay .rp-foot .rp-btn[data-rp='close'] { width: 88px; padding: 0; text-align: center; }
+#replay .rp-foot > .rp-actions-start { justify-content: center; }
 /* A FIXED width (the widest "00:00 / 00:00"), so the bar beside it never changes length as the
    clock fills in or pauses: a bar that shifts under a thumb mid-drag seeks to the wrong moment. */
 #replay .rp-meta {
@@ -431,6 +431,7 @@ export const REPLAY_CSS = `
   transition: color 160ms ease, opacity 160ms ease;
 }
 #replay .rp-icon svg { display: block; width: 17px; height: 17px; }
+#replay .rp-icon[hidden] { display: none !important; }
 #replay .rp-icon:hover { color: var(--rp-ink); }
 #replay .rp-icon:focus-visible { outline: 2px solid #e8ddc9; outline-offset: 2px; }
 #replay .rp-icon[aria-busy='true'] { opacity: .55; cursor: default; }
@@ -582,7 +583,7 @@ export const REPLAY_CSS = `
 @keyframes rp-again-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
 /* Paused: the whole picture goes quiet rather than showing a badge, and the clock line says so. */
-#replay[data-paused='1'] .rp-board { opacity: .82; transition: opacity 160ms ease; }
+/* Pausing is for reading the position: keep the board at its full material contrast. */
 #replay[data-paused='1'] .rp-meta { color: var(--rp-ink); }
 /* the pause glyph sits in the clock's own box, so it never moves the bar either */
 #replay[data-paused='1'] .rp-meta::before { content: '❚❚'; position: absolute; left: 0; top: 50%; translate: 0 -50%; font-size: 8px; letter-spacing: 0; color: var(--rp-dim); }

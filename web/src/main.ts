@@ -6177,8 +6177,15 @@ function alignDrawPiles() {
   const travelX = parseFloat(getComputedStyle(handCard).translate);
   const restingLeft = handCard.getBoundingClientRect().left - (Number.isFinite(travelX) ? travelX : 0);
   const desired = restingLeft - baseLeft;
-  const rightLimit = Math.min(window.innerWidth - 8, (actions?.getBoundingClientRect().left ?? window.innerWidth) - 8);
-  const room = Math.max(0, rightLimit - baseLeft - piles.offsetWidth);
+  // Keep this limit in the cockpit's layout coordinates: its entrance transform can make
+  // screen rectangles disagree while the sheet settles. Reserve the ready pile's 1.16 scale
+  // plus its 1.035 breath too; offsetWidth alone never includes that visual overflow.
+  const pileWidth = Math.max(0, ...Array.from(piles.children, el => (el as HTMLElement).offsetWidth));
+  // Grid tracks also transition from Grow's 108px slot to Draw's 128px slot. The custom
+  // property is the settled target, so the first Draw frame cannot cache the smaller width.
+  const drawSlot = parseFloat(getComputedStyle(box).getPropertyValue('--box-piles')) || piles.offsetWidth;
+  const reach = Math.max(drawSlot, piles.offsetWidth) + pileWidth * .21;
+  const room = Math.max(0, (actions?.offsetLeft ?? box.clientWidth) - 8 - piles.offsetLeft - reach);
   piles.style.setProperty('--futa04-draw-shift', `${Math.round(Math.max(0, Math.min(desired, room)))}px`);
   drawPileAnchorKey = anchorKey;
 }

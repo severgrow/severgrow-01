@@ -31,6 +31,15 @@ try {
     await page.goto('http://127.0.0.1:4258/');
     await page.locator('#menu-settings').click();
     await page.waitForTimeout(450);
+    // Font/layout work can set data-scroll late on a busy runner. Check the settled cue,
+    // with the same opacity limits below, rather than photographing halfway through it.
+    await page.waitForFunction(()=>{
+      const panel=document.getElementById('sheet-settings')!;
+      const fade=panel.querySelector('.sheet-fade');
+      const opacity=fade?Number(getComputedStyle(fade).opacity):0;
+      const more=panel.scrollHeight-panel.clientHeight-panel.scrollTop>2;
+      return more?panel.dataset.scroll==='1'&&opacity>.5:panel.dataset.scroll==='0'&&opacity<.1;
+    });
     const geometry = await page.evaluate(() => {
       const panel = document.getElementById('sheet-settings')!;
       const bounds = panel.getBoundingClientRect();

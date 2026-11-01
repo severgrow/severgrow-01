@@ -9,6 +9,7 @@
 // Playback is a plain clock over `model.frames` (see timeline.ts) and every seek paints a frame the
 // timeline computed, so a drag on the scrub bar lands on the real position at once.
 import { createHudBrandMark } from '../player/branding.js';
+import { ICONS } from '../ui/icons.js';
 import { REPLAY } from '../../../src/strings.js';
 import { IS_FUTA04 } from '../channel.js';
 import { NO_OVERLAY, BoardView } from '../ui/board.js';
@@ -269,9 +270,11 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   again.classList.add('rp-again');
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
-  closeBtn.className = 'rp-btn';
+  closeBtn.className = 'rp-icon';
   closeBtn.dataset.rp = 'close';
-  closeBtn.textContent = REPLAY.close;
+  closeBtn.innerHTML = ICONS.close!;
+  closeBtn.setAttribute('aria-label', REPLAY.close);
+  closeBtn.title = REPLAY.close;
   // THE ONE SHARE KEY (owner, 2026-10-30: "remove the png sharing option … so just 1 icon"): it
   // makes the replay's video and hands it to the phone's share sheet. The same 44px target and ink.
   const videoBtn = document.createElement('button');
@@ -825,6 +828,8 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     // messages ("Video saved", "Could not make the video") are spoken.
     videoRow.setAttribute('aria-live', cancel ? 'off' : 'polite');
     videoRow.hidden = false;
+    videoBtn.hidden = true;
+    if (document.activeElement === videoBtn) (cancel ? videoCancel : closeBtn).focus({ preventScroll: true });
   };
   /** Write progress only when the word changes: one announcement per second, not per frame. */
   const writeVideoProgress = (text: string): void => {
@@ -836,6 +841,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     videoShare.hidden = true;
     videoSave.hidden = true;
     videoRow.hidden = true;
+    videoBtn.hidden = false;
     videoRow.dataset.live = '0';
     videoCancel.hidden = true;
     videoBtn.disabled = false;
@@ -972,6 +978,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
         videoBtn.disabled = false;
         videoBtn.removeAttribute('aria-busy');
         videoCancel.hidden = true;
+        if (document.activeElement === videoCancel) (videoSave.hidden ? closeBtn : videoSave).focus({ preventScroll: true });
       }
     }
   };

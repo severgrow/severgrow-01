@@ -288,8 +288,17 @@ try {
   await page.waitForTimeout(250);
   await page.click('#world-key-ranking');
   await page.waitForSelector('#online-world-panel:not([hidden])');
-  const svgBox = (await page.locator('.world-map-svg').boundingBox())!;
-  await page.touchscreen.tap(svgBox.x + svgBox.width * .5, svgBox.y + svgBox.height * .85);
+  // Tap an actual exposed tile, not an arbitrary percentage that can land in SVG padding
+  // or under the ranking window as its typography/spacing changes.
+  const mapTap = await page.evaluate(()=>{
+    for(const tile of document.querySelectorAll('.world-hex[data-cell-id]')){
+      const r=tile.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;
+      if(document.elementFromPoint(x,y)?.closest('.world-hex')===tile)return {x,y};
+    }
+    return null;
+  });
+  if(!mapTap)throw new Error('the open ranking leaves an exposed map tile to tap');
+  await page.touchscreen.tap(mapTap.x,mapTap.y);
   await page.waitForTimeout(250);
   check('a tap on the map shuts the open page and selects the tile', await page.isHidden('#online-world-panel') && await page.isVisible('#online-world-selection'));
   // a ranking row glides the view to that player
@@ -340,6 +349,8 @@ try {
   check('reloading also restores the Territory camera',await sameCamera(),JSON.stringify({before:cameraBefore,after:await page.getAttribute('.world-map-svg','viewBox')}));
   await page.click('#online-world-menu');await page.click('#world-key-colour');
   await page.waitForSelector('.world-colour-swatch');
+  check('colour names remain comfortably legible',await page.locator('.world-colour-name').evaluateAll(nodes=>nodes.every(e=>parseFloat(getComputedStyle(e).fontSize)>=10)));
+  await page.screenshot({path:`${SHOTS}/territory-colours-390.png`});
   await page.evaluate(()=>{
     (window as any).__chipNods=[];
     const observer=new MutationObserver(()=>{for(const node of document.querySelectorAll('.world-colour-chip'))for(const a of node.getAnimations())(window as any).__chipNods.push(a.effect?.getTiming().iterations);});

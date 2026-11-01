@@ -98,3 +98,16 @@ Final TypeScript, futa04/futa05 production builds and asset-isolation checks pas
   turn deadlines or any other authoritative gameplay state from it.
 - Prefer an existing status lane, an accessible control label, shape/weight or brief light feedback
   over new captions, banners, badges or permanent instructions.
+
+## Piles and strike vocabulary — 1 November 2026
+
+- Bloom-completing Throw piles keep the existing soft cream/gold shadows, with no hard border or
+  spread-only contour. Empty Throw sockets use the same `.075 × card width` corner radius as cards.
+- Opponent Bomb/Blast cues reuse `replay/strike.ts`: one Bomb card means Bomb, two mean Blast.
+  Keep them in the existing effects layer, finite, pointer-transparent and static under reduced
+  motion. Fast-forward and abandoned turns must not leave or recreate a cue.
+- Draw-pile alignment reserves the settled grid slot and the scaled/breathing pile width before
+  approaching the cockpit. Do not cache a smaller, transitioning Grow slot as Draw's final width.
+- Replay Close reuses `ICONS.close` and a 44px target; an active video action row replaces its idle
+  Share key. Paused boards keep full contrast for reading. Prefer typography and spacing over nested
+  panel frames; preserve the Territory YOU highlight and keyboard focus indicators.
