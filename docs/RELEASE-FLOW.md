@@ -28,6 +28,14 @@ Both are rebuilt by one workflow, `.github/workflows/futasaku04-preview.yml` ("P
 Agents: only promote when the owner says so. Pushing to `futa0.5-online` is the normal end of a task
 (it reaches /test/ only); promoting is the owner's call.
 
+## Timing trap: promote after the publish run has read the branches (2026-11-01)
+
+The publish run reads the `live` and `futa0.5-online` heads in its first job (`resolve`), seconds
+after a push. Promoting a commit straight after pushing it is usually too late for that run: it
+publishes the NEW /test/ and the OLD live, and the run the `live` move starts is then rejected by
+the environment policy below. Observed 2026-11-01 (runs 41331774012 and 41331828139). Fix: any later
+push to `futa0.5-online` (or Run workflow → promote on it) publishes the already-moved `live`.
+
 ## Production environment branch policy
 
 Observed 31 October 2026: the `github-pages` environment accepts publications triggered from
