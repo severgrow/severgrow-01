@@ -14,9 +14,10 @@
 // So `territoryCounts` returns null unless BOTH numbers are known, and the paint simply hides both
 // read-outs while keeping the "TERRITORY" label exactly where it is.
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
-import type { SeedWallet } from '../../../server/src/seeds/types.js';
+import type { SeedWallet, WorldChallengesPayload } from '../../../server/src/seeds/types.js';
 import { MENU, ONLINE } from '../../../src/strings.js';
 import { EASE, MOTION } from '../logic/motion.js';
+import { formatRemaining } from './clock.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { CHALLENGE } from './challenge-copy.js';
 
@@ -79,7 +80,63 @@ export const territoryCounts = (
 export type TerritoryCountsUI = {
   /** Paint a known pair, or hide both read-outs (the label stays). Never throws, never fetches. */
   paint(counts: TerritoryCounts | null): void;
+  /**
+   * The right-hand half while an incoming challenge waits for THIS player's answer: the compact
+   * countdown, or null to go back to the tile count. The entry's LABEL and the Seeds half never
+   * move, and a tick writes one text node, nothing more (owner, 2026-11-01).
+   */
+  answer(text: string | null): void;
 };
+
+/**
+ * A pending challenge still inside its answer window: what the entry counts down instead of the
+ * tile count. Its id keeps two overlapping windows from being confused for one another.
+ */
+export type TerritoryAnswer = Readonly<{ challengeId: string; expiresAt: number }>;
+
+/**
+ * THE ONE THING THAT OUTRANKS THE TILE COUNT (owner, 2026-11-01: "when a challenge needs THEIR
+ * response, replace the tile count with the remaining time"). Only an INCOMING, PENDING challenge
+ * inside its window qualifies: an ACCEPTED one has no answer window left (its duel is the next
+ * move and the entry's lamp already says so), and a resolved one asks nothing at all. The soonest
+ * window wins, so two challenges can never overwrite each other at random.
+ *
+ * `now` is the SERVER-corrected clock (`clock.ts`, built from the payload's `serverNow`); nothing
+ * here invents a deadline or reads the browser clock on its own.
+ */
+export const answerWaiting = (
+  payload: Pick<WorldChallengesPayload, 'incoming'> | null | undefined,
+  now: number,
+): TerritoryAnswer | null => {
+  if (!payload) return null;
+  let soonest: TerritoryAnswer | null = null;
+  for (const challenge of payload.incoming) {
+    if (!challenge || challenge.fromMe === true || challenge.status !== 'pending') continue;
+    const { id, expiresAt } = challenge;
+    if (typeof id !== 'string' || !Number.isFinite(expiresAt) || expiresAt <= now) continue;
+    if (!soonest || expiresAt < soonest.expiresAt) soonest = { challengeId: id, expiresAt };
+  }
+  return soonest;
+};
+
+/**
+ * THE COMPACT COUNTDOWN ITSELF: the lobby's own formatter (`formatRemaining`, "18h 42m") applied to
+ * an absolute deadline on the SERVER's clock, or null when the window has closed. It never adds a
+ * word ("left" / "to answer"), so the entry cannot show anything but the time itself.
+ */
+export const answerLabel = (deadline: number | null, now: number): string | null =>
+  deadline !== null && deadline > now ? formatRemaining(deadline - now) : null;
+
+/**
+ * The right-hand read-out at `now`: the compact time left to answer, or the player's tile count.
+ * When the window closes the tile count returns by itself, so accepted / resolved rows and a
+ * passed deadline all read as tiles again without any extra state.
+ */
+export const territoryReadout = (
+  tiles: number,
+  answer: TerritoryAnswer | null,
+  now: number,
+): string => answerLabel(answer?.expiresAt ?? null, now) ?? String(tiles);
 
 /** Reduced motion is a designed static state: the numbers simply arrive, with no settle. */
 const reducedMotion = (): boolean => {
@@ -116,14 +173,27 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
   const seedsIcon = doc.getElementById('menu-world-seeds-icon');
   const waiting = doc.getElementById('menu-world-waiting');
   if (!button || !seeds || !tiles || !seedsValue || !tilesValue) {
-    return { paint: () => undefined };
+    return { paint: () => undefined, answer: () => undefined };
   }
   seedsIcon?.replaceChildren(seedIcon(16));
   let shown: TerritoryCounts | null = null;
+  /**
+   * The answer countdown's current text, or null when the tile count owns the half. It is kept
+   * here (not read back from the DOM) so a menu pass can repaint the pair without losing the
+   * countdown: the clock and the counts are written by two different reads of the same pass.
+   */
+  let answerText: string | null = null;
+  /** Write the right-hand value from the ONE state: the countdown while one is live, else tiles. */
+  const writeTiles = () => {
+    if (!shown) return;
+    const text = answerText ?? String(shown.tiles);
+    if (tilesValue.textContent !== text) tilesValue.textContent = text;
+  };
   return {
     paint(counts) {
       button.setAttribute('aria-label', counts
-        // The screen-reader line reuses the Territory screen's own words for both counts.
+        // The screen-reader line reuses the Territory screen's own words for both counts. It stays
+        // the same while the countdown ticks: a spoken name that changes every minute would chatter.
         ? `${MENU.world}. ${seedBalanceLabel(counts.seeds)}. ${ONLINE.worldHeld(counts.tiles, counts.cells)}${
           counts.waiting ? `. ${CHALLENGE.actionsWaiting(counts.waiting)}` : ''}`
         : MENU.world);
@@ -136,7 +206,8 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
       }
       const changed = !shown || shown.seeds !== counts.seeds || shown.tiles !== counts.tiles;
       seedsValue.textContent = String(counts.seeds);
-      tilesValue.textContent = String(counts.tiles);
+      shown = counts;
+      writeTiles();
       // The `hidden` attribute comes off BOTH sides in the same frame, so the entry never shows a
       // lone number: the pair appears and disappears as one instrument.
       seeds.hidden = false;
@@ -155,7 +226,15 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
         settle(seeds);
         settle(tiles);
       }
-      shown = counts;
+    },
+    answer(text) {
+      if (text === answerText) return;
+      const wasAnswering = answerText !== null;
+      answerText = text;
+      writeTiles();
+      // One acknowledgement on the SWITCH (tiles → clock, or back), never on a tick: the countdown
+      // itself only ever writes its text node.
+      if (wasAnswering !== (text !== null)) settle(tiles);
     },
   };
 };

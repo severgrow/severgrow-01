@@ -50,6 +50,35 @@ const WORLD = {
 const WALLET = { ok: true, wallet: { balance: 128, lifetimeEarned: 288, lifetimeSpent: 160, worldInvitationSeen: true } };
 const GUEST = { ok: true, token: 'stub-token', player: { id: 'stub', kind: 'guest', displayName: 'StubGuest' }, serverNow: Date.now() };
 
+/**
+ * THE TWO LIVE SIGNALS (owner brief, 2026-11-01), answered by the stub and changed between reads so
+ * the page can be watched transitioning — no server, no clock racing the test:
+ *   - an incoming PENDING challenge puts its time left on the Territory entry in place of tiles;
+ *   - an ACTIVE match whose turn is mine puts "your move" on the Play online key.
+ */
+type LiveChallenge = {
+  id: string; cellId: string; challengerId: string; defenderId: string; challengerName: string | null;
+  defenderName: string | null; fromMe: boolean; status: string; stake: number; stakeCellId: string | null;
+  createdAt: number; expiresAt: number; respondedAt: number | null; matchId: string | null;
+  matchFinished: boolean; matchWaitingForMe: boolean; matchWinnerId: string | null; winnerId: string | null;
+  resolvedAt: number | null; remainingMs: number; serverNow: number;
+};
+const liveChallenge = (status: string, leftMs: number): LiveChallenge => ({
+  id: `ch-${status}`, cellId: 'c5', challengerId: 'other', defenderId: 'stub',
+  challengerName: 'Other', defenderName: 'StubGuest', fromMe: false, status, stake: 0,
+  stakeCellId: 'c6', createdAt: Date.now() - 60_000, expiresAt: Date.now() + leftMs,
+  respondedAt: null, matchId: null, matchFinished: false, matchWaitingForMe: status === 'accepted',
+  matchWinnerId: null, winnerId: null, resolvedAt: null, remainingMs: leftMs, serverNow: Date.now(),
+});
+const liveMatch = (turnPlayer: 0 | 1, status = 'active') => ({
+  matchId: 'm-live', status, mySeat: 0, turnPlayer: status === 'active' ? turnPlayer : null,
+  turnDeadlineAt: Date.now() + 6 * 3_600_000, opponentName: 'Other', opponentTag: '2',
+  lastActivityAt: Date.now(), unseenTurn: turnPlayer === 0, revision: 4, graceUsed: [0, 0],
+  gracePeriods: 1, result: null,
+});
+let challengeWire: LiveChallenge[] = [];
+let matchWire: ReturnType<typeof liveMatch>[] = [];
+
 type Mode = 'known' | 'no-map' | 'wallet-fails' | 'world-fails' | 'no-guest' | 'zero';
 
 /** Every API answer the page can need, per scenario. Registered MOST-GENERIC FIRST: Playwright
@@ -141,11 +170,30 @@ const browser = await chromium.launch({
   args: ['--no-sandbox'],
 });
 
+/**
+ * The two LIVE answers, registered AFTER `stub` so they win (Playwright matches newest-first) over
+ * the catch-all map route. Each request rebuilds `serverNow`, so the page's corrected clock and the
+ * deadline always agree.
+ */
+const stubLive = async (page: Page) => {
+  await page.route('**/v1/world/challenges*', (r) => r.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ ok: true, incoming: challengeWire, outgoing: [], serverNow: Date.now() }),
+  }));
+  await page.route('**/v1/players/me/matches*', (r) => r.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ ok: true, matches: matchWire, serverNow: Date.now() }),
+  }));
+};
+
 /** Open the menu with a stubbed API answer for the given scenario, and let the read settle. */
 const open = async (page: Page, mode: Mode, largeText = false) => {
   await page.addInitScript(() => localStorage.clear());
   await page.addInitScript({ content: 'window.__name = (f) => f;' });
   await stub(page, mode);
+  await stubLive(page);
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#menu:not([hidden]) .menu-inner', { timeout: 20_000 });
   if (largeText) await page.evaluate(() => document.documentElement.classList.add('large-text'));
@@ -305,6 +353,129 @@ try {
       await page.close();
     }
   }
+  // ---- 5. THE TWO LIVE SIGNALS (owner brief, 2026-11-01) ----
+  //   · an incoming challenge that needs MY answer replaces the TILE COUNT with the time left,
+  //     ticking, and goes back to tiles when it is accepted or resolved (or the window closes);
+  //   · an unfinished duel on MY turn says "your move" on the Play online key, and reverts.
+  // Both ride the read the menu already makes on show (`futasaku:menu`): no new poll, no endpoint.
+  console.log('\nlive signals 390x844:');
+  {
+    challengeWire = [];
+    matchWire = [liveMatch(0)];
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    try {
+      await open(page, 'known');
+      /** Re-run the menu's own show read, exactly the signal a menu return sends. */
+      const refresh = async () => {
+        await page.evaluate(() => window.dispatchEvent(new Event('futasaku:menu')));
+        await page.waitForTimeout(700);
+      };
+      const sideText = () => page.evaluate(() => document.getElementById('menu-world-tiles-value')?.textContent ?? '');
+      const onlineText = () => page.evaluate(() => document.getElementById('menu-online')?.textContent ?? '');
+
+      check((await sideText()) === '2', `with no challenge the tile count is back (${await sideText()})`);
+      check((await onlineText()) === ONLINE.yourMove, `a duel on my turn says "your move" (${await onlineText()})`);
+
+      // APPEARS: the countdown replaces the count, and nothing else in the entry moves.
+      challengeWire = [liveChallenge('pending', 2 * 3_600_000 + 5 * 60_000 + 30_000)];
+      await refresh();
+      const waiting = await sideText();
+      check(/^\d+h \d+m$/.test(waiting), `a waiting challenge shows only the compact time (${waiting})`);
+      check(waiting !== '2', 'the tile count is replaced, never shown beside the time');
+      {
+        const m = await measure(page);
+        const b = m.button!, l = m.label!, t = m.sides[1]!;
+        check(t.shown && t.text === waiting, `the tiles half carries the countdown (${t.text})`);
+        check(t.ink!.right <= b.right + 0.5 && t.ink!.left >= b.x - 0.5, 'the countdown stays inside the entry');
+        check(t.ink!.left >= l.right - 0.5, 'the countdown never overlaps the centred label');
+        check(m.sides[0]!.text === '128', `the Seeds half is untouched (${m.sides[0]!.text})`);
+        if (SHOTS) await page.screenshot({ path: join(SHOTS, 'territory-answer-390x844.png') });
+      }
+
+      // TICKING: a short window visibly counts down, then hands the half back to the count itself.
+      challengeWire = [liveChallenge('pending', 6_000)];
+      await refresh();
+      const ticked0 = await sideText();
+      await page.waitForTimeout(2_200);
+      const ticked1 = await sideText();
+      check(/^\d+s$/.test(ticked0) && /^\d+s$/.test(ticked1), `short windows tick (${ticked0} → ${ticked1})`);
+      check(ticked0 !== ticked1, 'the countdown actually moves while it waits');
+      await page.waitForFunction(() => document.getElementById('menu-world-tiles-value')?.textContent === '2', undefined, { timeout: 12_000 })
+        .then(() => check(true, 'a closed window stops ticking and the tile count returns'))
+        .catch(() => check(false, 'a closed window stops ticking and the tile count returns'));
+
+      // ACCEPTED / RESOLVED: no answer window left, so the tile count is back.
+      challengeWire = [liveChallenge('accepted', 0)];
+      await refresh();
+      check((await sideText()) === '2', `an accepted challenge reads as tiles again (${await sideText()})`);
+      challengeWire = [liveChallenge('resolved', 0)];
+      await refresh();
+      check((await sideText()) === '2', `a resolved challenge reads as tiles again (${await sideText()})`);
+
+      // THE SMALLEST PHONE: the wider countdown never leaves the entry or shifts the label.
+      challengeWire = [liveChallenge('pending', 2 * 3_600_000 + 5 * 60_000 + 30_000)];
+      await page.setViewportSize({ width: 320, height: 568 });
+      await refresh();
+      {
+        const m = await measure(page);
+        const b = m.button!, l = m.label!, t = m.sides[1]!;
+        check(t.text === '2h 5m', `320x568: the countdown fits the small phone (${t.text})`);
+        check(t.ink!.left >= b.x && t.ink!.right <= b.right, `320x568: it stays inside the entry (${t.ink!.left}..${t.ink!.right} in ${b.x}..${b.right})`);
+        check(t.ink!.left >= l.right - 0.5, '320x568: it never overlaps the label');
+        check(Math.abs(l.cx - b.cx) <= 0.75, `320x568: the label stays centred (${l.cx} vs ${b.cx})`);
+        check(m.menuScroll <= 1 && m.docScroll <= 1, `320x568: still no scrolling (${m.menuScroll}/${m.docScroll})`);
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+      await refresh();
+
+      // THE TURN PASSES, THEN THE MATCH ENDS: the generic label comes back.
+      matchWire = [liveMatch(1)];
+      await refresh();
+      check((await onlineText()) === ONLINE.playOnline, `their turn reverts to the generic label (${await onlineText()})`);
+      matchWire = [liveMatch(0, 'finished')];
+      await refresh();
+      check((await onlineText()) === ONLINE.playOnline, `a finished match reverts too (${await onlineText()})`);
+      matchWire = [liveMatch(0)];
+      await refresh();
+      check((await onlineText()) === ONLINE.yourMove, `a new turn brings "your move" back (${await onlineText()})`);
+
+      // NO OVERLAP: inside PLAY, the live key stays its own 50px row, clear of its neighbours.
+      await page.click('#menu-play');
+      await page.waitForSelector('#play-menu:not([hidden])', { timeout: 8_000 });
+      await page.waitForTimeout(400);
+      const boxes = await page.evaluate(() => {
+        const id = (key: string) => document.getElementById(key);
+        const box = (el: HTMLElement | null) => {
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { x: +r.x.toFixed(1), y: +r.y.toFixed(1), w: +r.width.toFixed(1), h: +r.height.toFixed(1), right: +r.right.toFixed(1), bottom: +r.bottom.toFixed(1) };
+        };
+        return {
+          vw: innerWidth, vh: innerHeight,
+          online: box(id('menu-online')), campaign: box(id('menu-campaign')), practice: box(id('menu-new')),
+          text: id('menu-online')?.textContent ?? '',
+        };
+      });
+      check(boxes.text === ONLINE.yourMove, `the PLAY entry carries the live word (${boxes.text})`);
+      check(boxes.online !== null && boxes.online.h >= 44, `it keeps its tap height (${boxes.online?.h}px)`);
+      check(!!boxes.online && boxes.online.x >= -0.5 && boxes.online.right <= boxes.vw + 0.5 && boxes.online.bottom <= boxes.vh + 0.5,
+        'it stays fully on screen');
+      const clear = (a: typeof boxes.online, b: typeof boxes.online) =>
+        !!a && !!b && (a.bottom <= b.y + 0.5 || b.bottom <= a.y + 0.5);
+      check(clear(boxes.online, boxes.campaign) && clear(boxes.online, boxes.practice),
+        'it overlaps neither LEVEL nor Practice match');
+      if (SHOTS) await page.screenshot({ path: join(SHOTS, 'play-online-live-390x844.png') });
+      await page.click('#play-back');
+      await page.waitForSelector('#menu:not([hidden])', { timeout: 8_000 });
+
+      assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
+    } finally {
+      await page.close();
+    }
+  }
+
   console.log('\nterritory menu checks passed');
 } finally {
   await browser.close();

@@ -340,6 +340,12 @@ try {
       status: 201, contentType: 'application/json',
       body: JSON.stringify({ ok: true, token: 'stub-token', player: { id: 'p1', kind: 'guest', displayName: 'BloomHeron' }, serverNow: NOW }),
     }));
+    // The menu's own pass also reads the player's duel list (the Play online key's live word,
+    // owner 2026-11-01). Not what this suite tests: an empty list keeps that key generic.
+    await page.route('**/v1/players/me/matches*', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ ok: true, matches: [], serverNow: NOW }),
+    }));
 
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -823,6 +829,10 @@ try {
   await land.route('**/v1/guests*', (route) => route.fulfill({
     status: 201, contentType: 'application/json',
     body: JSON.stringify({ ok: true, token: 'stub-token', player: { id: 'p1', kind: 'guest', displayName: 'BloomHeron' }, serverNow: NOW }),
+  }));
+  // The Play online key's live word reads the duel list on the menu pass; empty here on purpose.
+  await land.route('**/v1/players/me/matches*', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, matches: [], serverNow: NOW }),
   }));
   await land.goto(BASE, { waitUntil: 'load' });
   await land.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20_000 });

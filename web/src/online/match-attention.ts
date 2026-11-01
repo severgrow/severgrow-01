@@ -31,6 +31,19 @@ export const needsMyResponse = (entry: AttentionSource): boolean =>
 export const countNeedingResponse = (entries: readonly AttentionSource[]): number =>
   entries.reduce((count, entry) => (needsMyResponse(entry) ? count + 1 : count), 0);
 
+/**
+ * THE MENU KEY'S ONE LIVE WORD (owner, 2026-11-01): an unfinished duel of MINE that is waiting on
+ * my move makes the Play online entry say "your move" instead of the generic label, and the
+ * generic label comes back the moment the turn passes or the match ends. The SAME predicate
+ * (`needsMyResponse`) drives the lobby's red "!", so the two surfaces can never disagree about
+ * whose move it is, and no second read or badge is needed.
+ */
+export const playOnlineLabel = (
+  entries: readonly AttentionSource[],
+  generic: string,
+  yourMove: string,
+): string => (entries.some(needsMyResponse) ? yourMove : generic);
+
 /** "Your matches (3)" — the button's visible label. */
 export const yourMatchesLabel = (total: number): string => ONLINE.yourMatchesCount(total);
 

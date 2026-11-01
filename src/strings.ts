@@ -62,6 +62,12 @@ export const ONLINE = Object.freeze({
   brand: 'FUTASAKU',
   tagline: 'GROW · CONNECT · CONQUER',
   playOnline: 'Play online',
+  /**
+   * THE MENU KEY'S LIVE WORD (owner, 2026-11-01): while an unfinished duel is waiting on THIS
+   * player's move, the Play online entry says so instead of the generic label, and goes back the
+   * moment the turn passes or the match ends. One word pair, no badge and no second screen.
+   */
+  yourMove: 'your move',
   playOffline: 'Play offline',
   pageTitleBase: 'FUTASAKU',
   connectionOffline: 'Offline',

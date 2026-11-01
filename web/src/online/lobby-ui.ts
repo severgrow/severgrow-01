@@ -11,6 +11,7 @@ import { pollDue } from './poll-gate.js';
 import {
   countNeedingResponse,
   needsMyResponse,
+  playOnlineLabel,
   yourMatchesButtonName,
   yourMatchesLabel,
 } from './match-attention.js';
@@ -19,8 +20,10 @@ import { createHudBrandMark } from '../player/branding.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { leaveLobbyForMatch } from './lobby-exit.js';
 import { WorldView } from './world-view.js';
-import { installTerritoryCountUI, territoryCounts } from './menu-territory.js';
+import { installTerritoryCountUI, answerWaiting, territoryCounts } from './menu-territory.js';
 import type { TerritoryCounts } from './menu-territory.js';
+import { mountAnswerClock } from './menu-territory-clock.js';
+import { correctedNow, emptyClock, noteServerNow } from './clock.js';
 import { waitingActionCount } from './territory-attention.js';
 import { cachedTerritory, registerTerritoryReader, rememberTerritory } from './territory-cache.js';
 import { seedIcon } from './seed-icon.js';
@@ -365,6 +368,20 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     leaveLobbyForMatch({ teardown: () => worldView?.close(true) });
   };
 
+  /**
+   * THE PLAY ONLINE KEY'S ONE LIVE WORD (owner, 2026-11-01): the SAME match list the hub draws,
+   * through the SAME "is it my move" predicate as the list's red "!", so the menu can never claim
+   * a move the list does not. Written only when it changes, so a poll leaves the key alone.
+   */
+  const paintMenuOnline = () => {
+    if (!menuOnline) return;
+    const label = playOnlineLabel(matches, ONLINE.playOnline, ONLINE.yourMove);
+    if (menuOnline.textContent !== label) menuOnline.textContent = label;
+    // The spoken name keeps the destination: "your move" alone would not say where the key goes.
+    const name = label === ONLINE.yourMove ? `${ONLINE.yourMove}. ${ONLINE.playOnline}` : ONLINE.playOnline;
+    if (menuOnline.getAttribute('aria-label') !== name) menuOnline.setAttribute('aria-label', name);
+  };
+
   const fillCopy = () => {
     $('online-hub-title').textContent = ONLINE.hubTitle;
     $('online-create').textContent = ONLINE.create;
@@ -408,8 +425,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const tagline = document.getElementById('menu-tagline');
     if (tagline) tagline.textContent = ONLINE.tagline;
     if (menuOnline) {
-      menuOnline.textContent = ONLINE.playOnline;
-      menuOnline.setAttribute('aria-label', ONLINE.playOnline);
+      // The generic label OR "your move", from the match list the menu already read (`fillCopy`
+      // runs on every hub/join/waiting open, so it must never stomp the live word).
+      paintMenuOnline();
     }
     // The 0.5 product menu MOVES #menu-new into the PLAY submenu and labels it "Practice match" (main.ts).
     // Only the flat legacy menu names it "Play offline"; fillCopy runs again on every hub open, so
@@ -540,6 +558,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       }
     }
     refreshTitle();
+    paintMenuOnline();
   };
 
   const ensureIdentity = async () => {
@@ -1104,6 +1123,13 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
    * 2026-10-20). This is not a poll: one read when the menu appears, and only while it is on show.
    */
   const territoryUI = installTerritoryCountUI();
+  /**
+   * The answer countdown behind the entry's right half (owner, 2026-11-01). It owns ONE interval,
+   * is pointed at the deadline the menu pass below already read, and stops the moment no answer is
+   * waiting. `now` is the lobby's injectable clock, so a test can drive it; the deadline itself is
+   * the server's, corrected once per read (`noteServerNow`).
+   */
+  const answerClock = mountAnswerClock((text) => territoryUI.answer(text), now);
   let menuPass: Promise<void> | null = null;
 
   /**
@@ -1116,29 +1142,52 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const id = await ensureIdentity();
     if (!id || (playerId && id.playerId !== playerId)) {
       if (menuEl?.hidden === false) territoryUI.paint(null);
+      answerClock.stop();
       return null;
     }
     let wallet: SeedWallet | null = null;
     let world: WorldMapPayload['world'] | null = null;
     let waiting = 0;
+    let duelList: MatchListEntry[] | null = null;
+    let duelServerNow = 0;
     try {
-      const [readWallet, map, challenges] = await Promise.all([
+      const [readWallet, map, challenges, duels] = await Promise.all([
         client.seedWallet(id.token),
         client.worldMap(),
         // The menu's own signal: the shared "is anything waiting for me" predicate.
         client.worldChallenges(id.token).catch(() => null),
+        // The SAME match list the hub draws, so the Play online key can say "your move". It rides
+        // the read the menu already makes on show: no new endpoint and no poll (owner, 2026-11-01).
+        client.listMatches(id.token).catch(() => null),
       ]);
       wallet = readWallet;
       world = map.world;
       waiting = waitingActionCount(challenges);
+      // ONE server-clock correction per read, then the answer window is an absolute deadline the
+      // clock ticks against. An unread list answers null, which stops the tick (never a guess).
+      const clock = challenges ? noteServerNow(emptyClock(), challenges.serverNow, now()) : null;
+      const answer = clock ? answerWaiting(challenges, correctedNow(clock, now())) : null;
+      answerClock.set(answer ? answer.expiresAt : null);
+      if (duels) {
+        duelList = duels.matches;
+        duelServerNow = duels.serverNow;
+      }
     } catch {
       // Offline, signed out, or a failed request: both read-outs stay hidden, together.
       wallet = null;
       world = null;
+      answerClock.stop();
     }
     const counts = territoryCounts(wallet, world, id.playerId, waiting);
     rememberTerritory(id.playerId, counts);
     if (menuEl?.hidden === false) territoryUI.paint(counts);
+    // The SAME list paints the Play online key's live word (and the hub, if it is open). Kept out
+    // of the try above: a paint can never be mistaken for a failed wallet/map read.
+    if (duelList) {
+      serverOffset = duelServerNow - now();
+      matches = duelList;
+      renderMatches();
+    }
     // The invitation reads the SAME wallet response; it never costs a second request.
     offerWorldInvitation(id, wallet);
     return counts;
