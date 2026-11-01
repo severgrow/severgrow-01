@@ -1,5 +1,6 @@
 // first: the release channel (the test copy keeps its own storage)
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
+import { showLiveStrike } from './ui/live-strike.js';
 import { readAppViewport } from './ui/app-viewport.js';
 import { mountMatchChat } from './online/chat/view.js';
 import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
@@ -4158,7 +4159,9 @@ async function playStep(step: Step, my: number) {
       // one dark pulse from the target, sized to the destroyed set (opacity ≤0.4, duration quick)
       let lastRing = 0;
       for (const key of step.destroyed) lastRing = Math.max(lastRing, hexDistance(parseKey(key), center));
-      flash(step.target, f, false, { dark: true, ms: MOTION.quick * 1.25 * f, radius: Math.min(4.4, lastRing + 1.15) });
+      const hold = Math.max(BLAST_MIN_MS, Math.min(840, lastRing * 36 + MOTION.move * 1.15)) * f;
+      if (IS_FUTA04 && !mine) showLiveStrike(board.fx, step, hold, m === 0);
+      else flash(step.target, f, false, { dark: true, ms: MOTION.quick * 1.25 * f, radius: Math.min(4.4, lastRing + 1.15) });
       if (settings.sound) sound.megaBomb();
       if (mine) vibrate(settings.vibration, 22);
       // Blast: lowkey but heavy — the board thuds like something solid landed.
@@ -4182,7 +4185,6 @@ async function playStep(step: Step, my: number) {
       }
       // Blast is the heaviest move: it holds the screen long enough to register (at least 640ms)
       // even when it only clears one ring, which used to be gone in ~430ms.
-      const hold = Math.max(BLAST_MIN_MS, Math.min(840, lastRing * 36 + MOTION.move * 1.15)) * f;
       // The PLANNED hold, published for the motion suite (a diagnostic, like every animLog mark).
       // Tests used to tax the wall clock to the end of the busy gate, which also counts this
       // runner's frame and pump-wake latency; the plan is what the product actually intends.
@@ -4256,12 +4258,13 @@ async function playStep(step: Step, my: number) {
         }
       }
       await anticipate(mo, f, my);
+      if (IS_FUTA04 && !mine && my === epoch) showLiveStrike(board.fx, step, (MOTION.move + MOTION.quick) * f, m === 0);
       // the pod swells (a plain fade with Reduce motion)
       anim(tileEl, m === 0 || b.fadeOnly ? [{ opacity: 1 }, { opacity: 0.85 }] : [{ transform: 'scale(1)' }, { transform: `scale(${1 + 0.14 * m})`, offset: 0.7 }, { transform: `scale(${1 + 0.1 * m})` }], { duration: 300 * f, fill: 'forwards', easing: 'ease-out', transformOrigin: 'center' } as KeyframeAnimationOptions);
       await wait(300 * f, my);
       // the burst: spores puff out, a soft thud
       if (b.particles > 0) sparks(step.target, mine ? 'you' : 'bot', 0, f, Math.max(6, Math.round(b.particles / (mine ? 2 : 3))));
-      flash(step.target, f, false);
+      if (!IS_FUTA04 || mine) flash(step.target, f, false);
       if (settings.sound) sound.fruit();
       {
         const hp = hapticFor('throw', settings);

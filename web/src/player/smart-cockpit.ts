@@ -526,16 +526,23 @@ html.futa04-information[data-step='draw'] #discard.ready:not(.futa04-bloom-draw)
    opposite SHAPE — a pale cream CORE (rgba(255,246,214): hue 47, chroma .16, value 1.0) with the
    gold living in the MIDDLE of the falloff (rgba(232,180,88): hue 38, chroma .62, value .91)
    fading to nothing at 18px. The metal reads from the cream highlight, not from a saturated ring.
-   Measured on painted pixels by web/e2e/throw-pile-presentation.ts: the brightest point is the
-   core (h 46, s .18, v .92) and the peak chroma is 5px out (h 37, s .52) — where the old rule had
-   its brightest AND most saturated point on the rim itself. Nothing here is a filter, a blur or
-   an animation: five box-shadow layers and one border. */
+   The framed preset measured a near-white rim (h 46, s .18, v .92), with gold 5px out.
+   OWNER, 2026-11-01: keep the glow colour, remove the contour. Only that hard cream border and
+   spread-only rim are removed below; all soft glow layers stay unchanged. The browser suite
+   checks this against the previous preset using the same painted-pixel sampler. No filter,
+   blur animation or timer: just the existing soft box-shadow layers. */
 html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-top.card {
-  transform:translateY(-3px); border-color:rgba(255,242,205,.9);
-  box-shadow:0 0 0 1px rgba(255,246,214,.82), 0 0 3px rgba(255,250,235,.62),
+  transform:translateY(-3px); border-color:transparent;
+  box-shadow:0 0 3px rgba(255,250,235,.62),
     0 0 9px 1px rgba(232,180,88,.55), 0 0 18px 5px rgba(184,130,44,.24),
     0 2px 4px rgba(0,0,0,.45);
-  transition:transform var(--dur-ack) var(--ease-standard),border-color .2s ease-out,box-shadow .2s ease-out;
+  transition:transform var(--dur-ack) var(--ease-standard),box-shadow .2s ease-out;
+}
+html.futa04-information .dock #discard .pile-top { border-radius:calc(var(--cw) * .075); }
+/* The empty Throw socket is the same card silhouette, not the legacy dashed rounded box. */
+html.futa04-information .dock #discard .pile-top.empty {
+  box-sizing:border-box; border:1px solid color-mix(in srgb,var(--instrument-selection,#f2e5c5) 36%,transparent);
+  border-radius:calc(var(--cw) * .075); background:rgba(8,10,10,.12);
 }
 /* Legal empty sockets share one warm, recessed treatment on Forest and Volcano turns. */
 html.futa04-information #board .l-over .receptive-well {

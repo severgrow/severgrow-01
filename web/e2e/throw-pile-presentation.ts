@@ -9,8 +9,9 @@
 //      the OLD ring is injected afterwards as a negative control, so the detector must flag it;
 //   2. the pile measurably grows when a card is picked, at 4 viewports, without touching the hand,
 //      the LED display or the deck — and it still ends bigger under Reduce motion;
-//   3. the Bloom-completing gold has a near-white core with its most saturated pixel in the
-//      falloff (measured before/after on the same page, same sampler).
+//   3. owner, 2026-11-01: remove the Bloom contour while keeping its soft gold. The
+//      removed cream rim is a negative control; the outer glow must remain the same colour.
+//      Also retain the older mustard negative control for the warm falloff.
 //
 // Run (build first):
 //   CHANNEL=futa04 … npm run web:build
@@ -24,7 +25,7 @@ import { servePreview } from './helpers/preview-port.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 
-const SHOTS = 'docs/screens/throw-pile-2026-10-30';
+const SHOTS = process.env.SHOTS ?? 'docs/screens/throw-pile-2026-10-30';
 mkdirSync(SHOTS, { recursive: true });
 
 const served = process.env.FUTA04_URL
@@ -426,11 +427,28 @@ try {
     const brightest = after.reduce((a, b) => (b.v > a.v ? b : a));
     const saturated = after.reduce((a, b) => (b.s > a.s ? b : a));
     check(brightest.d <= 1.5, `gold: the brightest glow pixel is at the core (${brightest.d}px out)`);
-    check(brightest.v >= 0.85, `gold: the core is near-white (v ${brightest.v}, hue ${brightest.h})`);
-    check(brightest.s <= 0.28, `gold: the core carries almost no chroma (s ${brightest.s})`);
+    // The removed opaque cream frame used to pin v>=.85, s<=.28. The owner now wants
+    // ONLY its existing translucent glow, so compare the actual rim to that frame instead.
+    const material = await page.locator('#discard .pile-top').evaluate(e=>{
+      const s=getComputedStyle(e);return {border:s.borderTopColor,shadow:s.boxShadow};
+    });
+    check(material.border === 'rgba(0, 0, 0, 0)' && !material.shadow.includes('0px 0px 0px 1px'), 'gold: no CSS border or spread-only contour');
+    check(brightest.h >= 32 && brightest.h <= 50, `gold: the soft core stays warm cream/gold (hue ${brightest.h})`);
     check(saturated.d >= 2 && saturated.d <= 9, `gold: peak chroma sits in the falloff (${saturated.d}px out)`);
     check(saturated.s >= 0.45, `gold: the falloff is a richer gold (s ${saturated.s}, hue ${saturated.h})`);
-    check(brightest.v > saturated.v + 0.3, `gold: lightness peaks at the core, not at the chroma (${brightest.v} vs ${saturated.v})`);
+    check(brightest.v > saturated.v + 0.2, `gold: lightness peaks at the core, not at the chroma (${brightest.v} vs ${saturated.v})`);
+
+    const frame = await page.addStyleTag({content:`html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-top.card {
+      border-color:rgba(255,242,205,.9)!important;
+      box-shadow:0 0 0 1px rgba(255,246,214,.82),0 0 3px rgba(255,250,235,.62),
+        0 0 9px 1px rgba(232,180,88,.55),0 0 18px 5px rgba(184,130,44,.24),0 2px 4px rgba(0,0,0,.45)!important;
+    }`});
+    await page.waitForTimeout(350);
+    const framed=await glowProfile(page);
+    const frameCore=framed.reduce((a,b)=>b.v>a.v?b:a);
+    check(frameCore.v > brightest.v + .2, `gold: sampler catches the removed bright frame (${frameCore.v} vs ${brightest.v})`);
+    check(after.filter(p=>p.d>=3&&p.d<=6).every(p=>{const previous=framed.find(x=>x.d===p.d)!;return Math.abs(p.v-previous.v)<.025&&Math.abs(p.h-previous.h)<=3;}), 'gold: removing the frame preserves the same warm outer falloff');
+    await frame.evaluate(e=>e.parentNode?.removeChild(e));
 
     // The same sampler against the OLD rule: it must fail the new criteria.
     await page.addStyleTag({ content: OLD_GOLD });

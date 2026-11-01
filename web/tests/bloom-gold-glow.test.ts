@@ -8,7 +8,9 @@
 // read as khaki. Heavenly gold is the OPPOSITE shape: a near-white cream CORE, with the metal
 // reading coming from a richer gold that lives in the MIDDLE of the falloff, not on the rim.
 //
-// This pins the colour algebra; web/e2e/throw-pile-glow.ts proves the painted pixels behave the
+// Owner, 2026-11-01: keep these glow colours, remove the contour frame. The cream
+// now comes only from the soft inner glow, never a hard border or spread-only rim.
+// This pins the colour algebra; web/e2e/throw-pile-presentation.ts proves the painted pixels behave the
 // same way (peak lightness at the core, peak saturation in the falloff).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -76,7 +78,7 @@ describe('the Bloom-completing gold is metal, not mustard', () => {
     expect(h).toBeGreaterThan(30);
     expect(h).toBeLessThan(50);
     // The owner's own words for the highlight, as a value the stylesheet must carry.
-    expect(body()).toContain('rgba(255,246,214');
+    expect(body()).toContain('rgba(255,250,235,.62)');
   });
 
   it('the gold lives in the falloff — the most chroma is not at the rim', () => {
@@ -96,13 +98,12 @@ describe('the Bloom-completing gold is metal, not mustard', () => {
     expect(mostSaturated.h).toBeLessThanOrEqual(46);
   });
 
-  it('the rim and the border are cream, and the old mustard literals are gone', () => {
+  it('the soft cream remains, with no contour border or mustard rim', () => {
     const css = body();
     expect(css).not.toContain('212,175,55');
     expect(css).not.toContain('196,152,42');
-    const border = rgb(/border-color:\s*(rgba?\([^)]+\))/.exec(css)![1]!);
-    expect(hsv(border).v).toBeGreaterThanOrEqual(0.96);
-    expect(hsv(border).s).toBeLessThanOrEqual(0.25);
+    expect(css).toContain('border-color:transparent');
+    expect(layers().every(layer => layer.blur > 0)).toBe(true);
   });
 
   it('stays inside the existing budget: no filter, no blur animation, no new timer', () => {
