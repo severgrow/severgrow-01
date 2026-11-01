@@ -8,6 +8,7 @@
 // pure function, so a test can prove the image carries the names, the score and the board — and
 // nothing else (no ids, no tokens, no hidden player records).
 import { FILM_GRAIN_OPACITY, FILM_GRAIN_URL } from '../player/atmosphere.js';
+import { replayUIFamily } from './typography.js';
 import { ledFrameUrl, ledPlateLayout, paintLedScore } from './led-plate.js';
 import type { LedPlateLayout } from './led-plate.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
@@ -55,7 +56,8 @@ export const TURN_H = 40;
 /** The board's own pictures, handed over by the module the on-screen board already loaded. */
 export type PosterArt = BoardArt;
 /** Decode those pictures once (idempotent, cached, never rejects). Shared with the video. */
-export const warmPosterArt = warmBoardArt;
+export const warmPosterArt = (art: BoardArt | null = null): Promise<void> =>
+  Promise.all([warmBoardArt(art), warmReplayFilm()]).then(() => undefined);
 
 export type PosterData = {
   names: readonly [string, string];
@@ -140,8 +142,8 @@ export const posterLayout = (d: PosterData): PosterLayout => {
   const plate = ledPlateLayout(POSTER_W / 2, rowMid, PLATE_H);
   const nameW = (POSTER_W - 2 * M - plate.w) / 2 - 28;
   const names: readonly [TextBox, TextBox] = [
-    line(rowMid, NAME_SIZE, fit(d.names[0].toUpperCase(), 14), 600, 'left', M, nameW),
-    line(rowMid, NAME_SIZE, fit(d.names[1].toUpperCase(), 14), 600, 'right', POSTER_W - M - nameW, nameW),
+    line(rowMid, NAME_SIZE, fit(d.names[0].toUpperCase(), 14), 400, 'left', M, nameW),
+    line(rowMid, NAME_SIZE, fit(d.names[1].toUpperCase(), 14), 400, 'right', POSTER_W - M - nameW, nameW),
   ];
   const score = { plate, value: [d.score[0], d.score[1]] as const };
   // The lockup, centred under the board: the mark, the address, one line of what the game is.
@@ -150,8 +152,8 @@ export const posterLayout = (d: PosterData): PosterLayout => {
   const siteMid = lockTop + WORDMARK_H + 22 + SITE_SIZE * CAP;
   const mark = line(siteMid, SITE_SIZE, d.mark, 800, 'center');
   const tagMid = siteMid + SITE_SIZE * CAP + 20 + TAG_SIZE * CAP;
-  const tagline = line(tagMid, TAG_SIZE, REPLAY.tagline, 600, 'center');
-  const turn = line(gap + rowInk + gap / 2, 30, '', 700, 'center');
+  const tagline = line(tagMid, TAG_SIZE, REPLAY.tagline, 400, 'center');
+  const turn = line(gap + rowInk + gap / 2, 30, '', 400, 'center');
   return { width: POSTER_W, height: POSTER_H, names, score, mark, wordmark, tagline, turn, board };
 };
 
@@ -181,7 +183,8 @@ export type PosterTurn = { text: string; seat: Player | null };
 // capture DOM overlays, so replay stills and video frames carry the SAME film baked into pixels
 // (owner, 2026-10-31: "the grain looks stronger on downloaded video — should be the same"): the
 // game's own tile (player/atmosphere.ts — fractal noise, sparse cream specks), drawn one grain per
-// pixel at the game's own 8.5% strength, exactly as the screen draws it.
+// pixel at the game's own 8.5% strength. Encoders may use a measured pre-emphasis so the
+// decoded file retains that fine texture; the game's own overlay is never strengthened.
 //
 // The tile is the game's SVG rendered once into a canvas. Should a browser refuse to let that be
 // read back (an SVG image can taint a canvas, and a tainted canvas cannot become a video frame), a
@@ -213,7 +216,6 @@ const codeFilmTile = (): HTMLCanvasElement => {
 };
 /** Make the film tile ready (the warm-up awaits this; painting never waits). */
 export const warmReplayFilm = (): Promise<void> => {
-  if (filmTile) return Promise.resolve();
   filmLoading ??= new Promise<void>((done) => {
     if (typeof Image === 'undefined') { done(); return; }
     const img = new Image();
@@ -237,12 +239,22 @@ export const warmReplayFilm = (): Promise<void> => {
 };
 
 /** The game's film over the entire export — artwork and lettering included. */
-export const paintReplayFilm = (g: CanvasRenderingContext2D, width: number, height: number): void => {
+export const paintReplayFilm = (g: CanvasRenderingContext2D, width: number, height: number, gain = 1): void => {
   const tile = filmTile ?? (filmTile = codeFilmTile());
   const pattern = g.createPattern(tile, 'repeat');
   if (!pattern) return;
   g.save();
-  g.globalAlpha = FILM_GRAIN_OPACITY;
+  if (gain > 1) {
+    // Encoding compensation must not turn the black paper grey. A tiny, uniform burn
+    // balances the extra cream before the same fine film is painted over everything.
+    const white = 255 - (gain - 1) * 2 / 1.4;
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'color-burn';
+    g.fillStyle = `rgb(${white} ${white} ${white})`;
+    g.fillRect(0, 0, width, height);
+  }
+  g.globalCompositeOperation = 'source-over';
+  g.globalAlpha = FILM_GRAIN_OPACITY * gain;
   g.fillStyle = pattern;
   g.fillRect(0, 0, width, height);
   g.restore();
@@ -255,7 +267,7 @@ export const drawReplayPoster = (
   turn?: PosterTurn,
   motion?: Readonly<Record<string, TileMotion>>,
   /** The video's moment: whose move it is, and whether this is the final hold. */
-  opts?: { live?: Player | null; end?: boolean },
+  opts?: { live?: Player | null; end?: boolean; filmGain?: number },
   /** Cache painters add the film after drawing their moving cells, never twice. */
   withFilm = true,
 ): HTMLCanvasElement => {
@@ -265,7 +277,7 @@ export const drawReplayPoster = (
   if (canvas.height !== L.height) canvas.height = L.height;
   const g = canvas.getContext('2d')!;
   // The game's UI face (Fragment Mono), the one every label in the game is set in.
-  const font = css('--font-ui', "'Fragment Mono', ui-monospace, monospace");
+  const font = replayUIFamily();
   const col = {
     bg: '#070908',
     ink: css('--rp-ink', '#f0e9dc'),
@@ -383,7 +395,7 @@ export const drawReplayPoster = (
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   }
   text({ ...L.tagline, text: L.tagline.text.toUpperCase(), x: L.tagline.x + 2 }, col.dim, 4);
-  if (withFilm) paintReplayFilm(g, L.width, L.height);
+  if (withFilm) paintReplayFilm(g, L.width, L.height, opts?.filmGain);
   return canvas;
 };
 

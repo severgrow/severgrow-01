@@ -20,7 +20,7 @@ import type { Player } from '../../../src/engine/index.js';
 import type { ReplayHighlight, ReplayModel, ReplayTurningPoint, Strike } from './timeline.js';
 import { boardAtIndex, frameAtTime, seekTo } from './seek.js';
 import { REPLAY_CSS } from './replay-css.js';
-import { posterFor } from './poster.js';
+import { posterFor, warmReplayFilm } from './poster.js';
 import { ledFrameUrl, ledPlateLayout, paintLedScore } from './led-plate.js';
 import { BOMB_ART_URL, paintStrike, STRIKE_TIMING } from './strike.js';
 import { hexCorner } from './board-canvas.js';
@@ -1362,7 +1362,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
       if (!model) return null;
       const plan = videoPlan(model);
       const at = step < 0 ? plan.steps.length - 1 : Math.min(step, plan.steps.length - 1);
-      await warmBoardArt(await loadBoardArtUrls());
+      await Promise.all([warmBoardArt(await loadBoardArtUrls()), warmReplayFilm()]);
       const canvas = document.createElement('canvas');
       paintVideoFrame(canvas, model, plan.steps[Math.max(0, at)]!);
       return canvas.toDataURL('image/png');

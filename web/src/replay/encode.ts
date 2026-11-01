@@ -16,6 +16,7 @@ import type { BoardArt } from './board-canvas.js';
 import { motionFrames, paintMotionFrameCached, VIDEO_H, VIDEO_W } from './frames.js';
 import { muxMp4 } from './mp4.js';
 import { warmReplayFilm } from './poster.js';
+import { matchReplayFilm } from './film-calibration.js';
 import type { Mp4Sample } from './mp4.js';
 import type { RecordedVideo } from './video.js';
 import type { ReplayModel } from './timeline.js';
@@ -89,6 +90,9 @@ export const encodeReplayMp4 = async (o: EncodeOptions): Promise<RecordedVideo |
   const cache = { canvas: document.createElement('canvas'), index: null as number | null };
   cache.canvas.width = VIDEO_W;
   cache.canvas.height = VIDEO_H;
+  const filmGain = await matchReplayFilm(canvas, config(codec) as VideoEncoderConfig,
+    gain => { paintMotionFrameCached(canvas, o.model, frames[0]!, cache, gain); }, o.signal);
+  if (o.signal?.aborted) return null;
 
   const started = performance.now();
   let paintMs = 0;
@@ -125,7 +129,7 @@ export const encodeReplayMp4 = async (o: EncodeOptions): Promise<RecordedVideo |
       if (failure) throw failure;
       const f = frames[i]!;
       const p0 = performance.now();
-      paintMotionFrameCached(canvas, o.model, f, cache);
+      paintMotionFrameCached(canvas, o.model, f, cache, filmGain);
       paintMs += performance.now() - p0;
       const timestamp = f.at * 1000;
       const duration = f.duration * 1000;

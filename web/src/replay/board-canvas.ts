@@ -18,6 +18,7 @@
 import { WORDMARK_URL } from '../player/branding.js';
 import { ledFrameUrl } from './led-plate.js';
 import { BOMB_ART_URL } from './strike.js';
+import { warmReplayUI } from './typography.js';
 import { allCoords, coordKey, mirror, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
@@ -94,7 +95,7 @@ export const warmBoardArt = (art: BoardArt | null = null): Promise<void> => {
   ].filter(
     (url): url is string => !!url,
   );
-  return Promise.all([...urls.map(decode), loadSignatureFont()]).then(() => undefined);
+  return Promise.all([...urls.map(decode), loadSignatureFont(), warmReplayUI()]).then(() => undefined);
 };
 
 /**

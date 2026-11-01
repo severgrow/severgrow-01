@@ -59,7 +59,7 @@ export const REPLAY_CSS = `
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 600 12.5px/1.2 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  font: var(--w-ui-regular, 400) 12.5px/1.2 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
   letter-spacing: .1em;
   text-transform: uppercase;
   color: var(--rp-dim);
@@ -170,13 +170,13 @@ export const REPLAY_CSS = `
   margin: 0;
   min-height: 17px;
   text-align: center;
-  font: 500 12px/1.2 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  font: var(--w-ui-regular, 400) 12px/1.2 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--rp-ink);
   font-variant-numeric: tabular-nums;
 }
-#replay .rp-turn b { font-weight: 700; color: var(--rp-ink); }
+#replay .rp-turn b { font-weight: var(--w-ui-bold, 400); color: var(--rp-ink); }
 #replay .rp-turn[data-seat='0'] b { color: var(--rp-me); }
 #replay .rp-turn[data-seat='1'] b { color: var(--rp-opp); }
 /* ONE beat per hand-over: the line settles in from 4px, then rests. Never a loop. */
@@ -371,7 +371,7 @@ export const REPLAY_CSS = `
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 500 10.5px/1.3 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  font: var(--w-ui-regular, 400) 10.5px/1.3 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--rp-ink);
@@ -453,7 +453,7 @@ export const REPLAY_CSS = `
   border-radius: 10px;
   background: rgba(255, 255, 255, .05);
   color: var(--rp-ink);
-  font: 500 11.5px/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  font: var(--w-ui-regular, 400) 11.5px/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
   letter-spacing: .12em;
   text-transform: uppercase;
   cursor: pointer;
@@ -461,7 +461,7 @@ export const REPLAY_CSS = `
 }
 #replay .rp-btn:focus-visible { outline: 2px solid #e8ddc9; outline-offset: 2px; }
 /* The one key that finishes the export: the game's cream, so the next tap is obvious. */
-#replay .rp-btn.rp-btn-go { background: var(--rp-ink); border-color: var(--rp-ink); color: #0b0d0c; font-weight: 700; }
+#replay .rp-btn.rp-btn-go { background: var(--rp-ink); border-color: var(--rp-ink); color: #0b0d0c; font-weight: var(--w-ui-strong, 400); }
 #replay .rp-btn[hidden] { display: none !important; }
 /* THE SIGNATURE: the 双サク mark over FUTASAKU.COM, set in Besley — the menu title's own face — in
    the game's classic cream (owner, 2026-10-26: "Besley … the classic cream colour we use", no gold,
@@ -550,7 +550,7 @@ export const REPLAY_CSS = `
   gap: 8px;
   min-width: 0;
   max-width: 100%;
-  font: 500 12px/1.15 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  font: var(--w-ui-regular, 400) 12px/1.15 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
   letter-spacing: .1em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -570,7 +570,7 @@ export const REPLAY_CSS = `
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-weight: 600;
+  font-weight: var(--w-ui-regular, 400);
   color: var(--rp-mk);
 }
 #replay .rp-caption-line span { flex: none; color: var(--rp-ink); }

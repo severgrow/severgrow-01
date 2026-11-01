@@ -96,7 +96,8 @@ export const paintVideoFrame = (
   canvas: HTMLCanvasElement,
   model: ReplayModel,
   step: VideoStep,
-): HTMLCanvasElement => drawReplayPoster(videoFrameData(model, step.index), canvas, videoTurn(model, step), undefined, videoMoment(model, step));
+  filmGain = 1,
+): HTMLCanvasElement => drawReplayPoster(videoFrameData(model, step.index), canvas, videoTurn(model, step), undefined, { ...videoMoment(model, step), filmGain });
 
 // ---------- THE MOVING VIDEO (owner, 2026-10-30: "finish the replays … find a smart way to do it
 // super nice") ----------
@@ -221,8 +222,9 @@ export const paintMotionFrameCached = (
   model: ReplayModel,
   f: MotionFrame,
   cache: { canvas: HTMLCanvasElement; index: number | null },
+  filmGain = 1,
 ): HTMLCanvasElement => {
-  if (!f.keys?.length) return paintMotionFrame(canvas, model, f);
+  if (!f.keys?.length) return paintMotionFrame(canvas, model, f, filmGain);
   const data = { ...videoFrameData(model, f.step.index), board: f.board };
   if (cache.index !== f.step.index) {
     const bare = { ...f.board };
@@ -236,7 +238,7 @@ export const paintMotionFrameCached = (
   g.drawImage(cache.canvas, 0, 0);
   paintPosterCells(data, canvas, new Set(f.keys), f.motion);
   if (f.strike) paintStrikeOver(g, data, f.strike);
-  paintReplayFilm(g, canvas.width, canvas.height);
+  paintReplayFilm(g, canvas.width, canvas.height, filmGain);
   return canvas;
 };
 
@@ -246,13 +248,13 @@ const paintStrikeOver = (g: CanvasRenderingContext2D, data: PosterData, strike: 
 };
 
 /** Paint one moving frame (the same painter as every other picture of the match). */
-export const paintMotionFrame = (canvas: HTMLCanvasElement, model: ReplayModel, f: MotionFrame): HTMLCanvasElement => {
+export const paintMotionFrame = (canvas: HTMLCanvasElement, model: ReplayModel, f: MotionFrame, filmGain = 1): HTMLCanvasElement => {
   const data = { ...videoFrameData(model, f.step.index), board: f.board };
-  drawReplayPoster(data, canvas, videoTurn(model, f.step), f.motion, videoMoment(model, f.step), !f.strike);
+  drawReplayPoster(data, canvas, videoTurn(model, f.step), f.motion, { ...videoMoment(model, f.step), filmGain }, !f.strike);
   if (f.strike) {
     const g = canvas.getContext('2d')!;
     paintStrikeOver(g, data, f.strike);
-    paintReplayFilm(g, canvas.width, canvas.height);
+    paintReplayFilm(g, canvas.width, canvas.height, filmGain);
   }
   return canvas;
 };

@@ -15,6 +15,7 @@ import { paintVideoFrame, videoPlan } from './frames.js';
 import { replayFileBase } from './poster.js';
 import type { PosterData } from './poster.js';
 import type { ReplayModel } from './timeline.js';
+import { matchReplayFilm } from './film-calibration.js';
 
 /** In order of preference. VP9 is smallest; MP4 is what iOS Safari can record. */
 export const VIDEO_MIMES = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'] as const;
@@ -87,11 +88,17 @@ export const recordReplayVideo = async (o: RecordVideoOptions): Promise<Recorded
 
   await Promise.all([warmBoardArt(o.art ?? (await loadBoardArtUrls())), warmReplayFilm()]);
   if (o.signal?.aborted) return null;
+  const filmGain = await matchReplayFilm(canvas, {
+    codec: mime.includes('vp9') ? 'vp09.00.41.08' : mime.includes('webm') ? 'vp8' : 'avc1.42e028',
+    width: plan.width, height: plan.height, bitrate: 5_000_000, framerate: 30, contentHint: 'detail',
+  }, gain => { paintVideoFrame(canvas, o.model, plan.steps[0]!, gain); }, o.signal, mime);
+  if (o.signal?.aborted) return null;
 
   // `captureStream(0)` means "only when I ask": one frame per painted position, frame-accurate.
   // A browser without `requestFrame` gets a timed stream instead, and the encoder samples it.
   let stream = canvas.captureStream(0);
   let track = stream.getVideoTracks()[0] as CanvasTrack | undefined;
+  if (track) track.contentHint = 'detail';
   if (!track || typeof track.requestFrame !== 'function') {
     stream.getTracks().forEach((t) => t.stop());
     stream = canvas.captureStream(30);
@@ -120,7 +127,7 @@ export const recordReplayVideo = async (o: RecordVideoOptions): Promise<Recorded
   let painted = 0;
   let next = 0;
   const paint = (index: number) => {
-    paintVideoFrame(canvas, o.model, plan.steps[index]!);
+    paintVideoFrame(canvas, o.model, plan.steps[index]!, filmGain);
     painted++;
     next = index + 1;
     requestFrame();
