@@ -34,6 +34,15 @@ import { waitingActionCount } from './territory-attention.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import type { AchievementView } from '../../../server/src/seeds/achievements.js';
 import { ACHIEVEMENT_COPY, ACHIEVEMENT_GROUP_TITLES, ACHIEVEMENTS_UI } from './achievement-copy.js';
+import {
+  achievementsReady,
+  achievementsVisible,
+  afterAchievementsRead,
+  noAchievements,
+  rememberAchievements,
+  restoreAchievements,
+  type AchievementsState,
+} from './achievement-state.js';
 import { SWORD_PATH } from './swords-glyph.js';
 import { meLine, ownerLine, ownerSpokenLine } from './world-selection.js';
 import { storedDisplayName } from './identity.js';
@@ -408,10 +417,13 @@ export class WorldView {
   private selectionSignature = '';
   private paneSignature = '';
   /**
-   * TERRITORY ACHIEVEMENTS, as the server last reported them. `null` = not available (a guest, or a
-   * server that predates them): the key stays hidden, so the page is safe on either server.
+   * TERRITORY ACHIEVEMENTS, and the state that decides whether their key exists. The key is hidden
+   * only for a guest or a server that definitively has no route (404); a transient failure keeps the
+   * last good list and the poll retries (see ./achievement-state.ts).
    */
-  private achievements: AchievementView[] | null = null;
+  private achievements: AchievementsState = noAchievements();
+  /** One achievements read in flight: a poll or a force may ask again, never in parallel. */
+  private achievementsLoading = false;
   /** The achievement whose CLAIM is on its way, and the one that just paid (for its moment). */
   private claimingAchievement: string | null = null;
   private justClaimed: string | null = null;
@@ -665,6 +677,10 @@ export class WorldView {
       this.identityKnown = true;
       if (!this.active) return;
       this.identity = identity;
+      // Paint the last good list from this device at once, then replace it with the fresh read. A
+      // guest has no key at all, and never inherits another account's remembered list.
+      this.achievements = restoreAchievements(browserStorage(), identity?.playerId ?? null);
+      this.paintPanel();
       if (identity) void this.loadColour(identity);
       void this.refresh(true);
     }).catch(() => {
@@ -771,8 +787,12 @@ export class WorldView {
       this.paintSwords();
       this.paintStakes();
       this.paintChallenges();
-      // Achievements are re-read only when something they count may have moved (never every poll).
-      if (force || ownerChanged || challengeChanged || walletChanged) void this.loadAchievements();
+      // Achievements are re-read when something they count may have moved, and after any transient
+      // failure (the existing poll is the retry; there is no second timer).
+      if (force || ownerChanged || challengeChanged || walletChanged || this.achievements.retry) {
+        this.achievements = { ...this.achievements, retry: false };
+        void this.loadAchievements();
+      }
       // LAST: a finished duel is settled by the server on this very read. If this client is the one
       // that has not seen the resolved row yet (or a read raced the settlement), it posts the same
       // idempotent confirm in the background — never a key the player must press.
@@ -1749,8 +1769,9 @@ export class WorldView {
         : ONLINE.worldChallenges);
     }
     // Achievements ready to claim light their own key, and MENU carries the sum of everything that
-    // wants the player: waiting actions plus rewards waiting.
-    const ready = (this.achievements ?? []).filter((a) => a.done && !a.claimed).length;
+    // wants the player: waiting actions plus rewards waiting. The count follows the same rule as
+    // the key, so a remembered list keeps its badge through a failed refresh.
+    const ready = achievementsReady(this.achievements);
     const reward = document.querySelector<HTMLElement>('#world-key-achievements .world-deck-count');
     if (reward) { reward.hidden = ready === 0; reward.textContent = String(ready); reward.classList.toggle('ready', ready > 0); }
     const menuCount = document.querySelector<HTMLElement>('#online-world-menu .world-deck-count');
@@ -1761,7 +1782,7 @@ export class WorldView {
       menuCount.classList.toggle('ready', waiting === 0 && ready > 0);
     }
     const achievementsKey = document.getElementById('world-key-achievements');
-    if (achievementsKey) achievementsKey.hidden = this.achievements === null;
+    if (achievementsKey) achievementsKey.hidden = !achievementsVisible(this.achievements);
     // The colour key exists only where the server has the palette route.
     const colourKey = document.getElementById('world-key-colour');
     if (colourKey) colourKey.hidden = !this.colourAvailable;
@@ -1786,20 +1807,42 @@ export class WorldView {
     if (this.pane === 'colour') this.paintColourPane();
   }
 
-  /** Re-read achievements (only on a change that could move them; see `refresh`). */
+  /** Re-read achievements (after a change that could move them, or after a transient failure). */
   private async loadAchievements(): Promise<void> {
     const identity = this.identity;
-    if (!identity) return;
+    if (!identity) {
+      // A guest never sees the key, and never sees a previous account's remembered list.
+      this.achievements = noAchievements(null);
+      this.paintPanel();
+      return;
+    }
+    // One read at a time. A poll that arrives while this one is in flight loses nothing: the answer
+    // about to land sets (or clears) the retry flag for the next poll.
+    if (this.achievementsLoading) return;
+    this.achievementsLoading = true;
+    let outcome: Parameters<typeof afterAchievementsRead>[1];
     try {
       const views = await this.client.achievements(identity.token);
-      if (identity !== this.identity || !this.active) return;
-      this.achievements = views;
+      if (identity !== this.identity || !this.active) {
+        // The answer belongs to another identity, or the map closed: keep what is on screen and let
+        // the next refresh recover. A dropped result must never leave the key hidden for ever.
+        outcome = { kind: 'discarded' };
+      } else {
+        outcome = { kind: 'loaded', playerId: identity.playerId, views };
+        rememberAchievements(browserStorage(), identity.playerId, views);
+      }
     } catch (error) {
-      // A server without the route answers 404: hide the key rather than show a broken page.
       const status = (error as { status?: number } | null)?.status;
-      if (status === 404 || (error as { code?: string } | null)?.code === 'NOT_FOUND') this.achievements = null;
-      else return;
+      const missing = status === 404 || (error as { code?: string } | null)?.code === 'NOT_FOUND';
+      if (identity !== this.identity || !this.active) outcome = { kind: 'discarded' };
+      // A server without the route answers 404: hide the key rather than show a broken page.
+      else if (missing) outcome = { kind: 'missing', playerId: identity.playerId };
+      // A 5xx, a timeout, an offline device: leave the key exactly as it was and retry on the poll.
+      else outcome = { kind: 'transient', playerId: identity.playerId };
+    } finally {
+      this.achievementsLoading = false;
     }
+    this.achievements = afterAchievementsRead(this.achievements, outcome);
     this.paintPanel();
   }
 
@@ -1966,7 +2009,7 @@ export class WorldView {
   private paintAchievements() {
     const list = document.getElementById('online-world-achievements');
     if (!list) return;
-    const views = this.achievements ?? [];
+    const views = achievementsVisible(this.achievements) ? this.achievements.views ?? [] : [];
     const signature = `achievements|${this.claimingAchievement}|${this.justClaimed}|${JSON.stringify(views)}`;
     if (signature === this.paneSignature) return;
     this.paneSignature = signature;
@@ -2044,8 +2087,11 @@ export class WorldView {
       const claim = await this.client.claimAchievement(identity.token, id);
       this.wallet = claim.wallet;
       this.paintWallet();
-      const view = this.achievements?.find((a) => a.id === id);
+      const view = this.achievements.views?.find((a) => a.id === id);
       if (view) view.claimed = true;
+      // Keep the device's remembered list truthful too: a later failed read paints this claim.
+      if (this.achievements.playerId === identity.playerId)
+        rememberAchievements(browserStorage(), identity.playerId, this.achievements.views ?? []);
       this.justClaimed = id;
       this.cue('chime');
       this.notice(ACHIEVEMENTS_UI.paid(claim.awarded));
