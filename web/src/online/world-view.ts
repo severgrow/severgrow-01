@@ -49,6 +49,7 @@ import { storedDisplayName } from './identity.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { lastCamera, rememberCamera } from './world-camera.js';
+import { menuTerritoryAnchor } from './living-camera.js';
 import { mountSheetViewport } from '../ui/sheet-viewport.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { TerritoryChat } from './territory-chat.js';
@@ -374,6 +375,10 @@ export const jitterBand = (cellId: string): number => {
 /** One shared map, with a stable viewport and revision-only refresh. No game-state logic here. */
 export class WorldView {
   private active = false;
+  private menuPreview = false;
+  private visited = false;
+  private previewOwner: string | null = null;
+  private previewRemembered = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private identity: Identity | null = null;
   private wallet: SeedWallet | null = null;
@@ -565,7 +570,8 @@ export class WorldView {
     next.focus({ preventScroll: true });
   };
 
-  constructor(private readonly client: DuelClient, private readonly ensureIdentity: () => Promise<Identity | null>) {
+  constructor(private readonly client: DuelClient, private readonly ensureIdentity: () => Promise<Identity | null>,
+    private readonly readWorld: () => Promise<WorldMapPayload> = () => client.worldMap()) {
     document.addEventListener('visibilitychange', () => { if (this.active && !document.hidden) void this.refresh(); });
     // ONE WINDOW AT A TIME: the chat shuts the menu window, and the menu window shuts the chat.
     this.chat = new TerritoryChat(client, () => this.identity?.token ?? null, () => this.setPane(null, false));
@@ -651,13 +657,46 @@ export class WorldView {
     }
   }
 
+  /** The same surface at rest: no private reads, poll, chat subscription or new renderer. */
+  preview(world: World | null, identity: Identity | null, fromMemory = false) {
+    if (this.active) this.close(true);
+    this.menuPreview = true;
+    if (!world) return;
+    const owner = identity?.playerId ?? null;
+    const changedWorld = this.world?.version !== world.version;
+    const firstOwner = !this.visited && !this.previewRemembered && owner !== this.previewOwner;
+    this.identity = identity;
+    this.previewOwner = owner;
+    if (changedWorld || firstOwner) {
+      this.box = lastCamera(browserStorage(), world.version);
+      this.previewRemembered = this.box !== null;
+      this.touched = this.box !== null;
+    }
+    this.world = world;
+    this.fromMemory = fromMemory;
+    this.disputes = world.disputes ?? [];
+    if (!this.svg || this.paintSignatureOf() !== this.paintSignature) this.paint();
+    else this.applyView();
+    // The menu's deliberate anchor is a real camera choice. Updates must not recenter it.
+    if (usableView(this.box)) this.touched = true;
+  }
+
+  /** Reuse the authoritative wallet the menu already read, for this same identity only.
+   * Prepare affordability while the map is inert; opening must not rebuild every tile for it. */
+  useMenuWallet(playerId: string, wallet: SeedWallet): void {
+    if (this.active || !this.menuPreview || this.identity?.playerId !== playerId) return;
+    this.wallet = wallet;
+    if (this.world && this.svg && this.paintSignatureOf() !== this.paintSignature) this.paint();
+  }
+
   async open() {
     this.active = true;
+    this.menuPreview = false;
+    this.visited = true;
     // The deliberate camera is restored after the world version is known; live bounds still win.
     const camera = this.world ? lastCamera(browserStorage(), this.world.version) : null;
-    this.touched = camera !== null;
-    this.box = camera;
-    this.notice('');
+    if (!usableView(this.box)) { this.touched = camera !== null; this.box = camera; }
+    this.notice(this.svg ? '' : ONLINE.worldLoading);
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
     if (!this.world) {
@@ -676,13 +715,16 @@ export class WorldView {
     void this.ensureIdentity().then((identity) => {
       this.identityKnown = true;
       if (!this.active) return;
-      this.identity = identity;
+      const changedIdentity = this.identity?.playerId !== identity?.playerId || this.identity?.token !== identity?.token;
+      if (changedIdentity) this.identity = identity;
       // Paint the last good list from this device at once, then replace it with the fresh read. A
       // guest has no key at all, and never inherits another account's remembered list.
       this.achievements = restoreAchievements(browserStorage(), identity?.playerId ?? null);
       this.paintPanel();
+      if (!changedIdentity) this.paintWallet();
       if (identity) void this.loadColour(identity);
-      void this.refresh(true);
+      // The initial refresh already reads private metadata for a known actor. Fetch it once.
+      if (changedIdentity) void this.refresh(true);
     }).catch(() => {
       // Public world remains usable without an identity; the wallet line may now say so.
       this.identityKnown = true;
@@ -719,7 +761,7 @@ export class WorldView {
     try {
       const identityAtRequest = this.identity;
       const [map, wallet, challenges] = await Promise.all([
-        this.client.worldMap(),
+        this.readWorld(),
         // A failed wallet read is `undefined`, not null: the last known balance stays on screen.
         identityAtRequest ? this.client.seedWallet(identityAtRequest.token).catch(() => undefined) : Promise.resolve(null),
         identityAtRequest ? this.client.worldChallenges(identityAtRequest.token).catch(() => null) : Promise.resolve(null),
@@ -778,6 +820,7 @@ export class WorldView {
         rememberWorld(browserStorage(), map.world);
         if (moved.length) this.cueTakeover(moved);
       }
+      this.notice(this.world?.cells.length ? '' : ONLINE.worldEmpty);
       this.paintWallet();
       this.paintPanel();
       this.paintSelection();
@@ -798,7 +841,7 @@ export class WorldView {
       // idempotent confirm in the background — never a key the player must press.
       this.settleAutomatically();
     } catch {
-      if (this.active) this.notice('The world could not refresh. Tap here to try again.');
+      if (this.active) this.notice(ONLINE.worldError);
     } finally { this.schedule(); }
   }
 
@@ -895,6 +938,20 @@ export class WorldView {
   private paint() {
     const container = document.getElementById('online-world-grid')!;
     const world = this.world!;
+    if (!world.cells.length) {
+      this.observer?.disconnect(); this.observer = null;
+      this.gestureCleanup?.(); this.gestureCleanup = null;
+      this.stopGlide();
+      if (this.viewFrame) cancelAnimationFrame(this.viewFrame);
+      this.viewFrame = 0; this.pointers.clear(); this.selected = null;
+      this.svg?.remove(); this.svg = null; this.box = this.fit = this.bounds = null;
+      this.accent = null;
+      this.marksGroup = this.ringsGroup = this.swordsGroup = this.disputesGroup = null;
+      this.ringPaths.clear(); this.markerNodes.clear(); this.quietNodes.clear(); this.stakeNodes.clear();
+      this.knownCells = null; this.fogCells = null;
+      this.closeSheet(false, true);
+      this.paintSignature = ''; return;
+    }
     this.paintSignature = this.paintSignatureOf();
     const occupied = new Map(world.claims.map((claim) => [claim.cellId, claim]));
     const svg = document.createElementNS(NS, 'svg');
@@ -1279,6 +1336,7 @@ export class WorldView {
     // THE FIT BOX carries `PAD` on all four sides, so the outermost cell can be panned clear of the
     // panel's rounded corner (see `PAD`).
     // Re-measured on every paint: the map GROWS (owner, 2026-10-27), so its extent is not fixed.
+    const previousFit = this.fit;
     this.fit = [minX - PAD, minY - PAD, maxX - minX + 2 * PAD, maxY - minY + 2 * PAD];
     // Frame the view to the WINDOW, so the map scales up to fill it. A portrait phone crops the
     // surplus width and pans to the edges; a wide screen resolves to the whole world. The DEFAULT
@@ -1289,13 +1347,19 @@ export class WorldView {
     this.bounds = this.boundsFor(this.aspect);
     if (!this.box || !this.touched) {
       this.box = [...(this.detailFor(this.aspect, rect.width) ?? this.bounds ?? this.fit)];
+    } else if (this.aspect > 0 && (!previousFit || this.fit.some((value, index) => value !== previousFit[index]))) {
+      // A changing coast no longer remounts the SVG (and its observer). Clamp an obsolete
+      // remembered view here, while leaving a still-valid geographic position untouched.
+      this.box = this.clampBox(this.reconcile(this.box, this.aspect) ?? this.box);
     }
-    this.observer?.disconnect();
-    this.installPanZoom(svg);
-    // Only the SVG is replaced: the keys, windows and tile bar over it are the page's own markup.
-    container.querySelector('.world-map-svg')?.remove();
-    container.append(svg);
-    this.svg = svg;
+    // Keep the physical surface and its gesture/resize listeners across real state updates too.
+    // New artwork belongs to the same camera; a wallet read must never remount the map mid-entry.
+    if (this.svg) this.svg.replaceChildren(...Array.from(svg.childNodes));
+    else {
+      this.installPanZoom(svg);
+      container.append(svg);
+      this.svg = svg;
+    }
     this.applyView();
     this.paintFrontier();
     this.paintRings();
@@ -1334,13 +1398,15 @@ export class WorldView {
       // centred on the player's own land when they have some — the first thing you see is yours.
       const width = Math.min(fw, pixelWidth * (X * R) / STAGE_CELL_PX);
       const height = width / aspect;
-      const home = this.world ? ownCentre(this.world.cells, this.world.claims, this.identity?.playerId ?? null) : null;
+      const home = this.world ? (this.menuPreview ? menuTerritoryAnchor : ownCentre)(this.world.cells, this.world.claims, this.identity?.playerId ?? null) : null;
       const cx = home ? home.x : fx + fw / 2, cy = home ? home.y : fy + fh / 2;
       return this.clampBox([cx - width / 2, cy - height / 2, width, height]);
     }
     const width = Math.min(fw, pixelWidth * (X * R) / MIN_CELL_PX);
     const height = width / aspect;
-    return [fx + (fw - width) / 2, fy + (fh - height) / 2, width, height];
+    const home = this.menuPreview && this.world ? menuTerritoryAnchor(this.world.cells, this.world.claims, this.identity?.playerId ?? null) : null;
+    return home ? this.clampBox([home.x-width/2,home.y-height/2,width,height])
+      : [fx + (fw - width) / 2, fy + (fh - height) / 2, width, height];
   }
   /**
    * The widest view that still draws one cell at MIN_CELL_PX, in world units. A view WIDER than this

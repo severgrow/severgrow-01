@@ -195,9 +195,12 @@ describe('the menu show pays ONE wallet read and ONE map read, never a poll', ()
     expect(lobbySource).toContain("window.addEventListener('futasaku:menu', () => { void refreshMenu(); })");
     expect(lobbySource).toMatch(/if \(menuEl\?\.hidden !== false\) return Promise\.resolve\(\)/);
     expect(lobbySource).toMatch(/if \(menuPass\) return menuPass/);
-    // One Promise.all for the pair (plus the challenge count the entry's lamp reads), from the same
-    // menu pass that offers the invitation. Still ONE read of each, never a poll.
-    expect(lobbySource).toMatch(/Promise\.all\(\[\s*client\.seedWallet\(id\.token\),\s*client\.worldMap\(\),\s*[\s\S]{0,220}?client\.worldChallenges\(id\.token\)/);
+    // The public map now starts before identity/settlement, so the living backdrop is never blocked.
+    // The SAME promise joins the wallet/challenge read. Still ONE read of each, never a poll.
+    expect(lobbySource).toMatch(/Promise\.all\(\[\s*client\.seedWallet\(id\.token\),\s*publicMap,\s*[\s\S]{0,220}?client\.worldChallenges\(id\.token\)/);
+    expect(lobbySource.match(/client\.worldMap\(\)/g)).toHaveLength(1);
+    expect(lobbySource).toContain('mountWorldSource(() => client.worldMap()');
+    expect(lobbySource).toContain('await readMenuCounts(undefined, publicMap)');
     // And no timer/interval/rAF drives it.
     expect(moduleSource).not.toMatch(/setInterval|setTimeout|requestAnimationFrame/);
     expect(lobbySource.slice(lobbySource.indexOf('const refreshMenu ='), lobbySource.indexOf("window.addEventListener('futasaku:menu'"))).not.toMatch(/setInterval|setTimeout|requestAnimationFrame/);
