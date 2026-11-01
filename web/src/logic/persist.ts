@@ -15,17 +15,19 @@ export const SAVE_KEY = 'severgrow.save.v7';
  * `difficulty` records the TRAINING tier this offline match came from, so a reloaded game still
  * writes its one-game carry-over when it ends (see `logic/difficulty.ts`). Optional: a save without
  * it is a game started outside the tiers (a URL seed, the lab, a campaign level).
+ * `blitz` marks an EXPERIMENTAL Blitz match (/test/ only) and `map` is the campaign level number
+ * whose board it plays, so a reload continues the same kind of match.
  */
-export type Saved<C> = { seed: number; actions: readonly Action[]; coach: C | null; level: Level; base?: State | null; difficulty?: DifficultyId };
+export type Saved<C> = { seed: number; actions: readonly Action[]; coach: C | null; level: Level; base?: State | null; difficulty?: DifficultyId; blitz?: boolean; map?: number };
 export type Loaded<C> = Saved<C> & { state: State };
 
-export const encodeSave = <C>(s: Saved<C>): string => JSON.stringify({ v: 7, rules: CURRENT_RULES_VERSION, seed: s.seed, actions: s.actions, coach: s.coach, level: s.level, ...(s.base ? { base: s.base } : {}), ...(s.difficulty ? { difficulty: s.difficulty } : {}) });
+export const encodeSave = <C>(s: Saved<C>): string => JSON.stringify({ v: 7, rules: CURRENT_RULES_VERSION, seed: s.seed, actions: s.actions, coach: s.coach, level: s.level, ...(s.base ? { base: s.base } : {}), ...(s.difficulty ? { difficulty: s.difficulty } : {}), ...(s.blitz ? { blitz: true } : {}), ...(s.map !== undefined ? { map: s.map } : {}) });
 
 /** Replay older saves under their recorded rules, then snapshot active matches before
  * continuing with current Futasaku 0.4 rules. Their board, hands, and event history are preserved. */
 export const decodeSave = <C>(raw: string | null): Loaded<C> | null => {
   try {
-    const s = JSON.parse(raw ?? '') as { v?: number; rules?: string; seed?: number; actions?: Action[]; coach?: C | null; level?: number; base?: State; difficulty?: DifficultyId };
+    const s = JSON.parse(raw ?? '') as { v?: number; rules?: string; seed?: number; actions?: Action[]; coach?: C | null; level?: number; base?: State; difficulty?: DifficultyId; blitz?: boolean; map?: number };
     const legacy = s?.rules === PREVIOUS_RULES_VERSION;
     const older03 = s?.rules === PREVIOUS_03_RULES_VERSION;
     const oldMega = s?.rules === PREVIOUS_MEGA_RULES_VERSION;
@@ -43,11 +45,15 @@ export const decodeSave = <C>(raw: string | null): Loaded<C> | null => {
     // A tier id that no longer exists (or junk) is dropped, exactly as an unknown level is.
     const difficulty = typeof s.difficulty === 'string' && difficultyById(s.difficulty) ? s.difficulty : undefined;
     const step = difficulty ? { difficulty } : {};
+    // Blitz is /test/-only and its flag is inert elsewhere; the map is only kept when it is a
+    // positive level number, so junk can never become a label.
+    const blitz = s.blitz === true ? { blitz: true } : {};
+    const map = Number.isSafeInteger(s.map) && s.map! > 0 ? { map: s.map! } : {};
     // A migrated match continues from one exact snapshot. Its earlier actions were
     // replayed under the recorded rules; replaying them under the new rules later
     // could otherwise change a deck-end position on the next reload.
-    if (oldConfig && state.phase !== 'GAME_OVER') return { seed:s.seed!,actions:[],coach:s.coach ?? null,level,base:state,state, ...step };
-    return { seed: s.seed!, actions: s.actions, coach: s.coach ?? null, level, base, state, ...step };
+    if (oldConfig && state.phase !== 'GAME_OVER') return { seed:s.seed!,actions:[],coach:s.coach ?? null,level,base:state,state, ...step, ...blitz, ...map };
+    return { seed: s.seed!, actions: s.actions, coach: s.coach ?? null, level, base, state, ...step, ...blitz, ...map };
   } catch {
     return null;
   }

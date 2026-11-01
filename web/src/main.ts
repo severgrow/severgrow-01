@@ -1,5 +1,7 @@
 // first: the release channel (the test copy keeps its own storage)
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
+// EXPERIMENTAL Blitz (/test/ only): presentation + wiring; its rules live in logic/blitz.ts.
+import type { BlitzPractice } from './blitz/practice.js';
 import { showLiveStrike } from './ui/live-strike.js';
 import { readAppViewport } from './ui/app-viewport.js';
 import { mountMatchChat } from './online/chat/view.js';
@@ -549,6 +551,8 @@ const save = () => {
     base: session.base,
     // The training tier the game came from, so a reloaded game still earns its carry-over.
     ...(gameDifficulty ? { difficulty: gameDifficulty } : {}),
+    // EXPERIMENTAL Blitz: a reload continues the same Blitz match (clock + ladder), not a normal one.
+    ...(blitzMatch ? { blitz: true, ...(blitzMap !== null ? { map: blitzMap } : {}) } : {}),
   });
   // A campaign match saves under its OWN key together with the level it belongs to: the classic
   // offline save is never overwritten by a campaign game, and a campaign match resumes as the level
@@ -884,6 +888,9 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   $('levels').hidden = name !== 'levels';
   $('campaign').hidden = name !== 'campaign';
   $('game').hidden = name !== 'game';
+  // EXPERIMENTAL Blitz: leaving the board takes its draining ring and vignette with it, and a
+  // clock that was running must not end a match nobody is looking at.
+  if (name !== 'game') blitz?.sync();
   // An invitation deferred out of a live match is offered here, now that a menu owns the screen.
   if (name !== 'game') drainInstallInvite();
   // A full-screen change gets the same quiet arrival as a surface, EXCEPT the game: the board is
@@ -1208,7 +1215,8 @@ const writeDifficultyStep = (id: DifficultyId, level: Level | null) => {
 };
 
 function renderLevelGrid() {
-  $('level-grid').replaceChildren(
+  const grid = $('level-grid');
+  grid.replaceChildren(
     ...DIFFICULTIES.map((tier) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -1235,6 +1243,9 @@ function renderLevelGrid() {
       return b;
     }),
   );
+  // EXPERIMENTAL Blitz (/test/ only): the fourth Practice tier, appended OUTSIDE DIFFICULTIES so the
+  // three training tiers and the menu pinned by their tests are untouched. Off everywhere else.
+  blitz?.appendTile(grid);
 }
 
 // ---------- campaign screen ----------
@@ -1650,6 +1661,8 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   showScreen('game');
   smartCockpit?.reset(v.score,v.opponentScore);
   outcomeLight?.reset();
+  // EXPERIMENTAL Blitz: a new match (or a resume) starts its clock clean; a non-Blitz match hides it.
+  blitz?.beginMatch();
   scheduleBot();
 }
 
@@ -1843,6 +1856,29 @@ async function mountPlayerEnhancements() {
 
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
     loads.push(import('./player/fonts.js').then((f) => f.applyFont('new')));
+  }
+
+  // EXPERIMENTAL Blitz. The channel guard keeps its module out of the futa04 product build
+  // entirely; the module's own FEATURES.blitz gate (channel + the /test/ route) keeps it off the
+  // live root, which is the same futa05 build one promote behind the staging copy.
+  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa05') {
+    loads.push(import('./blitz/practice.js').then((m) => {
+      blitz = m.mountBlitzPractice({
+        store,
+        randomSeed,
+        startMatch: (map) => { void startBlitzMatch(map); },
+        unlock: () => sound.unlock(),
+        state: () => session?.state ?? null,
+        isMatch: () => blitzMatch,
+        busy: () => busy(),
+        hold: () => pregameHold,
+        homeKey: () => board.rootKey(HUMAN),
+        reduceMotion: () => settings.reduceMotion,
+        onTimeout: () => finishBlitzTimeout(),
+      });
+      // The Practice grid may already have been painted while this async mount was loading.
+      if (blitz) renderLevelGrid();
+    }));
   }
 
   await Promise.all(loads);
@@ -2085,6 +2121,12 @@ async function startGame(
    * touching progress or the resume save. Default false, so no other caller can become one.
    */
   tutorial = false,
+  /**
+   * EXPERIMENTAL Blitz (/test/ only): the campaign board's config and the map's number, with the
+   * flag being non-null. Null for EVERY other caller, so the ordinary practice / campaign / tutorial
+   * path reads exactly the overrides and base it always did.
+   */
+  blitzStart: { config: CampaignLevel['config']; map: number } | null = null,
 ) {
   let generation = ++startGameGeneration;
   // The first lesson board on a cold first visit waits (briefly, capped) for its own art. Repeat
@@ -2124,6 +2166,8 @@ async function startGame(
   gameLevel = level;
   gameDifficulty = difficulty;
   campaignLevel = campaign;
+  blitzMatch = !!blitzStart;
+  blitzMap = blitzStart?.map ?? null;
   tutorialReplay = !!campaign && tutorial;
   // Read the place BEFORE the match can change it (see `campaignReplay`).
   campaignReplay = !!campaign && isReplay(campaignProgress, campaign);
@@ -2133,8 +2177,11 @@ async function startGame(
   lessonShownKey = '';
   if (lessonNow) saveLessonMeta();
   // Campaign first (the only production source of overrides), then the test copy's Lab experiment,
-  // otherwise {} — the classic game's own configuration.
-  const overrides = overridesForMatch(campaign, IS_TEST, IS_TEST && lab ? lab.overrides() : {});
+  // otherwise {} — the classic game's own configuration. A Blitz match names its campaign board
+  // directly (it is NOT a campaign match: no key, no progress, no lesson).
+  const overrides = blitzStart
+    ? blitzStart.config
+    : overridesForMatch(campaign, IS_TEST, IS_TEST && lab ? lab.overrides() : {});
   // Futasaku 0.4 starts from the engine's versioned match setup, so the client and the server
   // verifier agree on who moves first. The classic live channel keeps its historical player-0 start.
   // Levels 1-10 open from their lesson's authored position (the engine's own cards and board).
@@ -2152,8 +2199,9 @@ async function startGame(
   // real match behind it and the first legal tap is available the instant it leaves.
   const playRitual = playsStarterRitual(IS_FUTA04, campaign?.number ?? null);
   // A campaign match always keeps its opening as the replay base: the save must replay under the
-  // LEVEL's config (its authored board), never under the default config.
-  beginSession(state, null, [], campaign || opponentStarts ? state : null, playRitual);
+  // LEVEL's config (its authored board), never under the default config. A Blitz match does the same
+  // for its campaign board, so a reload replays the map, not a regenerated default one.
+  beginSession(state, null, [], campaign || opponentStarts || blitzStart ? state : null, playRitual);
   // A lesson's stage card waits for the ritual below: the ceremony owns the screen until it
   // resolves, and level 10's send-off is the last beat before the first move. Levels 1-9 have no
   // ritual, so their stage starts here, exactly as it always has.
@@ -2210,6 +2258,47 @@ function startCampaignLevel(level: CampaignLevel) {
   if (deal === null) return;
   gameOverDismissed = true;
   void startGame(deal, level.botLevel, null, level);
+}
+
+/**
+ * EXPERIMENTAL BLITZ (/test/ only). Opens one Blitz match on the given campaign board (30-70). The
+ * bot level is the persisted ladder's (9, or 8 after two losses in a row) and the DEAL is a fresh
+ * random one; only the MAP is that campaign level's authored board. It is NOT a campaign match:
+ * `campaign` stays null, so it has no campaign key, no progress and no lesson.
+ */
+async function startBlitzMatch(map: CampaignLevel): Promise<void> {
+  if (!blitz) return;
+  gameOverDismissed = true;
+  await startGame(randomSeed(), blitz.botLevel(), null, null, null, false, { config: map.config, map: map.number });
+}
+
+/**
+ * The 15 s clock ran out (EXPERIMENTAL Blitz). A real-time live duel LOSES the match when the turn
+ * clock expires — the server ends it with `reason: 'timeout'` and never plays the move for you — and
+ * this applies that same rule offline. The finish card, its reason line, the stats and the history
+ * are the shared ones; no server call and no online transport are involved.
+ */
+function finishBlitzTimeout(): void {
+  if (!session || !blitz || !blitzMatch) return;
+  if (session.state.phase === 'GAME_OVER') return;
+  // The board is already at the final state (nothing was played); stop any in-flight painting so
+  // the result card is read against a settled board, exactly as a finished move does.
+  fastForward();
+  const after = blitz.timeoutState(session.state);
+  const result = after.result;
+  if (!result) return;
+  session.state = after;
+  log.unshift(RESULT.timeoutLost);
+  if (!watching && !coach.tutorial) {
+    stats = recordResult(stats, result, HUMAN, gameLevel);
+    store.set(STATS_KEY, JSON.stringify(stats));
+    noteFinishedForInstall('lost');
+    store.set(PLAY_KEY, JSON.stringify(recordPlay(parsePlay(store.get(PLAY_KEY)), after.history ?? [], HUMAN)));
+    // The ladder's own rule: this is a loss, so the SECOND in a row drops the next bot to 8.
+    blitz.record('loss');
+  }
+  save();
+  render();
 }
 
 /**
@@ -2790,6 +2879,10 @@ function continueGame() {
   gameLevel = saved.level;
   // A resumed training game keeps its tier, so finishing it still earns the one-game carry-over.
   gameDifficulty = saved.difficulty ?? null;
+  // EXPERIMENTAL Blitz: a resumed Blitz match keeps its 15 s clock and its own ladder. The flag is
+  // inert on every channel the feature is off for, even if a save carried it.
+  blitzMatch = FEATURES.blitz && !!saved.blitz;
+  blitzMap = blitzMatch ? saved.map ?? null : null;
   try {
     const ticket = JSON.parse(store.get(TRAINING_REWARD_TICKET_KEY) ?? 'null') as { seed?: number; id?: string } | null;
     trainingRewardTicketId = gameDifficulty && ticket?.seed === saved.seed && typeof ticket.id === 'string' ? ticket.id : null;
@@ -2897,6 +2990,13 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
         const winner = p.after.result.winner;
         const outcome = winner === HUMAN ? 'win' : winner === null ? 'draw' : 'loss';
         writeDifficultyStep(gameDifficulty, stepAfterGame(gameDifficulty, gameLevel, outcome));
+      }
+      // EXPERIMENTAL Blitz has its OWN ladder (two losses in a row -> bot 8 until a win), so it is
+      // recorded separately and never through the tier carry-over above (`gameDifficulty` is null).
+      // A normal tier never reaches this line: `blitzMatch` is false, so the key is never touched.
+      if (blitzMatch) {
+        const winner = p.after.result.winner;
+        blitz?.record(winner === HUMAN ? 'win' : winner === null ? 'draw' : 'loss');
       }
       // Campaign progress: a win unlocks the next level and marks this one completed; a loss
       // removes nothing. Its own record — the classic stats above are never reshaped by it.
@@ -3298,6 +3398,8 @@ let gameLevel: Level = 7;
 let gameDifficulty: DifficultyId | null = null;
 /** The match as the player knows it: its campaign level, or its difficulty (never the bot level). */
 function currentMatchLabel(): string {
+  // EXPERIMENTAL Blitz is its own tier, outside DIFFICULTIES: it is named by the mounted feature.
+  if (blitzMatch) return blitz?.label ?? 'Pro';
   return matchLabel({ campaign: campaignLevel?.number ?? null, difficulty: gameDifficulty, botLevel: gameLevel });
 }
 /**
@@ -3306,6 +3408,15 @@ function currentMatchLabel(): string {
  * way a match can start, so a campaign board can never leak into a classic or online game.
  */
 let campaignLevel: CampaignLevel | null = null;
+/**
+ * EXPERIMENTAL Blitz (/test/ only, Practice): the mounted tier, or null when the feature is off.
+ * `blitzMatch` says the ACTIVE offline match is a Blitz one (it gets the 15 s clock and its own
+ * ladder); `blitzMap` is the campaign level number whose board it plays, for the result line and
+ * the test hook. Every other way a match starts clears both.
+ */
+let blitz: BlitzPractice | null = null;
+let blitzMatch = false;
+let blitzMap: number | null = null;
 /**
  * True while the match on screen is a TUTORIAL replay (Settings → Tutorial, owner 2026-10-24): the
  * same campaign level, played inertly. It never writes the progress record or the resume save, and
@@ -4871,7 +4982,10 @@ function render() {
   if (sideDockStale && IS_FUTA04) requestAnimationFrame(() => sideDockStale && centreSideDock());
   syncGlow();
   updateFuta04MoveActive();
-  if (!session || $('game').hidden) return;
+  if (!session || $('game').hidden) {
+    blitz?.sync();
+    return;
+  }
   armIdle();
   const v = session.view;
   const advice = myTurn() && !busy() ? currentAdvice() : null;
@@ -4913,6 +5027,8 @@ function render() {
   renderCoach(advice);
   renderOnboardingGuide(v);
   renderGameOver();
+  // EXPERIMENTAL Blitz: one cheap check per paint (arm on my turn, stop when the turn passes).
+  blitz?.sync();
   renderGuide(advice);
   renderFirstTip(v);
   updateFuta04Help();
@@ -9668,6 +9784,12 @@ async function restartCurrentMatch(): Promise<void> {
     await startGame(deal, campaign.botLevel, null, campaign, null, tutorialReplay);
     return;
   }
+  // EXPERIMENTAL Blitz: "New game" opens a fresh Blitz match on a new random board, at the
+  // ladder's current bot level. Leaving a match unfinished records nothing.
+  if (blitzMatch && blitz) {
+    await startBlitzMatch(blitz.newMap());
+    return;
+  }
   await startGame(randomSeed(), level, null, null, difficulty);
 }
 bind('gm-new', () => requestRestart());
@@ -10025,6 +10147,14 @@ bind('go-rematch', () => {
   }
   // A campaign retry restarts the SAME level from its fixed seed (never a random one).
   if (campaignLevel) return startCampaignLevel(campaignLevel);
+  // EXPERIMENTAL Blitz: "Try again"/"Play again" opens the NEXT Blitz match — a new random board,
+  // and the ladder's level as it stands after the game just finished (two losses -> bot 8).
+  if (blitzMatch && blitz) {
+    hideGameOver();
+    resultAdvance = false;
+    void startBlitzMatch(blitz.newMap());
+    return;
+  }
   startGame(randomSeed(), gameLevel);
 });
 // The finish card's ONE disclosure: every detail line and every extra action is behind it.
@@ -10340,6 +10470,18 @@ let appReady = false;
   settings: () => ({ ...settings }),
   /** The campaign place the page is on, as the menu's LEVEL <n> reads it (tests/screenshots). */
   campaignLevel: () => currentLevel(campaignProgress).number,
+  /**
+   * EXPERIMENTAL Blitz (/test/ only): null when the feature is off (futa04, the live root, any other
+   * channel). `active` marks the current offline match as a Blitz one, `map` is its campaign board
+   * (30-70), `botLevel` the level this match started at and `nextBotLevel` the ladder's next one.
+   */
+  blitz: () => (blitz ? {
+    active: blitzMatch,
+    map: blitzMap,
+    botLevel: gameLevel,
+    nextBotLevel: blitz.botLevel(),
+    ...blitz.status(),
+  } : null),
   busy: () => busy(),
   /** Read-only sound diagnostics: the pre-rendered bank's size and the last cues played. */
   soundBank: () => sound.bankStats(),

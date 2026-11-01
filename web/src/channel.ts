@@ -7,6 +7,12 @@ export const CHANNEL: Channel =
   raw === 'test' || raw === 'futa04' || raw === 'futa-test' || raw === 'futa05' || raw === 'live' ? raw : 'futa04';
 export const IS_TEST = CHANNEL === 'test' || CHANNEL === 'futa-test';
 export const IS_FUTA04 = CHANNEL === 'futa04' || CHANNEL === 'futa-test' || CHANNEL === 'futa05';
+/**
+ * The staging copy at `/test/` (docs/RELEASE-FLOW.md). It is built from the SAME `futa05` source as
+ * the live root and only moved to the `/test/` path afterwards, so the channel alone can never tell
+ * the two apart — the path can, and does. Only the first path segment counts.
+ */
+export const IS_TEST_ROUTE = typeof location !== 'undefined' && /^\/test(\/|$)/.test(location.pathname);
 const modern = IS_TEST || IS_FUTA04;
 export const FEATURES = Object.freeze({
   typography: modern,
@@ -30,6 +36,12 @@ export const FEATURES = Object.freeze({
    * copy (`test`, `futa-test`) keeps the menu it is used to, so its e2e keeps working unchanged.
    */
   campaign: CHANNEL === 'futa04' || CHANNEL === 'futa05',
+  /**
+   * EXPERIMENTAL Blitz (Practice only): the STAGING COPY, and nothing else. The live root is the
+   * same `futa05` build one promote behind it, so the channel is not enough: the `/test/` route is
+   * what makes this true only for the staging copy and always false for the futa04 product.
+   */
+  blitz: CHANNEL === 'futa05' && IS_TEST_ROUTE,
 });
 const isPreviewHost = typeof location !== 'undefined' && (
   location.hostname.endsWith('.chatgpt.site') ||
