@@ -3,7 +3,6 @@ import { CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
 import { DuelError } from '../../../server/src/client.js';
 import type { DuelClient, KeyValue } from '../../../server/src/client.js';
 import type { RewardResult } from '../../../server/src/seeds/types.js';
-import { isDealSeed } from '../../../src/campaign/index.js';
 
 export const PENDING_SEED_PROOFS_KEY = 'severgrow.seeds.pending.v1';
 export type PendingSeedProof =
@@ -23,6 +22,13 @@ export type PendingSeedProof =
  * is generous for the honest path and short enough that a wedge is a retry, not a hang.
  */
 export const SEED_SETTLE_TIMEOUT_MS = 5_000;
+
+/**
+ * A random deal's seed: a whole 32-bit unsigned number. The same rule as the campaign's `isDealSeed`,
+ * written out because the online layer never imports the campaign module (campaign-seam.test.ts).
+ */
+const isDealSeed = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xffffffff;
 
 const proofKey = (p: PendingSeedProof) =>
   p.kind === 'campaign' ? `campaign:${p.levelId}` : `training:${p.ticketId}`;

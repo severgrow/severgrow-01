@@ -187,3 +187,11 @@ describe('random campaign deals from level 11 (owner, 2026-11-01)', () => {
     await expect(economy.campaign(player, eleven.id, actions, CURRENT_BOT_VERSION, seed + 1)).rejects.toThrow();
   });
 });
+
+describe('the server announces random deals under the word the page looks for', () => {
+  it('SERVER_FEATURES spells RANDOM_DEALS_FEATURE exactly', async () => {
+    const { SERVER_FEATURES } = await import('../src/fetch-app.js');
+    const { RANDOM_DEALS_FEATURE } = await import('../../src/campaign/index.js');
+    expect(SERVER_FEATURES).toContain(RANDOM_DEALS_FEATURE);
+  });
+});
