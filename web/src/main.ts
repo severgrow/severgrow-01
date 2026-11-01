@@ -137,6 +137,7 @@ import {
   CAMPAIGN_LEVELS,
   campaignLevelById,
   completedCount,
+  dealsRandomly,
   currentLevel,
   isCompleted,
   isUnlocked,
@@ -162,7 +163,8 @@ import {
   TUTORIAL_LEVEL_COUNT,
 } from './logic/campaign.js';
 import type { CampaignMatchKind } from './logic/campaign.js';
-import { fetchAccountHighestLevel, syncAccountProgress } from './logic/account-progress.js';
+import { fetchAccountHighestLevel, fetchServerFeatures, syncAccountProgress } from './logic/account-progress.js';
+import { dealFor, finishDeal, markMoved, randomDealsEnabled, readRest, refreshRandomDeals, restLeftMs, startDeal, writeRest } from './logic/campaign-deals.js';
 import {
   freeTurnGuide, migrateTutorialProgress, nextTutorialChapter, previousTutorialChapter,
   tutorialAccepts, tutorialChapter, tutorialFeedback, tutorialTrackFor,
@@ -2204,8 +2206,36 @@ function startCampaignLevel(level: CampaignLevel) {
   // has been won. The tiles already disable locked levels, but a guard here means no future caller
   // (a deep link, a test hook, a stale save) can skip the campaign by starting a level directly.
   if (!isUnlocked(campaignProgress, level)) return showScreen('campaign');
+  const deal = campaignDealFor(level);
+  if (deal === null) return;
   gameOverDismissed = true;
-  void startGame(level.seed, level.botLevel, null, level);
+  void startGame(deal, level.botLevel, null, level);
+}
+
+/**
+ * RANDOM DEALS (owner, 2026-11-01): the deal a NEW attempt at a campaign level is played on, or
+ * null when the campaign is resting (five new deals in a row without a move). Levels 11+ shuffle a
+ * fresh deal once the server can check it (`campaignRandomDeals`); lessons keep their one opening.
+ * Resuming a saved match never comes here: it is the same deal, not a new one.
+ */
+function campaignDealFor(level: CampaignLevel): number | null {
+  if (!dealsRandomly(level)) return level.seed;
+  const started = startDeal(readRest(store), Date.now());
+  writeRest(store, started.state);
+  if (!started.allowed) {
+    showCampaignRest();
+    return null;
+  }
+  return dealFor(level, campaignRandomDeals, randomSeed).seed;
+}
+
+/** The quiet rest notice: how long until the campaign deals again. */
+function showCampaignRest() {
+  const minutes = Math.max(1, Math.ceil(restLeftMs(readRest(store), Date.now()) / 60_000));
+  $('rest-title').textContent = CAMPAIGN.restTitle;
+  $('rest-body').textContent = CAMPAIGN.restBody(minutes);
+  $('rest-ok').textContent = CAMPAIGN.restOk;
+  sheet('sheet-rest');
 }
 
 function clearFreePlayBulbNudge() {
@@ -2800,6 +2830,25 @@ function rememberRemoved(steps: readonly Step[], before: State) {
   }
 }
 
+/**
+ * The restart rest (owner, 2026-11-01) only counts deals the player LEFT without a move of their
+ * own: their first move makes it a real game, and a finished match clears the count. Only a
+ * random-deal campaign level (11+) is counted; the stored record is written only when it changes.
+ */
+function noteCampaignDealPlay(by: Player, after: State) {
+  if (!campaignLevel || tutorialReplay || !dealsRandomly(campaignLevel)) return;
+  const finished = after.phase === 'GAME_OVER';
+  if (by !== HUMAN && !finished) return;
+  const before = readRest(store);
+  const next = finished ? finishDeal(before) : markMoved(before);
+  if (next.abandons !== before.abandons || next.open !== before.open) writeRest(store, next);
+}
+
+/** The deal a campaign win was played on, for its proof: only a random deal names its seed. */
+function campaignDealProof(level: CampaignLevel, state: State): { dealSeed?: number } {
+  return dealsRandomly(level) && state.seed !== level.seed ? { dealSeed: state.seed } : {};
+}
+
 function afterPlay(p: Played, by: Player, advice: Advice | null) {
   const taught = by === HUMAN ? lessonActive() : null;
   if (taught) {
@@ -2830,6 +2879,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
     displayEvent=quiet;
   }
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
+  noteCampaignDealPlay(by, p.after);
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
     if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
@@ -2872,7 +2922,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
         const proof = finalLessonWon
           ? { kind: 'campaign' as const, levelId: FINAL_LESSON.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
           : campaignLevel && !lessonNow && !tutorialReplay && p.after.result.winner === HUMAN
-          ? { kind: 'campaign' as const, levelId: campaignLevel.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
+          ? { kind: 'campaign' as const, levelId: campaignLevel.id, ...campaignDealProof(campaignLevel, session.state), actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
           : gameDifficulty && trainingRewardTicketId
             ? { kind: 'training' as const, ticketId: trainingRewardTicketId, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
             : null;
@@ -3359,6 +3409,17 @@ const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializePro
  * lowers it, never runs for a guest, and a failed read leaves the local game exactly as it was with
  * no error shown. The reconciliation itself is pure and unit-tested (`reconcileProgress`).
  */
+/**
+ * Whether this server can check a random campaign deal (owner, 2026-11-01). Remembered on the device,
+ * so offline play keeps the last answer; asked once at boot. Until the server says yes, levels 11+
+ * keep their fixed deal, so no win can be refused and no Seeds can be lost.
+ */
+let campaignRandomDeals = randomDealsEnabled(store);
+async function syncRandomDeals(): Promise<void> {
+  if (!FEATURES.campaign || !onlineBuildEnabled()) return;
+  campaignRandomDeals = await refreshRandomDeals(store, fetchServerFeatures);
+}
+
 async function syncAccountLevel(): Promise<void> {
   if (!FEATURES.campaign) return;
   const before = campaignProgress;
@@ -9555,7 +9616,8 @@ bind('gm-resume', () => sheet(null));
 /**
  * Restart (owner brief, 2026-10-22). It resets the match the player is IN, instead of walking them
  * out to a level list:
- *   - a campaign level reopens from its own deterministic seed (the authored opening is identical);
+ *   - a lesson (levels 1-10) reopens on its one authored opening; from level 11 a campaign level
+ *     deals a fresh random hand (owner, 2026-11-01), counted by the restart rest (`campaignDealFor`);
  *   - a practice match restarts its same tier with a fresh deal;
  *   - a finished match is not pausable, so this only ever runs while a match is in progress.
  * A confirmation appears only when there is real progress to lose; a fresh turn restarts at once.
@@ -9597,8 +9659,13 @@ async function restartCurrentMatch(): Promise<void> {
       showScreen('campaign');
       return;
     }
+    const deal = tutorialReplay ? campaign.seed : campaignDealFor(campaign);
+    if (deal === null) {
+      restarting = false;
+      return;
+    }
     gameOverDismissed = true;
-    await startGame(campaign.seed, campaign.botLevel, null, campaign, null, tutorialReplay);
+    await startGame(deal, campaign.botLevel, null, campaign, null, tutorialReplay);
     return;
   }
   await startGame(randomSeed(), level, null, null, difficulty);
@@ -9606,6 +9673,7 @@ async function restartCurrentMatch(): Promise<void> {
 bind('gm-new', () => requestRestart());
 bind('restart-confirm', () => void restartCurrentMatch());
 bind('restart-cancel', () => sheet(null));
+bind('rest-ok', () => sheet(null));
 bind('gm-howto', () => openHowToReference());
 bind('gm-settings', () => sheet('sheet-settings'));
 bind('gm-resign', () => {
@@ -10460,6 +10528,7 @@ else showScreen('menu');
 // One background read on boot: a signed-in account's place comes from the server (a guest never
 // asks). It repaints the menu if it moves; the first paint is already usable without it.
 void syncAccountLevel();
+void syncRandomDeals();
 
 // The main-menu tagline ("GROW · CONNECT · CONQUER") is NOT on the menu — the owner had it removed
 // on 2026-10-14 (it read as clutter under the wordmark). It is not in `web/index.html` at all, so

@@ -371,3 +371,20 @@ describe('a missing identity is said out loud, never silently deferred', () => {
     expect(pending(store)).toHaveLength(2);
   });
 });
+
+describe('a random-deal win waiting to be paid (owner, 2026-11-01)', () => {
+  it('sends its deal seed with the level, and a fixed-deal win sends none', async () => {
+    const store = storage();
+    queueSeedProof(store, { ...proof('c2-11'), dealSeed: 424242 });
+    queueSeedProof(store, proof('c2-12'));
+    const submit = vi.fn(async () => reward(10));
+    await flushSeedProofs(store, clientOf(submit), 'account');
+    expect(submit.mock.calls.map((call) => (call as unknown[])[1])).toEqual([{ levelId: 'c2-11', dealSeed: 424242 }, { levelId: 'c2-12' }]);
+  });
+
+  it('a stored win with a broken deal seed is never sent', () => {
+    const store = storage();
+    store.set(PENDING_SEED_PROOFS_KEY, JSON.stringify([{ ...proof('c2-11'), dealSeed: -3 }, { ...proof('c2-12'), dealSeed: 9 }]));
+    expect(pendingSeedProofCount(store)).toBe(1);
+  });
+});

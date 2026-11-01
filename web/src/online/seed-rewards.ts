@@ -3,10 +3,12 @@ import { CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
 import { DuelError } from '../../../server/src/client.js';
 import type { DuelClient, KeyValue } from '../../../server/src/client.js';
 import type { RewardResult } from '../../../server/src/seeds/types.js';
+import { isDealSeed } from '../../../src/campaign/index.js';
 
 export const PENDING_SEED_PROOFS_KEY = 'severgrow.seeds.pending.v1';
 export type PendingSeedProof =
-  | { kind: 'campaign'; levelId: string; actions: readonly Action[]; botVersion: string }
+  /** `dealSeed`: the random deal the win was played on (levels 11+, owner 2026-11-01); absent = the fixed deal. */
+  | { kind: 'campaign'; levelId: string; dealSeed?: number; actions: readonly Action[]; botVersion: string }
   | { kind: 'training'; ticketId: string; actions: readonly Action[]; botVersion: string };
 
 /**
@@ -28,7 +30,8 @@ const isPendingProof = (value: unknown): value is PendingSeedProof => {
   if (!value || typeof value !== 'object') return false;
   const proof = value as Record<string, unknown>;
   if (!Array.isArray(proof.actions)) return false;
-  return (proof.kind === 'campaign' && typeof proof.levelId === 'string' && proof.levelId.length > 0)
+  return (proof.kind === 'campaign' && typeof proof.levelId === 'string' && proof.levelId.length > 0
+      && (proof.dealSeed === undefined || isDealSeed(proof.dealSeed)))
     || (proof.kind === 'training' && typeof proof.ticketId === 'string' && proof.ticketId.length > 0);
 };
 const read = (storage: KeyValue): PendingSeedProof[] => {
@@ -115,7 +118,10 @@ const submitWithDeadline = async (
 ): Promise<RewardResult> => {
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   const signal = controller ? { signal: controller.signal } : {};
-  const submit = client.submitSeedProof(token, proof.kind === 'campaign' ? { levelId: proof.levelId } : { ticketId: proof.ticketId },
+  const source = proof.kind === 'campaign'
+    ? (proof.dealSeed === undefined ? { levelId: proof.levelId } : { levelId: proof.levelId, dealSeed: proof.dealSeed })
+    : { ticketId: proof.ticketId };
+  const submit = client.submitSeedProof(token, source,
     proof.actions, proof.botVersion, signal);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

@@ -2,7 +2,7 @@ import { apply, newMatch, viewFor } from '../../../src/engine/index.js';
 import type { Action, State } from '../../../src/engine/index.js';
 import { botSeed } from '../../../src/bots/levels.js';
 import { botFor, CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
-import { ALTERNATE_OPENINGS, campaignLevelById, campaignOpening } from '../../../src/campaign/index.js';
+import { ALTERNATE_OPENINGS, campaignDeal, campaignLevelById, campaignOpening, dealsRandomly, isDealSeed } from '../../../src/campaign/index.js';
 import { FINAL_LESSON, finalLessonOpening } from '../../../web/src/lessons/final.js';
 
 export type OfflineProof = { actions: readonly Action[]; botVersion: string };
@@ -60,9 +60,24 @@ export const verifyOfflineMatch = (
   };
 };
 
-export const verifyCampaignProof = (levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION): VerifiedOffline | null => {
+export const verifyCampaignProof = (
+  levelId: string,
+  actions: readonly Action[],
+  botVersion = CURRENT_BOT_VERSION,
+  /**
+   * RANDOM DEALS (owner, 2026-11-01): from level 11 up each attempt is a fresh shuffle, and the
+   * proof names that deal's seed. The deal is rebuilt on the level's authored board and replayed
+   * against the real bot like any other proof. Absent: the level's fixed opening (every proof
+   * queued before random deals, and every lesson level, which never accepts a seed).
+   */
+  dealSeed?: number,
+): VerifiedOffline | null => {
   const level = campaignLevelById(levelId);
   if (!level) return null;
+  if (dealSeed !== undefined) {
+    if (!dealsRandomly(level) || !isDealSeed(dealSeed)) return null;
+    return verifyOfflineMatch(campaignDeal(level, dealSeed), level.botLevel, { actions, botVersion });
+  }
   // The level's CURRENT opening first. Then the alternate one: since 2026-10-17 both the released
   // campaign and the /2/ onboarding line are live against this single Edge function, and they play
   // levels 4-10 on different boards. See src/campaign/frozen.ts.

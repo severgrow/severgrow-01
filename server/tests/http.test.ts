@@ -79,6 +79,9 @@ describe('HTTP surface', () => {
     expect(typeof body.rulesVersion).toBe('string');
     expect(typeof body.serverNow).toBe('number');
     expect(body.db).toBeUndefined();
+    // A page reads this to know whether the server checks random campaign deals (owner, 2026-11-01)
+    // before it deals one: an older server would refuse such a win and its Seeds would be lost.
+    expect((health.body as { features?: unknown }).features).toContain('campaign-random-deals');
 
     const withDb = await request('GET', '/v1/health?db=1');
     expect(withDb.status).toBe(200);

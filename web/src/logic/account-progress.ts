@@ -81,3 +81,21 @@ export const fetchAccountHighestLevel = async (token: string): Promise<number | 
   const client = new DuelClient({ baseUrl, ...(region ? { region } : {}) });
   return client.accountCampaignLevel(token);
 };
+
+/**
+ * What the server can do (`GET /v1/health` `features`), bounded to five seconds so a dead line can
+ * never hold anything up. A build with no online endpoint answers "nothing".
+ */
+export const fetchServerFeatures = async (): Promise<readonly string[]> => {
+  const baseUrl = duelApiUrl();
+  if (!baseUrl) return [];
+  const region = duelRegion();
+  const client = new DuelClient({ baseUrl, ...(region ? { region } : {}) });
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = setTimeout(() => controller?.abort(), 5_000);
+  try {
+    return await client.serverFeatures(controller ? { signal: controller.signal } : {});
+  } finally {
+    clearTimeout(timer);
+  }
+};

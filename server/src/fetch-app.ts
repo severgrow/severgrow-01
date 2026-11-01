@@ -6,6 +6,10 @@ import { DEFAULT_SERVER_CONFIG } from './config.js';
 import { corsHeadersForRequest } from './cors.js';
 import { ApiError } from './errors.js';
 import type { MatchService } from './service.js';
+import { RANDOM_DEALS_FEATURE } from '../../src/campaign/index.js';
+
+/** What this server can do that an older one could not; a page checks before relying on it. */
+export const SERVER_FEATURES: readonly string[] = Object.freeze([RANDOM_DEALS_FEATURE]);
 
 export type FetchAppDeps = {
   service: MatchService;
@@ -70,10 +74,11 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
     if (method === 'GET' && path === '/v1/health') {
       const serverNow = service.serverNow();
-      const body: { ok: true; rulesVersion: string; serverNow: number; db?: { ok: true; ms: number } } = {
+      const body: { ok: true; rulesVersion: string; serverNow: number; features: readonly string[]; db?: { ok: true; ms: number } } = {
         ok: true,
         rulesVersion: service.rulesVersion,
         serverNow,
+        features: SERVER_FEATURES,
       };
       if (url.searchParams.get('db') === '1') {
         const startedDb = Date.now();

@@ -432,6 +432,15 @@ export class DuelClient {
    * rides the same authenticated wallet read, so no new route and no extra round trip is invented;
    * `null` means the player has never cleared a level (or an older server did not send the field).
    */
+  /**
+   * What the server can do that an older one could not (`GET /v1/health` `features`). An older server
+   * sends no list, which reads as "none", so a page keeps its old behaviour until the server is updated.
+   */
+  async serverFeatures(options: { signal?: AbortSignal } = {}): Promise<string[]> {
+    const response = await this.request<{ features?: unknown }>('GET', '/v1/health', options.signal ? { signal: options.signal } : {});
+    return Array.isArray(response.features) ? response.features.filter((f): f is string => typeof f === 'string') : [];
+  }
+
   async accountCampaignLevel(token: string): Promise<number | null> {
     const response = await this.request<{ campaignHighestLevel?: unknown }>('GET', '/v1/seeds/wallet', { token });
     const level = response.campaignHighestLevel;
@@ -517,7 +526,7 @@ export class DuelClient {
    */
   async submitSeedProof(
     token: string,
-    source: { levelId: string } | { ticketId: string },
+    source: { levelId: string; dealSeed?: number } | { ticketId: string },
     actions: readonly Action[],
     botVersion: string,
     options: { signal?: AbortSignal } = {},

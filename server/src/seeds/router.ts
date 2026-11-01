@@ -1,4 +1,5 @@
 import type { Action } from '../../../src/engine/index.js';
+import { isDealSeed } from '../../../src/campaign/index.js';
 import { ApiError } from '../errors.js';
 import type { PlayerRecord } from '../storage/types.js';
 import type { WorldEconomyService } from './service.js';
@@ -111,7 +112,10 @@ export const createWorldEconomyRouter = (deps: {
     const actions = body.actions as Action[];
     if (path === '/v1/seeds/campaign') {
       if (typeof body.levelId !== 'string') throw new ApiError('INVALID_REQUEST', 'A Campaign level is required.');
-      return ok(200, { reward: await economy.campaign(player, body.levelId, actions, body.botVersion) });
+      // A random deal's seed (owner, 2026-11-01). Optional: a fixed-deal proof simply omits it.
+      if (body.dealSeed !== undefined && !isDealSeed(body.dealSeed)) throw new ApiError('INVALID_REQUEST', 'That deal is not valid.');
+      return ok(200, { reward: await economy.campaign(player, body.levelId, actions, body.botVersion,
+        body.dealSeed === undefined ? undefined : body.dealSeed) });
     }
     if (typeof body.ticketId !== 'string') throw new ApiError('INVALID_REQUEST', 'A Training ticket is required.');
     return ok(200, { reward: await economy.training(player, body.ticketId, actions, body.botVersion) });

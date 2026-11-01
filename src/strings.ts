@@ -1508,6 +1508,13 @@ export const PRIVACY = Object.freeze({
  * The copy stays in the game's own voice and promises nothing the game does not do.
  */
 export const CAMPAIGN = Object.freeze({
+  /**
+   * The restart rest (owner, 2026-11-01): five new deals in a row without a move rest the campaign
+   * for an hour. One quiet sheet: a title, the minutes left, one key.
+   */
+  restTitle: 'Campaign resting',
+  restBody: (minutes: number) => `Back in ${minutes} min.`,
+  restOk: 'OK',
   /** the main menu entry that opens the campaign */
   title: 'Campaign',
   /** the main menu entry that keeps the old difficulty picker */

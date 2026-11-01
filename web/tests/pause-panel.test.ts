@@ -190,11 +190,13 @@ describe('the panel keeps the pause behaviour it borrowed', () => {
   it('makes Restart honest: the current match, never a silent trip to a level list', () => {
     // The old key left for the level list under two different names ("New game"/"Back to levels").
     // Owner brief 2026-10-22: Restart resets the match in place, with a confirmation only when
-    // there is real progress; a campaign keeps its deterministic seed, practice a fresh deal.
+    // there is real progress; practice gets a fresh deal. Owner, 2026-11-01: a campaign level from 11
+    // up now deals randomly too (lessons keep their one opening), through the campaign's one deal door.
     expect(mainSource).not.toMatch(/Start a new game\? This one will be lost/);
     expect(mainSource).toMatch(/function requestRestart\(\)/);
     expect(mainSource).toMatch(/function restartHasConsequence\(\)/);
-    expect(mainSource).toMatch(/campaign\.seed, campaign\.botLevel, null, campaign/);
+    expect(mainSource).toMatch(/const deal = tutorialReplay \? campaign\.seed : campaignDealFor\(campaign\);/);
+    expect(mainSource).toMatch(/startGame\(deal, campaign\.botLevel, null, campaign, null, tutorialReplay\)/);
     expect(mainSource).toMatch(/startGame\(randomSeed\(\), level, null, null, difficulty\)/);
     // Rapid taps are stopped by a state guard released by the new session, not by a timer.
     expect(mainSource).toMatch(/if \(!session \|\| restarting \|\| isOnlineDuel\(\)\) return/);

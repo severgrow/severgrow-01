@@ -94,6 +94,24 @@ of Futasaku. Good luck!" — dismissible with a tap anywhere, never repeated.
 - Levels 11+ are untouched: same openings, same proofs, same payouts.
 - Clearing 1-10 locally only unlocks the next level on the device. Nothing in a level-11+ proof depends on it.
 
+**Random deals from level 11, and the restart rest (owner, 2026-11-01).** "I want deals to always be
+completely random. As if you'd be playing card game in real life."
+
+- Levels 1-10 (lessons) keep their one authored opening. From level 11 every attempt — the first one
+  and every Restart — is a fresh shuffle (`campaignDeal(level, seed)`): hands, piles and who starts
+  change; the level's authored board, rock, gold and bot level never do (`tests/campaign/random-deals.test.ts`).
+- The win proof carries the deal's seed (`dealSeed`); the server rebuilds the deal on the level's board
+  and replays every move against the real bot (`verifyCampaignProof(..., dealSeed)`). Seeds still pay
+  once per level. A proof without `dealSeed` is checked on the fixed opening, so older queued wins pay.
+- **Safety switch.** The page deals randomly only after the server lists `campaign-random-deals` in
+  `GET /v1/health` `features` (remembered on the device for offline play). An older server never sees
+  a random-deal proof it would refuse — a refused proof is dropped, so its Seeds would be lost.
+  Server deploy: rebuild `supabase/functions/duel/bundle.ts` and redeploy `duel` (DEPLOY-ONLINE.md).
+- **The rest.** Five new deals in a row on levels 11+ without a move of the player's own rest the
+  campaign for one hour (`web/src/logic/campaign-deals.ts`; sheet `#sheet-rest`, words `CAMPAIGN.rest*`).
+  One real move, or a finished match, clears the count; resuming a saved match is not a new deal.
+  Browser walk: `node --import tsx web/e2e/campaign-random-deals.ts`.
+
 **Engine rules: unchanged.** No rule, scoring, card-count or legal-move change. Draw/Grow/Throw, Bloom, Bomb, Blast and the strangle are the engine's own; the tests check this.
 
 **How to add or change a lesson without bringing confusion back:**

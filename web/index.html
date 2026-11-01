@@ -773,6 +773,16 @@
       </div>
     </section>
 
+    <!-- The campaign's restart rest (owner, 2026-11-01): five new deals in a row without a move rest
+         the campaign for an hour. Words come from src/strings.ts (CAMPAIGN.rest*). -->
+    <section id="sheet-rest" class="sheet confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="rest-title" hidden data-ix-surface>
+      <header class="sheet-head"><h2 id="rest-title"></h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body stack">
+        <p id="rest-body" class="muted small"></p>
+        <button id="rest-ok" class="btn primary" type="button"></button>
+      </div>
+    </section>
+
     <!-- The player's profile (owner brief, 2026-10-21): a SKELETON, reached from the menu's account
          key. Same visual language as the pause panel — one content axis, hairline rules, neutral
          digits, no new colour — because it is the same kind of read-out surface, not a second app.
