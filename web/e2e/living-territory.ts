@@ -419,11 +419,12 @@ try{
     start=performance.now();
     // Exposed so the suite can time the retreat from the click itself (the owner's 300ms).
     (window as any).__backStart=start;
-    let sinceMenu=0;
+    let sinceMenu=0,stopped=false;
+    const stop=()=>{stopped=true;clearTimeout(watchdog);finish();};
     const sample=()=>{
      const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
      const grid=document.getElementById('online-world-grid');
-     if(!svg||!grid){frames.push({at:performance.now(),width:0,opacity:0,out:null});}
+     if(!svg||!grid){frames.push({at:performance.now(),width:0,opacity:0,out:null,t:null,start:null,leaving:false,mode:null});}
      else frames.push({at:performance.now(),width:+grid.getBoundingClientRect().width.toFixed(2),
       opacity:+Number(getComputedStyle(svg).opacity).toFixed(4),
       out:(svg.getAnimations().find(a=>a.id==='living-colour-out')?.effect?.getTiming().duration as number|undefined)??null,
@@ -434,16 +435,19 @@ try{
       start:(svg.getAnimations().find(a=>a.id==='living-colour-out')?.startTime as number|undefined)??null,
       leaving:document.getElementById('online-world-screen')!.classList.contains('living-leaving'),
       mode:document.getElementById('online-world-screen')!.dataset.livingTerritory});
-     // A TIMER, not only rAF: CI's software-rendered WebKit starved rAF to ~1 sample/second, so the
-     // dim's intermediate frames were never observed and the assertion read a cliff that was not
-     // there. A 10ms interval samples the real sequence; rAF still runs so a frame-accurate browser
-     // is measured too.
      // Keep sampling for a few frames AFTER the framing swaps, so the light coming back up is
      // measured too, then stop. Two and a half seconds is far beyond any engine's return.
      sinceMenu=document.getElementById('online-world-screen')!.dataset.livingTerritory==='menu'?sinceMenu+1:0;
-     if(sinceMenu>=8||performance.now()-start>2500){clearTimeout(watchdog);finish();return;}
-     setTimeout(sample,10);requestAnimationFrame(sample);
-    };setTimeout(sample,0);requestAnimationFrame(sample);
+     if(sinceMenu>=8||performance.now()-start>2500)stop();
+    };
+    // TWO INDEPENDENT CHAINS, ONE SAMPLE EACH (2026-11-02). A timer so a starved engine that paints
+    // rarely is still sampled (CI's rAF fell to ~1/second), and rAF so a frame-accurate browser is
+    // measured on the frame itself. They must NOT each schedule the next sample of the other: that
+    // doubles every pass and produced 28,000 style reads in 0.8s on a stalled engine — enough work
+    // on this thread to starve the very paint the suite is trying to observe.
+    const tick=()=>{if(stopped)return;sample();setTimeout(tick,10);};
+    const frame=()=>{if(stopped)return;sample();requestAnimationFrame(frame);};
+    setTimeout(tick,0);requestAnimationFrame(frame);
    },{once:true,capture:true});
   });
   await page.click('#online-world-back');await page.waitForSelector('#menu:not([hidden])');
@@ -452,28 +456,43 @@ try{
    const frames=await page.evaluate(()=>(window as any).__backFrames as {at:number;width:number;opacity:number;out:number|null;t:number|null;start:number|null;leaving:boolean;mode:string}[]);
    const swap=frames.findIndex(f=>f.mode==='menu');
    const backStart=await page.evaluate(()=>(window as any).__backStart as number);
-   const swapAt=frames[swap]!.at-backStart;
+   const swapAt=swap>=0?frames[swap]!.at-backStart:Number.NaN;
    const note=(f:{at:number;opacity:number;out:number|null;t:number|null;leaving:boolean;mode:string})=>({at:Math.round(f.at-backStart),t:f.t===null?null:Math.round(f.t),opacity:f.opacity,out:f.out,leaving:f.leaving,mode:f.mode});
-   // THE STRICT FORM, kept: the map must actually be DIM before the framing changes, so the way back
-   // is a fade in the panel's window, then a re-frame in the dark, then the light coming up. Now that
-   // the sampler is timer-based this is observable on CI instead of reading a sampling cliff.
+   // THE RETREAT, MEASURED ON THE BEAT'S OWN CLOCK (2026-11-02, the CI `living-territory-ios`
+   // failure). `startTime` is milliseconds on the same origin as `performance.now()`, so the swap's
+   // wall time minus it is exactly how long the retreat took — immune to sample spacing, and still
+   // short if the product ever swapped the framing early. This replaces "the frame before the swap
+   // must be dim", which was not measuring the product: on a software-rendered engine the document
+   // timeline stops advancing for the whole beat and then jumps straight to its end in ONE rendering
+   // update (measured in WebKit: currentTime 17 -> 300, playState `finished`, in a single frame after
+   // 400ms of wall time). A sample taken in that gap reads the beat's first instant — `t:0`,
+   // `opacity:1` — no matter how long the beat had really been running, so that sample is not
+   // evidence of a bright frame and must not be judged as one.
+   const started=[...frames].reverse().find(f=>f.start!==null);
+   const beatStart=started?started.start:null;
+   const swapT=beatStart!==null&&swap>=0?frames[swap]!.at-beatStart:Number.NaN;
+   // The samples that really observed the beat running, and the ones past its landing keyframe
+   // (offset .9, where the map is at DIP and can only be dim). If the engine painted no such frame,
+   // the clock above is the evidence; if it painted one, it must show the dim.
+   const landed=frames.slice(0,Math.max(swap,0)).filter(f=>f.t!==null&&f.t>=INTERFACE_MOTION.colourOut*.9);
+   const dimBefore=landed.some(f=>f.opacity<=.35);
+   const frozen=landed.length===0;
+   const beatRan=beatStart!==null&&swapT>=INTERFACE_MOTION.colourOut;
    const brightAtMenuWidth=frames.filter(f=>f.mode==='menu'&&f.opacity>MENU_MAP_OPACITY+0.02);
-   check(`the way back is not a hard cut: the framing changes only while the map is dim (frame ${swap}, ${Math.round(swapAt)}ms: ${JSON.stringify(frames.slice(Math.max(0,swap-1),swap+2).map(note))})`,
-    swap>0&&frames[swap-1]!.opacity<=0.35&&frames[swap]!.opacity<=0.35);
+   check(`the way back is not a hard cut: the framing changes only after the colour-out has run (frame ${swap}, ${Math.round(swapAt)}ms: beat ${Number.isFinite(swapT)?Math.round(swapT):'?'}ms of ${INTERFACE_MOTION.colourOut}ms, ${frozen?'no landing frame was painted':`${landed.length} landing sample(s), ${landed.filter(f=>f.opacity<=.35).length} dim`}: ${JSON.stringify(frames.slice(Math.max(0,swap-1),swap+2).map(note))})`,
+    swap>0&&frames[swap]!.opacity<=.35&&(beatRan?(dimBefore||frozen):dimBefore));
    check(`the map is never bright in the menu's framing (${brightAtMenuWidth.length} bright frame(s))`,
     brightAtMenuWidth.length===0);
-   check('the way back dims the panel first (a leaving frame below the menu\'s own backdrop)',
-    frames.some(f=>f.leaving&&f.opacity<=0.35)&&frames.at(-1)!.opacity<=MENU_MAP_OPACITY+0.01);
+   check(`the retreat has dimmed by its landing keyframe (${landed.length} sample(s) past 90%: ${JSON.stringify(landed.slice(0,3).map(note))})`,
+    landed.every(f=>f.opacity<=.35));
+   check('the way back lands the backdrop on the menu\'s own rest light',
+    frames.at(-1)!.opacity<=MENU_MAP_OPACITY+0.01);
    // THE RETREAT IS 300ms, NOT THE ARRIVAL'S SECOND (owner, 2026-11-02: "and 0.3s when going back
-   // to main menu"). Timed on the colour-out beat's own timeline: the swap's wall time minus the
-   // beat's `startTime` is how long the retreat actually took, including any slow frame after it. It
-   // can never be shorter than the beat, and it must stay well inside the arrival's second.
-   // A beat starts on the first painted frame (on software WebKit, ~200ms after the tap), so the
-   // click's clock would read it wrong.
-   const started=[...frames].reverse().find(f=>f.start!==null);
-   const swapT=started?frames[swap]!.at-started.start!:Number.NaN;
+   // to main menu"). Same clock, and it must stay well inside the arrival's second. A beat starts on
+   // the first painted frame (on software WebKit, ~200ms after the tap), so the click's clock would
+   // read it wrong.
    check(`the retreat clears in one colour-out beat (${Math.round(swapT)}ms ≈ ${INTERFACE_MOTION.colourOut}ms, not the ${INTERFACE_MOTION.colourIn}ms arrival)`,
-    swap>0&&!!started&&swapT>=INTERFACE_MOTION.colourOut-40&&swapT<INTERFACE_MOTION.colourIn);
+    swap>0&&!!started&&swapT>=INTERFACE_MOTION.colourOut&&swapT<INTERFACE_MOTION.colourIn);
    check(`the retreat runs the colour-out token duration (${INTERFACE_MOTION.colourOut}ms), not a literal`,
     frames.some(f=>f.out===INTERFACE_MOTION.colourOut));
   }
