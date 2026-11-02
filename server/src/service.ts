@@ -32,6 +32,7 @@ import type {
   OfflineSummary,
   OnlineGameResult,
   PlayerSummary,
+  PublicPlayerProfile,
   ReplayPayload,
   ReplaySeat,
   SubmitActionRequest,
@@ -150,6 +151,16 @@ export class MatchService {
 
   async getMe(player: PlayerRecord): Promise<PlayerSummary> {
     return playerSummary(player);
+  }
+
+  /**
+   * ANOTHER PLAYER'S PUBLIC PROFILE. The economy owns the one aggregate read; this is the thin
+   * service door so the route does not have to know about the seeds store. Signed-in callers only
+   * (the route authenticates first), and the response is the closed allow-list in `protocol.ts`.
+   */
+  async publicProfile(playerId: string): Promise<PublicPlayerProfile> {
+    if (!this.economy) throw new ApiError('DB_UNAVAILABLE', 'Profiles are not available right now.');
+    return await this.economy.publicProfile(playerId);
   }
 
   /**

@@ -25,6 +25,25 @@ export type WorldClaim = {
   colourId: number | null;
 };
 export type WorldSnapshot = { revision: number; claims: WorldClaim[] };
+
+/**
+ * ONE PLAYER'S PUBLIC FACTS, as the store reads them for `GET /v1/players/:id/profile`.
+ *
+ * `null` means there is no such player. Every field here is public on the shared map already
+ * (name, tag, level, tiles, colour), except the online record — which is why the store method's
+ * SQL selects ONLY these columns. The service turns this row into the wire allow-list
+ * (`PublicPlayerProfile`); no private field may be added to either shape casually.
+ */
+export type PublicProfileRow = {
+  displayName: string | null;
+  level: number | null;
+  tiles: number;
+  /** The stored palette slot, or null when the player never chose one (the service derives it). */
+  chosenColourId: number | null;
+  games: number;
+  wins: number;
+  longestStreak: number;
+};
 export type RewardMode = 'queue' | 'friend' | 'training' | 'campaign';
 export type RewardInput = {
   playerId: string;
@@ -243,6 +262,15 @@ export interface WorldEconomyStore {
   /** Record one verified clear. Idempotent per level; keeps the best attempt's shape. */
   recordCampaignClear(playerId: string, clear: CampaignClear): Promise<void>;
   world(): Promise<WorldSnapshot>;
+  /**
+   * THE PUBLIC PROFILE READ (one player, for a signed-in visitor). It must be ONE aggregate read
+   * — never a query per fact: the Edge compute budget has already been lost once to an N+1 fan-out
+   * (`WORKER_RESOURCE_LIMIT` / HTTP 546). `null` when the id is not a player.
+   *
+   * The implementation's SELECT list IS the privacy allow-list: name, level, tile count, colour,
+   * and the online record. It must never join or select a wallet, a token, a device or an email.
+   */
+  publicProfile(playerId: string): Promise<PublicProfileRow | null>;
   /**
    * The player's stored palette choice, or null when they have none. A READ: it never writes the
    * derived default, so "no choice" stays "no row" and the map's colours do not depend on who read

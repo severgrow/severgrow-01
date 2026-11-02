@@ -156,9 +156,10 @@ describe('the flag and the colour tile are decoration, never a placeholder', () 
   it('hides each mark when its fact is unknown', () => {
     const source = read('../src/accounts/profile.ts');
     expect(source).toMatch(/flag\.hidden = glyph === ''/);
-    expect(source).toMatch(/swatch\.hidden = !facts\.colour/);
+    // One painter (`paintSwatch`) serves own AND visitor mode, so the two can never disagree.
+    expect(source).toMatch(/swatch\.hidden = !colour/);
     // The colour is painted through one custom property, so the swatch shares the map's colour.
-    expect(source).toMatch(/swatch\.style\.setProperty\('--tile', facts\.colour\.css\)/);
+    expect(source).toMatch(/swatch\.style\.setProperty\('--tile', colour\.css\)/);
   });
 
   it('draws the Futasaku mark with the game’s own asset, not a new logo', () => {

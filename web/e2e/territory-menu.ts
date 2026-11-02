@@ -111,9 +111,10 @@ const iconOffsets = (p: Page) => p.evaluate(() => [...document.querySelectorAll<
   const cx = ox + (ink.x - vb.x + ink.width / 2) * scale, cy = oy + (ink.y - vb.y + ink.height / 2) * scale;
   return { id: key.id, dx: +(cx - (k.left + k.width / 2)).toFixed(1), dy: +(cy - (k.top + k.height / 2)).toFixed(1) };
 }));
+// The bar's keys are ICON ONLY (owner, 2026-11-01), so each key's SPOKEN label is its name.
 const barKey = (p: Page) => p.evaluate(() => {
   const bar = document.getElementById('online-world-selection')!;
-  return bar.hidden ? null : (bar.querySelector('.world-claim-button')?.textContent ?? '');
+  return bar.hidden ? null : (bar.querySelector('.world-claim-button')?.getAttribute('aria-label') ?? '');
 });
 
 const browser = await chromium.launch(CHROME ? { executablePath: CHROME } : {});
@@ -257,15 +258,15 @@ try {
   await page.waitForTimeout(150);
   check('tapping a free tile opens no menu and no window', await page.isHidden('#online-world-panel') && !(await keysOut(page)) && await page.isHidden('#online-world-chat-panel'));
   check('…and does not move the map', (await page.getAttribute('.world-map-svg', 'viewBox')) === viewBefore);
-  check('the tile bar offers GROW A TILE', (await barKey(page)) === 'GROW A TILE', String(await barKey(page)));
+  check('the tile bar offers Grow a tile (icon key)', (await barKey(page)) === ONLINE.worldGrowKey, String(await barKey(page)));
   const barBox = await page.evaluate(() => { const b = document.getElementById('online-world-selection')!.getBoundingClientRect(); const g = document.getElementById('online-world-grid')!.getBoundingClientRect(); return { bottom: Math.round(g.bottom - b.bottom), centre: Math.round((b.left + b.right) / 2 - (g.left + g.right) / 2) }; });
   check('the bar floats at the map\'s foot, centred', barBox.bottom >= 8 && barBox.bottom <= 16 && Math.abs(barBox.centre) <= 1, JSON.stringify(barBox));
   await page.screenshot({ path: `${SHOTS}/territory-grow-bar-390.png` });
   await page.click('#online-world-selection .world-claim-button');
-  check('GROW asks once more', (await barKey(page)) === 'CONFIRM GROW');
+  check('GROW asks once more', (await barKey(page)) === ONLINE.worldGrowConfirm);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await page.waitForTimeout(900);
-  check('a background refresh keeps the armed key', (await barKey(page)) === 'CONFIRM GROW');
+  check('a background refresh keeps the armed key', (await barKey(page)) === ONLINE.worldGrowConfirm);
   await page.click('#online-world-selection .world-claim-button');
   await page.waitForFunction((id) => document.querySelector(`.world-hex[data-cell-id="${id}"]`)?.classList.contains('mine'), free.id, { timeout: 10_000 });
   check('CONFIRM GROW grows the tile from the bar', true);

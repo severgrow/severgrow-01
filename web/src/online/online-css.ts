@@ -645,8 +645,8 @@ export const ONLINE_CSS = `
 .world-selection {
   position: absolute; z-index: 3; left: 50%; bottom: 10px; translate: -50% 0;
   box-sizing: border-box; width: max-content; max-width: calc(100% - 20px); min-height: 44px;
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 6px 6px 6px 16px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 6px 8px 6px 16px; border-radius: 14px;
   color: #e8ddbe; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase;
   background: rgba(10, 13, 11, .7);
   -webkit-backdrop-filter: blur(8px) saturate(1.05); backdrop-filter: blur(8px) saturate(1.05);
@@ -657,15 +657,24 @@ export const ONLINE_CSS = `
 .world-selection[hidden], .world-grid.pane-open .world-selection { display: none; }
 .world-selection-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes world-bar-in { from { opacity: 0; translate: -50% 4px; } to { opacity: 1; translate: -50% 0; } }
-.world-claim-button {
-  min-height: 40px; padding: 0 15px; flex: none;
-  color: #161a16; background: linear-gradient(#efe4c8, #ddd1b2); border: 0;
-  box-shadow: inset 0 1px 0 #fff8, inset 0 -2px 0 #0000002e;
-  border-radius: 10px; font: inherit; font-size: .66rem; font-weight: 700; letter-spacing: .12em;
+/* THE TILE BAR'S KEYS (owner, 2026-11-01: "grow a tile/challenge/sell a tile/see profile etc in
+   territory should be all icons in buttons rather than text buttons"). They ARE the MENU row's
+   hardware key — the world-key rule supplies the material, the supplied button frame, the 44px
+   target, the press and the cream focus ring — placed in the bar instead of the map's corner. This rule
+   only cancels the absolute placement the row uses and pins the touch minimum at every scale.
+   Two keys fit beside the owner line at 320px because the line truncates, never the keys. */
+.world-selection .world-claim-button {
+  position: relative; z-index: 1; left: auto; top: auto; right: auto; bottom: auto;
+  flex: none; width: 44px; height: 44px; min-width: 44px; min-height: 44px;
+  padding: 0; border: 0; font: inherit;
   cursor: pointer; touch-action: manipulation;
 }
-/* asked once already: the key lights the challenge red, so the second press is a decision */
-.world-claim-button.armed { color: #fff4e6; background: linear-gradient(#d9694f, #b8533c); box-shadow: inset 0 1px 0 #ffffff40, inset 0 -2px 0 #00000040, 0 0 12px #e07a5f66; }
+/* asked once already: the key lights the challenge red, so the second press is a decision. The
+   glyph becomes a tick at the same moment (world-view.ts), so the answer reads without text. */
+.world-claim-button.armed {
+  color: #fff4e6; background: linear-gradient(#d9694f, #b8533c);
+  box-shadow: inset 0 1px 0 #ffffff40, inset 0 -2px 0 #00000040, 0 0 12px #e07a5f66;
+}
 .world-claim-button:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 /* on its way to the server: the same key, dimmed and breathing, so the bar never changes size */
 .world-claim-button.working { opacity: .62; cursor: default; animation: world-working 1.1s ease-in-out infinite; }

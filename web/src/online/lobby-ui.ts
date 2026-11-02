@@ -20,6 +20,7 @@ import { createHudBrandMark } from '../player/branding.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { leaveLobbyForMatch } from './lobby-exit.js';
 import { WorldView } from './world-view.js';
+import { requestPlayerProfile } from '../accounts/profile-request.js';
 import { installTerritoryCountUI, answerWaiting, territoryCounts } from './menu-territory.js';
 import type { TerritoryCounts } from './menu-territory.js';
 import { mountAnswerClock } from './menu-territory-clock.js';
@@ -586,6 +587,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     return id ? { token: id.token, playerId: id.playerId } : null;
   });
   worldView.setCue((name) => hooks.cue?.(name));
+  // A rival's tile offers SEE PROFILE; the accounts module owns the sheet and the token, and hears
+  // this request through one zero-dependency event (web/src/accounts/profile-request.ts).
+  worldView.setProfileOpener((playerId, trigger) => requestPlayerProfile(playerId, trigger));
   // The Territory's own-tile level comes from this device's campaign record, not from the server's
   // last paid clear (owner report, 2026-10-24).
   worldView.setMyLevel(() => hooks.campaignLevel?.() ?? null);

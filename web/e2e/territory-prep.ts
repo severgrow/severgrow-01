@@ -472,7 +472,7 @@ try {
   const reached = await tapTile('-1,-4');
   const bar = await page.evaluate(`(() => {
     const el = document.getElementById('online-world-selection');
-    return el && !el.hidden ? (el.querySelector('.world-claim-button') || {}).textContent : null;
+    return el && !el.hidden ? (el.querySelector('.world-claim-button') || {}).getAttribute?.('aria-label') : null;
   })()`);
   console.log('rival tile', reached ? 'tapped' : 'keyboard', 'bar:', JSON.stringify(bar));
   if (bar) {

@@ -17,6 +17,7 @@ import type {
   ChallengeSettleResult,
   ClaimResult,
   SellResult,
+  PublicProfileRow,
   ReceiptRow,
   RewardInput,
   RewardResult,
@@ -30,6 +31,7 @@ import type {
 } from './types.js';
 import { emptyWallet } from './types.js';
 import { parseWorldCell, seenCellIds, worldNeighbours } from '../world.js';
+import type { Storage } from '../storage/types.js';
 import { stakedCellFor } from './stake.js';
 
 type Receipt = { input: RewardInput; awarded: number; reason: string | null };
@@ -62,6 +64,13 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   readonly campaignClearRows = new Map<string, CampaignClear[]>();
   revision = 0;
 
+  /**
+   * The PLAYER and MATCH halves of a public profile. The memory store keeps claims, receipts and
+   * colours itself; names and the online record live in the storage layer, so the dev backend is
+   * given the same storage the server uses (optional: an un-wired store simply 404s a profile).
+   */
+  constructor(private readonly storage?: Storage) {}
+
   private current(playerId: string): SeedWallet {
     let wallet = this.wallets.get(playerId);
     if (!wallet) { wallet = emptyWallet(); this.wallets.set(playerId, wallet); }
@@ -75,6 +84,45 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
       claims.push({ ...claim, ownerLevel: await this.campaignHighestLevel(claim.ownerId), colourId: this.colours.get(claim.ownerId) ?? null });
     }
     return { revision: this.revision, claims };
+  }
+  /**
+   * The SAME public facts the Postgres store aggregates in one SQL statement, assembled from the
+   * memory maps: tiles this player owns, their verified campaign level, their chosen slot, and the
+   * online record over FINISHED matches only. The run is counted the way the profile's panel counts
+   * it: a loss or a draw breaks the run, and the longest run is a MAX, never a total.
+   */
+  async publicProfile(playerId: string): Promise<PublicProfileRow | null> {
+    if (!this.storage) return null;
+    const player = await this.storage.playerById(playerId);
+    if (!player) return null;
+    const rows = await this.storage.listMatchesForPlayer(playerId);
+    const finished = rows
+      .filter((row) => row.match.status === 'finished' && row.match.result !== null)
+      .sort((a, b) => {
+        const at = (row: typeof a) => row.match.finishedAt ?? row.match.updatedAt;
+        return at(a) - at(b) || (a.match.id < b.match.id ? -1 : a.match.id > b.match.id ? 1 : 0);
+      });
+    let wins = 0;
+    let run = 0;
+    let longestStreak = 0;
+    for (const row of finished) {
+      if (row.match.result!.winner === row.mySeat) {
+        wins++;
+        run++;
+        if (run > longestStreak) longestStreak = run;
+      } else {
+        run = 0;
+      }
+    }
+    return {
+      displayName: player.displayName,
+      level: await this.campaignHighestLevel(playerId),
+      tiles: [...this.claims.values()].filter((claim) => claim.ownerId === playerId).length,
+      chosenColourId: this.colours.get(playerId) ?? null,
+      games: finished.length,
+      wins,
+      longestStreak,
+    };
   }
   async colourChoice(playerId: string): Promise<{ colourId: number; chosenAt: number } | null> {
     const colourId = this.colours.get(playerId);

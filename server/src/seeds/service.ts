@@ -6,6 +6,7 @@ import { playerTag } from '../../../src/player-tag.js';
 import { ApiError } from '../errors.js';
 import { newId, newInviteCode, newSeed } from '../ids.js';
 import type { MatchRecord, PlayerRecord, Storage } from '../storage/types.js';
+import type { PublicPlayerProfile } from '../protocol.js';
 import { WORLD_VERSION, seenWorld } from '../world.js';
 import { colourById, colourChangeAvailableAt, colourCooldownMs, colourIdFor, isColourId, resolveTileColours } from '../../../src/tile-colours.js';
 import { SEED_ECONOMY, WORLD_CHALLENGE_LIST_WINDOW_MS } from './config.js';
@@ -23,6 +24,13 @@ import { FINAL_LESSON } from '../../../web/src/lessons/final.js';
 
 /** A linked territory duel follows the ordinary 24-hour turn clock. */
 const TERRITORY_TURN_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+/** The only id shape the profile route accepts; anything else is a clean 404, never a cast error. */
+const PLAYER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A public count is a whole, non-negative number; anything else a driver returns becomes 0. */
+const countOf = (value: unknown): number => {
+  const n = typeof value === 'number' ? value : Number(value ?? 0);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+};
 /** One retry for a genuine invite-code collision is plenty for a challenge-created duel. */
 const MAX_INVITE_ATTEMPTS = 5;
 
@@ -83,6 +91,38 @@ export class WorldEconomyService {
   }
 
   wallet(player: PlayerRecord) { return this.store.wallet(player.id); }
+
+  /**
+   * ANOTHER PLAYER'S PUBLIC PROFILE (owner, 2026-11-01: "allow to look up other peoples profile on
+   * territory"). The caller's own token gets them in; the id comes from the request. Everything
+   * returned here is already visible on the shared map or derived from it, plus the ONLINE record —
+   * and nothing else: no email, no wallet, no offline record, no tokens, no devices.
+   *
+   * ONE aggregate store read (`PublicProfileRow`). The store does its own awaits SEQUENTIALLY: the
+   * Edge pool is `max: 2`, and a fan-out of parallel reads is exactly what queued three of five
+   * statements and hung an earlier endpoint until the worker budget ran out (HTTP 546, then silent
+   * 90 s hangs). There is deliberately NO `Promise.race` deadline here either — abandoning a query
+   * mid-flight leaks the pool connection it is holding. Slow or failed is the client's em-dash state;
+   * it is never an invented number. A bad or unknown id is the same clean 404, so a caller cannot
+   * use this route to enumerate which ids exist.
+   */
+  async publicProfile(playerId: string): Promise<PublicPlayerProfile> {
+    if (!PLAYER_ID.test(playerId)) throw new ApiError('NOT_FOUND', 'No such player.');
+    const row = await this.store.publicProfile(playerId.toLowerCase());
+    if (!row) throw new ApiError('NOT_FOUND', 'No such player.');
+    // A stored slot wins; with none the palette default is derived from the id, exactly as the map
+    // derives it. The map and the profile therefore show the same colour id for the same player, and
+    // the client resolves the one shared palette (src/tile-colours.ts) to the swatch and the hex.
+    const colourId = colourIdFor(playerId.toLowerCase(), row.chosenColourId);
+    return {
+      displayName: row.displayName,
+      tag: playerTag(playerId.toLowerCase()),
+      level: row.level === null || row.level <= 0 ? null : Math.floor(row.level),
+      tiles: countOf(row.tiles),
+      colourId,
+      online: { games: countOf(row.games), wins: countOf(row.wins), longestStreak: countOf(row.longestStreak) },
+    };
+  }
 
   /**
    * THE PLAYER'S COLOUR (owner, 2026-10-30). Reading never writes: with no stored choice the answer

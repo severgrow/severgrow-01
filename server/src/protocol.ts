@@ -90,6 +90,29 @@ export type MatchSummary = {
   serverNow: number;
 };
 
+/**
+ * ONE PLAYER'S PUBLIC PROFILE — the allow-list of `GET /v1/players/:id/profile`.
+ *
+ * This is what a signed-in player may learn about ANOTHER player. It is deliberately a closed
+ * shape: the route builds exactly these keys and nothing else. It carries no email or identity
+ * provider data, no Seeds wallet, no offline record from devices, no tokens and no devices. A new
+ * field here is a privacy decision, so `server/tests/public-profile.test.ts` asserts this exact
+ * shape and fails if a private one ever appears.
+ */
+export type PublicPlayerProfile = {
+  displayName: string | null;
+  /** The `#TAG` that tells two players with the same name apart (derived from the id, as the map does). */
+  tag: string;
+  /** The furthest Campaign level their verified clears show, or null. */
+  level: number | null;
+  /** Cells they own in the shared world (`world_claims`). */
+  tiles: number;
+  /** Their Territory colour slot, already resolved to the palette default if they never chose. */
+  colourId: number;
+  /** The ONLINE record only: finished duels they took part in, and their best winning run. */
+  online: { games: number; wins: number; longestStreak: number };
+};
+
 export type MatchListEntry = {
   matchId: string;
   status: MatchStatus;
