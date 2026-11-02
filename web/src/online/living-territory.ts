@@ -52,7 +52,14 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
    if(fromMenu){
     exitSurface(menu,{onDone:()=>{if(mode==='world'&&turn===generation){menu.hidden=true;resetSurface(menu);}}});
    }else{resetSurface(menu);menu.hidden=true;enterSurface(screen,{travel:6});}
-   document.getElementById('online-world-back')?.focus({preventScroll:true});
+   // WHERE FOCUS GOES ON OPEN (owner, 2026-11-02: "on desktop entering territory there is a random
+   // circle around 'back' until anything else is tapped — remove"). Focusing the round back key
+   // painted its focus ring on a PROGRAMMATIC focus, which reads as a stray circle. So the open
+   // focuses the SCREEN (the new region — what a screen reader should announce) and leaves the back
+   // key alone; the first Tab press then walks the territory's own keys in order, ring and all.
+   const screenEl = screen as HTMLElement;
+   if (!screenEl.hasAttribute('tabindex')) screenEl.setAttribute('tabindex', '-1');
+   screenEl.focus({ preventScroll: true });
   },
   /**
    * The menu's map does not hard-cut to the Territory's window (owner, 2026-11-02: "a smooth

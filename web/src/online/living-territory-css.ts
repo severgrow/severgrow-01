@@ -1,10 +1,17 @@
 import { INTERFACE_MOTION as motion } from '../ui/interface-motion.js';
-/** The menu map's rest opacity. OWNER, 2026-11-02: "decrease opacity by further 7%" — 7% of the
- * PRESENT value, not seven points off 1: 0.28 x (1 - 0.07) = 0.2604. The Territory screen keeps 1. */
-export const MENU_MAP_OPACITY = 0.2604;
+/** The menu map's rest opacity. OWNER, 2026-11-02: "decrease opacity by further 7%", then
+ * "decrease color intensity in background living territory in main menu by 10%". Both are
+ * MULTIPLICATIVE on the present value, never points off 1: 0.28 x 0.93 x 0.90 = 0.23436. The
+ * Territory screen keeps 1; only the menu's backdrop is dimmed. */
+export const MENU_MAP_OPACITY = 0.23436;
 export const LIVING_TERRITORY_CSS = `
 /* One SVG, one camera, one physical viewport. Hidden here means the Territory SCREEN is inactive;
    only its inert artwork is deliberately painted behind the menu. No second map or canvas. */
+/* The Territory SCREEN takes focus on open so a screen reader announces the new region, but it is
+   a container, not a control: it must not paint a focus ring (owner, 2026-11-02: the stray circle
+   around Back). Its own keys still show theirs. */
+#online-world-screen:focus { outline:none; }
+
 #online-world-screen[data-living-territory="menu"][hidden] { display:grid!important;z-index:1;pointer-events:none; }
 #menu[data-living-world] { z-index:2; }
 #online-world-screen[data-living-territory="menu"] .online-inner > :not(.world-grid),

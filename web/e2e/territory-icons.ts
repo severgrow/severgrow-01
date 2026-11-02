@@ -128,7 +128,7 @@ const sheetState = (p: Page) => p.evaluate(() => {
     winsShown: wins ? getComputedStyle(wins).display !== 'none' : false,
     offlineShown: offline ? getComputedStyle(offline).display !== 'none' : false,
     onlineShown: online ? getComputedStyle(online).display !== 'none' : false,
-    visitor: document.getElementById('profile-visitor')?.textContent ?? '',
+    visitorCaption: document.getElementById('profile-visitor') !== null,
     playTitle: document.getElementById('profile-play-title')?.textContent ?? '',
     onlineValues: [...(document.getElementById('profile-play-online')?.querySelectorAll('dd') ?? [])].map((dd) => dd.textContent ?? ''),
   };
@@ -192,7 +192,9 @@ try {
   const visitor = await sheetState(page);
   check('the visitor sheet is the SAME sheet in its visitor mode', visitor.mode === 'visitor' && !visitor.hidden, JSON.stringify(visitor));
   check('it names the other player with their #tag', visitor.name === `${rival.player.displayName} #${rivalTag}`, visitor.name);
-  check('it says, in one quiet line, that this is someone else', visitor.visitor === PROFILE.visitor, visitor.visitor);
+  // OWNER, 2026-11-02: the "viewing another player" caption was removed as clutter — the sheet is
+  // identified by the mode, the name and the rows a visitor does not get.
+  check('it carries no "viewing another player" caption node', visitor.visitorCaption === false, String(visitor.visitorCaption));
   check('it shows their level, tiles and colour', visitor.level === 'Level 7' && !visitor.levelHidden && visitor.tiles === '2', `${visitor.level} / ${visitor.tiles}`);
   check('it names their colour in hex beside the swatch', !visitor.hexHidden && visitor.hex === '#ded4c4', `${visitor.hex} / hidden=${visitor.hexHidden}`);
   check('it shows the ONLINE record only', visitor.playTitle === PROFILE.theirGames && visitor.onlineShown && visitor.onlineValues[0] === '0', JSON.stringify(visitor.onlineValues));

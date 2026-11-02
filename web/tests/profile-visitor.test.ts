@@ -157,13 +157,16 @@ describe('one sheet, two modes: the mode is a single attribute', () => {
     expect(env.byId['profile-colour-hex']!.hidden).toBe(true);
   });
 
-  it('visitor mode says whose sheet it is, and takes its record heading from the strings', () => {
+  it('visitor mode is identified by the mode attribute and the record heading, not a caption', () => {
+    // OWNER, 2026-11-02: "remove that - self explanatory adding clutter". Whose sheet it is is
+    // already obvious from the name and from the rows a visitor does not get; there is no caption.
     const env = fakeDocument();
     const ui = installProfileUI(env.doc);
     ui.openVisitor(visitor());
     expect(env.sheet.dataset.mode).toBe('visitor');
-    expect(env.byId['profile-visitor']!.textContent).toBe(PROFILE.visitor);
     expect(env.byId['profile-play-title']!.textContent).toBe(PROFILE.theirGames);
+    // Nothing writes a caption: the stub keeps whatever the markup shipped, which is ''.
+    expect(env.byId['profile-visitor']!.textContent).toBe('—');
   });
 
   it('visitor mode renders the public facts: name & tag, level, tiles, colour and online record', () => {
@@ -294,8 +297,8 @@ describe('the wire becomes panel facts in one pure place', () => {
 });
 
 describe('the markup and CSS carry the two modes', () => {
-  it('has the one quiet line and the level mark, both additive', () => {
-    expect(profileSection).toContain('id="profile-visitor"');
+  it('has the level mark and the colour hex, and NO caption line (owner, 2026-11-02)', () => {
+    expect(profileSection).not.toContain('id="profile-visitor"');
     expect(profileSection).toContain('id="profile-level"');
     expect(profileSection).toMatch(/id="profile-level"[^>]*hidden/);
     // The visitor's colour hex is a caption, hidden by default.
@@ -314,11 +317,12 @@ describe('the markup and CSS carry the two modes', () => {
     expect(css).toMatch(/#sheet-profile \.sp-level\[hidden\] \{\s*display: none;/);
   });
 
-  it('the accounts module says whose profile it is from the strings, not a literal', () => {
-    expect(profileSection).toContain('id="profile-title"');
-    // The visitor line's text is written by profile.ts from PROFILE.visitor.
-    expect(read('../src/accounts/profile.ts')).toContain('visitorLine.textContent = PROFILE.visitor');
-    expect(PROFILE.visitor).toBe('Viewing another player');
+  it('carries no "viewing another player" caption anywhere (owner, 2026-11-02)', () => {
+    // The line was clutter: the sheet only opens for a real name, and a visitor's missing private
+    // rows already say what kind of page this is.
+    expect(profileSection).not.toContain('profile-visitor');
+    expect(read('../src/accounts/profile.ts')).not.toContain('visitorLine');
+    expect(read('../../src/strings.ts')).not.toContain("visitor: 'Viewing another player'");
   });
 
   it('the request bridge is one zero-dependency event, and the panel answers it', () => {

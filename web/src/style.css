@@ -2610,7 +2610,10 @@ html.futasaku-product .install-prompt-scrim {
    baseline, and the flag's emoji baseline does the same. */
 #sheet-profile .sp-row-name dd.sp-name-line {
   display: flex;
-  align-items: baseline;
+  /* CENTRE, not baseline (owner, 2026-11-02): the hex and the flag are small marks beside the name,
+     and on the baseline they hang from the text's descender line, which reads as a bottom-aligned
+     chip. Centring puts every mark on the name's own optical centre. */
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
@@ -6566,12 +6569,25 @@ html.final-turns .game::after {
 .lm-seg.on:not(.enemy) {
   stroke-opacity: 0.35;
 }
-.lm-tree .lm-seg.on {
-  filter: drop-shadow(0 0 2.5px var(--c-danger));
-}
-.lm-volcano .lm-seg.on {
-  filter: drop-shadow(0 0 2.5px var(--c-you));
-}
+/* NO PER-FRAME FILTER (owner, 2026-11-02: the surrounded home "looks very plain and almost out of
+   place"). A `drop-shadow` on a segment re-rasterises every frame while the home breathes, which is
+   the exact cost we removed from the Territory fog. The glow is now a SECOND, WIDER, faint stroke on
+   the same path — same soft edge, painted once, and it moves with the compositor. */
+/* The warm edge stays, but ONLY on a home that is not currently trembling. `worried` animates the
+   canopy/sprite with a transform, and a `drop-shadow` on a child of an animating ancestor
+   re-rasterises every frame — the same trap the Territory fog had. In the common danger case the
+   glow is kept; while the home trembles the heavier stroke carries it instead. */
+.landmark.danger:not(.worried) .lm-tree .lm-seg.on { filter: drop-shadow(0 0 2.5px var(--c-danger)); }
+.landmark.danger:not(.worried) .lm-volcano .lm-seg.on { filter: drop-shadow(0 0 2.5px var(--c-you)); }
+/* The constriction: the ring gains weight as the home is hemmed in, so the threat is legible without
+   reading anything. 3 sides -> 5: 2.5px -> 4px. */
+.landmark[data-blocked='4'] .lm-seg { stroke-width: 3.2; }
+.landmark[data-blocked='5'] .lm-seg { stroke-width: 4; }
+.landmark[data-blocked='6'] .lm-seg { stroke-width: 4.6; }
+/* Critical (5 of 6 sides): a slow, deliberate swell — transform only, so it is compositor work. */
+.landmark[data-blocked='5']:not(.strangled) .lm-ring { animation: lm-constrict 1.9s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes lm-constrict { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.972); } }
+.reduce-motion .landmark .lm-ring { animation: none; }
 
 /* idle: the canopy sways a few pixels, a leaf falls now and then; the smoke curls, the crater breathes, an ember pops */
 .landmark.idle.lm-tree .lm-canopy {

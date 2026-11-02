@@ -115,8 +115,21 @@ html.slim-hud .game > .hud > .live-pill { grid-column:2; grid-row:1; justify-sel
 .live-ring .fg { stroke-linecap:butt; transform:rotate(-90deg); transform-origin:50% 50%; }
 .live-ring[data-urgent='1'] .sh { stroke:rgba(0,0,0,.5); }
 .live-ring.pulse { animation:live-pulse 600ms ease-out 1; }
+/* A WARM HALO behind the arc (owner, 2026-11-02: the timer "looks very plain"). A static radial
+   gradient whose OPACITY steps up with urgency: no filter, no per-frame work, and it sits behind the
+   home tile's own ink so the tile still reads. */
+.live-ring .halo { fill:url(#live-halo); opacity:.35; transition:opacity 400ms ease; }
+.live-ring[data-urgent='1'] .halo { opacity:.85; }
+/* THE EMBER: a small lit dot riding the arc's leading end, so the ring reads as a burning fuse
+   rather than a progress bar. Its angle comes from one CSS variable the frame already writes. */
+.live-ring .ember { fill:#ffe6b8; opacity:.9; transform:rotate(calc(var(--lap, 0) * 360deg)); transform-origin:50% 50%; transform-box:view-box; }
+.live-ring[data-urgent='1'] .ember { fill:#fff3d6; }
 .live-vignette { position:fixed; inset:0; z-index:6; pointer-events:none; box-shadow:inset 0 0 70px rgba(224,115,92,.0); transition:box-shadow .3s ease; }
-.live-vignette[data-on='1'] { box-shadow:inset 0 0 70px rgba(224,115,92,.22); }
+.live-vignette[data-on='1'] { box-shadow:inset 0 0 70px rgba(224,115,92,.22); animation:live-vignette-breathe 2.4s ease-in-out infinite; }
+/* A slow breath, opacity-ish only (box-shadow spread is constant per keyframe, so no per-frame cost):
+   it says "hurry" without flashing, and Reduce motion turns it off. */
+@keyframes live-vignette-breathe { 0%,100% { box-shadow:inset 0 0 70px rgba(224,115,92,.14); } 50% { box-shadow:inset 0 0 84px rgba(224,115,92,.30); } }
+.reduce-motion .live-vignette[data-on='1'] { animation:none; }
 .live-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .live-setting small { display:block; opacity:.7; font-size:.8em; }
 @keyframes live-breathe { 0%,100% { opacity:1 } 50% { opacity:.35 } }
@@ -174,6 +187,18 @@ const ringSvg = (cls: string, outerPx: number, strokes: { fg: number; track: num
   svg.setAttribute('class', cls);
   svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
   svg.setAttribute('aria-hidden', 'true');
+  // A soft warm halo (a static radial gradient, opacity only) so the ring sits on the tile like heat
+  // rather than a bare line — no filter, nothing per frame.
+  const defs = document.createElementNS(SVGNS, 'defs');
+  defs.innerHTML = `<radialGradient id="live-halo"><stop offset="0%" stop-color="#e0735c" stop-opacity="0"/><stop offset="62%" stop-color="#e0735c" stop-opacity=".16"/><stop offset="86%" stop-color="#e0735c" stop-opacity=".30"/><stop offset="100%" stop-color="#e0735c" stop-opacity="0"/></radialGradient>`;
+  svg.append(defs);
+  const halo = document.createElementNS(SVGNS, 'circle');
+  halo.setAttribute('class', 'halo');
+  halo.setAttribute('cx', String(size / 2));
+  halo.setAttribute('cy', String(size / 2));
+  halo.setAttribute('r', String(Math.max(1, outerPx)));
+  svg.append(halo);
+
   const order: { cls: string; stroke: number }[] = [
     { cls: 'sh', stroke: strokes.shadow },
     { cls: 'bg', stroke: strokes.track },
@@ -189,6 +214,12 @@ const ringSvg = (cls: string, outerPx: number, strokes: { fg: number; track: num
     svg.append(node);
     return node;
   });
+  const ember = document.createElementNS(SVGNS, 'circle');
+  ember.setAttribute('class', 'ember');
+  ember.setAttribute('cx', String(size / 2));
+  ember.setAttribute('cy', String(Math.max(1, outerPx - strokes.fg / 2)));
+  ember.setAttribute('r', String(Math.max(0.9, strokes.fg * 0.62)));
+  svg.append(ember);
   const [sh, , fg] = nodes as [SVGCircleElement, SVGCircleElement, SVGCircleElement];
   const length = 2 * Math.PI * Number(fg.getAttribute('r'));
   for (const node of nodes) node.style.strokeDasharray = `${length}`;
@@ -648,6 +679,8 @@ export const createHud = () => {
     // homes: green -> orange -> red. Nothing on this ring says whose turn it is; the home it sits
     // on already does (owner's rule).
     fg.style.strokeDashoffset = `${ringLength * (1 - frac)}`;
+    // The ember rides the arc's leading end: one CSS variable, no layout, no filter.
+    ring.style.setProperty('--lap', String(frac));
     fg.style.stroke = ringColour(frac);
     const secs = Math.ceil(left / 1000);
     const urgent = model.deadline !== null && left <= 10_000;

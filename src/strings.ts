@@ -1427,7 +1427,6 @@ export const PROFILE = Object.freeze({
   /** VISITOR MODE (owner, 2026-11-01: "allow to look up other peoples profile on territory"). The
    *  same sheet, one quiet line saying whose it is, and the record's own heading. A visitor sees the
    *  owner's ONLINE record only; the offline row and the Seeds line are not rendered at all. */
-  visitor: 'Viewing another player',
   theirGames: 'Their games',
   /** The player's level, in the name line — the same word the Territory tile bar uses ("LEVEL 22"). */
   level: (n: number) => `Level ${n}`,

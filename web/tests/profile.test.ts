@@ -237,7 +237,11 @@ describe('the flag and the colour tile are decoration, never a placeholder', () 
     expect(inkH / inkW).toBeCloseTo(2 / Math.sqrt(3), 3);
     // Flag, tile and name share one BASELINE (owner: the hex sits beside the name, not floating).
     const lineCss = /dd\.sp-name-line \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
-    expect(lineCss).toMatch(/align-items: baseline/);
+    // OWNER, 2026-11-02: "the color hex is aligned by bottom edge - make it centered vertically to
+    // name and flag instead". The name line CENTRES its marks, so the hex sits on the name's optical
+    // centre rather than hanging off its descender line.
+    expect(lineCss).toMatch(/align-items: center/);
+    expect(lineCss).not.toMatch(/align-items: baseline/);
   });
 });
 
@@ -285,7 +289,11 @@ describe('a signed-in player ALWAYS has a colour, so the tile is never absent', 
     expect(inkH / inkW).toBeCloseTo(2 / Math.sqrt(3), 3);
     // Flag, tile and name share one BASELINE (owner: the hex sits beside the name, not floating).
     const lineCss = /dd\.sp-name-line \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
-    expect(lineCss).toMatch(/align-items: baseline/);
+    // OWNER, 2026-11-02: "the color hex is aligned by bottom edge - make it centered vertically to
+    // name and flag instead". The name line CENTRES its marks, so the hex sits on the name's optical
+    // centre rather than hanging off its descender line.
+    expect(lineCss).toMatch(/align-items: center/);
+    expect(lineCss).not.toMatch(/align-items: baseline/);
   });
 });
 

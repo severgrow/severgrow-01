@@ -167,7 +167,6 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
   // VISITOR MODE's two additive marks: the one quiet line that says whose sheet this is, and the
   // level inside the name line (the Territory tile bar's own `LEVEL 22` word). Own mode renders
   // neither, so its four rows and two records are byte-for-byte the layout they were.
-  const visitorLine = doc.getElementById('profile-visitor');
   const levelText = doc.getElementById('profile-level');
   const hexText = doc.getElementById('profile-colour-hex');
   const playTitle = doc.getElementById('profile-play-title');
@@ -302,7 +301,6 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     fillGrid(offlineGrid!, null);
     fillGrid(onlineGrid!, facts?.online ?? null);
     if (playTitle) playTitle.textContent = PROFILE.theirGames;
-    if (visitorLine) visitorLine.textContent = PROFILE.visitor;
   };
 
   let opened = false;

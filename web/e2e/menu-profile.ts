@@ -386,6 +386,10 @@ try {
           return +b.toFixed(2);
         })(),
         flagShown: !document.getElementById('profile-flag').hidden,
+        flagTop: +document.getElementById('profile-flag').getBoundingClientRect().top.toFixed(2),
+        flagBottom: +document.getElementById('profile-flag').getBoundingClientRect().bottom.toFixed(2),
+        nameTop: +document.getElementById('profile-name').getBoundingClientRect().top.toFixed(2),
+        nameBottom: +document.getElementById('profile-name').getBoundingClientRect().bottom.toFixed(2),
         // THE ONE TILE — read as it actually renders, never with its hidden attribute forced off.
         // The owner could not see it ("i cant see the color hex in profile"), and the two causes
         // were: an SVG hidden attribute that swatch.hidden = … never cleared (so the UA's
@@ -403,7 +407,7 @@ try {
             display: cs.display,
             boxW: +rb.width.toFixed(2), boxH: +rb.height.toFixed(2),
             inkW: +rf.width.toFixed(2), inkH: +rf.height.toFixed(2),
-            boxBottom: +rb.bottom.toFixed(2), inkBottom: +rf.bottom.toFixed(2),
+            boxTop: +rb.top.toFixed(2), boxBottom: +rb.bottom.toFixed(2), inkBottom: +rf.bottom.toFixed(2),
             fill: fs.fill, stroke: fs.stroke, strokeWidth: parseFloat(fs.strokeWidth) || 0,
             tile: sw.style.getPropertyValue('--tile').trim(),
             aria: sw.getAttribute('aria-label'),
@@ -477,8 +481,10 @@ try {
       titleInkLeft: number; titleCentre: number; headH: number;
       close: { left: number; right: number; top: number; bottom: number; w: number; h: number };
       nameBaseline: number; flagBaseline: number; flagShown: boolean;
+      flagTop: number; flagBottom: number; nameTop: number; nameBottom: number;
       hex: {
         hiddenAttr: boolean; display: string; boxW: number; boxH: number; inkW: number; inkH: number;
+        boxTop: number;
         boxBottom: number; inkBottom: number; fill: string; stroke: string; strokeWidth: number;
         tile: string; aria: string | null; right: number; rowRight: number;
       };
@@ -573,12 +579,15 @@ try {
       `${rows.brandMark.right} + 8 ≤ ${rows.close.left}`);
     check(`${label}: the nameplate keeps its 44/46px row and its centred title`,
       rows.headH >= 43.5 && rows.headH <= 46.5 && Math.abs(rows.titleCentre) <= 0.5, `${rows.headH}/${rows.titleCentre}`);
-    // The flag, the colour tile and the name must share ONE baseline (the owner asked for a hex
-    // beside the name, not a sticker floating near it). A baseline-aligned <svg> rests its box's
-    // bottom edge on the text baseline, so both numbers must land on the same line.
-    check(`${label}: the flag and the tile sit on the name's baseline`,
-      rows.flagShown && Math.abs(rows.flagBaseline - rows.nameBaseline) <= 0.5 && Math.abs(rows.hex.boxBottom - rows.nameBaseline) <= 0.5,
-      `flag ${rows.flagBaseline} / hex ${rows.hex.boxBottom} / name ${rows.nameBaseline}`);
+    // THE MARKS ARE CENTRED ON THE NAME (owner, 2026-11-02: "the color hex is aligned by bottom edge -
+    // make it centered vertically to name and flag instead"). So the assertion is the VERTICAL
+    // CENTRE of the flag and of the tile box against the name's own box centre — a bottom-edge check
+    // would now fail a correct layout, and a centre check fails the old bottom-aligned one.
+    check(`${label}: the flag and the tile are centred on the name`,
+      rows.flagShown &&
+        Math.abs((rows.flagTop + rows.flagBottom) / 2 - (rows.nameTop + rows.nameBottom) / 2) <= 1.5 &&
+        Math.abs((rows.hex.boxTop + rows.hex.boxBottom) / 2 - (rows.nameTop + rows.nameBottom) / 2) <= 1.5,
+      `flag c ${((rows.flagTop + rows.flagBottom) / 2).toFixed(1)} / hex c ${((rows.hex.boxTop + rows.hex.boxBottom) / 2).toFixed(1)} / name c ${((rows.nameTop + rows.nameBottom) / 2).toFixed(1)}`);
     // THE ONE TILE, as it actually renders. Present (the `hidden` attribute is really gone), the
     // map's hex silhouette, sized to read as a hexagon, and painted in the player's own colour.
     check(`${label}: the colour tile is present and painted`, !rows.hex.hiddenAttr && rows.hex.display !== 'none' && rows.hex.boxW > 0,

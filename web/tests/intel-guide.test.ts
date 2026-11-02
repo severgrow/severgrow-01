@@ -107,10 +107,13 @@ describe('the Rules tab: the ten lessons as cards', () => {
     expect(cards[0]!.title).toBe('Draw, Grow, Throw');
     expect(cards[4]!.title).toBe('Bloom three at once');
     // Level 9 became a real game from scratch (owner, 2026-11-01), so its FINISH card now says what
-    // it was ("PLAY A FULL GAME"). The Rules tab is reference material, so the card keeps the idea
-    // the level still teaches — the Throw pile — from the lesson's own frozen name, and its line is
-    // still the Throw-pile sentence (checked below). This asserts the intent, not a weaker rule.
-    expect(cards[8]!.title).toBe('The other pile');
+    // it was ("PLAY A FULL GAME"). The Rules tab is reference material, so the card takes its title
+    // from the lesson's own frozen name — which, after the owner's second naming direction, is the
+    // ACTION the lesson drills: "Throw Pile", rendered in sentence case. Its line is still the
+    // Throw-pile sentence (checked below), so the idea survives both renames. This asserts the
+    // intent — one source of truth for the title — not a weaker rule.
+    expect(cards[8]!.title).toBe('Throw pile');
+    expect(cards[8]!.title.toLowerCase()).toBe(LESSON.names[9]!.toLowerCase());
     expect(cards[8]!.line).toBe(LESSON.pileGoldLine);
     for (const c of cards) {
       expect(c.title, c.title).not.toBe(c.title.toUpperCase());
