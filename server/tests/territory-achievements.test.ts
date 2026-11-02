@@ -21,7 +21,7 @@ import type { AchievementHistory, DuelView } from '../src/seeds/achievements.js'
 import type { CampaignClear, WorldEconomyStore } from '../src/seeds/types.js';
 import { SEED_ECONOMY } from '../src/seeds/config.js';
 import { WORLD_CELLS, worldNeighbours } from '../src/world.js';
-import type { PlayerRecord } from '../src/storage/types.js';
+import type { PlayerRecord, Storage } from '../src/storage/types.js';
 import { campaignOpening, CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { apply, viewFor, DEFAULT_CONFIG } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
