@@ -18,7 +18,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MENU, PROFILE } from '../../src/strings.js';
-import { installProfileUI, profileRows } from '../src/accounts/profile.js';
+import { installProfileUI, profileColour, profileRows } from '../src/accounts/profile.js';
+import { TILE_COLOURS, colourById, colourFor, colourIdFor } from '../../src/tile-colours.js';
 import { SEEDS_WORD } from '../src/online/seed-icon.js';
 import type { ProfileFacts } from '../src/accounts/profile.js';
 
@@ -156,9 +157,17 @@ describe('the flag and the colour tile are decoration, never a placeholder', () 
   it('hides each mark when its fact is unknown', () => {
     const source = read('../src/accounts/profile.ts');
     expect(source).toMatch(/flag\.hidden = glyph === ''/);
-    expect(source).toMatch(/swatch\.hidden = !facts\.colour/);
+    // The ATTRIBUTE, not `swatch.hidden`: an <svg> has no `hidden` IDL property, so the old
+    // assignment wrote an expando and left the markup's `[hidden]` in place — the tile could never
+    // appear (measured 0x0 with the attribute still set). See the 2026-11-02 note in profile.ts.
+    expect(source).toMatch(/swatch\.toggleAttribute\('hidden', !facts\.colour\)/);
+    // Code, not the comment that explains the old bug.
+    expect(source).not.toMatch(/^\s*swatch\.hidden\s*=/m);
     // The colour is painted through one custom property, so the swatch shares the map's colour.
     expect(source).toMatch(/swatch\.style\.setProperty\('--tile', facts\.colour\.css\)/);
+    // A named swatch must not also be aria-hidden: it carries role="img" + the colour's name, so
+    // hiding it would leave the player's only colour indicator unspoken.
+    expect(source).toMatch(/swatch\.removeAttribute\('aria-hidden'\)/);
   });
 
   it('draws the Futasaku mark with the game’s own asset, not a new logo', () => {
@@ -186,6 +195,54 @@ describe('the flag and the colour tile are decoration, never a placeholder', () 
     const swatchCss = /\.sp-swatch \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
     expect(swatchCss).not.toContain('border-radius');
     expect(styleCss).toMatch(/\.sp-swatch-face \{\s*fill: var\(--tile/);
+  });
+
+  it('sizes the tile so the hexagon READS as one, and puts it on the name’s baseline', () => {
+    // Owner, 2026-11-02: "i cant see the color hex in profile". Two causes: the silent `hidden`
+    // attribute above, and a 13x15 box whose letterboxed ink was 10.79x12.46 — smaller than the
+    // name's lowercase. The chosen box is 20.5px square: 17.02 x 19.65 of ink at the map hex's own
+    // 1.1547 aspect (2/√3), which is taller than the name's 19px line box.
+    const swatchCss = /\.sp-swatch \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    expect(swatchCss).toMatch(/width: 20\.5px/);
+    expect(swatchCss).toMatch(/height: 20\.5px/);
+    expect(swatchCss).toMatch(/flex: none/);
+    // The box is square because the viewBox is; the INK is the hex's own taller-than-wide shape.
+    const inkW = (20.5 * (2 * 11.5 * Math.cos(Math.PI / 6))) / 24;
+    const inkH = (20.5 * 23) / 24;
+    expect(inkW).toBeCloseTo(17.02, 1);
+    expect(inkH).toBeCloseTo(19.65, 1);
+    expect(inkH / inkW).toBeCloseTo(2 / Math.sqrt(3), 3);
+    // Flag, tile and name share one BASELINE (owner: the hex sits beside the name, not floating).
+    const lineCss = /dd\.sp-name-line \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    expect(lineCss).toMatch(/align-items: baseline/);
+  });
+});
+
+describe('a signed-in player ALWAYS has a colour, so the tile is never absent', () => {
+  it('derives one from the player id when nothing was ever chosen', () => {
+    // Owner, 2026-11-02: "i cant see the color hex in profile". A player who never picked a colour
+    // still HAS one — the game assigns it deterministically (colourIdFor). The old sheet rendered
+    // nothing whenever the endpoint had no answer, which is exactly that player.
+    for (const id of ['fixture-player', 'a', 'player-1234', '']) {
+      const colour = profileColour(id);
+      expect(colour).not.toBeNull();
+      expect(colour.css).toBe(colourFor(id));
+      expect(colour.name).toBe(colourById(colourIdFor(id)).name);
+    }
+  });
+
+  it('prefers the stored choice, and stays derived when there is none', () => {
+    const chosen = profileColour('fixture-player', 12);
+    expect(chosen).toEqual({ css: TILE_COLOURS[12]!.css, name: 'Glacier' });
+    // A stale id this build does not know is treated as no choice, never as a blank tile.
+    expect(profileColour('fixture-player', 999)).toEqual(profileColour('fixture-player'));
+    expect(profileColour('fixture-player').css).not.toBe('');
+  });
+
+  it('is what the profile is opened with, before any request can fail', () => {
+    // `profileFacts` starts from the derived colour; `readColour` can only REPLACE it.
+    expect(mountSource).toMatch(/colour: profileColour\(identity\.playerId\)/);
+    expect(mountSource).not.toMatch(/colour: null/);
   });
 });
 
@@ -246,6 +303,45 @@ describe('the sheet speaks the pause panel’s language', () => {
     expect(block).toContain('font-variant-numeric: lining-nums tabular-nums');
     // No new colour is coined: every colour is an existing token (the swatch reads --tile).
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgb\(|hsl\(/);
+  });
+
+  it('is a three-track nameplate: a real mark, the centred word, the close key', () => {
+    // Owner, 2026-11-02: "profile frame ... next to logo looking ugly", "this or any similar should
+    // never happen". The rendered geometry (the mark's width, its air from the corner arc, the
+    // title's centre) is measured in the browser by web/e2e/menu-profile.ts; these are the source
+    // facts that make it possible, pinned so a small edit cannot quietly undo it.
+    const head = /#sheet-profile \.sp-head \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    // Equal `1fr` side cells keep the title on the panel's own centre line; the middle is the
+    // title's own width. minmax(68px, …) is the wordmark's 67.69px, so the mark's cell can never
+    // shrink under it (which is what letterboxed the mark before).
+    expect(head).toContain('grid-template-columns: minmax(68px, 1fr) max-content minmax(68px, 1fr)');
+    // The mark is sized by WIDTH through the game's 22px height (2200:715 -> 67.69px), never by a
+    // small `width:` (the old width:22px rendered 22 x 7.14 — the smudge the owner photographed).
+    const mark = /#sheet-profile \.sp-brand svg \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    expect(mark).toMatch(/height: 22px/);
+    expect(mark).toMatch(/flex: none/);
+    expect(mark).not.toMatch(/width: 22px/);
+    // The mark starts past the panel's gutter, not in it: that inset is what takes its top-left
+    // corner out of the 32px corner band instead of under the curve.
+    const brand = /#sheet-profile \.sp-brand \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    expect(brand).toContain('padding-inline-start: var(--sp-edge)');
+    expect(brand).toMatch(/justify-content: flex-start/);
+    expect(/#sheet-profile \{[\s\S]*?--sp-edge: 20px/.test(styleCss)).toBe(true);
+    // And the short-screen budget makes the same statement with less room.
+    expect(styleCss).toMatch(/@media \(max-height: 700px\) \{[\s\S]{0,700}--sp-edge: 14px/);
+  });
+
+  it('gives the read-out its own calm, even ground, so no band of the menu can wash a row', () => {
+    // Owner, 2026-11-02: the "MATCHES WON" row had a soft gradient across it. Nothing faded over
+    // the content: the 0.42-alpha glass let the blurred menu behind show through, and a bright key
+    // landed across the fifth row. The plate is now the page's own ground with a 3% wash of the same
+    // smoked glass (alpha 0.982) — the same glass family, but even.
+    const block = /#sheet-profile \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    expect(block).toContain('background: color-mix(in srgb, var(--c-bg) 97%, var(--dark-glass))');
+    expect(block).not.toContain('background: var(--dark-glass);');
+    // 0.97 opaque + 3% of the 0.42 glass = 0.982 alpha. The number IS the fix — below ~0.96 a lit
+    // menu key behind the plate draws a visible band across a row — and the browser suite asserts
+    // the real computed alpha on every size.
   });
 });
 

@@ -16,6 +16,7 @@
 // never as 0. The two records go through the same builder (logic/match-record.ts), which is what
 // keeps the halves identical in rounding and in the em dash rule.
 import { PROFILE } from '../../../src/strings.js';
+import { colourById, colourIdFor } from '../../../src/tile-colours.js';
 import type { Record3 } from '../logic/match-record.js';
 import { recordRows } from '../logic/match-record.js';
 import { countryName, flagOf } from '../logic/country.js';
@@ -45,6 +46,23 @@ export type ProfileFacts = {
 };
 
 export type ProfileRow = Readonly<{ label: string; value: string }>;
+
+/**
+ * THE PLAYER ALWAYS HAS A COLOUR, so the profile's one tile is never absent (owner, 2026-11-02:
+ * "i cant see the color hex in profile"). A player who has never picked one still HAS one: the
+ * game derives it deterministically from their player id (`colourIdFor` → FNV-1a → one of the
+ * twenty), which is the colour their Territory tiles already wear on the map. The old profile
+ * asked the server and rendered `nothing` when the answer was an empty body — which is exactly
+ * what a player who never chose sees. Reading the derived value first makes the tile a FACT, not
+ * a request that may fail; the endpoint can only ever replace it with the stored choice.
+ */
+export const profileColour = (
+  playerId: string,
+  chosen: number | null = null,
+): NonNullable<ProfileFacts['colour']> => {
+  const colour = colourById(colourIdFor(playerId, chosen));
+  return { css: colour.css, name: colour.name };
+};
 
 /** A known, sane count, or the honest em dash. A count is a whole, non-negative number. */
 const count = (n: number | null): string =>
@@ -160,14 +178,25 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
 
     // The player's own tile colour, drawn as the MAP draws a hex (flat left/right edges, a point
     // top and bottom), so the profile shows the same object as the board.
+    //
+    // `swatch.hidden = …` was a NO-OP: `hidden` is an IDL property of HTMLElement, and this is an
+    // <svg>, so the assignment wrote an expando and left the markup's `hidden` attribute in place.
+    // The sheet therefore rendered an SVG with the UA's `[hidden] { display: none }` forever —
+    // measured 0x0 with the attribute still set — which is the other half of "i cant see the color
+    // hex". The ATTRIBUTE is the state, so it is what gets toggled.
     if (swatch) {
-      swatch.hidden = !facts.colour;
+      swatch.toggleAttribute('hidden', !facts.colour);
+      // The markup ships aria-hidden="true" because a hidden swatch must say nothing; once it is
+      // the player's ONE colour with role="img" and a name, hiding it from assistive tech would
+      // leave the only colour indicator unspoken. The two states move together.
       if (facts.colour) {
+        swatch.removeAttribute('aria-hidden');
         swatch.style.setProperty('--tile', facts.colour.css);
         swatch.setAttribute('role', 'img');
         swatch.setAttribute('aria-label', facts.colour.name);
         swatch.setAttribute('title', facts.colour.name);
       } else {
+        swatch.setAttribute('aria-hidden', 'true');
         swatch.style.removeProperty('--tile');
         swatch.removeAttribute('role');
         swatch.removeAttribute('aria-label');
