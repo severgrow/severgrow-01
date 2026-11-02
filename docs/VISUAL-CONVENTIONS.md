@@ -114,3 +114,52 @@ Final TypeScript, futa04/futa05 production builds and asset-isolation checks pas
 - Replay names align to the rendered hex map's outer edges, using the existing board sizing pass.
   When a very short landscape map cannot fit the names and score together, keep the names directly
   outside those same edges. The score stays centred; resize/export layout updates share this rule.
+
+## Windows, and what may not be drawn in them — 2 November 2026
+
+The owner, looking at two windows side by side: *"territory and profile windows dont match really
+- we should never use frame contour ... but BOTH (and any other similar) should be using our classic
+dark glass window style"*, and *"i also dont like the hairline divisions in profile (and if shows up
+anywhere else) - id remove and not add in new windoows iin future"*.
+
+- **One material per window.** Every dialog, sheet and panel uses the game's classic dark glass:
+  `--dark-glass` and `--dark-glass-blur` (defined once at the top of `web/src/style.css`, surfaced as
+  `web/src/player/glass-surface.ts`). A window that needs a feature-specific readability adjustment
+  keeps it and says why in a comment — the match-chat blur is the documented example. There is no
+  third material and no per-window tint.
+- **No frame contour.** Do not stroke an outline, inner border or ring around a window to define it.
+  A window is separated from the board by its material (blur, depth, shadow) and its position, never
+  by a drawn frame. This includes a 1px "instrument" border that follows the window's own edge.
+- **No interior hairline dividers.** Do not draw a line between rows or blocks inside a window. Use
+  space, type weight and a muted label to show where one block ends and the next begins. This
+  applies to list rows, record rows, settings groups and any future list. Replacing a hairline with
+  a 1px shadow, a gradient rule or a dotted line is the same divider in a different coat — not a
+  fix. If a divider is ever genuinely unavoidable (a dense numeric table where a misread is a
+  gameplay error), say why in a comment at that rule and keep it to that one place.
+- **Buttons wear the game's button, not a frame.** A window's actions reuse the existing ghost /
+  primary classes. No border ring of their own, no new button shape per dialog. A window action and
+  a menu key of the same rank must look like siblings.
+- **Keep the readable exceptions.** A feature-specific opacity change made to fix a real reported
+  defect (the Profile plate at `alpha 0.982`, chosen because a bright key bled a band across a row
+  through the glass) survives this rule; re-measure that defect before making such a surface
+  translucent again.
+
+## Motion — what the numbers are now
+
+The earlier note in this file (150/100ms, 4px travel, .996 start scale) describes a SHEET's arrival
+and is still true for sheets. Screens have their own, larger beat, and the direction carries meaning.
+Source of truth is `web/src/ui/interface-motion.ts`:
+
+- `open: 150`, `close: 100`, `travel: 4` (a sheet), `screen: 10` (a whole screen),
+  `stagger: 50` (the beat between a screen's body and its own head row), `easeOpen`
+  `cubic-bezier(0.22, 1, 0.36, 1)`, `easeClose` `cubic-bezier(0.4, 0, 1, 1)`.
+- Depth decides direction: a forward move (menu → PLAY → picker) rises from below, a back move drops
+  from above, the board itself never moves, and a boot screen is simply there. A sheet keeps its own
+  smaller travel.
+- Every arrival is paint only: the screen accepts input on its first frame. Reduced motion skips
+  spatial movement entirely — including CSS transitions, which the JS cancels rather than trusting
+  a cascade race.
+- **Never a filter on an animating element.** A `filter` on a node whose ancestor is animating (or
+  on the animating node itself) re-rasterises every frame; that cost was measured and removed twice
+  already (the Territory fog, and the surrounded-home glow). Paint the effect instead — a radial
+  gradient, a second stroke, a heavier line — or let it live where nothing animates.
