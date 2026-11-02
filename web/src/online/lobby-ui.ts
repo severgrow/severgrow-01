@@ -1125,6 +1125,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     fillCopy();
     show('world');
     void renderWorld();
+    // The panel has been framed synchronously by `WorldView.open`; settle the menu's full-bleed
+    // map into it (a no-op from the hub, or under Reduce motion).
+    living?.enter();
   };
   const worldEntry = document.getElementById('menu-world') as HTMLButtonElement | null;
   worldEntry?.addEventListener('click', () => openWorld('menu'));

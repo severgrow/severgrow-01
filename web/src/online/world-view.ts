@@ -449,6 +449,9 @@ export class WorldView {
   private bounds: ViewBox | null = null;
   /** True once the player has panned or zoomed, so a re-frame never throws their view away. */
   private touched = false;
+  /** A camera the PLAYER chose (pan, zoom, double-tap). Unlike `touched` — which merely means "a
+   * usable view exists" — this must survive the menu/territory frame changes untouched. */
+  private manualCamera = false;
   /** The panel's measured aspect from the last paint/resize. */
   private aspect = 0;
   /** The panel's measured width in CSS pixels — the only way to hold the MIN_CELL_PX floor. */
@@ -671,6 +674,9 @@ export class WorldView {
     if (changedWorld || firstOwner) {
       this.box = lastCamera(browserStorage(), world.version);
       this.previewRemembered = this.box !== null;
+      // A remembered camera is a choice made in a previous visit, so it outranks the automatic
+      // menu frame exactly as a gesture does.
+      if (this.previewRemembered) this.manualCamera = true;
       this.touched = this.box !== null;
     }
     this.world = world;
@@ -678,8 +684,28 @@ export class WorldView {
     this.disputes = world.disputes ?? [];
     if (!this.svg || this.paintSignatureOf() !== this.paintSignature) this.paint();
     else this.applyView();
+    // THE MENU FRAMES THE SAME WORLD TO THE WHOLE SCREEN (owner, 2026-11-02). Unless the player
+    // chose a camera, the menu's view is re-derived from the LIVE full-bleed box on every show, so
+    // its first visit and every return fill the screen at the same tile scale. `touched` alone
+    // cannot gate this: it is set by `preview` itself.
+    if (!this.manualCamera) {
+      const auto = this.autoBox();
+      if (auto) { this.box = auto; this.touched = true; }
+    }
     // The menu's deliberate anchor is a real camera choice. Updates must not recenter it.
     if (usableView(this.box)) this.touched = true;
+  }
+
+  /** Frame the CURRENT window from scratch (the menu's whole screen or the Territory's panel),
+   * centred where this window centres its world. Only called when the player has not chosen a
+   * camera. One layout read, never per frame. Returns null before the world's fit box exists. */
+  private autoBox(): ViewBox | null {
+    const rect = this.viewportSize();
+    if (!(rect.width > 0) || !(rect.height > 0)) return null;
+    this.aspect = rect.width / rect.height;
+    this.pixels = rect.width;
+    const auto = this.detailFor(this.aspect, rect.width);
+    return auto && usableView(auto) ? [...auto] : null;
   }
 
   /** Reuse the authoritative wallet the menu already read, for this same identity only.
@@ -691,12 +717,27 @@ export class WorldView {
   }
 
   async open() {
+    // THE TERRITORY'S OWN FRAME IS RESTORED (owner, 2026-11-02): the menu paints the map across the
+    // whole screen, so its view is wider than this panel's. Capture the panel's framing while the
+    // menu still owns the anchor — same home, same tile scale as a first visit — then a
+    // panned/zoomed camera is left untouched.
+    const auto = !this.manualCamera && this.menuPreview ? this.autoBox() : null;
     this.active = true;
     this.menuPreview = false;
     this.visited = true;
     // The deliberate camera is restored after the world version is known; live bounds still win.
     const camera = this.world ? lastCamera(browserStorage(), this.world.version) : null;
-    if (!usableView(this.box)) { this.touched = camera !== null; this.box = camera; }
+    if (!usableView(this.box)) {
+      this.touched = camera !== null;
+      this.box = camera;
+      // Restored from storage: it may be a camera the player chose, so it outranks the auto frame.
+      if (camera) this.manualCamera = true;
+    }
+    if (auto) {
+      this.box = auto;
+      this.touched = true;
+      if (this.svg) this.applyView(false);
+    }
     this.notice(this.svg ? '' : ONLINE.worldLoading);
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
@@ -1726,6 +1767,7 @@ export class WorldView {
     const [, , w, h] = this.box;
     const to = this.clampBox([x - w / 2, y - h / 2, w, h]);
     this.touched = true;
+    this.manualCamera = true;
     if (!interfaceMotionAllowed()) { this.box = to; this.applyView(false); return; }
     const from = [...this.box] as [number, number, number, number];
     const start = performance.now();
@@ -3280,6 +3322,7 @@ export class WorldView {
       // scale equally at every zoom level.
       this.box = zoomedView(box, viewAnchor(x, y, liveRect(rect)), scale, frame);
       this.touched = true;
+      this.manualCamera = true;
       set();
     };
     /**
@@ -3452,6 +3495,7 @@ export class WorldView {
         // The gesture is a PAN, so it can never be the first half of a double tap.
         this.lastTap = null;
         this.touched = true;
+        this.manualCamera = true;
         this.setMoving(true);
       }
       // Capturing on pointerdown retargets a touch tap's click to the SVG,

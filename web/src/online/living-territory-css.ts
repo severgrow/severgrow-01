@@ -1,5 +1,8 @@
 import { INTERFACE_MOTION as motion } from '../ui/interface-motion.js';
-export const LIVING_TERRITORY_CSS=`
+/** The menu map's rest opacity. OWNER, 2026-11-02: "decrease opacity by further 7%" — 7% of the
+ * PRESENT value, not seven points off 1: 0.28 x (1 - 0.07) = 0.2604. The Territory screen keeps 1. */
+export const MENU_MAP_OPACITY = 0.2604;
+export const LIVING_TERRITORY_CSS = `
 /* One SVG, one camera, one physical viewport. Hidden here means the Territory SCREEN is inactive;
    only its inert artwork is deliberately painted behind the menu. No second map or canvas. */
 #online-world-screen[data-living-territory="menu"][hidden] { display:grid!important;z-index:1;pointer-events:none; }
@@ -9,11 +12,30 @@ export const LIVING_TERRITORY_CSS=`
 #online-world-screen[data-living-territory="menu"]::before { opacity:0; }
 #online-world-screen[data-living-territory="menu"] .world-grid { background:transparent;box-shadow:none; }
 #online-world-screen[data-living-territory="menu"] .world-grid::after { opacity:0; }
+/* THE MENU'S MAP IS A BACKGROUND, NOT A WINDOW (owner, 2026-11-02: "the living territory in main
+   menu shouldnt be cropped as in territory menu, it should take the whole background"). The
+   Territory screen keeps its framed, rounded .world-grid; on the menu the same grid is lifted out of
+   the column and stretched to the viewport, so the SVG (100% of the grid) paints edge to edge. The
+   camera measures this box and reconciles the viewBox to the screen's own aspect, so the map fills
+   with no letterbox band and no visible frame edge. */
+#online-world-screen[data-living-territory="menu"] .online-inner { padding:0; }
+#online-world-screen[data-living-territory="menu"] .online-inner .world-grid {
+  position:absolute; inset:0; z-index:0;
+  /* An abspos grid CHILD placed in a row is contained by that ROW's area (the desktop stage puts
+     it in row 2, which started 54px down). Clearing the placement makes the inner's padding box
+     its containing block, so the background truly reaches the screen's top edge. */
+  grid-row:auto; grid-column:auto; align-self:auto;
+  width:auto; height:auto; max-width:none; max-height:none;
+  margin:0; border-radius:0;
+}
 #online-world-screen[data-living-territory] .world-map-svg {
   transform-origin:center;
-  transition:opacity ${motion.open}ms ${motion.easeOpen},transform ${motion.open}ms ${motion.easeOpen};
+  transition:opacity ${motion.open}ms ${motion.easeOpen};
 }
-#online-world-screen[data-living-territory="menu"] .world-map-svg { opacity:.28;transform:scale(${motion.scale}); }
+/* NO SCALE HERE: at full bleed even the interface layer's 99.6% would leave a 1px transparent rim
+   around the screen. The menu's map is exactly the viewport; the settle on opening is added by JS
+   from the SAME tokens (see living-territory.ts). */
+#online-world-screen[data-living-territory="menu"] .world-map-svg { opacity:${MENU_MAP_OPACITY};transform:none; }
 #online-world-screen[data-living-territory="menu"] .world-map-svg * { animation-play-state:paused!important; }
 @starting-style { #online-world-screen[data-living-territory="menu"] .world-map-svg { opacity:0; } }
 /* A shared rhythm links the logo, title and keys. Short screens compress space, never tap targets. */

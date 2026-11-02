@@ -15,6 +15,8 @@ import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { seedSettings } from './helpers/settings-seed.js';
 import { cellXY } from '../src/online/world-growth.js';
+import { MENU_MAP_OPACITY } from '../src/online/living-territory-css.js';
+import { INTERFACE_MOTION } from '../src/ui/interface-motion.js';
 const shots=process.env.SHOTS??'/tmp/living-territory';mkdirSync(shots,{recursive:true});
 const storage=new MemoryStorage(),store=new MemoryWorldEconomyStore();
 const config={...DEFAULT_SERVER_CONFIG,corsOrigins:['*']};
@@ -39,7 +41,7 @@ const browser=await (ios?webkit:chromium).launch(ios?{}:{...(process.env.PW_CHRO
  if(process.env.GITHUB_ACTIONS)console.error(`::error title=Living Territory browser launch::${String(error).replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A')}`);throw error;
 });
 let activePage:Page|null=null;
-let checks=0;const check=(label:string,pass:boolean)=>{assert.ok(pass,label);checks++;console.log('PASS',label);};
+let checks=0;const check=(label:string,pass:boolean,note?:string)=>{assert.ok(pass,note?`${label} :: ${note}`:label);checks++;console.log('PASS',label,note??'');};
 const browserErrors:string[]=[];
 const identity=JSON.stringify({token:me.token,playerId:me.player.id,kind:me.player.kind,displayName:me.player.displayName});
 const boot=async(page:Page,options:{cached?:boolean;fail?:boolean;delay?:number;anonymous?:boolean;failAuth?:boolean;empty?:boolean;rawIdentity?:string;pwa?:boolean;largeText?:boolean;delayCode?:number;wideCache?:boolean}={})=>{
@@ -77,10 +79,38 @@ const boot=async(page:Page,options:{cached?:boolean;fail?:boolean;delay?:number;
 };
 const state=(p:Page)=>p.evaluate(()=>{
  const svg=document.querySelector<SVGSVGElement>('.world-map-svg');const r=svg?.getBoundingClientRect();
+ const grid=document.getElementById('online-world-grid');const g=grid?.getBoundingClientRect();
+ const vb=(svg?.getAttribute('viewBox')??'').split(/\s+/).map(Number);
+ const cs=svg?getComputedStyle(svg):null,gs=grid?getComputedStyle(grid):null;
  return {box:svg?.getAttribute('viewBox'),rect:r?[r.x,r.y,r.width,r.height]:null,count:document.querySelectorAll('.world-map-svg').length,
   mode:document.getElementById('online-world-screen')?.dataset.livingTerritory,
-  same:!!svg&&svg===(window as any).__livingSvg};
+  same:!!svg&&svg===(window as any).__livingSvg,
+  gridRect:g?[g.x,g.y,g.width,g.height]:null,
+  centre:vb.length===4?[+(vb[0]!+vb[2]!/2).toFixed(3),+(vb[1]!+vb[3]!/2).toFixed(3)]:null,
+  // World units per CSS pixel: the map's material scale. Equal on both axes = no stretch.
+  material:r&&r.width>0&&r.height>0&&vb.length===4?[+(vb[2]!/r.width).toFixed(6),+(vb[3]!/r.height).toFixed(6)]:null,
+  opacity:cs?Number(cs.opacity):null, transform:cs?cs.transform:null,
+  radius:gs?gs.borderRadius:null, background:gs?gs.backgroundImage:null, shadow:gs?gs.boxShadow:null,
+  viewport:[innerWidth,innerHeight]};
 });
+/** WCAG contrast from RENDERED pixels: the key's own face (median) vs its brightest ink. */
+const keyContrast=async(p:Page,selector:string)=>{
+ const shot=await p.locator(selector).screenshot({animations:'disabled'});
+ return p.evaluate(async(b64)=>{
+  const img=new Image();img.src=`data:image/png;base64,${b64}`;await img.decode();
+  const c=document.createElement('canvas');c.width=img.width;c.height=img.height;
+  const ctx=c.getContext('2d')!;ctx.drawImage(img,0,0);
+  const d=ctx.getImageData(0,0,c.width,c.height).data;
+  const lin=(v:number)=>{const s=v/255;return s<=0.04045?s/12.92:((s+0.055)/1.055)**2.4;};
+  const lum:number[]=[];
+  for(let y=Math.floor(c.height*.25);y<Math.ceil(c.height*.75);y++)for(let x=Math.floor(c.width*.25);x<Math.ceil(c.width*.75);x++){
+   const i=(y*c.width+x)*4;lum.push(0.2126*lin(d[i]!)+0.7152*lin(d[i+1]!)+0.0722*lin(d[i+2]!));
+  }
+  lum.sort((a,b)=>a-b);
+  const face=lum[Math.floor(lum.length*.5)]!,ink=lum[Math.floor(lum.length*.995)]!;
+  return +( (ink+0.05)/(face+0.05) ).toFixed(2);
+ },shot.toString('base64'));
+};
 try{
  for(const [name,width,height] of [['phone',390,844],['small',320,568],['large-text',320,568],['pwa',390,844],['tall',430,932],['tablet',768,1024],['desktop',1440,1000],['landscape',844,390]] as const){
   if(process.env.LIVING_CASE)continue;
@@ -110,7 +140,19 @@ try{
    await store.adminAdjustSeeds({playerId:me.player.id,delta:50,reason:'fresh entry read',actorId:'e2e',requestId:'fresh-wallet-entry',now:Date.now()});
   }
   const walletBefore=walletReads;
-  await page.evaluate(()=>{(window as any).__livingSvg=document.querySelector('.world-map-svg');(window as any).__livingTile=document.querySelector('.world-hex');});const before=await state(page);
+  await page.evaluate(()=>{(window as any).__livingSvg=document.querySelector('.world-map-svg');(window as any).__livingTile=document.querySelector('.world-hex');});
+  const before=await state(page);
+  // OWNER, 2026-11-02: "shouldnt be cropped as in territory menu, it should take the whole
+  // background". The MENU's layer must paint to every viewport edge; the Territory panel keeps its
+  // frame (its own screenshot/checks below are unchanged).
+  const fill=(r:number[]|null)=>!!r&&r[0]!<=0.5&&r[1]!<=0.5&&r[0]!+r[2]!>=before.viewport[0]!-0.5&&r[1]!+r[3]!>=before.viewport[1]!-0.5;
+  check(`${name}: menu map is full-bleed, grid to every edge${' '+JSON.stringify({grid:before.gridRect,svg:before.rect,vp:before.viewport})}`,fill(before.gridRect)&&fill(before.rect));
+  check(`${name}: menu map has no crop frame (square, no face, no shadow)`,before.radius==='0px'&&before.background==='none'&&before.shadow==='none');
+  check(`${name}: menu map opacity is ${MENU_MAP_OPACITY} (7% below 0.28)`,Math.abs((before.opacity??1)-MENU_MAP_OPACITY)<=0.0006,`${before.opacity}`);
+  if(name==='small'){
+   const ratio=await keyContrast(page,'#menu-world');
+   check(`small: the menu keys stay legible over the dimmed map (${ratio}:1 ≥ 4.5:1)`,ratio>=4.5);
+  }
   if(name==='phone')await page.evaluate(()=>{
    document.getElementById('menu-world')!.addEventListener('click',()=>{
    const frames:any[]=[];(window as any).__livingFrames=frames;
@@ -119,36 +161,66 @@ try{
    const watchdog=setTimeout(finish,3000);
    const sample=()=>{
     const svg=document.querySelector('.world-map-svg'),screen=document.getElementById('online-world-screen');
-    if(!svg||!screen){frames.push({at:performance.now(),box:null,opacity:0,visible:false,same:false});clearTimeout(watchdog);finish();return;}
-    const frame={at:performance.now(),box:svg.getAttribute('viewBox'),opacity:Number(getComputedStyle(svg).opacity),visible:getComputedStyle(screen).display!=='none',same:svg===(window as any).__livingSvg};
+    const grid=document.getElementById('online-world-grid');
+    if(!svg||!screen||!grid){frames.push({at:performance.now(),box:null,opacity:0,visible:false,same:false,material:null,anim:0});clearTimeout(watchdog);finish();return;}
+    const vb=(svg.getAttribute('viewBox')??'').split(/\s+/).map(Number);
+    const g=grid.getBoundingClientRect();
+    const anims=[...svg.getAnimations()].filter(a=>!("transitionProperty" in a));
+    const frame={at:performance.now(),box:svg.getAttribute('viewBox'),opacity:Number(getComputedStyle(svg).opacity),visible:getComputedStyle(screen).display!=='none',same:svg===(window as any).__livingSvg,
+     material:vb.length===4&&g.width>0?+(vb[2]!/g.width).toFixed(6):null,
+     anim:anims.length,duration:anims[0]?.effect?.getTiming().duration??null,easing:anims[0]?.effect?.getTiming().easing??null,
+     from:(anims[0] as any)?.effect?.getKeyframes?.().map((k:any)=>k.transform)??null};
     frames.push(frame);
     // Software WebKit can spend a frame flushing styles. Keep the same minimum observations
-    // and exact-continuity assertions, and include a settled frame within a finite deadline.
+    // and continuity assertions, and include a settled frame within a finite deadline.
     const now=performance.now();
     if(now<limit&&(now<end||frames.length<3||frame.opacity<.999))requestAnimationFrame(sample);
     else {clearTimeout(watchdog);finish();}
    };requestAnimationFrame(sample);
    },{once:true,capture:true});
   });
-  await page.click('#menu-world');await page.waitForSelector('#online-world-screen:not([hidden])');await page.waitForTimeout(name==='phone'?450:250);
+  await page.click('#menu-world');await page.waitForSelector('#online-world-screen:not([hidden])');await page.waitForTimeout(name==='phone'?450:500);
+  const after=await state(page);
+  const after0=await page.evaluate(()=>{const svg=document.querySelector('.world-map-svg')!;const grid=document.getElementById('online-world-grid')!;const vb=(svg.getAttribute('viewBox')??'').split(/\s+/).map(Number);const r=svg.getBoundingClientRect(),g=grid.getBoundingClientRect();return {box:vb,rect:[r.x,r.y,r.width,r.height],gridRect:[g.x,g.y,g.width,g.height]};});
   if(name==='phone'){
    await page.evaluate(()=>(window as any).__livingFramesDone);
-   const frames=await page.evaluate(()=>(window as any).__livingFrames as {at:number;box:string;opacity:number;visible:boolean;same:boolean}[]);
-   const continuous=frames.length>2&&frames.every(f=>f.same&&f.visible&&f.box===before.box);
-   check(`every transition frame retains the visible map and exact camera${continuous?'':' '+JSON.stringify({before:before.box,frames})}`,continuous);
+   const frames=await page.evaluate(()=>(window as any).__livingFrames as {at:number;box:string;opacity:number;visible:boolean;same:boolean;material:number|null;anim:number;duration:number|null;easing:string|null;from:string[]|null}[]);
+   const material0=before.material![0]!;
+   const stable=frames.length>2&&frames.every(f=>f.same&&f.visible&&f.material!==null&&Math.abs(f.material-material0)<0.0005);
+   check(`every transition frame retains the one map at the same tile scale${stable?'':' '+JSON.stringify({before:before.box,frames})}`,stable);
+   // CONTENT CONTINUITY, PROVEN FROM THE ANIMATION ITSELF: its first keyframe must be exactly the
+   // translation that maps the panel's rendering onto the menu's last rendering. Sampling a tile
+   // would measure an already-progressed frame; the keyframe is what the very first painted frame
+   // uses, so this is the real handoff, not an approximation of it.
+   const animated=frames.find(f=>f.anim>0);
+   const beforeBox=(before.box??'').split(/\s+/).map(Number);
+   const mm=before.material![0]!;
+   const s=(after0.box[2]!/after0.gridRect![2]!)/mm;
+   const dx=(after0.box[0]!-beforeBox[0]!)/mm+(before.rect![0]!-after0.gridRect![0]!)+(after0.gridRect![2]!/2)*(s-1);
+   const dy=(after0.box[1]!-beforeBox[1]!)/mm+(before.rect![1]!-after0.gridRect![1]!)+(after0.gridRect![3]!/2)*(s-1);
+   const got=[...(String(animated?.from?.[0]??'')).matchAll(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi)].map(m=>Number(m[0]));
+   const handoff=got.length>=2&&Math.abs(got[0]!-dx)<=0.5&&Math.abs(got[1]!-dy)<=0.5&&(got.length<3||Math.abs(got[2]!-s)<=0.002);
+   check(`the map continues from the menu's own pixels into the frame (start ${JSON.stringify(got)} = ${[+dx.toFixed(2),+dy.toFixed(2),+s.toFixed(4)]})`,handoff);
+   check('the settle runs on the interface opening beat (150ms, its easing)',
+     frames.some(f=>f.anim>0&&f.duration===INTERFACE_MOTION.open&&f.easing===INTERFACE_MOTION.easeOpen),
+     JSON.stringify(frames.filter(f=>f.anim>0).slice(0,1)));
    check('clarity transition reaches full contrast',frames.at(-1)!.opacity>.99);
    const gaps=frames.slice(1).map((f,i)=>f.at-frames[i]!.at).sort((a,b)=>a-b);console.log('INFO transition frame p95 ms',gaps[Math.floor(gaps.length*.95)]);
   }
-  const after=await state(page);check(`${name}: opening retains surface and exact camera${after.same&&before.box===after.box?'':' '+JSON.stringify({before,after})}`,after.same&&before.box===after.box);
+  const afterUnstretched=!!after.material&&Math.abs(after.material[0]!/after.material[1]!-1)<0.002;
+  check(`${name}: opening keeps one surface and an unstretched tile${after.same&&afterUnstretched?'':' '+JSON.stringify({after})}`,after.same&&afterUnstretched);
+  check(`${name}: opening crops the menu's full-bleed view into the Territory panel`,!!after.rect&&!!before.rect&&after.rect[2]!<before.rect[2]!&&after.rect[3]!<before.rect[3]!);
   if(name==='phone'){
    check('known menu wallet avoids a first-open tile rebuild',await page.evaluate(()=>document.querySelector('.world-hex')===(window as any).__livingTile));
    check(`known identity private metadata is fetched once on entry (${walletReads-walletBefore})`,walletReads-walletBefore===1);
    check('entry still replaces the known wallet with its fresh server balance',await page.evaluate(()=>document.querySelector('.world-seeds')?.textContent?.replace(/\D/g,'')==='1750'));
   }
-  check(`${name}: only uniform material-scale movement`,!!before.rect&&!!after.rect&&Math.abs(after.rect[2]!/before.rect[2]!-after.rect[3]!/before.rect[3]!)<.002);
+  check(`${name}: the map keeps true hexagons on both surfaces (no stretch)`,!!before.material&&!!after.material&&Math.abs(before.material[0]!/before.material[1]!-1)<.002&&Math.abs(after.material[0]!/after.material[1]!-1)<.002);
   await page.screenshot({path:`${shots}/territory-${name}.png`});
   await page.click('#online-world-back');await page.waitForSelector('#menu:not([hidden])');await page.waitForTimeout(200);
-  const back=await state(page);check(`${name}: return retains camera and map`,back.same&&back.box===after.box&&back.mode==='menu');
+  const back=await state(page);
+  const backSame=back.same&&back.mode==='menu'&&!!back.material&&Math.abs(back.material[0]!/back.material[1]!-1)<0.002;
+  check(`${name}: return retains the one map as a true, unstretched hex field`,backSame,JSON.stringify({after,back}));
   check(`${name}: returning restores keyboard focus`,await page.evaluate(()=>document.activeElement?.id==='menu-world'));
   check(`${name}: no horizontal page overflow`,await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   check(`${name}: every visible menu key fits`,await page.evaluate(()=>[...document.querySelectorAll<HTMLElement>('#menu button')].filter(e=>e.offsetWidth&&e.offsetHeight).every(e=>{const r=e.getBoundingClientRect();return r.top>=-1&&r.bottom<=innerHeight+1&&r.left>=-1&&r.right<=innerWidth+1;})));
@@ -164,12 +236,19 @@ try{
    await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);await page.mouse.wheel(0,-180);await page.waitForTimeout(200);
    const panned=await state(page);check('existing zoom still works',panned.box!==after.box);
    await page.click('#online-world-back');await page.waitForTimeout(200);await page.click('#menu-world');await page.waitForTimeout(200);
-   check('deliberate camera survives re-entry',(await state(page)).box===panned.box);
+   const reopened=await state(page);
+   const near=(a:string|null|undefined,b:string|null|undefined)=>!!a&&!!b&&a.split(/\s+/).every((v,i)=>Math.abs(Number(v)-Number(b.split(/\s+/)[i]))<1e-3);
+   check('deliberate camera survives re-entry',near(reopened.box,panned.box??null),JSON.stringify({panned:panned.box,reopened:reopened.box}));
    // A real newly claimed tile, followed by return and the menu's existing fresh read.
    await store.claim(me.player.id,'-3,-3','new-claim-menu',Date.now());await page.click('#online-world-back');
    await page.waitForFunction(()=>document.querySelector('.world-hex[data-cell-id="-3,-3"]')?.classList.contains('mine'));
    check('menu reflects a new authoritative claim',true);
-   await page.emulateMedia({reducedMotion:'reduce'});await page.click('#menu-world');await page.click('#online-world-back');
+   await page.emulateMedia({reducedMotion:'reduce'});await page.click('#menu-world');
+   check('reduce motion: the map opens with no settle and no transform',await page.evaluate(()=>{
+    const s=document.querySelector<SVGSVGElement>('.world-map-svg');
+    return !!s&&s.getAnimations().filter(a=>!("transitionProperty" in a)).length===0&&getComputedStyle(s).transform==='none';
+   }));
+   await page.click('#online-world-back');
    check('reduced motion returns immediately',await page.evaluate(()=>!document.getElementById('menu')!.hidden));
    await page.setViewportSize({width:844,height:390});await page.waitForTimeout(200);
    check('rotation keeps finite camera',(await state(page)).box!.split(/\s+/).every(v=>Number.isFinite(Number(v))));

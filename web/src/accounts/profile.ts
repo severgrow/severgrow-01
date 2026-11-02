@@ -22,16 +22,20 @@ import { countryName, flagOf } from '../logic/country.js';
 import { SEEDS_WORD } from '../online/seed-icon.js';
 import { createWordmarkMark } from '../player/branding.js';
 import { HEX_TILE_POINTS } from '../player/hex-tile.js';
+import { colourById, colourIdFor } from '../../../src/tile-colours.js';
 import { groupDigits } from '../logic/format.js';
 import { enterSurface, exitSurface } from '../ui/interface-motion.js';
+
+/** The one tile colour the profile draws, in the shape the map already knows. */
+export type ProfileColour = Readonly<{ css: string; name: string }>;
 
 export type ProfileFacts = {
   /** The player's display name with its #TAG, or null when the device has none. */
   name: string | null;
   /** ISO 3166-1 alpha-2 of the country the device places itself in, or null when unknown. */
   country: string | null;
-  /** The colour this player's Territory tiles wear, or null when it could not be read. */
-  colour: { css: string; name: string } | null;
+  /** The colour this player's Territory tiles wear. Never null for a signed-in player. */
+  colour: ProfileColour;
   /** The server wallet balance, or null when the read is unknown. */
   seeds: number | null;
   /** Cells this player OWNS in the shared world, or null when the read is unknown. */
@@ -45,6 +49,20 @@ export type ProfileFacts = {
 };
 
 export type ProfileRow = Readonly<{ label: string; value: string }>;
+
+/**
+ * THE PLAYER'S COLOUR IS NEVER MISSING (owner, 2026-11-02: "i cant see the color hex in profile").
+ * The server read is the first answer, but a player who has never picked a colour — or a read that
+ * failed, was slow or was rate-limited — still HAS a colour: `colourIdFor` derives the same
+ * deterministic slot the public map paints this player with. Showing the server's answer when it
+ * arrives and the map's own default otherwise means the swatch can neither vanish nor disagree with
+ * the map. Pure, so the fallback is testable without a DOM or a network.
+ */
+export const profileColour = (playerId: string, read: ProfileColour | null): ProfileColour => {
+  if (read) return read;
+  const colour = colourById(colourIdFor(playerId));
+  return { css: colour.css, name: colour.name };
+};
 
 /** A known, sane count, or the honest em dash. A count is a whole, non-negative number. */
 const count = (n: number | null): string =>
@@ -159,20 +177,17 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     }
 
     // The player's own tile colour, drawn as the MAP draws a hex (flat left/right edges, a point
-    // top and bottom), so the profile shows the same object as the board.
+    // top and bottom), so the profile shows the same object as the board. `facts.colour` is never
+    // null (see `profileColour`), so the only way this hides is a build whose markup has no swatch.
+    // The element is an SVG: SVGElement has no `hidden` IDL property, so the old `swatch.hidden =
+    // true` was a no-op expando and the markup's `hidden` attribute never came off — the tile was
+    // invisible no matter what the read said (owner, 2026-11-02). Toggle the ATTRIBUTE.
     if (swatch) {
-      swatch.hidden = !facts.colour;
-      if (facts.colour) {
-        swatch.style.setProperty('--tile', facts.colour.css);
-        swatch.setAttribute('role', 'img');
-        swatch.setAttribute('aria-label', facts.colour.name);
-        swatch.setAttribute('title', facts.colour.name);
-      } else {
-        swatch.style.removeProperty('--tile');
-        swatch.removeAttribute('role');
-        swatch.removeAttribute('aria-label');
-        swatch.removeAttribute('title');
-      }
+      swatch.toggleAttribute('hidden', !facts.colour);
+      swatch.style.setProperty('--tile', facts.colour.css);
+      swatch.setAttribute('role', 'img');
+      swatch.setAttribute('aria-label', facts.colour.name);
+      swatch.setAttribute('title', facts.colour.name);
     }
 
     fillGrid(offlineGrid!, facts.offline);

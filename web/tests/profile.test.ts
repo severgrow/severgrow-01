@@ -18,8 +18,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MENU, PROFILE } from '../../src/strings.js';
-import { installProfileUI, profileRows } from '../src/accounts/profile.js';
+import { installProfileUI, profileColour, profileRows } from '../src/accounts/profile.js';
 import { SEEDS_WORD } from '../src/online/seed-icon.js';
+import { colourById, colourIdFor } from '../../src/tile-colours.js';
 import type { ProfileFacts } from '../src/accounts/profile.js';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
@@ -153,12 +154,32 @@ describe('the flag and the colour tile are decoration, never a placeholder', () 
     expect(nameRow).toMatch(/id="profile-colour"[^>]*hidden/);
   });
 
-  it('hides each mark when its fact is unknown', () => {
+  it('hides the flag when its fact is unknown, and drives the swatch by ATTRIBUTE', () => {
     const source = read('../src/accounts/profile.ts');
     expect(source).toMatch(/flag\.hidden = glyph === ''/);
-    expect(source).toMatch(/swatch\.hidden = !facts\.colour/);
+    // The swatch is an SVG, which has no `hidden` IDL property: the ATTRIBUTE is the only thing
+    // that hides it (owner, 2026-11-02: the old `.hidden =` write never removed the markup's
+    // attribute, so the tile could never appear).
+    expect(source).toMatch(/swatch\.toggleAttribute\('hidden', !facts\.colour\)/);
     // The colour is painted through one custom property, so the swatch shares the map's colour.
     expect(source).toMatch(/swatch\.style\.setProperty\('--tile', facts\.colour\.css\)/);
+  });
+
+  it('always has a colour for a signed-in player, even before or without the server read', () => {
+    // A player who never chose a colour still HAS one: the map derives it from the player id.
+    for (const playerId of ['fixture-player', 'p-1', 'a'.repeat(40), 'zz-9']) {
+      const fallback = profileColour(playerId, null);
+      const expected = colourById(colourIdFor(playerId));
+      expect(fallback).toEqual({ css: expected.css, name: expected.name });
+      expect(fallback.css).toMatch(/^hsl\(/);
+    }
+    // The server's answer, when it arrives, wins over the derived default.
+    const chosen = { css: 'hsl(300 40% 50%)', name: 'Fuchsia' };
+    expect(profileColour('fixture-player', chosen)).toBe(chosen);
+    // The mount seeds the panel from that same fallback, so a failed/slow read never blanks it.
+    expect(mountSource).toMatch(/colour: profileColour\(identity\.playerId, null\)/);
+    // And a rejected read is swallowed; the default stays painted.
+    expect(mountSource).toMatch(/\}\)\.catch\(\(\) => null\)/);
   });
 
   it('draws the Futasaku mark with the game’s own asset, not a new logo', () => {
@@ -186,6 +207,21 @@ describe('the flag and the colour tile are decoration, never a placeholder', () 
     const swatchCss = /\.sp-swatch \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
     expect(swatchCss).not.toContain('border-radius');
     expect(styleCss).toMatch(/\.sp-swatch-face \{\s*fill: var\(--tile/);
+    // OWNER, 2026-11-02: read as a hexagon at a glance. 23 x 23 around a -12 -12 24 24 viewBox
+    // draws the hex at ~19 x 22 CSS px (the old 13 x 15 was a stamp, and its 0 0 24 24 viewBox
+    // clipped the centred points to a quadrant).
+    expect(swatchCss).toContain('width: 23px');
+    expect(swatchCss).toContain('height: 23px');
+    expect(nameRow).toContain('viewBox="-12 -12 24 24"');
+  });
+
+  it('sizes the wordmark for the nameplate, not as a stamp (owner, 2026-11-02)', () => {
+    // The wide mark is 2200 x 715: width is the lever. 56px is 2.55x the old 22px and leaves the
+    // 44/46px nameplate row and its centred title untouched (the two side cells are equal).
+    const brandCss = /#sheet-profile \.sp-brand svg \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    expect(brandCss).toContain('width: 56px');
+    const headCss = /#sheet-profile \.sp-head \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    expect(headCss).toContain('grid-template-columns: 56px 1fr 56px');
   });
 });
 

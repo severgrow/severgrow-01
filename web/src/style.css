@@ -2431,7 +2431,11 @@ html.futasaku-product .install-prompt-scrim {
    the title sits on the panel's own centre line. */
 #sheet-profile .sp-head {
   display: grid;
-  grid-template-columns: 44px 1fr 44px;
+  /* The nameplate keeps its 44px row and its centre line: the two side cells are equal, so the
+     title is centred on the head whatever the mark's width. They are 56px because the wordmark at
+     the HUD badge's own proportion needs it (owner, 2026-11-02: "the logo in profile on left is too
+     small"). 56px is 2.55x the old 22px stamp and still leaves the title wide air at 320px. */
+  grid-template-columns: 56px 1fr 56px;
   align-items: center;
   min-height: 46px;
   padding: 0 0 2px;
@@ -2469,9 +2473,12 @@ html.futasaku-product .install-prompt-scrim {
   justify-content: flex-start;
   opacity: 0.9;
 }
+/* The mark is 2200 x 715, so WIDTH is the only sensible lever: at 56px the wide wordmark is
+   18.2px tall, 41% of the 44px row and close to the HUD badge's own 22px on its 44px row. It
+   still sits dead centre in the row (align-items: center), so the nameplate never grows. */
 #sheet-profile .sp-brand svg {
   display: block;
-  width: 22px;
+  width: 56px;
   height: auto;
 }
 /* The five rows: full width, one hairline between neighbours (never a box around each), label on
@@ -2548,11 +2555,16 @@ html.futasaku-product .install-prompt-scrim {
 /* One tile's worth of the player's own colour, as the MAP draws a hex: a flat vertical edge on the
    left and right, a point at the top and bottom (web/src/player/hex-tile.ts). The silhouette is an
    SVG polygon, so it stays crisp at any density; the hairline keeps a pale colour visible on the
-   sheet's own ground. */
+   sheet's own ground.
+   OWNER, 2026-11-02: "i cant see the color hex in profile". It was 13 x 15 (a stamp when it showed
+   at all) and the SVG carried a 0 0 24 24 viewBox while its points are centred on 0, which cropped
+   the tile to its lower-right quadrant. It is now a 23 x 23 box around a -12 -12 24 24 viewBox: at
+   that box the drawn hex is ~19 x 22 CSS px, read as a hexagon at a glance, on the name's centre
+   line (the name line already aligns its children on the centre). */
 #sheet-profile .sp-swatch {
   flex: none;
-  width: 13px;
-  height: 15px;
+  width: 23px;
+  height: 23px;
   overflow: visible;
 }
 #sheet-profile .sp-swatch-face {

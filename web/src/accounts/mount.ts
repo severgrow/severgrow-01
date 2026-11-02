@@ -17,7 +17,7 @@ import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
 import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
 import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
 import { glassBaseCss } from '../player/glass-surface.js';
-import { installProfileUI } from './profile.js';
+import { installProfileUI, profileColour } from './profile.js';
 import { EMAIL_ON_KEY, GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
 import type { ProfileFacts } from './profile.js';
 import { STATS_KEY, parseStats } from '../logic/stats.js';
@@ -668,7 +668,9 @@ export const mountAccounts = async (): Promise<void> => {
     return {
       name: shownName(identity),
       country: browserCountry(),
-      colour: null,
+      // The map's own deterministic colour from the first frame; a successful read replaces it with
+      // the player's chosen colour. A failed read therefore leaves a TRUTHFUL tile, never a blank.
+      colour: profileColour(identity.playerId, null),
       seeds: pair?.seeds ?? null,
       tiles: pair?.tiles ?? null,
       matchesWon: matchesWonEver(offline, null),
@@ -678,14 +680,15 @@ export const mountAccounts = async (): Promise<void> => {
   };
 
   /** The player's tile colour, for the one tile the profile draws beside their name. */
-  const readColour = (token: string): Promise<ProfileFacts['colour']> =>
+  const readColour = (token: string): Promise<ProfileFacts['colour'] | null> =>
     apiGet('/v1/world/colour', token).then((body) => {
       const colour = (body as { colour?: { colourId?: unknown; colour?: unknown } } | null)?.colour;
       const id = typeof colour?.colourId === 'number' ? colour.colourId : null;
       const css = typeof colour?.colour === 'string' ? colour.colour : null;
       if (id === null || !css) return null;
       return { css, name: TILE_COLOURS[id]?.name ?? css };
-    });
+    // A read that fails is not a reason to hide the tile: the deterministic default stays painted.
+    }).catch(() => null);
 
   const openProfile = () => {
     const s = signedIn();
