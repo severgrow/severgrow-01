@@ -19,10 +19,7 @@ import {
   reconcileProgress,
 } from '../../src/campaign/index.js';
 import type { CampaignProgress } from '../../src/campaign/index.js';
-import {
-  readAccountIdentity,
-  syncAccountProgress,
-} from '../src/logic/account-progress.js';
+import { readAccountIdentity } from '../src/logic/account-progress.js';
 import { tutorialLevel, tutorialLevels } from '../src/logic/campaign.js';
 import { IDENTITY_STORAGE_KEY } from '../src/online/identity.js';
 import type { KeyValue } from '../../server/src/client.js';
@@ -115,56 +112,14 @@ describe("the server's known place raises a local record, never lowers it", () =
   });
 });
 
-describe('only a signed-in ACCOUNT is synced', () => {
+describe('the identity the account read is allowed to use', () => {
   const account = (kind: 'guest' | 'account') => kv({ [IDENTITY_STORAGE_KEY]: accountIdentity(kind) });
-
-  it('a guest never asks the server and keeps its local record', async () => {
-    const local = placeAt(5);
-    let asked = 0;
-    const after = await syncAccountProgress(local, {
-      storage: account('guest'),
-      fetchHighest: async () => { asked += 1; return 36; },
-    });
-    expect(asked).toBe(0);
-    expect(after).toBe(local);
-  });
-
-  it('no identity on the device is the same local-only game', async () => {
-    const local = placeAt(5);
-    let asked = 0;
-    const after = await syncAccountProgress(local, {
-      storage: kv(),
-      fetchHighest: async () => { asked += 1; return 36; },
-    });
-    expect(asked).toBe(0);
-    expect(after).toBe(local);
-  });
-
-  it('a signed-in account is raised from the server', async () => {
-    const local = placeAt(1);
-    const after = await syncAccountProgress(local, {
-      storage: account('account'),
-      fetchHighest: async (token) => {
-        expect(token).toBe('token-account');
-        return 36;
-      },
-    });
-    expect(currentLevel(after).number).toBe(37);
-  });
-
-  it('a failed read changes nothing and never throws at the caller', async () => {
-    const local = placeAt(5);
-    const after = await syncAccountProgress(local, {
-      storage: account('account'),
-      fetchHighest: async () => { throw new Error('network down'); },
-    });
-    expect(after).toBe(local);
-  });
 
   it('reads only the stored identity, and tolerates a malformed one', () => {
     expect(readAccountIdentity(null)).toBeNull();
     expect(readAccountIdentity(kv({ [IDENTITY_STORAGE_KEY]: '{not json' }))).toBeNull();
     expect(readAccountIdentity(kv({ [IDENTITY_STORAGE_KEY]: JSON.stringify({ token: 't' }) }))).toBeNull();
     expect(readAccountIdentity(account('account'))).toMatchObject({ token: 'token-account', kind: 'account' });
+    expect(readAccountIdentity(account('guest'))).toMatchObject({ kind: 'guest' });
   });
 });

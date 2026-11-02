@@ -459,6 +459,21 @@ export class DuelClient {
     return typeof level === 'number' && Number.isFinite(level) && level >= 1 ? level : null;
   }
 
+  /**
+   * The account's furthest verified Campaign level (owner brief, 2026-11-01). One authenticated GET
+   * scoped to the token, one store statement: the same `campaignHighestLevel` the wallet carries,
+   * which is a single indexed `max` over the player's campaign receipts. It is NOT the
+   * `campaign_clears` table (migration 0021): that is only written when a reward proof is
+   * submitted, so ordinary campaign wins never appear there. The caller owns the deadline and the
+   * cache.
+   */
+  async accountCampaignHighest(token: string, options: { signal?: AbortSignal } = {}): Promise<number | null> {
+    const response = await this.request<{ campaign?: { highestLevel?: unknown } }>(
+      'GET', '/v1/players/me/campaign', { token, ...(options.signal ? { signal: options.signal } : {}) });
+    const level = response.campaign?.highestLevel;
+    return typeof level === 'number' && Number.isInteger(level) && level >= 1 ? level : null;
+  }
+
   async claimWorld(token: string, cellId: string, requestId: string): Promise<ClaimResult> {
     const response = await this.request<{ claim: ClaimResult }>('POST', '/v1/world/claims', { token, body: { cellId, requestId } });
     return response.claim;

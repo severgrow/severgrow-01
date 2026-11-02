@@ -12,6 +12,7 @@ import { MemoryStorage } from '../src/storage/memory.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
 import { WorldEconomyService } from '../src/seeds/service.js';
 import { createWorldEconomyRouter } from '../src/seeds/router.js';
+import { createFetchApp } from '../src/fetch-app.js';
 
 const config = (): ServerConfig => ({
   ...DEFAULT_SERVER_CONFIG,
@@ -54,6 +55,61 @@ const wallet = (h: ReturnType<typeof harness>, token: string | null, search = ''
     method: 'GET',
     ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
   }), '/v1/seeds/wallet');
+
+describe("the account's furthest campaign level is one authenticated read", () => {
+  const app = (h: ReturnType<typeof harness>) => createFetchApp({ service: h.service, config: config() });
+  const readHighest = async (h: ReturnType<typeof harness>, token: string | null) => {
+    const res = await app(h)(new Request('https://futasaku.test/v1/players/me/campaign', {
+      method: 'GET',
+      ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
+    }));
+    return { status: res.status, body: await res.json() as Record<string, unknown> };
+  };
+
+  it('returns the highest campaign receipt, not a campaign_clears row', async () => {
+    const h = harness();
+    const a = await player(h);
+    // Nothing cleared yet is an honest null, not an error and not zero.
+    expect(await readHighest(h, a.token)).toMatchObject({
+      status: 200, body: { ok: true, campaign: { highestLevel: null } },
+    });
+
+    // The receipt is what an ordinary win writes. `campaign_clears` is deliberately left empty: it
+    // only fills when a reward proof is submitted, so it cannot be the account's source of truth.
+    for (const level of [1, 3, 10]) await cleared(h, a.record.id, level);
+    const res = await readHighest(h, a.token);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, campaign: { highestLevel: 10 } });
+    expect(await h.store.campaignClears(a.record.id)).toEqual([]);
+  });
+
+  it('a lesson:10 receipt has no ordinal, so it does not move the highest level', async () => {
+    const h = harness();
+    const a = await player(h);
+    await h.store.settle({
+      playerId: a.record.id, sourceKey: 'lesson:10', mode: 'campaign', outcome: 'win',
+      opponentId: null, now: Date.UTC(2026, 9, 1), lessonLevel: 10,
+    });
+    expect(await readHighest(h, a.token)).toMatchObject({ body: { campaign: { highestLevel: null } } });
+  });
+
+  it('reads only the token’s own clears, never another player’s', async () => {
+    const h = harness();
+    const a = await player(h);
+    const b = await player(h);
+    for (const level of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) await cleared(h, a.record.id, level);
+    await cleared(h, b.record.id, 5);
+
+    expect(await readHighest(h, a.token)).toMatchObject({ body: { campaign: { highestLevel: 10 } } });
+    expect(await readHighest(h, b.token)).toMatchObject({ body: { campaign: { highestLevel: 5 } } });
+  });
+
+  it('refuses an unauthenticated or unknown token', async () => {
+    const h = harness();
+    expect((await readHighest(h, null)).status).toBe(401);
+    expect((await readHighest(h, 'not-a-real-token')).status).toBe(401);
+  });
+});
 
 describe("the wallet read also reports the account's furthest cleared Campaign level", () => {
   it('is the highest campaign receipt, null when the player has never cleared one', async () => {

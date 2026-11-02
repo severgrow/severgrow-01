@@ -162,6 +162,17 @@ export class MatchService {
   }
 
   /**
+   * THE ACCOUNT'S FURTHEST VERIFIED CAMPAIGN LEVEL. One store read from the id the token names —
+   * never an id from the request — so an account can only ever read its own place. This is the
+   * existing `campaignHighestLevel` (a single indexed `max` over the player's campaign receipts),
+   * never the reward-proof-only `campaign_clears` table; `null` when there is no economy attached.
+   */
+  async campaignHighestLevel(player: PlayerRecord): Promise<number | null> {
+    if (!this.economy) return null;
+    return this.economy.campaignHighestLevel(player);
+  }
+
+  /**
    * One device posts its RUNNING totals. They are cumulative, so storage keeps the highest value
    * each counter has seen; the response is the fresh aggregate for the whole account.
    */

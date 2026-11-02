@@ -131,6 +131,20 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return { status: 200, body: { ok: true, offline: await service.offlineStats(player), serverNow: service.serverNow() } };
     }
 
+    // THE ACCOUNT'S FURTHEST CAMPAIGN LEVEL (owner brief, 2026-11-01). One authenticated read for
+    // the first-run nudge, and ONE source: `campaignHighestLevel`, the same single indexed `max`
+    // over the player's `campaign:cN-M` receipts the map uses. Deliberately NOT `campaign_clears`
+    // (that table is only written when a reward proof is submitted, so ordinary wins never land in
+    // it). Levels unlock in order, so "highest = N" means chapter-1 levels 1..N are cleared; the
+    // client derives the lamps. A guest is never asked: the client only calls this with an account.
+    if (method === 'GET' && path === '/v1/players/me/campaign') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      return {
+        status: 200,
+        body: { ok: true, campaign: { highestLevel: await service.campaignHighestLevel(player) }, serverNow: service.serverNow() },
+      };
+    }
+
     if (method === 'POST' && path === '/v1/players/me/offline') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
       const body = asRecord(await readJson(req, config.maxBodyBytes));

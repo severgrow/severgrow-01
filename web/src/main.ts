@@ -39,6 +39,8 @@ import { EMPTY_SEL, futa04OneTap, growControls, heldMoveWord, isBoardAction, kin
 import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
 import { ONBOARDING_LEVELS, guideKey, onboardGuide, revealTierFor } from './logic/onboarding.js';
+// The first-run nudge: ten lamps on the PLAY key, painted from campaign progress (menu/first-run.ts).
+import { installFirstRunLamps } from './menu/first-run.js';
 import { whyNotTap, placedHexKeys } from './logic/tap-why.js';
 import {
   DESK_IDLE,
@@ -145,6 +147,7 @@ import {
   isUnlocked,
   nextCampaignLevel,
   parseProgress,
+  reconcileProgress,
   serializeProgress,
   CAMPAIGN_PROGRESS_KEY,
 } from '../../src/campaign/index.js';
@@ -165,7 +168,13 @@ import {
   TUTORIAL_LEVEL_COUNT,
 } from './logic/campaign.js';
 import type { CampaignMatchKind } from './logic/campaign.js';
-import { fetchAccountHighestLevel, fetchServerFeatures, syncAccountProgress } from './logic/account-progress.js';
+import { fetchServerFeatures } from './logic/account-progress.js';
+import {
+  cachedAccountClearsForThisDevice,
+  fetchAccountHighestLevel,
+  forgetAccountClears,
+  loadAccountClears,
+} from './menu/account-clears.js';
 import { dealFor, finishDeal, markMoved, randomDealsEnabled, readRest, refreshRandomDeals, restLeftMs, startDeal, writeRest } from './logic/campaign-deals.js';
 import {
   freeTurnGuide, migrateTutorialProgress, nextTutorialChapter, previousTutorialChapter,
@@ -756,6 +765,12 @@ function syncMenuResume(): boolean {
   return showContinue;
 }
 /**
+ * THE FIRST-RUN NUDGE's painter (menu/first-run.ts). Built once at module scope — the same place the
+ * press primitive and the hand's breath are installed — so every later menu pass is one pure read
+ * and one DOM apply, with no listener, timer or storage of its own.
+ */
+const firstRunLamps = installFirstRunLamps();
+/**
  * Every control of the product menu that depends only on compile-time channel flags, the saved-game
  * storage and `src/strings.ts` — never the network. Extracted from `showScreen` so boot can lay the
  * menu out in its SYNCHRONOUS prefix (before the first `await`): a first-time tester then sees a way
@@ -772,7 +787,9 @@ function layoutMenu(canContinue: boolean) {
   // it; the legacy channels keep the flat menu they are used to.
   const online = onlineBuildEnabled();
   $('menu-play').hidden = !FEATURES.campaign;
-  $('menu-play').textContent = MENU.play;
+  // The key's word goes into its own node, so the nudge's lamps inside the key survive a layout pass
+  // (menu-play-lessons, painted below from campaign progress).
+  $('menu-play-label').textContent = MENU.play;
   $('menu-play').setAttribute('aria-label', MENU.play);
   $('play-title').textContent = MENU.playTitle;
   // The bottom row is a GROUP (owner brief, 2026-10-21): LOG IN (or the player's name) on the left,
@@ -823,6 +840,11 @@ function layoutMenu(canContinue: boolean) {
     const stillTeaching = !!target && lessonsDone < lessonsTotal && lessonFor(target.number) !== null;
     readout.textContent = stillTeaching ? CAMPAIGN.lessonsCompleted(lessonsDone, lessonsTotal) : '';
     readout.hidden = !stillTeaching;
+    // THE FIRST-RUN NUDGE (owner brief, 2026-11-01): the ten lamps on PLAY, painted from the SAME
+    // record this pass already reads, unioned with any ACCOUNT answer already on the device (the
+    // cached read, or one that arrived after boot). This pass stays synchronous — one pure read and
+    // one DOM apply. It retires itself the moment c1-10 is cleared in either source.
+    firstRunLamps.paint(campaignProgress, accountClears);
     if (entry.kind === 'list') {
       cmp.textContent = MENU.levels;
       cmp.setAttribute('aria-label', MENU.levelsAria);
@@ -3036,6 +3058,10 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
           turns: p.after.turnNumber,
         });
         if (after !== campaignProgress) {
+          // A NEW clear changes the account too. Forget the remembered account answer so the NEXT
+          // open asks once more; this session keeps the device half, which already contains this win,
+          // so the lamps stay correct without a second request.
+          if (after.completed.length > campaignProgress.completed.length) forgetAccountClears(store);
           campaignProgress = after;
           saveCampaignProgress();
         }
@@ -3542,10 +3568,16 @@ const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializePro
 /**
  * An ACCOUNT's place lives on the server (owner report, 2026-10-25: level 35 on the phone, level 1
  * on the desktop). Campaign progress is still device-local for a guest; for a signed-in account one
- * authenticated read of the furthest verified clear RAISES this device's record to match. It never
- * lowers it, never runs for a guest, and a failed read leaves the local game exactly as it was with
- * no error shown. The reconciliation itself is pure and unit-tested (`reconcileProgress`).
+ * authenticated read of the account's verified clears both RAISES this device's record to match and
+ * lights the first-run nudge's lamps (the union of device and account). It never lowers the record,
+ * never runs for a guest, and a failed read leaves everything exactly as it was with no error shown.
+ * The reconciliation itself is pure and unit-tested (`reconcileProgress`).
+ *
+ * The cached answer is read synchronously HERE, before the first menu paint, so a returning player
+ * whose account has finished the ten never sees the nudge flash on from an empty device record. With
+ * no cache, the device record paints first and the network answer refines the lamps when it arrives.
  */
+let accountClears: readonly number[] | null = cachedAccountClearsForThisDevice(store);
 /**
  * Whether this server can check a random campaign deal (owner, 2026-11-01). Remembered on the device,
  * so offline play keeps the last answer; asked once at boot. Until the server says yes, levels 11+
@@ -3557,18 +3589,39 @@ async function syncRandomDeals(): Promise<void> {
   campaignRandomDeals = await refreshRandomDeals(store, fetchServerFeatures);
 }
 
+/**
+ * THE ONE ACCOUNT READ (owner brief, 2026-11-01). Signed-in only, at most once per player per page
+ * session, and cached on the device. The answer serves BOTH consumers: it raises the local record
+ * (the existing account-place rule) and it is the account half of the nudge's union. A
+ * failure/absence is silent and leaves the device lamps exactly as they are.
+ *
+ * The answer is the account's FURTHEST verified Campaign level (`campaignHighestLevel`, one indexed
+ * `max` over its campaign receipts) — never `campaign_clears`, which only holds reward-proof rows.
+ * Levels unlock in order, so `levelsFromHighest` turns that one number into the cleared chapter-1
+ * levels the lamps union.
+ */
 async function syncAccountLevel(): Promise<void> {
-  if (!FEATURES.campaign) return;
-  const before = campaignProgress;
-  const after = await syncAccountProgress(campaignProgress, {
+  if (!FEATURES.campaign || !onlineBuildEnabled()) return;
+  const beforeProgress = campaignProgress;
+  const beforeClears = accountClears;
+  const result = await loadAccountClears({
     storage: store,
     fetchHighest: fetchAccountHighestLevel,
   });
-  if (after === before) return;
-  campaignProgress = after;
-  saveCampaignProgress();
-  // The menu's LEVEL <n> entry is painted from progress; repaint it in place so a boot that was
-  // already showing level 1 now names the account's real level, without a reload or a replay.
+  if (result.status === 'signed-out') {
+    accountClears = null;
+  } else if (result.status === 'ok') {
+    accountClears = result.levels;
+    // The same answer, as the "furthest level" the existing account-place rule reads.
+    const after = reconcileProgress(campaignProgress, result.highest);
+    if (after !== campaignProgress) {
+      campaignProgress = after;
+      saveCampaignProgress();
+    }
+  }
+  if (accountClears === beforeClears && campaignProgress === beforeProgress) return;
+  // The menu's LEVEL <n> entry and the lamps are painted from progress; repaint in place so a boot
+  // that was already showing level 1 now names the account's real level, without a reload or replay.
   if (shownScreen === 'menu') layoutMenu(syncMenuResume());
   else if (shownScreen === 'campaign') renderCampaignScreen();
   else if (shownScreen === 'levels') renderLevelGrid();
