@@ -23,6 +23,7 @@ import { WorldView } from './world-view.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { mountWorldSource } from './living-world-source.js';
 import { mountLivingTerritory } from './living-territory.js';
+import { requestPlayerProfile } from '../accounts/profile-request.js';
 import { installTerritoryCountUI, answerWaiting, territoryCounts } from './menu-territory.js';
 import type { TerritoryCounts } from './menu-territory.js';
 import { mountAnswerClock } from './menu-territory-clock.js';
@@ -607,6 +608,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   window.addEventListener('futasaku:screen', event => syncMenuWorld((event as CustomEvent<string>).detail === 'menu'));
   window.addEventListener('pageshow', event => { if(event.persisted) { living?.settle(); if(menuEl?.hidden === false) void refreshMenu(); } });
   worldView.setCue((name) => hooks.cue?.(name));
+  // A rival's tile offers SEE PROFILE; the accounts module owns the sheet and the token, and hears
+  // this request through one zero-dependency event (web/src/accounts/profile-request.ts).
+  worldView.setProfileOpener((playerId, trigger) => requestPlayerProfile(playerId, trigger));
   // The Territory's own-tile level comes from this device's campaign record, not from the server's
   // last paid clear (owner report, 2026-10-24).
   worldView.setMyLevel(() => hooks.campaignLevel?.() ?? null);

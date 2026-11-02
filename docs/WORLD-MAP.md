@@ -102,9 +102,13 @@ tapping empty tile should NOT open the menu and still have option to grow/sell/c
   challenge lamp), CHAT (LATEST, an open book, was removed in v3.5.1). MENU's grille folds into a close mark. Each key opens its
   own page of one window that hangs under the row; the lit key gets a lamp, pressing it again shuts the
   page, and MENU folds everything away. Fit map and My land are gone.
-- **A tap only selects.** The tile bar floats at the map's foot: free ground GROW A TILE → CONFIRM GROW,
-  your ground SELL → CONFIRM SELL, a rival tile beside yours CHALLENGE (opens the offer), contested
-  ground VIEW CHALLENGE. Tapping the same tile again lets it go; a tap on the map shuts an open page.
+- **A tap only selects.** The tile bar floats at the map's foot: free ground's GROW sprout key, your
+  ground's SELL coin (both arm to a tick and confirm on the second press), a rival tile beside yours
+  CHALLENGE (the map's crossed swords, opens the offer), contested ground VIEW CHALLENGE, and any
+  rival tile a SEE PROFILE key (head and shoulders) that opens the same profile sheet in its visitor
+  mode. Every key is an icon-only 44 px hardware key from the MENU row's family: the words are the
+  key's `aria-label` and `title` (`ONLINE.worldGrowKey` etc. in `src/strings.ts`). Tapping the same
+  tile again lets it go; a tap on the map shuts an open page.
 - **Smoothness.** The SVG Gaussian blurs re-rendered on every frame of a pan: at 4x CPU throttle pan and
   pinch frames ran at p95 50 ms. While the map moves (pan, pinch, wheel, a glide) `.world-grid.moving`
   draws them sharp and pauses the ambient loops; they soften again 140 ms after it rests. View writes

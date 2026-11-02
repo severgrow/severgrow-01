@@ -44,6 +44,7 @@ import {
   type AchievementsState,
 } from './achievement-state.js';
 import { SWORD_PATH } from './swords-glyph.js';
+import { TILE_BAR_ICONS } from './tile-bar-icons.js';
 import { meLine, ownerLine, ownerSpokenLine } from './world-selection.js';
 import { storedDisplayName } from './identity.js';
 import { browserStorage } from '../../../server/src/client.js';
@@ -107,6 +108,18 @@ const WORLD_KEY_ICONS = {
     '<path class="fill" d="M12 11.2a3.6 3.6 0 0 1 3.6 3.6H8.4A3.6 3.6 0 0 1 12 11.2Z"/>'),
 } as const;
 type Pane = 'ranking' | 'challenges' | 'achievements' | 'colour';
+
+/** One key of the tile bar: an action kind plus the words it is SPOKEN with (the text is gone). */
+type TileBarAction = {
+  kind: 'grow' | 'sell' | 'challenge' | 'profile';
+  label: string;
+  run: () => void;
+  armed?: boolean;
+  working?: boolean;
+  /** Profile only: whose sheet the key opens. */
+  playerId?: string;
+};
+
 /**
  * HOW LONG THE GLIDE TAKES, AND HOW IT MOVES (owner, 2026-10-29: "the 'out of map' territory
  * animation is too fast and too jumpy - a bit slower, way smoother, without costing much CPU at all").
@@ -523,6 +536,8 @@ export class WorldView {
   private readonly stakeNodes = new Map<string, SVGPathElement>();
   /** Set by lobby-ui once `openMatch` exists, so an accepted challenge can open its duel. */
   private matchOpener: ((matchId: string) => void) | null = null;
+  /** Set by lobby-ui: opens the accounts sheet for another player (see `setProfileOpener`). */
+  private profileHook: ((playerId: string, trigger: HTMLElement | null) => void) | null = null;
   private sheet: {
     root: HTMLElement;
     card: HTMLElement;
@@ -627,6 +642,15 @@ export class WorldView {
   /** lobby-ui owns opening a duel; the challenge layer only knows the match id. */
   setMatchOpener(open: (matchId: string) => void): void {
     this.matchOpener = open;
+  }
+
+  /**
+   * ANOTHER PLAYER'S PROFILE (owner, 2026-11-01). The accounts module owns the sheet and the
+   * token, so it is injected here exactly like the match opener; the bar only passes the id and the
+   * key that was pressed (so closing the sheet returns focus to it).
+   */
+  setProfileOpener(open: (playerId: string, trigger: HTMLElement | null) => void): void {
+    this.profileHook = open;
   }
 
   /** The game's own cue bank, injected by lobby-ui. Absent, the screen stays silent. */
@@ -1610,10 +1634,17 @@ export class WorldView {
     this.paintSelection();
   }
   /**
-   * THE TILE BAR: one line and at most one key. Free ground grows, your own ground sells, a rival's
-   * ground beside yours can be challenged, and contested ground opens its challenge. Grow and sell ask
-   * twice. The bar is rebuilt only when what it says changes, so the 12 s poll never resets a press
-   * or an armed key; the key's action is re-pointed at the current state on every paint.
+   * THE TILE BAR: the owner line and its ICON KEYS (owner, 2026-11-01: "grow a tile/challenge/sell a
+   * tile/see profile etc in territory should be all icons in buttons rather than text buttons").
+   *
+   * Same behaviour as before — free ground grows, your own ground sells, a rival's ground beside
+   * yours can be challenged, contested ground opens its challenge, grow and sell ask twice — but
+   * every action is now a 44 px hardware key from the MENU row's own family, carrying one line icon
+   * and a SPOKEN label (aria-label + title) in place of the removed text. A rival's tile also
+   * offers SEE PROFILE, so the two-key set is challenge + profile.
+   *
+   * The bar is rebuilt only when what it says changes, so the 12 s poll never resets a press or an
+   * armed key; each key's action is re-pointed at the current state on every paint.
    */
   private paintSelection() {
     const bar = document.getElementById('online-world-selection')!;
@@ -1621,12 +1652,17 @@ export class WorldView {
     const cellId = this.selected;
     let line = '';
     let spoken = '';
-    let action: { label: string; run: () => void; armed?: boolean; working?: boolean } | null = null;
+    let actions: TileBarAction[] = [];
     if (world && cellId && this.working) {
       const tile = world.claims.find((claim) => claim.cellId === cellId);
       line = tile ? ownerLine(tile, true, this.myLevel()) : `FREE TILE · ${world.cost} SEEDS`;
       spoken = tile ? ownerSpokenLine(tile, true, this.myLevel()) : line;
-      action = { label: this.working === 'grow' ? ONLINE.worldGrowing : ONLINE.worldSelling, run: () => undefined, working: true };
+      actions = [{
+        kind: this.working === 'grow' ? 'grow' : 'sell',
+        label: this.working === 'grow' ? ONLINE.worldGrowing : ONLINE.worldSelling,
+        run: () => undefined,
+        working: true,
+      }];
     } else if (world && cellId) {
       const tile = world.claims.find((claim) => claim.cellId === cellId);
       const challenge = this.identity ? challengeOnCell(this.allChallenges, cellId) : null;
@@ -1638,17 +1674,21 @@ export class WorldView {
         // ranking row and the territory chat do: two players can share a name.
         spoken = ownerSpokenLine(tile, mine, mine ? this.myLevel() : null);
         if (challenge) {
-          action = { label: CHALLENGE.viewKey, run: () => this.openChallengeSheet(challenge) };
+          actions.push({ kind: 'challenge', label: CHALLENGE.viewKey, run: () => this.openChallengeSheet(challenge) });
         } else if (mine && !this.busy && world.version >= 3) {
           // Your own tile can be sold back (owner, 2026-10-27).
           const armed = this.sellArmed === cellId;
-          action = {
+          actions.push({
+            kind: 'sell',
             label: armed ? ONLINE.worldSellConfirm : ONLINE.worldSell(world.cost), armed,
             run: () => { if (armed) void this.sell(cellId); else { this.sellArmed = cellId; this.paintSelection(); } },
-          };
+          });
         } else if (!mine && this.isFrontier(cellId)) {
-          action = { label: CHALLENGE.sendKey, run: () => this.openSendSheet(cellId) };
+          actions.push({ kind: 'challenge', label: CHALLENGE.sendKey, run: () => this.openSendSheet(cellId) });
         }
+        // A RIVAL'S PROFILE (owner, 2026-11-01). Never your own: the menu's account key already
+        // opens that, and duplicating it here would be one more key for nothing.
+        if (!mine) actions.push({ kind: 'profile', label: ONLINE.worldSeeProfile, run: () => undefined, playerId: tile.ownerId });
       } else {
         const available = !!this.svg?.querySelector(`.world-hex[data-cell-id="${cellId}"]`)?.classList.contains('available');
         // OWNER WORDING (2026-10-16): "when placing a tile dont say 'claim hex' say grow a tile
@@ -1657,17 +1697,18 @@ export class WorldView {
         line = !available && this.wallet && this.wallet.balance < world.cost ? `${world.cost} SEEDS NEEDED` : `FREE TILE · ${world.cost} SEEDS`;
         if (available && !this.busy) {
           const armed = this.growArmed === cellId;
-          action = {
-            label: armed ? 'CONFIRM GROW' : 'GROW A TILE', armed,
+          actions = [{
+            kind: 'grow',
+            label: armed ? ONLINE.worldGrowConfirm : ONLINE.worldGrowKey, armed,
             run: () => { if (armed) void this.claim(); else { this.growArmed = cellId; this.paintSelection(); } },
-          };
+          }];
         }
       }
     }
     if (!spoken) spoken = line;
     bar.hidden = !line;
-    bar.classList.toggle('has-action', !!action);
-    const signature = `${cellId}|${line}|${spoken}|${action?.label ?? ''}`;
+    bar.classList.toggle('has-action', actions.length > 0);
+    const signature = `${cellId}|${line}|${spoken}|${actions.map((a) => `${a.kind}:${a.label}:${a.armed ? 1 : 0}`).join(',')}`;
     if (signature !== this.selectionSignature) {
       this.selectionSignature = signature;
       const text = document.createElement('span');
@@ -1676,24 +1717,37 @@ export class WorldView {
       // The tag stays in the TITLE only: visible text never carries it, and the live region still
       // announces just the line a sighted player reads.
       if (spoken) text.title = spoken;
-      bar.replaceChildren(text);
-      if (action) {
+      const keys = actions.map((action) => {
         const key = document.createElement('button');
         key.type = 'button';
-        key.className = 'world-claim-button';
-        key.textContent = action.label;
-        bar.append(key);
-      }
+        // The class the old text key had is kept (handlers/tests key off it); `world-key` brings the
+        // MENU row's material, size and focus ring.
+        key.className = 'world-claim-button world-key';
+        key.dataset.action = action.kind;
+        // THE TEXT IS GONE, SO THE LABEL IS SPOKEN: the aria-label is the key's name for assistive
+        // technology and the title is the same words for a pointer. Not decoration — the replacement.
+        key.setAttribute('aria-label', action.label);
+        key.title = action.label;
+        key.insertAdjacentHTML('afterbegin', action.armed ? TILE_BAR_ICONS.confirm : TILE_BAR_ICONS[action.kind]);
+        return key;
+      });
+      bar.replaceChildren(text, ...keys);
     }
     if (spoken) bar.title = spoken;
     else bar.removeAttribute('title');
-    const key = bar.querySelector<HTMLButtonElement>('.world-claim-button');
-    if (key && action) {
-      key.onclick = action.run;
+    // Re-point every key at the CURRENT state (a poll may have changed the price, the challenge or
+    // the armed step since the bar was built).
+    const keys = [...bar.querySelectorAll<HTMLButtonElement>('.world-claim-button')];
+    keys.forEach((key, index) => {
+      const action = actions[index];
+      if (!action) return;
+      key.onclick = action.kind === 'profile'
+        ? () => this.profileHook?.(action.playerId!, key)
+        : action.run;
       key.disabled = !!action.working;
       key.classList.toggle('armed', !!action.armed);
       key.classList.toggle('working', !!action.working);
-    }
+    });
   }
   private async claim() {
     if (!this.identity || !this.selected || this.busy) return;

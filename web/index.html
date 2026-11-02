@@ -812,6 +812,11 @@
         <button class="icon-only sp-close" data-profile-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
       </header>
       <div class="sheet-body sp-body">
+        <!-- VISITOR MODE (owner, 2026-11-01): the same sheet, opened for ANOTHER player from a
+             Territory tile. One quiet line is the whole difference in voice; `data-mode="visitor"`
+             on the sheet hides the Seeds line, the all-time win line and the offline record, so no
+             private row is ever painted for a visitor. Own mode renders none of this. -->
+        <p id="profile-visitor" class="sp-visitor"></p>
         <dl class="sp-rows">
           <!-- The name line carries the flag of the country the device places itself in and one tile
                in this player's own Territory colour, when either is known. Both are decoration: the
@@ -820,31 +825,37 @@
             <dt id="profile-name-label">Name &amp; tag</dt>
             <dd class="sp-name-line">
               <span id="profile-name">—</span>
+              <!-- The visitor's level, in the Territory tile bar's own wording ("LEVEL 22"). Hidden
+                   outside visitor mode, so the own profile's name line is unchanged. -->
+              <span id="profile-level" class="sp-level" hidden></span>
               <span id="profile-flag" class="sp-flag" hidden></span>
               <!-- One tile in this player's own colour, drawn as the MAP draws a hex: flat edges
                    left and right, a point top and bottom (web/src/player/hex-tile.ts). -->
               <svg id="profile-colour" class="sp-swatch" viewBox="-12 -12 24 24" aria-hidden="true" hidden>
                 <polygon class="sp-swatch-face" points=""></polygon>
               </svg>
+              <!-- The visitor's colour, in the shape a designer names it. Hidden in own mode, so
+                   the own name line is untouched. -->
+              <span id="profile-colour-hex" class="sp-hex" hidden></span>
             </dd>
           </div>
           <!-- The Seeds label is filled by web/src/accounts/profile.ts from the economy's own word
                (web/src/online/seed-icon.ts): this page must stay free of that word, the same rule the
                rest of the markup follows (web/tests/seed-words.test.ts is about the removed mode). -->
-          <div class="sp-row"><dt id="profile-seeds-label"></dt><dd id="profile-seeds">—</dd></div>
-          <div class="sp-row"><dt id="profile-tiles-label">Tiles</dt><dd id="profile-tiles">—</dd></div>
-          <div class="sp-row"><dt id="profile-wins-label">Matches won</dt><dd id="profile-wins">—</dd></div>
+          <div class="sp-row sp-row-seeds"><dt id="profile-seeds-label"></dt><dd id="profile-seeds">—</dd></div>
+          <div class="sp-row sp-row-tiles"><dt id="profile-tiles-label">Tiles</dt><dd id="profile-tiles">—</dd></div>
+          <div class="sp-row sp-row-wins"><dt id="profile-wins-label">Matches won</dt><dd id="profile-wins">—</dd></div>
         </dl>
         <!-- Your games (owner, 2026-11-01): two rows of the same three tiles — the offline record on
              top, the online one below — filled by web/src/accounts/profile.ts from
              web/src/logic/match-record.ts. Each row wears its word down the left edge. -->
         <div class="sp-play">
           <h3 id="profile-play-title" class="sp-play-title">Your games</h3>
-          <div class="sp-play-row">
+          <div class="sp-play-row" data-play-row="offline">
             <span id="profile-play-offline-label" class="sp-play-side" aria-hidden="true">Offline</span>
             <dl id="profile-play-offline" class="sp-play-grid" aria-label="Offline"></dl>
           </div>
-          <div class="sp-play-row">
+          <div class="sp-play-row" data-play-row="online">
             <span id="profile-play-online-label" class="sp-play-side" aria-hidden="true">Online</span>
             <dl id="profile-play-online" class="sp-play-grid" aria-label="Online"></dl>
           </div>

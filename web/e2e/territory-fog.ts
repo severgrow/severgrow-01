@@ -115,7 +115,7 @@ const grow = async (p: Page, cellId: string) => {
   await p.keyboard.press('Enter');
   await p.waitForSelector('.world-claim-button', { timeout: 10_000 });
   await p.click('.world-claim-button');
-  await p.waitForFunction(() => document.querySelector('.world-claim-button')?.textContent === 'CONFIRM GROW');
+  await p.waitForFunction(() => document.querySelector('.world-claim-button')?.getAttribute('aria-label') === 'Confirm grow');
   await p.click('.world-claim-button');
   await p.waitForSelector(`.world-hex.mine[data-cell-id="${cellId}"]`, { timeout: 20_000 });
 };

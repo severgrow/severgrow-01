@@ -20,6 +20,10 @@ import { glassBaseCss } from '../player/glass-surface.js';
 import { installProfileUI, profileColour } from './profile.js';
 import { EMAIL_ON_KEY, GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
 import type { ProfileFacts } from './profile.js';
+import { PLAYER_PROFILE_EVENT } from './profile-request.js';
+import type { PlayerProfileRequest } from './profile-request.js';
+import { visitorFacts } from './visitor-profile.js';
+import type { PublicPlayerProfile } from '../../../server/src/protocol.js';
 import { STATS_KEY, parseStats } from '../logic/stats.js';
 import { accountRecord, offlineRecord, onlineRecord } from '../logic/match-record.js';
 import { DEVICE_KEY, deviceIdFrom, matchesWonEver, newDeviceId, offlineCounters } from '../logic/offline-sync.js';
@@ -725,6 +729,34 @@ export const mountAccounts = async (): Promise<void> => {
       paint({ seeds: counts.seeds, tiles: counts.tiles });
     });
   };
+
+  /**
+   * ANOTHER PLAYER'S PROFILE (owner, 2026-11-01: "allow to look up other peoples profile on
+   * territory"). The Territory tile bar asks through `profile-request.ts`; this module owns the
+   * token, so the read happens here and lands in the SAME sheet in its visitor mode.
+   *
+   * The sheet opens at once in its honest empty state (every fact is the em dash), then the one
+   * allow-listed read paints it. A failed, absent or slow read simply leaves the empty state —
+   * never an invented number. `visitorRequest` makes a late answer from an older tile unable to
+   * overwrite a newer sheet.
+   */
+  let visitorRequest = 0;
+  const openPlayerProfile = (playerId: string, opener: HTMLElement | null) => {
+    const seq = ++visitorRequest;
+    profile.openVisitor(null, opener);
+    const identity = readIdentity(kv);
+    if (!identity) return;
+    void apiGet(`/v1/players/${encodeURIComponent(playerId)}/profile`, identity.token).then((body) => {
+      if (seq !== visitorRequest) return;
+      const wire = (body as { profile?: PublicPlayerProfile } | null)?.profile;
+      profile.showVisitor(visitorFacts(wire ?? null));
+    });
+  };
+  window.addEventListener(PLAYER_PROFILE_EVENT, (event) => {
+    const detail = (event as CustomEvent<PlayerProfileRequest>).detail;
+    if (!detail || typeof detail.playerId !== 'string' || !detail.playerId) return;
+    openPlayerProfile(detail.playerId, detail.trigger ?? null);
+  });
 
   // A finished OFFLINE game (main.ts dispatches this after it saves the record): tell the account, so
   // the same numbers show on the player's other devices. Signed out, or with no API, this is a no-op.

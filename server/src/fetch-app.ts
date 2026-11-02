@@ -107,6 +107,29 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return { status: 200, body: { ok: true, player: await service.getMe(player), serverNow: service.serverNow() } };
     }
 
+    /**
+     * ANOTHER PLAYER'S PUBLIC PROFILE (owner, 2026-11-01: look up other people's profiles from
+     * Territory). A SIGNED-IN caller only — the token names who is asking, and a missing or stale
+     * one is the usual 401; there is no anonymous read. The response is the closed allow-list in
+     * `PublicPlayerProfile`: name, tag, level, tiles, colour and the ONLINE record. It can never
+     * carry an email, a Seeds wallet, an offline record, a token, a device, or anything private:
+     * the store query selects only the public columns (see `seeds/postgres.ts`).
+     *
+     * A malformed/percent-broken id and an unknown one are the SAME 404, so this route cannot be
+     * used to tell which player ids exist.
+     */
+    const profileRoute = /^\/v1\/players\/([^/]+)\/profile$/.exec(path);
+    if (method === 'GET' && profileRoute) {
+      await service.authenticate(bearer(req.headers.get('authorization')));
+      let playerId = profileRoute[1]!;
+      try {
+        playerId = decodeURIComponent(playerId);
+      } catch {
+        throw new ApiError('NOT_FOUND', 'No such player.');
+      }
+      return { status: 200, body: { ok: true, profile: await service.publicProfile(playerId), serverNow: service.serverNow() } };
+    }
+
     if (method === 'PATCH' && path === '/v1/players/me') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
       const body = asRecord(await readJson(req, config.maxBodyBytes));

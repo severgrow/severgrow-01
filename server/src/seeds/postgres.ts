@@ -306,6 +306,77 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
       };
     });
   },
+  /**
+   * ONE PLAYER'S PUBLIC PROFILE — ONE statement, whatever the number of tiles or matches.
+   *
+   * WHY ONE. The Edge worker has a fixed compute budget per request. An earlier achievements
+   * endpoint fanned out one query per fact and died at the budget (`WORKER_RESOURCE_LIMIT`, HTTP
+   * 546). Everything below is therefore a single aggregate: scalar CTEs for name, tile count and
+   * level, and one window-function pass over the player's FINISHED matches for games, wins and the
+   * longest winning run. `publicProfile` in `server/tests/public-profile.test.ts` counts the
+   * statements with a recording pool.
+   *
+   * WHAT IT MAY SELECT (the privacy allow-list, enforced here in the SQL, not by filtering after):
+   * display name, campaign level, tile count, palette slot, and their online record. It never
+   * touches `seed_wallets`, `player_tokens`, `player_identities`, `offline_stats`, device rows or
+   * an email: those columns are not in this SELECT list, so they cannot leak from it.
+   *
+   * The colour-table probe is a cached catalogue read (no per-request cost after the first call).
+   */
+  async publicProfile(playerId) {
+    const colourTable = await hasColourTable();
+    const { rows } = await pool.query(
+      `with me as (
+         select p.display_name from players p where p.id = $1
+       ), tiles as (
+         select count(*)::int as tiles from world_claims c where c.owner_id = $1
+       ), level as (
+         select max((substring(r.source_key from '^campaign:c[0-9]+-([0-9]+)$'))::int) as level
+           from seed_reward_receipts r
+          where r.player_id = $1 and r.mode = 'campaign'
+       ), colour as (
+         ${colourTable
+           ? 'select colour_id from player_tile_colours where player_id = $1'
+           : 'select null::smallint as colour_id'}
+       ), played as (
+         select coalesce((m.result->>'winner')::int = mp.seat, false) as won,
+                coalesce(m.finished_at, m.updated_at) as ended_at,
+                m.id
+           from matches m
+           join match_participants mp on mp.match_id = m.id and mp.player_id = $1
+          where m.status = 'finished' and m.result is not null
+       ), numbered as (
+         select won, row_number() over (order by ended_at, id) as n from played
+       ), runs as (
+         select won, n - row_number() over (partition by won order by n) as grp from numbered
+       )
+       select me.display_name,
+              level.level,
+              tiles.tiles,
+              colour.colour_id,
+              (select count(*)::int from played) as games,
+              (select count(*)::int from played where won) as wins,
+              coalesce((select max(s.len) from (
+                select won, count(*)::int as len from runs group by won, grp
+              ) s where s.won), 0) as longest_streak
+         from me
+         cross join tiles
+         cross join level
+         left join colour on true`,
+      [playerId],
+    );
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      displayName: row.display_name == null ? null : String(row.display_name),
+      level: row.level == null ? null : number(row.level),
+      tiles: number(row.tiles),
+      chosenColourId: row.colour_id == null ? null : number(row.colour_id),
+      games: number(row.games),
+      wins: number(row.wins),
+      longestStreak: number(row.longest_streak),
+    };
+  },
   async colourChoice(playerId) {
     if (!(await hasColourTable())) return null;
     const { rows } = await pool.query('select colour_id, chosen_at from player_tile_colours where player_id = $1', [playerId]);

@@ -107,6 +107,7 @@ All responses are JSON. Authenticated routes require `Authorization: Bearer <tok
 | GET | `/v1/health` | liveness + the pinned rules version |
 | POST | `/v1/guests` | create a guest identity → `{ player, token }` (token shown once) |
 | POST | `/v1/players/me/upgrade` | upgrade a guest to a permanent account (keeps the id) |
+| GET | `/v1/players/:id/profile` | another player's PUBLIC profile (signed in): `{ displayName, tag, level, tiles, colourId, online: { games, wins, longestStreak } }` (the client resolves `colourId` to the shared palette) |
 | POST | `/v1/matches` | create a match → `{ match: { inviteCode, … }, player: view }` |
 | POST | `/v1/matches/join` | join by `{ inviteCode }` → `{ match, player }` |
 | GET | `/v1/matches/:id` | match summary (public: status, revision, seats) |
@@ -119,6 +120,18 @@ A **player view** contains: the engine `View` (`viewFor(state, seat)`), the seat
 and status, the legal actions (only when it is that seat's turn), and the public-safe events. It
 never contains the seed, the deck, either full hand, `fruitKnown`, the event history internals, or
 the authoritative `State`.
+
+**Another player's public profile (`GET /v1/players/:id/profile`, owner 2026-11-01).** A signed-in
+caller may look up any player id from a Territory tile. The answer is a closed allow-list — display
+name, `#tag`, campaign level, tile count, palette colour, and the ONLINE record (finished duels:
+games, wins, longest winning run). There is no email or identity-provider data, no Seeds wallet, no
+offline record, no token and no device: the query selects only those columns, and
+`server/tests/public-profile.test.ts` fails if a private one ever appears in the body or the SQL.
+Unknown and malformed ids are the same `404 NOT_FOUND`. It is **one aggregate statement** (plus a
+cached catalogue probe for the optional colour table), awaited **sequentially**: the Edge pool is
+`max: 2`, and a parallel fan-out is what hung the earlier achievements endpoint (`WORKER_RESOURCE_LIMIT`,
+HTTP 546). There is deliberately no `Promise.race` timeout — abandoning a statement leaks the pool
+connection it holds.
 
 **Cancelling a waiting duel (new).** `POST /v1/matches/:id/cancel` retires the caller's own match
 while it is still `waiting` (an invite nobody ever joined, or a parked Find-Opponent search). It is

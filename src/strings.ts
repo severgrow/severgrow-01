@@ -126,6 +126,12 @@ export const ONLINE = Object.freeze({
   worldNoStanding: 'Grow a tile to join the ranking',
   worldSell: (price: number) => `Sell this tile · +${price}`,
   worldSellConfirm: 'Confirm sell',
+  /** The tile bar's icon keys (owner, 2026-11-01: actions are icons, not text). The visible text is
+   *  gone, so these words are the keys' SPOKEN labels and titles — the label is not extra, it is
+   *  the replacement. */
+  worldGrowKey: 'Grow a tile',
+  worldGrowConfirm: 'Confirm grow',
+  worldSeeProfile: 'See profile',
   worldGrowing: 'Growing…',
   worldSelling: 'Selling…',
   worldSellBusy: 'This tile is being challenged. It can be sold once the challenge is over.',
@@ -1418,6 +1424,15 @@ export const PROFILE = Object.freeze({
   unknown: '—',
   /** Player stats (owner, 2026-11-01): two rows of three, the offline record above the online one. */
   playTitle: 'Your games',
+  /** VISITOR MODE (owner, 2026-11-01: "allow to look up other peoples profile on territory"). The
+   *  same sheet, one quiet line saying whose it is, and the record's own heading. A visitor sees the
+   *  owner's ONLINE record only; the offline row and the Seeds line are not rendered at all. */
+  visitor: 'Viewing another player',
+  theirGames: 'Their games',
+  /** The player's level, in the name line — the same word the Territory tile bar uses ("LEVEL 22"). */
+  level: (n: number) => `Level ${n}`,
+  /** The visitor's colour, said aloud: the visible line is only the hex itself. */
+  colourHex: (hex: string) => `Colour ${hex}`,
   offline: 'Offline',
   online: 'Online',
   games: 'Games',

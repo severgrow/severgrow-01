@@ -2653,6 +2653,68 @@ html.futasaku-product .install-prompt-scrim {
   stroke-linejoin: round;
 }
 
+/* ---------- VISITOR MODE (owner, 2026-11-01: "allow to look up other peoples profile on territory")
+   ONE SHEET, TWO MODES, and the mode is a single attribute on the sheet. Own mode is the default and
+   renders exactly the four lines and two records it always did. Visitor mode adds one quiet line —
+   the whole difference in voice — and REMOVES the rows a visitor may not read: the Seeds line, the
+   all-time win line (it includes offline games) and the offline record. The level lives in the name
+   line, in the Territory tile bar's own "LEVEL 22" wording, so it needs no row of its own. */
+#sheet-profile .sp-visitor {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 0.58rem;
+  line-height: 1.2;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--c-muted);
+}
+#sheet-profile:not([data-mode='visitor']) .sp-visitor {
+  display: none;
+}
+#sheet-profile[data-mode='visitor'] .sp-row-seeds,
+#sheet-profile[data-mode='visitor'] .sp-row-wins,
+#sheet-profile[data-mode='visitor'] .sp-play-row[data-play-row='offline'] {
+  display: none;
+}
+/* The online row is the first (only) visible row in visitor mode, so it loses the separator it
+   carried as the second row. */
+#sheet-profile[data-mode='visitor'] .sp-play-row[data-play-row='online'] {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+/* The visitor's level, set as a quiet neighbour of the name. Hidden with the attribute, so own mode
+   keeps the name line it always had (the flag and the colour tile keep their places). */
+#sheet-profile .sp-level {
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: 0.56rem;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+#sheet-profile .sp-level[hidden] {
+  display: none;
+}
+/* The visitor's colour hex, beside the swatch: a quiet mono caption, never a new row. */
+#sheet-profile .sp-hex {
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: 0.52rem;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+#sheet-profile .sp-hex[hidden],
+#sheet-profile:not([data-mode='visitor']) .sp-hex {
+  display: none;
+}
+
 /* Short screens (320x568, 360x640): the air comes out first; every row stays at least 44px. */
 @media (max-height: 700px) {
   #sheet-profile {

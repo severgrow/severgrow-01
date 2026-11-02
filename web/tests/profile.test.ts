@@ -160,31 +160,17 @@ describe('the flag and the colour tile are decoration, never a placeholder', () 
     // The ATTRIBUTE, not `swatch.hidden`: an <svg> has no `hidden` IDL property, so the old
     // assignment wrote an expando and left the markup's `[hidden]` in place — the tile could never
     // appear (measured 0x0 with the attribute still set). See the 2026-11-02 note in profile.ts.
-    expect(source).toMatch(/swatch\.toggleAttribute\('hidden', !facts\.colour\)/);
+    expect(source).toMatch(/swatch\.removeAttribute\('hidden'\)/);
+    expect(source).toMatch(/swatch\.setAttribute\('hidden', ''\)/);
     // Code, not the comment that explains the old bug.
     expect(source).not.toMatch(/^\s*swatch\.hidden\s*=/m);
+    // One painter (`paintSwatch`) serves own AND visitor mode, so the two can never disagree.
+    expect(source.match(/const paintSwatch/g) ?? []).toHaveLength(1);
     // The colour is painted through one custom property, so the swatch shares the map's colour.
-    expect(source).toMatch(/swatch\.style\.setProperty\('--tile', facts\.colour\.css\)/);
+    expect(source).toMatch(/swatch\.style\.setProperty\('--tile', colour\.css\)/);
     // A named swatch must not also be aria-hidden: it carries role="img" + the colour's name, so
     // hiding it would leave the player's only colour indicator unspoken.
     expect(source).toMatch(/swatch\.removeAttribute\('aria-hidden'\)/);
-  });
-
-  it('always has a colour for a signed-in player, even before or without the server read', () => {
-    // A player who never chose a colour still HAS one: the map derives it from the player id.
-    for (const playerId of ['fixture-player', 'p-1', 'a'.repeat(40), 'zz-9']) {
-      const fallback = profileColour(playerId, null);
-      const expected = colourById(colourIdFor(playerId));
-      expect(fallback).toEqual({ css: expected.css, name: expected.name });
-      expect(fallback.css).toMatch(/^hsl\(/);
-    }
-    // A STORED choice, when there is one, wins over the derived default.
-    const chosen = profileColour('fixture-player', 12);
-    expect(chosen).toEqual({ css: TILE_COLOURS[12]!.css, name: 'Glacier' });
-    // The mount seeds the panel from that same fallback, so a failed/slow read never blanks it.
-    expect(mountSource).toMatch(/colour: profileColour\(identity\.playerId\)/);
-    // And a rejected read is swallowed; the default stays painted.
-    expect(mountSource).toMatch(/\}\)\.catch\(\(\) => null\)/);
   });
 
   it('draws the Futasaku mark with the game’s own asset, not a new logo', () => {

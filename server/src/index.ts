@@ -49,7 +49,9 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
   const isMemory = storage instanceof MemoryStorage;
   const memoryFeedback = isMemory ? new MemoryFeedbackStore() : null;
   const memoryLinks = isMemory ? new MemoryIdentityLinkStore((p, k, n) => (storage as MemoryStorage).revokeTokensOfPlayer(p, k, n)) : null;
-  const economyStore = isMemory ? new MemoryWorldEconomyStore() : postgresWorldEconomyStore(poolFromUrl(databaseUrlFromEnv()!));
+  // The memory store also serves the public profile's name + online-record halves, so it is given
+  // the same storage the server uses (the Postgres store reads them in its one SQL statement).
+  const economyStore = isMemory ? new MemoryWorldEconomyStore(live.storage) : postgresWorldEconomyStore(poolFromUrl(databaseUrlFromEnv()!));
   const economy = new WorldEconomyService(economyStore, live.storage);
   const service = new MatchService({ storage: live.storage, config, economy });
   // The admin router (docs/ADMIN.md) shares the dev server's OWN in-memory stores, so the dashboard
