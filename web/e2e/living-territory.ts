@@ -124,7 +124,8 @@ try{
   await page.click('#menu-world');await page.waitForSelector('#online-world-screen:not([hidden])');await page.waitForTimeout(name==='phone'?450:250);
   if(name==='phone'){
    const frames=await page.evaluate(()=>(window as any).__livingFrames as {at:number;box:string;opacity:number;visible:boolean;same:boolean}[]);
-   check('every transition frame retains the visible map and exact camera',frames.length>2&&frames.every(f=>f.same&&f.visible&&f.box===before.box));
+   const continuous=frames.length>2&&frames.every(f=>f.same&&f.visible&&f.box===before.box);
+   check(`every transition frame retains the visible map and exact camera${continuous?'':' '+JSON.stringify({before:before.box,frames})}`,continuous);
    check('clarity transition reaches full contrast',frames.at(-1)!.opacity>.99);
    const gaps=frames.slice(1).map((f,i)=>f.at-frames[i]!.at).sort((a,b)=>a-b);console.log('INFO transition frame p95 ms',gaps[Math.floor(gaps.length*.95)]);
   }

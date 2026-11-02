@@ -158,3 +158,8 @@ so both the map and counters catch up. This is an acknowledgement-triggered refr
 Grow/Sell/colour/achievement completions can use the same path. A closing/game presentation does
 not start a menu refresh, and inactive Grow does not leave a paused ripple behind. The regression
 was observed timing out before this fix and passing afterwards.
+
+Camera measurements use resolved layout dimensions from the map viewport. Decorative SVG scale
+must not be fed back into logical camera bounds through transformed `getBoundingClientRect()`
+measurements. A focused regression supplies rounded/scaled SVG bounds and verifies that the
+logical aspect, pixel width and exact `viewBox` remain those of the layout viewport.

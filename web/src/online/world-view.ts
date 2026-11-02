@@ -1350,7 +1350,7 @@ export class WorldView {
     // Frame the view to the WINDOW, so the map scales up to fill it. A portrait phone crops the
     // surplus width and pans to the edges; a wide screen resolves to the whole world. The DEFAULT
     // view is then the framed view capped so one cell is at least MIN_CELL_PX (see `detailFor`).
-    const rect = container.getBoundingClientRect();
+    const rect = this.viewportSize();
     this.aspect = rect.height > 0 ? rect.width / rect.height : 0;
     this.pixels = rect.width;
     this.bounds = this.boundsFor(this.aspect);
@@ -1476,6 +1476,16 @@ export class WorldView {
     this.box = [...recovered];
     return this.box;
   }
+  /** Camera geometry belongs to the layout viewport, not the SVG's decorative CSS scale.
+   * Resolved layout dimensions keep transforms and subpixel rounding out of the logical view. */
+  private viewportSize(): { width: number; height: number } {
+    const grid = document.getElementById('online-world-grid');
+    if (!grid) return { width: 0, height: 0 };
+    const style = getComputedStyle(grid);
+    const width = Number.parseFloat(style.width), height = Number.parseFloat(style.height);
+    if (Number.isFinite(width) && Number.isFinite(height)) return { width, height };
+    return grid.getBoundingClientRect();
+  }
   /**
    * Write the view: one viewBox attribute on the SAME svg, so cell identity is never touched.
    */
@@ -1485,7 +1495,7 @@ export class WorldView {
     // panel cannot change shape between two pointer moves, and the ResizeObserver already refreshes
     // `this.aspect` when it does, so a drag does not force a layout read on every move — one style
     // write per frame, never a measure.
-    const rect = measure ? this.svg.getBoundingClientRect() : null;
+    const rect = measure ? this.viewportSize() : null;
     const aspect = rect && rect.width > 0 && rect.height > 0 ? rect.width / rect.height : this.aspect;
     if (rect && aspect > 0) { this.aspect = aspect; this.pixels = rect.width; }
     // NOTHING BUT FOUR FINITE NUMBERS EVER REACHES THE ATTRIBUTE. "NaN NaN NaN NaN" is a map that
@@ -3525,7 +3535,7 @@ export class WorldView {
     // player's zoom level is kept and re-derived at the new aspect, so the view stays band-free.
     if (typeof ResizeObserver === 'function') {
       this.observer = new ResizeObserver(() => {
-        const r = svg.getBoundingClientRect();
+        const r = this.viewportSize();
         const aspect = r.height > 0 ? r.width / r.height : 0;
         const next = this.boundsFor(aspect);
         // A hidden / mid-transition map measures 0: keep the last good frame rather than invent one.
