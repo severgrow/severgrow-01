@@ -191,7 +191,7 @@ const shotHead = async (page: Page, name: string) => {
     const s = sheet.getBoundingClientRect();
     const head = sheet.querySelector('.sp-head').getBoundingClientRect();
     // 14px of the backdrop above (the plate floats 10px off the screen edge, so the rounded corner
-    // is legible) and 10px below the hairline: the corner, the mark and the title in one frame.
+    // is legible) and 10px below the header: the corner, the mark and the title in one frame.
     return { x: Math.max(0, s.x - 14), y: Math.max(0, s.y - 14), width: s.width + 28, height: head.bottom - s.y + 24 };
   })()`)) as { x: number; y: number; width: number; height: number };
   await page.screenshot({ path: `docs/screens/menu-footer/${name}.png`, clip: box });
@@ -511,6 +511,21 @@ try {
           };
         }),
         hScroll: Math.max(0, sheet.scrollWidth - sheet.clientWidth),
+        // NO INTERIOR RULES (owner, 2026-11-02): every edge the old dividers lived on, read from
+        // the rendered stylesheet. The tile keeps its block but no longer wears a 1px contour.
+        dividers: (() => {
+          const edges = (el) => {
+            const s = getComputedStyle(el);
+            return [s.borderTopWidth, s.borderBottomWidth, s.borderLeftWidth, s.borderRightWidth];
+          };
+          return {
+            head: edges(sheet.querySelector('.sp-head')),
+            rows: [...sheet.querySelectorAll('.sp-row')].map(edges),
+            play: edges(sheet.querySelector('.sp-play')),
+            playRows: [...sheet.querySelectorAll('.sp-play-row')].map(edges),
+            tiles: [...sheet.querySelectorAll('.sp-tile')].map(edges),
+          };
+        })(),
         role: sheet.getAttribute('role'),
         modal: sheet.getAttribute('aria-modal'),
         // THE PLATE'S GROUND (owner, 2026-11-02): a soft bright band ran through the MATCHES WON
@@ -526,6 +541,9 @@ try {
       n: number; labels: string[]; values: string[]; offline: [string, string][]; online: [string, string][];
       sides: { text: string; insideX: boolean; insideY: boolean; w: number; h: number }[];
       hScroll: number; note: number; signIn: number; brand: number; role: string; modal: string | null;
+      dividers: {
+        head: string[]; rows: string[][]; play: string[]; playRows: string[][]; tiles: string[][];
+      };
       sheetBg: string;
       scroll: number; pageScroll: number; bottom: number; vh: number;
       brandMark: { w: number; h: number; right: number };
@@ -608,9 +626,9 @@ try {
     check(`${label}: the close key's glyph clears the top-right corner arc by >=12px`,
       c.closeAir >= 12, `${c.closeAir}px from the arc, ${c.closeRight}px in`);
     // Nothing else may land in a corner band either: the centred title sits a whole radius in from
-    // both side edges (so it can never meet a top curve), and the first hairline row starts below
+    // both side edges (so it can never meet a top curve), and the first identity row starts below
     // the corner band, with the sheet's own padding under it.
-    check(`${label}: the title and the first hairline row stay out of the corner band`,
+    check(`${label}: the title and the first identity row stay out of the corner band`,
       c.titleInsetLeft >= c.radius && c.titleInsetRight >= c.radius && c.rowTopInset >= c.radiusY,
       `title ${c.titleInsetLeft}/${c.titleInsetRight}, row top ${c.rowTopInset}, r=${c.radius}/${c.radiusY}`);
     // ONE LINE: the 22px mark and the centred title share the nameplate's centre line. The mark is
@@ -693,6 +711,15 @@ try {
     const sheetIssues = materialMismatches(sheetMaterial);
     check(`${label}: the profile wears the one dark glass, with no frame contour`,
       sheetIssues.length === 0, sheetIssues.join(' | ') || JSON.stringify(sheetMaterial));
+    // The old rules sat on the header, between identity rows, above the record and between its
+    // two rows; the tiles wore their own contour. All of those edges must now be zero on screen.
+    const dividerEdges = [
+      ...rows.dividers.head, ...rows.dividers.play,
+      ...rows.dividers.rows.flat(), ...rows.dividers.playRows.flat(), ...rows.dividers.tiles.flat(),
+    ];
+    check(`${label}: no interior hairline is drawn in the profile`,
+      dividerEdges.every((w) => w === '0px'),
+      dividerEdges.filter((w) => w !== '0px').join(',') || `${dividerEdges.length} edges, all 0px`);
     if (size.w === 390 && size.h === 844 && !size.large) {
       // THE BAND, MEASURED ON THE SETTLED PLATE. Hide the row's ink first: what is sampled is the
       // ground the plate paints (glass over the veiled menu), which is where the owner's band was.
@@ -866,7 +893,7 @@ try {
     check('audit 320x568: the muted label clears 4.5:1', a.label.contrast >= 4.5,
       `${a.label.color} on ${a.label.ground} = ${a.label.contrast}:1 at ${a.label.size}`);
     // Q6/Q18: the two records are the same instrument (the 9px between the row BOXES is the
-    // separator hairline + its 8px gap, which row 2 carries inside itself), and a five-digit
+    // 8px margin plus the 9px top pad row 2 carries inside itself, with no rule), and a five-digit
     // number neither wraps nor grows the tiles.
     check('audit 320x568: the two record rows are equal weight',
       Math.abs(a.records.offGridH - a.records.onGridH) <= 0.5 &&

@@ -1,5 +1,30 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-02 — Windows keep no interior hairline divider
+
+Owner: "i also dont like the hairline divisions in profile (and if shows up anywhere else) - id
+remove and not add in new widnows iin future".
+
+**The rule.** A window separates its rows and blocks with space, a size/weight step or a muted
+label, never with a 1px rule between them. The plate's own outer edge is the glass material and is
+not covered by this rule. The standing version lives in [UX.md](UX.md#design-rules), and
+`tests/window-dividers.test.ts` fails on a new directional hairline inside any window (or on a
+pseudo-element line, which is the same thing in another coat). A genuinely necessary divider is
+allowed only with a `divider-ok: <reason>` comment at the rule.
+
+**What changed.** The Profile lost its header rule, the rules between the four identity rows, the
+rule above the record and the rule between the offline and online records; the six record tiles
+now use a neutral fill instead of a 1px contour. The same interior rules were removed from the
+pause plate (header, tool row and the centred score rule), Settings rows, "What happened", the
+finish card's stat rows, the Territory window's head and standing block, Match Intel's stat strip
+and tip accents, the tutorial Bloom groups, and the match chat's head/foot/message separators.
+
+**What was kept, and why.** The 2px+ coloured marks that carry meaning rather than divide blocks:
+the observation's margin rule in Match Intel, the card combo edge, the score-pop accent and the
+gameplay HUD edge. Buttons, inputs, form fields and the record tiles keep their own contour (or
+fill) because that is a control's edge, not a rule between two rows. The glass plate's own edge is
+untouched. The Profile plate's measured opacity guard (the "Matches won" band) is unchanged.
+
 ## 2026-10-16 — The shared link preview showed the old name (owner report; fixed)
 
 Owner: "when sending a link with an invite to game - the graphic that shows up is an outdated severor

@@ -18,6 +18,14 @@ draws the game and listens to taps.
 - **Not colour alone.** The two players differ by a mark and a pattern (yours: a ring;
   the bot's: a diamond and a grain). Gold hexes have a fine weave and a "2" badge.
   Suits have their own icons. Board marks have their own shapes (see the legend).
+- **Windows have no interior rules.** A sheet, dialog or glass window never draws a
+  hairline between its rows or blocks (owner, 2026-11-02: "i also dont like the hairline
+  divisions in profile ... id remove and not add in new widnows iin future"). Separate
+  blocks with space, a size/weight step, a muted label or a soft fill — not with a 1px
+  `border-top`/`border-bottom`/`border-left`/`border-right`, a 1px shadow, or a gradient
+  rule. The plate's own outer edge is the glass material, not an interior divider. If a
+  divider is ever genuinely unavoidable, write the reason at the rule as
+  `divider-ok: <reason>` in a comment; `tests/window-dividers.test.ts` fails otherwise.
 - **No emoji as icons.** Every icon is a small SVG line drawing, made in code.
 - **Nothing downloaded.** No images, no sound files, no trackers, no outside
   requests. Fonts are free (SIL Open Font License) and bundled in `web/src/fonts`.

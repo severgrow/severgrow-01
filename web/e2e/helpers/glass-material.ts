@@ -52,7 +52,11 @@ export const readMaterial = async (page: Page, selector: string): Promise<Materi
       radius: [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].join(' '),
       shadow: cs.boxShadow,
       borders: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
-      outline: `${cs.outlineStyle} ${cs.outlineWidth}` === 'none 0px' ? 'none' : `${cs.outlineStyle} ${cs.outlineWidth}`,
+      // A `none` STYLE is no outline, whatever width the UA computes for it. Chrome computes
+      // `outline-style: none` with `outline-width: 3px` (the CSS `medium` default) even when
+      // nothing is drawn, so requiring `none 0px` would fail a surface that has no outline at all.
+      // A drawn outline still reports its real style and width here.
+      outline: cs.outlineStyle === 'none' ? 'none' : `${cs.outlineStyle} ${cs.outlineWidth}`,
     };
   }, selector);
 
