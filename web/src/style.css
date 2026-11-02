@@ -609,6 +609,38 @@ button {
   #menu .menu-territory-side { gap: 4px; font-size: 0.8rem; }
   #menu .menu-territory-label { font-size: 0.95rem; letter-spacing: 0.05em; }
 }
+/* ---------- THE FIRST-RUN NUDGE (owner brief, 2026-11-01) ----------
+   Ten lamps on the PLAY key, one per lesson: a hairline ring is a lesson not yet cleared, a ring
+   filled with the key's own ink is one that is. The strip is SET INTO the key — absolutely placed on
+   its lower bezel — so it takes no row, no gap and no tap target from the menu; the column's key
+   spacing is exactly what it was without it, at every size. It is decoration (aria-hidden on the
+   markup, pointer-events:none here): PLAY is the target, and PLAY is the key that already leads to
+   LEVEL 1. Nothing below is sized by the label, so Large text cannot move a lamp. */
+#menu #menu-play { position: relative; }
+.menu-play-lessons {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+/* One lamp: a 6px ring of the key's ink, hollow while the lesson is open. Filled, it is the ink
+   solid — no glow, no gradient, no colour of its own, because the key is already the one cream
+   surface on this screen and the lamps are its own indicator lights. */
+.menu-play-lessons > i {
+  width: 6px;
+  height: 6px;
+  border: 1px solid color-mix(in srgb, var(--fu-ink) 34%, transparent);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.menu-play-lessons > i.on {
+  border-color: var(--fu-ink);
+  background: var(--fu-ink);
+}
 .menu-lessons {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -39,6 +39,8 @@ import { EMPTY_SEL, futa04OneTap, growControls, heldMoveWord, isBoardAction, kin
 import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
 import { ONBOARDING_LEVELS, guideKey, onboardGuide, revealTierFor } from './logic/onboarding.js';
+// The first-run nudge: ten lamps on the PLAY key, painted from campaign progress (menu/first-run.ts).
+import { installFirstRunLamps } from './menu/first-run.js';
 import { whyNotTap, placedHexKeys } from './logic/tap-why.js';
 import {
   DESK_IDLE,
@@ -756,6 +758,12 @@ function syncMenuResume(): boolean {
   return showContinue;
 }
 /**
+ * THE FIRST-RUN NUDGE's painter (menu/first-run.ts). Built once at module scope — the same place the
+ * press primitive and the hand's breath are installed — so every later menu pass is one pure read
+ * and one DOM apply, with no listener, timer or storage of its own.
+ */
+const firstRunLamps = installFirstRunLamps();
+/**
  * Every control of the product menu that depends only on compile-time channel flags, the saved-game
  * storage and `src/strings.ts` — never the network. Extracted from `showScreen` so boot can lay the
  * menu out in its SYNCHRONOUS prefix (before the first `await`): a first-time tester then sees a way
@@ -772,7 +780,9 @@ function layoutMenu(canContinue: boolean) {
   // it; the legacy channels keep the flat menu they are used to.
   const online = onlineBuildEnabled();
   $('menu-play').hidden = !FEATURES.campaign;
-  $('menu-play').textContent = MENU.play;
+  // The key's word goes into its own node, so the nudge's lamps inside the key survive a layout pass
+  // (menu-play-lessons, painted below from campaign progress).
+  $('menu-play-label').textContent = MENU.play;
   $('menu-play').setAttribute('aria-label', MENU.play);
   $('play-title').textContent = MENU.playTitle;
   // The bottom row is a GROUP (owner brief, 2026-10-21): LOG IN (or the player's name) on the left,
@@ -823,6 +833,10 @@ function layoutMenu(canContinue: boolean) {
     const stillTeaching = !!target && lessonsDone < lessonsTotal && lessonFor(target.number) !== null;
     readout.textContent = stillTeaching ? CAMPAIGN.lessonsCompleted(lessonsDone, lessonsTotal) : '';
     readout.hidden = !stillTeaching;
+    // THE FIRST-RUN NUDGE (owner brief, 2026-11-01): the ten lamps on PLAY, painted from the SAME
+    // record this pass already reads — no extra read, request or timer. It retires itself the moment
+    // c1-10 is in `completed`.
+    firstRunLamps.paint(campaignProgress);
     if (entry.kind === 'list') {
       cmp.textContent = MENU.levels;
       cmp.setAttribute('aria-label', MENU.levelsAria);
