@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { KeyValue } from '../../server/src/client.js';
+import { CAMPAIGN_LEVELS, currentLevel, reconcileProgress } from '../../src/campaign/index.js';
 import {
   ACCOUNT_CLEARS_KEY,
   cachedAccountClearsForThisDevice,
@@ -63,6 +64,16 @@ describe('the account answer is its furthest verified level, expanded in order',
 
   it('normalises a cached list (positive integers, unique, sorted)', () => {
     expect(normaliseLevels([3, 1, 3, 0, -2, 1.5, '4', Number.NaN, 10])).toEqual([1, 3, 10]);
+  });
+
+  it('the same one answer also places the account on a new device', () => {
+    // One read serves both consumers: this list is the lamps' half, and `highest` is the existing
+    // account-place rule's half. A level-36 account lands on level 37, with chapter 1 complete.
+    const fresh = { version: 1 as const, unlocked: 1, completed: [], best: {} };
+    const after = reconcileProgress(fresh, 36);
+    expect(currentLevel(after).number).toBe(37);
+    expect(after.completed).toEqual(CAMPAIGN_LEVELS.slice(0, 36).map((level) => level.id));
+    expect(levelsFromHighest(36).filter((level) => level <= 10)).toHaveLength(10);
   });
 });
 
