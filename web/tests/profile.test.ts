@@ -215,8 +215,8 @@ describe('the flag and the colour tile are decoration, never a placeholder', () 
     // OWNER, 2026-11-02: read as a hexagon at a glance. 23 x 23 around a -12 -12 24 24 viewBox
     // draws the hex at ~19 x 22 CSS px (the old 13 x 15 was a stamp, and its 0 0 24 24 viewBox
     // clipped the centred points to a quadrant).
-    expect(swatchCss).toContain('width: 23px');
-    expect(swatchCss).toContain('height: 23px');
+    expect(swatchCss).toContain('width: 20.5px');
+    expect(swatchCss).toContain('height: 20.5px');
     expect(nameRow).toContain('viewBox="-12 -12 24 24"');
   });
 
@@ -237,17 +237,17 @@ describe('the flag and the colour tile are decoration, never a placeholder', () 
   it('sizes the tile so the hexagon READS as one, and puts it on the name’s baseline', () => {
     // Owner, 2026-11-02: "i cant see the color hex in profile". Two causes: the silent `hidden`
     // attribute above, and a 13x15 box whose letterboxed ink was 10.79x12.46 — smaller than the
-    // name's lowercase. The chosen box is 23px square around the map's own -12 -12 24 24 viewBox:
-    // ~19.09 x 22.04 of ink at the hex's 1.1547 aspect (2/√3), read as a hexagon at a glance.
+    // name's lowercase. The chosen box is 20.5px square around the map's own -12 -12 24 24 viewBox:
+    // 17.02 x 19.65 of ink at the hex's 1.1547 aspect (2/√3), taller than the name's 19px line box.
     const swatchCss = /\.sp-swatch \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
-    expect(swatchCss).toMatch(/width: 23px/);
-    expect(swatchCss).toMatch(/height: 23px/);
+    expect(swatchCss).toMatch(/width: 20\.5px/);
+    expect(swatchCss).toMatch(/height: 20\.5px/);
     expect(swatchCss).toMatch(/flex: none/);
     // The box is square; the INK is the hex's own taller-than-wide shape.
-    const inkW = (23 * (2 * 11.5 * Math.cos(Math.PI / 6))) / 24;
-    const inkH = (23 * 23) / 24;
-    expect(inkW).toBeCloseTo(19.09, 1);
-    expect(inkH).toBeCloseTo(22.04, 1);
+    const inkW = (20.5 * (2 * 11.5 * Math.cos(Math.PI / 6))) / 24;
+    const inkH = (20.5 * 23) / 24;
+    expect(inkW).toBeCloseTo(17.02, 1);
+    expect(inkH).toBeCloseTo(19.65, 1);
     expect(inkH / inkW).toBeCloseTo(2 / Math.sqrt(3), 3);
     // Flag, tile and name share one BASELINE (owner: the hex sits beside the name, not floating).
     const lineCss = /dd\.sp-name-line \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';

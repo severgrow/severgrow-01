@@ -2605,12 +2605,13 @@ html.futasaku-product .install-prompt-scrim {
    OWNER, 2026-11-02: "i cant see the color hex in profile". It was 13 x 15 (a stamp when it showed
    at all) and the SVG carried a 0 0 24 24 viewBox while its points are centred on 0, which cropped
    the tile to its lower-right quadrant. It is now a 23 x 23 box around a -12 -12 24 24 viewBox: at
-   that box the drawn hex is ~19 x 22 CSS px, read as a hexagon at a glance, on the name's centre
-   line (the name line already aligns its children on the centre). */
+   that box the drawn hex is 17.02 x 19.65 CSS px (0.83 x 0.96 of it): taller than the name's own
+   19px line box, so it reads as a hexagon, and small enough that the widest legal name still fits
+   at 320px beside the flag (measured: a 23px box pushed the name row 17px over). */
 #sheet-profile .sp-swatch {
   flex: none;
-  width: 23px;
-  height: 23px;
+  width: 20.5px;
+  height: 20.5px;
   overflow: visible;
 }
 #sheet-profile .sp-swatch-face {
