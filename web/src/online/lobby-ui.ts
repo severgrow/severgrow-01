@@ -20,6 +20,9 @@ import { createHudBrandMark } from '../player/branding.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { leaveLobbyForMatch } from './lobby-exit.js';
 import { WorldView } from './world-view.js';
+import { lastWorld, rememberWorld } from './world-memory.js';
+import { mountWorldSource } from './living-world-source.js';
+import { mountLivingTerritory } from './living-territory.js';
 import { installTerritoryCountUI, answerWaiting, territoryCounts } from './menu-territory.js';
 import type { TerritoryCounts } from './menu-territory.js';
 import { mountAnswerClock } from './menu-territory-clock.js';
@@ -198,6 +201,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let waitingInFlight = false;
   let serverOffset = 0;
   let worldView: WorldView | null = null;
+  const worldSource = mountWorldSource(() => client.worldMap(), lastWorld(browserStorage()), world => rememberWorld(browserStorage(), world));
+  let living: ReturnType<typeof mountLivingTerritory> | null = null;
 
   /**
    * THE DISCLOSURE'S OWN STATE — and the guard against the list snapping shut.
@@ -335,13 +340,17 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     // Each online screen arrives on the shared interface beat; the screens we leave are reset so a
     // half-finished entrance can never surface later. No transform on the game: these are menus.
     for (const [key, el] of Object.entries(screens) as [keyof typeof screens, HTMLElement][]) {
-      if (key === next) enterSurface(el, { travel: 6 });
+      if (key === next && key !== 'world') enterSurface(el, { travel: 6 });
       else resetSurface(el);
     }
     // The online screens are their own full-screen view: keep the main menu fully out of the
     // way (hidden, not merely behind) so its title/buttons can never bleed through the panel.
     // Every path back to the menu goes through hooks.showMenu() → showScreen('menu').
-    if (menuEl) menuEl.hidden = next !== null;
+    if (next === 'world') living?.open();
+    else {
+      if (next !== null) living?.hide();
+      if (menuEl) menuEl.hidden = next !== null;
+    }
     if (brandMark) {
       const head = next ? screens[next].querySelector('.online-head') : null;
       if (head && brandMark.parentElement !== head) head.append(brandMark);
@@ -584,7 +593,19 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   worldView = new WorldView(client, async () => {
     const id = await ensureIdentity();
     return id ? { token: id.token, playerId: id.playerId } : null;
+  }, () => worldSource.read(), async () => {
+    // A late mutation acknowledgement must not reuse a menu read that began before it committed.
+    if (menuPass) await menuPass.catch(() => undefined);
+    if (menuEl?.hidden === false && worldEl.dataset.livingTerritory === 'menu') await refreshMenu();
   });
+  living = menuEl ? mountLivingTerritory({menu: menuEl, screen: worldEl,
+    preview: () => worldView?.preview(worldSource.peek(), identity.peek(), !worldSource.isFresh()),
+    stop: () => worldView?.close(true),
+  }) : null;
+  worldSource.subscribe(() => living?.update());
+  const syncMenuWorld = (visible: boolean) => living?.menu(visible);
+  window.addEventListener('futasaku:screen', event => syncMenuWorld((event as CustomEvent<string>).detail === 'menu'));
+  window.addEventListener('pageshow', event => { if(event.persisted) { living?.settle(); if(menuEl?.hidden === false) void refreshMenu(); } });
   worldView.setCue((name) => hooks.cue?.(name));
   // The Territory's own-tile level comes from this device's campaign record, not from the server's
   // last paid clear (owner report, 2026-10-24).
@@ -1105,7 +1126,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     show('world');
     void renderWorld();
   };
-  document.getElementById('menu-world')?.addEventListener('click', () => openWorld('menu'));
+  const worldEntry = document.getElementById('menu-world') as HTMLButtonElement | null;
+  worldEntry?.addEventListener('click', () => openWorld('menu'));
+  // Code readiness, not network readiness: a tap can never land before this handler exists.
+  if (worldEntry) worldEntry.disabled = false;
   $('online-world-back').addEventListener('click', () => {
     if (worldFrom === 'hub') return void openHub();
     show(null);
@@ -1138,13 +1162,16 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
    * never pay for two different reads of the same thing (owner brief, 2026-10-21). Unknown stays
    * unknown; the caller paints an em dash, never a 0.
    */
-  const readMenuCounts = async (playerId?: string): Promise<TerritoryCounts | null> => {
+  const readMenuCounts = async (playerId?: string, publicMap = worldSource.read()): Promise<TerritoryCounts | null> => {
+    // Public geography must load even when identity or the wallet cannot be read.
+    void publicMap.catch(() => undefined);
     const id = await ensureIdentity();
     if (!id || (playerId && id.playerId !== playerId)) {
       if (menuEl?.hidden === false) territoryUI.paint(null);
       answerClock.stop();
       return null;
     }
+    living?.update();
     let wallet: SeedWallet | null = null;
     let world: WorldMapPayload['world'] | null = null;
     let waiting = 0;
@@ -1153,7 +1180,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     try {
       const [readWallet, map, challenges, duels] = await Promise.all([
         client.seedWallet(id.token),
-        client.worldMap(),
+        publicMap,
         // The menu's own signal: the shared "is anything waiting for me" predicate.
         client.worldChallenges(id.token).catch(() => null),
         // The SAME match list the hub draws, so the Play online key can say "your move". It rides
@@ -1178,6 +1205,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       world = null;
       answerClock.stop();
     }
+    if (wallet && menuEl?.hidden === false && identity.peek()?.playerId === id.playerId)
+      worldView?.useMenuWallet(id.playerId, wallet);
     const counts = territoryCounts(wallet, world, id.playerId, waiting);
     rememberTerritory(id.playerId, counts);
     if (menuEl?.hidden === false) territoryUI.paint(counts);
@@ -1242,11 +1271,14 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (menuPass) return menuPass;
     menuPass = (async () => {
       try {
+        // Start the public map immediately; identity and Seed settlement never block its arrival.
+        const publicMap = worldSource.read();
+        void publicMap.catch(() => undefined);
         // Settle queued Seed proofs first, so the wallet read below already includes them.
         await syncSeedRewards();
         if (menuEl?.hidden !== false) return;
         // One wallet + one map read, remembered for the profile too (territory-cache.ts).
-        await readMenuCounts();
+        await readMenuCounts(undefined, publicMap);
       } finally {
         menuPass = null;
       }
@@ -1258,10 +1290,12 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   // rather than leaving the waiting screen (or the parked search) one tick stale.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
+    living?.settle();
+    if(menuEl?.hidden === false) void refreshMenu();
     if (waiting) void pollWaiting();
     else if (search) void pollSearch();
   });
-  if (menuEl?.hidden === false) void refreshMenu();
+  if (menuEl?.hidden === false) { syncMenuWorld(true); void refreshMenu(); }
   $('online-create').addEventListener('click', () => void createMatch());
   // The "Your matches" disclosure. Opening also asks for the freshest list; the render it causes
   // reads `matchesExpanded`, so it cannot shut the panel it just opened.

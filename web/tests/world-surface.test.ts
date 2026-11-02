@@ -173,8 +173,12 @@ describe('the world map rests on the ONE shared page surface', () => {
     // The framing rule: the view is sized to the WINDOW's aspect, and the framed view is BOTH zoom
     // limits, so zooming out can never widen the box back to the world and letterbox it.
     expect(worldView, 'the view must frame itself to the window').toContain('boundsFor');
-    expect(worldView, 'the window’s aspect must come from its measured box')
-      .toMatch(/getBoundingClientRect\(\)[\s\S]{0,120}width \/ .{0,40}height/);
+    // Decorative SVG scale must not feed back into logical framing. The behavioral regression
+    // in living-viewport.test.ts supplies scaled bounds and verifies the exact resulting camera.
+    expect(worldView, 'the view must measure the layout viewport')
+      .toMatch(/const rect = measure \? this\.viewportSize\(\) : null/);
+    expect(worldView, 'the window’s aspect must remain its measured width divided by height')
+      .toMatch(/const aspect = rect[^;]*rect\.width \/ rect\.height/);
     // The step itself is pure now (`zoomedView`, web/tests/world-zoom.test.ts proves it as numbers);
     // the LIMIT it must never cross is still this one line, and it must stay exactly that.
     const stepAt = worldView.indexOf('export const zoomedView');

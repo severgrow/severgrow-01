@@ -914,6 +914,7 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   // lobby screen stacked on the board. The visible screen's own exit beat is started by
   // `leaveForMatch()` before this runs, and `hideLobbySurfaces` lets a closing screen finish it.
   hideLobbySurfaces();
+  window.dispatchEvent(new CustomEvent('futasaku:screen', { detail: name }));
   if (name === 'levels') {
     renderLevelGrid();
   }
