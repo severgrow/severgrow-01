@@ -1,7 +1,9 @@
-// THE ACCOUNT HALF OF THE FIRST-RUN NUDGE (owner brief, 2026-11-01).
+// THE ACCOUNT HALF OF THE MENU'S CAMPAIGN SUGGESTION (owner brief, 2026-11-01; the lamps it was
+// written for were removed on 2026-11-02, and the account answer is still what the suggestion and the
+// account-place rule read).
 //
-// The nudge's state is the UNION of this device's campaign progress and the signed-in account's
-// cleared levels. These tests pin the account half's promises without a browser:
+// The account answer is the UNION partner of this device's campaign progress. These tests pin the
+// account half's promises without a browser:
 //
 //   1. the derivation is `campaignHighestLevel` → levels 1..N (levels unlock in order);
 //   2. a guest / signed-out device is NEVER asked;
@@ -67,8 +69,9 @@ describe('the account answer is its furthest verified level, expanded in order',
   });
 
   it('the same one answer also places the account on a new device', () => {
-    // One read serves both consumers: this list is the lamps' half, and `highest` is the existing
-    // account-place rule's half. A level-36 account lands on level 37, with chapter 1 complete.
+    // One read serves both consumers: this list is the suggestion's half, and `highest` is the
+    // existing account-place rule's half. A level-36 account lands on level 37, with chapter 1
+    // complete.
     const fresh = { version: 1 as const, unlocked: 1, completed: [], best: {} };
     const after = reconcileProgress(fresh, 36);
     expect(currentLevel(after).number).toBe(37);
@@ -240,7 +243,7 @@ describe('the source keeps the efficiency promises', () => {
     // The menu pass itself stays synchronous: the paint is only a function call on that pass.
     const layoutAt = mainSource.indexOf('function layoutMenu(');
     const body = mainSource.slice(layoutAt, mainSource.indexOf('\nfunction showScreen(', layoutAt));
-    expect(body).toContain('firstRunLamps.paint(campaignProgress, accountClears)');
+    expect(body).toContain('menuSuggestion.paint(campaignProgress, accountClears)');
     expect(body).not.toMatch(/\bawait\b|fetch\(/);
   });
 

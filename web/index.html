@@ -123,17 +123,10 @@
           <!-- PLAY (product channels only) opens the submenu below, and carries the ONE cream fill
                on this screen. Revealed by main.ts, so no other channel ever shows it. Its three
                entries (LEVEL n / Play online / Practice match) are MOVED into #play-actions at boot,
-               in the order PLAY_MENU_ENTRIES lists them. -->
+               in the order PLAY_MENU_ENTRIES lists them. Its slight cream halo is a suggestion for a
+               new player (owner, 2026-11-02), painted as a class from campaign progress. -->
           <button id="menu-play" class="btn primary big" type="button" aria-label="Play" hidden>
             <span id="menu-play-label">Play</span>
-            <!-- THE FIRST-RUN NUDGE (owner brief, 2026-11-01): ten lamps, one per lesson (levels
-                 1-10), set into the key's lower bezel — a ring for a lesson not cleared, a filled
-                 lamp for one that is. No words, no count, no second control: it is decoration
-                 (aria-hidden, pointer-events:none) and the key under it is the only target, so it
-                 cannot steal a tap or add a row to a column whose spacing is pinned. main.ts paints
-                 it from campaign progress in the menu's own pass (web/src/menu/first-run.ts), and
-                 the tenth lamp's clearing takes the whole strip off the menu for good. -->
-            <span id="menu-play-lessons" class="menu-play-lessons" hidden aria-hidden="true"></span>
           </button>
           <!-- Continue (the saved game resume) sits right under the leader, as a quiet ghost. -->
           <button id="menu-continue" class="btn ghost big" type="button" aria-label="Continue" hidden>Continue</button>
