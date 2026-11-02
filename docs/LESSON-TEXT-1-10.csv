@@ -37,11 +37,11 @@ Level 8,After your first draw: before you Blast,Info box,Blast: two Bombs clear 
 Level 8,After the Blast: before your Grow,Info box,Blast clears several tiles at once and does NOT use your Grow.,freeGrowLine
 Level 8,Win card,Finish card,You had more points – you won!,wonOnPoints
 Level 8,Win card,"Finish card (""you learned"")",BLAST A HOLE,BLAST A HOLE
-Level 9,Introduction: gold Throw pile,Info box,The Throw pile glows gold when its top card completes a Bloom in your hand.,pileGoldLine
-Level 9,After a pile Bloom: skipping,Info box,Tap » to skip Grow/Bloom and keep your cards for later.,optionalLine
-Level 9,Right after the skip sentence (the Undo key is lit),Info box,You are able to undo your previous moves until you Throw a card at the end of your turn.,undoLine
+Level 9,Introduction (before the first draw): the Throw pile,Info box,The Throw pile glows gold when its top card completes a Bloom in your hand.,pileGoldLine
+Level 9,When a Bloom really comes from the Throw pile: skipping,Info box,Tap » to skip Grow/Bloom and keep your cards for later.,optionalLine
+Level 9,Straight after that sentence (the Undo key is lit),Info box,You are able to undo your previous moves until you Throw a card at the end of your turn.,undoLine
 Level 9,Win card,Finish card,You had more points – you won!,wonOnPoints
-Level 9,Win card,"Finish card (""you learned"")",BLOOM FROM THE THROW PILE,BLOOM FROM THE THROW PILE
+Level 9,Win card,"Finish card (""you learned"")",PLAY A FULL GAME,PLAY A FULL GAME
 Level 10,Win card,Finish card,YOU CAN PLAY FUTASAKU,canPlay
 Level 10,Win card,Finish card,Next: the big board.,canPlayLine
 Level 10,Win card,"Finish card (""you learned"")",THE WHOLE GAME,THE WHOLE GAME

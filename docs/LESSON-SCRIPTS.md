@@ -10,16 +10,23 @@ This file is the script of what the game shows in levels 1-10. It must match the
 
 If you change a beat, a word or a position, change it here too. If you change a lesson's position or goals, bump its `version` (an unfinished save of the old lesson then restarts cleanly).
 
-**Current version: 2** (2026-10-19 onboarding polish). The campaign progress and match-save keys moved to `.v3` at the same time, so nobody resumes onto a changed board. Old `.v2` keys stay in the browser, unread.
+**Current version: 3**, except level 1 and level 9, which are **4** (level 1 stopped offering
+Overgrow on 2026-10-24; level 9 became a real game from scratch on 2026-11-01, so an unfinished
+scripted-position save must restart). The campaign progress and match-save keys moved to `.v3` at
+the same time, so nobody resumes onto a changed board. Old `.v2` keys stay in the browser, unread.
 
 ## How every lesson works
 
-- **Authored, not dealt.** Each level opens from a fixed position:
+- **Authored, not dealt.** Levels 1-8 and 10 open from a fixed position:
   - the 19-hex map, its rock and gold, the tiles already grown;
   - both hands, the Draw pile order and the Throw pile.
   - Every card is a real card from the engine's deck. Cards a lesson does not name are out of play, which is how a lesson gets a short Draw pile (its clock) without a rule change.
+- **Level 9 is a real game** (owner, 2026-11-01): no authored position. `lessonOpening` deals the
+  campaign level's own `newMatch` on the small map — the engine's real shuffle, the level's real
+  bot (4), and the Who-starts ritual. Every legal move is the player's, and the game runs to a real
+  `GAME_OVER`. The live display still coaches each action as it happens (below).
 - **Steps come from the live game, not a counter.** The light always points at a legal move. From level 4 on, a different legal move is fine and the guide follows what happened.
-- **The opponent** (levels 1-9) is gentle, deterministic and always plays (owner, 2026-10-22: "every
+- **The opponent** (levels 1-8) is gentle, deterministic and always plays (owner, 2026-10-22: "every
   level has to still feel like a game and a slight challenge"):
   - it plays only legal moves and always draws from the Draw pile;
   - from level 2 it grows on EVERY turn: one tile, spreading on its own side with its lowest card;
@@ -107,6 +114,11 @@ storage keyed to lesson version 2:
 | 3rd | **WHISPER** | gentle pulse on the target, no dim, no pointer; still the action line — never a single word |
 | 4th + | **SILENT** | nothing; the calm neutral display (the score) |
 
+**Level 9 is the exception** (owner, 2026-11-01): it is a real game, so its live cue is never
+faded to nothing. Mastery still softens the *light* (SILENT becomes at least a whisper), but the
+display keeps saying the action of the moment — DRAW, CHOOSE A CARD, TAP LIT TILE, THROW A CARD,
+WAIT on their turn — whenever that action is the one happening.
+
 - From level 2 a spotlight may fire only for an action new **in that level**, and levels 2-9 spend at
   most **one** new-idea spotlight. Level 1 may show three (Draw, Grow, Throw). Level 10 has none.
 - The safety net is measured from the last touch: **6 s WHISPER**, **12 s GUIDE**, **20 s the light
@@ -172,7 +184,7 @@ label and no words. Then the lesson's explanations begin.
   in level 7), the info box says "This lesson cannot finish now. Open the menu to start again."
   There is no button in the box; the menu is always in the header.
 - **The clock.** The Draw pile's count glows when 3 or fewer cards are left. When the pile is empty the LED says LAST TURN.
-- **Seeds.** Levels 1-10 pay no Seeds in /3 and their finish card has no Seeds line. Their authored openings cannot be replayed by the server's verifier (see the report).
+- **Seeds.** Levels 1-10 pay no Seeds in /3 and their finish card has no Seeds line. Levels 1-8 and 10 cannot be replayed by the server's verifier at all (authored openings, scripted opponent); level 9 is a real `newMatch` game but still pays nothing.
 
 ### Beat format
 
@@ -344,21 +356,36 @@ The same in every level:
   6. Then the turn. Ends on points.
 - **Finish:** YOU WIN / YOU LEARNED: BLAST A HOLE (✹)
 
-## LEVEL 9 — THROW PILE (AND » IS OPTIONAL)
+## LEVEL 9 — A FULL GAME (ROUND THE STONE)
 
-- **Setup:**
-  - The Throw pile's top card (a 5) finishes the 3-4-5 in your hand.
-  - Your tile -1,1 (4); their home's sides are held by 9s.
-- **Beats:**
-  1. LIT Throw pile | BOX: "The Throw pile glows gold when its top card completes a Bloom in your hand." | tap anywhere
-  2. LIT Throw pile | DISPLAY: TAP THE THROW PILE | drawn from the Throw pile
-  3. LIT Bloom | DISPLAY: TAP BLOOM | Bloom picked
-  4. LIT the Bloom's tiles | DISPLAY: TAP THE LIT TILES | Bloom played
-  5. LIT » (nothing lit while a power is still playable) | BOX: "Tap » to skip Grow/Bloom and keep
-     your cards for later." | tap anywhere. Once; skipping is taught here, never required.
-  6. LIT the Undo key | BOX: "You are able to undo your previous moves until you Throw a card at the
-     end of your turn." | tap anywhere. Once, straight after the skip (owner, 2026-10-22).
-- **Finish:** YOU WIN / YOU LEARNED: BLOOM FROM THE THROW PILE (↦)
+- **Setup:** none authored. The level deals its own real match on the 19-hex map (the campaign
+  level's board: rocks -2,0 / -1,-1 / -1,0, gold 0,0 / 0,2 / 0,-2), with the campaign's bot (4).
+  It opens with the **Who-starts ritual** — the same card ceremony as a practice match and an
+  online duel — because this is the first level that is a real game from scratch (owner,
+  2026-11-01). Who starts is the engine's `startingPlayerFor(seed)`, shown by the ritual.
+- **The one sentence kept from the old lesson:** before the first draw, once, the box says the
+  Throw-pile line ("The Throw pile glows gold when its top card completes a Bloom in your hand.")
+  and nothing is forced. The old skip/Undo explanations still appear only if a Bloom really comes
+  from the Throw pile, at the moment it happens. Nothing was deleted from the teaching.
+- **Every move is the player's.** No goals, no lock, no scripted opponent; all legal Grow / Bloom /
+  Bomb / Blast / Throw moves work. The game ends on its own terms — surround, deck end or the turn
+  limit — with a real result, and a real loss is possible.
+- **The live coaching stays.** The cockpit's display says the action of the moment, read from the
+  live state: TAP DRAW PILE at the Draw step; CHOOSE A CARD when a card must be picked; TAP LIT
+  TILE at the target; THROW A CARD, then TAP THROW PILE; WAIT on their turn. The lit target is the
+  thing the cue names. The mastery fade may soften the light but never silences the line. The box
+  and the light never hold a tap: the sentence closes on the same tap that plays the move, and the
+  reading floor is skipped here so the first Draw is never swallowed.
+- **The record and progress:** a finished match counts in the offline record (it is a campaign
+  game), a win marks level 9 complete and unlocks 10, a loss removes nothing.
+- **The reference card (Match Intel → Rules):** the ten lessons are cards there, titled with the
+  idea each teaches. Level 9's finish card now names the format ("PLAY A FULL GAME"), so its Rules
+  card keeps the teaching instead: titled from the lesson's own frozen name ("The Other Pile" →
+  "The other pile"), with the Throw-pile sentence as its line (`logic/intel-guide.ts`).
+- **Finish:** YOU WIN / YOU LEARNED: PLAY A FULL GAME (↦).
+- **Proof range:** with the strongest bot on the player's seat it wins by surround in 3 turns; a
+  player who draws and ends the turn without ever Growing loses by surround in about 14. Both are
+  real, deterministic results of seed 95009 on this board.
 
 ## LEVEL 10 — FINALE
 
@@ -366,10 +393,11 @@ The same in every level:
   - Gold 0,0, rock 0,1.
   - Your tile -1,1 (4); their tiles 1,-1 (4), 1,-2 (6), 2,-1 (7).
   - The gentlest bot (level 1). Draw pile: 14 cards.
-  - **This is the first level that opens with the Who-starts ritual** (owner, 2026-10-24): the same
-    card ceremony as a practice match and an online duel, before the board is yours. It presents the
-    engine's starter — `authoredState` opens every lesson on your turn — and decides nothing.
-    Levels 1-9 keep their authored openings and never show it.
+  - **This level also opens with the Who-starts ritual** (owner, 2026-10-24): the same card
+    ceremony as a practice match and an online duel, before the board is yours. It presents the
+    engine's starter — `authoredState` opens every authored lesson on your turn — and decides
+    nothing. Levels 1-8 keep their authored openings and never show it; level 9 is the first real
+    game and does.
 - **Beats:**
   - Before the first draw, once: BOX: "You are ready now for your first game of Futasaku. Good
     luck!" | nothing lit, a tap anywhere dismisses it | no action line on the display (the box
@@ -396,12 +424,12 @@ Measured by the unit suite (`web/tests/lessons.test.ts`), counting the player's 
 | 6 | 2 | surround |
 | 7 | 3 | 6–2 on points |
 | 8 | 2 | 7–2 on points |
-| 9 | 3 | 12–4 on points |
+| 9 | real game | a real result (seed 95009: surround in 3 with the best play; a loss is possible) |
 | 10 | 3 | surround |
 
-With the opponent growing every turn (2026-10-22). L2-L9 are all at or under five turns. L6, L8 and
+With the opponent growing every turn (2026-10-22). L2-L8 are all at or under five turns. L6, L8 and
 L10 end sooner because the lesson's own move (or the finale's strongest attack) is the winning one;
-no filler turn was added just to reach a count.
+no filler turn was added just to reach a count. L9 has no fixed count: it is a real match.
 L1 is under 60 seconds in the browser test (about 16 s at 390x844).
 
 ## No Bloom before the Bloom lesson (owner, 2026-10-22)

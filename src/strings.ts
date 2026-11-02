@@ -1720,9 +1720,11 @@ export const LESSON = Object.freeze({
   /**
    * The tutorial's lesson names, one short chapter title per teaching beat (owner, 2026-11-01:
    * "in tutorial in settings in level 1-9 give each lesson a short name"). Shown beside the
-   * lesson's number in Settings → Tutorial, and nowhere else: the info box never carries a level
-   * name (docs/LESSON-SCRIPTS.md). A name says what the lesson leaves you able to do, in the
-   * game's quiet garden register, never the rule read back.
+   * lesson's number in Settings → Tutorial, and — for a level whose finish card names the FORMAT
+   * rather than the idea (level 9 is a full game since 2026-11-01) — as that lesson's Rules-tab card
+   * title in Match Intel. The info box never carries a level name (docs/LESSON-SCRIPTS.md). A name
+   * says what the lesson leaves you able to do, in the game's quiet garden register, never the rule
+   * read back.
    *
    * Level 10 is the send-off, not a teaching beat, so it has no name and no placeholder. This is
    * the ONE map: a component reads it, never a name of its own. Pinned by

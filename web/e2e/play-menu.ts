@@ -197,7 +197,7 @@ try {
     // LEVEL <n> hands STRAIGHT into the level (there is no list to pick from). Levels 1-10 open
     // from their LESSON's authored position, so the seed on the board is the lesson's own —
     // asserting `CAMPAIGN_LEVELS[0].seed` here is what made the older suites claim a false failure.
-    const lessonSeed = LESSONS[0]!.position.seed;
+    const lessonSeed = LESSONS[0]!.position!.seed;
     await page.waitForFunction((seed: number) => (window as any).__severgrow.state()?.seed === seed, lessonSeed, { timeout: 30_000 });
     const opened = await page.evaluate(() => (window as any).__severgrow.state().seed as number);
     check(opened === lessonSeed, `${vp.key}: LEVEL opens level 1 on its lesson seed (${opened})`);

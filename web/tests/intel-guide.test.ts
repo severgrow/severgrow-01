@@ -106,7 +106,12 @@ describe('the Rules tab: the ten lessons as cards', () => {
     expect(cards).toHaveLength(10);
     expect(cards[0]!.title).toBe('Draw, Grow, Throw');
     expect(cards[4]!.title).toBe('Bloom three at once');
-    expect(cards[8]!.title).toBe('Bloom from the Throw pile');
+    // Level 9 became a real game from scratch (owner, 2026-11-01), so its FINISH card now says what
+    // it was ("PLAY A FULL GAME"). The Rules tab is reference material, so the card keeps the idea
+    // the level still teaches — the Throw pile — from the lesson's own frozen name, and its line is
+    // still the Throw-pile sentence (checked below). This asserts the intent, not a weaker rule.
+    expect(cards[8]!.title).toBe('The other pile');
+    expect(cards[8]!.line).toBe(LESSON.pileGoldLine);
     for (const c of cards) {
       expect(c.title, c.title).not.toBe(c.title.toUpperCase());
       expect(c.line.length, c.title).toBeGreaterThan(20);

@@ -4,6 +4,10 @@
 // should be visible and use exactly the same system as other games - on level 10 show a lesson
 // window message saying 'You are ready now for your first game of Futasaku. Good luck!'"
 //
+// Owner, 2026-11-01 made LEVEL 9 a real game from scratch too, so the ritual now starts there;
+// that level's own suite is `web/e2e/futa04-lesson-9-free.ts`. This suite stays the level-10
+// proof (the send-off, reduced motion, the control).
+//
 // What this proves, in the browser and through the real menu:
 //   * a campaign LEVEL 10 starts with the same ritual as a practice match (deck, reveal, result),
 //     and the cards agree with the seat the engine already chose;

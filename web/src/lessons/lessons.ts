@@ -15,6 +15,8 @@ import type { Level } from '../../../src/bots/levels.js';
 import { LESSON as W } from '../../../src/strings.js';
 import { authoredState } from './authored.js';
 import { FINAL_LESSON } from './final.js';
+import { campaignLevelByNumber } from '../../../src/campaign/levels.js';
+import { campaignOpening } from '../../../src/campaign/play.js';
 import type { PositionSpec } from './authored.js';
 import type { OpponentScript } from './opponent.js';
 import type { ActionKind, LessonTier, PowerKind } from './mastery.js';
@@ -44,8 +46,16 @@ export type Lesson = {
    * restarted (never resumed into a position it no longer matches); a completed level stays done.
    */
   version: number;
-  position: PositionSpec;
-  /** The scripted opponent, or a real bot level (level 10 is a normal game). */
+  /**
+   * `guide` (the default): a hand-held lesson that opens from an authored position.
+   * `free`: a real game from scratch — the engine's own deal on the campaign level's board, the
+   * real bot, every legal move, played to a real result. The live display still coaches each
+   * action as it happens. Only level 9 (`docs/LESSON-SCRIPTS.md`).
+   */
+  kind?: 'guided' | 'free';
+  /** A guided lesson's authored opening; a free lesson has none — its deal comes from the level. */
+  position?: PositionSpec;
+  /** The scripted opponent, or a real bot level (levels 9 and 10 are normal games). */
   opponent: { script: OpponentScript } | { bot: Level };
   /** Levels 1-3: only the lit thing (and its quiet alternatives) answers a tap. */
   locked: boolean;
@@ -57,7 +67,7 @@ export type Lesson = {
    * can be played (ACT_INTROS — owner, 2026-10-22: "every step has a playable example straight away").
    */
   intro: readonly IntroKind[];
-  /** Level 10 keeps its hints for an idle moment; every other level guides every step (the fade decides how much). */
+  /** Level 10 keeps its hints for an idle moment; every other level guides every step (the fade decides how much). Level 9's live cue always shows. */
   guide: 'always' | 'idle';
   /**
    * The actions this level introduces. From level 2 a spotlight may fire only for one of these,
@@ -230,24 +240,22 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLAST A HOLE', icon: '✹' },
   },
   {
-    level: 9, version: 3, locked: false, guide: 'always',
+    // A FULL game from scratch (owner, 2026-11-01): a real deal, the real engine, every legal
+    // action, played to a real result on the small map. The opening ritual says who starts (the
+    // starter ritual begins at this level), and the same live beats coach each action as it
+    // happens — no scripted opening, no forced move. The Throw-pile sentence is still said once
+    // before the first draw, so what the old lesson taught is not lost.
+    level: 9, version: 4, kind: 'free', locked: false, guide: 'always',
     intro: ['pile-gold'],
-    goals: [{ t: 'pileBloom' }],
+    goals: [],
     newActions: [],
-    position: {
-      seed: 96009,
-      tiles: [['-1,1', YOU, 4], ['1,-2', THEM, 9], ['1,-1', THEM, 9], ['2,-1', THEM, 9]],
-      hand: [[0, 3], [0, 4], [1, 2], [2, 6], [3, 7], [1, 8], [2, 9]],
-      opponent: [[1, 1], [2, 2], [3, 3], [0, 2], [3, 2], [2, 1], [3, 4]],
-      deck: [[3, 2], [1, 4], [3, 5], [0, 6], [1, 5], [2, 4], [3, 6], [0, 7], [1, 7], [2, 7], [3, 8], [2, 8]],
-      discard: [[3, 1], [0, 5]],
-    },
-    opponent: { script: {} },
-    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLOOM FROM THE THROW PILE', icon: '↦' },
+    // The campaign level's own bot (4); `web/tests/lesson-9-free.test.ts` pins the two together.
+    opponent: { bot: 4 },
+    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'PLAY A FULL GAME', icon: '↦' },
   },
   {
     level: 10, version: 3, locked: false, guide: 'idle',
-    // The last level opens like a real game (the ritual plays from level 10 on), then says this one
+    // The last level opens like a real game (the ritual plays from level 9 on), then says this one
     // thing before the first draw: you know the game now, go and play it (owner, 2026-10-24).
     intro: ['first-game'],
     goals: [],
@@ -260,7 +268,25 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
 ] satisfies Lesson[]);
 
 export const lessonFor = (level: number): Lesson | null => LESSONS.find((l) => l.level === level) ?? null;
-export const lessonOpening = (lesson: Lesson): State => authoredState(lesson.position);
+
+/** Is this lesson a real game from scratch rather than an authored teaching position? */
+export const lessonIsFree = (lesson: Pick<Lesson, 'kind'>): boolean => lesson.kind === 'free';
+
+/**
+ * The opening a lesson starts from. A guided lesson lays its authored position on the small map. A
+ * free lesson (level 9) deals the campaign level's own real match — `campaignOpening`, the same
+ * `newMatch` call the campaign and the server use, so the deal, the board and who starts are the
+ * engine's, never a script.
+ */
+export const lessonOpening = (lesson: Lesson): State => {
+  if (lessonIsFree(lesson)) {
+    const level = campaignLevelByNumber(lesson.level);
+    if (!level) throw new Error(`free lesson ${lesson.level} has no campaign level`);
+    return campaignOpening(level);
+  }
+  if (!lesson.position) throw new Error(`guided lesson ${lesson.level} has no opening`);
+  return authoredState(lesson.position);
+};
 
 // ---------- reading the live game ----------
 
@@ -563,7 +589,7 @@ const suggestFresh = (lesson: Lesson, s: State): Action | null => {
   const legal = s.phase === 'ACT' && s.actor === YOU ? lessonLegal(lesson, s) : [];
   const a = suggestRaw(lesson, s);
   if (!a || a.t !== 'Sprout') return a;
-  const koAllowed = currentGoal(lesson, s)?.t === 'strangle' || lesson.level === 10;
+  const koAllowed = currentGoal(lesson, s)?.t === 'strangle' || lesson.level === 10 || lessonIsFree(lesson);
   const notKo = (x: Action | null): Action | null => {
     if (!x || koAllowed) return x;
     try { return isStrangled(apply(s, x), THEM) ? null : x; } catch { return null; }
@@ -585,9 +611,10 @@ const suggestRaw = (lesson: Lesson, s: State): Action | null => {
   const grew = (s.sproutsThisTurn ?? 0) > 0;
   const end = legal.find((a) => a.t === 'EndAct') ?? null;
   const pick = (a: Action | null | undefined): Action | null => a ?? null;
-  // A KO is the lesson only on level 6, and part of the game on level 10. Elsewhere the light never
-  // points at a move that ends the game by surround: the lesson ends on points, as most games do.
-  const koAllowed = goal?.t === 'strangle' || lesson.level === 10;
+  // A KO is the lesson only on level 6, and part of the game on level 10 and in a free game.
+  // Elsewhere the light never points at a move that ends the game by surround: the lesson ends on
+  // points, as most games do.
+  const koAllowed = goal?.t === 'strangle' || lesson.level === 10 || lessonIsFree(lesson);
   const win = koAllowed ? strangleMove(s, legal) : null;
   const notKo = (a: Action | null): Action | null => {
     if (!a || koAllowed) return a;
@@ -668,6 +695,11 @@ export type Beat = {
   status?: boolean;
   /** Show only after a few idle seconds (the late levels' quiet guide). */
   idleOnly?: boolean;
+  /**
+   * A free lesson (level 9): this is live coaching on a real action, so its action line shows at
+   * once, whatever the per-action mastery tier. The light still fades by tier.
+   */
+  always?: boolean;
   /** The action this step teaches, so the UI can fade its light by the player's mastery. */
   kind?: ActionKind;
   /** A power's one-time hello: remembered on this device, never shown twice. */
@@ -924,11 +956,13 @@ const lightFor = (lesson: Lesson, s: State, ctx: BeatCtx, move: Action, legal: r
   // The lesson's own step is lit at once; every other suggestion waits for a few idle seconds
   // (owner, 2026-10-24: "cards suggested should be after a few seconds of idle… and be actually a
   // good move"). Level 1 teaches the whole turn, so every step there is its own. Level 10 waits
-  // for a quiet moment on every hint.
-  const idleOnly = lesson.guide === 'idle' || (lesson.level !== 1 && !servesGoal(goal, move));
+  // for a quiet moment on every hint. A FREE lesson coaches a real game: its cue for the action
+  // happening now always shows, with no idle wait.
+  const free = lessonIsFree(lesson);
+  const idleOnly = !free && (lesson.guide === 'idle' || (lesson.level !== 1 && !servesGoal(goal, move)));
   const kind = kindForMove(goal, move);
   const beat = (id: string, say: string, lit: Lit): Beat => ({
-    id, say, lit, ...(idleOnly ? { idleOnly } : {}), ...(kind ? { kind } : {}),
+    id, say, lit, ...(idleOnly ? { idleOnly } : {}), ...(free ? { always: true } : {}), ...(kind ? { kind } : {}),
   });
   switch (move.t) {
     case 'Draw':
@@ -974,6 +1008,9 @@ export const lessonBeat = (lesson: Lesson, s: State, ctx: BeatCtx): Beat | null 
     const first = myTurns(s).length <= 1 && lesson.guide === 'always';
     return {
       id: 'their-turn', say: W.theirTurn, status: true,
+      // A free lesson (level 9) is live coaching on a real game: WAIT is its action line for the
+      // opponent's turn, so it gets the same "never silenced by mastery" guarantee as DRAW/GROW.
+      ...(lessonIsFree(lesson) ? { always: true } : {}),
       ...(first ? { line: W.theirTurnLine } : {}), lit: { t: 'none' },
       ...(lesson.guide === 'idle' ? { idleOnly: true } : {}),
     };
@@ -1007,6 +1044,9 @@ export const lessonBeat = (lesson: Lesson, s: State, ctx: BeatCtx): Beat | null 
 export const presentedLessonBeat = (beat: Beat | null, tier: LessonTier): Beat | null => {
   if (!beat) return null;
   if (beat.explain || beat.hello || beat.status) return beat;
+  // A free lesson's live coach: the action line belongs to the game happening now, so mastery
+  // may soften the light but never silence the cue (level 9's whole point).
+  if (beat.always) return beat;
   if (tier === 'silent') return null;
   return beat;
 };

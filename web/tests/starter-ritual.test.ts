@@ -22,7 +22,7 @@ import {
   starterRitualDeck,
   starterRitualView,
 } from '../src/logic/starter-ritual.js';
-import { lessonFor, lessonOpening } from '../src/lessons/lessons.js';
+import { lessonFor, lessonIsFree, lessonOpening } from '../src/lessons/lessons.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -163,18 +163,21 @@ describe('the outcome is readable (owner, 2026-10-23)', () => {
 });
 
 describe('which matches open with the ritual (owner, 2026-10-24)', () => {
-  it('plays on a practice match and on every campaign level from 10 on', () => {
-    expect(RITUAL_FROM_CAMPAIGN_LEVEL).toBe(10);
+  it('plays on a practice match and on every campaign level from 9 on', () => {
+    expect(RITUAL_FROM_CAMPAIGN_LEVEL).toBe(9);
     expect(playsStarterRitual(true, null), 'practice').toBe(true);
-    for (const n of [10, 11, 12, 13, 31, 70]) expect(playsStarterRitual(true, n), `level ${n}`).toBe(true);
+    for (const n of [9, 10, 11, 12, 13, 31, 70]) expect(playsStarterRitual(true, n), `level ${n}`).toBe(true);
   });
 
-  it('never plays on the hand-held lessons 1-9', () => {
-    // Those nine openings are authored and deliberately skip the draw (their first sentence is
-    // about the board, not about who starts). Enabling the ritual there would be a different game.
-    for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9]) expect(playsStarterRitual(true, n), `level ${n}`).toBe(false);
-    expect(lessonFor(10), 'level 10 is the first level after them').not.toBeNull();
-    expect(lessonFor(9)!.level).toBe(9);
+  it('never plays on the hand-held lessons 1-8', () => {
+    // Those eight openings are authored and deliberately skip the draw (their first sentence is
+    // about the board, not about who starts). Level 9 is a real game from scratch (owner,
+    // 2026-11-01), so the same ceremony as practice and online belongs there.
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) expect(playsStarterRitual(true, n), `level ${n}`).toBe(false);
+    const l9 = lessonFor(9);
+    expect(l9, 'level 9 is the first real game').not.toBeNull();
+    expect(lessonIsFree(l9!), 'level 9 is a free lesson').toBe(true);
+    expect(lessonIsFree(lessonFor(8)!), 'level 8 is still hand-held').toBe(false);
   });
 
   it('is a product-channel rule, exactly like the ritual itself', () => {

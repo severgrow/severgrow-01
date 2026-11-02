@@ -21,7 +21,7 @@ import {
 } from '../../../src/engine/index.js';
 import type { Action, Coord, RulesConfig, View } from '../../../src/engine/index.js';
 import { INTEL, LESSON as W } from '../../../src/strings.js';
-import { LESSONS } from '../lessons/lessons.js';
+import { LESSONS, lessonIsFree } from '../lessons/lessons.js';
 import { homeSides } from './home.js';
 import { opportunities, weakSpots } from './weakspots.js';
 
@@ -69,11 +69,24 @@ const LINES: Readonly<Record<number, string>> = Object.freeze({
 
 const BOMB_LEVELS = new Set([7, 8]);
 
+/**
+ * The Rules tab's title for one lesson. A hand-held lesson IS one idea, so its finish card names it
+ * ("BLOOM THREE AT ONCE"). A FREE lesson (level 9, a real game from scratch since 2026-11-01) has a
+ * finish card about the format ("PLAY A FULL GAME"), which is the right thing to say after a match
+ * and the wrong thing for reference material — so the card keeps the idea the level still teaches,
+ * from the lesson's own frozen name ("The Other Pile" → "The other pile"). `LINES` below still gives
+ * it the Throw-pile sentence, so nothing the old lesson taught left the Rules tab.
+ */
+const ruleTitle = (lesson: (typeof LESSONS)[number]): string =>
+  lessonIsFree(lesson) && W.names[lesson.level]
+    ? sentence(W.names[lesson.level]!)
+    : sentence(lesson.finish.learned);
+
 /** The ten lesson cards. A game without Bombs leaves out the two Bomb lessons. */
 export const ruleCards = (config?: RulesConfig): RuleCard[] =>
   LESSONS
     .filter((l) => (config?.fruitCardCount ?? 4) > 0 || !BOMB_LEVELS.has(l.level))
-    .map((l) => ({ level: l.level, icon: l.finish.icon, title: sentence(l.finish.learned), line: LINES[l.level] ?? '' }));
+    .map((l) => ({ level: l.level, icon: l.finish.icon, title: ruleTitle(l), line: LINES[l.level] ?? '' }));
 
 const SEVERITY_RANK: Readonly<Record<TipSeverity, number>> = Object.freeze({ critical: 0, high: 1, steady: 2 });
 
