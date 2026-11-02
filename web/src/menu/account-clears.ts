@@ -1,15 +1,21 @@
-// THE ACCOUNT HALF OF THE FIRST-RUN NUDGE (owner brief, 2026-11-01).
+// THE ACCOUNT HALF OF THIS DEVICE'S CAMPAIGN PLACE (owner brief, 2026-11-01).
 //
-// The nudge's lamps are the UNION of this device's campaign progress (the menu already holds it) and
-// the signed-in ACCOUNT's cleared levels. The account truth is `campaignHighestLevel`: the furthest
-// Campaign level with a verified first-clear receipt, which the server reads as ONE indexed
-// `max(...)` over `seed_reward_receipts (player_id, source_key)` where `mode = 'campaign'`
-// (server/src/seeds/postgres.ts). It is deliberately NOT `campaign_clears` (migration 0021): that
-// table is only written when a campaign REWARD PROOF is submitted, so ordinary wins never land in it.
+// A signed-in player's campaign place is the UNION of this device's progress and the ACCOUNT's
+// cleared levels. One answer serves two readers: `reconcileProgress` raises the local record to the
+// account's place (level 35 on the phone, level 1 on the desktop), and the menu's campaign suggestion
+// (web/src/menu/suggestion.ts) unions the same levels. The ten first-run lamps it was written for
+// were removed on 2026-11-02; the read and its cache are NOT dead — the account-place rule still
+// needs them on every signed-in boot.
+//
+// The account truth is `campaignHighestLevel`: the furthest Campaign level with a verified first-clear
+// receipt, which the server reads as ONE indexed `max(...)` over `seed_reward_receipts (player_id,
+// source_key)` where `mode = 'campaign'` (server/src/seeds/postgres.ts). It is deliberately NOT
+// `campaign_clears` (migration 0021): that table is only written when a campaign REWARD PROOF is
+// submitted, so ordinary wins never land in it.
 //
 // Levels unlock in order (docs/SPEC.md), so an account whose highest clear is N has cleared levels
-// 1..N. `levelsFromHighest` is the whole derivation, and chapter-1 levels 1-10 are the ones the ten
-// lamps stand for. A `lesson:10` receipt has no ordinal, so it cannot inflate the number.
+// 1..N. `levelsFromHighest` is the whole derivation, and chapter-1 levels 1-10 are the lessons the
+// menu's suggestion unions. A `lesson:10` receipt has no ordinal, so it cannot inflate the number.
 //
 // THE EFFICIENCY RULES (the hard part):
 //   * signed-in only — a guest never asks;
@@ -17,7 +23,7 @@
 //   * one bounded GET, no polling, no repeating timer, no render loop, no parallel requests;
 //   * the answer is cached under the existing `severgrow.*` namespace, keyed by PLAYER ID;
 //   * a campaign clear forgets the cache, so the next open asks once more;
-//   * every failure is `unavailable` — the caller keeps the device lamps exactly as they are.
+//   * every failure is `unavailable` — the caller keeps the device record exactly as it is.
 import type { KeyValue } from '../../../server/src/client.js';
 import { DuelClient } from '../../../server/src/client.js';
 import { readAccountIdentity } from '../logic/account-progress.js';
@@ -73,7 +79,7 @@ const highestOf = (levels: readonly number[]): number | null =>
 /**
  * The cached answer for exactly `playerId`, or null when there is no usable cache. A cache written
  * by another build/player, or any malformed value, reads as "no cache" — the safe direction: it
- * costs one read, it never hides a nudge.
+ * costs one read, it never hides the suggestion.
  */
 export const readCachedAccountClears = (storage: KeyValue | null, playerId: string): number[] | null => {
   if (!storage) return null;

@@ -3,7 +3,7 @@
 // Campaign progress is device-local by design: a guest keeps playing exactly as before and nothing
 // here touches them. A SIGNED-IN account is different — its place must be the same on the phone and
 // the desktop. The read itself (and its cache) now lives in `menu/account-clears.ts`, because the
-// same one authenticated read serves both the account place and the first-run nudge's union; this
+// same one authenticated read serves both the account place and the menu's campaign suggestion; this
 // file keeps the tolerant identity parse that read needs, plus the feature probe.
 //
 // This file is deliberately free of DOM and of the page's state so the rules are unit-tested with a
