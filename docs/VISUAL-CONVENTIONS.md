@@ -135,7 +135,10 @@ anywhere else) - id remove and not add in new windoows iin future"*.
   applies to list rows, record rows, settings groups and any future list. Replacing a hairline with
   a 1px shadow, a gradient rule or a dotted line is the same divider in a different coat — not a
   fix. If a divider is ever genuinely unavoidable (a dense numeric table where a misread is a
-  gameplay error), say why in a comment at that rule and keep it to that one place.
+  gameplay error), mark it with a `/* divider-ok: <reason> */` comment at that rule and keep it to
+  that one place — that exact marker is what `tests/window-dividers.test.ts` looks for, so prose
+  explaining the reason is not enough on its own. The same rule, the marker and the guard are
+  stated in `docs/UX.md` and `docs/DECISIONS.md`.
 - **Buttons wear the game's button, not a frame.** A window's actions reuse the existing ghost /
   primary classes. No border ring of their own, no new button shape per dialog. A window action and
   a menu key of the same rank must look like siblings.
