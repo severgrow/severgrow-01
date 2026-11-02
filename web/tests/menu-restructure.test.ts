@@ -89,7 +89,14 @@ describe('PLAY is a real screen, not a layer on the menu', () => {
     // The back key closes the submenu EXPLICITLY before showing the menu: a redundant late
     // `showScreen('menu')` (boot finishing after async mounts) must never tear down a submenu the
     // player has just opened, so the two calls are no longer one expression.
-    expect(mainSource).toMatch(/bind\('play-back', \(\) => \{[\s\S]{0,240}?closePlayMenu\(\);[\s\S]{0,240}?showScreen\('menu'\);/);
+    // THE GUARANTEE, not the call order: the back key returns to the menu, `showScreen` closes the
+    // submenu on the way (it now also ANIMATES that exit), and a redundant late `showScreen('menu')`
+    // still cannot tear down a submenu the player has just opened. The old assertion pinned two
+    // calls in one handler; the layer moved the close into showScreen, so this asserts the
+    // behaviour instead — the early return that protects the open submenu, and the close itself.
+    expect(mainSource).toMatch(/bind\('play-back', \(\) => \{[\s\S]{0,600}?showScreen\('menu'\);/);
+    expect(mainSource).toMatch(/if \(same && name === 'menu' && !\$\('play-menu'\)\.hidden && !leavingPlay\) return;/);
+    expect(mainSource).toMatch(/closePlayMenu\(name === 'menu'\);/);
     expect(mainSource).toMatch(/function showScreen[\s\S]*?closePlayMenu\(\)/);
   });
 });

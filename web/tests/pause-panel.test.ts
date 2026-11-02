@@ -143,13 +143,23 @@ describe('the face keeps its palette and its tempo', () => {
     // The panel is opened by the shared layer, never by its own CSS. Options are allowed (a full
     // plate asks for the strongest arrival the tokens permit — see the call site), but the call
     // itself must be `enterSurface` and must never be a bespoke animation.
-    expect(mainSource).toMatch(/enterSurface\(next(?:,\s*\{[^}]*\})?\);/);
-    // Whatever it asks for stays inside the vocabulary the token test pins.
-    const call = mainSource.match(/enterSurface\(next(?:,\s*(\{[^}]*\}))?\);/);
-    if (call?.[1]) {
-      const numbers = [...call[1].matchAll(/(?:duration|travel|scale):\s*([\d.]+)/g)].map((m) => Number(m[1]));
-      expect(numbers.length).toBeGreaterThan(0);
-      for (const n of numbers) expect(n).toBeLessThanOrEqual(320); // a duration, a px travel or a scale
+    //
+    // The options are a TERNARY now (a full plate asks for the strongest arrival, a plain one for
+    // the default), so this reads the whole call statement and then every option value in it — the
+    // intent is unchanged: one shared layer, and every number inside the vocabulary the token test
+    // pins. Narrowing to a literal object would have failed a correct call.
+    const callStart = mainSource.indexOf('enterSurface(next');
+    expect(callStart, 'the pause panel is opened with enterSurface(next, …)').toBeGreaterThan(-1);
+    const statement = mainSource.slice(callStart, mainSource.indexOf(';', callStart) + 1);
+    // Every option comes from the shared vocabulary: either a design token (INTERFACE_MOTION.*,
+    // PLATE_SCALE) or a number small enough to be a duration / px travel / scale. Raw magic numbers
+    // are what this guards against, and tokens are the stronger form of the same rule.
+    const values = [...statement.matchAll(/(?:duration|travel|scale):\s*([A-Za-z_][\w.]*|[\d.]+)/g)].map((m) => m[1]!);
+    expect(values.length).toBeGreaterThan(0);
+    for (const v of values) {
+      const n = Number(v);
+      if (Number.isFinite(n)) expect(n).toBeLessThanOrEqual(320);
+      else expect(v).toMatch(/^(?:INTERFACE_MOTION\.\w+|PLATE_SCALE)$/);
     }
     expect(panelCss).not.toMatch(/\b\d+(?:\.\d+)?(?:ms|s)\b/);
     expect(panelCss).not.toMatch(/cubic-bezier|ease-in-out|ease-out|\blinear\b/);
