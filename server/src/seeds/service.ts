@@ -218,13 +218,17 @@ export class WorldEconomyService {
    * `campaign_clears`.
    */
   private async achievementHistory(player: PlayerRecord): Promise<{ history: AchievementHistory; claimed: Set<string> }> {
-    const [claims, challenges, receipts, clears, rows] = await Promise.all([
-      this.store.claimedCells(),
-      this.store.challengesInvolving(player.id, 0),
-      this.store.receiptRows(player.id),
-      this.store.campaignClears(player.id),
-      this.matches.listMatchesForPlayer(player.id),
-    ]);
+    // SEQUENTIAL, not Promise.all. The Edge pool holds at most two connections
+    // (server/src/storage/pool-config.ts), and firing five reads at once queued three of them
+    // behind it — measured in production as an endpoint that answered in 0.27 s on one request and
+    // then hung for 90 s on the next, with no response and no log line, while every single-query
+    // route beside it (wallet, matches, world) stayed under 0.6 s. One read at a time is bounded by
+    // the same total work and cannot starve the pool.
+    const claims = await this.store.claimedCells();
+    const challenges = await this.store.challengesInvolving(player.id, 0);
+    const receipts = await this.store.receiptRows(player.id);
+    const clears = await this.store.campaignClears(player.id);
+    const rows = await this.matches.listMatchesForPlayer(player.id);
 
     let highestLevel: number | null = null;
     let lessonCleared = false;
