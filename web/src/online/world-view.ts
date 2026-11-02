@@ -51,6 +51,8 @@ import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { lastChosenCamera, rememberCamera } from './world-camera.js';
 import { menuTerritoryAnchor } from './living-camera.js';
+import { globePoint, globePose, globeScale } from './map-globe.js';
+import type { GlobePose } from './map-globe.js';
 import { mountSheetViewport } from '../ui/sheet-viewport.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { TerritoryChat } from './territory-chat.js';
@@ -437,10 +439,21 @@ const coords = (q: number, r: number) => ({ x: X * (q + r / 2) * R, y: 1.5 * r *
  * hex inradius is 8.66, so the mark keeps its air to the timer ring. Because the X is IN the path,
  * `makeMarker` draws it once; it must never go back to rotating two copies into an X.
  */
-const hexPath = (x: number, y: number) => {
-  const points = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]];
-  return points.map(([dx, dy], index) => `${index ? 'L' : 'M'}${(x + dx! * R).toFixed(2)},${(y + dy! * R).toFixed(2)}`).join(' ') + 'Z';
+const HEX_POINTS = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]] as const;
+/**
+ * ONE HEXAGON, WITH EVERY CORNER PASSED THROUGH `warp` (the globe's bend, see `map-globe.ts`).
+ * The identity warp draws exactly the flat hexagon it always did. Warping the CORNERS, rather than
+ * scaling each tile about its own centre, is what keeps neighbours touching: two cells share a
+ * corner's coordinates, so both draw that corner at the same bent point and the shared edge cannot
+ * open a seam. A tile stays a true six-sided shape.
+ */
+const hexPathAt = (x: number, y: number, warp: (x: number, y: number) => { x: number; y: number }) => {
+  return HEX_POINTS.map(([dx, dy], index) => {
+    const at = warp(x + dx * R, y + dy * R);
+    return `${index ? 'L' : 'M'}${at.x.toFixed(2)},${at.y.toFixed(2)}`;
+  }).join(' ') + 'Z';
 };
+const hexPath = (x: number, y: number) => hexPathAt(x, y, (px, py) => ({ x: px, y: py }));
 /**
  * TILE JITTER (owner, 2026-10-30: "a slight per-tile hue/brightness jitter derived from the CELL id
  * (so a mass of one colour is not a single flat slab)"). `TILE_JITTER` are lightness offsets in
@@ -537,6 +550,12 @@ export class WorldView {
   private pendingRequest: string | null = null;
   private busy = false;
   private svg: SVGSVGElement | null = null;
+  /**
+   * THE MAP'S BEND, derived from the WORLD alone (never from a window), so the menu backdrop and the
+   * Territory panel bend the same tiles into the same pixels. Null before the first paint and for an
+   * empty world, which draws the flat map.
+   */
+  private globe: GlobePose | null = null;
   /** The single top-most path that carries the selection highlight (see `paintAccent`). */
   private accent: SVGPathElement | null = null;
   private box: ViewBox | null = null;
@@ -1139,9 +1158,25 @@ export class WorldView {
     const delay = animation.effect?.getComputedTiming().delay ?? 0;
     return ringPhase(Number(current), delay, period);
   }
+  /** A map point as it is DRAWN: the flat coordinates, bent onto the globe when the map has one. */
+  private warp(x: number, y: number): { x: number; y: number } {
+    const pose = this.globe;
+    return pose ? globePoint(pose, x, y) : { x, y };
+  }
+  /** A cell's centre, in drawing coordinates. */
+  private at(q: number, r: number) {
+    const flat = coords(q, r);
+    return this.warp(flat.x, flat.y);
+  }
+  /** A cell's hexagon, bent with its neighbours so shared edges stay shared. */
+  private shape(x: number, y: number): string {
+    const pose = this.globe;
+    return pose ? hexPathAt(x, y, (px, py) => globePoint(pose, px, py)) : hexPath(x, y);
+  }
   private paint() {
     const container = document.getElementById('online-world-grid')!;
     const world = this.world!;
+    this.globe = globePose(world.cells);
     if (!world.cells.length) {
       this.observer?.disconnect(); this.observer = null;
       this.gestureCleanup?.(); this.gestureCleanup = null;
@@ -1308,9 +1343,9 @@ export class WorldView {
     fogRing[1]!.style.animationDelay = loopPhase(this.fogPhase(2, 13000), 13000);
     const fogPath = (id: string, ring: FogRing): SVGPathElement => {
       const [q, r] = id.split(',').map(Number) as [number, number];
-      const at = coords(q, r);
+      const at = this.at(q, r);
       const fog = document.createElementNS(NS, 'path');
-      fog.setAttribute('d', hexPath(at.x, at.y));
+      fog.setAttribute('d', this.shape(at.x, at.y));
       fog.setAttribute('data-cell-id', id);
       fog.classList.add('world-fog', `ring-${ring}`);
       return fog;
@@ -1382,10 +1417,13 @@ export class WorldView {
     halos.setAttribute('aria-hidden', 'true');
     halos.setAttribute('filter', 'url(#world-blur-glow)');
     for (const cell of world.cells) {
-      const at = coords(cell.q, cell.r);
-      const d = hexPath(at.x, at.y);
-      minX = Math.min(minX, at.x - R); maxX = Math.max(maxX, at.x + R);
-      minY = Math.min(minY, at.y - R); maxY = Math.max(maxY, at.y + R);
+      // THE EXTENT STAYS THE FLAT MAP'S (owner: the map must not move). The bend is drawn INSIDE the
+      // view the camera already framed, so the island's silhouette keeps its size and position.
+      const flat = coords(cell.q, cell.r);
+      const at = this.warp(flat.x, flat.y);
+      const d = this.shape(at.x, at.y);
+      minX = Math.min(minX, flat.x - R); maxX = Math.max(maxX, flat.x + R);
+      minY = Math.min(minY, flat.y - R); maxY = Math.max(maxY, flat.y + R);
       const owner = occupied.get(cell.id);
       const mine = !!owner && owner.ownerId === this.identity?.playerId;
       // The FACE: the tile's surface, and nothing else. Its fill is inline so it beats the
@@ -1481,7 +1519,7 @@ export class WorldView {
       const pick = held[(i * 7 + world.revision) % held.length];
       const cell = pick ? world.cells.find((c) => c.id === pick.cellId) : undefined;
       if (!cell) continue;
-      const at = coords(cell.q, cell.r);
+      const at = this.at(cell.q, cell.r);
       const mote = document.createElementNS(NS, 'circle');
       mote.setAttribute('cx', (at.x + ((i * 37) % 9) - 4).toFixed(1));
       mote.setAttribute('cy', (at.y + ((i * 53) % 7) - 3).toFixed(1));
@@ -1507,7 +1545,10 @@ export class WorldView {
     border.setAttribute('aria-hidden', 'true');
     const ownCells = world.cells.filter((cell) => own.has(cell.id));
     if (ownCells.length) {
-      const d = borderSegments(ownCells).map(([x1, y1, x2, y2]) => `M${x1.toFixed(2)},${y1.toFixed(2)}L${x2.toFixed(2)},${y2.toFixed(2)}`).join('');
+      const d = borderSegments(ownCells).map(([x1, y1, x2, y2]) => {
+        const a = this.warp(x1, y1), b = this.warp(x2, y2);
+        return `M${a.x.toFixed(2)},${a.y.toFixed(2)}L${b.x.toFixed(2)},${b.y.toFixed(2)}`;
+      }).join('');
       const colour = world.claims.find((claim) => own.has(claim.cellId))?.colour;
       for (const kind of ['glow', 'edge'] as const) {
         const line = document.createElementNS(NS, 'path');
@@ -1604,6 +1645,8 @@ export class WorldView {
       // centred on the player's own land when they have some — the first thing you see is yours.
       const width = Math.min(fw, pixelWidth * (X * R) / STAGE_CELL_PX);
       const height = width / aspect;
+      // THE CAMERA IS THE FLAT MAP'S (owner: the map must not move). The land's own centre is read
+      // in map units; centring on its BENT position would shift the whole view when the effect is on.
       const home = this.world ? (this.menuPreview ? menuTerritoryAnchor : ownCentre)(this.world.cells, this.world.claims, this.identity?.playerId ?? null) : null;
       const cx = home ? home.x : fx + fw / 2, cy = home ? home.y : fy + fh / 2;
       return this.clampBox([cx - width / 2, cy - height / 2, width, height]);
@@ -1727,8 +1770,8 @@ export class WorldView {
     if (!this.accent) return;
     const cell = this.selected ? this.world?.cells.find((candidate) => candidate.id === this.selected) : null;
     if (!cell) { this.accent.removeAttribute('d'); return; }
-    const at = coords(cell.q, cell.r);
-    this.accent.setAttribute('d', hexPath(at.x, at.y));
+    const at = this.at(cell.q, cell.r);
+    this.accent.setAttribute('d', this.shape(at.x, at.y));
   }
   /**
    * A TAP SELECTS, NOTHING MORE (owner, 2026-10-28: "tapping empty tile should NOT open the menu and
@@ -1905,7 +1948,7 @@ export class WorldView {
     const svg = this.svg;
     const cell = this.world?.cells.find((candidate) => candidate.id === cellId);
     if (!svg || !cell) return;
-    const at = coords(cell.q, cell.r);
+    const at = this.at(cell.q, cell.r);
     const colour = this.world?.claims.find((claim) => claim.cellId === cellId)?.colour;
     const group = document.createElementNS(NS, 'g');
     group.classList.add('world-ripples');
@@ -1913,7 +1956,7 @@ export class WorldView {
     group.setAttribute('filter', 'url(#world-blur-mote)');
     for (const wave of [0, 1]) {
       const ring = document.createElementNS(NS, 'path');
-      ring.setAttribute('d', hexPath(at.x, at.y));
+      ring.setAttribute('d', this.shape(at.x, at.y));
       ring.classList.add('world-ripple');
       ring.style.setProperty('--ripple-delay', `${wave * 180}ms`);
       if (colour) ring.style.setProperty('--territory', colour);
@@ -2541,10 +2584,11 @@ export class WorldView {
       const cell = this.world.cells.find((candidate) => candidate.id === id);
       const claim = this.world.claims.find((candidate) => candidate.cellId === id);
       if (!cell || !claim) continue;
-      const at = coords(cell.q, cell.r);
+      const flat = coords(cell.q, cell.r);
       // The top-right vertex of this tile: a small L inset from it reads as a notched corner.
-      const vx = at.x + (X / 2) * R;
-      const vy = at.y - 0.5 * R;
+      const v = this.warp(flat.x + (X / 2) * R, flat.y - 0.5 * R);
+      const vx = v.x;
+      const vy = v.y;
       const notch = document.createElementNS(NS, 'path');
       notch.setAttribute('d',
         `M${(vx - 2.6).toFixed(2)},${(vy + 0.15).toFixed(2)} ` +
@@ -2590,9 +2634,9 @@ export class WorldView {
       if (!cell || !claim) continue;
       let entry = this.ringPaths.get(challenge.id);
       if (!entry) {
-        const at = coords(cell.q, cell.r);
+        const at = this.at(cell.q, cell.r);
         const path = document.createElementNS(NS, 'path');
-        path.setAttribute('d', hexPath(at.x, at.y));
+        path.setAttribute('d', this.shape(at.x, at.y));
         path.setAttribute('pathLength', '1');
         path.setAttribute('stroke-dasharray', '1');
         path.setAttribute('fill', 'none');
@@ -2644,8 +2688,11 @@ export class WorldView {
     for (const marker of markers) {
       const cell = cells.get(marker.cellId);
       if (!cell) continue;
-      const at = coords(cell.q, cell.r);
-      const transform = `translate(${at.x.toFixed(2)} ${at.y.toFixed(2)})`;
+      const flat = coords(cell.q, cell.r);
+      const at = this.warp(flat.x, flat.y);
+      // A mark on a receding tile shrinks with it: the local cross-radius factor of the globe.
+      const withTile = this.globe ? globeScale(this.globe, flat.x, flat.y) : 1;
+      const transform = `translate(${at.x.toFixed(2)} ${at.y.toFixed(2)}) scale(${withTile.toFixed(4)})`;
       if (marker.mine) {
         mine.add(marker.key);
         let node = this.markerNodes.get(marker.key);
@@ -2716,8 +2763,8 @@ export class WorldView {
         group.append(path);
         this.stakeNodes.set(id, path);
       }
-      const at = coords(cell.q, cell.r);
-      path.setAttribute('d', hexPath(at.x, at.y));
+      const at = this.at(cell.q, cell.r);
+      path.setAttribute('d', this.shape(at.x, at.y));
       path.setAttribute('data-challenge-id', id);
       path.setAttribute('data-cell-id', marker.cellId);
       const claim = this.world.claims.find((candidate) => candidate.cellId === marker.cellId);
@@ -2849,8 +2896,8 @@ export class WorldView {
     for (const tile of moved) {
       const cell = this.world.cells.find((candidate) => candidate.id === tile.cellId);
       if (!cell) continue;
-      const at = coords(cell.q, cell.r);
-      const d = hexPath(at.x, at.y);
+      const at = this.at(cell.q, cell.r);
+      const d = this.shape(at.x, at.y);
       const was = document.createElementNS(NS, 'path');
       was.setAttribute('d', d);
       was.classList.add('world-takeover-was');
@@ -3531,7 +3578,7 @@ export class WorldView {
       let best: string | null = null;
       let bestDistance = Infinity;
       for (const cell of cells) {
-        const at = coords(cell.q, cell.r);
+        const at = this.at(cell.q, cell.r);
         const distance = (at.x - wx) ** 2 + (at.y - wy) ** 2;
         if (distance < bestDistance) { bestDistance = distance; best = cell.id; }
       }
