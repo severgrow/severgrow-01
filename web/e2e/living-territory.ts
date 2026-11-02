@@ -292,8 +292,14 @@ try{
   if(name==='phone')await page.evaluate(()=>{
    const frames:any[]=[];(window as any).__backFrames=frames;
    let finish!:()=>void;(window as any).__backFramesDone=new Promise<void>(r=>{finish=r;});
-   const start=performance.now();const watchdog=setTimeout(finish,3000);
+   let start=0;const watchdog=setTimeout(finish,6000);
    document.getElementById('online-world-back')!.addEventListener('click',()=>{
+    // The clock starts AT THE CLICK, not at setup, and the window is generous: on CI's software-
+    // rendered WebKit the whole return (dim, re-frame, light up) runs well past 420ms, and a window
+    // that closes first yields ONE frame and `swap -1` — which is what made this look like a hard
+    // cut when nothing had even happened yet.
+    start=performance.now();
+    let sinceMenu=0;
     const sample=()=>{
      const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
      const grid=document.getElementById('online-world-grid');
@@ -306,7 +312,11 @@ try{
      // dim's intermediate frames were never observed and the assertion read a cliff that was not
      // there. A 10ms interval samples the real sequence; rAF still runs so a frame-accurate browser
      // is measured too.
-     if(performance.now()-start<420)setTimeout(sample,10);else{clearTimeout(watchdog);finish();}
+     // Keep sampling for a few frames AFTER the framing swaps, so the light coming back up is
+     // measured too, then stop. Two and a half seconds is far beyond any engine's return.
+     sinceMenu=document.getElementById('online-world-screen')!.dataset.livingTerritory==='menu'?sinceMenu+1:0;
+     if(sinceMenu>=8||performance.now()-start>2500){clearTimeout(watchdog);finish();return;}
+     setTimeout(sample,10);requestAnimationFrame(sample);
     };setTimeout(sample,0);requestAnimationFrame(sample);
    },{once:true,capture:true});
   });
