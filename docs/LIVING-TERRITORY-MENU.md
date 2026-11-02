@@ -113,10 +113,10 @@ port needs forwarding. It does not contact the live database. No preview code or
 
 ## Verification recorded in this worktree
 
-- Full `npm run check`: **371 test files passed, 3,747 tests passed**, one expected failure,
+- Full `npm run check`: **371 test files passed, 3,750 tests passed**, one expected failure,
   66 optional skips; TypeScript passed.
 - Focused source/camera/menu/lobby-exit/import-cycle regressions: **35 tests passed**.
-- Living Territory browser pass: **116 checks passed**, including the slow-controller and
+- Living Territory browser pass: **120 checks passed**, including the slow-controller and
   obsolete-coast regressions. No uncaught page exceptions.
 - Existing Territory menu, challenges and gesture browser suites passed.
 - Both futa04 and futa05 builds passed; the futa04 asset-isolation guard passed. The futa05
@@ -151,3 +151,10 @@ from about 246ms to about 70ms while retaining the exact camera and reaching ful
 filters or moving the fade to an HTML wrapper did not improve the measured result, so those extra
 material changes were not adopted. This is a measured software-browser improvement; physical-device
 performance remains to be checked.
+
+The interruption pass also holds a real Grow request until after Back and the menu's earlier read.
+Once the server acknowledges it, the view queues a fresh pass through the existing menu reader,
+so both the map and counters catch up. This is an acknowledgement-triggered refresh, not a poll;
+Grow/Sell/colour/achievement completions can use the same path. A closing/game presentation does
+not start a menu refresh, and inactive Grow does not leave a paused ripple behind. The regression
+was observed timing out before this fix and passing afterwards.

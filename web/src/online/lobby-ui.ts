@@ -593,7 +593,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   worldView = new WorldView(client, async () => {
     const id = await ensureIdentity();
     return id ? { token: id.token, playerId: id.playerId } : null;
-  }, () => worldSource.read());
+  }, () => worldSource.read(), async () => {
+    // A late mutation acknowledgement must not reuse a menu read that began before it committed.
+    if (menuPass) await menuPass.catch(() => undefined);
+    if (menuEl?.hidden === false && worldEl.dataset.livingTerritory === 'menu') await refreshMenu();
+  });
   living = menuEl ? mountLivingTerritory({menu: menuEl, screen: worldEl,
     preview: () => worldView?.preview(worldSource.peek(), identity.peek(), !worldSource.isFresh()),
     stop: () => worldView?.close(true),

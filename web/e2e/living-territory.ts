@@ -35,11 +35,15 @@ process.env.VITE_SUPABASE_URL='http://127.0.0.1:9';process.env.VITE_SUPABASE_ANO
 const web=await createServer({cacheDir:`/tmp/living-e2e-vite-${(api.address() as AddressInfo).port}`,configFile:resolve(process.env.BASELINE_ROOT??'.','web/vite.config.ts'),server:{host:'127.0.0.1',port:0},logLevel:'error'});await web.listen();
 const origin=`http://127.0.0.1:${(web.httpServer!.address() as AddressInfo).port}`;
 const ios=process.env.LIVING_WEBKIT==='1';
-const browser=await (ios?webkit:chromium).launch(ios?{}:{...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--no-sandbox']});
+const browser=await (ios?webkit:chromium).launch(ios?{}:{...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--no-sandbox']}).catch(error=>{
+ if(process.env.GITHUB_ACTIONS)console.error(`::error title=Living Territory browser launch::${String(error).replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A')}`);throw error;
+});
+let activePage:Page|null=null;
 let checks=0;const check=(label:string,pass:boolean)=>{assert.ok(pass,label);checks++;console.log('PASS',label);};
 const browserErrors:string[]=[];
 const identity=JSON.stringify({token:me.token,playerId:me.player.id,kind:me.player.kind,displayName:me.player.displayName});
 const boot=async(page:Page,options:{cached?:boolean;fail?:boolean;delay?:number;anonymous?:boolean;failAuth?:boolean;empty?:boolean;rawIdentity?:string;pwa?:boolean;largeText?:boolean;delayCode?:number;wideCache?:boolean}={})=>{
+ activePage=page;
  page.on('pageerror',error=>{browserErrors.push(error.message);if(process.env.LIVING_DEBUG)console.log('BROWSER ERROR',error.message);});
  await page.addInitScript(({identity,anonymous})=>{
   (window as any).__name=(f:unknown)=>f;
@@ -124,10 +128,10 @@ try{
    check('clarity transition reaches full contrast',frames.at(-1)!.opacity>.99);
    const gaps=frames.slice(1).map((f,i)=>f.at-frames[i]!.at).sort((a,b)=>a-b);console.log('INFO transition frame p95 ms',gaps[Math.floor(gaps.length*.95)]);
   }
-  const after=await state(page);check(`${name}: opening retains surface and exact camera`,after.same&&before.box===after.box);
+  const after=await state(page);check(`${name}: opening retains surface and exact camera${after.same&&before.box===after.box?'':' '+JSON.stringify({before,after})}`,after.same&&before.box===after.box);
   if(name==='phone'){
    check('known menu wallet avoids a first-open tile rebuild',await page.evaluate(()=>document.querySelector('.world-hex')===(window as any).__livingTile));
-   check('known identity private metadata is fetched once on entry',walletReads-walletBefore===1);
+   check(`known identity private metadata is fetched once on entry (${walletReads-walletBefore})`,walletReads-walletBefore===1);
    check('entry still replaces the known wallet with its fresh server balance',await page.evaluate(()=>document.querySelector('.world-seeds')?.textContent?.replace(/\D/g,'')==='1750'));
   }
   check(`${name}: only uniform material-scale movement`,!!before.rect&&!!after.rect&&Math.abs(after.rect[2]!/before.rect[2]!-after.rect[3]!/before.rect[3]!)<.002);
@@ -165,7 +169,7 @@ try{
   await context.close();
  }
  if(!process.env.BASELINE_ROOT){
-  for(const scenario of [{name:'cached-offline',cached:true,fail:true},{name:'uncached-offline',fail:true},{name:'slow',delay:1600},{name:'anonymous',anonymous:true},{name:'auth-unavailable',anonymous:true,failAuth:true},{name:'empty',empty:true},{name:'cached-empty',empty:true,cached:true},{name:'stale-camera',cached:true,wideCache:true,delay:1600},{name:'bootstrap',delayCode:1600}]){
+  for(const scenario of [{name:'cached-offline',cached:true,fail:true},{name:'uncached-offline',fail:true},{name:'slow',delay:1600},{name:'anonymous',anonymous:true},{name:'auth-unavailable',anonymous:true,failAuth:true},{name:'empty',empty:true},{name:'cached-empty',empty:true,cached:true},{name:'stale-camera',cached:true,wideCache:true,delay:1600},{name:'bootstrap',delayCode:1600},{name:'inflight-claim'}]){
    if(process.env.LIVING_CASE&&process.env.LIVING_CASE!==scenario.name)continue;
    const context=await browser.newContext({viewport:{width:390,height:844}}),page=await context.newPage();await boot(page,scenario);
    check(`${scenario.name}: menu stays immediately usable`,await page.locator('#menu-world').isEnabled());
@@ -190,6 +194,24 @@ try{
     await page.waitForSelector('[data-living-territory="menu"] .world-map-svg');
     check(`${scenario.name}: a later valid map recovers one surface`,await page.locator('.world-map-svg').count()===1);
    }
+   if(scenario.name==='inflight-claim'){
+    await page.waitForSelector('#menu-world-tiles:not([hidden])');
+    const countBefore=Number((await page.locator('#menu-world-tiles-value').textContent())!.replace(/\D/g,''));
+    await page.click('#menu-world');await page.waitForTimeout(250);
+    let release!:()=>void,reached!:()=>void;
+    const pending=new Promise<void>(r=>{reached=r;}),gate=new Promise<void>(r=>{release=r;});
+    await page.route('**/v1/world/claims',async route=>{reached();await gate;await route.continue();});
+    await page.focus('.world-hex[data-cell-id="2,-4"]');await page.keyboard.press('Enter');
+    await page.click('#online-world-selection .world-claim-button');await page.click('#online-world-selection .world-claim-button');
+    await pending;
+    const oldRead=page.waitForResponse(r=>new URL(r.url()).pathname==='/v1/world');
+    await page.click('#online-world-back');await oldRead;await page.waitForTimeout(150);
+    release();
+    await page.waitForFunction(()=>document.querySelector('.world-hex[data-cell-id="2,-4"]')?.classList.contains('mine'),undefined,{timeout:5000});
+    check('a claim completing after Back updates the living menu',true);
+    await page.waitForFunction(n=>Number(document.getElementById('menu-world-tiles-value')!.textContent!.replace(/\D/g,''))===n+1,countBefore,{timeout:5000});
+    check('late mutation also refreshes the menu read-outs',true);
+   }
    await context.close();
   }
  }
@@ -210,7 +232,12 @@ try{
    }));
    await page.screenshot({path:`${shots}/${kind}-holdings.png`});await context.close();
   }
-  check('no uncaught browser errors',browserErrors.length===0);
+  check(`no uncaught browser errors${browserErrors.length?': '+browserErrors.join(' | '):''}`,browserErrors.length===0);
  }
  console.log(`PASS ${checks} living Territory checks`);
+ }catch(error){
+ const detail=error instanceof Error?error.message:String(error);
+ if(process.env.GITHUB_ACTIONS)console.error(`::error title=Living Territory browser failure::${detail.replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A')}`);
+ if(activePage)await (activePage as Page).screenshot({path:`${shots}/failure.png`}).catch(()=>undefined);
+ throw error;
 }finally{await browser.close();await web.close();api.closeAllConnections();await new Promise<void>(r=>api.close(()=>r()));}

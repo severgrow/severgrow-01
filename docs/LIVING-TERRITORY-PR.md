@@ -6,7 +6,7 @@ The change also shares the public map read/cache, frames a real owned tile on fi
 the logo/title rhythm and handles early taps, interrupted navigation, keyboard focus, app return,
 empty maps and stale remembered coastlines. No new gameplay rules, dependencies or backend rollout.
 
-Validation: full check (3,747 tests), 116 feature-browser checks, both production-channel builds and
+Validation: full check (3,750 tests), 120 feature-browser checks, both production-channel builds and
 asset guards, existing Territory menu/challenge/gesture suites, normal/reduced-motion Territory-to-duel
 regression, and the 4× CPU probe (controlled repeat passed; its first pan timing miss is documented).
 Chromium and WebKit continuity suites are added to CI with screenshot artifacts. Physical iPhone

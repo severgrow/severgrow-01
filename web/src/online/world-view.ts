@@ -571,7 +571,8 @@ export class WorldView {
   };
 
   constructor(private readonly client: DuelClient, private readonly ensureIdentity: () => Promise<Identity | null>,
-    private readonly readWorld: () => Promise<WorldMapPayload> = () => client.worldMap()) {
+    private readonly readWorld: () => Promise<WorldMapPayload> = () => client.worldMap(),
+    private readonly requestMenuRefresh: () => Promise<void> = async () => {}) {
     document.addEventListener('visibilitychange', () => { if (this.active && !document.hidden) void this.refresh(); });
     // ONE WINDOW AT A TIME: the chat shuts the menu window, and the menu window shuts the chat.
     this.chat = new TerritoryChat(client, () => this.identity?.token ?? null, () => this.setPane(null, false));
@@ -740,6 +741,7 @@ export class WorldView {
     this.stopGlide();
     this.saveCamera();
     this.active = false;
+    this.menuPreview = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.chat.setOpen(false);
@@ -757,7 +759,14 @@ export class WorldView {
     if (this.active) this.timer = setTimeout(() => { if (!document.hidden) void this.refresh(); else this.schedule(); }, 12_000);
   }
   async refresh(force = false) {
-    if (!this.active) return;
+    if (!this.active) {
+      // A mutation can finish after Back. Revalidate through the existing menu pass after
+      // its older read settles; never turn a successful server action into a refresh failure.
+      if (force && this.menuPreview) {
+        try { await this.requestMenuRefresh(); } catch { /* retain the last good snapshot */ }
+      }
+      return;
+    }
     try {
       const identityAtRequest = this.identity;
       const [map, wallet, challenges] = await Promise.all([
@@ -1657,6 +1666,7 @@ export class WorldView {
   }
   /** THE GROW RIPPLE: the new tile sends two soft rings out over the land around it. */
   private ripple(cellId: string) {
+    if (!this.active) return;
     const svg = this.svg;
     const cell = this.world?.cells.find((candidate) => candidate.id === cellId);
     if (!svg || !cell) return;
@@ -2057,9 +2067,9 @@ export class WorldView {
       this.colourSignature = '';
       this.paintColourPane();
       this.paintKeyColour();
+      // Also refresh a menu returned to while the colour request was on its way.
+      await this.refresh(true);
     }
-    // The tiles: one map read, which also refreshes the picker's marks on a failure path.
-    await this.refresh(true);
   }
 
   /**
@@ -2174,6 +2184,7 @@ export class WorldView {
     } finally {
       this.claimingAchievement = null;
       this.paintPanel();
+      if (!this.active && this.menuPreview) await this.refresh(true);
     }
   }
 
