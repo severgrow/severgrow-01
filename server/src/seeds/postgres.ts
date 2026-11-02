@@ -188,6 +188,36 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
     );
     return rows.map((row) => String(row.source_key));
   },
+  /**
+   * ONE read for the whole board's ownership. `world_claims` is the finite, public set of held
+   * cells (the seen world), never a player's history, so this stays bounded and needs no new
+   * index: the read is a single scan and the achievements matcher does the counting in memory.
+   */
+  async claimedCells() {
+    const { rows } = await pool.query('select cell_id, owner_id from world_claims order by cell_id');
+    return rows.map((row) => ({ cellId: String(row.cell_id), ownerId: String(row.owner_id) }));
+  },
+  /**
+   * The highest Campaign level for MANY players in ONE grouped statement (the receipts' primary
+   * key is `(player_id, source_key)`), so "beat a higher branch" never costs one query per
+   * opponent. A player with no matching receipt stays absent from the rows and reads `null`.
+   */
+  async campaignHighestLevels(playerIds) {
+    const levels: Record<string, number | null> = {};
+    for (const id of new Set(playerIds)) levels[id] = null;
+    if (playerIds.length === 0) return levels;
+    const { rows } = await pool.query(
+      `select player_id, max((substring(source_key from '^campaign:c[0-9]+-([0-9]+)$'))::int) as level
+         from seed_reward_receipts
+        where player_id = any($1::uuid[]) and mode = 'campaign'
+        group by player_id`,
+      [playerIds],
+    );
+    for (const row of rows) {
+      if (Object.hasOwn(levels, String(row.player_id))) levels[String(row.player_id)] = row.level == null ? null : number(row.level);
+    }
+    return levels;
+  },
   async receiptRows(playerId) {
     const { rows } = await pool.query(
       `select source_key, mode, opponent_id, utc_day, awarded, created_at

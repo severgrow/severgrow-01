@@ -5,11 +5,18 @@
 // answer: `this.achievements` started null, any non-404 error returned without painting or retrying,
 // and only some unrelated change ever asked again.
 //
+// Owner direction (2026-11-01): "should always be availalbe in territory menu". The key is now
+// present for EVERY signed-in player, from the first paint, including while a read is in flight or
+// has failed; the panel shows its honest waiting state instead.
+//
 // The rule this file pins:
-//   * the key is hidden ONLY for a guest or because the server has no such route (404 / NOT_FOUND);
+//   * the key is present for any signed-in player; hidden ONLY for a guest or because the server has
+//     definitively no such route (404 / NOT_FOUND);
 //   * a TRANSIENT failure (500, offline, timeout) never hides a list that is already on screen;
 //   * a transient failure with no list yet is remembered, and the ordinary world poll retries;
 //   * a discarded answer (identity changed, map closed) cannot leave the key hidden for ever;
+//   * an EMPTY successful answer is the server's deadline fallback, never a real "you have none":
+//     it keeps the remembered list and retries;
 //   * the last good list per player is remembered on the device, so a later open paints at once.
 //
 // These are the decisions, pure. `web/src/online/world-view.ts` is the thin DOM apply; the second
@@ -65,13 +72,18 @@ describe('the achievements key visibility rule', () => {
     expect(achievementsReady(state)).toBe(0);
   });
 
-  it('is hidden until there is a list, and wants a retry after a transient first read', () => {
+  // CHANGED INTENT (owner, 2026-11-01: "should always be availalbe in territory menu"): this used
+  // to assert that the key was HIDDEN before a list had ever arrived. That is exactly the behaviour
+  // the owner rejected. It is not a weakened test — it pins the opposite, stronger rule: the key is
+  // there from the first paint, and a read in flight or a failure is the panel's waiting state.
+  it('is present as soon as there is a player, before any list and through a failed first read', () => {
     const before = noAchievements('p1');
-    expect(achievementsVisible(before)).toBe(false);
+    expect(achievementsVisible(before), 'signed in, nothing read yet: the key is there').toBe(true);
     expect(before.retry).toBe(false);
 
     const failed = afterAchievementsRead(before, { kind: 'transient', playerId: 'p1' });
-    expect(achievementsVisible(failed)).toBe(false);
+    expect(achievementsVisible(failed), 'a failed first read keeps the key').toBe(true);
+    expect(failed.views, 'and still invents no progress').toBeNull();
     expect(failed.retry, 'the next world poll must try again').toBe(true);
     expect(failed.routeMissing).toBe(false);
 
@@ -79,6 +91,23 @@ describe('the achievements key visibility rule', () => {
     expect(achievementsVisible(loaded)).toBe(true);
     expect(loaded.views).toEqual(list());
     expect(loaded.retry).toBe(false);
+  });
+
+  it('treats an empty successful answer as "not computed yet", never as a real empty set', () => {
+    const good = afterAchievementsRead(noAchievements('p1'), { kind: 'loaded', playerId: 'p1', views: list() });
+    expect(achievementsReady(good)).toBe(1);
+    // The server's deadline fallback: HTTP 200 with no rows. A real answer always carries the set.
+    const fallback = afterAchievementsRead(good, { kind: 'loaded', playerId: 'p1', views: [] });
+    expect(achievementsVisible(fallback)).toBe(true);
+    expect(fallback.views, 'the remembered list survives the fallback').toEqual(list());
+    expect(achievementsReady(fallback), 'and so does its ready badge').toBe(1);
+    expect(fallback.retry, 'the poll asks again').toBe(true);
+
+    // With no list yet it stays honest: visible, nothing drawn, and a retry.
+    const first = afterAchievementsRead(noAchievements('p1'), { kind: 'loaded', playerId: 'p1', views: [] });
+    expect(achievementsVisible(first)).toBe(true);
+    expect(first.views).toBeNull();
+    expect(first.retry).toBe(true);
   });
 
   it('never disappears after a good read because a later read failed transiently', () => {
@@ -187,6 +216,8 @@ describe('the world view applies the rule instead of making the key depend on a 
     );
     expect(load, 'the loader must exist').toContain('afterAchievementsRead(');
     expect(load).toContain('rememberAchievements(');
+    // An empty body is the server's deadline fallback, so it must not overwrite the remembered list.
+    expect(load, 'only a real (non-empty) list is remembered').toMatch(/if \(views\.length > 0\) rememberAchievements\(/);
     expect(source).toContain('restoreAchievements(');
     // Every outcome (loaded, 404, transient, discarded) is applied and then painted; the old failure
     // path returned before painting, which is how a missed read left the key in the wrong state.

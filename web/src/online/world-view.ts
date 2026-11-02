@@ -1829,7 +1829,9 @@ export class WorldView {
         outcome = { kind: 'discarded' };
       } else {
         outcome = { kind: 'loaded', playerId: identity.playerId, views };
-        rememberAchievements(browserStorage(), identity.playerId, views);
+        // A real answer carries the full set. An EMPTY body is the server's deadline fallback, not
+        // a truthful "you have none": never let it overwrite the list remembered on this device.
+        if (views.length > 0) rememberAchievements(browserStorage(), identity.playerId, views);
       }
     } catch (error) {
       const status = (error as { status?: number } | null)?.status;
@@ -2009,6 +2011,15 @@ export class WorldView {
   private paintAchievements() {
     const list = document.getElementById('online-world-achievements');
     if (!list) return;
+    const waiting = this.achievements.views === null;
+    const unavailable = this.achievements.views !== null && this.achievements.views.length === 0;
+    // ONE quiet line while there is nothing honest to draw: no spinner, no placeholder rows, no
+    // numbers. It disappears the moment a real list arrives and does not reserve more than a line.
+    const empty = document.getElementById('world-achievements-empty');
+    if (empty) {
+      empty.hidden = !(achievementsVisible(this.achievements) && (waiting || unavailable));
+      empty.textContent = waiting ? ACHIEVEMENTS_UI.waiting : ACHIEVEMENTS_UI.unavailable;
+    }
     const views = achievementsVisible(this.achievements) ? this.achievements.views ?? [] : [];
     const signature = `achievements|${this.claimingAchievement}|${this.justClaimed}|${JSON.stringify(views)}`;
     if (signature === this.paneSignature) return;

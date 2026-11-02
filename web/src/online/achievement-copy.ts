@@ -66,4 +66,11 @@ export const ACHIEVEMENTS_UI = Object.freeze({
   claiming: '…',
   paid: (seeds: number) => `+${seeds} Seeds`,
   failed: 'That did not go through. Try again.',
+  /**
+   * ONE quiet line, never a spinner (owner, 2026-11-01: the key must always be there, and the
+   * panel must not invent numbers while the server has not answered). It is shown only while there
+   * is no list to draw: the first read is in flight, or the server's deadline fallback came back.
+   */
+  waiting: 'Reading your progress…',
+  unavailable: 'Progress is not available just now. It will refresh on its own.',
 });

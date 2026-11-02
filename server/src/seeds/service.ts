@@ -5,7 +5,7 @@ import { CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
 import { playerTag } from '../../../src/player-tag.js';
 import { ApiError } from '../errors.js';
 import { newId, newInviteCode, newSeed } from '../ids.js';
-import type { MatchRecord, PlayerRecord, Storage } from '../storage/types.js';
+import type { MatchListRow, MatchRecord, MoveRecord, PlayerRecord, Storage } from '../storage/types.js';
 import { WORLD_VERSION, seenWorld } from '../world.js';
 import { colourById, colourChangeAvailableAt, colourCooldownMs, colourIdFor, isColourId, resolveTileColours } from '../../../src/tile-colours.js';
 import { SEED_ECONOMY, WORLD_CHALLENGE_LIST_WINDOW_MS } from './config.js';
@@ -26,6 +26,13 @@ const TERRITORY_TURN_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 /** One retry for a genuine invite-code collision is plenty for a challenge-created duel. */
 const MAX_INVITE_ATTEMPTS = 5;
 
+/**
+ * The achievements read answers within this budget, whatever the database does. The Edge function
+ * is killed when it runs past its compute allowance (HTTP 546 WORKER_RESOURCE_LIMIT), so a slow
+ * database must produce the page's waiting state in a few seconds, never a request that hangs.
+ */
+export const ACHIEVEMENTS_READ_DEADLINE_MS = 4_000;
+
 export type SendChallengeOutcome =
   | { ok: true; challenge: WorldChallengeWire; replayed: boolean }
   | { ok: false; code: ChallengeSendFailure };
@@ -35,6 +42,8 @@ export class WorldEconomyService {
     readonly store: WorldEconomyStore,
     private readonly matches: Storage,
     private readonly now: () => number = () => Date.now(),
+    /** Overridable for tests that must not wait four real seconds. */
+    private readonly achievementsDeadlineMs: number = ACHIEVEMENTS_READ_DEADLINE_MS,
   ) {}
 
   async world() {
@@ -187,19 +196,50 @@ export class WorldEconomyService {
    * The player's achievements: progress from the map, their own challenge rows, their finished
    * duels, and their campaign receipts/clears, plus which are paid. Every number comes from a
    * server-owned table; the request supplies only the authenticated player.
+   *
+   * COST (owner report, 2026-11-01: "i still dont see achievments"). This read used to fetch one
+   * move log per finished duel and one campaign level per opponent — an N+1 that grew with the
+   * player's history and ran past the Edge function's compute budget (HTTP 546
+   * WORKER_RESOURCE_LIMIT). Every FACT SOURCE is now read exactly ONCE per request (one aggregated
+   * statement per table) and all 35 definitions are evaluated in memory from that one history, so
+   * the cost is a small CONSTANT whatever the history holds.
+   *
+   * DEADLINE. A hard internal budget answers instead of hanging: when the database cannot finish
+   * in `ACHIEVEMENTS_READ_DEADLINE_MS`, the honest empty answer is returned (the page shows its
+   * waiting state and keeps the list it remembers). No 100 s request for the platform to kill.
    */
   async achievements(player: PlayerRecord): Promise<AchievementView[]> {
-    const [history, keys] = await Promise.all([
-      this.achievementHistory(player),
-      this.store.receiptKeys(player.id, 'achievement:'),
-    ]);
-    return achievementViews(achievementFacts(history), new Set(keys));
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      return await Promise.race([
+        this.achievementViews(player),
+        new Promise<AchievementView[]>((resolve) => {
+          timer = setTimeout(() => resolve([]), this.achievementsDeadlineMs);
+          // Node would keep a process alive for a pending timer. Deno's timer has no `unref`, so
+          // guard rather than assume one runtime.
+          (timer as unknown as { unref?: () => void }).unref?.();
+        }),
+      ]);
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
   }
 
-  /** Assemble the one history the pure matcher reads. Reads only `FACTS_SOURCES`. */
-  private async achievementHistory(player: PlayerRecord): Promise<AchievementHistory> {
-    const [snapshot, challenges, receipts, clears, rows] = await Promise.all([
-      this.store.world(),
+  private async achievementViews(player: PlayerRecord): Promise<AchievementView[]> {
+    const { history, claimed } = await this.achievementHistory(player);
+    return achievementViews(achievementFacts(history), claimed);
+  }
+
+  /**
+   * Assemble the one history the pure matcher reads. Reads only `FACTS_SOURCES`, ONCE per source:
+   * `world_claims` (the whole board), `world_challenges`, `matches`+`match_participants`,
+   * `match_moves` (every move of every finished duel, in one statement), `seed_reward_receipts`
+   * (this player's rows AND every opponent's campaign level, each as one grouped read) and
+   * `campaign_clears`.
+   */
+  private async achievementHistory(player: PlayerRecord): Promise<{ history: AchievementHistory; claimed: Set<string> }> {
+    const [claims, challenges, receipts, clears, rows] = await Promise.all([
+      this.store.claimedCells(),
       this.store.challengesInvolving(player.id, 0),
       this.store.receiptRows(player.id),
       this.store.campaignClears(player.id),
@@ -216,77 +256,96 @@ export class WorldEconomyService {
       if (highestLevel === null || level > highestLevel) highestLevel = level;
     }
 
-    const duels: DuelView[] = [];
-    for (const row of rows) {
-      const match = row.match;
-      if (match.status !== 'finished' || !match.result) continue;
-      const moves = await this.matches.movesOf(match.id, 0);
-      let myCuts = 0;
-      let myBlooms = 0;
-      let myOtherGrows = 0;
-      let throwDraws = 0;
-      let megaBomb = false;
-      for (const move of moves) {
-        // A cut is recorded against the player who LOST the tiles, whoever moved; so every move's
-        // events are inspected, not only this player's.
-        for (const event of move.events) {
-          if (event.t === 'Sever' && event.player === row.mySeat) myCuts += 1;
-        }
-        if (move.seat !== row.mySeat) {
-          if (move.action.t === 'Draw' && move.action.from === 'discard') throwDraws += 1;
-          continue;
-        }
-        if (move.action.t === 'Draw' && move.action.from === 'discard') throwDraws += 1;
-        if (move.action.t === 'Bloom') myBlooms += 1;
-        else if (move.action.t === 'Sprout' || move.action.t === 'PlayFruit' || move.action.t === 'MegaBomb') myOtherGrows += 1;
-        if (move.action.t === 'MegaBomb') megaBomb = true;
-      }
-      // The root's six sides, from the final authoritative board: every one held by the opponent.
-      const root = homeCoord(row.mySeat, match.config);
-      const home = match.state.board[coordKey(root)];
-      const rootSurrounded = !!home?.root && home.owner === row.mySeat &&
-        allNeighbors(root).every((side) => {
-          const tile = match.state.board[coordKey(side)];
-          return !!tile && tile.owner !== row.mySeat;
-        });
-      duels.push({
-        opponentId: row.opponentId,
-        kind: match.kind ?? 'duel',
-        openQueue: match.openQueue,
-        live: match.liveManaged === true,
-        finishedAt: match.finishedAt ?? match.updatedAt,
-        won: match.result.winner !== null && match.result.winner === row.mySeat,
-        draw: match.result.winner === null,
-        undercut: match.result.undercut === true,
-        reason: match.result.reason,
-        myCuts,
-        myBlooms,
-        myOtherGrows,
-        throwDraws,
-        megaBomb,
-        rootSurrounded,
-        creator: row.mySeat === 0 && !match.openQueue && (match.kind ?? 'duel') === 'duel',
-      });
+    const finished = rows.filter((row) => row.match.status === 'finished' && row.match.result !== null);
+    // ONE read for every move of every finished duel. Grouped in memory; the matcher only needs
+    // counts, so the cross-match order of this aggregate is irrelevant.
+    const moves = finished.length ? await this.matches.movesOfMatches(finished.map((row) => row.match.id)) : [];
+    const movesByMatch = new Map<string, MoveRecord[]>();
+    for (const move of moves) {
+      const list = movesByMatch.get(move.matchId);
+      if (list) list.push(move);
+      else movesByMatch.set(move.matchId, [move]);
     }
+    const duels = finished.map((row) => this.duelFacts(row, movesByMatch.get(row.match.id) ?? []));
 
-    const opponentLevels: Record<string, number | null> = {};
-    await Promise.all([...new Set(duels.map((d) => d.opponentId).filter((id): id is string => id !== null))]
-      .map(async (id) => {
-        opponentLevels[id] = await this.store.campaignHighestLevel(id).catch(() => null);
-      }));
+    // ONE grouped read for every opponent's campaign level; never one query per opponent. Only the
+    // "higher branch" achievement reads it, so a failure here must not take the whole page down
+    // (the old per-opponent read was allowed to fail quietly too).
+    const opponentIds = [...new Set(duels.map((d) => d.opponentId).filter((id): id is string => id !== null))];
+    const opponentLevels: Record<string, number | null> = opponentIds.length
+      ? await this.store.campaignHighestLevels(opponentIds).catch(() => ({}))
+      : {};
+
+    // The claim receipt is the only record of a paid achievement: derived from the same receipt
+    // rows read above, so the page needs no second receipts query.
+    const claimed = new Set(receipts
+      .filter((receipt) => receipt.sourceKey.startsWith('achievement:'))
+      .map((receipt) => receipt.sourceKey));
 
     return {
-      playerId: player.id,
-      claims: snapshot.claims,
-      challenges: challenges as ChallengeView[],
-      duels,
-      campaign: {
-        highestLevel,
-        chaptersCleared: highestLevel === null ? 0 : Math.min(7, Math.floor(highestLevel / 10)),
-        lessonCleared,
-        clears,
+      history: {
+        playerId: player.id,
+        claims,
+        challenges: challenges as ChallengeView[],
+        duels,
+        campaign: {
+          highestLevel,
+          chaptersCleared: highestLevel === null ? 0 : Math.min(7, Math.floor(highestLevel / 10)),
+          lessonCleared,
+          clears,
+        },
+        opponentLevels,
       },
-      opponentLevels,
+      claimed,
+    };
+  }
+
+  /** One finished duel reduced to the facts the pure matcher reads, from its own stored moves. */
+  private duelFacts(row: MatchListRow, moves: readonly MoveRecord[]): DuelView {
+    const match = row.match;
+    const result = match.result!;
+    let myCuts = 0;
+    let myBlooms = 0;
+    let myOtherGrows = 0;
+    let throwDraws = 0;
+    let megaBomb = false;
+    for (const move of moves) {
+      // A cut is recorded against the player who LOST the tiles, whoever moved; so every move's
+      // events are inspected, not only this player's.
+      for (const event of move.events) {
+        if (event.t === 'Sever' && event.player === row.mySeat) myCuts += 1;
+      }
+      if (move.action.t === 'Draw' && move.action.from === 'discard') throwDraws += 1;
+      if (move.seat !== row.mySeat) continue;
+      if (move.action.t === 'Bloom') myBlooms += 1;
+      else if (move.action.t === 'Sprout' || move.action.t === 'PlayFruit' || move.action.t === 'MegaBomb') myOtherGrows += 1;
+      if (move.action.t === 'MegaBomb') megaBomb = true;
+    }
+    // The root's six sides, from the final authoritative board: every one held by the opponent.
+    const root = homeCoord(row.mySeat, match.config);
+    const home = match.state.board[coordKey(root)];
+    const rootSurrounded = !!home?.root && home.owner === row.mySeat &&
+      allNeighbors(root).every((side) => {
+        const tile = match.state.board[coordKey(side)];
+        return !!tile && tile.owner !== row.mySeat;
+      });
+    return {
+      opponentId: row.opponentId,
+      kind: match.kind ?? 'duel',
+      openQueue: match.openQueue,
+      live: match.liveManaged === true,
+      finishedAt: match.finishedAt ?? match.updatedAt,
+      won: result.winner !== null && result.winner === row.mySeat,
+      draw: result.winner === null,
+      undercut: result.undercut === true,
+      reason: result.reason,
+      myCuts,
+      myBlooms,
+      myOtherGrows,
+      throwDraws,
+      megaBomb,
+      rootSurrounded,
+      creator: row.mySeat === 0 && !match.openQueue && (match.kind ?? 'duel') === 'duel',
     };
   }
 

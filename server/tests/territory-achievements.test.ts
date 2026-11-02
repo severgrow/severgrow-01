@@ -5,7 +5,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MemoryStorage } from '../src/storage/memory.js';
+import { postgresStorage } from '../src/storage/postgres.js';
+import type { PgPool, PgQueryResult, PgRow } from '../src/storage/postgres.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
+import { postgresWorldEconomyStore } from '../src/seeds/postgres.js';
 import { WorldEconomyService } from '../src/seeds/service.js';
 import { createWorldEconomyRouter } from '../src/seeds/router.js';
 import {
@@ -15,12 +18,12 @@ import {
   achievementViews,
 } from '../src/seeds/achievements.js';
 import type { AchievementHistory, DuelView } from '../src/seeds/achievements.js';
-import type { CampaignClear } from '../src/seeds/types.js';
+import type { CampaignClear, WorldEconomyStore } from '../src/seeds/types.js';
 import { SEED_ECONOMY } from '../src/seeds/config.js';
 import { WORLD_CELLS, worldNeighbours } from '../src/world.js';
 import type { PlayerRecord } from '../src/storage/types.js';
 import { campaignOpening, CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
-import { apply, viewFor } from '../../src/engine/index.js';
+import { apply, viewFor, DEFAULT_CONFIG } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
 import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
@@ -71,11 +74,16 @@ describe('the set', () => {
     expect(ACHIEVEMENTS.filter((a) => a.group === 'campaign')).toHaveLength(7);
   });
 
-  it('names only tables the service actually reads', () => {
+  it('names only tables the service actually reads, one aggregated read per source', () => {
     const source = readFileSync(fileURLToPath(new URL('../src/seeds/service.ts', import.meta.url)), 'utf8');
-    for (const read of ['store.world(', 'challengesInvolving(', 'listMatchesForPlayer(', 'movesOf(', 'receiptRows(', 'campaignClears(']) {
+    // The fact sources as the AGGREGATE reads added for the 2026-11-01 cost fix: never one query
+    // per duel (`movesOf(`) or per opponent (`campaignHighestLevel(`).
+    for (const read of ['claimedCells(', 'challengesInvolving(', 'listMatchesForPlayer(', 'movesOfMatches(', 'receiptRows(', 'campaignClears(', 'campaignHighestLevels(']) {
       expect(source).toContain(read);
     }
+    // The removed per-duel read: the achievements history no longer asks for one move log at a time.
+    // (The single-opponent `campaignHighestLevel` method still exists for the wallet's own level.)
+    expect(source, 'one move log per duel is the N+1 that was removed').not.toContain('this.matches.movesOf(');
     expect([...FACTS_SOURCES].sort()).toEqual([
       'campaign_clears', 'match_moves', 'matches', 'seed_reward_receipts', 'world_challenges', 'world_claims',
     ]);
@@ -307,6 +315,133 @@ describe('HTTP', () => {
     const unearned = await req('POST', '/v1/seeds/achievements/claim', { id: 'estate' });
     expect(unearned?.status).toBe(409);
     expect(unearned?.body).toMatchObject({ ok: false, code: 'NOT_EARNED' });
+  });
+});
+
+/**
+ * THE COST OF ONE ACHIEVEMENTS READ (owner report, 2026-11-01: the deployed endpoint answered HTTP
+ * 546 after ~100 s and the key never appeared). The old read asked the database for one move log per
+ * finished duel and one campaign level per opponent: an N+1 that grew with the player's history.
+ *
+ * This drives the REAL Postgres adapters through a recording fake pool and asserts the shape of the
+ * read itself: one statement per fact source, so the total is a small CONSTANT whether the player
+ * has 3 finished duels or 12. The rules are unchanged; only the fetching is.
+ */
+type Call = { text: string; values: readonly unknown[] };
+
+const fakePool = () => {
+  const calls: Call[] = [];
+  const scripts: { match: string; rows: PgRow[] }[] = [];
+  const respond = (text: string, values: readonly unknown[]): PgQueryResult => {
+    calls.push({ text, values });
+    for (const script of scripts) if (text.includes(script.match)) return { rows: script.rows };
+    return { rows: [] };
+  };
+  const client = { query: async (text: string, values: readonly unknown[] = []) => respond(text, values) };
+  const pool: PgPool = {
+    query: async (text, values = []) => respond(text, values),
+    connect: async () => client,
+  };
+  return {
+    pool,
+    calls,
+    script: (match: string, rows: PgRow[]) => void scripts.push({ match, rows }),
+    statements: () => calls.map((call) => call.text.replace(/\s+/g, ' ').trim()),
+  };
+};
+
+const finishedMatchRow = (id: string, opponentId: string): PgRow => ({
+  id,
+  invite_code: `INV-${id}`,
+  rules_version: 'test',
+  seed: '1',
+  config: JSON.stringify(DEFAULT_CONFIG),
+  starting_player: 0,
+  status: 'finished',
+  revision: '3',
+  state: JSON.stringify({ board: {} }),
+  result: JSON.stringify({ winner: 1, reason: 'knock', scores: [0, 0] }),
+  created_at: '1',
+  updated_at: '2',
+  finished_at: '3',
+  my_seat: 0,
+  my_last_seen_at: '3',
+  opponent_id: opponentId,
+  opponent_name: opponentId,
+});
+
+const moveRow = (matchId: string, revision: number): PgRow => ({
+  match_id: matchId,
+  revision: String(revision),
+  seat: 0,
+  player_id: 'me',
+  action: JSON.stringify({ t: 'Bloom' }),
+  events: JSON.stringify([{ t: 'Sever', player: 0 }]),
+  request_id: `${matchId}-${revision}`,
+  created_at: '1',
+});
+
+const measureAchievementsRead = async (matches: number, opponents: number) => {
+  const fake = fakePool();
+  fake.script('from world_claims', [
+    { cell_id: '0,0', owner_id: 'me' },
+    { cell_id: '0,1', owner_id: 'them' },
+  ]);
+  fake.script('from world_challenges', []);
+  // The receipts of this player: one claimed achievement and one campaign clear.
+  fake.script('from seed_reward_receipts where player_id=$1 order by created_at asc', [
+    { source_key: 'achievement:roots', mode: 'campaign', opponent_id: null, utc_day: '2026-10-30', awarded: 100, created_at: '1' },
+    { source_key: 'campaign:c1-01', mode: 'campaign', opponent_id: null, utc_day: '2026-10-30', awarded: 100, created_at: '2' },
+  ]);
+  fake.script('information_schema.tables', [{ table_name: 'campaign_clears' }]);
+  fake.script('from campaign_clears', []);
+  fake.script('from match_participants self', Array.from({ length: matches }, (_, i) =>
+    finishedMatchRow(`m${i}`, `op${i % Math.max(1, opponents)}`)));
+  fake.script('from match_moves', Array.from({ length: matches }, (_, i) => moveRow(`m${i}`, 1)));
+  // The one grouped opponent-level read.
+  fake.script('group by player_id', Array.from({ length: opponents }, (_, i) => ({ player_id: `op${i}`, level: '5' })));
+
+  const store = postgresWorldEconomyStore(fake.pool);
+  const storage = postgresStorage(fake.pool);
+  const service = new WorldEconomyService(store, storage, () => START);
+  const views = await service.achievements(player('me'));
+  return { statements: fake.statements(), views };
+};
+
+describe('the cost of the achievements read', () => {
+  it('is a small constant number of statements, not one per duel or per opponent', async () => {
+    const small = await measureAchievementsRead(3, 2);
+    const big = await measureAchievementsRead(12, 6);
+
+    expect(small.views).toHaveLength(35);
+    expect(big.views).toHaveLength(35);
+    // Small, and — the point — IDENTICAL for four times the history.
+    expect(small.statements.length).toBeLessThanOrEqual(9);
+    expect(big.statements.length).toBe(small.statements.length);
+
+    // Exactly ONE aggregate read of each fact source.
+    const count = (needle: string) => big.statements.filter((text) => text.includes(needle)).length;
+    expect(count('from match_moves'), 'one move aggregate, never one per duel').toBe(1);
+    expect(count('from match_participants self'), 'one match list').toBe(1);
+    expect(count('from seed_reward_receipts where player_id=$1 order by created_at asc'), 'one receipt read').toBe(1);
+    expect(count('group by player_id'), 'one grouped opponent-level read').toBe(1);
+    expect(count('from world_claims')).toBe(1);
+    expect(count('from world_challenges')).toBe(1);
+    // The removed N+1 shapes are gone.
+    expect(big.statements.some((text) => text === 'select * from match_moves where match_id = $1 and revision > $2 order by revision asc')).toBe(false);
+  });
+
+  it('answers with the honest empty fallback inside the deadline when the database hangs', async () => {
+    const hanging = {
+      claimedCells: () => new Promise<never>(() => undefined),
+      challengesInvolving: async () => [],
+      receiptRows: async () => [],
+      campaignClears: async () => [],
+    } as unknown as WorldEconomyStore;
+    const service = new WorldEconomyService(hanging, new MemoryStorage(), () => START, 25);
+    const started = Date.now();
+    expect(await service.achievements(player('slow'))).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 });
 
