@@ -17,7 +17,7 @@ import {
 } from './match-attention.js';
 import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
-import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
+import { enterSurface, exitSurface, resetSurface, INTERFACE_MOTION } from '../ui/interface-motion.js';
 import { leaveLobbyForMatch } from './lobby-exit.js';
 import { WorldView } from './world-view.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
@@ -332,6 +332,13 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     el.replaceChildren(document.createTextNode(text), waitDots());
   };
 
+  /**
+   * Every online screen is a doorway one step below the menu, and waiting/join are one step below
+   * the hub, so the arrival travels the same way a screen change does: forward from below, back
+   * from above (owner, 2026-11-02). `null` is the closed lobby.
+   */
+  const ONLINE_RANK: Record<'hub' | 'waiting' | 'join' | 'world', number> = { hub: 1, waiting: 2, join: 2, world: 2 };
+  let shownOnline: OnlineScreen = null;
   const show = (next: OnlineScreen) => {
     if (next !== 'world') worldView?.close();
     hub.hidden = next !== 'hub';
@@ -340,9 +347,20 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     worldEl.hidden = next !== 'world';
     // Each online screen arrives on the shared interface beat; the screens we leave are reset so a
     // half-finished entrance can never surface later. No transform on the game: these are menus.
+    const way = (next ? ONLINE_RANK[next] : 0) < (shownOnline ? ONLINE_RANK[shownOnline] : 0) ? -1 : 1;
+    shownOnline = next;
     for (const [key, el] of Object.entries(screens) as [keyof typeof screens, HTMLElement][]) {
-      if (key === next && key !== 'world') enterSurface(el, { travel: 6 });
-      else resetSurface(el);
+      const head = el.querySelector<HTMLElement>('.online-head');
+      if (key === next && key !== 'world') {
+        enterSurface(el, { travel: way * INTERFACE_MOTION.screen });
+        if (head) {
+          resetSurface(head);
+          enterSurface(head, { travel: way * INTERFACE_MOTION.travel, delay: INTERFACE_MOTION.stagger });
+        }
+      } else {
+        resetSurface(el);
+        if (head) resetSurface(head);
+      }
     }
     // The online screens are their own full-screen view: keep the main menu fully out of the
     // way (hidden, not merely behind) so its title/buttons can never bleed through the panel.
@@ -1139,9 +1157,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   if (worldEntry) worldEntry.disabled = false;
   $('online-world-back').addEventListener('click', () => {
     if (worldFrom === 'hub') return void openHub();
-    show(null);
-    hooks.showMenu();
-    refreshTitle();
+    // The panel leaves on its own beat (dim, skin out), and only then is the menu put back and
+    // revealed — so the return never hard-cuts from the framed window to the full-bleed background.
+    const backToMenu = () => { show(null); hooks.showMenu(); refreshTitle(); };
+    if (living) living.leave(backToMenu);
+    else backToMenu();
   });
   document.getElementById('online-world')?.addEventListener('click', () => openWorld('hub'));
   // The first affordable claim is invited only on the quiet menu, never during a match,

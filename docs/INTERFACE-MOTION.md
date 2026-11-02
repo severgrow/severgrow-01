@@ -38,8 +38,14 @@ The numbers live in one JavaScript object and one block of CSS custom properties
 | `--ix-travel` | `4px` | the distance a surface moves while arriving |
 | `--ix-scale` | `0.996` | the scale it grows from |
 | `--ix-settle` | `1.0005` | the hair past rest it eases through before settling |
-| `--ix-ease-open` | `cubic-bezier(0.2, 0.7, 0.2, 1)` | decelerate into rest |
+| `--ix-ease-open` | `cubic-bezier(0.22, 1, 0.36, 1)` | decelerate into rest |
 | `--ix-ease-close` | `cubic-bezier(0.4, 0, 1, 1)` | accelerate away |
+| `--ix-screen` | `10px` | how far a WHOLE SCREEN travels while it arrives |
+| `--ix-stagger` | `50ms` | the beat between a screen's body and its own head |
+
+`--ix-screen` and `--ix-stagger` are the 2026-11-02 addition (owner: "if we have existing ones make
+them more visible and smooth"). They are not a second vocabulary: the same duration, the same curve,
+the same sign convention — a screen simply spends more of it than a card does.
 
 They are deliberately **not** `--dur-*` tokens. The board's vocabulary is closed at two tempo
 tokens (`ack`, `consequence`); interface motion is a separate, quieter family.
@@ -48,16 +54,65 @@ tokens (`ack`, `consequence`); interface motion is a separate, quieter family.
 
 | Moment | Transition |
 | --- | --- |
-| Sheet, pause face, finish plate, confirmation, install invitation, matched card | `enterSurface` / `exitSurface`, 300 / 100 ms |
+| Sheet, pause face, finish plate, confirmation, install invitation, matched card | `enterSurface` / `exitSurface`. A full plate takes the strong arrival (screen travel, 98.5% scale) and its head follows one stagger later; a compact card keeps 4px / 99.6% |
 | Pause confirmation chained over the pause face | same primitives; closing the confirmation returns to the pause face |
-| Screen to screen (menu, PLAY, levels, campaign, online hub) | `enterSurface`, 6 px travel; the game screen never moves |
-| Backdrop / scrim | opacity only, 150 ms, no travel |
+| Screen to screen (menu, PLAY, the picker, the campaign list, the online hub) | `enterSurface` with `screenArrival`: forward rises from below by `--ix-screen`, back drops from above; the screen's head follows one `--ix-stagger` later. The game screen never moves |
+| Menu ↔ Territory (the map) | the camera's own handoff (`living-territory.ts`): the SAME SVG continues from the menu's pixels, the frame's skin fades in and the map's light comes up after the geometry has landed — see below |
+| Backdrop / scrim | opacity only, 150ms, no travel |
 | Buttons, keys, utilities, icon controls | CSS `:active` with `--ix-press`; `press()` only for custom controls |
 | Result heading / hairline | one timed reveal on the first showing (`data-fresh="1"`) |
 | Starter lottery, card ritual, gameplay effects | their own choreography — do not wrap them in this layer |
 
 Opening and closing are the same motion in reverse. Closing hides the node only when the exit has
 actually finished; an interrupted exit never hides a panel the player has just reopened.
+
+### Which way is forward
+
+`web/src/ui/screen-motion.ts` is the one place that decides it, from a depth ladder alone
+(`menu 0 → play 1 → levels 2 → campaign 3 → game 4`). A deeper screen is a forward move, a shallower
+one is a back move, two at the same depth do not travel, and the GAME never travels at all. The
+decision is pure and unit-tested (`web/tests/screen-motion.test.ts`), so "which way does this
+arrive" can never drift between two call sites.
+
+## The menu ↔ Territory transition
+
+Owner, 2026-11-02: *"make going into territory from main menu look intentional … right now it jumps,
+slightly changing position."* The menu paints the map full-bleed and the Territory paints the same
+SVG inside a framed panel, so the two windows differ in shape and position.
+
+What already existed, and is still the foundation: the panel's map starts on the exact screen
+mapping of the menu's last frame (a translate, plus a scale only when the world fit caps one of the
+two views), then eases to rest in `--ix-open` on `--ix-ease-open`. Measured: the player's own tile
+sits at the same pixel on both frames (0.01px on a 390x844 phone).
+
+The jump was not in that handoff. It was in everything around it:
+
+- the map's paint box leads the panel's window by `(dx,dy)` while it slides home — measured 102px on
+  a 390x844 phone, 66px at 1440x1000, 41px at 320x568, 72x41px in landscape — so for those frames
+  the panel's own glass showed through at one edge and the map's opposite edge was clipped;
+- the map was ALREADY at 26% and climbing to 100% over the same 150ms, so that difference was lit;
+- the panel's frame (its vignette and its hairline) simply existed from the first frame;
+- the way back had no animation at all: the geometry returned to the full-bleed framing in one frame.
+
+So three things were added, all transform/opacity, none per-frame:
+
+1. **the frame's skin arrives** — the panel's vignette (`::after`) and a 1px instrument hairline
+   (`::before`, above the map) fade in over the same beat, instead of appearing;
+2. **the map's light follows its geometry** — it holds the menu's 26% for the first third of the
+   beat, dips, then comes up to 100% *after* `easeOpen` has spent ~87% of the travel, so the crop and
+   the slide are never seen lit;
+3. **the panel's head arrives a beat later** — the back key, the title and the wallet line rise 4px
+   over `--ix-open` after `--ix-stagger`.
+
+The way back is the same motion in reverse: the map's light goes down over the close beat while the
+skin leaves, the framing returns to the menu's full-bleed view while the map is at its dimmest, and
+the menu's own arrival continues from there. Total: ~150ms in, ~100ms + the menu's arrival out.
+
+Rejected, and why: **a full-screen veil** (a second composited layer that does the same job the
+frame's skin and the map's light already do, and reads as a flash); **a scale settle on the panel**
+(it would scale the map with the frame and break the 1:1 handoff the camera rule depends on);
+**animating the crop itself** (a clip-path or a per-frame `getBoundingClientRect` — a filter-like
+cost on every frame, and the owner's rule here is transform + opacity only).
 
 ## Reduced motion
 
@@ -70,6 +125,11 @@ In that state `enterSurface`/`exitSurface` call their `onDone` immediately and l
 its resting CSS state. CSS-only surfaces carry the same `@media` and `.reduce-motion` rules. The
 game's Speed setting is **not** consulted: choosing Speed Off for the board does not stop a menu
 from opening.
+
+Reduce motion is INSTANT, not fast: `screenArrival(..., true)` returns a zero-length arrival, the
+Territory's settle and its light are skipped whole (and the way back is a straight swap — the
+`web/e2e/living-territory.ts` suite samples the return and asserts no animation survives it), and
+the frame's skin has no transition. Nothing is left fainter or displaced because it did not animate.
 
 ## When to avoid animation
 
@@ -103,15 +163,23 @@ over the whole board SVG was the one measurable cost this layer avoids.
 Do not add a new duration, curve or library for one surface. If the vocabulary genuinely cannot
 express a movement, change this file, its CSS block, this document and the test together.
 
-## Adoption status (2026-10-22, verified 2026-10-23)
+## Adoption status (2026-10-22, re-verified 2026-11-02)
 
 Wired: the central `sheet()` path (so Settings, pause, How to play, What happened, the campaign
 start confirmation and the new restart confirmation all share it), the profile read-out, the finish
 plate, the install invitation, the starter lottery's exit, the online hub/waiting/join screens, the
-matched card, and the screen-to-screen changes between menu-like screens — which is how the PLAY
-submenu arrives (`#menu-play` → `openPlayMenu` → `enterSurface`, 6px travel; the main menu stands
-down while it is open and `openPlayMenu` keeps `shownScreen === 'menu'` so a late boot show cannot
-tear it down). The pre-game card ritual and all gameplay animation are untouched.
+matched card, and every screen-to-screen change — which is how PLAY arrives (`#menu-play` →
+`openPlayMenu` → `arriveScreen`), how the picker and the campaign list arrive, and how any of them
+returns (the opposite sign). The main menu stands down while PLAY is open and `openPlayMenu` keeps
+`shownScreen === 'menu'` so a late boot show cannot tear it down; a separate `route` records that the
+player is in a doorway so the way back is a BACK move, not a replay.
+
+What changed on 2026-11-02, and why it was needed: a whole screen used to arrive with 6px of travel
+and a 99.6% scale, and a full plate with 4px and 99.6% — the owner's "I cannot tell". A screen is now
+`--ix-screen` (10px) with its own head one `--ix-stagger` later, a full plate is 10px / 98.5% with its
+head staggered, PLAY's exit is a real exit (`exitSurface`, not a hard `hidden = true`), and the
+finish card takes the plate's arrival. The pre-game card ritual and all gameplay animation are
+untouched.
 
 Read-outs are NOT animated. The chapter caption under `LEVEL <n>` in the PLAY submenu is text that
 the menu's own layout pass repaints; it carries no entrance of its own, so a slow layout can never
@@ -131,7 +199,13 @@ waits for `data-ix-state="open"` rather than for "not hidden".
 ## Files
 
 - `web/src/ui/interface-motion.ts` — tokens and the primitives.
+- `web/src/ui/screen-motion.ts` — the one pure decision a whole screen needs: which way it arrives.
 - `web/src/style.css` — the `--ix-*` block and the interface refinement section at the end.
-- `web/tests/interface-motion.test.ts` — the contract.
-- `web/src/main.ts` — `openSheetNow`, `openPlayMenu`, `showScreen`, `presentResult`, `hideGameOver`.
+- `web/src/online/living-territory.ts` / `-css.ts` — the menu ↔ Territory handoff and its skin.
+- `web/tests/interface-motion.test.ts`, `web/tests/screen-motion.test.ts` — the contract.
+- `web/src/main.ts` — `arriveScreen`, `openSheetNow`, `openPlayMenu`, `showScreen`, `presentResult`.
 - `web/e2e/play-menu.ts` — the doorway measured as a settled surface at 360x640 and 390x844.
+- `web/e2e/screen-motion.ts` — every screen change, its direction, its stagger, and Reduce motion.
+- `web/e2e/living-territory.ts` — the no-jump frame, the return, and the camera rule.
+- `web/e2e/motion-strip.ts` — the filmstrip in `docs/screens/motion/`.
+- `docs/screens/motion/` — the transition, held at four points of its beat.

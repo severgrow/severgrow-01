@@ -17,7 +17,7 @@ const declarations = (prefix: string): string[] =>
   [...css.matchAll(new RegExp(`--${prefix}-([\\w-]+):`, 'g'))].map((m) => m[1]!);
 
 describe('one interface vocabulary', () => {
-  it('has the eight tokens the owner set and nothing else (2026-10-23: "alive and organic")', () => {
+  it('has the ten tokens the owner set and nothing else (2026-11-02: "make them more visible")', () => {
     expect(INTERFACE_MOTION).toEqual({
       open: 150,
       close: 100,
@@ -27,6 +27,8 @@ describe('one interface vocabulary', () => {
       settle: 1.0005,
       easeOpen: 'cubic-bezier(0.22, 1, 0.36, 1)',
       easeClose: 'cubic-bezier(0.4, 0, 1, 1)',
+      screen: 10,
+      stagger: 50,
     });
   });
 
@@ -37,11 +39,20 @@ describe('one interface vocabulary', () => {
     expect(INTERFACE_MOTION.press).toBeLessThanOrEqual(130);
     expect(INTERFACE_MOTION.travel).toBeLessThanOrEqual(16);
     expect(INTERFACE_MOTION.scale).toBeGreaterThanOrEqual(0.95);
+    // A whole screen travels further than a sheet, but never further than the vocabulary allows.
+    expect(INTERFACE_MOTION.screen).toBeGreaterThan(INTERFACE_MOTION.travel);
+    expect(INTERFACE_MOTION.screen).toBeLessThanOrEqual(16);
+    // A stagger is a beat INSIDE the arrival, not a second animation: a third of it, and never
+    // longer than the arrival itself.
+    expect(INTERFACE_MOTION.stagger).toBeGreaterThan(0);
+    expect(INTERFACE_MOTION.stagger).toBeLessThan(INTERFACE_MOTION.open);
     // the settle is a hair past rest, not a spring
     expect(INTERFACE_MOTION.settle).toBeGreaterThan(1);
     expect(INTERFACE_MOTION.settle).toBeLessThanOrEqual(1.01);
     // a backdrop (no travel, no growth) never settles
     expect(source).toMatch(/const settleScale = scale === 1 \? 1 : INTERFACE_MOTION\.settle;/);
+    // and the overshoot always goes the way the surface came from (a back move drops from above)
+    expect(source).toMatch(/const settleLift = travel === 0 \? 0 : -Math\.sign\(travel\);/);
   });
 
   it('the CSS custom properties are the same numbers, in one place', () => {
@@ -53,8 +64,10 @@ describe('one interface vocabulary', () => {
     expect(token('settle')).toBe(String(INTERFACE_MOTION.settle));
     expect(token('ease-open')).toBe(INTERFACE_MOTION.easeOpen);
     expect(token('ease-close')).toBe(INTERFACE_MOTION.easeClose);
+    expect(token('screen')).toBe(`${INTERFACE_MOTION.screen}px`);
+    expect(token('stagger')).toBe(`${INTERFACE_MOTION.stagger}ms`);
     // No near-duplicate token has crept in under a second spelling.
-    expect(new Set(declarations('ix'))).toEqual(new Set(['open', 'close', 'press', 'travel', 'scale', 'settle', 'ease-open', 'ease-close']));
+    expect(new Set(declarations('ix'))).toEqual(new Set(['open', 'close', 'press', 'travel', 'scale', 'settle', 'ease-open', 'ease-close', 'screen', 'stagger']));
     // The board's locked vocabulary is untouched: interface motion does not add a `--dur-*`.
     expect(new Set(declarations('dur'))).toEqual(new Set(['ack', 'consequence', 'quick', 'moment', 'tap', 'move']));
   });

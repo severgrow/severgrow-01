@@ -3904,6 +3904,10 @@ html.futasaku-product #campaign .campaign-chapters {
   --ix-settle: 1.0005;
   --ix-ease-open: cubic-bezier(0.22, 1, 0.36, 1);
   --ix-ease-close: cubic-bezier(0.4, 0, 1, 1);
+  /* A WHOLE SCREEN travels further than a sheet (2026-11-02), and its head lands one short beat
+     later. Two extra tokens, no second vocabulary: see `INTERFACE_MOTION.screen` / `.stagger`. */
+  --ix-screen: 10px;
+  --ix-stagger: 50ms;
 }
 .btn,
 .btn.primary,
