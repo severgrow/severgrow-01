@@ -98,51 +98,15 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
     return;
    }
    const returning=mode==='world';
-   /**
-    * THE FRAMING MUST NOT CHANGE WHILE THE MAP IS LIT (owner: "going back to main menu ... a sleek
-    * designed intentional transition"). `leave()` dims the map, and `finish()` re-frames it while it
-    * is at DIP. But the menu's arrival can land DURING that dim — and this line used to
-    * `clearBeats()`, which CANCELLED the dim mid-flight, leaving the geometry to flip at whatever
-    * opacity it had reached. Measured on CI's WebKit: the panel re-framed from 358px to 390px at
-    * opacity 0.8983 — a hard cut with the map nearly full bright.
-    *
-    * So an arrival that interrupts a leaving dim finishes the dim FIRST: jump to DIP, re-frame at
-    * DIP, then hand the light back. It is one frame, it reads as the same beat, and it cannot race.
-    */
-   if(leaving&&mode==='world'){
-    const map=mapOf();
-    const turn=++generation;
-    stop(lightBeat);lightBeat=null;
-    leaving=false;
-    screen.classList.remove('living-leaving');
-    /**
-     * A FRAME AT THE DIM IS REQUIRED, not a synchronous jump. The dim may have only reached ~0.9
-     * when the menu arrives; setting DIP and re-framing in the same tick means no frame is ever
-     * PAINTED at the dim value, so the geometry still appears to flip while the map is bright — the
-     * exact race CI caught (358px -> 390px at opacity 0.8983). So: take the light to DIP now, let
-     * that one frame paint, and only then re-frame and hand the light back. One frame at 60Hz is
-     * imperceptible and it makes the ordering impossible to lose, whatever the engine's timing.
-     */
-    if(map){map.style.opacity=String(DIP);}
-    const reframe=()=>{
-      if(turn!==generation)return;
-      set('menu');
-      if(!map)return;
-      const played=map.animate([{opacity:String(DIP)},{opacity:String(MENU_MAP_OPACITY)}],
-        {duration:INTERFACE_MOTION.close,easing:INTERFACE_MOTION.easeOpen,fill:'both'});
-      lightBeat=played;
-      played.finished.then(()=>{if(lightBeat===played)lightBeat=stop(lightBeat);}).catch(()=>undefined);
-    };
-    if(typeof requestAnimationFrame==='function')requestAnimationFrame(reframe);else reframe();
-    // The menu itself appears at once; only the map's framing waits the one frame.
-    menu.hidden=false;menu.inert=false;
-    resetSurface(screen);screen.inert=true;screen.hidden=true;
-    hooks.preview();
-    return;
-   }else{
-    clearBeats();screen.classList.remove('living-leaving');
-    set('menu');
-   }
+   // `leave()` owns the exit beat: it dims the map, then `finish()` re-frames the panel at the dim
+   // value and hands the light back. Reaching here normally means that beat has completed (the menu
+   // arrives after `done`), so this just settles the presentation. NOTE: an earlier attempt added a
+   // special case here that jumped the map to DIP and re-framed on the next frame, to stop a "hard
+   // cut" seen in CI; that cut was a SAMPLER artefact (rAF starved to ~1 sample/second in CI, so the
+   // smooth dim was never observed), proven once the suite sampled on a timer instead. The jump made
+   // the dim abrupt, so it is gone.
+   clearBeats();screen.classList.remove('living-leaving');
+   set('menu');
    // Cancel an interrupted menu exit before it can hide a newly returned menu.
    if(menu.dataset.ixState==='closing')resetSurface(menu);
    menu.hidden=false;menu.inert=false;

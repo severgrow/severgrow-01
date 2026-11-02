@@ -302,8 +302,12 @@ try{
       opacity:+Number(getComputedStyle(svg).opacity).toFixed(4),
       leaving:document.getElementById('online-world-screen')!.classList.contains('living-leaving'),
       mode:document.getElementById('online-world-screen')!.dataset.livingTerritory});
-     if(performance.now()-start<420)requestAnimationFrame(sample);else{clearTimeout(watchdog);finish();}
-    };requestAnimationFrame(sample);
+     // A TIMER, not only rAF: CI's software-rendered WebKit starved rAF to ~1 sample/second, so the
+     // dim's intermediate frames were never observed and the assertion read a cliff that was not
+     // there. A 10ms interval samples the real sequence; rAF still runs so a frame-accurate browser
+     // is measured too.
+     if(performance.now()-start<420)setTimeout(sample,10);else{clearTimeout(watchdog);finish();}
+    };setTimeout(sample,0);requestAnimationFrame(sample);
    },{once:true,capture:true});
   });
   await page.click('#online-world-back');await page.waitForSelector('#menu:not([hidden])');
@@ -311,8 +315,14 @@ try{
    await page.evaluate(()=>(window as any).__backFramesDone);
    const frames=await page.evaluate(()=>(window as any).__backFrames as {at:number;width:number;opacity:number;leaving:boolean;mode:string}[]);
    const swap=frames.findIndex(f=>f.mode==='menu');
+   // THE STRICT FORM, kept: the map must actually be DIM before the framing changes, so the way back
+   // is a fade in the panel's window, then a re-frame in the dark, then the light coming up. Now that
+   // the sampler is timer-based this is observable on CI instead of reading a sampling cliff.
+   const brightAtMenuWidth=frames.filter(f=>f.mode==='menu'&&f.opacity>MENU_MAP_OPACITY+0.02);
    check(`the way back is not a hard cut: the framing changes only while the map is dim (frame ${swap}: ${JSON.stringify(frames.slice(Math.max(0,swap-1),swap+2))})`,
     swap>0&&frames[swap-1]!.opacity<=0.35&&frames[swap]!.opacity<=0.35);
+   check(`the map is never bright in the menu's framing (${brightAtMenuWidth.length} bright frame(s))`,
+    brightAtMenuWidth.length===0);
    check('the way back dims the panel first (a leaving frame below the menu\'s own backdrop)',
     frames.some(f=>f.leaving&&f.opacity<=0.35)&&frames.at(-1)!.opacity<=MENU_MAP_OPACITY+0.01);
   }
