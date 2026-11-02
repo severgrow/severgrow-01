@@ -238,9 +238,39 @@ try{
    document.getElementById('menu-world')!.addEventListener('click',()=>{
     const frames:any[]=[];(window as any).__colourFrames=frames;
     let finish!:()=>void;(window as any).__colourFramesDone=new Promise<void>(r=>{finish=r;});
+    // THE BEAT'S SHAPE, READ FROM THE WEB ANIMATIONS API (2026-11-02, the CI `living-territory-ios`
+    // failure). Painted samples cannot answer "is this a real graded one-second fade?" on an engine
+    // that stops advancing the document timeline and then completes the beat in ONE rendering
+    // update: currentTime and the painted opacity both read the END state for every sample after
+    // the jump, so a correct fade looks like an instant flip. The animation's keyframes and timing
+    // are immutable data, readable while the beat exists, and are captured ONCE here for Node to
+    // assert. `getKeyframes()` is a snapshot, so it stays valid after the beat is cancelled at rest.
+    const capture=()=>{
+     if((window as any).__colourStructure)return;
+     const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
+     const light=svg?.getAnimations().find(a=>a.id==='living-colour-in');
+     const effect=light?.effect as KeyframeEffect|null|undefined;
+     if(!light||!effect)return;
+     const timing=effect.getTiming();
+     (window as any).__colourStructure={id:light.id,
+      duration:typeof timing.duration==='number'?timing.duration:String(timing.duration),
+      easing:timing.easing,fill:timing.fill,
+      keyframes:effect.getKeyframes().map(k=>({offset:k.offset??k.computedOffset,computedOffset:k.computedOffset,
+       easing:k.easing,opacity:'opacity' in k?Number(k.opacity):null})),
+      currentTime:light.currentTime,playState:light.playState,timeline:document.timeline.currentTime};
+    };
+    // Scheduled after the click task, so `enter()` has created the beat but the document timeline
+    // has not advanced: this reads the beat at its own first frame.
+    setTimeout(capture,0);
+    // A SECOND, INDEPENDENT FACT: HOW MANY FRAMES THE ENGINE ACTUALLY RENDERED during the beat.
+    // Only a counter (no samples, no style reads), so it cannot starve the paint it observes.
+    let painted=0;const beatAt=performance.now();
+    const paint=()=>{painted++;if(performance.now()-beatAt<1300)requestAnimationFrame(paint);};
+    requestAnimationFrame(paint);
     const start=performance.now();let closed=false;
     const watchdog=setTimeout(()=>{if(!closed){closed=true;finish();}},5000);
     const tick=()=>{
+     capture();
      const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
      const light=svg?.getAnimations().find(a=>a.id==='living-colour-in');
      frames.push({at:+(performance.now()-start).toFixed(1),opacity:svg?+Number(getComputedStyle(svg).opacity).toFixed(4):0,
@@ -248,7 +278,11 @@ try{
       // THE ANIMATION'S OWN CLOCK, not the wall clock: a beat starts on the first painted frame, and
       // on a slow open that frame can be 150ms after the tap. Measuring against the click would make
       // a correct one-second fade look short (and, worse, make the dip look like a fall).
-      t:light?.currentTime==null?null:Number(light.currentTime)});
+      t:light?.currentTime==null?null:Number(light.currentTime),
+      // Evidence for the stalled-renderer branch below: the rendered-frame count and the document
+      // timeline. If either stopped advancing while the wall clock did not, samples taken in that
+      // gap are not evidence about the fade.
+      raf:painted,timeline:document.timeline.currentTime});
      if(performance.now()-start<1600)setTimeout(tick,16);
      else if(!closed){closed=true;clearTimeout(watchdog);finish();}
     };setTimeout(tick,0);
@@ -359,36 +393,64 @@ try{
      frames.some(f=>f.colour===INTERFACE_MOTION.colourIn),
      JSON.stringify(frames.filter(f=>f.anim>0).slice(0,1)));
    check('clarity transition reaches full contrast',frames.at(-1)!.opacity>.99);
-   // THE OWNER'S SECOND, MEASURED (2026-11-02: "make it the color of tiles fade in in like 1 second
-   // or so"): the colour must be RISING across the arrival, not switched on in one beat. 0ms is the
-   // pinned first frame (the menu's own light); ~300ms and ~1000ms are the first samples at or after
-   // those marks, so a slow CI frame can only read LATER than the mark — the climb it measures is
-   // still the real one.
+   // THE OWNER'S SECOND, PINNED STRUCTURALLY (2026-11-02: "make it the color of tiles fade in in
+   // like 1 second or so"). Why this cannot be a frame-sampling check: on CI's software-rendered
+   // WebKit the document timeline stops advancing and the beat completes in ONE rendering update
+   // (measured: currentTime 17 -> 300 with playState `finished` in a single frame after ~400ms of
+   // wall time). currentTime AND the painted opacity then both read the END state, which is exactly
+   // how a correct fade was reported as "0ms 0.2344 -> 295ms 1 -> 1046ms 1". The Web Animations API
+   // still describes the whole beat: keyframes and timing are the author's declaration, not a
+   // renderer's opinion, so they cannot be defeated by a stalled paint.
    await page.evaluate(()=>(window as any).__colourFramesDone);
-   const colour=await page.evaluate(()=>(window as any).__colourFrames as {at:number;opacity:number;duration:number|null;t:number|null}[]);
-   // The beat's own clock: `t` is the colour animation's current time. A slow first frame only
-   // shifts WHEN the sample happened, never what the sample measures.
+   const colour=await page.evaluate(()=>(window as any).__colourFrames as {at:number;opacity:number;duration:number|null;t:number|null;raf:number;timeline:number|null}[]);
+   const structure=await page.evaluate(()=>(window as any).__colourStructure as {id:string;duration:number|string;easing:string;fill:string;
+    keyframes:{offset:number;computedOffset:number;easing:string;opacity:number|null}[];currentTime:number|null;playState:string;timeline:number|null}|null);
+   // The dip's OFFSET is re-derived from the source's own formula (`COLOUR_DIP_AT = 0.3 * open /
+   // colourIn`), never a typed literal. The dip's VALUE is an internal floor the source does not
+   // export, so it is pinned by meaning: strictly darker than the menu's light and never a blink
+   // out. A missing middle keyframe, a two-keyframe 0 -> 1 ramp or a shorter/longer duration all
+   // fail this.
+   const COLOUR_DIP_AT=0.3*(INTERFACE_MOTION.open/INTERFACE_MOTION.colourIn);
+   const kfs=(structure?.keyframes??[]).filter(k=>k.opacity!==null);
+   const offsets=kfs.map(k=>k.offset),ops=kfs.map(k=>k.opacity!);
+   const dip=ops.length?Math.min(...ops):null,dipAt=dip===null?-1:ops.indexOf(dip);
+   const graded=!!structure
+    &&structure.id==='living-colour-in'
+    &&structure.duration===INTERFACE_MOTION.colourIn
+    &&kfs.length>=3
+    &&offsets.every((o,i)=>i===0?Math.abs(o)<=1e-9:o>offsets[i-1]!+1e-9)
+    &&Math.abs(offsets.at(-1)!-1)<=1e-9
+    &&Math.abs(ops[0]!-MENU_MAP_OPACITY)<=1e-9
+    &&Math.abs(ops.at(-1)!-1)<=1e-9
+    &&dip!==null&&dip>=0.02&&dip<MENU_MAP_OPACITY
+    &&Math.abs(offsets[dipAt]!-COLOUR_DIP_AT)<=1e-6
+    &&ops.slice(dipAt).every((o,i)=>i===0||o>ops[dipAt+i-1]!+1e-9);
+   check(`the arrival is a real graded colour fade, not an instant flip (${structure?`${structure.duration}ms, ${kfs.length} keyframes ${JSON.stringify(offsets.map((o,i)=>[+o.toFixed(4),ops[i]]))}`:'the colour-in beat was never created'})`,
+     graded,JSON.stringify(structure));
+   // THE SAME FACT ON THE WALL CLOCK, HONEST ABOUT A NON-PAINTING ENGINE. The endpoints are always
+   // real: the timer's first tick runs inside the click's own task, before the timeline can advance,
+   // so it reads the menu's light, and the last tick reads the panel's rest. What the MIDDLE can
+   // prove depends on the renderer. (a) A painting engine shows at least one sample strictly between
+   // the endpoints and below full. (b) A renderer that provably did not paint intermediate frames
+   // is not judged on those samples: that is DETECTED from evidence (rendered-frame count, distinct
+   // document-timeline values, or one animation-clock step spanning most of the beat), never
+   // assumed. The branch is printed.
+   const firstWall=colour[0]!,lastWall=colour.at(-1)!;
+   const between=colour.slice(1,-1).filter(f=>f.opacity<0.999);
    const timed=colour.filter(f=>f.t!==null);
-   // WHEN THE ANIMATION'S CLOCK WAS NEVER READABLE, SAY SO — do not compare one frame with itself.
-   // On CI's software WebKit the colour animation can be unfindable for the first samples (the map
-   // may still be the menu's, or the beat not yet created), so `timed` is empty and the old fallback
-   // picked `colour[0]` three times: three identical "timestamps" at 0ms, reported as the colour not
-   // rising. That is a harness limitation, not a product failure, and it must not read as one.
-   const timedEnough=timed.length>=3;
-   const near=(ms:number)=>timed.reduce((best,f)=>Math.abs(f.t!-ms)<Math.abs(best.t!-ms)?f:best,timed[0]??colour[0]!);
-   const start0=near(0),early=near(300),late=near(1000),last=colour.at(-1)!;
-   check(`the tiles’ colour RISES over the arrival (${timedEnough?`${Math.round(start0.t!)}ms ${start0.opacity} -> ${Math.round(early.t!)}ms ${early.opacity} -> ${Math.round(late.t!)}ms ${late.opacity}`:`only ${timed.length} timed sample(s) — clock unreadable, see the wall-clock check below`})`,
-     timedEnough&&start0.opacity>=.09&&start0.opacity<=MENU_MAP_OPACITY+0.02&&early.opacity>start0.opacity&&late.opacity>early.opacity);
-   // THE SAME FACT WITHOUT THE ANIMATION'S CLOCK, so a starved engine is still held to the owner's
-   // rule: on the WALL clock the colour must be low early and high by the end, and must not be flat.
-   const at=(ms:number)=>colour.reduce((best,f)=>Math.abs(f.at-ms)<Math.abs(best.at-ms)?f:best,colour[0]!);
-   const w0=at(0),w300=at(300),w1000=at(1000);
-   check(`the tiles’ colour RISES on the wall clock too (${w0.opacity} -> ${w300.opacity} -> ${w1000.opacity})`,
-     w0.opacity<=MENU_MAP_OPACITY+0.02&&w300.opacity>w0.opacity&&w1000.opacity>w300.opacity);
-   check(`the colour reaches the panel's own rest light by the end (${last.opacity} at ${Math.round(last.at)}ms)`,
-     last.opacity>=.99&&late.opacity>=.98);
+   const maxJump=timed.slice(1).reduce((most,f,i)=>Math.max(most,Math.abs(f.t!-timed[i]!.t!)),0);
+   const paintedFrames=Math.max(0,...colour.map(f=>f.raf??0));
+   const timelineValues=new Set(colour.filter(f=>f.timeline!==null).map(f=>f.timeline)).size;
+   const stalled=paintedFrames<8||timelineValues<4||maxJump>=INTERFACE_MOTION.colourIn*0.6;
+   const branch=between.length?`painting engine: ${between.length} intermediate sample(s) below full`
+    :stalled?`stalled renderer: ${paintedFrames} rendered frame(s), ${timelineValues} document-timeline value(s), one animation-clock step spanned ${Math.round(maxJump)}ms of ${INTERFACE_MOTION.colourIn}ms`
+    :`no intermediate sample and no evidence of a paint stall`;
+   check(`the tiles’ colour RISES on the wall clock too (first ${firstWall.opacity} at ${Math.round(firstWall.at)}ms, last ${lastWall.opacity} at ${Math.round(lastWall.at)}ms; ${branch})`,
+     Math.abs(firstWall.opacity-MENU_MAP_OPACITY)<=0.03&&lastWall.opacity>=0.999&&(between.length>0||stalled));
+   check(`the colour reaches the panel's own rest light by the end (${lastWall.opacity} at ${Math.round(lastWall.at)}ms)`,
+     lastWall.opacity>=.99);
    check(`the colour-in beat is the colour-in token (${INTERFACE_MOTION.colourIn}ms), not a literal`,
-     colour.some(f=>f.duration===INTERFACE_MOTION.colourIn),JSON.stringify(colour.filter(f=>f.duration!==null).slice(0,1)));
+     structure?.duration===INTERFACE_MOTION.colourIn,JSON.stringify(structure?{duration:structure.duration}:null));
    const gaps=frames.slice(1).map((f,i)=>f.at-frames[i]!.at).sort((a,b)=>a-b);console.log('INFO transition frame p95 ms',gaps[Math.floor(gaps.length*.95)]);
   }
   const afterUnstretched=!!after.material&&Math.abs(after.material[0]!/after.material[1]!-1)<0.002;
@@ -424,15 +486,27 @@ try{
     const sample=()=>{
      const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
      const grid=document.getElementById('online-world-grid');
+     const out=svg?.getAnimations().find(a=>a.id==='living-colour-out');
+     // THE RETREAT'S SHAPE, FROM THE WEB ANIMATIONS API (same reason as the arrival: a stalled
+     // renderer paints no intermediate dim, so its samples cannot prove the beat). Captured once
+     // while the beat exists; `getKeyframes()` is a snapshot that survives its cancellation.
+     if(out&&!(window as any).__colourOutStructure){
+      const effect=out.effect as KeyframeEffect;
+      const timing=effect.getTiming();
+      (window as any).__colourOutStructure={duration:typeof timing.duration==='number'?timing.duration:String(timing.duration),
+       easing:timing.easing,fill:timing.fill,
+       keyframes:effect.getKeyframes().map(k=>({offset:k.offset??k.computedOffset,computedOffset:k.computedOffset,
+        easing:k.easing,opacity:'opacity' in k?Number(k.opacity):null}))};
+     }
      if(!svg||!grid){frames.push({at:performance.now(),width:0,opacity:0,out:null,t:null,start:null,leaving:false,mode:null});}
      else frames.push({at:performance.now(),width:+grid.getBoundingClientRect().width.toFixed(2),
       opacity:+Number(getComputedStyle(svg).opacity).toFixed(4),
-      out:(svg.getAnimations().find(a=>a.id==='living-colour-out')?.effect?.getTiming().duration as number|undefined)??null,
+      out:(out?.effect?.getTiming().duration as number|undefined)??null,
       // The retreat's own clock, so a late first frame cannot be read as an early finish.
-      t:(svg.getAnimations().find(a=>a.id==='living-colour-out')?.currentTime as number|undefined)??null,
+      t:(out?.currentTime as number|undefined)??null,
       // The beat's timeline start, on the same clock as `performance.now()`: minus the swap's wall
       // time it is the exact length of the retreat, with no sampling gap to guess.
-      start:(svg.getAnimations().find(a=>a.id==='living-colour-out')?.startTime as number|undefined)??null,
+      start:(out?.startTime as number|undefined)??null,
       leaving:document.getElementById('online-world-screen')!.classList.contains('living-leaving'),
       mode:document.getElementById('online-world-screen')!.dataset.livingTerritory});
      // Keep sampling for a few frames AFTER the framing swaps, so the light coming back up is
@@ -483,8 +557,32 @@ try{
     swap>0&&frames[swap]!.opacity<=.35&&(beatRan?(dimBefore||frozen):dimBefore));
    check(`the map is never bright in the menu's framing (${brightAtMenuWidth.length} bright frame(s))`,
     brightAtMenuWidth.length===0);
-   check(`the retreat has dimmed by its landing keyframe (${landed.length} sample(s) past 90%: ${JSON.stringify(landed.slice(0,3).map(note))})`,
-    landed.every(f=>f.opacity<=.35));
+   // THE RETREAT'S SHAPE, PINNED FROM ITS KEYFRAMES (same reasoning as the arrival). A stalled
+   // engine paints no intermediate dim, so its samples cannot prove the 300ms graded retreat. The
+   // first keyframe is the map's PRESENT colour (whatever the interrupted arrival had reached), so
+   // only the shape is pinned: it starts brighter than its dip, touches the dim floor at its 90%
+   // landing keyframe, and ends on the menu's own rest light. A hard cut (one keyframe, or two from
+   // bright to rest) fails this.
+   const outStructure=await page.evaluate(()=>(window as any).__colourOutStructure as {duration:number|string;easing:string;fill:string;
+    keyframes:{offset:number;computedOffset:number;easing:string;opacity:number|null}[]}|null);
+   const outKfs=(outStructure?.keyframes??[]).filter(k=>k.opacity!==null);
+   const outOffsets=outKfs.map(k=>k.offset),outOps=outKfs.map(k=>k.opacity!);
+   const landing=outKfs.findIndex(k=>Math.abs(k.offset-.9)<=1e-6);
+   const retreatGraded=!!outStructure
+    &&outStructure.duration===INTERFACE_MOTION.colourOut
+    &&outKfs.length>=3
+    &&outOffsets.every((o,i)=>i===0?Math.abs(o)<=1e-9:o>outOffsets[i-1]!+1e-9)
+    &&Math.abs(outOffsets.at(-1)!-1)<=1e-9
+    &&outOps[0]!>outOps[1]!
+    &&landing>=0&&outOps[landing]!<=0.35
+    &&Math.abs(outOps.at(-1)!-MENU_MAP_OPACITY)<=1e-9;
+   check(`the retreat is a real graded colour-out, not an instant flip (${outStructure?`${outStructure.duration}ms, ${outKfs.length} keyframes ${JSON.stringify(outOffsets.map((o,i)=>[+o.toFixed(4),outOps[i]]))}`:'the colour-out beat was never created'})`,
+    retreatGraded,JSON.stringify(outStructure));
+   // KEEP THE PAINTED EVIDENCE WHEN THERE IS SOME, AND SAY SO WHEN THE ENGINE PAINTED NONE. An empty
+   // `landed` set used to make `every()` pass vacuously; now the clock that already proves the beat
+   // ran (see above) is the only substitute, and it is printed.
+   check(`the retreat has dimmed by its landing keyframe (${landed.length?`${landed.length} sample(s) past 90%: ${JSON.stringify(landed.slice(0,3).map(note))}`:`no landing frame was painted; the beat clock shows the framing swapped ${Number.isFinite(swapT)?Math.round(swapT):'?'}ms after the beat began`})`,
+    landed.length?landed.every(f=>f.opacity<=.35):beatRan);
    check('the way back lands the backdrop on the menu\'s own rest light',
     frames.at(-1)!.opacity<=MENU_MAP_OPACITY+0.01);
    // THE RETREAT IS 300ms, NOT THE ARRIVAL'S SECOND (owner, 2026-11-02: "and 0.3s when going back
