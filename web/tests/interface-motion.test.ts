@@ -17,7 +17,7 @@ const declarations = (prefix: string): string[] =>
   [...css.matchAll(new RegExp(`--${prefix}-([\\w-]+):`, 'g'))].map((m) => m[1]!);
 
 describe('one interface vocabulary', () => {
-  it('has the ten tokens the owner set and nothing else (2026-11-02: "make them more visible")', () => {
+  it('has the twelve tokens the owner set and nothing else (2026-11-02: "make them more visible")', () => {
     expect(INTERFACE_MOTION).toEqual({
       open: 150,
       close: 100,
@@ -29,6 +29,8 @@ describe('one interface vocabulary', () => {
       easeClose: 'cubic-bezier(0.4, 0, 1, 1)',
       screen: 10,
       stagger: 50,
+      colourIn: 1000,
+      colourOut: 300,
     });
   });
 
@@ -49,6 +51,16 @@ describe('one interface vocabulary', () => {
     // the settle is a hair past rest, not a spring
     expect(INTERFACE_MOTION.settle).toBeGreaterThan(1);
     expect(INTERFACE_MOTION.settle).toBeLessThanOrEqual(1.01);
+    // THE LIVING MAP'S COLOUR (owner, 2026-11-02: "fade in in like 1 second or so, and 0.3s when
+    // going back to main menu"): a full-second arrival, a shorter retreat, and neither is one of the
+    // shared surface beats stretched.
+    expect(INTERFACE_MOTION.colourIn).toBeGreaterThanOrEqual(800);
+    expect(INTERFACE_MOTION.colourIn).toBeLessThanOrEqual(1200);
+    expect(INTERFACE_MOTION.colourOut).toBeGreaterThanOrEqual(250);
+    expect(INTERFACE_MOTION.colourOut).toBeLessThanOrEqual(400);
+    expect(INTERFACE_MOTION.colourOut).toBeLessThan(INTERFACE_MOTION.colourIn);
+    expect(INTERFACE_MOTION.colourIn).toBeGreaterThan(INTERFACE_MOTION.open);
+    expect(INTERFACE_MOTION.colourOut).toBeGreaterThan(INTERFACE_MOTION.close);
     // a backdrop (no travel, no growth) never settles
     expect(source).toMatch(/const settleScale = scale === 1 \? 1 : INTERFACE_MOTION\.settle;/);
     // and the overshoot always goes the way the surface came from (a back move drops from above)
@@ -66,8 +78,10 @@ describe('one interface vocabulary', () => {
     expect(token('ease-close')).toBe(INTERFACE_MOTION.easeClose);
     expect(token('screen')).toBe(`${INTERFACE_MOTION.screen}px`);
     expect(token('stagger')).toBe(`${INTERFACE_MOTION.stagger}ms`);
+    expect(token('colour-in')).toBe(`${INTERFACE_MOTION.colourIn}ms`);
+    expect(token('colour-out')).toBe(`${INTERFACE_MOTION.colourOut}ms`);
     // No near-duplicate token has crept in under a second spelling.
-    expect(new Set(declarations('ix'))).toEqual(new Set(['open', 'close', 'press', 'travel', 'scale', 'settle', 'ease-open', 'ease-close', 'screen', 'stagger']));
+    expect(new Set(declarations('ix'))).toEqual(new Set(['open', 'close', 'press', 'travel', 'scale', 'settle', 'ease-open', 'ease-close', 'screen', 'stagger', 'colour-in', 'colour-out']));
     // The board's locked vocabulary is untouched: interface motion does not add a `--dur-*`.
     expect(new Set(declarations('dur'))).toEqual(new Set(['ack', 'consequence', 'quick', 'moment', 'tap', 'move']));
   });

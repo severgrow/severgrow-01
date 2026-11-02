@@ -173,27 +173,68 @@ try{
    const tiles=[...document.querySelectorAll<SVGElement>('.world-hex.mine')].slice(0,3).map(h=>{const r=h.getBoundingClientRect();return [+(r.x+r.width/2).toFixed(2),+(r.y+r.height/2).toFixed(2)];});
    return {tiles,opacity:+Number(getComputedStyle(svg).opacity).toFixed(4),skin:+Number(getComputedStyle(document.getElementById('online-world-grid')!,'::after').opacity).toFixed(4)};
   });
+  /** THE OWNER'S COMPLAINT, IN ONE READ: identifiable tiles by cell id, at their painted screen
+   * centres. The menu's last frame and the panel's settled frame must agree to a fraction of a
+   * pixel — §"tiles don't move at all" (owner, 2026-11-02). */
+  const tilePoints=(p:Page)=>p.evaluate(()=>[...document.querySelectorAll<SVGElement>('.world-hex.mine')].slice(0,3).map(h=>{
+   const r=h.getBoundingClientRect();
+   return {id:h.getAttribute('data-cell-id')??'',at:[+(r.x+r.width/2).toFixed(3),+(r.y+r.height/2).toFixed(3)]};
+  }));
+  /** Same tiles, same pixels: every id present on both sides, every centre within `tolerance` px. */
+  const tilesStill=(a:{id:string;at:number[]}[]|null,b:{id:string;at:number[]}[]|null,tolerance=0.01)=>{
+   if(!a||!b||!a.length||a.length!==b.length)return false;
+   return a.every((tile,index)=>tile.id===b[index]!.id&&Math.abs(tile.at[0]!-b[index]!.at[0]!)<=tolerance&&Math.abs(tile.at[1]!-b[index]!.at[1]!)<=tolerance);
+  };
+  let menuTiles:{id:string;at:number[]}[]|null=null;
   if(name==='phone'){
    menuFrame=await painted();
+   menuTiles=await tilePoints(page);
    await page.evaluate(()=>{
     (window as any).__firstFrame=null;
     document.getElementById('menu-world')!.addEventListener('click',()=>{
      requestAnimationFrame(()=>{
       const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
-      // EVERY beat on the page is pinned to its own zero, not just the map's handoff: the map's
-      // light and the frame's skin (a CSS transition) start with it, and one engine may have
-      // already advanced a frame by the time this callback runs.
+      // The first painted frame is READ, not rewound. Pausing freezes every beat for the read, so a
+      // frame that has already progressed cannot hide a jump; but moving `currentTime` back to zero
+      // would also restart the map's one-second colour climb, and the arrival is measured from the
+      // click (see `__colourFrames`). Resume from where the player actually was.
       const held=document.getAnimations();
-      for(const a of held){try{a.pause();a.currentTime=0;}catch{/* finished: already at rest */}}
+      for(const a of held){try{a.pause();}catch{/* finished: already at rest */}}
       const tiles=svg?[...document.querySelectorAll<SVGElement>('.world-hex.mine')].slice(0,3).map(h=>{const r=h.getBoundingClientRect();return [+(r.x+r.width/2).toFixed(2),+(r.y+r.height/2).toFixed(2)];}):[];
       (window as any).__firstFrame={tiles,opacity:svg?+Number(getComputedStyle(svg).opacity).toFixed(4):null,
        skin:+Number(getComputedStyle(document.getElementById('online-world-grid')!,'::after').opacity).toFixed(4),
-       settle:held.some(a=>(a.effect as KeyframeEffect)?.getKeyframes?.().some(k=>'transform' in k))};
+       // The MAP's own beats only: the head/screen transitions on the same page also carry
+       // transforms, and counting them would report a handoff the map never ran.
+       settle:!!svg&&svg.getAnimations().some(a=>(a.effect as KeyframeEffect)?.getKeyframes?.().some(k=>'transform' in k))};
       for(const a of held){try{a.play();}catch{/* finished */}}
      });
     },{once:true,capture:true});
    });
   }
+  if(name==='phone')await page.evaluate(()=>{
+   // THE OWNER'S SECOND MEASURED DIRECTLY (2026-11-02: "make it the color of tiles fade in in like
+   // 1 second or so, and 0.3s when going back to main menu"). A TIMER samples the map's one opacity
+   // track through the arrival: rAF alone was starved to ~1 sample/second on CI's software WebKit,
+   // which is exactly how a smooth fade turns into a step. One timer, never two chained loops.
+   document.getElementById('menu-world')!.addEventListener('click',()=>{
+    const frames:any[]=[];(window as any).__colourFrames=frames;
+    let finish!:()=>void;(window as any).__colourFramesDone=new Promise<void>(r=>{finish=r;});
+    const start=performance.now();let closed=false;
+    const watchdog=setTimeout(()=>{if(!closed){closed=true;finish();}},5000);
+    const tick=()=>{
+     const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
+     const light=svg?.getAnimations().find(a=>a.id==='living-colour-in');
+     frames.push({at:+(performance.now()-start).toFixed(1),opacity:svg?+Number(getComputedStyle(svg).opacity).toFixed(4):0,
+      duration:(light?.effect?.getTiming().duration as number|undefined)??null,
+      // THE ANIMATION'S OWN CLOCK, not the wall clock: a beat starts on the first painted frame, and
+      // on a slow open that frame can be 150ms after the tap. Measuring against the click would make
+      // a correct one-second fade look short (and, worse, make the dip look like a fall).
+      t:light?.currentTime==null?null:Number(light.currentTime)});
+     if(performance.now()-start<1600)setTimeout(tick,16);
+     else if(!closed){closed=true;clearTimeout(watchdog);finish();}
+    };setTimeout(tick,0);
+   },{once:true,capture:true});
+  });
   if(name==='phone')await page.evaluate(()=>{
    document.getElementById('menu-world')!.addEventListener('click',()=>{
    const frames:any[]=[];(window as any).__livingFrames=frames;
@@ -217,6 +258,9 @@ try{
      skin:Number(getComputedStyle(grid,'::after').opacity),ty:Number.isFinite(ty)?ty:0,
      material:vb.length===4&&g.width>0?+(vb[2]!/g.width).toFixed(6):null,
      anim:anims.length,duration:settle?.effect?.getTiming().duration??null,easing:settle?.effect?.getTiming().easing??null,
+     // The colour track is the ONE layer that multiplies every tile's fill: its own duration is
+     // recorded here so the assertion can name the owner's token, not a frame estimate.
+     colour:anims.find(a=>a.id==='living-colour-in')?.effect?.getTiming().duration??null,
      from:(settle as any)?.effect?.getKeyframes?.().map((k:any)=>k.transform)??null};
     frames.push(frame);
     // Software WebKit can spend a frame flushing styles. Keep the same minimum observations
@@ -234,17 +278,34 @@ try{
    const first=firstFrame;
    const menuFrameHere=menuFrame!;
    const moved=first.tiles.length>0&&first.tiles.length===menuFrameHere.tiles.length&&first.tiles.every((t,i)=>Math.abs(t[0]!-menuFrameHere.tiles[i]![0]!)<=0.5&&Math.abs(t[1]!-menuFrameHere.tiles[i]![1]!)<=0.5);
-   check(`NO JUMP: the settle's first frame paints every own tile at the menu's last-frame point (${JSON.stringify(first.tiles)} = ${JSON.stringify(menuFrameHere.tiles)})`,moved&&first.settle);
-   check(`NO JUMP: the map does not brighten on that first frame (${first.opacity} vs the menu's ${menuFrameHere.opacity})`,
-    first.opacity!==null&&Math.abs(first.opacity-menuFrameHere.opacity)<=0.01);
-   check(`the window's frame ARRIVES instead of appearing (vignette ${first.skin} on the first frame)`,first.skin<=0.02);
+   check(`NO JUMP: the panel's first frame paints every own tile at the menu's last-frame point (${JSON.stringify(first.tiles)} = ${JSON.stringify(menuFrameHere.tiles)})`,moved);
+   // THE OWNER'S RULE, NOT A SMOOTH SETTLE: with the panel anchored to the menu's mapping there is
+   // no transform to animate at all. The old handoff beat moved the whole map by the re-fit; its
+   // absence is the proof that nothing travels behind the frame.
+   check('NO JUMP: opening runs no map transform (the menu mapping is already the panel mapping)',first.settle===false);
+   // THE COLOUR MAY ONLY GO DOWN ON THAT FRAME. Before the owner's one-second climb the map held
+   // the menu's value through the handoff; now the dip begins on the arrival's first frame, so on a
+   // slow engine that frame is legitimately DARKER. What must never happen is a flash brighter than
+   // the menu's last frame (the old lit crop).
+   check(`NO JUMP: the map does not brighten on that first frame (${first.opacity} <= the menu's ${menuFrameHere.opacity})`,
+    first.opacity!==null&&first.opacity<=menuFrameHere.opacity+0.01);
+   // THE FIRST PAINTED FRAME IS NOT THE FINISHED FRAME. It used to be read at exactly 0ms; on a slow
+   // open the browser paints no frame at all until ~100ms in, so the honest assertion is that the
+   // skin is still arriving on the first frame it actually shows (a snap would be exactly 1).
+   check(`the window's frame ARRIVES instead of appearing (vignette ${first.skin} on the first frame)`,first.skin<1);
   }
   await page.waitForTimeout(name==='phone'?450:500);
   const after=await state(page);
+  if(name==='phone'){
+   // THE OWNER'S ASSERTION, SETTLED. First frame and settled frame are the same pixels: nothing
+   // slides home after the light comes up either.
+   const settledTiles=await tilePoints(page);
+   check(`NO JUMP: every own tile is on its menu pixel in the settled panel (${JSON.stringify(settledTiles)})`,tilesStill(menuTiles,settledTiles),JSON.stringify({menu:menuTiles,settled:settledTiles}));
+  }
   const after0=await page.evaluate(()=>{const svg=document.querySelector('.world-map-svg')!;const grid=document.getElementById('online-world-grid')!;const vb=(svg.getAttribute('viewBox')??'').split(/\s+/).map(Number);const r=svg.getBoundingClientRect(),g=grid.getBoundingClientRect();return {box:vb,rect:[r.x,r.y,r.width,r.height],gridRect:[g.x,g.y,g.width,g.height]};});
   if(name==='phone'){
    await page.evaluate(()=>(window as any).__livingFramesDone);
-   const frames=await page.evaluate(()=>(window as any).__livingFrames as {at:number;box:string;opacity:number;visible:boolean;same:boolean;material:number|null;anim:number;duration:number|null;easing:string|null;from:string[]|null;skin:number;ty:number}[]);
+   const frames=await page.evaluate(()=>(window as any).__livingFrames as {at:number;box:string;opacity:number;visible:boolean;same:boolean;material:number|null;anim:number;duration:number|null;easing:string|null;colour:number|null;from:string[]|null;skin:number;ty:number}[]);
    const material0=before.material![0]!;
    const stable=frames.length>2&&frames.every(f=>f.same&&f.visible&&f.material!==null&&Math.abs(f.material-material0)<0.0005);
    check(`every transition frame retains the one map at the same tile scale${stable?'':' '+JSON.stringify({before:before.box,frames})}`,stable);
@@ -256,24 +317,48 @@ try{
    // of travel remained.
    const bright=frames.filter(f=>Math.abs(f.ty)>=2&&f.opacity>0.35);
    check(`while the map is still moving it stays dim (${bright.length} bright frame(s): ${JSON.stringify(bright.slice(0,3))})`,bright.length===0);
-   check(`the frame's skin fades in on the same beat (vignette ${frames[0]!.skin} -> ${frames.at(-1)!.skin})`,(firstFrame?.skin??1)<=0.05&&frames.at(-1)!.skin>=0.99);
-   // CONTENT CONTINUITY, PROVEN FROM THE ANIMATION ITSELF: its first keyframe must be exactly the
-   // translation that maps the panel's rendering onto the menu's last rendering. Sampling a tile
-   // would measure an already-progressed frame; the keyframe is what the very first painted frame
-   // uses, so this is the real handoff, not an approximation of it.
-   const animated=frames.find(f=>f.duration!==null);
+   check(`the frame's skin fades in on the same beat (vignette ${firstFrame?.skin} -> ${frames.at(-1)!.skin})`,(firstFrame?.skin??1)<0.99&&frames.at(-1)!.skin>=0.99);
+   // THE MAPPING IS UNCHANGED, PROVEN FROM GEOMETRY (not from a sampled animation frame): project
+   // real tiles through both surfaces' own `meet` mappings and require the same screen pixel. The
+   // old panel re-fitted itself to its width/centre, so the panel point was tens of pixels away —
+   // the owner's "drop". This does not call `anchoredView`: it re-derives the browser's mapping.
    const beforeBox=(before.box??'').split(/\s+/).map(Number);
-   const mm=before.material![0]!;
-   const s=(after0.box[2]!/after0.gridRect![2]!)/mm;
-   const dx=(after0.box[0]!-beforeBox[0]!)/mm+(before.rect![0]!-after0.gridRect![0]!)+(after0.gridRect![2]!/2)*(s-1);
-   const dy=(after0.box[1]!-beforeBox[1]!)/mm+(before.rect![1]!-after0.gridRect![1]!)+(after0.gridRect![3]!/2)*(s-1);
-   const got=[...(String(animated?.from?.[0]??'')).matchAll(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi)].map(m=>Number(m[0]));
-   const handoff=got.length>=2&&Math.abs(got[0]!-dx)<=0.5&&Math.abs(got[1]!-dy)<=0.5&&(got.length<3||Math.abs(got[2]!-s)<=0.002);
-   check(`the map continues from the menu's own pixels into the frame (start ${JSON.stringify(got)} = ${[+dx.toFixed(2),+dy.toFixed(2),+s.toFixed(4)]})`,handoff);
-   check('the settle runs on the interface opening beat (150ms, its easing)',
-     frames.some(f=>f.anim>0&&f.duration===INTERFACE_MOTION.open&&f.easing===INTERFACE_MOTION.easeOpen),
+   const project=(box:number[],rect:number[],wx:number,wy:number)=>{
+    const k=Math.min(rect[2]!/box[2]!,rect[3]!/box[3]!);
+    const ox=(rect[2]!-box[2]!*k)/2,oy=(rect[3]!-box[3]!*k)/2;
+    return [rect[0]!+ox+(wx-box[0]!)*k,rect[1]!+oy+(wy-box[1]!)*k];
+   };
+   const points=['-2,-4','-1,-4','-2,-3'].map(id=>{
+    const [q,r]=id.split(',').map(Number);const at=cellXY(q!,r!);
+    const a=project(beforeBox,before.rect!,at.x,at.y),b=project(after0.box,after0.rect,at.x,at.y);
+    return {id,menu:[+a[0]!.toFixed(3),+a[1]!.toFixed(3)],panel:[+b[0]!.toFixed(3),+b[1]!.toFixed(3)]};
+   });
+   check(`NO JUMP: every world point keeps its screen pixel in the panel ${JSON.stringify(points)}`,
+     points.every(p=>Math.abs(p.menu[0]!-p.panel[0]!)<=0.001&&Math.abs(p.menu[1]!-p.panel[1]!)<=0.001));
+   check(`NO JUMP: the panel keeps the menu's tile scale (${before.material![0]} = ${after.material![0]})`,
+     Math.abs(before.material![0]!-after.material![0]!)<=1e-6);
+   check(`the tiles’ colour comes up on the colour-in token (${INTERFACE_MOTION.colourIn}ms, not the ${INTERFACE_MOTION.open}ms surface beat)`,
+     frames.some(f=>f.colour===INTERFACE_MOTION.colourIn),
      JSON.stringify(frames.filter(f=>f.anim>0).slice(0,1)));
    check('clarity transition reaches full contrast',frames.at(-1)!.opacity>.99);
+   // THE OWNER'S SECOND, MEASURED (2026-11-02: "make it the color of tiles fade in in like 1 second
+   // or so"): the colour must be RISING across the arrival, not switched on in one beat. 0ms is the
+   // pinned first frame (the menu's own light); ~300ms and ~1000ms are the first samples at or after
+   // those marks, so a slow CI frame can only read LATER than the mark — the climb it measures is
+   // still the real one.
+   await page.evaluate(()=>(window as any).__colourFramesDone);
+   const colour=await page.evaluate(()=>(window as any).__colourFrames as {at:number;opacity:number;duration:number|null;t:number|null}[]);
+   // The beat's own clock: `t` is the colour animation's current time. A slow first frame only
+   // shifts WHEN the sample happened, never what the sample measures.
+   const timed=colour.filter(f=>f.t!==null);
+   const near=(ms:number)=>timed.reduce((best,f)=>Math.abs(f.t!-ms)<Math.abs(best.t!-ms)?f:best,timed[0]??colour[0]!);
+   const start0=near(0),early=near(300),late=near(1000),last=colour.at(-1)!;
+   check(`the tiles’ colour RISES over the arrival (${Math.round(start0.t!)}ms ${start0.opacity} -> ${Math.round(early.t!)}ms ${early.opacity} -> ${Math.round(late.t!)}ms ${late.opacity})`,
+     start0.opacity>=.09&&start0.opacity<=MENU_MAP_OPACITY+0.02&&early.opacity>start0.opacity&&late.opacity>early.opacity);
+   check(`the colour reaches the panel's own rest light by the end (${last.opacity} at ${Math.round(last.at)}ms)`,
+     last.opacity>=.99&&late.opacity>=.98);
+   check(`the colour-in beat is the colour-in token (${INTERFACE_MOTION.colourIn}ms), not a literal`,
+     colour.some(f=>f.duration===INTERFACE_MOTION.colourIn),JSON.stringify(colour.filter(f=>f.duration!==null).slice(0,1)));
    const gaps=frames.slice(1).map((f,i)=>f.at-frames[i]!.at).sort((a,b)=>a-b);console.log('INFO transition frame p95 ms',gaps[Math.floor(gaps.length*.95)]);
   }
   const afterUnstretched=!!after.material&&Math.abs(after.material[0]!/after.material[1]!-1)<0.002;
@@ -285,6 +370,9 @@ try{
    check('entry still replaces the known wallet with its fresh server balance',await page.evaluate(()=>document.querySelector('.world-seeds')?.textContent?.replace(/\D/g,'')==='1750'));
   }
   check(`${name}: the map keeps true hexagons on both surfaces (no stretch)`,!!before.material&&!!after.material&&Math.abs(before.material[0]!/before.material[1]!-1)<.002&&Math.abs(after.material[0]!/after.material[1]!-1)<.002);
+  // THE ARTIFACT IS OF THE RESTING PANEL: the tiles' colour takes the owner's full second, so a
+  // screenshot at 500ms would show a half-lit map that no player ever sits on.
+  if(name!=='phone')await page.waitForFunction(()=>{const s=document.querySelector<SVGSVGElement>('.world-map-svg');return !s||Number(getComputedStyle(s).opacity)>=.99;},undefined,{timeout:6000});
   await page.screenshot({path:`${shots}/territory-${name}.png`});
   // THE RETURN JOURNEY (owner: "going back to main menu from territory too"). Sample every frame of
   // the way out: the panel's window must not become the full-bleed one while the map is bright, or
@@ -299,13 +387,21 @@ try{
     // that closes first yields ONE frame and `swap -1` — which is what made this look like a hard
     // cut when nothing had even happened yet.
     start=performance.now();
+    // Exposed so the suite can time the retreat from the click itself (the owner's 300ms).
+    (window as any).__backStart=start;
     let sinceMenu=0;
     const sample=()=>{
      const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
      const grid=document.getElementById('online-world-grid');
-     if(!svg||!grid){frames.push({at:performance.now(),width:0,opacity:0});}
+     if(!svg||!grid){frames.push({at:performance.now(),width:0,opacity:0,out:null});}
      else frames.push({at:performance.now(),width:+grid.getBoundingClientRect().width.toFixed(2),
       opacity:+Number(getComputedStyle(svg).opacity).toFixed(4),
+      out:(svg.getAnimations().find(a=>a.id==='living-colour-out')?.effect?.getTiming().duration as number|undefined)??null,
+      // The retreat's own clock, so a late first frame cannot be read as an early finish.
+      t:(svg.getAnimations().find(a=>a.id==='living-colour-out')?.currentTime as number|undefined)??null,
+      // The beat's timeline start, on the same clock as `performance.now()`: minus the swap's wall
+      // time it is the exact length of the retreat, with no sampling gap to guess.
+      start:(svg.getAnimations().find(a=>a.id==='living-colour-out')?.startTime as number|undefined)??null,
       leaving:document.getElementById('online-world-screen')!.classList.contains('living-leaving'),
       mode:document.getElementById('online-world-screen')!.dataset.livingTerritory});
      // A TIMER, not only rAF: CI's software-rendered WebKit starved rAF to ~1 sample/second, so the
@@ -323,21 +419,42 @@ try{
   await page.click('#online-world-back');await page.waitForSelector('#menu:not([hidden])');
   if(name==='phone'){
    await page.evaluate(()=>(window as any).__backFramesDone);
-   const frames=await page.evaluate(()=>(window as any).__backFrames as {at:number;width:number;opacity:number;leaving:boolean;mode:string}[]);
+   const frames=await page.evaluate(()=>(window as any).__backFrames as {at:number;width:number;opacity:number;out:number|null;t:number|null;start:number|null;leaving:boolean;mode:string}[]);
    const swap=frames.findIndex(f=>f.mode==='menu');
+   const backStart=await page.evaluate(()=>(window as any).__backStart as number);
+   const swapAt=frames[swap]!.at-backStart;
+   const note=(f:{at:number;opacity:number;out:number|null;t:number|null;leaving:boolean;mode:string})=>({at:Math.round(f.at-backStart),t:f.t===null?null:Math.round(f.t),opacity:f.opacity,out:f.out,leaving:f.leaving,mode:f.mode});
    // THE STRICT FORM, kept: the map must actually be DIM before the framing changes, so the way back
    // is a fade in the panel's window, then a re-frame in the dark, then the light coming up. Now that
    // the sampler is timer-based this is observable on CI instead of reading a sampling cliff.
    const brightAtMenuWidth=frames.filter(f=>f.mode==='menu'&&f.opacity>MENU_MAP_OPACITY+0.02);
-   check(`the way back is not a hard cut: the framing changes only while the map is dim (frame ${swap}: ${JSON.stringify(frames.slice(Math.max(0,swap-1),swap+2))})`,
+   check(`the way back is not a hard cut: the framing changes only while the map is dim (frame ${swap}, ${Math.round(swapAt)}ms: ${JSON.stringify(frames.slice(Math.max(0,swap-1),swap+2).map(note))})`,
     swap>0&&frames[swap-1]!.opacity<=0.35&&frames[swap]!.opacity<=0.35);
    check(`the map is never bright in the menu's framing (${brightAtMenuWidth.length} bright frame(s))`,
     brightAtMenuWidth.length===0);
    check('the way back dims the panel first (a leaving frame below the menu\'s own backdrop)',
     frames.some(f=>f.leaving&&f.opacity<=0.35)&&frames.at(-1)!.opacity<=MENU_MAP_OPACITY+0.01);
+   // THE RETREAT IS 300ms, NOT THE ARRIVAL'S SECOND (owner, 2026-11-02: "and 0.3s when going back
+   // to main menu"). Timed on the colour-out beat's own timeline: the swap's wall time minus the
+   // beat's `startTime` is how long the retreat actually took, including any slow frame after it. It
+   // can never be shorter than the beat, and it must stay well inside the arrival's second.
+   // A beat starts on the first painted frame (on software WebKit, ~200ms after the tap), so the
+   // click's clock would read it wrong.
+   const started=[...frames].reverse().find(f=>f.start!==null);
+   const swapT=started?frames[swap]!.at-started.start!:Number.NaN;
+   check(`the retreat clears in one colour-out beat (${Math.round(swapT)}ms ≈ ${INTERFACE_MOTION.colourOut}ms, not the ${INTERFACE_MOTION.colourIn}ms arrival)`,
+    swap>0&&!!started&&swapT>=INTERFACE_MOTION.colourOut-40&&swapT<INTERFACE_MOTION.colourIn);
+   check(`the retreat runs the colour-out token duration (${INTERFACE_MOTION.colourOut}ms), not a literal`,
+    frames.some(f=>f.out===INTERFACE_MOTION.colourOut));
   }
   await page.waitForTimeout(200);
   const back=await state(page);
+  if(name==='phone'){
+   // THE RETURN IS THE SAME RULE (owner: "going back ... too"): the menu's own tiles must be back on
+   // the exact pixels the panel showed them at. Not "dimmed while it settles" — the same pixels.
+   const backTiles=await tilePoints(page);
+   check(`NO JUMP: the menu returns every own tile to the panel's pixels (${JSON.stringify(backTiles)})`,tilesStill(menuTiles,backTiles),JSON.stringify({menu:menuTiles,back:backTiles}));
+  }
   const backSame=back.same&&back.mode==='menu'&&!!back.material&&Math.abs(back.material[0]!/back.material[1]!-1)<0.002;
   check(`${name}: return retains the one map as a true, unstretched hex field`,backSame,JSON.stringify({after,back}));
   check(`${name}: returning restores keyboard focus`,await page.evaluate(()=>document.activeElement?.id==='menu-world'));
@@ -349,6 +466,12 @@ try{
     await page.evaluate(()=>{document.getElementById('menu-world')!.click();document.getElementById('online-world-back')!.click();});
    }
    await page.waitForTimeout(250);check('rapid navigation never hides the returned menu',await page.evaluate(()=>!document.getElementById('menu')!.hidden&&!document.getElementById('menu')!.inert));
+   // THE COLOUR MUST NOT BE CAUGHT MID-FADE (owner, 2026-11-02, same evening): an open then an
+   // immediate Back must land the backdrop at its own rest light — never a stuck half-lit map.
+   check('rapid navigation leaves the menu map at its rest colour, never half-faded',await page.evaluate((rest:number)=>{
+    const s=document.querySelector<SVGSVGElement>('.world-map-svg');
+    return !!s&&Math.abs(Number(getComputedStyle(s).opacity)-rest)<=0.01;
+   },MENU_MAP_OPACITY));
    // AN IMPATIENT SECOND BACK, DETERMINISTICALLY. The loop above only catches the swallowed-Back bug
    // when the two presses land inside the same exit beat, which is timing-dependent. This one presses
    // Back, waits 20ms (well inside the 100ms dim), and presses it again: the second journey must

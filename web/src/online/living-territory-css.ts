@@ -63,12 +63,12 @@ export const LIVING_TERRITORY_CSS = `
   transition:opacity ${motion.open}ms ${motion.easeOpen};
 }
 /* THE RETURN'S FIRST BEAT (see leave() in living-territory.ts): the frame's skin leaves with the
-   map's light, before the geometry returns to the menu's full-bleed framing. The map's own opacity
-   is driven by the animation, not here. */
+   map's colour, over the owner's 300ms retreat. The map's own opacity is driven by the animation,
+   not here. */
 #online-world-screen.living-leaving .world-grid::before,
 #online-world-screen.living-leaving .world-grid::after,
 #online-world-screen.living-leaving::before {
-  transition-duration:${motion.close}ms; transition-timing-function:${motion.easeClose}; opacity:0;
+  transition-duration:${motion.colourOut}ms; transition-timing-function:${motion.easeClose}; opacity:0;
 }
 /* NO SCALE HERE: at full bleed even the interface layer's 99.6% would leave a 1px transparent rim
    around the screen. The menu's map is exactly the viewport; the settle on opening is added by JS

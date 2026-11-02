@@ -1,7 +1,11 @@
 import { INTERFACE_MOTION, enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
+import { anchoredView } from './world-view.js';
 import { LIVING_TERRITORY_CSS, MENU_MAP_OPACITY } from './living-territory-css.js';
 
-type Hooks = { menu: HTMLElement; screen: HTMLElement; preview: () => void; stop: () => void };
+type Hooks = { menu: HTMLElement; screen: HTMLElement; preview: () => void; stop: () => void;
+ /** Hands the menu's last painted map (viewBox + measured box) to the shared WorldView before the
+  * panel owns the CSS, so opening keeps the menu's exact pixels (see `anchoredView`). */
+ anchor?: (box: readonly number[], rect: { left: number; top: number; width: number; height: number }) => void };
 
 export const mountLivingTerritory=(hooks:Hooks)=>{
  const {menu,screen}=hooks;
@@ -12,6 +16,14 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
  /** The floor of the arrival's dip: low enough that the crop and the slide cannot be read, high
   * enough that the map never blinks out. An internal value, not a token. */
  const DIP=0.1;
+ /**
+  * WHERE THE COLOUR'S CLIMB BEGINS, as a fraction of `colourIn`. The map dips to `DIP` over the
+  * first third of the 150ms geometry handoff (so the sliding crop is never lit), and from that
+  * point the tiles' colour RISES for the rest of the owner's one second. Derived from the two
+  * tokens, never measured or hand-picked.
+  */
+ const COLOUR_DIP_AT=0.3*(INTERFACE_MOTION.open/INTERFACE_MOTION.colourIn);
+
  let mode:'menu'|'world'|'off'='off',generation=0;
  /** A Back tap during the panel's own exit must not restart it (a second dim from full light). */
  let leaving=false;
@@ -44,6 +56,16 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
  };
  const mapOf=()=>screen.querySelector<SVGSVGElement>('#online-world-grid .world-map-svg');
  const gridOf=()=>screen.querySelector<HTMLElement>('#online-world-grid');
+ /**
+  * The menu's map rests at its own backdrop light. On the way back, any beat still on it — a CSS
+  * transition the attribute flip just synthesised, or an interrupted colour ramp — is cancelled,
+  * so a return can never leave a half-lit map behind. One call per return, never per frame.
+  */
+ const settleMap=()=>{
+  const map=mapOf();if(!map)return;
+  for(const a of map.getAnimations()){try{a.cancel();}catch{/* already finished */}}
+ };
+
  const set=(next:'menu'|'world'|'off')=>{
   cutTransitions();
   mode=next;generation++;
@@ -58,45 +80,55 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
  }).observe(menu,{attributes:true,attributeFilter:['hidden']});
  /**
   * THE RETURN JOURNEY (owner, 2026-11-02: "going back to main menu from territory too"). The panel
-  * must not hard-cut back to the menu's full-bleed view. The map's light is taken down over one
-  * close beat while the frame's skin leaves with it; the geometry then returns to the menu's own
-  * framing while the map is at its dimmest, so the reversed crop is never seen at full brightness.
-  * `done` runs at that moment and the menu's own arrival continues the beat. Reduce motion (no
-  * `beat`) or a panel that is not up: straight to `done`, no animation.
+  * must not hard-cut back to the menu's full-bleed view. The tiles' colour is taken DOWN over the
+  * owner's retreat (`colourOut`, 300ms) and only then does the geometry return to the menu's own
+  * framing, so the reversed crop is never seen at full brightness. `done` runs at that moment and
+  * the menu's own arrival continues the beat. Reduce motion (no `beat`), or a panel that is not up:
+  * straight to `done`, no animation.
+  *
+  * The retreat begins at the tiles' PRESENT colour, never at a hard 1: a Back pressed during the
+  * one-second arrival must continue downwards from there instead of flashing back to full first.
   */
  const leave=(done:()=>void,beat:{duration:number;easing:string}|null)=>{
   // A Back while a Back is already running COMPLETES that journey rather than being dropped: the
   // player asked to leave twice, and the second press must not leave them on a hidden screen.
   if(leaving&&leavingFinish){const finish=leavingFinish;leavingFinish=null;finish();return;}
   if(mode!=='world'){done();return;}
+  const map=mapOf();
+  // Read BEFORE the beats are cancelled: cancelling the arrival would snap the map back to its CSS
+  // rest (full light) and the fade would start from a brightness the player never saw.
+  const from=map?Number(getComputedStyle(map).opacity):MENU_MAP_OPACITY;
   leaving=true;
   const turn=generation;
   clearBeats();
   screen.classList.add('living-leaving');
-  const map=mapOf();
   const finish=()=>{
    leavingFinish=null;
    if(turn!==generation){leaving=false;return;}
    leaving=false;
    screen.classList.remove('living-leaving');
    done();
-   // The map is in the menu's framing now; hand its light back with the last short fade. Reduce
-   // motion gets none of this: the menu is simply there, at its own rest value.
-   if(!map||!beat)return;
-   const played=map.animate([{opacity:String(DIP)},{opacity:String(MENU_MAP_OPACITY)}],
-     {duration:INTERFACE_MOTION.close,easing:INTERFACE_MOTION.easeOpen,fill:'both'});
-   lightBeat=played;
-   played.finished.then(()=>{if(lightBeat===played)lightBeat=stop(lightBeat);}).catch(()=>undefined);
   };
-  if(!map||!beat){finish();return;}
+  // Already at (or below) the menu's own backdrop light: there is nothing to fade down, so the
+  // retreat is one frame. This is the rapid open -> back case, and it must never delay the menu.
+  if(!map||!beat||from<=MENU_MAP_OPACITY+0.02){finish();return;}
   leavingFinish=finish;
-  const dim=map.animate([{opacity:'1'},{opacity:String(DIP)}],
-   {duration:beat.duration,easing:beat.easing,fill:'both'});
-  lightBeat=dim;
-  // A CANCELLED dim still completes the journey. `clearBeats()` cancels this beat (an arrival, a
+  // THE RETREAT IS ONE 300ms BEAT WITH A DIM LANDING (owner, 2026-11-02: "and 0.3s when going back
+  // to main menu"). The colour goes down inside the panel's window, touches the dip just before the
+  // framing returns, and settles on the menu's own backdrop light as it swaps — the reverse of the
+  // arrival's dip, never a lit re-frame. The last keyframe is the menu's rest, so the backdrop is
+  // exactly where the menu expects it when the attribute flips.
+  const out=map.animate([
+   {opacity:String(from),offset:0,easing:beat.easing},
+   {opacity:String(DIP),offset:.9,easing:'linear'},
+   {opacity:String(MENU_MAP_OPACITY),offset:1},
+  ],{duration:beat.duration,fill:'both',easing:'linear'});
+  out.id='living-colour-out';
+  lightBeat=out;
+  // A CANCELLED fade still completes the journey. `clearBeats()` cancels this beat (an arrival, a
   // reopen, a hide), and the old `.catch()` swallowed the rejection, so `finish()` never ran and the
   // menu could stay hidden. Cancellation is a reason to finish, not to stop.
-  dim.finished.then(finish,()=>{if(leaving&&turn===generation)finish();});
+  out.finished.then(finish,()=>{if(leaving&&turn===generation)finish();});
  };
  return {
   menu(visible:boolean){
@@ -119,6 +151,9 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
    // the dim abrupt, so it is gone.
    clearBeats();screen.classList.remove('living-leaving');
    set('menu');
+   // The map has finished its retreat; anything still on it (a CSS transition synthesised by the
+   // attribute flip, a beat from an interrupted journey) would leave the backdrop half-lit.
+   if(returning)settleMap();
    // Cancel an interrupted menu exit before it can hide a newly returned menu.
    if(menu.dataset.ixState==='closing')resetSurface(menu);
    menu.hidden=false;menu.inert=false;
@@ -130,6 +165,10 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
    const fromMenu=mode==='menu'&&!menu.hidden;
    const svg=mapOf();
    menuView=fromMenu&&svg?{box:(svg.getAttribute('viewBox')??'').split(/\s+/).map(Number),rect:svg.getBoundingClientRect()}:null;
+   // THE MENU'S PIXELS ARE THE PANEL'S PIXELS (owner, 2026-11-02: "tiles don't move at all").
+   // Hand the frame over BEFORE `set('world')` re-lays the grid, while the rect still describes the
+   // full-bleed menu; `WorldView.open` (called immediately after this) turns it into the panel view.
+   if(menuView)hooks.anchor?.(menuView.box,menuView.rect);
    clearBeats();screen.classList.remove('living-leaving');
    set('world');const turn=generation;
    resetSurface(screen);screen.hidden=false;screen.inert=false;
@@ -157,11 +196,16 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
    * the panel's WINDOW by (dx,dy) while it slides home: 102px on a 390x844 phone, 41px at 320x568,
    * 66px on a 1440x1000 desktop, 72x41px in landscape. For those frames the panel's own glass shows
    * through at one edge and the map's opposite edge is clipped away, and the map is already at 26%
-   * opacity and climbing — so the window appears to snap. So the map's LIGHT is now tied to its
-   * geometry: it holds the menu's dim value for the first third of the beat (easeOpen has already
-   * spent ~87% of the travel by then), dips, and only then comes up to full inside a settled frame.
-   * Transform + opacity only: no filter, no per-frame layout read, and the screen is already live
-   * underneath, so it never delays a tap.
+   * opacity — so the window appears to snap. So the map's LIGHT is now tied to its geometry: it dips
+   * inside the first third of the handoff (easeOpen has already spent ~87% of the travel by then),
+   * and from there the tiles' colour RISES for the owner's full second.
+   *
+   * ONE LAYER, NOT N TILES (owner, 2026-11-02, same evening: "make it the color of tiles fade in in
+   * like 1 second or so"). The colour of the tiles is their fill multiplied by the map's own
+   * `opacity`; that single track is what the menu already dims to `MENU_MAP_OPACITY`. So the fade
+   * is one composited animation on the map SVG — never a per-tile loop, never a filter. Transform
+   * (when the two views really differ) + opacity only, one layout read at the handoff, and the
+   * screen is already live underneath, so it never delays a tap.
    */
   enter(){
    const from=menuView;menuView=null;
@@ -185,21 +229,37 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
    const s=mt/mm;
    const dx=(to[0]!-from.box[0]!)/mm+(from.rect.left-frame.left)+(frame.width/2)*(s-1);
    const dy=(to[1]!-from.box[1]!)/mm+(from.rect.top-frame.top)+(frame.height/2)*(s-1);
-   const hand=map.animate([{transform:`translate(${dx}px,${dy}px) scale(${s})`},{transform:'none'}],
-     {duration:INTERFACE_MOTION.open,easing:INTERFACE_MOTION.easeOpen,fill:'both'});
-   settleBeat=hand;
-   hand.finished.then(()=>{if(settleBeat===hand)settleBeat=stop(settleBeat);}).catch(()=>undefined);
+   // ZERO MOVEMENT IS THE POINT (owner, 2026-11-02: "tiles don't move at all ... not a smooth
+   // settle"). The panel's viewBox is the menu's own mapping seen through the panel's box (see
+   // `anchoredView`), so the handoff transform is the identity and must not be animated at all.
+   // Compare the DRAWn box to that mapping instead of trusting a hand-rolled error term: the menu's
+   // own `meet` letterbox (sub-pixel when its viewBox is reconciled to a rounded layout size) is
+   // part of the real mapping, and `anchoredView` already carries it.
+   const mapped=anchoredView({box:from.box,rect:{left:from.rect.left,top:from.rect.top,width:from.rect.width,height:from.rect.height}},
+     {left:frame.left,top:frame.top,width:frame.width,height:frame.height});
+   const still=!!mapped&&mapped.every((value,index)=>Math.abs(value-to[index]!)<=1e-6);
+   if(!still){
+    const hand=map.animate([{transform:`translate(${dx}px,${dy}px) scale(${s})`},{transform:'none'}],
+      {duration:INTERFACE_MOTION.open,easing:INTERFACE_MOTION.easeOpen,fill:'both'});
+    hand.id='living-handoff';
+    settleBeat=hand;
+    hand.finished.then(()=>{if(settleBeat===hand)settleBeat=stop(settleBeat);}).catch(()=>undefined);
+   }
+   // THE COLOUR COMES UP OVER THE OWNER'S SECOND, not the surface's 150ms beat. The dip stays
+   // inside the 150ms geometry handoff (`COLOUR_DIP_AT`), so the moving crop is never lit; the rest
+   // of the arrival is the tiles' fills climbing from DIP back to their saturated rest.
    const light=map.animate([
-     {opacity:String(MENU_MAP_OPACITY),offset:0},
-     {opacity:String(DIP),offset:.3,easing:INTERFACE_MOTION.easeClose},
-     {opacity:'1',offset:1,easing:INTERFACE_MOTION.easeOpen},
-   ],{duration:INTERFACE_MOTION.open,fill:'both',easing:'linear'});
+     {opacity:String(MENU_MAP_OPACITY),offset:0,easing:INTERFACE_MOTION.easeClose},
+     {opacity:String(DIP),offset:COLOUR_DIP_AT,easing:'linear'},
+     {opacity:'1',offset:1},
+   ],{duration:INTERFACE_MOTION.colourIn,fill:'both',easing:'linear'});
+   light.id='living-colour-in';
    lightBeat=light;
    light.finished.then(()=>{if(lightBeat===light)lightBeat=stop(lightBeat);}).catch(()=>undefined);
   },
-  /** The Back control: the panel leaves over its own beat, then `done` puts the menu back. */
+  /** The Back control: the panel leaves over the owner's retreat, then `done` puts the menu back. */
   leave(done:()=>void){
-   leave(done,interfaceMotionAllowed()?{duration:INTERFACE_MOTION.close,easing:INTERFACE_MOTION.easeClose}:null);
+   leave(done,interfaceMotionAllowed()?{duration:INTERFACE_MOTION.colourOut,easing:INTERFACE_MOTION.easeClose}:null);
   },
   hide(){clearBeats();screen.classList.remove('living-leaving');menuView=null;set('off');screen.hidden=true;resetSurface(menu);hooks.stop();},
   update(){if(mode==='menu')hooks.preview();},

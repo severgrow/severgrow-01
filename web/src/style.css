@@ -610,37 +610,35 @@ button {
   #menu .menu-territory-side { gap: 4px; font-size: 0.8rem; }
   #menu .menu-territory-label { font-size: 0.95rem; letter-spacing: 0.05em; }
 }
-/* ---------- THE FIRST-RUN NUDGE (owner brief, 2026-11-01) ----------
-   Ten lamps on the PLAY key, one per lesson: a hairline ring is a lesson not yet cleared, a ring
-   filled with the key's own ink is one that is. The strip is SET INTO the key — absolutely placed on
-   its lower bezel — so it takes no row, no gap and no tap target from the menu; the column's key
-   spacing is exactly what it was without it, at every size. It is decoration (aria-hidden on the
-   markup, pointer-events:none here): PLAY is the target, and PLAY is the key that already leads to
-   LEVEL 1. Nothing below is sized by the label, so Large text cannot move a lamp. */
-#menu #menu-play { position: relative; }
-.menu-play-lessons {
+/* ---------- THE CAMPAIGN'S SUGGESTION (owner, 2026-11-02) ----------
+   "make slight glow cream around the play and level 1 so its suggestive". A soft cream halo around
+   the two keys that lead to the campaign — PLAY and the LEVEL <n> entry — while lessons 1-10 are
+   unfinished (the rule is in web/src/menu/suggestion.ts). It replaces the ten first-run lamps the
+   owner asked to remove, so it carries the whole pointer and must stay QUIET: two wide, low-alpha
+   shadows, no ring, no neon, no colour of its own beyond the keys' own cream.
+   It is a STATIC `box-shadow` on the key's `::after` halo: painted once, never per frame, and NOT a
+   `filter` on the key (the trap the Territory fog and the surrounded-home glow hit twice). There is
+   no keyframe and no transition, so Reduce motion has no movement to switch off. Because the halo is
+   its own box, the key's material, inset light and focus ring are untouched; because it is
+   `pointer-events:none` and paints outside the key's box, it steals no tap. */
+#menu .menu-buttons > .btn.suggest,
+#play-menu .menu-buttons > .btn.suggest {
+  position: relative;
+  /* Explicit, so "no motion" is a fact the browser reports, not an omission. */
+  animation: none;
+  transition: none;
+}
+#menu .menu-buttons > .btn.suggest::after,
+#play-menu .menu-buttons > .btn.suggest::after {
+  content: '';
   position: absolute;
-  left: 50%;
-  bottom: 6px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  inset: 0;
+  border-radius: inherit;
   pointer-events: none;
-}
-/* One lamp: a 6px ring of the key's ink, hollow while the lesson is open. Filled, it is the ink
-   solid — no glow, no gradient, no colour of its own, because the key is already the one cream
-   surface on this screen and the lamps are its own indicator lights. */
-.menu-play-lessons > i {
-  width: 6px;
-  height: 6px;
-  border: 1px solid color-mix(in srgb, var(--fu-ink) 34%, transparent);
-  border-radius: 50%;
-  box-sizing: border-box;
-}
-.menu-play-lessons > i.on {
-  border-color: var(--fu-ink);
-  background: var(--fu-ink);
+  animation: none;
+  box-shadow:
+    0 0 3px color-mix(in srgb, var(--fu-cream) 18%, transparent),
+    0 0 16px 3px color-mix(in srgb, var(--fu-cream) 20%, transparent);
 }
 .menu-lessons {
   display: grid;
@@ -3921,6 +3919,12 @@ html.futasaku-product #campaign .campaign-chapters {
      later. Two extra tokens, no second vocabulary: see `INTERFACE_MOTION.screen` / `.stagger`. */
   --ix-screen: 10px;
   --ix-stagger: 50ms;
+  /* THE LIVING MAP'S COLOUR (owner, 2026-11-02: "make it the color of tiles fade in in like 1
+     second or so, and 0.3s when going back to main menu"). These are NOT `open`/`close` stretched:
+     the map's tiles do not appear or move — one opacity track brings their colours up over a
+     second and takes them down over 300ms. See `INTERFACE_MOTION.colourIn` / `.colourOut`. */
+  --ix-colour-in: 1000ms;
+  --ix-colour-out: 300ms;
 }
 .btn,
 .btn.primary,
@@ -7503,23 +7507,21 @@ html.settings-essentials #settings-report {
   border-color: color-mix(in srgb, var(--c-line) 88%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-text) 7%, transparent);
 }
-/* WHEN THE MENU SITS ON THE LIVING MAP, ITS KEYS ARE SOLID (owner, 2026-11-02: "make the buttons non
-   transparent, so they sit on top of the map and the map is not inside any of the buttons there -
-   for clarity"). A transparent key let the hex field show through the label's own box, so the map
-   read as part of the control. This must live AFTER the `.btn.ghost` fill above, because that rule
-   is later in the file than the menu column's own styles and would otherwise win on source order —
-   measured: the key kept `oklab(… / 0.025)` while the override "won" on paper. Both the shorthand
-   and the colour are set, since a shorthand resets the colour.
-   The translucent material is kept where the menu is on the plain background, where there is
-   nothing to show through. Ghost/primary hierarchy, border, shadow and focus ring are unchanged. */
-#menu[data-living-world] .menu-buttons > .btn:not(.primary),
-#menu[data-living-world] .menu-footer > .btn:not(.primary) {
-  background: var(--c-bg) !important;
-  background-color: var(--c-bg) !important;
-}
-#menu[data-living-world] .menu-buttons > .btn.primary {
-  background: var(--fu-cream);
-  background-color: var(--fu-cream);
+/* THE MENU'S KEYS ARE THE PLAY SUBMENU'S DARK GLASS (owner, 2026-11-02: "use the dark glass around
+   buttons similar to sub menu play"). This REPLACES the opaque `--c-bg` fill of 65f4257f
+   ("solid keys over the living map") — that rule is deleted rather than overridden, so there is one
+   statement of the truth. Both menus now wear the SAME material, which is the point: the owner is
+   pointing at the PLAY submenu, so the key has to compute what that submenu's key computes.
+   The property is the `background` SHORTHAND, not `background-color`. `.btn.ghost` (directly above)
+   also uses the shorthand, and a shorthand resets every longhand, so a longhand would be reset by
+   it; the shorthand is the form that wins. `!important` is unnecessary here because the id in the
+   selector outranks `.btn.ghost`.
+   The PLAY key stays cream (`primary`): it is the one key the owner has always kept distinct. */
+#menu .menu-buttons > .btn:not(.primary),
+#play-menu .menu-buttons > .btn:not(.primary) {
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
 }
 
 /* ---------- the pause plate's company ----------

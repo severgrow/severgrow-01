@@ -620,6 +620,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   living = menuEl ? mountLivingTerritory({menu: menuEl, screen: worldEl,
     preview: () => worldView?.preview(worldSource.peek(), identity.peek(), !worldSource.isFresh()),
     stop: () => worldView?.close(true),
+    // The menu's last painted frame, handed to the shared map before the panel takes the CSS box.
+    anchor: (box, rect) => worldView?.setMenuFrame(box, rect),
   }) : null;
   worldSource.subscribe(() => living?.update());
   const syncMenuWorld = (visible: boolean) => living?.menu(visible);

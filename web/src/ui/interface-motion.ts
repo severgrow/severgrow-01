@@ -10,8 +10,8 @@
 // way a sheet of glass set down on a table settles; it leaves in 100ms, sinking a little as it
 // fades. Still no bounce and no big slides: one breath, then stillness. Presses answer in 90ms.
 //
-// This layer is deliberately small and dependency-free: two durations, two easings, one travel
-// distance and two primitives. FUTURE AGENTS ADOPT IT BY MARKUP:
+// This layer is deliberately small and dependency-free: two surface durations, the living map's
+// colour pair, two easings, one travel distance and two primitives. FUTURE AGENTS ADOPT IT BY MARKUP:
 //
 //   <div class="sheet" data-ix-surface>…</div>          // CSS settles it if JS never runs
 //   <button class="btn" data-ix-press>…</button>        // CSS press on pointerdown/up
@@ -48,6 +48,21 @@ export const INTERFACE_MOTION = Object.freeze({
    * one part landing after another, short enough that nothing waits on it.
    */
   stagger: 50,
+  /**
+   * THE LIVING MAP'S COLOUR — NOT A SURFACE'S ARRIVAL (owner, 2026-11-02, the same evening as the
+   * "tiles must not move" brief): "for territory transition, make it the color of tiles fade in in
+   * like 1 second or so, and 0.3s when going back to main menu — so it's truly smooth and organic
+   * how you change screens". The tiles do not reappear and never move: they come UP to their
+   * saturated colours on arrival (a full second — the living map SETTLING, not a surface appearing)
+   * and go back DOWN on the retreat (300ms — a way out is quicker than an arrival).
+   *
+   * Deliberately their own tokens. `open`/`close` time every surface's arrival, exit and press and
+   * are shared by every screen; stretching them for one map would slow the whole interface down.
+   * Only the living map's single opacity track (the one layer that multiplies every tile's fill)
+   * reads these — see `web/src/online/living-territory.ts`.
+   */
+  colourIn: 1000,
+  colourOut: 300,
 });
 
 export type SurfaceMotion = Readonly<typeof INTERFACE_MOTION>;

@@ -151,8 +151,9 @@ and is still true for sheets. Screens have their own, larger beat, and the direc
 Source of truth is `web/src/ui/interface-motion.ts`:
 
 - `open: 150`, `close: 100`, `travel: 4` (a sheet), `screen: 10` (a whole screen),
-  `stagger: 50` (the beat between a screen's body and its own head row), `easeOpen`
-  `cubic-bezier(0.22, 1, 0.36, 1)`, `easeClose` `cubic-bezier(0.4, 0, 1, 1)`.
+  `stagger: 50` (the beat between a screen's body and its own head row), `colourIn: 1000` /
+  `colourOut: 300` (the living map's tiles coming up to, and going back down from, their colours),
+  `easeOpen` `cubic-bezier(0.22, 1, 0.36, 1)`, `easeClose` `cubic-bezier(0.4, 0, 1, 1)`.
 - Depth decides direction: a forward move (menu → PLAY → picker) rises from below, a back move drops
   from above, the board itself never moves, and a boot screen is simply there. A sheet keeps its own
   smaller travel.

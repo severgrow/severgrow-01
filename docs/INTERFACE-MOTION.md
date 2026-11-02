@@ -42,10 +42,17 @@ The numbers live in one JavaScript object and one block of CSS custom properties
 | `--ix-ease-close` | `cubic-bezier(0.4, 0, 1, 1)` | accelerate away |
 | `--ix-screen` | `10px` | how far a WHOLE SCREEN travels while it arrives |
 | `--ix-stagger` | `50ms` | the beat between a screen's body and its own head |
+| `--ix-colour-in` | `1000ms` | the living map's tiles coming UP to their colours (menu → Territory) |
+| `--ix-colour-out` | `300ms` | the living map's colour going back DOWN (Territory → menu) |
 
 `--ix-screen` and `--ix-stagger` are the 2026-11-02 addition (owner: "if we have existing ones make
 them more visible and smooth"). They are not a second vocabulary: the same duration, the same curve,
 the same sign convention — a screen simply spends more of it than a card does.
+
+`--ix-colour-in` / `--ix-colour-out` are the same evening's addition (owner: "for territory
+transition, make it the color of tiles fade in in like 1 second or so, and 0.3s when going back to
+main menu — so it's truly smooth and organic how you change screens"). They are NOT `open`/`close`
+stretched: no surface's arrival changes, and only the living map's single opacity track reads them.
 
 They are deliberately **not** `--dur-*` tokens. The board's vocabulary is closed at two tempo
 tokens (`ack`, `consequence`); interface motion is a separate, quieter family.
@@ -80,12 +87,13 @@ Owner, 2026-11-02: *"make going into territory from main menu look intentional �
 slightly changing position."* The menu paints the map full-bleed and the Territory paints the same
 SVG inside a framed panel, so the two windows differ in shape and position.
 
-What already existed, and is still the foundation: the panel's map starts on the exact screen
-mapping of the menu's last frame (a translate, plus a scale only when the world fit caps one of the
-two views), then eases to rest in `--ix-open` on `--ix-ease-open`. Measured: the player's own tile
-sits at the same pixel on both frames (0.01px on a 390x844 phone).
+What already existed, and is still the foundation: the panel's map is the SAME item seen through the
+panel's own box (see `anchoredView` in `web/src/online/world-view.ts`), so there is no travel to
+animate — the owner's "tiles don't move at all". Measured: the player's own tile sits at the same
+pixel on both frames (0.01px on a 390x844 phone). A transform is only ever added when the two views
+genuinely differ (the world-fit cap on a very tall screen), and then it eases home in `--ix-open`.
 
-The jump was not in that handoff. It was in everything around it:
+The jump was not in the mapping. It was in everything around it:
 
 - the map's paint box leads the panel's window by `(dx,dy)` while it slides home — measured 102px on
   a 390x844 phone, 66px at 1440x1000, 41px at 320x568, 72x41px in landscape — so for those frames
@@ -94,19 +102,24 @@ The jump was not in that handoff. It was in everything around it:
 - the panel's frame (its vignette and its hairline) simply existed from the first frame;
 - the way back had no animation at all: the geometry returned to the full-bleed framing in one frame.
 
-So three things were added, all transform/opacity, none per-frame:
+So four things were added, all transform/opacity, none per-frame:
 
 1. **the frame's skin arrives** — the panel's vignette (`::after`) and a 1px instrument hairline
    (`::before`, above the map) fade in over the same beat, instead of appearing;
-2. **the map's light follows its geometry** — it holds the menu's 26% for the first third of the
-   beat, dips, then comes up to 100% *after* `easeOpen` has spent ~87% of the travel, so the crop and
-   the slide are never seen lit;
-3. **the panel's head arrives a beat later** — the back key, the title and the wallet line rise 4px
+2. **the map's light follows its geometry** — it dips inside the first third of the 150ms handoff
+   (easeOpen has already spent ~87% of the travel by then), so the crop and the slide are never
+   seen lit;
+3. **the tiles' colour comes up over the owner's second** — after the dip, the one opacity track
+   that multiplies every tile's fill climbs for the rest of `--ix-colour-in` (1000ms). It is one
+   composited layer, never a per-tile loop and never a filter; the tiles themselves do not move;
+4. **the panel's head arrives a beat later** — the back key, the title and the wallet line rise 4px
    over `--ix-open` after `--ix-stagger`.
 
-The way back is the same motion in reverse: the map's light goes down over the close beat while the
-skin leaves, the framing returns to the menu's full-bleed view while the map is at its dimmest, and
-the menu's own arrival continues from there. Total: ~150ms in, ~100ms + the menu's arrival out.
+The way back is the same motion in reverse: the map's colour goes down over `--ix-colour-out`
+(300ms) while the skin leaves, and the framing returns to the menu's full-bleed view at the menu's
+own backdrop light. Total: 150ms of geometry + a one-second colour climb in, 300ms out. A Back
+pressed during the arrival continues from the colour that is actually on screen, and a Back at (or
+below) the menu's light completes in one frame — no stuck half-faded map either way.
 
 Rejected, and why: **a full-screen veil** (a second composited layer that does the same job the
 frame's skin and the map's light already do, and reads as a flash); **a scale settle on the panel**

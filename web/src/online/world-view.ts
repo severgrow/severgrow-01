@@ -322,6 +322,50 @@ export const reconciledView = (box: ViewBox | null, aspect: number): ViewBox | n
 export const resizedCamera = (box: ViewBox | null, aspect: number, manual: boolean): ViewBox | null =>
   manual && usableView(box) ? [box[0], box[1], box[2], box[3]] : reconciledView(box, aspect);
 
+/** A measured screen surface: the menu's full-bleed SVG box or the Territory panel's framed one. */
+export type ScreenRect = { left: number; top: number; width: number; height: number };
+
+/**
+ * THE PANEL IS A WINDOW ONTO THE MENU'S OWN MAP (owner, 2026-11-02: "entering territory still
+ * 'drops' the territory few pixels lower, it should have exact same positon as in main menu
+ * background, so tiles don't move at all").
+ *
+ * The menu and the Territory panel draw the SAME SVG, but through boxes of different sizes. Framing
+ * the panel with `detailFor`/`reconciledView` re-fits the world to the PANEL's width and centre, so
+ * the map travels behind the frame — the "drop" the owner saw. This function instead answers one
+ * question: what viewBox must the panel carry so that the world point under every CSS pixel is the
+ * one the menu was already showing there?
+ *
+ * Let the menu draw `box` into `menu.rect`. The browser's `meet` mapping (the SVG default, and what
+ * an aspect-matched box reduces to) is `screen = menu.topLeft + letterbox + (world - box.origin) *
+ * k`, with ONE scale `k` on both axes. The panel keeps that same `k`, so its window is simply the
+ * menu's world-space rectangle under `panel.rect` — translated, never re-scaled. Its viewBox aspect
+ * is then exactly the panel's own, so the panel fills without a band; and because `k` is inherited
+ * from the menu, a tile keeps the very size the menu's floor already gave it (MIN_CELL_PX or more).
+ */
+export const anchoredView = (
+  menu: { box: readonly number[]; rect: ScreenRect },
+  panel: ScreenRect,
+): ViewBox | null => {
+  const box = menu.box;
+  const from = menu.rect;
+  if (!usableView(box) || !(from.width > 0) || !(from.height > 0) || !(panel.width > 0) || !(panel.height > 0)) return null;
+  // The scale the menu is ACTUALLY painted at. `meet` takes the smaller axis; a reconciled view
+  // matches both, so this is normally `width / box[2]` and the letterbox is zero.
+  const k = Math.min(from.width / box[2], from.height / box[3]);
+  if (!(k > 0) || !Number.isFinite(k)) return null;
+  const ox = (from.width - box[2] * k) / 2;
+  const oy = (from.height - box[3] * k) / 2;
+  const view: ViewBox = [
+    box[0] + (panel.left - from.left - ox) / k,
+    box[1] + (panel.top - from.top - oy) / k,
+    panel.width / k,
+    panel.height / k,
+  ];
+  return usableView(view) ? view : null;
+};
+
+
 /**
  * THE POINTERS A NEW EVENT PROVES ARE GONE (see `pointers`). A mouse is ONE pointer: it has one
  * position and one button state, so a second tracked mouse id, or a tracked mouse id at the moment
@@ -422,6 +466,12 @@ export const jitterBand = (cellId: string): number => {
 export class WorldView {
   private active = false;
   private menuPreview = false;
+  /**
+   * THE MENU'S LAST FRAME, handed over at the instant the Territory is requested (see
+   * `anchoredView`). It is not camera state: `open` consumes it once, and it may only move an
+   * AUTOMATIC frame — a deliberate camera outranks it, byte for byte.
+   */
+  private menuAnchor: { box: ViewBox; rect: ScreenRect } | null = null;
   private visited = false;
   private previewOwner: string | null = null;
   private previewRemembered = false;
@@ -678,6 +728,19 @@ export class WorldView {
   }
 
   /**
+   * HAND OVER THE MENU'S OWN PIXELS (owner, 2026-11-02: "tiles don't move at all"). Called from
+   * `living-territory` before the panel's CSS owns the box, with the menu SVG's drawn viewBox and
+   * measured rect. `open` turns it into the panel's view (see `anchoredView`), so the map is never
+   * re-fitted: the panel looks at the same world through a smaller window. Only an automatic frame
+   * adopts it; a camera the player chose outranks the menu (see `resizedCamera`).
+   */
+  setMenuFrame(box: readonly number[], rect: ScreenRect): void {
+    this.menuAnchor = usableView(box) && rect.width > 0 && rect.height > 0
+      ? { box: [box[0], box[1], box[2], box[3]], rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }
+      : null;
+  }
+
+  /**
    * ANOTHER PLAYER'S PROFILE (owner, 2026-11-01). The accounts module owns the sheet and the
    * token, so it is injected here exactly like the match opener; the bar only passes the id and the
    * key that was pressed (so closing the sheet returns focus to it).
@@ -774,14 +837,24 @@ export class WorldView {
   }
 
   async open() {
-    // THE TERRITORY'S OWN FRAME IS RESTORED (owner, 2026-11-02): the menu paints the map across the
-    // whole screen, so its view is wider than this panel's. Capture the panel's framing while the
-    // menu still owns the anchor — same home, same tile scale as a first visit — then a
-    // panned/zoomed camera is left untouched.
-    const auto = !this.manualCamera && this.menuPreview ? this.autoBox() : null;
+    // THE PANEL LOOKS AT THE MENU'S UNMOVED MAP (owner, 2026-11-02: "so tiles don't move at all").
+    // `living-territory` hands over the menu's drawn viewBox + rect at the click; `anchoredView`
+    // turns it into the panel's view, which keeps the menu's pixel-for-pixel mapping instead of
+    // re-fitting the world to this window. Only an AUTOMATIC camera may be anchored; a camera the
+    // player chose (or restored from storage) stays byte-for-byte untouched (see `resizedCamera`).
+    const panelRect = this.panelWindow();
+    const anchored = !this.manualCamera && this.menuPreview && this.menuAnchor && panelRect
+      ? anchoredView(this.menuAnchor, panelRect)
+      : null;
+    // The fallback for a menu frame that could not be captured (no world yet): the panel's own frame.
+    const auto = !anchored && !this.manualCamera && this.menuPreview ? this.autoBox() : null;
     this.active = true;
     this.menuPreview = false;
     this.visited = true;
+    if (anchored && panelRect) {
+      this.aspect = panelRect.width / panelRect.height;
+      this.pixels = panelRect.width;
+    }
     // The deliberate camera is restored after the world version is known; live bounds still win.
     const camera = this.world ? lastCamera(browserStorage(), this.world.version) : null;
     if (!usableView(this.box)) {
@@ -790,10 +863,15 @@ export class WorldView {
       // Restored from storage: it may be a camera the player chose, so it outranks the auto frame.
       if (camera) this.manualCamera = true;
     }
-    if (auto) {
+    if (anchored) {
+      this.box = anchored;
+      this.touched = true;
+    } else if (auto) {
       this.box = auto;
       this.touched = true;
     }
+    // The handover is one-shot: a later open (or a resize) must never resurrect a stale menu frame.
+    this.menuAnchor = null;
     // THE PANEL'S FRAME IS WRITTEN NOW, NOT ON SOME LATER FRAME (CI, 2026-11-02). The menu and the
     // panel have different aspects, so the drawn viewBox must change the moment the panel owns the
     // map. It used to wait for the resize observer's `queueView` — a requestAnimationFrame — which
@@ -801,7 +879,7 @@ export class WorldView {
     // panel showing the MENU's frame. This is one layout read at the one moment the window's shape
     // is known, and it only DRAWS the camera: `this.box` is not re-framed (see `resizedCamera`), so
     // a deliberate camera's four numbers are written exactly as the player left them.
-    if ((auto || this.manualCamera) && this.svg) this.applyView();
+    if ((anchored || auto || this.manualCamera) && this.svg) this.applyView();
     this.notice(this.svg ? '' : ONLINE.worldLoading);
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
@@ -1581,6 +1659,17 @@ export class WorldView {
     const width = Number.parseFloat(style.width), height = Number.parseFloat(style.height);
     if (Number.isFinite(width) && Number.isFinite(height)) return { width, height };
     return grid.getBoundingClientRect();
+  }
+  /** THE PANEL'S WINDOW ON SCREEN, position included. `viewportSize` answers "how big is the layout
+   * box"; the menu handoff needs where that box IS, because it preserves a screen mapping (see
+   * `anchoredView`). It is read before the open animation can transform the SVG, so the box is the
+   * browser's own layout rect. */
+  private panelWindow(): ScreenRect | null {
+    const grid = document.getElementById('online-world-grid');
+    if (!grid) return null;
+    const rect = grid.getBoundingClientRect();
+    if (!(rect.width > 0) || !(rect.height > 0)) return null;
+    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
   }
   /**
    * Write the view: one viewBox attribute on the SAME svg, so cell identity is never touched.
