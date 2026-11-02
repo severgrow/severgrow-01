@@ -269,7 +269,7 @@ try{
     requestAnimationFrame(paint);
     const start=performance.now();let closed=false;
     const watchdog=setTimeout(()=>{if(!closed){closed=true;finish();}},5000);
-    const tick=()=>{
+    const sample=()=>{
      capture();
      const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
      const light=svg?.getAnimations().find(a=>a.id==='living-colour-in');
@@ -283,6 +283,16 @@ try{
       // timeline. If either stopped advancing while the wall clock did not, samples taken in that
       // gap are not evidence about the fade.
       raf:painted,timeline:document.timeline.currentTime});
+    };
+    // THE FIRST SAMPLE IS TAKEN IN A MICROTASK, NOT A TIMER (2026-11-02, CI run 41544528104). A
+    // `setTimeout(0)` is not guaranteed to run at the beat's start: on CI's software WebKit the
+    // first tick landed 511ms after the tap, by which time the fade was already at 0.5429 — so
+    // "the first sample is the menu's light" failed on a correct fade. A microtask runs at the end
+    // of the click task, after the product has opened the panel and created the beat, but before
+    // any timer or rendering update can advance it: it is the arrival's real first instant.
+    queueMicrotask(sample);
+    const tick=()=>{
+     sample();
      if(performance.now()-start<1600)setTimeout(tick,16);
      else if(!closed){closed=true;clearTimeout(watchdog);finish();}
     };setTimeout(tick,0);
@@ -428,8 +438,8 @@ try{
    check(`the arrival is a real graded colour fade, not an instant flip (${structure?`${structure.duration}ms, ${kfs.length} keyframes ${JSON.stringify(offsets.map((o,i)=>[+o.toFixed(4),ops[i]]))}`:'the colour-in beat was never created'})`,
      graded,JSON.stringify(structure));
    // THE SAME FACT ON THE WALL CLOCK, HONEST ABOUT A NON-PAINTING ENGINE. The endpoints are always
-   // real: the timer's first tick runs inside the click's own task, before the timeline can advance,
-   // so it reads the menu's light, and the last tick reads the panel's rest. What the MIDDLE can
+   // real: the first sample is a microtask at the end of the click task (the arrival's first
+   // instant, before any timer can be delayed), and the last tick reads the panel's rest. What the MIDDLE can
    // prove depends on the renderer. (a) A painting engine shows at least one sample strictly between
    // the endpoints and below full. (b) A renderer that provably did not paint intermediate frames
    // is not judged on those samples: that is DETECTED from evidence (rendered-frame count, distinct
