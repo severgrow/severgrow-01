@@ -36,9 +36,9 @@ export type BlitzHooks = {
 };
 
 export type BlitzPractice = {
-  /** The visible tier name (Practice: EASY / MEDIUM / HARD / PRO). */
+  /** The visible tier name (Practice: EASY / MEDIUM / HARD / BLITZ). */
   readonly label: string;
-  /** Put the PRO tile at the end of the tier grid (again after every grid re-render). */
+  /** Put the BLITZ tile at the end of the tier grid (again after every grid re-render). */
   appendTile: (grid: HTMLElement) => void;
   /** The bot level the NEXT Blitz game uses (the persisted ladder). */
   botLevel: () => Level;
@@ -162,8 +162,11 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
     const selected = hooks.store.get(SELECTED_KEY) === 'pro';
     button.className = `btn big level-tile difficulty-tile${selected ? ' primary on' : ' ghost'}`;
     button.dataset.difficulty = 'pro';
-    button.textContent = 'PRO';
-    button.setAttribute('aria-label', 'Pro. Blitz: 15 seconds a turn against the computer at level 9.');
+    // THE TIER IS CALLED BLITZ (owner, 2026-11-02: "BLITZ should be call BLITZ no 'PRO' in practice
+    // match"). It sits in the same grid as EASY / MEDIUM / HARD, so it wears that family's shape but
+    // its own name — the mode is the feature, not a difficulty rung.
+    button.textContent = 'BLITZ';
+    button.setAttribute('aria-label', 'Blitz: 15 seconds a turn against the computer at level 9.');
     button.addEventListener('click', () => {
       hooks.unlock();
       hooks.store.set(SELECTED_KEY, 'pro');

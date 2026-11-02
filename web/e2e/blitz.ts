@@ -4,13 +4,13 @@
 //   npx tsx web/e2e/blitz.ts
 //
 // It builds BOTH builds the feature has to be distinguished in:
-//   * CHANNEL=futa04 (the locked product)               -> the PRO tier must not exist;
-//   * CHANNEL=futa05, served the way /test/ is (composed at /test/) -> PRO exists, and it starts a
+//   * CHANNEL=futa04 (the locked product)               -> the BLITZ tier must not exist;
+//   * CHANNEL=futa05, served the way /test/ is (composed at /test/) -> BLITZ exists, and it starts a
 //     Blitz match, enforces the 15 s clock with the existing live-duel ring/vignette, drops the bot
 //     to 8 after two losses, survives a reload, and returns to 9 after a win.
 //
 // The live ROOT is the same futa05 build one promote behind /test/, so the same build is also
-// served at `/` here and asserted to have NO PRO tier — that is the gate that protects live.
+// served at `/` here and asserted to have NO BLITZ tier — that is the gate that protects live.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -81,7 +81,7 @@ try {
   check(existsSync(join(DIST_FUTA04, 'index.html')) && existsSync(join(DIST_TEST, 'index.html')), 'both builds exist');
 
   // ---------------------------------------------------------------------------------------------
-  // 1. The locked product build: no PRO tier, no Blitz hook.
+  // 1. The locked product build: no BLITZ tier, no Blitz hook.
   // ---------------------------------------------------------------------------------------------
   servedA = await serveStaticDist(DIST_FUTA04);
   {
@@ -89,14 +89,14 @@ try {
     await openPractice(page);
     const tiers = await page.locator('#level-grid .difficulty-tile').allTextContents();
     check(JSON.stringify(tiers) === JSON.stringify(['EASY', 'MEDIUM', 'HARD']), 'futa04 Practice has exactly EASY / MEDIUM / HARD');
-    check(await page.locator('#level-grid [data-difficulty="pro"]').count() === 0, 'futa04 has no PRO tier');
+    check(await page.locator('#level-grid [data-difficulty="pro"]').count() === 0, 'futa04 has no BLITZ tier');
     check((await blitz(page)) === null, 'futa04 has no Blitz hook');
     noErrors(page);
     await page.close();
   }
 
   // ---------------------------------------------------------------------------------------------
-  // 2. The /test/ copy: PRO exists; the live ROOT of the same build does not.
+  // 2. The /test/ copy: BLITZ exists; the live ROOT of the same build does not.
   // ---------------------------------------------------------------------------------------------
   const site = mkdtempSync(join(tmpdir(), 'blitz-site-'));
   cleanup.push(site);
@@ -108,7 +108,7 @@ try {
   {
     const live = await open(servedB.url); // the same bytes, at the LIVE root path
     await openPractice(live);
-    check(await live.locator('#level-grid [data-difficulty="pro"]').count() === 0, 'the futa05 build at the LIVE ROOT has no PRO tier');
+    check(await live.locator('#level-grid [data-difficulty="pro"]').count() === 0, 'the futa05 build at the LIVE ROOT has no BLITZ tier');
     check((await blitz(live)) === null, 'the futa05 build at the LIVE ROOT has no Blitz hook');
     noErrors(live);
     await live.close();
@@ -116,8 +116,8 @@ try {
 
   const page = await open(TEST_URL);
   await openPractice(page);
-  check(await page.locator('#level-grid [data-difficulty="pro"]').count() === 1, '/test/ Practice has the PRO tier');
-  check((await page.locator('#level-grid .difficulty-tile').allTextContents()).at(-1) === 'PRO', 'PRO is the last Practice tier');
+  check(await page.locator('#level-grid [data-difficulty="pro"]').count() === 1, '/test/ Practice has the BLITZ tier');
+  check((await page.locator('#level-grid .difficulty-tile').allTextContents()).at(-1) === 'BLITZ', 'BLITZ is the last Practice tier');
 
   // ---------------------------------------------------------------------------------------------
   // 3. Starting: a campaign board 30-70, bot 9, a 15 s limit, the live-duel ring.
@@ -145,6 +145,24 @@ try {
   }, undefined, { timeout: 20000 });
   await page.waitForSelector('.live-ring:not([hidden])', { timeout: 5000 });
   check((await page.locator('.live-ring').getAttribute('data-side')) === 'me', 'the clock ring sits on my home');
+  // The ring's own face (owner, 2026-11-02: it looked "very plain"): a warm halo behind the arc and
+  // an ember on its leading end. Both are present and painted, and neither is a filter.
+  const ringFace = await page.evaluate(() => {
+    const ring = document.querySelector('.live-ring')!;
+    const halo = ring.querySelector('.halo');
+    const ember = ring.querySelector('.ember');
+    const fg = ring.querySelector('.fg');
+    return {
+      halo: !!halo && Number(getComputedStyle(halo).opacity) > 0,
+      ember: !!ember && getComputedStyle(ember).fill !== 'none',
+      arc: !!fg && getComputedStyle(fg).stroke !== 'none',
+      filtered: getComputedStyle(ring).filter !== 'none' || !!halo && getComputedStyle(halo).filter !== 'none',
+    };
+  });
+  check(ringFace.halo, 'the ring carries its warm halo');
+  check(ringFace.ember, 'the ring carries an ember on its leading end');
+  check(ringFace.arc, 'the arc itself is painted');
+  check(!ringFace.filtered, 'no filter on the ring (a filter on an animating element re-rasterises every frame)');
   // urgent at <= 10 s left; the red vignette (the "time near end" glow) at <= 5 s.
   await page.waitForSelector('.live-ring[data-urgent="1"]', { timeout: 12000 });
   check(true, 'the ring turns urgent as the 15 s runs out');
