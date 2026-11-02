@@ -30,6 +30,7 @@ import type { Browser, Page } from 'playwright-core';
 import { PROFILE } from '../../src/strings.js';
 import { colourById, colourFor, colourIdFor } from '../../src/tile-colours.js';
 import { SEEDS_WORD } from '../src/online/seed-icon.js';
+import { GLASS, materialMismatches, readMaterial } from './helpers/glass-material.js';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
 const SHOTS = process.env.SHOTS === '1';
@@ -56,17 +57,22 @@ const hslToRgb = (css: string): number[] => {
   return [f(0), f(8), f(4)];
 };
 let failed = 0;
-/** The alpha of a computed colour (`color(srgb … / a)`, `rgba(…)`), or 1 when it is opaque. */
-const alphaOf = (css: string): number => {
-  const slash = /\/\s*([\d.]+%?)\s*\)/.exec(css);
-  if (slash) return slash[1]!.endsWith('%') ? Number(slash[1]!.slice(0, -1)) / 100 : Number(slash[1]);
-  const rgba = /^rgba\([^)]*,\s*([\d.]+)\s*\)$/.exec(css);
-  return rgba ? Number(rgba[1]) : 1;
-};
 const check = (name: string, ok: boolean, note = '') => {
   if (!ok) failed += 1;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
+/** WCAG relative luminance (0-1) of a computed `rgb(...)` colour. */
+const relativeLuminance = (css: string): number => {
+  const [r = 0, g = 0, b = 0] = (css.match(/[\d.]+/g) ?? []).map(Number).slice(0, 3).map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+/** The same, for a measured GREY whose channel value is already 0-255 (a sampled pixel mean). */
+const greyLuminance = (channel: number): number => relativeLuminance(`rgb(${channel}, ${channel}, ${channel})`);
+/** WCAG contrast between two relative luminances. */
+const contrastRatio = (a: number, b: number): number => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 const waitFor = async (cond: () => Promise<boolean> | boolean, timeout = 15_000): Promise<boolean> => {
   const start = Date.now();
   while (Date.now() - start < timeout) {
@@ -78,6 +84,56 @@ const waitFor = async (cond: () => Promise<boolean> | boolean, timeout = 15_000)
     await new Promise((r) => setTimeout(r, 100));
   }
   return false;
+};
+
+/**
+ * THE BAND GUARD'S INSTRUMENT (owner, 2026-11-02). The plate is glass again, so the thing the old
+ * opaque plate prevented — a soft bright band across "MATCHES WON" from a blurred menu key behind the
+ * sheet — has to be measured, not assumed. This samples the RENDERED pixels of the wins row's band
+ * (the row's ink hidden, so what is measured is the plate's ground itself), in strips across its
+ * width, and reports the spread between the darkest and the brightest strip plus the ground's mean
+ * luminance. A PNG is decoded in the page's own canvas: no image dependency, no colour guessing.
+ */
+const plateBand = async (
+  page: Page,
+  clip: { x: number; y: number; width: number; height: number },
+): Promise<{ spread: number; mean: number; lo: number; hi: number; strips: number }> => {
+  const png = await page.screenshot({ clip });
+  const url = `data:image/png;base64,${png.toString('base64')}`;
+  // A STRING evaluate on purpose: the bundler's `__name` helper is not defined in the page.
+  return page.evaluate(`(async () => {
+    const img = new Image();
+    img.src = ${JSON.stringify(url)};
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const g = canvas.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const { data, width, height } = g.getImageData(0, 0, canvas.width, canvas.height);
+    const lum = (i) => 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+    // One value per 4-device-pixel column strip: the strip's MEAN luminance. With the row's ink
+    // hidden this is the plate's ground, so a horizontal wash shows up as a difference between
+    // strips rather than being averaged away.
+    const strip = 4;
+    const means = [];
+    for (let x0 = 0; x0 < width; x0 += strip) {
+      let sum = 0, n = 0;
+      for (let y = 0; y < height; y++) {
+        for (let x = x0; x < Math.min(x0 + strip, width); x++) {
+          sum += lum((y * width + x) * 4);
+          n += 1;
+        }
+      }
+      means.push(sum / n);
+    }
+    const lo = Math.min(...means), hi = Math.max(...means);
+    return {
+      spread: +(hi - lo).toFixed(2),
+      mean: +(means.reduce((a, b) => a + b, 0) / means.length).toFixed(2),
+      lo: +lo.toFixed(2), hi: +hi.toFixed(2), strips: means.length,
+    };
+  })()`) as Promise<{ spread: number; mean: number; lo: number; hi: number; strips: number }>;
 };
 
 // ---- build the 0.5 product channel with accounts ON, against the placeholder project ----
@@ -115,6 +171,7 @@ const server = createServer((req, res) => {
 await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
 const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 if (SHOTS) mkdirSync('docs/screens/menu-footer', { recursive: true });
+if (SHOTS) mkdirSync('docs/screens/glass', { recursive: true });
 
 const browser: Browser = await chromium.launch({
   ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}),
@@ -296,11 +353,11 @@ try {
           return { w: +r.width.toFixed(2), h: +r.height.toFixed(2), right: +r.right.toFixed(1) };
         })(),
         // THE CORNER (owner, 2026-11-02: "the profile frame ... next to logo looking ugly"). The
-        // plate's corners are 32px on the product channel (the active theme's --radius 16px,
-        // doubled by the product sheet rule), and all four are rounded in landscape where the sheet
-        // becomes a centred dialog. Every mark in the header is measured against the arc itself:
-        // markAir / closeAir are the distance from that element's top-left / top-right corner to
-        // the corner arc (0 = on the curve, negative = under it, r - hypot(r - dx, r - dy)).
+        // plate's corners are the glass family's 15px (32px until the 2026-11-02 material pass put
+        // every window on one corner), and all four are rounded in landscape where the sheet becomes
+        // a centred dialog. Every mark in the header is measured against the arc itself: markAir /
+        // closeAir are the distance from that element's top-left / top-right corner to the corner
+        // arc (0 = on the curve, negative = under it, r - hypot(r - dx, r - dy)).
         corner: (() => {
           const cs = getComputedStyle(sheet);
           const rr = cs.borderTopLeftRadius.split(/\s+/).map((v) => parseFloat(v));
@@ -513,11 +570,13 @@ try {
     check(`${label}: the profile never scrolls sideways`, rows.hScroll <= 1, String(rows.hScroll));
     check(`${label}: the old footer note is gone and nothing replaced it`, rows.note === 0);
     check(`${label}: the sign-in line is gone`, rows.signIn === 0);
-    // THE WASH GUARD. Nothing faded over the row: at the shared 0.42-alpha glass a blurred menu key
-    // behind the plate drew a soft bright band through MATCHES WON (5/255 in the rebuilt sheet,
-    // 51/255 in the owner's screenshot). The plate now reads 0.982 opaque, so anything back under
-    // 0.95 — the shared glass included — lets the background paint through a row again and fails.
-    check(`${label}: the plate ground is dense enough to be even`, alphaOf(rows.sheetBg) >= 0.95, rows.sheetBg);
+    // THE WASH GUARD, REPLACED BY THE MEASURED ONE (owner, 2026-11-02). The plate used to be
+    // alpha 0.982 to stop a blurred bright menu key drawing a band through this row. It is glass
+    // again, so the guard now measures what the owner actually saw: the spread of the RENDERED
+    // ground across the row's band (pixels, below), not the opacity of a token. The old alpha
+    // assertion is gone on purpose — pinning 0.982 would have made this pass impossible — and the
+    // pixel guard is strictly harder to satisfy than "alpha >= 0.95" ever was.
+    check(`${label}: the plate is the shared dark glass`, rows.sheetBg === GLASS.background, rows.sheetBg);
     check(`${label}: the Futasaku mark is in the nameplate`, rows.brand === 1);
     // THE MARK'S WIDTH IS THE GUARD AGAINST THE SMUDGE. The owner's live screenshot showed a
     // 29px-wide mark in a 464px-wide image (~6.1% of the screen): the CJK wordmark read as a grey
@@ -533,15 +592,15 @@ try {
       rows.brandMark.w >= WORDMARK_MIN_W, `${rows.brandMark.w} ≥ ${WORDMARK_MIN_W}`);
     // THE CORNER GUARD — THE ONE THAT CATCHES THE OWNER'S SCREENSHOT. `markAir` is the distance
     // from the wordmark's own top-left corner to the plate's corner ARC, read from the sheet's own
-    // getComputedStyle radius (32px today; asserted to be a real rounded corner, so a theme change
-    // is measured rather than assumed). A mark merely "inside the sheet" still passes while it is
-    // tucked under the curve; this does not. MEASURED on the evidence: the live build's mark sat at
-    // ~25px in / ~11px down in a 464-wide shot with a ~33px radius — 9.9px of air — and the first
-    // (left-aligned) attempt at 320x568 measured 12.5px. 16px is the floor; this build measures
-    // 17.5-20.5px in portrait and far more in landscape.
+    // getComputedStyle radius (15px since the 2026-11-02 material pass unified every window on the
+    // glass family's corner; it was 32px before that, and the check reads the real value either
+    // way). A mark merely "inside the sheet" still passes while it is tucked under the curve; this
+    // does not. MEASURED on the evidence: the live build's mark sat at ~25px in / ~11px down in a
+    // 464-wide shot with a ~33px radius — 9.9px of air — and the first (left-aligned) attempt at
+    // 320x568 measured 12.5px. 16px is the floor.
     const c = rows.corner;
     check(`${label}: the wordmark clears the top-left corner arc by >=16px`,
-      c.radius >= 20 && c.markAir >= 16 && c.markTopAir >= 16,
+      c.radius >= 14 && c.markAir >= 16 && c.markTopAir >= 16,
       `${c.markAir}px from the arc, ${c.markTopAir}px down, ${c.markLeftAir}px in (r=${c.radius}/${c.radiusY})`);
     // THE SAME RULE FOR THE OTHER END OF THE ROW ("this or any similar"): the close key's GLYPH
     // clears the top-right arc by >=12px. Its 44px target is wider than its ink, so the ink is what
@@ -622,9 +681,48 @@ try {
       `root ${rows.rootFont}, title ${rows.titleFont}, label ${rows.labelFont}, name ${rows.nameFont}`);
     check(`${label}: the record tiles never overflow`, rows.tileOverflow <= 1, String(rows.tileOverflow));
     check(`${label}: the identity values share one right edge`, rows.rowRightSpread <= 0.5, String(rows.rowRightSpread));
-    check(`${label}: the profile reads as a dialog that traps nothing`, rows.role === 'dialog' && rows.modal === null, `${rows.role}/${rows.modal}`);
-    check(`${label}: the profile does not scroll`, rows.scroll <= 1 && rows.pageScroll <= 1, `${rows.scroll}/${rows.pageScroll}`);
+    check(`${label}: the profile reads as a dialog that traps nothing`, rows.role === 'dialog' && rows.modal === null, `${rows.role}/${rows.modal}`);    check(`${label}: the profile does not scroll`, rows.scroll <= 1 && rows.pageScroll <= 1, `${rows.scroll}/${rows.pageScroll}`);
     check(`${label}: the profile is fully inside the screen`, rows.bottom <= rows.vh + 0.5, `${rows.bottom} ≤ ${rows.vh}`);
+    // ---- THE MATERIAL GUARD: ONE GLASS FOR EVERY WINDOW (owner, 2026-11-02) -------------------
+    // "territory and profile windows dont match really ... BOTH (and any other similar) should be
+    // using our classic dark glass window style". The profile is compared against the same object
+    // the Territory challenge suite uses (helpers/glass-material.ts): --dark-glass and
+    // --dark-glass-blur, the family's 15px corner, its one soft shadow, border 0 and no outline.
+    const sheetMaterial = await readMaterial(page, '#sheet-profile:not([hidden])');
+    const sheetIssues = materialMismatches(sheetMaterial);
+    check(`${label}: the profile wears the one dark glass, with no frame contour`,
+      sheetIssues.length === 0, sheetIssues.join(' | ') || JSON.stringify(sheetMaterial));
+    if (size.w === 390 && size.h === 844 && !size.large) {
+      // THE BAND, MEASURED ON THE SETTLED PLATE. Hide the row's ink first: what is sampled is the
+      // ground the plate paints (glass over the veiled menu), which is where the owner's band was.
+      const geo = await page.evaluate(() => {
+        const sheet = document.getElementById('sheet-profile')!;
+        const row = [...sheet.querySelectorAll('.sp-row')].at(-1)!;
+        const r = row.getBoundingClientRect();
+        const probe = document.createElement('style');
+        probe.id = 'band-probe';
+        probe.textContent = '#sheet-profile .sp-rows, #sheet-profile .sp-play, #sheet-profile .sp-head { visibility: hidden !important; }';
+        document.head.append(probe);
+        return {
+          clip: { x: r.left + 1, y: r.top + 3, width: r.width - 2, height: r.height - 6 },
+          label: getComputedStyle(row.querySelector('dt')!).color,
+          row: { left: +r.left.toFixed(1), top: +r.top.toFixed(1), w: +r.width.toFixed(1), h: +r.height.toFixed(1) },
+        };
+      });
+      await page.waitForTimeout(80);
+      const band = await plateBand(page, geo.clip);
+      await page.evaluate(() => document.getElementById('band-probe')?.remove());
+      // 8/255 is the ceiling: the rebuilt 0.42 sheet measured ~5/255 for this row, the owner's
+      // screenshot showed 51/255 (21 → 72). A tint below 8/255 is under 3% of the ramp; a band is
+      // not. This is the "cannot come back" guard, on pixels rather than on a token.
+      check(`${label}: no bright band is drawn across the MATCHES WON row`,
+        band.spread <= 8, `ground ${band.lo}..${band.hi}/255, spread ${band.spread} over ${band.strips} strips`);
+      const labelLum = relativeLuminance(geo.label);
+      check(`${label}: the muted row label still reads at >=4.5:1 on that ground`,
+        contrastRatio(labelLum, greyLuminance(band.mean)) >= 4.5,
+        `${geo.label} on ground ${band.mean}/255 = ${contrastRatio(labelLum, greyLuminance(band.mean)).toFixed(2)}:1`);
+      if (SHOTS) await page.screenshot({ path: `docs/screens/glass/profile-390x844.png` });
+    }
     if (label === '360x640') await shot(page, 'profile-signed-in-360x640');
     if (label === '844x390') await shot(page, 'profile-landscape-844x390');
     if (label === '390x844') await shotHead(page, 'profile-header-390x844');

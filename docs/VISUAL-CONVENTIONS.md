@@ -114,3 +114,35 @@ Final TypeScript, futa04/futa05 production builds and asset-isolation checks pas
 - Replay names align to the rendered hex map's outer edges, using the existing board sizing pass.
   When a very short landscape map cannot fit the names and score together, keep the names directly
   outside those same edges. The score stays centred; resize/export layout updates share this rule.
+
+## One glass window — 2 November 2026
+
+- **The material.** The classic dark glass is `--dark-glass` (`rgba(8, 10, 10, .42)`) with
+  `--dark-glass-blur` (`blur(9px) saturate(1.05)`) from `web/src/style.css` `:root` — the recipe the
+  pause plate (`#sheet-menu`) and the Match Intel / lesson window
+  (`web/src/player/glass-surface.ts`, `#futasaku-glass`) already share. Its complete finish is that
+  file's "NO FRAME AROUND THE GLASS" rule: `border: 0`, the 15px corner and the one soft shadow
+  `0 10px 28px rgba(0, 0, 0, .22)`. No outline, no edge highlight, no inset hairline anywhere.
+- **Every floating window wears it.** The Territory challenge card — and the 100-Seeds invitation
+  that shares `.world-invitation-card` — used to be a material of its own (`#1c211edb`,
+  `blur(10px)`, a 1px outline, a 20/80px shadow); the profile sheet's plate was alpha 0.982 with a
+  32px corner. Both now read the shared values. `.sheet`'s floating rule no longer declares a corner
+  (it was `calc(var(--radius) * 2)` and, on specificity, beat the family rule for every sheet except
+  the pause plate).
+- **Documented exceptions are density only.** Settings and Tutorial (0.88) and Match Intel (0.86 +
+  `blur(16px)`) are READING surfaces: at 42% a lit menu key or the hand's card faces read through
+  the words. They keep that density; corner, shadow and edge are the family's, and Match Intel's old
+  1px inset hairline is gone.
+- **The profile's band is measured, not pinned.** The 0.982 plate existed to stop a bright menu key
+  washing the MATCHES WON row. On the rendered pixels at 390x844 the ground now varies 5.96/255
+  across that row (0.59 on the opaque plate; 51 in the owner's screenshot). `web/e2e/menu-profile.ts`
+  fails above 8/255 and also samples the row's muted label contrast (7.4:1).
+- **Action keys draw no ring.** A filled lead key (amber on the challenge card) and a quiet
+  transparent second, 10px corner, 44px floor, the delegated press and a 2px ivory
+  `:focus-visible` ring. Before this pass those two keys had no app focus style at all — the
+  browser's own 3px ring — and a 1px border each.
+
+Images: [challenge](screens/glass/territory-challenge-390x844.png),
+[profile](screens/glass/profile-390x844.png), and their before-shots
+[challenge](screens/glass/before-territory-challenge-390x844.png),
+[profile](screens/glass/before-profile-390x844.png).

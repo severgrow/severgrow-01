@@ -1267,8 +1267,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     line.textContent = 'Your place in the world is waiting.';
     const actions = document.createElement('div');
     const open = document.createElement('button');
+    open.className = 'world-invitation-primary';
     open.textContent = ONLINE.worldInviteOpen;
     const later = document.createElement('button');
+    later.className = 'world-invitation-secondary';
     later.textContent = 'LATER';
     const finish = (go: boolean) => {
       sheet.remove(); invitationOpen = false; invitationDismissedThisSession = true;
