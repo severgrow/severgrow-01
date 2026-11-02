@@ -1,18 +1,26 @@
 // THE FIRST-RUN NUDGE (owner brief, 2026-11-01) — the browser guard.
 //
-//   CHANNEL=futa04 npm run web:build && npx tsx web/e2e/first-run.ts
+//   CHANNEL=futa04 VITE_DUEL_API_URL=/functions/v1/duel npm run web:build
+//   npx tsx web/e2e/first-run.ts
 //
 // Serves the CURRENT `web/dist` (the product build) and drives real Chromium:
-//   1. a fresh device sees ten lamps on the PLAY key, none of them lit;
+//   1. a fresh, signed-out device sees ten lamps on the PLAY key, none of them lit — Source A only;
 //   2. the lamps are DECORATION on the key: a tap on a lamp lands on PLAY itself (no stolen tap),
 //      and the PLAY submenu that opens leads with LEVEL 1, the one cream key — so the nudge really
 //      is the way to level 1;
 //   3. three cleared lessons are three lit lamps, and the count is spoken on the key;
 //   4. once c1-10 is cleared the strip is gone from the menu — and stays gone through a reload and
-//      a trip into the PLAY submenu and back;
-//   5. it costs geometry nothing: the menu's key heights and the gaps between them are EXACTLY what
+//      a trip into the PLAY submenu and back (a replay/practice cannot bring it back);
+//   5. a SIGNED-IN account with cleared levels lights the lamps on a device that knows nothing
+//      (the union); an account that has cleared all ten hides the nudge on a fresh device; the one
+//      account read happens once and the cached answer serves the next open with NO request;
+//   6. it costs geometry nothing: the menu's key heights and the gaps between them are EXACTLY what
 //      they are with the strip hidden, at 320x568 and 390x844, with Large text as well;
-//   6. no page error is logged.
+//   7. no page error is logged.
+//
+// The account scenarios intercept `/v1/players/me/campaign` in Chromium, so the build just needs an
+// online endpoint configured (the VITE_DUEL_API_URL above makes `duelApiUrl()` non-null). No server
+// runs and no real account is touched.
 import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
@@ -22,9 +30,9 @@ import type { Page } from 'playwright-core';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
 const PROGRESS_KEY = 'severgrow.campaign.progress.v3';
+const IDENTITY_KEY = 'severgrow.duel.identity.v1';
 const KEY_H = 50;
 const C1 = ['c1-01', 'c1-02', 'c1-03', 'c1-04', 'c1-05', 'c1-06', 'c1-07', 'c1-08', 'c1-09', 'c1-10'];
-const WAIT = 20_000;
 
 const types: Record<string, string> = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml',
@@ -40,9 +48,12 @@ const server = createServer((req, res) => {
 await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
 const ORIGIN = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
-const CHROME = '/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
 const browser = await chromium.launch({
-  ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : existsSync(CHROME) ? { executablePath: CHROME } : {}),
+  ...(process.env.PW_CHROMIUM
+    ? { executablePath: process.env.PW_CHROMIUM }
+    : existsSync('/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing')
+      ? { executablePath: '/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' }
+      : {}),
   args: ['--no-sandbox'],
 });
 
@@ -102,7 +113,7 @@ const openFresh = async (page: Page) => {
   await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#menu:not([hidden])', { timeout: WAIT });
+  await page.waitForSelector('#menu:not([hidden])', { timeout: 30_000 });
   await page.waitForTimeout(600); // the injected typography stylesheet mounts after boot
 };
 
@@ -110,8 +121,53 @@ const openFresh = async (page: Page) => {
 const reopenWith = async (page: Page, completed: string[]) => {
   await page.evaluate((pair) => localStorage.setItem(pair[0], pair[1]), [PROGRESS_KEY, storage(completed)] as [string, string]);
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#menu:not([hidden])', { timeout: WAIT });
+  await page.waitForSelector('#menu:not([hidden])', { timeout: 30_000 });
   await page.waitForTimeout(600);
+};
+
+/**
+ * A signed-in account on a device, with the account's campaign endpoint intercepted. The answer is
+ * the server's `campaignHighestLevel` shape (`{ ok, campaign: { highestLevel } }`), so this drives
+ * the REAL client path (identity → one bounded GET → derive 1..N → union → repaint), not a
+ * hand-written cache. `cleared` names the levels the account has finished; the device derives the
+ * furthest one. `deviceCompleted` is what THIS device already knows; empty is the new-phone case.
+ */
+const openAccount = async (
+  page: Page,
+  cleared: readonly number[],
+  deviceCompleted: readonly string[] = [],
+) => {
+  let requests = 0;
+  const highest = cleared.length ? Math.max(...cleared) : null;
+  await page.route('**/v1/players/me/campaign', async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: {
+        'access-control-allow-origin': '*',
+        'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
+        'access-control-allow-headers': '*',
+      } });
+      return;
+    }
+    requests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ ok: true, campaign: { highestLevel: highest }, serverNow: Date.now() }),
+    });
+  });
+  await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+  await page.evaluate((pair) => {
+    localStorage.clear();
+    localStorage.setItem(pair[0], JSON.stringify({
+      token: 'e2e-account-token', playerId: 'e2e-account', displayName: 'RYK', kind: 'account',
+    }));
+    if (pair[1]) localStorage.setItem(pair[2], pair[1]);
+  }, [IDENTITY_KEY, deviceCompleted.length ? storage([...deviceCompleted]) : '', PROGRESS_KEY] as [string, string, string]);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#menu:not([hidden])', { timeout: 30_000 });
+  await page.waitForTimeout(600);
+  return { requests: () => requests };
 };
 
 const VIEWPORTS = [
@@ -151,7 +207,7 @@ for (const vp of VIEWPORTS) {
   // ---- 2. tapping the nudge reaches LEVEL 1 -------------------------------------------
   const lamp = fresh.lamps[Math.floor(fresh.lamps.length / 2)]!;
   await page.mouse.click(lamp.x + lamp.w / 2, lamp.y + lamp.h / 2);
-  const submenu = await page.waitForSelector('#play-menu:not([hidden])', { timeout: WAIT }).then(() => true).catch(() => false);
+  const submenu = await page.waitForSelector('#play-menu:not([hidden])', { timeout: 10_000 }).then(() => true).catch(() => false);
   check(`${tag}: tapping the lamps opens PLAY (one honest target)`, submenu);
   const entry = await page.evaluate(() => {
     const el = document.getElementById('menu-campaign')!;
@@ -159,7 +215,7 @@ for (const vp of VIEWPORTS) {
   });
   check(`${tag}: LEVEL 1 is the cream lead of that submenu`, entry.visible && entry.text === 'LEVEL 1' && entry.lead, JSON.stringify(entry));
   await page.click('#menu-campaign');
-  const playing = await page.waitForSelector('#game:not([hidden])', { timeout: WAIT }).then(() => true).catch(() => false);
+  const playing = await page.waitForSelector('#game:not([hidden])', { timeout: 20_000 }).then(() => true).catch(() => false);
   const board = await page.evaluate(() => document.querySelectorAll('#board > *').length);
   check(`${tag}: and that entry starts level 1 on a real board`, playing && board > 0, `board nodes ${board}`);
 
@@ -191,9 +247,9 @@ for (const vp of VIEWPORTS) {
     JSON.stringify(done.keys.map((k) => [k.id, k.y, k.h])) === JSON.stringify(fresh.keys.map((k) => [k.id, k.y, k.h])));
   // A menu pass after a trip through the submenu cannot bring it back.
   await page.click('#menu-play');
-  await page.waitForSelector('#play-menu:not([hidden])', { timeout: WAIT });
+  await page.waitForSelector('#play-menu:not([hidden])', { timeout: 10_000 });
   await page.click('#play-back');
-  await page.waitForSelector('#menu:not([hidden])', { timeout: WAIT });
+  await page.waitForSelector('#menu:not([hidden])', { timeout: 10_000 });
   const back = await measure(page);
   check(`${tag}: it does not come back on the next menu pass`, !!back.strip && back.strip.shown === false && back.lamps.every((l) => !l.on));
 
@@ -219,6 +275,66 @@ for (const vp of VIEWPORTS) {
   check(`${tag} Large text: the menu still does not overflow`, afterText.innerOverflow === 0 && afterText.screenOverflow === 0, `inner ${afterText.innerOverflow}, screen ${afterText.screenOverflow}`);
 
   check(`${tag}: no page errors`, errors.length === 0, errors[0] ?? '');
+
+  // ---- 6. the ACCOUNT is the second source: the lamps are the union ----------------
+  // A fresh CONTEXT per account case: its own storage, so one account's cache can never leak into
+  // the next case, and the first boot is a guest (no identity, no request) before we seed it.
+  const accountPage = async () => {
+    const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, hasTouch: true, isMobile: true });
+    const p = await context.newPage();
+    const pageErrors: string[] = [];
+    p.on('pageerror', (e) => pageErrors.push(e.message));
+    return { page: p, context, pageErrors };
+  };
+
+  // 6a. A returning player on a NEW phone: no device record, seven account clears → seven lamps.
+  const seven = await accountPage();
+  const sevenNet = await openAccount(seven.page, [1, 2, 3, 4, 5, 6, 7]);
+  await seven.page.waitForFunction(() => document.querySelectorAll('#menu-play-lessons > i.on').length === 7, undefined, { timeout: 10_000 });
+  const onNewPhone = await measure(seven.page);
+  check(`${tag}: a new phone lights the account’s seven clears, not zero`,
+    onNewPhone.lamps.filter((l) => l.on).length === 7 && onNewPhone.key?.aria === 'Play. 7 of 10 lessons completed',
+    `${onNewPhone.lamps.filter((l) => l.on).length} lit / ${String(onNewPhone.key?.aria)}`);
+  check(`${tag}: the account read happened ONCE`, sevenNet.requests() === 1, `${sevenNet.requests()} requests`);
+  // The answer is cached by player id: a reload opens the menu with NO request.
+  await seven.page.reload({ waitUntil: 'domcontentloaded' });
+  await seven.page.waitForSelector('#menu:not([hidden])', { timeout: 30_000 });
+  await seven.page.waitForFunction(() => document.querySelectorAll('#menu-play-lessons > i.on').length === 7, undefined, { timeout: 10_000 });
+  await seven.page.waitForTimeout(500);
+  check(`${tag}: the cached account answer costs a second open NO request`, sevenNet.requests() === 1, `${sevenNet.requests()} requests`);
+  check(`${tag}: the account lanes log no page error`, seven.pageErrors.length === 0, seven.pageErrors[0] ?? '');
+  await seven.context.close();
+
+  // 6b. Some from each: device 1-3, account 4-7 → seven DISTINCT lamps, never ten.
+  const union = await accountPage();
+  await openAccount(union.page, [4, 5, 6, 7], ['c1-01', 'c1-02', 'c1-03']);
+  await union.page.waitForFunction(() => document.querySelectorAll('#menu-play-lessons > i.on').length === 7, undefined, { timeout: 10_000 });
+  const unionSeen = await measure(union.page);
+  check(`${tag}: device and account are a UNION (3 + 4 → 7, not 10)`,
+    unionSeen.lamps.filter((l) => l.on).length === 7,
+    `${unionSeen.lamps.filter((l) => l.on).length} lit`);
+  check(`${tag}: the union log has no page error`, union.pageErrors.length === 0, union.pageErrors[0] ?? '');
+  await union.context.close();
+
+  // 6c. The account has cleared all ten though the DEVICE has nothing: the nudge is absent.
+  const doneAccount = await accountPage();
+  const doneNet = await openAccount(doneAccount.page, C1.map((_, index) => index + 1));
+  await doneAccount.page.waitForFunction(() => {
+    const strip = document.getElementById('menu-play-lessons');
+    return !!strip && strip.hidden === true;
+  }, undefined, { timeout: 10_000 });
+  const doneSeen = await measure(doneAccount.page);
+  check(`${tag}: an account with all ten hides the nudge on an empty device`,
+    !!doneSeen.strip && doneSeen.strip.hidden === true && doneSeen.key?.aria === 'Play',
+    `${String(doneSeen.key?.aria)} / hidden ${String(doneSeen.strip?.hidden)}`);
+  check(`${tag}: that account read also happened once`, doneNet.requests() === 1, `${doneNet.requests()} requests`);
+  // The account's answer is remembered on the device (keyed by player) so the next open is free.
+  const cache = await doneAccount.page.evaluate((key) => localStorage.getItem(key), 'severgrow.campaign.account-clears.v1');
+  check(`${tag}: the completed account is cached under its player id`,
+    !!cache && JSON.parse(cache).playerId === 'e2e-account' && JSON.parse(cache).levels.length === 10, String(cache));
+  check(`${tag}: the completed-account lane logs no page error`, doneAccount.pageErrors.length === 0, doneAccount.pageErrors[0] ?? '');
+  await doneAccount.context.close();
+
   await page.close();
 }
 

@@ -42,10 +42,11 @@ const LESSONS: readonly CampaignLevel[] = Object.freeze(
 export type FirstRun = Readonly<{ lit: number; total: number }>;
 
 /**
- * The account's cleared levels — campaign level NUMBERS (1-10) from the server's own
- * `campaign_clears` rows. `null`/`undefined` means "not answered (or no account)": the device's
- * record alone decides, exactly as before. An empty array is a real answer ("this account has
- * cleared nothing") and is equivalent to none for the union.
+ * The account's cleared levels — campaign level NUMBERS (1-10) derived from the account's FURTHEST
+ * verified Campaign level (`campaignHighestLevel`: levels unlock in order, so N means 1..N). `null`
+ * / `undefined` means "not answered (or no account)": the device's record alone decides, exactly as
+ * before. An empty array is a real answer ("this account has cleared nothing") and is equivalent to
+ * none for the union.
  */
 export type AccountClears = readonly number[] | null | undefined;
 

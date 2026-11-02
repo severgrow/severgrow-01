@@ -66,6 +66,49 @@ describe('one gate: visible while the ten are unfinished, gone once they are', (
   });
 });
 
+describe('the account is a second source: the lamps are the UNION of both', () => {
+  it('a guest / signed-out device is decided by the device record alone', () => {
+    expect(firstRun(progress([]), null)).toEqual({ lit: 0, total: 10 });
+    expect(firstRun(progress(['c1-01', 'c1-02']), null)!.lit).toBe(2);
+    expect(firstRun(progress(C1), null)).toBeNull();
+    // An EMPTY account answer is a real answer, not a hidden nudge.
+    expect(firstRun(progress([]), [])).toEqual({ lit: 0, total: 10 });
+  });
+
+  it('a NEW phone lights the account’s levels even though the device knows nothing', () => {
+    // The owner's case: a returning player on a new phone must not be walked through levels they
+    // already finished. Seven account clears mean seven lit lamps, zero device progress.
+    expect(firstRun(progress([]), [1, 2, 3, 4, 5, 6, 7])).toEqual({ lit: 7, total: 10 });
+    // A partial device record is not a prerequisite for an account-only answer.
+    expect(firstRun(progress(['c1-01']), [2, 3])).toEqual({ lit: 3, total: 10 });
+  });
+
+  it('some from each source counts the union once, never twice', () => {
+    // Device 1-3, account 4-7: seven DISTINCT lessons lit, not ten.
+    expect(firstRun(progress(['c1-01', 'c1-02', 'c1-03']), [4, 5, 6, 7])).toEqual({ lit: 7, total: 10 });
+    // Overlap is counted once too (device 1 & 5, account 5 & 6 → 1, 5, 6).
+    expect(firstRun(progress(['c1-01', 'c1-05']), [5, 6])).toEqual({ lit: 3, total: 10 });
+  });
+
+  it('level 10 hides the nudge when EITHER source cleared it', () => {
+    // Account-only complete on a brand-new device.
+    expect(firstRun(progress([]), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])).toBeNull();
+    expect(firstRun(progress([]), [10])).toBeNull();
+    // Device-only complete, with the account not answering at all.
+    expect(firstRun(progress(C1), null)).toBeNull();
+    expect(firstRun(progress(['c1-10']), [])).toBeNull();
+    // And the union of two partial records that together reach 10.
+    expect(firstRun(progress(C1.slice(0, 5)), [6, 7, 8, 9, 10])).toBeNull();
+  });
+
+  it('an unanswered or failed account read is exactly the device truth', () => {
+    for (const account of [null, undefined, [] as number[]]) {
+      expect(firstRun(progress(['c1-01', 'c1-02', 'c1-03']), account)).toEqual({ lit: 3, total: 10 });
+      expect(firstRun(progress(C1), account)).toBeNull();
+    }
+  });
+});
+
 describe('nothing outside the campaign moves it', () => {
   it('a replay of a lesson already cleared leaves the strip exactly as it was', () => {
     const before = progress(['c1-01', 'c1-02']);
@@ -97,20 +140,21 @@ describe('nothing outside the campaign moves it', () => {
 
 describe('the paint is one read and one apply — no storage key, no timer, no request', () => {
   it('starts no timer, starts no loop, and reads no network', () => {
-    expect(moduleSource).not.toMatch(/setInterval|setTimeout|requestAnimationFrame/);
+    expect(moduleSource).not.toMatch(/setInterval|setTimeout|requestAnimationFrame|animate\(.*iteration/);
     expect(moduleSource).not.toMatch(/\bfetch\(|XMLHttpRequest|WebSocket|\.then\(/);
   });
 
-  it('adds no storage key: it writes none and reads none', () => {
+  it('adds no storage key: the painter writes none and reads none', () => {
     expect(moduleSource).not.toMatch(/localStorage|sessionStorage|browserStorage|IndexedDB|STORAGE/);
-    // The only save the menu reads for it is the campaign progress main.ts already holds.
-    expect(mainSource).toContain('firstRunLamps.paint(campaignProgress)');
+    // The only saves the menu reads for it are the progress record and the account answer main.ts
+    // already holds; the account read/cache lives in its own module (menu/account-clears.ts).
+    expect(mainSource).toContain('firstRunLamps.paint(campaignProgress, accountClears)');
   });
 
-  it('is painted in the menu’s own layout pass, from the record that pass already reads', () => {
+  it('is painted in the menu’s own layout pass, from what that pass already holds', () => {
     const start = mainSource.indexOf('function layoutMenu(');
     const body = mainSource.slice(start, mainSource.indexOf('\nfunction showScreen(', start));
-    expect(body).toContain('firstRunLamps.paint(campaignProgress)');
+    expect(body).toContain('firstRunLamps.paint(campaignProgress, accountClears)');
     // The menu pass must stay synchronous: no network, no await (menu-first-paint.test.ts).
     expect(body).not.toMatch(/\bawait\b|fetch\(/);
     // Built once at module scope, so a menu pass never rebuilds the DOM.
@@ -135,6 +179,33 @@ describe('the paint is one read and one apply — no storage key, no timer, no r
     ui.paint(progress(C1));
     expect(strip.hidden).toBe(true);
     expect(key.attributes['aria-label']).toBe(MENU.play);
+  });
+
+  it('paints the device first and refines the union when the account answer arrives', () => {
+    const { doc, strip } = fakeDoc();
+    const ui = installFirstRunLamps(doc);
+    // 1. The same pass as the menu: device-only, immediately.
+    ui.paint(progress(['c1-01', 'c1-02', 'c1-03']));
+    expect(litCount(strip)).toBe(3);
+    // 2. The account answers with its own clears; the lamps become the union.
+    ui.paint(progress(['c1-01', 'c1-02', 'c1-03']), [4, 5, 6, 7]);
+    expect(litCount(strip)).toBe(7);
+    // 3. The tenth is cleared on the account: the strip leaves, for ever.
+    ui.paint(progress(['c1-01', 'c1-02', 'c1-03']), [4, 5, 6, 7, 8, 9, 10]);
+    expect(strip.hidden).toBe(true);
+  });
+
+  it('a failed or not-yet-answered account read leaves the device lamps exactly as they are', () => {
+    const { doc, strip } = fakeDoc();
+    const ui = installFirstRunLamps(doc);
+    ui.paint(progress(['c1-01', 'c1-04']));
+    const before = { lit: litCount(strip), hidden: strip.hidden };
+    // Not answered yet (`null`/`undefined`) and a genuinely empty answer all mean "device only".
+    for (const account of [null, undefined, [] as number[]]) {
+      ui.paint(progress(['c1-01', 'c1-04']), account);
+      expect({ lit: litCount(strip), hidden: strip.hidden }).toEqual(before);
+      expect(before).toEqual({ lit: 2, hidden: false });
+    }
   });
 });
 
