@@ -259,9 +259,13 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass[data-mode='intel'] { pointer-events:auto; display:flex; flex-direction:column; }
 /* Match Intel is a READING surface (Now / Tips / Rules), not a one-line hint over the board: at the
    hint's 42% glass the hand's card faces showed straight through the rule rows. Same dark glass,
-   denser, with a deeper blur — the board still reads as "behind", the words read cleanly. */
+   denser, with a deeper blur — the board still reads as "behind", the words read cleanly.
+   NO EDGE, THOUGH (owner, 2026-11-02: "we should never use frame contour ... BOTH (and any other
+   similar) should be using our classic dark glass window style"). The finish used to add an inset
+   1px ivory hairline all round, which is a contour drawn on the glass; it is gone, and the window is
+   now defined by its shade and its shadow alone, like every other glass surface in the game. */
 #futasaku-glass[data-mode='intel'] { background:rgba(8,10,10,.86); backdrop-filter:blur(16px) saturate(1.05); -webkit-backdrop-filter:blur(16px) saturate(1.05);
-  box-shadow:0 14px 36px rgba(0,0,0,.42), inset 0 0 0 1px rgba(233,216,173,.07); }
+  box-shadow:0 14px 36px rgba(0,0,0,.42); }
 #futasaku-glass .intel-bar { display:flex; align-items:center; gap:8px; padding:4px 6px 2px 12px; min-height:44px; }
 /* Match Intel: Now · Tips · Rules (owner, 2026-10-24: "pristine… easy to go through and read").
    One pattern: a serif title, short tracked capitals for labels, one plain sentence of mono text. */

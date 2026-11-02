@@ -119,4 +119,43 @@ describe('Match Intel\'s own glass has no frame either', () => {
     expect(base).toContain('box-shadow:0 10px 28px rgba(0,0,0,.22)');
     expect(base).not.toMatch(/inset|border:1px/);
   });
+  it('its denser READING variant is still frameless (owner, 2026-11-02)', () => {
+    // The reading surface keeps its documented density (0.86 + blur 16) because the hand's cards
+    // showed through at 42%, but the 1px inset ivory hairline it used to add all round was a
+    // frame contour drawn on the glass. The owner's rule is that no window has one.
+    const surface = readFileSync(fileURLToPath(new URL('../src/player/glass-surface.ts', import.meta.url)), 'utf8');
+    // The variant is declared twice (layout, then material); read every block.
+    const intelBlocks = [...surface.matchAll(/#futasaku-glass\[data-mode='intel'\] \{([^}]*)\}/g)].map((m) => m[1] ?? '');
+    const intel = intelBlocks.find((block) => block.includes('background')) ?? '';
+    expect(intel).toContain('background:rgba(8,10,10,.86)');
+    expect(intel).toContain('backdrop-filter:blur(16px) saturate(1.05)');
+    expect(intelBlocks.every((block) => !/inset/.test(block))).toBe(true);
+  });
+});
+
+describe('the Territory challenge card is the same window as every other sheet (owner, 2026-11-02)', () => {
+  // "territory and profile windows dont match really - we should never use frame contour like in
+  // territory challenge ... BOTH (and any other similar) should be using our classic dark glass
+  // window style ... challenge and not now buttons should have a frame neither". The card used to be
+  // #1c211edb with a 1px #d8cda557 outline, a 10px blur and a 20px/80px shadow of its own.
+  const online = readFileSync(fileURLToPath(new URL('../src/online/online-css.ts', import.meta.url)), 'utf8');
+  it('wears --dark-glass, the family corner and the one shadow, with no outline', () => {
+    const card = /\.world-invitation-card \{([^}]*)\}/.exec(online)?.[1] ?? '';
+    expect(card).toMatch(/background: var\(--dark-glass\);/);
+    expect(card).toMatch(/backdrop-filter: var\(--dark-glass-blur\);/);
+    expect(card).toMatch(/border-radius: 15px;/);
+    expect(card).toMatch(/box-shadow: 0 10px 28px rgba\(0, 0, 0, 0\.22\);/);
+    expect(card).toMatch(/border: 0; outline: none;/);
+    expect(online).not.toMatch(/background: #1c211edb/);
+    expect(online).not.toMatch(/border: 1px solid #d8cda5/);
+  });
+  it('its action keys draw no ring and reuse the game\'s key shape', () => {
+    const key = /\.world-invitation-card button \{([^}]*)\}/.exec(online)?.[1] ?? '';
+    expect(key).toMatch(/border: 0;/);
+    expect(key).toMatch(/border-radius: 10px;/);
+    expect(key).toMatch(/min-height: 44px;/);
+    // The lead key is a FILL, the quiet one is not: that is how the pair still reads without rings.
+    expect(online).toMatch(/\.world-invitation-card :is\(\.world-invitation-primary, \.world-challenge-primary\) \{\s*background: var\(--c-gold, #f2c14e\);/);
+    expect(online).toMatch(/\.world-challenge-keys button\[aria-busy='true'\]/);
+  });
 });

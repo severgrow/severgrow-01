@@ -820,14 +820,9 @@ html.reduce-motion .world-selection { animation: none; }
 }
 .world-challenge-keys { width: 100%; display: flex; gap: 8px; }
 /* The one primary key is the game's own amber, not a second green: this card is part of the same
-   instrument as PLAY and the pause plate, and its lead key must read as the lead key everywhere. */
-.world-challenge-primary {
-  background: var(--c-gold, #f2c14e); border-color: var(--c-gold, #f2c14e);
-  color: #14170f; font-weight: 700;
-}
-.world-challenge-secondary { background: transparent; opacity: .75; }
-/* Declining is armed, not done: the label says so and the face steps forward to be read. */
-.world-challenge-secondary.is-armed { opacity: 1; border-color: #d8cda5aa; }
+   instrument as PLAY and the pause plate, and its lead key must read as the lead key everywhere.
+   Its fill IS its edge (the .world-invitation-card rules above own both); nothing is stroked. */
+.world-challenge-secondary.is-armed { opacity: 1; }
 /* An in-flight key speaks the app's own busy language: calmer face, progress cursor. */
 .world-challenge-keys button[aria-busy='true'] { cursor: progress; opacity: .62; }
 .world-challenge-notice { min-height: 0; margin: 0; font-size: .7rem; line-height: 1.35; color: #d9c89a; }
@@ -882,21 +877,57 @@ html.reduce-motion .world-selection { animation: none; }
     max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   background: #050806ae;
 }
+/* THE INVITATION CARD IS THE GAME'S DARK GLASS (owner, 2026-11-02: "territory and profile windows
+   dont match really - we should never use frame contour like in territory challenge, it should be
+   more like the profile window - but BOTH (and any other similar) should be using our classic dark
+   glass window style"). It used to be a material of its own — #1c211edb at .86 alpha, blur(10px)
+   and a 1px #d8cda557 outline all round — which is why it read as a stroked card, not a pane of
+   glass. It now wears exactly the recipe of the pause plate (#sheet-menu) and the Match Intel /
+   lesson window (player/glass-surface.ts): --dark-glass and --dark-glass-blur, the family's 15px
+   corner and its ONE soft drop shadow, and NO border or outline — style.css's "NO FRAME AROUND THE
+   GLASS" rule is the last word on the edge of every glass surface in the game. */
 .world-invitation-card {
   width: min(100%, 360px); padding: 23px 21px 19px; box-sizing: border-box;
   display: flex; flex-direction: column; align-items: center; gap: 8px;
   text-align: center; color: #eee3c6; border-radius: 15px;
-  border: 1px solid #d8cda557; background: #1c211edb;
-  box-shadow: 0 20px 80px #0009; backdrop-filter: blur(10px);
+  border: 0; outline: none;
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
 }
 .world-invitation-card strong { font-size: 1.16rem; letter-spacing: .1em; }
 .world-invitation-card p { margin: 3px 0 13px; line-height: 1.4; }
 .world-invitation-card > div { width: 100%; display: flex; gap: 8px; }
+/* THE KEYS ARE THE GAME'S KEYS, WITHOUT A RING (owner, 2026-11-02: "challenge and not now buttons
+   should have a frame neither and should match similar buttons in other spots of the game"). Every
+   other key in the game answers the press with its FILL, not with a drawn edge: .btn.primary /
+   the pause plate's lead are filled with their own colour (so no ring reads), and the quiet key is
+   the transparent .btn.link. These two keys now do the same — the 10px corner and the 44px floor
+   of the shared .btn, an amber lead and a quiet transparent second — and the delegated press
+   (logic/press.ts) still gives both their depth. No border, no outline, nothing drawn along an
+   edge. */
 .world-invitation-card button {
-  flex: 1; min-height: 44px; border-radius: 8px; border: 1px solid #d8cda558;
-  color: #eee3c6; background: #343a31; font: inherit; font-size: .75rem; letter-spacing: .06em;
+  flex: 1; min-height: 44px; padding: 0 10px; border-radius: 10px; border: 0;
+  color: #f0e9dc; background: transparent; font: inherit; font-size: .75rem; letter-spacing: .06em;
+  cursor: pointer;
 }
-.world-invitation-card button:last-child { background: transparent; opacity: .75; }
+.world-invitation-card :is(.world-invitation-primary, .world-challenge-primary) {
+  background: var(--c-gold, #f2c14e); color: #14170f; font-weight: 700;
+}
+.world-invitation-card :is(.world-invitation-secondary, .world-challenge-secondary) { opacity: .75; }
+@media (hover: hover) and (pointer: fine) {
+  .world-invitation-card button:hover:not(:disabled) {
+    background-color: color-mix(in srgb, currentColor 6%, transparent);
+  }
+  .world-invitation-card :is(.world-invitation-primary, .world-challenge-primary):hover:not(:disabled) {
+    background-color: var(--c-gold, #f2c14e); filter: brightness(1.04);
+  }
+}
+/* The game's focus ring, on the glass: the same 2px ivory the pause plate's keys draw. */
+.world-invitation-card button:focus-visible { outline: 2px solid #f0e9dc; outline-offset: 2px; }
+/* A locked key keeps the app's disabled language: calmer face, never a second colour. */
+.world-invitation-card button:disabled { opacity: .45; cursor: default; }
 
 /* 0.6: a lobby action in flight (find / create / join). The guard refuses a second tap before any
    request; the key it locked says so with aria-busy and a calmer face. NO second spinner: the
