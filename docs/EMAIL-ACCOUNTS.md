@@ -72,19 +72,57 @@ and physical-device limitations are in [REVIEW-2026-10-31.md](REVIEW-2026-10-31.
 
 ## Activation handoff — 31 October quiet polish
 
-The owner confirmed production SMTP is **not configured yet**. Keep `EMAIL_ACCOUNTS_ENABLED=false`
-until delivery is configured and the real-mail checks above pass. The cloud development environment
-has no Supabase administration identity or SMTP credentials, so it cannot safely perform that setup.
-The rest of the web release works against the current server independently.
+Superseded on 2 November 2026: production SMTP **is** configured now (see *Live mail transport*
+below), so this handoff note is history rather than current state. It is kept because it explains why
+the flag defaults to off.
+
+## Live mail transport (2 November 2026)
+
+Resend sends for `futasaku.com`: SPF, DKIM (`resend._domainkey`) and the `send.` bounce MX are
+published, and Supabase Auth's SMTP points at `smtp.resend.com:465` as `resend`, sender
+`FUTASAKU <noreply@futasaku.com>`. A real send returned 200, so the domain is verified.
+
+`EMAIL_ACCOUNTS_ENABLED=true` is set as an Edge Function secret, so `/v1/auth/methods` answers
+`{"email":true}`. The client only reveals email once **both** that and Auth's `external.email` are
+true — with either missing, the menu's LOG IN key falls straight through to Google, which is exactly
+how it looked before the secret was set. If email ever disappears from the sign-in sheet again, check
+those two answers before reading any UI code.
+
+Raised at the same time: `rate_limit_email_sent` 2 → 30 per hour (two per hour locked real users out
+after two sign-ups). `mailer_otp_exp` stays 3600, and the templates say "one hour" to match.
+
+Still open: `_dmarc` is not published, which pushes deliverability in the wrong direction; a
+`v=DMARC1; p=none; rua=mailto:…` record is the smallest fix. `info@futasaku.com` is referenced by the
+privacy page but the domain has no mailbox, so those replies are lost.
 
 ## Branded mail — live on the project (2 November 2026)
 
 The Supabase Auth mailer is set from [`server/email-templates/`](../server/email-templates), and that
 folder is the source of truth — not the Supabase dashboard. Six templates are live: confirmation,
 recovery, magic link, email change, invite and reauthentication. Each is table-based and inline
-styled, with no `<style>` block, image, SVG, web font or CSS variable (the things Gmail and other
-clients strip). The FUTASAKU wordmark is letter-spaced type, not an image; the palette is the game's
-cream-on-ink; one cream button sits above the raw link in small muted text.
+styled, with no `<style>` block, SVG, web font or CSS variable (the things Gmail and other clients
+strip), and the page is dark by declaration rather than by preference: `color-scheme: dark`, an
+explicit ground on the body and the outer table, so a client that forces light mode still shows the
+intended near-black card.
+
+**The wordmark is the real one.** The header carries the game's own treeless wordmark (the HUD badge
+and Profile nameplate asset, not the tree emblem), served from this site at
+`https://www.futasaku.com/email/futasaku-wordmark.png`. The committed file is
+`web/public/email/futasaku-wordmark.png`: 300×92 PNG, i.e. exactly 2× the 150×46 CSS box the mail
+declares, tinted `#efe5cb` on the card's ink `#18191a`. It is generated from
+`web/src/assets/futasaku-wordmark-silhouette.webp` by `scripts/build-email-wordmark.mjs`, so the mail
+and the game cannot drift to two different marks.
+
+**Images-off is a designed state, not a break.** Mail clients block images for unknown senders, so
+the image is an upgrade rather than a dependency: the `<img>` carries fixed `width`/`height`
+attributes *and* inline sizes (the layout does not move when it fails), and `alt="FUTASAKU"` styled in
+the same cream and letter-spacing as the old type wordmark (so a blocked header still reads as the
+brand, on purpose). `scripts/render-email-templates.mjs --blocked` renders that state for review.
+
+The palette is the game's cream-on-ink; the heading uses Georgia (the email-safe relative of the
+game's Besley display face), the code digits are monospaced like the cockpit readout, one cream
+button sits above the raw link in small muted text, and "VALID FOR ONE HOUR" is the quiet brass
+instrument label (`#b7a98a`).
 
 | type | subject |
 | --- | --- |
@@ -96,26 +134,39 @@ cream-on-ink; one cream button sits above the raw link in small muted text.
 | reauthentication | your futasaku verification code |
 
 The game signs in with a code, so confirmation, magic link and reauthentication show the 8-digit
-`{{ .Token }}` in a plate as the primary action, with the button as the desktop path. The copy says
-"valid for one hour" because `mailer_otp_exp` is 3600; the apply script warns if that changes.
+`{{ .Token }}` in a plate as the primary action, with the button as the desktop path. Every template
+states "VALID FOR ONE HOUR" because `mailer_otp_exp` is 3600; the apply script warns if that changes.
 Notification templates (password changed, identity linked, phone changed, …) are disabled on this
 project (`mailer_notifications_*_enabled = false`), so they are not branded.
 
 ```sh
+node scripts/build-email-wordmark.mjs              # regenerate the committed header PNG from the game asset
 node scripts/apply-email-templates.mjs --dry-run   # validate the HTML, no network
 node scripts/apply-email-templates.mjs             # PATCH the six subjects + contents, then read back
-node scripts/render-email-templates.mjs            # /tmp/futasaku-email-<type>.png, 600px, dark + light
+node scripts/render-email-templates.mjs            # /tmp/futasaku-email-<type>.png at 600/390/320, dark + light
+node scripts/render-email-templates.mjs --blocked  # the images-off state, on purpose unresolvable
 ```
 
-`tests/email-templates.test.ts` pins the variables and the inbox rules on every `npm run check`. The
-apply script writes only `mailer_subjects_*` and `mailer_templates_*_content`; SMTP, rate limits and
-`mailer_otp_exp` are never touched. The older hand-paste `server/templates/email-signin.html` was
-removed so there is not a second, conflicting copy.
+The render script prints the logo's box and flags a wrapped button, an overflowing code plate, any
+element escaping the card, or sideways scroll. The apply script reports the live HTTP status of the
+logo URL — a 404 is not fatal (the alt wordmark still reads), but it must be 200 before recipients
+see the mark.
+
+`tests/email-templates.test.ts` pins the variables, the inbox rules, the one-image contract (absolute
+URL, alt text, 150×46 box, a 300×92 committed file), the dark-mode declarations and the one-hour
+promise on every `npm run check`. The apply script writes only `mailer_subjects_*` and
+`mailer_templates_*_content`; SMTP, rate limits and `mailer_otp_exp` are never touched. The older
+hand-paste `server/templates/email-signin.html` was removed so there is not a second, conflicting copy.
 
 Operator checklist:
 
-- Configure a production mail provider in Supabase Auth → SMTP, with a verified sender/domain.
-  Set the provider's required DNS records (SPF/DKIM and its recommended DMARC policy).
+- The production mail provider (Resend) is configured, with a verified sender/domain and its SPF,
+  DKIM and bounce records published. DMARC is still the outstanding DNS item.
+- **The logo URL follows the site's release flow.** `web/public/**` is copied into the built site, so
+  the PNG appears at `/test/email/futasaku-wordmark.png` on the first push to `futa0.5-online` and at
+  `www.futasaku.com/email/futasaku-wordmark.png` when that commit is promoted. Until the promote,
+  real mail shows the styled alt-text wordmark instead of the image. Check with
+  `curl -sI https://www.futasaku.com/email/futasaku-wordmark.png` (expect `200 image/png`).
 - Email OTPs are 8 digits (`mailer_otp_length`) and expire in one hour (`mailer_otp_exp` = 3600);
   the templates state that. Keep mail/verification limits enabled. No SMTP or service credentials
   belong in browser config.

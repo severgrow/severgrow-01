@@ -12,19 +12,51 @@ change, invite, reauthentication) live in `server/email-templates/`;
 made only there leaves no reviewable copy and no history.
 
 **Why it is plain HTML and not the game's glass.** Email is not a browser: Gmail strips `<style>`,
-most clients ignore CSS variables, `backdrop-filter` does not exist, and images and inline SVG are
-blocked or stripped. So the brand is carried by type and colour taken from `web/src/style.css`
-(`#18191a` ground, `#eeebe4` ink, `#efe5cb` accent, `#b7a98a` for the quiet wordmark tone already
-used by the privacy page). The wordmark is letter-spaced uppercase text — the profile's treeless mark
-as type — and there is one cream button with the raw link underneath for clients that drop it. No
-hexagon is drawn: a CSS hexagon needs transforms or pseudo-elements that clients drop, and an image
-would arrive broken.
+most clients ignore CSS variables, `backdrop-filter` does not exist, and inline SVG is stripped. So
+the brand is carried by type and colour taken from `web/src/style.css`
+(`#18191a` ground, `#eeebe4` ink, `#efe5cb` accent, `#b7a98a` for the quiet brass label already
+used by the privacy page). There is one cream button with the raw link underneath for clients that
+drop it. No hexagon is drawn: a CSS hexagon needs transforms or pseudo-elements that clients drop.
 
 **Honesty about time.** The copy says "valid for one hour" because `mailer_otp_exp` is 3600. The
 apply script warns when the two disagree instead of letting the email promise a duration the server
 does not honour. Notification templates are disabled on this project and are not branded. The old
 hand-paste `server/templates/email-signin.html` was removed as a second, conflicting copy; history
 keeps it.
+
+### Later the same day — the real wordmark, and an image that is not a dependency
+
+Owner: *"the emails sent should contain FUTASAKU logo (no tree one) and be more futasaku, by default
+in dark mode."*
+
+The first pass used a letter-spaced type wordmark because "an image would arrive broken". That was
+right about the risk and wrong about the conclusion: an image is only fragile when it is the only
+carrier. This pass uses the game's own treeless mark (the HUD badge / Profile nameplate asset) as a
+hosted PNG at a stable absolute URL — `https://www.futasaku.com/email/futasaku-wordmark.png`, 300×92
+(2× of a 150×46 box), tinted `#efe5cb` on the card's ink by
+`scripts/build-email-wordmark.mjs` from `web/src/assets/futasaku-wordmark-silhouette.webp` — and
+keeps the type wordmark as the fallback instead of deleting it:
+
+- fixed `width`/`height` attributes **and** inline sizes, so a blocked image reserves its box and the
+  header does not collapse;
+- `alt="FUTASAKU"` styled in the same cream, serif and letter-spacing as the type wordmark, so an
+  images-off inbox still shows a deliberate wordmark rather than an empty band;
+- `--blocked` in the render script makes that state reviewable, and the measurement reports the box.
+
+More FUTASAKU without clutter: the game's serif display voice for headings (Georgia, the email-safe
+relative of Besley), the cockpit's monospaced readout for the code digits, and "VALID FOR ONE HOUR"
+as the one quiet brass instrument label. Nothing decorative was added; no gradients, clipart or new
+mark was invented.
+
+The cost is honest: the PNG lives at the site root, so it resolves only when this commit is promoted.
+Between the push and the promote, real mail shows the alt-text wordmark — by design, not by accident.
+`/test/email/futasaku-wordmark.png` proves the file is published before the promote.
+
+Images: [confirmation](screens/email/confirmation.png),
+[images off](screens/email/confirmation-images-off.png), [320px](screens/email/confirmation-320.png),
+[recovery](screens/email/recovery.png), [magic link](screens/email/magic_link.png),
+[email change](screens/email/email_change.png), [invite](screens/email/invite.png),
+[reauthentication](screens/email/reauthentication.png).
 
 ## 2026-11-02 — Windows keep no interior hairline divider
 

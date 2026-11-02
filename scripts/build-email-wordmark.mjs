@@ -1,0 +1,142 @@
+#!/usr/bin/env node
+/**
+ * Build the email header wordmark PNG from the game's own asset.
+ *
+ *   node scripts/build-email-wordmark.mjs
+ *
+ * WHY: Gmail strips inline `<svg>`, so the transactional mail cannot reuse the app's SVG mark. This
+ * script takes the exact treeless silhouette the game tints for the HUD badge / Profile nameplate
+ * (`web/src/assets/futasaku-wordmark-silhouette.webp`, 2200x715), tints it with the app's accent
+ * (`#efe5cb`, `--c-accent`) and bakes it onto the email card's ground (`#18191a`) at 2x the size the
+ * template displays it. The output is a committed file served by the site at
+ * `/email/futasaku-wordmark.png`, so the mail and the game cannot drift to two different marks.
+ *
+ * Alpha fringes: the exported webp carries faint alpha in otherwise empty space, so the silhouette's
+ * true box is found by thresholding alpha, exactly as `whiteLogo()` in web/src/player/branding.ts
+ * does the same job in the browser.
+ */
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright-core';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const SOURCE = join(ROOT, 'web', 'src', 'assets', 'futasaku-wordmark-silhouette.webp');
+const OUT_DIR = join(ROOT, 'web', 'public', 'email');
+const OUT = join(OUT_DIR, 'futasaku-wordmark.png');
+
+/** Displayed width in the template; the height follows the mark's own aspect (150x46). The file is
+ *  generated at twice this, for 2x screens. The template's `width`/`height` attributes must match
+ *  these numbers — tests/email-templates.test.ts pins them against this file's real pixels. */
+const DISPLAY = { width: 150 };
+/** The card's ground in the template (`#18191a`). Baking it in keeps the logo on its intended ink
+ *  even when a client forces light mode, where a transparent PNG would sit on cream. */
+const INK = '#18191a';
+/** The app tints the mark with `--c-accent`; same colour here. */
+const CREAM = '#efe5cb';
+
+function cachedChromium() {
+  if (process.env.PW_CHROMIUM) return process.env.PW_CHROMIUM;
+  const base = join(homedir(), 'Library', 'Caches', 'ms-playwright');
+  let entries = [];
+  try {
+    entries = readdirSync(base).filter((name) => name.startsWith('chromium-')).sort().reverse();
+  } catch {
+    return null;
+  }
+  for (const name of entries) {
+    const root = join(base, name, 'chrome-mac-arm64');
+    for (const bundle of ['Google Chrome for Testing.app', 'Chromium.app']) {
+      for (const binary of ['Google Chrome for Testing', 'Chromium']) {
+        const path = join(root, bundle, 'Contents', 'MacOS', binary);
+        try {
+          readFileSync(path);
+          return path;
+        } catch {
+          /* try the next one */
+        }
+      }
+    }
+  }
+  return null;
+}
+
+const data = `data:image/webp;base64,${readFileSync(SOURCE).toString('base64')}`;
+const executablePath = cachedChromium();
+const browser = await chromium.launch(executablePath ? { executablePath } : {});
+
+try {
+  const page = await browser.newPage();
+  const png = await page.evaluate(
+    async ({ data, display, ink, cream }) => {
+      const image = new Image();
+      image.src = data;
+      await image.decode();
+      const w = image.naturalWidth;
+      const h = image.naturalHeight;
+
+      const plate = document.createElement('canvas');
+      plate.width = w;
+      plate.height = h;
+      const pctx = plate.getContext('2d', { willReadFrequently: true });
+      pctx.drawImage(image, 0, 0);
+      const pixels = pctx.getImageData(0, 0, w, h).data;
+
+      // The silhouette's own box: ignore the faint alpha fringe in empty space.
+      let left = w, top = h, right = -1, bottom = -1;
+      for (let y = 0; y < h; y += 1) {
+        for (let x = 0; x < w; x += 1) {
+          if (pixels[(y * w + x) * 4 + 3] > 8) {
+            if (x < left) left = x;
+            if (x > right) right = x;
+            if (y < top) top = y;
+            if (y > bottom) bottom = y;
+          }
+        }
+      }
+      if (right < 0) throw new Error('the wordmark silhouette is empty');
+
+      // Tint at source resolution first, then downscale once (never tint a resized alpha edge).
+      const tinted = document.createElement('canvas');
+      tinted.width = w;
+      tinted.height = h;
+      const tctx = tinted.getContext('2d');
+      tctx.drawImage(image, 0, 0);
+      tctx.globalCompositeOperation = 'source-in';
+      tctx.fillStyle = cream;
+      tctx.fillRect(0, 0, w, h);
+
+      const cropW = right - left + 1;
+      const cropH = bottom - top + 1;
+      const outW = Math.round(display.width * 2);
+      const outH = Math.round(outW * (cropH / cropW));
+
+      const out = document.createElement('canvas');
+      out.width = outW;
+      out.height = outH;
+      const octx = out.getContext('2d');
+      octx.imageSmoothingEnabled = true;
+      octx.imageSmoothingQuality = 'high';
+      octx.fillStyle = ink;
+      octx.fillRect(0, 0, outW, outH);
+      octx.drawImage(tinted, left, top, cropW, cropH, 0, 0, outW, outH);
+
+      return {
+        png: out.toDataURL('image/png'),
+        source: { w, h },
+        crop: { left, top, right, bottom },
+        out: { w: outW, h: outH },
+      };
+    },
+    { data, display: DISPLAY, ink: INK, cream: CREAM },
+  );
+
+  mkdirSync(OUT_DIR, { recursive: true });
+  writeFileSync(OUT, Buffer.from(png.png.split(',')[1], 'base64'));
+  console.log(`source ${png.source.w}x${png.source.h}, ink box ${png.crop.left},${png.crop.top}..${png.crop.right},${png.crop.bottom}`);
+  console.log(`wrote  ${OUT}`);
+  console.log(`       ${png.out.w}x${png.out.h} px = 2x of ${png.out.w / 2}x${png.out.h / 2} CSS px`);
+} finally {
+  await browser.close();
+}

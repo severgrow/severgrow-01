@@ -42,15 +42,26 @@ const REQUIRED_MARKERS = [
   ['#101112', 'the page ground'],
   ['#18191a', 'the card ground'],
   ['#efe5cb', 'the primary button fill'],
-  ['#b7a98a', 'the wordmark tone'],
+  ['#b7a98a', 'the quiet brass label tone'],
   ['futasaku.com', 'the footer link'],
   ['max-width:520px', 'the 600px-max width rule'],
 ];
 
+/**
+ * The one image the mail may carry: the game's treeless wordmark, hosted from the site (not a
+ * hashed bundle path — an email is read long after that build is gone), 150x46 CSS px backed by a
+ * committed 300x92 file, alt text that reads as the wordmark when images are off.
+ */
+const LOGO_URL = 'https://www.futasaku.com/email/futasaku-wordmark.png';
+const LOGO_FILE = join(ROOT, 'web', 'public', 'email', 'futasaku-wordmark.png');
+const LOGO_BOX = { width: 150, height: 46 };
+
 const FORBIDDEN = [
   [/<style[\s>]/i, 'a <style> block (Gmail strips it)'],
-  [/<img[\s>]/i, 'an image (many clients block images)'],
   [/<svg[\s>]/i, 'inline SVG (Gmail does not render it)'],
+  [/<picture[\s>]/i, 'a <picture> element (not one image contract)'],
+  [/background-image/i, 'a CSS background image (blocked with images)'],
+  [/srcset=/i, 'a srcset (one fixed 2x file is enough)'],
   [/backdrop-filter/i, 'backdrop-filter (no email client supports it)'],
   [/var\(--/i, 'a CSS variable (most clients do not support them)'],
   [/@media/i, 'a media query (keep one layout that works everywhere)'],
@@ -59,6 +70,14 @@ const FORBIDDEN = [
   [/url\(/i, 'a url() background (blocked with images)'],
   [/position:\s*(fixed|absolute)/i, 'absolute positioning (no email client lays out like that)'],
 ];
+
+/** The committed PNG's real size, checked once: the template's box must be exactly half of it. */
+function logoSize() {
+  const buffer = readFileSync(LOGO_FILE);
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (!buffer.subarray(0, 8).equals(signature)) return null;
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
 
 function readEnv() {
   let text = '';
@@ -97,6 +116,22 @@ function checkTemplate(type, html, vars) {
   if (!/<table[\s>]/i.test(markup)) problems.push('is not table-based');
   if (!/<meta name="viewport"/i.test(markup)) problems.push('has no viewport meta');
 
+  // Exactly one image, and it is THE wordmark: the absolute site URL, fixed 150x46 box, alt text
+  // that still names the brand when an inbox blocks it. Anything else is a second failure mode.
+  const images = [...markup.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+  if (images.length !== 1) problems.push(`must carry exactly one image (found ${images.length})`);
+  for (const tag of images) {
+    if (!tag.includes(`src="${LOGO_URL}"`)) problems.push(`the image is not ${LOGO_URL}`);
+    if (!/alt="FUTASAKU"/.test(tag)) problems.push('the image has no meaningful alt text');
+    if (!tag.includes(`width="${LOGO_BOX.width}"`) || !tag.includes(`height="${LOGO_BOX.height}"`)) {
+      problems.push(`the image must declare width="${LOGO_BOX.width}" height="${LOGO_BOX.height}"`);
+    }
+    if (!tag.includes(`width:${LOGO_BOX.width}px`) || !tag.includes(`height:${LOGO_BOX.height}px`)) {
+      problems.push('the image must also reserve that box in inline CSS');
+    }
+    if (!tag.includes('display:block')) problems.push('the image must be display:block');
+  }
+
   const found = [...html.matchAll(/\{\{\s*(?:\.\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g)].map((m) => m[1]);
   const braces = (html.match(/\{\{/g) || []).length;
   if (braces !== found.length) problems.push('has a malformed {{ … }} variable');
@@ -112,6 +147,13 @@ function checkTemplate(type, html, vars) {
 
 function load() {
   const subjects = JSON.parse(readFileSync(join(DIR, 'subjects.json'), 'utf8'));
+  // The templates point at the committed asset; refuse a missing or re-exported-at-another-size file
+  // instead of sending a mail whose box would squeeze the mark.
+  const size = logoSize();
+  if (!size) fail('web/public/email/futasaku-wordmark.png is missing — run node scripts/build-email-wordmark.mjs');
+  else if (size.width !== LOGO_BOX.width * 2 || size.height !== LOGO_BOX.height * 2) {
+    fail(`the wordmark is ${size.width}x${size.height}; the templates display ${LOGO_BOX.width}x${LOGO_BOX.height}, so it must be exactly ${LOGO_BOX.width * 2}x${LOGO_BOX.height * 2}`);
+  }
   const files = [];
   for (const [type, { vars, purpose }] of Object.entries(TYPES)) {
     const subject = subjects[type];
@@ -148,6 +190,16 @@ async function request(token, init) {
   return body ?? {};
 }
 
+/** Is the wordmark actually served? A 404 here means every recipient gets the alt-text fallback. */
+async function logoStatus() {
+  try {
+    const response = await fetch(LOGO_URL, { method: 'HEAD', redirect: 'follow' });
+    return `HTTP ${response.status}`;
+  } catch (error) {
+    return `unreachable (${(error instanceof Error ? error.message : String(error)).slice(0, 80)})`;
+  }
+}
+
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has('--dry-run');
 const verifyOnly = args.has('--verify');
@@ -164,6 +216,7 @@ if (dryRun) {
     console.log(`OK    ${type.padEnd(16)} ${String(html.length).padStart(5)} B  ${String(words).padStart(3)} words  ${purpose}`);
     console.log(`      subject: ${subject}`);
   }
+  console.log(`      wordmark: ${LOGO_URL} (${LOGO_BOX.width}x${LOGO_BOX.height}, file ${LOGO_BOX.width * 2}x${LOGO_BOX.height * 2})`);
   console.log(`\n${templates.length} templates valid. Nothing was sent to Supabase.`);
   process.exit(0);
 }
@@ -181,6 +234,12 @@ const fields = (t) => ({
 });
 
 try {
+  // A 200 from Supabase is not proof a recipient sees the mark: the file has to be served too.
+  // This is a report, not a gate — the asset ships in the same commit as the templates, and before
+  // the site publishes it every mailbox shows the styled alt-text wordmark (never an empty box).
+  const logo = await logoStatus();
+  console.log(`LOGO  ${LOGO_URL} → ${logo}${logo === 'HTTP 200' ? '' : '  (until it is published, mail shows the alt-text wordmark)'}\n`);
+
   const current = await request(token, { method: 'GET' });
   // The copy says "one hour". That has to match the project's real expiry, not last month's config:
   // never promise a duration the server does not honour.
