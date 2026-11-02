@@ -431,6 +431,43 @@ describe('the cost of the achievements read', () => {
     expect(big.statements.some((text) => text === 'select * from match_moves where match_id = $1 and revision > $2 order by revision asc')).toBe(false);
   });
 
+  it('reads the facts ONE AT A TIME, never in parallel against the two-connection pool', async () => {
+    // THE production bug (2026-11-02). Five reads fired with Promise.all against an Edge pool of
+    // max: 2 (server/src/storage/pool-config.ts). Three queued behind the two in flight and the
+    // request never returned: no headers, no body, not even a log line, while every single-query
+    // route beside it on the same token stayed under 0.6 s. It answered 0.27 s on one call and hung
+    // for 90 s on the next. Sequential awaits fixed it (measured: 20/20 calls, 0.22-0.55 s).
+    //
+    // This test watches OVERLAP rather than the source text: each fake read records when it starts
+    // and ends, and no two may be in flight at the same time.
+    let inFlight = 0;
+    let worstOverlap = 0;
+    const wrap = <T,>(fn: () => Promise<T>) => async (): Promise<T> => {
+      inFlight += 1;
+      worstOverlap = Math.max(worstOverlap, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      try {
+        return await fn();
+      } finally {
+        inFlight -= 1;
+      }
+    };
+    const store = {
+      claimedCells: wrap(async () => []),
+      challengesInvolving: wrap(async () => []),
+      receiptRows: wrap(async () => []),
+      campaignClears: wrap(async () => []),
+    } as unknown as WorldEconomyStore;
+    const storage = {
+      listMatchesForPlayer: wrap(async () => []),
+      movesOfMatches: wrap(async () => []),
+    } as unknown as Storage;
+    const service = new WorldEconomyService(store, storage, () => START);
+    const views = await service.achievements(player('me'));
+    expect(views).toHaveLength(35);
+    expect(worstOverlap, 'at most one fact read in flight at a time').toBe(1);
+  });
+
   it('never abandons a database query to hit a deadline (the cause of the hung pool)', async () => {
     // Measured on the deployed function: a deadline that RESOLVED early did not cancel the queries
     // underneath it. They kept holding a connection from the Edge pool (max 2), so two abandoned
