@@ -113,7 +113,7 @@ port needs forwarding. It does not contact the live database. No preview code or
 
 ## Verification recorded in this worktree
 
-- Full `npm run check`: **371 test files passed, 3,750 tests passed**, one expected failure,
+- Full `npm run check`: **372 test files passed, 3,750 tests passed**, one expected failure,
   66 optional skips; TypeScript passed.
 - Focused source/camera/menu/lobby-exit/import-cycle regressions: **35 tests passed**.
 - Living Territory browser pass: **120 checks passed**, including the slow-controller and
@@ -163,3 +163,8 @@ Camera measurements use resolved layout dimensions from the map viewport. Decora
 must not be fed back into logical camera bounds through transformed `getBoundingClientRect()`
 measurements. A focused regression supplies rounded/scaled SVG bounds and verifies that the
 logical aspect, pixel width and exact `viewBox` remain those of the layout viewport.
+
+The transition sampler waits for at least three exact-camera observations and a settled full-opacity
+frame, with a three-second watchdog. This accommodates slow software-WebKit style flushes without
+relaxing map identity, visibility or camera-continuity assertions. Local Chromium passed all 120
+checks with this sampler; confirm hosted WebKit and the full CI run on the final branch head.
