@@ -72,7 +72,12 @@ const boot=async(page:Page,options:{cached?:boolean;fail?:boolean;delay?:number;
   if(options.fail)await route.fulfill({status:503,contentType:'application/json',body:'{"ok":false}'});else await route.continue();
  });
  if(options.delayCode)await page.route('**/src/online/lobby-ui.ts*',async route=>{await new Promise(r=>setTimeout(r,options.delayCode));await route.continue();});
- await page.goto(origin);await page.waitForFunction(()=>(window as any).__severgrow?.ready?.());
+ // Wait for the DOM, not the `load` event. On WebKit, `load` waits for every subresource (fonts,
+ // the map's images, the favicons); across the eight viewports this suite reopens, that occasionally
+ // never settles and the whole run dies on a 30 s goto timeout — which is what turned CI red on
+ // 3217830e while all 109 checks before it passed. The real readiness signal is the app's own
+ // `__severgrow.ready()` awaited on the next line, so waiting for `load` bought nothing.
+ await page.goto(origin,{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>(window as any).__severgrow?.ready?.());
  if(options.delayCode)check('early Territory key cannot swallow a tap before its handler is attached',await page.locator('#menu-world').isDisabled());
  // Wait for code bootstrap only, never for a map/network answer.
  await page.waitForFunction(()=>!(document.getElementById('menu-world') as HTMLButtonElement).disabled);
