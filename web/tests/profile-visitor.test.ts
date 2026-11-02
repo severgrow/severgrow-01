@@ -153,8 +153,6 @@ describe('one sheet, two modes: the mode is a single attribute', () => {
     expect(env.byId['profile-seeds']!.textContent).toBe('128');
     expect(env.byId['profile-wins']!.textContent).toBe('9');
     expect(env.byId['profile-level']!.hidden).toBe(true);
-    // The visitor's hex chip never appears on your own sheet.
-    expect(env.byId['profile-colour-hex']!.hidden).toBe(true);
   });
 
   it('visitor mode is identified by the mode attribute and the record heading, not a caption', () => {
@@ -174,17 +172,20 @@ describe('one sheet, two modes: the mode is a single attribute', () => {
     const ui = installProfileUI(env.doc);
     ui.openVisitor(visitor());
     expect(env.byId['profile-name']!.textContent).toBe('BloomHeron #ABCD');
-    expect(env.byId['profile-level']!.textContent).toBe('Level 7');
+    // The visible form is short (owner: "level can be lvl to safe space"); the spoken label spells it.
+    expect(env.byId['profile-level']!.textContent).toBe('Lvl 7');
+    expect(env.byId['profile-level']!.getAttribute?.('aria-label')).toBe('Level 7');
     expect(env.byId['profile-level']!.hidden).toBe(false);
     expect(env.byId['profile-tiles']!.textContent).toBe('2');
     // The silhouette is still the board's own hex (written once when the sheet is installed).
     expect(env.face.getAttribute('points')).not.toBeNull();
     // The colour is painted through the shared `--tile` property, exactly as own mode does.
     expect(env.byId['profile-colour']!.style.values['--tile']).toBe('hsl(341 42% 53%)');
-    // …and its hex is written beside the swatch, and spoken as a colour.
-    expect(env.byId['profile-colour-hex']!.textContent).toBe('#b95575');
-    expect(env.byId['profile-colour-hex']!.hidden).toBe(false);
-    expect(env.byId['profile-colour-hex']!.getAttribute('aria-label')).toBe(PROFILE.colourHex('#b95575'));
+    // NO HEX CODE BESIDE THE TILE (owner, 2026-11-02: "what's the hashtag and number next to tile
+    // in profile? color? remove"). The swatch carries the colour and its name is its aria-label, so
+    // the `#b95575` label is gone from the sheet, the paint path and the strings.
+    expect(read('../src/accounts/profile.ts')).not.toContain('colourHex');
+    expect(read('../../src/strings.ts')).not.toContain('colourHex');
     // The online record is the only grid actually carrying values.
     const text = env.byId['profile-play-online']!.children.map((tile) => tile.children.map((part) => part.textContent).join(':'));
     expect(text).toEqual([`${PROFILE.games}:5`, `${PROFILE.winRate}:60%`, `${PROFILE.longestStreak}:2`]);
@@ -301,8 +302,8 @@ describe('the markup and CSS carry the two modes', () => {
     expect(profileSection).not.toContain('id="profile-visitor"');
     expect(profileSection).toContain('id="profile-level"');
     expect(profileSection).toMatch(/id="profile-level"[^>]*hidden/);
-    // The visitor's colour hex is a caption, hidden by default.
-    expect(profileSection).toMatch(/id="profile-colour-hex"[^>]*hidden/);
+    // The hex chip is GONE: the swatch says the colour, and its code was a designer's label.
+    expect(profileSection).not.toContain('profile-colour-hex');
   });
 
   it('tags the three private rows so one attribute can hide them', () => {

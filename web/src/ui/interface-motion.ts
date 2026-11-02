@@ -37,6 +37,17 @@ export const INTERFACE_MOTION = Object.freeze({
   easeOpen: 'cubic-bezier(0.22, 1, 0.36, 1)',
   /** Accelerate away. The exact reverse feeling, not a new personality. */
   easeClose: 'cubic-bezier(0.4, 0, 1, 1)',
+  /**
+   * How far a WHOLE SCREEN travels while it arrives: 10px (owner, 2026-11-02: "if we have existing
+   * ones make them more visible" — at 6px a full-screen change read as a hard cut on a phone).
+   * A sheet keeps `travel`; a screen spends more so the arrival is unmistakable.
+   */
+  screen: 10,
+  /**
+   * The beat between a screen's body and its own head (the title row): 50ms. Long enough to read as
+   * one part landing after another, short enough that nothing waits on it.
+   */
+  stagger: 50,
 });
 
 export type SurfaceMotion = Readonly<typeof INTERFACE_MOTION>;
@@ -45,10 +56,12 @@ export type SurfaceMotion = Readonly<typeof INTERFACE_MOTION>;
 export type SurfaceOptions = {
   /** Default `INTERFACE_MOTION.open` / `.close`. */
   duration?: number;
-  /** Default `INTERFACE_MOTION.travel`. */
+  /** Default `INTERFACE_MOTION.travel`. A NEGATIVE travel arrives from above (a back move). */
   travel?: number;
   /** Default `INTERFACE_MOTION.scale`. */
   scale?: number;
+  /** Hold the surface at its first frame this long before it starts (a stagger). */
+  delay?: number;
   /** Called once the surface has finished leaving (never after an interruption). */
   onDone?: () => void;
 };
@@ -108,16 +121,18 @@ export function enterSurface(el: HTMLElement | null | undefined, options: Surfac
   }
   const travel = options.travel ?? INTERFACE_MOTION.travel;
   const scale = options.scale ?? INTERFACE_MOTION.scale;
+  const delay = options.delay ?? 0;
   // A surface that does not grow (a backdrop: travel 0, scale 1) does not settle either.
   const settleScale = scale === 1 ? 1 : INTERFACE_MOTION.settle;
-  const settleLift = travel === 0 ? 0 : -1;
+  // The hair past rest goes the way the surface came from: from below it eases up, from above down.
+  const settleLift = travel === 0 ? 0 : -Math.sign(travel);
   const a = el.animate(
     [
       { opacity: 0, translate: `0 ${travel}px`, scale: String(scale) },
       { opacity: 1, translate: `0 ${settleLift}px`, scale: String(settleScale), offset: 0.7 },
       { opacity: 1, translate: '0 0', scale: '1' },
     ],
-    { duration, easing: INTERFACE_MOTION.easeOpen, fill: 'both' },
+    { duration, delay, easing: INTERFACE_MOTION.easeOpen, fill: 'both' },
   );
   running.set(el, a);
   stateOf.set(el, 'opening');

@@ -195,8 +195,10 @@ try {
   // OWNER, 2026-11-02: the "viewing another player" caption was removed as clutter — the sheet is
   // identified by the mode, the name and the rows a visitor does not get.
   check('it carries no "viewing another player" caption node', visitor.visitorCaption === false, String(visitor.visitorCaption));
-  check('it shows their level, tiles and colour', visitor.level === 'Level 7' && !visitor.levelHidden && visitor.tiles === '2', `${visitor.level} / ${visitor.tiles}`);
-  check('it names their colour in hex beside the swatch', !visitor.hexHidden && visitor.hex === '#ded4c4', `${visitor.hex} / hidden=${visitor.hexHidden}`);
+  // Short visible form (owner: "level can be lvl to safe space"); the element spells it out.
+  check('it shows their level, tiles and colour', visitor.level === 'Lvl 7' && !visitor.levelHidden && visitor.tiles === '2', `${visitor.level} / ${visitor.tiles}`);
+  // NO HEX CODE (owner: "what's the hashtag and number next to tile in profile? color? remove").
+  check('it carries no hex code beside the swatch', visitor.hexHidden && visitor.hex === '', `${visitor.hex} / hidden=${visitor.hexHidden}`);
   check('it shows the ONLINE record only', visitor.playTitle === PROFILE.theirGames && visitor.onlineShown && visitor.onlineValues[0] === '0', JSON.stringify(visitor.onlineValues));
   check('it renders NO Seeds row and NO offline row',
     !visitor.seedsShown && !visitor.offlineShown && !visitor.winsShown, JSON.stringify(visitor));

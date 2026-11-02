@@ -168,7 +168,6 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
   // level inside the name line (the Territory tile bar's own `LEVEL 22` word). Own mode renders
   // neither, so its four rows and two records are byte-for-byte the layout they were.
   const levelText = doc.getElementById('profile-level');
-  const hexText = doc.getElementById('profile-colour-hex');
   const playTitle = doc.getElementById('profile-play-title');
 
   const fillGrid = (grid: HTMLElement, record: Record3 | null) => {
@@ -193,13 +192,6 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     if (levelText) {
       levelText.hidden = true;
       levelText.textContent = '';
-    }
-    // The visitor's hex chip is visitor-only; own mode keeps the name line it always had.
-    if (hexText) {
-      hexText.hidden = true;
-      hexText.textContent = '';
-      hexText.removeAttribute('aria-label');
-      hexText.removeAttribute('title');
     }
     seedsValue!.textContent = rows[1]!.value;
     tilesValue!.textContent = rows[2]!.value;
@@ -266,25 +258,15 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     const level =
       typeof facts?.level === 'number' && Number.isInteger(facts.level) && facts.level > 0 ? facts.level : null;
     if (levelText) {
-      levelText.textContent = level === null ? '' : PROFILE.level(level);
+      // Visible short form ("Lvl 7"); the element spells it out for a screen reader below.
+      levelText.textContent = level === null ? '' : PROFILE.levelShort(level);
+      if (level !== null) levelText.setAttribute('aria-label', `Level ${level}`);
       levelText.hidden = level === null;
     }
+    // The colour TILE says the colour (owner, 2026-11-02: "what's the hashtag and number next to
+    // tile in profile? color? remove"). The `#2C7A5B` code was a designer's label, not something a
+    // player reads: the swatch already shows it, and its name is the swatch's own aria-label.
     paintSwatch(facts?.colour ?? null);
-    // The colour's hex, beside its tile: the one fact a visitor asked to see, in the shape a
-    // designer names a colour. No valid hex is simply absent, never a made-up value.
-    const hex = facts?.colour?.hex ?? null;
-    if (hexText) {
-      hexText.textContent = hex ?? '';
-      hexText.hidden = hex === null;
-      if (hex) {
-        const spoken = PROFILE.colourHex(hex);
-        hexText.setAttribute('aria-label', spoken);
-        hexText.title = spoken;
-      } else {
-        hexText.removeAttribute('aria-label');
-        hexText.removeAttribute('title');
-      }
-    }
     // No country is derivable without an IP lookup, so a visitor never gets a flag.
     if (flag) {
       flag.textContent = '';

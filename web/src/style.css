@@ -2617,12 +2617,21 @@ html.futasaku-product .install-prompt-scrim {
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
+  /* The marks drop to a second line when the name needs the room; the name keeps every character. */
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
+/* THE WHOLE NICKNAME IS ALWAYS SHOWN (owner, 2026-11-02: "make sure the whole nickname is shown in
+   total"). It used to ellipsis at the row's width, so a real name could be cut to "RYK #VJ…" — and a
+   name you cannot read is worse than a row that breathes. The name takes the space it needs and the
+   ROW WRAPS its marks to a second line if they cannot fit beside it, instead of truncating the one
+   thing on this sheet that identifies the player. */
 #sheet-profile #profile-name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* `anywhere` so a long name breaks at the row edge rather than spilling past it: the value is
+     never clipped, and the ellipsis is gone for good. */
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 /* A colour emoji at the row's own size; the emoji stack first so a monochrome symbol font cannot
    take it over on older Android. */
@@ -3907,6 +3916,10 @@ html.futasaku-product #campaign .campaign-chapters {
   --ix-settle: 1.0005;
   --ix-ease-open: cubic-bezier(0.22, 1, 0.36, 1);
   --ix-ease-close: cubic-bezier(0.4, 0, 1, 1);
+  /* A WHOLE SCREEN travels further than a sheet (2026-11-02), and its head lands one short beat
+     later. Two extra tokens, no second vocabulary: see `INTERFACE_MOTION.screen` / `.stagger`. */
+  --ix-screen: 10px;
+  --ix-stagger: 50ms;
 }
 .btn,
 .btn.primary,

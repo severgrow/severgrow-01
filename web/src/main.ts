@@ -89,7 +89,9 @@ import type { CutInput } from './logic/cut.js';
 import { EASE, BREATH, MOTION, PINNED, breathAmpStep, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
 import { boardHasSettled, resultHoldStalled } from './logic/result-hold.js';
 import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
-import { enterSurface, exitSurface, resetSurface } from './ui/interface-motion.js';
+import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface, INTERFACE_MOTION } from './ui/interface-motion.js';
+import { screenArrival } from './ui/screen-motion.js';
+import type { ScreenName } from './ui/screen-motion.js';
 import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
@@ -710,25 +712,72 @@ let openSheet: HTMLElement | null = null;
 /** The screen last shown. Boot finishes after `load` (it awaits async UI mounts), so a late
  *  redundant `showScreen('menu')` must not reset a menu the player has already interacted with. */
 let shownScreen: 'menu' | 'levels' | 'campaign' | 'game' | null = null;
+/** Where the player actually is, doorways included (`shownScreen` cannot say `play`). */
+let route: ScreenName | null = null;
 const TRAINING_REWARD_TICKET_KEY = 'severgrow.seeds.training-ticket.v1';
 let trainingRewardTicketId: string | null = null;
 let seedRewardMessage = '';
+/** The head of each full screen: the row that lands one short beat after the screen's body. */
+const SCREEN_HEAD: Record<'menu' | 'levels' | 'campaign', string> = {
+  menu: '.menu-stack',
+  levels: '.levels-head',
+  campaign: '.levels-head',
+};
+
+/** A full plate does not grow from 99.6% — that is invisible at its size (owner, 2026-11-02). */
+const PLATE_SCALE = 0.985;
+
+/**
+ * Arrive a whole screen on the shared beat: the body travels, then its own head follows one stagger
+ * later (owner, 2026-11-02: "if we have existing ones make them more visible and smooth"). Both
+ * calls are the SAME primitives a sheet uses; the direction is the only new decision
+ * (`ui/screen-motion.ts`). Nothing here delays input — an arriving screen is tappable on its first
+ * frame, and the head's delay is pure paint.
+ */
+function arriveScreen(el: HTMLElement, head: Element | null, from: ScreenName | null, to: ScreenName): void {
+  const arrival = screenArrival(from, to, !interfaceMotionAllowed());
+  if (head instanceof HTMLElement) {
+    if (arrival.duration > 0) {
+      resetSurface(head);
+      enterSurface(head, { travel: arrival.head, delay: arrival.stagger, duration: arrival.duration });
+    } else resetSurface(head);
+  }
+  enterSurface(el, { travel: arrival.travel, duration: arrival.duration });
+}
+
 /**
  * The PLAY submenu (product menu only). It is not one of the four screens: it is a doorway that
  * replaces the menu, exactly as the online hub does. Opening anything else closes it.
  */
-function closePlayMenu() {
-  $('play-menu').hidden = true;
+function closePlayMenu(animated = false) {
+  const menu = $('play-menu');
+  const head = menu.querySelector<HTMLElement>(SCREEN_HEAD.levels);
+  if (head) resetSurface(head);
+  if (menu.hidden) {
+    syncBrandMark();
+    return;
+  }
+  if (!animated) {
+    menu.hidden = true;
+    resetSurface(menu);
+    syncBrandMark();
+    return;
+  }
+  // The way back out of PLAY is the menu's arrival seen from behind: the doorway leaves downward
+  // (it came up) while the menu rises under it, so the pair reads as one move, not two.
+  exitSurface(menu, { travel: 6, scale: 0.99, onDone: () => { menu.hidden = true; } });
   syncBrandMark();
 }
 function openPlayMenu() {
-  $('play-menu').hidden = false;
+  const menu = $('play-menu');
+  menu.hidden = false;
   $('menu').hidden = true;
   resetSurface($('menu'));
-  enterSurface($('play-menu'), { travel: 6 });
+  arriveScreen(menu, menu.querySelector(SCREEN_HEAD.levels), 'menu', 'play');
   // The menu is still the screen underneath the submenu. Keeping that fact (rather than nulling
   // it) lets a redundant late boot `showScreen('menu')` leave the player's open submenu alone.
   shownScreen = 'menu';
+  route = 'play';
   syncBrandMark();
 }
 /**
@@ -906,11 +955,17 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
     pregameHold = false;
   }
   const same = shownScreen === name;
+  // The doorways (PLAY, the online hub) sit on top of the menu without it changing, so `shownScreen`
+  // cannot say where the player actually is. `route` can: it is what the next move measures its
+  // direction against (owner, 2026-11-02: a forward move and a back move must read differently).
+  const leavingPlay = route === 'play' && name === 'menu' && !$('play-menu').hidden;
   // A redundant call to show the menu must not tear down the submenu the player has just opened.
   // (Boot finishes after async mounts and used to reset the screen here; the back key closes it.)
-  if (same && name === 'menu' && !$('play-menu').hidden) return;
+  if (same && name === 'menu' && !$('play-menu').hidden && !leavingPlay) return;
+  const from = route ?? shownScreen;
   shownScreen = name;
-  closePlayMenu();
+  route = name;
+  closePlayMenu(name === 'menu');
   $('menu').hidden = name !== 'menu';
   $('levels').hidden = name !== 'levels';
   $('campaign').hidden = name !== 'campaign';
@@ -920,13 +975,19 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   if (name !== 'game') blitz?.sync();
   // An invitation deferred out of a live match is offered here, now that a menu owns the screen.
   if (name !== 'game') drainInstallInvite();
-  // A full-screen change gets the same quiet arrival as a surface, EXCEPT the game: the board is
-  // the live object and must never slide or fade under the player's finger. Hiding a screen resets
-  // its surface animation, so nothing can finish on a screen the player has already left.
+  // A full-screen change gets the same arrival as a surface, EXCEPT the game: the board is the live
+  // object and must never slide or fade under the player's finger. A forward move rises from below,
+  // the way back drops from above, and the screen's own head lands one short beat later. Hiding a
+  // screen resets its surface animation (and its head's), so nothing can finish on a screen the
+  // player has already left.
   for (const [id, key] of [['menu', 'menu'], ['levels', 'levels'], ['campaign', 'campaign']] as const) {
     const el = $(id);
-    if (name === key) enterSurface(el, { travel: 6 });
-    else resetSurface(el);
+    const head = el.querySelector<HTMLElement>(SCREEN_HEAD[key]);
+    if (name === key) arriveScreen(el, head, from, key);
+    else {
+      resetSurface(el);
+      if (head) resetSurface(head);
+    }
   }
   // The plate is fixed to the viewport (not inside #game), so leaving the board must take it too.
   if (name !== 'game') hideLessonPlate();
@@ -1144,9 +1205,16 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
     // of the panel barely moves and it covers the very backdrop you would compare it against, so the
     // eye catches only the fade and the plate looks like it was simply there.
     // The cure stays inside the one vocabulary (open ≤ 320ms, travel ≤ 16px, scale ≥ 95%): a plate
-    // takes the STRONGEST arrival the tokens allow, so its edges move ~10px a side instead of ~7px
-    // and the size change is a clear 5%. Same one breath, just spent where a big surface can show it.
-    enterSurface(next);
+    // takes the STRONGEST arrival the tokens allow, so its edges move ~10px a side and the size
+    // change is a clear 1.5% — and, since 2026-11-02, its own head follows one short beat later, so
+    // the eye has a second, ordered event to read instead of one diffuse fade.
+    const plate = !next.classList.contains('confirm-sheet');
+    enterSurface(next, plate ? { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE } : {});
+    const sheetHead = next.querySelector<HTMLElement>('.sheet-head');
+    if (plate && sheetHead) {
+      resetSurface(sheetHead);
+      enterSurface(sheetHead, { travel: INTERFACE_MOTION.travel, delay: INTERFACE_MOTION.stagger });
+    } else if (sheetHead) resetSurface(sheetHead);
     next.querySelector<HTMLElement>('[data-close], button:not([hidden])')?.focus();
   } else if (wasOpen) {
     // CLOSING. Pause is released NOW (the game resumes and an online clock is never "frozen" by a
@@ -1165,7 +1233,7 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
       scrim.hidden = true;
       restoreSheetFocus();
     };
-    const leave = closing ? exitSurface(closing, { onDone: finishClose }) : null;
+    const leave = closing ? exitSurface(closing, { travel: Math.round(INTERFACE_MOTION.travel * 1.5), scale: 0.99, onDone: finishClose }) : null;
     const leaveScrim = exitSurface(scrim, { travel: 0, scale: 1, onDone: () => undefined });
     // With motion off the surface calls back at once. A scrim that cannot animate only loses its
     // own fade; it must never shorten the surface's exit.
@@ -8026,7 +8094,13 @@ function presentResult(go: HTMLElement, wasHidden: boolean): void {
   go.dataset.fresh = '1';
   enterSurface(go, { travel: 0, scale: 1, duration: 150 });
   const card = go.querySelector<HTMLElement>('.go-card');
-  if (card) enterSurface(card);
+  if (card) {
+    // The result plate is the other full-height surface: it takes the same stronger arrival the
+    // sheets do, so the card is a plate landing, not a panel that was simply there. Its own title
+    // keeps the CSS reveal it already owns (`go-title-in`, 60ms later) — one choreography each.
+    resetSurface(card);
+    enterSurface(card, { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE });
+  }
 }
 /** One exit for every path that puts the result away, so the board always comes back to life. */
 function hideGameOver(): void {
@@ -9606,14 +9680,14 @@ if (FEATURES.campaign) {
 
 bind('menu-play', openPlayMenu);
 bind('play-back', () => {
-  closePlayMenu();
   // The submenu keeps the menu underneath (see openPlayMenu), so returning repaints its own state
-  // explicitly rather than relying on showScreen's "the screen changed" branch.
+  // explicitly rather than relying on showScreen's "the screen changed" branch. `showScreen` owns
+  // the doorway's exit and the menu's arrival, so the pair is one move.
   layoutMenu(syncMenuResume());
   showScreen('menu');
 });
 // The hub takes over the whole screen; the submenu must not stay behind it.
-$('menu-online').addEventListener('click', closePlayMenu);
+$('menu-online').addEventListener('click', () => closePlayMenu());
 
 bind('menu-new', () => {
   if (!$('menu-continue').hidden && !window.confirm('Start a new game? The saved game will be lost.')) return;

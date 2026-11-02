@@ -1428,10 +1428,14 @@ export const PROFILE = Object.freeze({
    *  same sheet, one quiet line saying whose it is, and the record's own heading. A visitor sees the
    *  owner's ONLINE record only; the offline row and the Seeds line are not rendered at all. */
   theirGames: 'Their games',
-  /** The player's level, in the name line — the same word the Territory tile bar uses ("LEVEL 22"). */
-  level: (n: number) => `Level ${n}`,
-  /** The visitor's colour, said aloud: the visible line is only the hex itself. */
-  colourHex: (hex: string) => `Colour ${hex}`,
+  /** The visible short form; the sheet's spoken label spells it out. */
+  levelShort: (n: number) => `Lvl ${n}`,
+  /**
+   * The player's level, in the name line. SHORTENED (owner, 2026-11-02: "level can be lvl to safe
+   * space"): the name line also carries the player's whole nickname, and "Level" cost it five
+   * characters of width for no meaning the number does not already carry. Spoken as "level" for a
+   * screen reader by the element's own label.
+   */
   offline: 'Offline',
   online: 'Online',
   games: 'Games',
