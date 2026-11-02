@@ -22,7 +22,7 @@ import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
-const SHOTS = 'docs/screens/menu';
+const SHOTS = process.env.SHOTS ?? 'docs/screens/menu';
 const PROGRESS_KEY = 'severgrow.campaign.progress.v3';
 const KEY_H = 50;
 const C1 = ['c1-01', 'c1-02', 'c1-03', 'c1-04', 'c1-05', 'c1-06', 'c1-07', 'c1-08', 'c1-09', 'c1-10'];
