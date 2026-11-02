@@ -349,6 +349,17 @@ try{
     await page.evaluate(()=>{document.getElementById('menu-world')!.click();document.getElementById('online-world-back')!.click();});
    }
    await page.waitForTimeout(250);check('rapid navigation never hides the returned menu',await page.evaluate(()=>!document.getElementById('menu')!.hidden&&!document.getElementById('menu')!.inert));
+   // AN IMPATIENT SECOND BACK, DETERMINISTICALLY. The loop above only catches the swallowed-Back bug
+   // when the two presses land inside the same exit beat, which is timing-dependent. This one presses
+   // Back, waits 20ms (well inside the 100ms dim), and presses it again: the second journey must
+   // COMPLETE the first, not be dropped. Before the fix that left `leaving` set and the menu hidden —
+   // a stuck screen for a player who taps twice.
+   await page.click('#menu-world');await page.waitForTimeout(120);
+   await page.click('#online-world-back');await page.waitForTimeout(20);
+   await page.click('#online-world-back').catch(()=>undefined);
+   await page.waitForTimeout(350);
+   check('a second Back mid-exit completes the journey instead of a stuck screen',
+     await page.evaluate(()=>{const m=document.getElementById('menu')!;return !m.hidden&&!m.inert;}));
    check('rapid navigation keeps one renderer', (await state(page)).count===1);
    await page.click('#menu-world');await page.waitForTimeout(200);
    const rect=await page.locator('.world-map-svg').boundingBox();assert.ok(rect);

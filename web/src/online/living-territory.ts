@@ -20,8 +20,12 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
  let menuView:{box:number[];rect:DOMRect}|null=null;
  /** The two beats that must be able to cancel each other: the handoff and the map's light. */
  let settleBeat:Animation|null=null,lightBeat:Animation|null=null;
+ /** The in-flight exit's completion. A SECOND Back must finish the journey, never be swallowed —
+  * measured on CI: two rapid back presses left `leaving` set, `done()` was never called, and the
+  * menu stayed hidden (a stuck screen). */
+ let leavingFinish:(()=>void)|null=null;
  const stop=(beat:Animation|null):null=>{if(beat)try{beat.cancel();}catch{/* already gone */}return null;};
- const clearBeats=()=>{settleBeat=stop(settleBeat);lightBeat=stop(lightBeat);leaving=false;};
+ const clearBeats=()=>{settleBeat=stop(settleBeat);lightBeat=stop(lightBeat);leaving=false;leavingFinish=null;};
  /**
   * UNDER REDUCE MOTION NOTHING MAY ANIMATE — including CSS transitions. The map carries an opacity
   * `transition` in `living-territory-css.ts`; flipping `data-living-territory` re-applies that rule
@@ -61,13 +65,17 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
   * `beat`) or a panel that is not up: straight to `done`, no animation.
   */
  const leave=(done:()=>void,beat:{duration:number;easing:string}|null)=>{
-  if(mode!=='world'||leaving){if(mode!=='world')done();return;}
+  // A Back while a Back is already running COMPLETES that journey rather than being dropped: the
+  // player asked to leave twice, and the second press must not leave them on a hidden screen.
+  if(leaving&&leavingFinish){const finish=leavingFinish;leavingFinish=null;finish();return;}
+  if(mode!=='world'){done();return;}
   leaving=true;
   const turn=generation;
   clearBeats();
   screen.classList.add('living-leaving');
   const map=mapOf();
   const finish=()=>{
+   leavingFinish=null;
    if(turn!==generation){leaving=false;return;}
    leaving=false;
    screen.classList.remove('living-leaving');
@@ -81,10 +89,14 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
    played.finished.then(()=>{if(lightBeat===played)lightBeat=stop(lightBeat);}).catch(()=>undefined);
   };
   if(!map||!beat){finish();return;}
+  leavingFinish=finish;
   const dim=map.animate([{opacity:'1'},{opacity:String(DIP)}],
    {duration:beat.duration,easing:beat.easing,fill:'both'});
   lightBeat=dim;
-  dim.finished.then(finish).catch(()=>undefined);
+  // A CANCELLED dim still completes the journey. `clearBeats()` cancels this beat (an arrival, a
+  // reopen, a hide), and the old `.catch()` swallowed the rejection, so `finish()` never ran and the
+  // menu could stay hidden. Cancellation is a reason to finish, not to stop.
+  dim.finished.then(finish,()=>{if(leaving&&turn===generation)finish();});
  };
  return {
   menu(visible:boolean){
