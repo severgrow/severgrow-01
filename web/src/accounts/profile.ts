@@ -16,13 +16,13 @@
 // never as 0. The two records go through the same builder (logic/match-record.ts), which is what
 // keeps the halves identical in rounding and in the em dash rule.
 import { PROFILE } from '../../../src/strings.js';
+import { colourById, colourIdFor } from '../../../src/tile-colours.js';
 import type { Record3 } from '../logic/match-record.js';
 import { recordRows } from '../logic/match-record.js';
 import { countryName, flagOf } from '../logic/country.js';
 import { SEEDS_WORD } from '../online/seed-icon.js';
 import { createWordmarkMark } from '../player/branding.js';
 import { HEX_TILE_POINTS } from '../player/hex-tile.js';
-import { colourById, colourIdFor } from '../../../src/tile-colours.js';
 import { groupDigits } from '../logic/format.js';
 import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 
@@ -51,16 +51,19 @@ export type ProfileFacts = {
 export type ProfileRow = Readonly<{ label: string; value: string }>;
 
 /**
- * THE PLAYER'S COLOUR IS NEVER MISSING (owner, 2026-11-02: "i cant see the color hex in profile").
- * The server read is the first answer, but a player who has never picked a colour — or a read that
- * failed, was slow or was rate-limited — still HAS a colour: `colourIdFor` derives the same
- * deterministic slot the public map paints this player with. Showing the server's answer when it
- * arrives and the map's own default otherwise means the swatch can neither vanish nor disagree with
- * the map. Pure, so the fallback is testable without a DOM or a network.
+ * THE PLAYER ALWAYS HAS A COLOUR, so the profile's one tile is never absent (owner, 2026-11-02:
+ * "i cant see the color hex in profile"). A player who has never picked one still HAS one: the
+ * game derives it deterministically from their player id (`colourIdFor` → FNV-1a → one of the
+ * twenty), which is the colour their Territory tiles already wear on the map. The old profile
+ * asked the server and rendered `nothing` when the answer was an empty body — which is exactly
+ * what a player who never chose sees. Reading the derived value first makes the tile a FACT, not
+ * a request that may fail; the endpoint can only ever replace it with the stored choice.
  */
-export const profileColour = (playerId: string, read: ProfileColour | null): ProfileColour => {
-  if (read) return read;
-  const colour = colourById(colourIdFor(playerId));
+export const profileColour = (
+  playerId: string,
+  chosen: number | null = null,
+): NonNullable<ProfileFacts['colour']> => {
+  const colour = colourById(colourIdFor(playerId, chosen));
   return { css: colour.css, name: colour.name };
 };
 
@@ -177,17 +180,31 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     }
 
     // The player's own tile colour, drawn as the MAP draws a hex (flat left/right edges, a point
-    // top and bottom), so the profile shows the same object as the board. `facts.colour` is never
-    // null (see `profileColour`), so the only way this hides is a build whose markup has no swatch.
-    // The element is an SVG: SVGElement has no `hidden` IDL property, so the old `swatch.hidden =
-    // true` was a no-op expando and the markup's `hidden` attribute never came off — the tile was
-    // invisible no matter what the read said (owner, 2026-11-02). Toggle the ATTRIBUTE.
+    // top and bottom), so the profile shows the same object as the board.
+    //
+    // `swatch.hidden = …` was a NO-OP: `hidden` is an IDL property of HTMLElement, and this is an
+    // <svg>, so the assignment wrote an expando and left the markup's `hidden` attribute in place.
+    // The sheet therefore rendered an SVG with the UA's `[hidden] { display: none }` forever —
+    // measured 0x0 with the attribute still set — which is the other half of "i cant see the color
+    // hex". The ATTRIBUTE is the state, so it is what gets toggled.
     if (swatch) {
       swatch.toggleAttribute('hidden', !facts.colour);
-      swatch.style.setProperty('--tile', facts.colour.css);
-      swatch.setAttribute('role', 'img');
-      swatch.setAttribute('aria-label', facts.colour.name);
-      swatch.setAttribute('title', facts.colour.name);
+      // The markup ships aria-hidden="true" because a hidden swatch must say nothing; once it is
+      // the player's ONE colour with role="img" and a name, hiding it from assistive tech would
+      // leave the only colour indicator unspoken. The two states move together.
+      if (facts.colour) {
+        swatch.removeAttribute('aria-hidden');
+        swatch.style.setProperty('--tile', facts.colour.css);
+        swatch.setAttribute('role', 'img');
+        swatch.setAttribute('aria-label', facts.colour.name);
+        swatch.setAttribute('title', facts.colour.name);
+      } else {
+        swatch.setAttribute('aria-hidden', 'true');
+        swatch.style.removeProperty('--tile');
+        swatch.removeAttribute('role');
+        swatch.removeAttribute('aria-label');
+        swatch.removeAttribute('title');
+      }
     }
 
     fillGrid(offlineGrid!, facts.offline);

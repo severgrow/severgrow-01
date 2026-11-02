@@ -668,9 +668,10 @@ export const mountAccounts = async (): Promise<void> => {
     return {
       name: shownName(identity),
       country: browserCountry(),
-      // The map's own deterministic colour from the first frame; a successful read replaces it with
-      // the player's chosen colour. A failed read therefore leaves a TRUTHFUL tile, never a blank.
-      colour: profileColour(identity.playerId, null),
+      // NOT null: a player who never chose a colour still has the one the game derived for them,
+      // which is what their tiles wear on the map. The read below only replaces it with a stored
+      // choice, so the one tile can never vanish while the read is in flight or fails.
+      colour: profileColour(identity.playerId),
       seeds: pair?.seeds ?? null,
       tiles: pair?.tiles ?? null,
       matchesWon: matchesWonEver(offline, null),
