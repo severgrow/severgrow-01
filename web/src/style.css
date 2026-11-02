@@ -2444,29 +2444,30 @@ html.futasaku-product .install-prompt-scrim {
   --sp-pad: 16px;
   --sp-row: 46px;
   /* THE HEADER'S OWN EDGE INSET (owner, 2026-11-02: "profile frame ... next to logo looking ugly").
-     The plate's top corners are 32px — the theme's --radius (16px) doubled by the product sheet
-     rule. A wordmark set flush in the panel's 16px gutter therefore had its top-left corner INSIDE
-     the corner square (x = 16 < 32), tucked under the arc: 9.9px of air on the arc in the owner's
-     own screenshot. 20px more puts the mark's left edge at 36px from the plate at 390x844 (28px on
-     short screens, which take 14px; 32px in landscape) — its top-left corner is outside the 32px
-     corner band altogether, so the mark cannot meet the curve at any size. */
+     The plate's corners are the glass family's 15px (the sheet had 32px of its own until the
+     2026-11-02 material pass put every window on one corner). A wordmark set flush in the panel's
+     16px gutter therefore had its top-left corner inside the corner square (x = 16 < 32), tucked
+     under the arc: 9.9px of air on the arc in the owner's own screenshot. 20px more puts the mark's
+     left edge at 36px from the plate at 390x844 (28px on short screens, which take 14px; 32px in
+     landscape) — well outside the corner band at any radius the family uses, so the mark cannot
+     meet the curve at any size. */
   --sp-edge: 20px;
   --sp-hair: color-mix(in srgb, var(--c-line) 58%, transparent);
   /* The 22px bottom air is the same rule at the other end: the record's lowest corners must clear
      the plate's bottom arcs (all four corners are rounded in landscape), and 14px of padding
      measured only 7.9px of air there. */
   padding: 10px var(--sp-pad) max(22px, env(safe-area-inset-bottom));
-  /* THE PLATE IS A READ-OUT, NOT A WINDOW (owner, 2026-11-02: the "MATCHES WON" row had a soft
-     gradient wash across it). Nothing was fading over the content: the sheet's 0.42-alpha glass was
-     letting the menu behind it through, and a blurred bright menu key landed exactly across the
-     fifth row — measured on the owner's own screenshot, the ground lifted from 21 to 72/255 there,
-     and +5/255 in the rebuilt sheet at 0.42. A read-out plate has to be even, so its ground is the
-     page's own ground with a 3% wash of the smoked glass (alpha 0.982): still the same glass
-     FAMILY, but the light behind it can no longer draw a band across a row (residual < 2/255,
-     below the film's own grain). The shared glass and every other sheet are untouched — the
-     `web/e2e/menu-profile.ts` suite asserts this alpha so a future "make it glassier" cannot
-     bring the wash back. */
-  background: color-mix(in srgb, var(--c-bg) 97%, var(--dark-glass));
+  /* THE PLATE IS GLASS, LIKE EVERY OTHER WINDOW (owner, 2026-11-02: "territory and profile windows
+     dont match really ... BOTH (and any other similar) should be using our classic dark glass
+     window style"). It wore a near-opaque plate (alpha 0.982) for ONE measured reason, not for its
+     look: at .42 alpha a blurred bright menu key behind the fifth row drew a soft band across
+     "MATCHES WON" (the owner's screenshot: ground 21 → 72/255). That band is a measure of what the
+     MENU behind the sheet puts through, not of the sheet — so the sheet now wears --dark-glass and
+     the band was re-measured on the settled plate at 390x844 (web/e2e/menu-profile.ts samples the
+     rendered pixels across that row, and fails if the ground ever varies by more than the 8/255
+     the rebuilt .42 sheet measured: a band, not a tint). The plate, its corner and its shadow are
+     now the same three values as the pause plate and the challenge card. */
+  background: var(--dark-glass);
   /* Five short lines always fit; the cap is honesty about being a brief sheet, not a scroll area. */
   max-height: 94dvh;
   animation: gm-panel-in var(--dur-quick) var(--ease-standard) both;
@@ -8218,7 +8219,11 @@ html.futasaku-product .sheet:not(#sheet-menu):not(.confirm-sheet) {
   right: 10px;
   bottom: max(10px, env(safe-area-inset-bottom));
   max-height: calc(100dvh - 20px);
-  border-radius: calc(var(--radius) * 2);
+  /* The corner is the family's, and only the family's (see the "NO FRAME" rule below): a floating
+     plate earns its edge clearance from `left/right/bottom`, never from a second, rounder corner.
+     This rule used to set `calc(var(--radius) * 2)` (32px at the product's 16px radius) and so beat
+     the family rule on specificity, which left every sheet except the pause plate with a corner the
+     pause plate and the challenge card did not share. */
 }
 /* A floating plate is not a bottom sheet: no grab handle. */
 html.futasaku-product .sheet::before {

@@ -400,8 +400,9 @@ describe('the sheet speaks the pause panel’s language', () => {
     expect(mark).toMatch(/height: 22px/);
     expect(mark).toMatch(/flex: none/);
     expect(mark).not.toMatch(/width: 22px/);
-    // The mark starts past the panel's gutter, not in it: that inset is what takes its top-left
-    // corner out of the 32px corner band instead of under the curve.
+    // The mark starts past the panel's gutter, not in it: that inset is what keeps its top-left
+    // corner out of the corner band instead of under the curve (the band is the glass family's
+    // 15px corner since the 2026-11-02 material pass; 20px of inset clears it either way).
     const brand = /#sheet-profile \.sp-brand \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
     expect(brand).toContain('padding-inline-start: var(--sp-edge)');
     expect(brand).toMatch(/justify-content: flex-start/);
@@ -410,17 +411,17 @@ describe('the sheet speaks the pause panel’s language', () => {
     expect(styleCss).toMatch(/@media \(max-height: 700px\) \{[\s\S]{0,700}--sp-edge: 14px/);
   });
 
-  it('gives the read-out its own calm, even ground, so no band of the menu can wash a row', () => {
-    // Owner, 2026-11-02: the "MATCHES WON" row had a soft gradient across it. Nothing faded over
-    // the content: the 0.42-alpha glass let the blurred menu behind show through, and a bright key
-    // landed across the fifth row. The plate is now the page's own ground with a 3% wash of the same
-    // smoked glass (alpha 0.982) — the same glass family, but even.
+  it('wears the family\'s dark glass, and proves its ground even without an opaque plate', () => {
+    // OWNER, 2026-11-02 (the rule CHANGED): "territory and profile windows dont match really - we
+    // should never use frame contour like in territory challenge, it should be more like the profile
+    // window - but BOTH (and any other similar) should be using our classic dark glass window
+    // style". So the 0.982 plate is gone and the sheet wears --dark-glass, the pause plate's own
+    // recipe. The band it was built to stop (the MATCHES WON wash) is now measured on the RENDERED
+    // pixels by web/e2e/menu-profile.ts: the ground across that row must vary by <= 8/255. A token
+    // can no longer stand in for that measurement, and an opaque plate can no longer hide behind it.
     const block = /#sheet-profile \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
-    expect(block).toContain('background: color-mix(in srgb, var(--c-bg) 97%, var(--dark-glass))');
-    expect(block).not.toContain('background: var(--dark-glass);');
-    // 0.97 opaque + 3% of the 0.42 glass = 0.982 alpha. The number IS the fix — below ~0.96 a lit
-    // menu key behind the plate draws a visible band across a row — and the browser suite asserts
-    // the real computed alpha on every size.
+    expect(block).toContain('background: var(--dark-glass);');
+    expect(block).not.toContain('color-mix(in srgb, var(--c-bg) 97%');
   });
 });
 

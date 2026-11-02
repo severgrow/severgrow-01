@@ -20,6 +20,7 @@ import { join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { serveStaticDist } from './helpers/preview-port.js';
+import { edgeStrokeSpread, GLASS, materialMismatches, readMaterial } from './helpers/glass-material.js';
 import { WORLD_CELLS, worldNeighbours } from '../../server/src/world.js';
 import type { WorldChallengeWire } from '../../server/src/seeds/types.js';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
@@ -44,6 +45,10 @@ const opt = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.sl
 const DIST = resolve(opt('dist') ?? 'web/dist');
 const OUT = new URL('../../docs/screens/territory-challenges/', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
+// THE MATERIAL PASS'S OWN SCREENSHOTS (owner, 2026-11-02), beside the profile suite's.
+const GLASS_OUT = new URL('../../docs/screens/glass/', import.meta.url).pathname;
+mkdirSync(GLASS_OUT, { recursive: true });
+const SHOTS = process.env.SHOTS === '1';
 
 const HOUR = 60 * 60 * 1000;
 const NOW = Date.now();
@@ -627,6 +632,82 @@ try {
       sendSheet.visiblePrimary && sendSheet.primaries === 1 && sendSheet.primary === 'CHALLENGE', sendSheet.primary);
     check(`[${tag}] the sheet's primary key is 44px tall`, sendSheet.primaryHeight >= 44, `${n2(sendSheet.primaryHeight)}px`);
     check(`[${tag}] the sheet does not scroll the page`, sendSheet.y === 0);
+
+    // ---- 4b. THE WINDOW IS THE GAME'S DARK GLASS, WITH NO FRAME CONTOUR ----------------------
+    // Owner, 2026-11-02: "territory and profile windows dont match really - we should never use
+    // frame contour like in territory challenge, it should be more like the profile window - but
+    // BOTH (and any other similar) should be using our classic dark glass window style ... challenge
+    // and not now buttons should have a frame neither".
+    // The card's material is compared against the ONE family definition (helpers/glass-material.ts,
+    // taken from --dark-glass / --dark-glass-blur and the "NO FRAME AROUND THE GLASS" rule), and the
+    // same object is what the profile suite asserts. A drawn border or outline is a failure here —
+    // there is no such thing as a "glass hairline" in this product.
+    const cardMaterial = await readMaterial(page, '.world-challenge-sheet:not([hidden]) .world-challenge-card');
+    const cardIssues = materialMismatches(cardMaterial);
+    check(`[${tag}] the challenge window wears the shared dark glass, with no frame contour`,
+      cardIssues.length === 0, cardIssues.join(' | ') || JSON.stringify(cardMaterial));
+    const keyMaterial = await page.evaluate(() => {
+      const sheet = document.querySelector('.world-challenge-sheet:not([hidden])') as HTMLElement;
+      const primary = sheet.querySelector('.world-challenge-primary') as HTMLButtonElement;
+      const secondary = sheet.querySelector('.world-challenge-secondary') as HTMLButtonElement;
+      const read = (el: Element) => {
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return {
+          borders: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+          outline: `${cs.outlineStyle} ${cs.outlineWidth} ${cs.outlineColor}`,
+          fill: cs.backgroundColor,
+          color: cs.color,
+          opacity: cs.opacity,
+          height: +r.height.toFixed(1),
+          reach: (el.textContent ?? '').trim().length > 0,
+        };
+      };
+      // The sheet focuses its lead key on opening, so its FOCUS ring is read first: that ring is
+      // required (keyboard users need it) and is not a frame. Then it is blurred and the settled
+      // faces are read: a ring there would be the contour the owner rejected.
+      const focused = document.activeElement === primary;
+      const focusRead = read(primary);
+      (document.activeElement as HTMLElement | null)?.blur();
+      return {
+        focused,
+        focusRing: focusRead.outline,
+        primary: read(primary),
+        secondary: read(secondary),
+      };
+    });
+    check(`[${tag}] the opening focus ring still reads on the lead key`,
+      !keyMaterial.focused || /^solid 2px rgb\(240, 233, 220\)$/.test(keyMaterial.focusRing),
+      keyMaterial.focusRing);
+    check(`[${tag}] neither action key draws a ring`,
+      [keyMaterial.primary, keyMaterial.secondary].every((k) => k.borders.every((w) => w === '0px') && /^none 0px/.test(k.outline)),
+      `${JSON.stringify(keyMaterial.primary.borders)}/${keyMaterial.primary.outline} · ${JSON.stringify(keyMaterial.secondary.borders)}/${keyMaterial.secondary.outline}`);
+    // Without a ring the pair must still read as a pair: one filled lead key and one quiet second,
+    // each a 44px target. A transparent lead or a filled second is the failure this bites on.
+    check(`[${tag}] the lead key is filled and the quiet key is not, both 44px`,
+      keyMaterial.primary.fill !== 'rgba(0, 0, 0, 0)' && keyMaterial.secondary.fill === 'rgba(0, 0, 0, 0)' &&
+      keyMaterial.primary.height >= 43.5 && keyMaterial.secondary.height >= 43.5,
+      `${keyMaterial.primary.fill} / ${keyMaterial.secondary.fill}, ${n2(keyMaterial.primary.height)}/${n2(keyMaterial.secondary.height)}px`);
+    // The quiet key is quieter ON PURPOSE (the family's .75), and its label is still readable.
+    check(`[${tag}] the quiet key keeps the family's quieter face`,
+      +keyMaterial.secondary.opacity === 0.75 && keyMaterial.primary.reach && keyMaterial.secondary.reach,
+      `${keyMaterial.secondary.opacity}`);
+    if (tag === '390x844') {
+      check(`[${tag}] the card's corner is the family's 15px`,
+        cardMaterial?.radius === `${GLASS.radius} ${GLASS.radius} ${GLASS.radius} ${GLASS.radius}`, String(cardMaterial?.radius));
+      // A stroke can also be drawn by a shadow or a pseudo-element, which no computed `border`
+      // would show: sample the rendered pixels across the card's left edge. The old card measured a
+      // spike to ~90/255 at its 1px #d8cda557 outline against a ~12/255 ground (spread ~78); the
+      // glass edge is a tone step, and the floor here is 20/255.
+      const edge = await edgeStrokeSpread(page, '.world-challenge-sheet:not([hidden]) .world-challenge-card');
+      check(`[${tag}] no stroke is drawn along the card's edge`,
+        !!edge && edge.spread <= 20, edge ? `spread ${edge.spread}/255 over ${edge.columns.length} px` : 'the card is not in the DOM');
+    }
+    if (SHOTS && tag === '390x844') {
+      // The after-shot the owner compares with his own 1024px screenshot: the window at 1:1 on the
+      // same phone viewport as the profile shot.
+      await page.screenshot({ path: join(GLASS_OUT, 'territory-challenge-390x844.png') });
+    }
     await page.evaluate(()=>{
       Object.defineProperty(visualViewport,'height',{configurable:true,value:240});
       Object.defineProperty(visualViewport,'offsetTop',{configurable:true,value:80});
