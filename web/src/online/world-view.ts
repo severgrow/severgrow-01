@@ -290,6 +290,39 @@ export const clampedView = (
 };
 
 /**
+ * A VIEW FILLING A WINDOW OF THIS ASPECT. The window's shape is authoritative — the SVG has no
+ * letterbox band — so the box's WIDTH is kept (the player's horizontal window is untouched) and its
+ * height is re-derived about the same centre, which is the smallest correction to the window's own
+ * aspect. This is a DRAWING rule: it says how a camera is shown in a frame of another shape, never
+ * what the camera IS (see `resizedCamera`).
+ */
+export const reconciledView = (box: ViewBox | null, aspect: number): ViewBox | null => {
+  if (!box || !usableView(box) || !(aspect > 0)) return box;
+  if (Math.abs(box[2] / box[3] - aspect) <= 0.002) return box;
+  const height = box[2] / aspect;
+  return [box[0], box[1] + (box[3] - height) / 2, box[2], height];
+};
+
+/**
+ * THE WINDOW CHANGED SHAPE; THE PLAYER'S CAMERA DID NOT (CI, 2026-11-02).
+ *
+ * The menu paints the same map across the whole screen and the Territory panel keeps its framed
+ * box, so the two surfaces have different aspects. `reconciledView` is what makes either one fill
+ * without a band, and it is CORRECT AS A DRAWING. It used to be written back into the camera too,
+ * on every window change — the menu's own resize did it the moment the player went back, and the
+ * panel's did it again on the way in. A pan or zoom chosen inside the Territory therefore came back
+ * 6.7% taller after one trip through the menu (390 x 844 menu vs 358 x 726 panel): identical x and
+ * width, a re-derived height, which is exactly the asymmetry the CI log showed.
+ *
+ * So the camera state has its own rule: a camera the player chose (or that was restored from
+ * storage) is handed back UNTOUCHED, and only an automatic frame is re-derived. A deliberate view is
+ * then byte-identical across menu -> territory -> menu -> territory, whatever the engine's layout
+ * schedule, because nothing ever rewrites its four numbers.
+ */
+export const resizedCamera = (box: ViewBox | null, aspect: number, manual: boolean): ViewBox | null =>
+  manual && usableView(box) ? [box[0], box[1], box[2], box[3]] : reconciledView(box, aspect);
+
+/**
  * THE POINTERS A NEW EVENT PROVES ARE GONE (see `pointers`). A mouse is ONE pointer: it has one
  * position and one button state, so a second tracked mouse id, or a tracked mouse id at the moment
  * the event says every button is up, is a release this map never saw — the browser delivered the
@@ -760,8 +793,15 @@ export class WorldView {
     if (auto) {
       this.box = auto;
       this.touched = true;
-      if (this.svg) this.applyView(false);
     }
+    // THE PANEL'S FRAME IS WRITTEN NOW, NOT ON SOME LATER FRAME (CI, 2026-11-02). The menu and the
+    // panel have different aspects, so the drawn viewBox must change the moment the panel owns the
+    // map. It used to wait for the resize observer's `queueView` — a requestAnimationFrame — which
+    // on a slow renderer lands after the next thing the player (or a test) looks at, leaving the
+    // panel showing the MENU's frame. This is one layout read at the one moment the window's shape
+    // is known, and it only DRAWS the camera: `this.box` is not re-framed (see `resizedCamera`), so
+    // a deliberate camera's four numbers are written exactly as the player left them.
+    if ((auto || this.manualCamera) && this.svg) this.applyView();
     this.notice(this.svg ? '' : ONLINE.worldLoading);
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
@@ -800,7 +840,9 @@ export class WorldView {
   }
   private saveCamera() {
     if (this.active && this.touched && this.world && this.box)
-      rememberCamera(browserStorage(), this.world.version, this.reconcile(this.box, this.aspect));
+      // A deliberate camera is stored EXACTLY as the player left it (see `resizedCamera`): storing
+      // the menu's shape here is how one trip through the menu used to re-frame it for good.
+      rememberCamera(browserStorage(), this.world.version, resizedCamera(this.box, this.aspect, this.manualCamera));
   }
   close(instant = false) {
     this.stopGlide();
@@ -1423,8 +1465,10 @@ export class WorldView {
       this.box = [...(this.detailFor(this.aspect, rect.width) ?? this.bounds ?? this.fit)];
     } else if (this.aspect > 0 && (!previousFit || this.fit.some((value, index) => value !== previousFit[index]))) {
       // A changing coast no longer remounts the SVG (and its observer). Clamp an obsolete
-      // remembered view here, while leaving a still-valid geographic position untouched.
-      this.box = this.clampBox(this.reconcile(this.box, this.aspect) ?? this.box);
+      // remembered view here, while leaving a still-valid geographic position untouched. A camera
+      // the player chose keeps its own box (and so its own zoom and shape); only an automatic frame
+      // is re-derived to the window.
+      this.box = this.clampBox(resizedCamera(this.box, this.aspect, this.manualCamera) ?? this.box);
     }
     // Keep the physical surface and its gesture/resize listeners across real state updates too.
     // New artwork belongs to the same camera; a wallet read must never remount the map mid-entry.
@@ -1508,19 +1552,6 @@ export class WorldView {
     return [fx + (fw - w) / 2, fy + (fh - h) / 2, w, h];
   }
   /**
-   * The view's aspect is ALWAYS the panel's. A box measured a frame too early (the panel is a flex
-   * child, so its height can change with the chrome under it) would make `preserveAspectRatio` centre
-   * the map inside a box of the wrong shape — a letterbox band, the exact thing the owner rejected on
-   * 2026-10-16. Keeping the box's WIDTH and re-deriving its height (about the same centre) is the
-   * smallest correction: the pan's horizontal window is untouched.
-   */
-  private reconcile(box: ViewBox | null, aspect: number): ViewBox | null {
-    if (!box || !usableView(box) || !(aspect > 0)) return box;
-    if (Math.abs(box[2] / box[3] - aspect) <= 0.002) return box;
-    const height = box[2] / aspect;
-    return [box[0], box[1] + (box[3] - height) / 2, box[2], height];
-  }
-  /**
    * THE VIEW, RECOVERED IF IT IS EVER MISSING OR POISONED (see the note at `usableView`).
    *
    * A missing view needs a fresh frame, but that frame lives in
@@ -1568,7 +1599,7 @@ export class WorldView {
     // fit box, which is always a real view.
     const box = this.recoverBox();
     if (!box) return;
-    const target = this.reconcile(box, aspect);
+    const target = reconciledView(box, aspect);
     if (usableView(target)) this.svg.setAttribute('viewBox', target.join(' '));
   }
   /**
@@ -3665,8 +3696,9 @@ export class WorldView {
           this.box = [...(this.detailFor(aspect, r.width) ?? next)];
         } else {
           // A changing notice or keyboard changes the aspect, not the player's chosen zoom.
-          // Reconcile around the same centre; `set` still enforces current bounds/touch limits.
-          this.box = this.reconcile(this.box, aspect);
+          // `resizedCamera` re-derives an automatic frame around the same centre and hands a
+          // DELIBERATE one back untouched; `set` still enforces current bounds/touch limits.
+          this.box = resizedCamera(this.box, aspect, this.manualCamera);
         }
         set();
       });
