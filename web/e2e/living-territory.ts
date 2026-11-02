@@ -369,10 +369,22 @@ try{
    // The beat's own clock: `t` is the colour animation's current time. A slow first frame only
    // shifts WHEN the sample happened, never what the sample measures.
    const timed=colour.filter(f=>f.t!==null);
+   // WHEN THE ANIMATION'S CLOCK WAS NEVER READABLE, SAY SO — do not compare one frame with itself.
+   // On CI's software WebKit the colour animation can be unfindable for the first samples (the map
+   // may still be the menu's, or the beat not yet created), so `timed` is empty and the old fallback
+   // picked `colour[0]` three times: three identical "timestamps" at 0ms, reported as the colour not
+   // rising. That is a harness limitation, not a product failure, and it must not read as one.
+   const timedEnough=timed.length>=3;
    const near=(ms:number)=>timed.reduce((best,f)=>Math.abs(f.t!-ms)<Math.abs(best.t!-ms)?f:best,timed[0]??colour[0]!);
    const start0=near(0),early=near(300),late=near(1000),last=colour.at(-1)!;
-   check(`the tiles’ colour RISES over the arrival (${Math.round(start0.t!)}ms ${start0.opacity} -> ${Math.round(early.t!)}ms ${early.opacity} -> ${Math.round(late.t!)}ms ${late.opacity})`,
-     start0.opacity>=.09&&start0.opacity<=MENU_MAP_OPACITY+0.02&&early.opacity>start0.opacity&&late.opacity>early.opacity);
+   check(`the tiles’ colour RISES over the arrival (${timedEnough?`${Math.round(start0.t!)}ms ${start0.opacity} -> ${Math.round(early.t!)}ms ${early.opacity} -> ${Math.round(late.t!)}ms ${late.opacity}`:`only ${timed.length} timed sample(s) — clock unreadable, see the wall-clock check below`})`,
+     timedEnough&&start0.opacity>=.09&&start0.opacity<=MENU_MAP_OPACITY+0.02&&early.opacity>start0.opacity&&late.opacity>early.opacity);
+   // THE SAME FACT WITHOUT THE ANIMATION'S CLOCK, so a starved engine is still held to the owner's
+   // rule: on the WALL clock the colour must be low early and high by the end, and must not be flat.
+   const at=(ms:number)=>colour.reduce((best,f)=>Math.abs(f.at-ms)<Math.abs(best.at-ms)?f:best,colour[0]!);
+   const w0=at(0),w300=at(300),w1000=at(1000);
+   check(`the tiles’ colour RISES on the wall clock too (${w0.opacity} -> ${w300.opacity} -> ${w1000.opacity})`,
+     w0.opacity<=MENU_MAP_OPACITY+0.02&&w300.opacity>w0.opacity&&w1000.opacity>w300.opacity);
    check(`the colour reaches the panel's own rest light by the end (${last.opacity} at ${Math.round(last.at)}ms)`,
      last.opacity>=.99&&late.opacity>=.98);
    check(`the colour-in beat is the colour-in token (${INTERFACE_MOTION.colourIn}ms), not a literal`,
