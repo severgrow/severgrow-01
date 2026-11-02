@@ -267,6 +267,54 @@ describe('a signed-in player ALWAYS has a colour, so the tile is never absent', 
     expect(mountSource).toMatch(/colour: profileColour\(identity\.playerId\)/);
     expect(mountSource).not.toMatch(/colour: null/);
   });
+
+  it('sizes the tile so the hexagon READS as one, and puts it on the name’s baseline', () => {
+    // Owner, 2026-11-02: "i cant see the color hex in profile". Two causes: the silent `hidden`
+    // attribute above, and a 13x15 box whose letterboxed ink was 10.79x12.46 — smaller than the
+    // name's lowercase. The chosen box is 20.5px square: 17.02 x 19.65 of ink at the map hex's own
+    // 1.1547 aspect (2/√3), which is taller than the name's 19px line box.
+    const swatchCss = /\.sp-swatch \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    expect(swatchCss).toMatch(/width: 20\.5px/);
+    expect(swatchCss).toMatch(/height: 20\.5px/);
+    expect(swatchCss).toMatch(/flex: none/);
+    // The box is square because the viewBox is; the INK is the hex's own taller-than-wide shape.
+    const inkW = (20.5 * (2 * 11.5 * Math.cos(Math.PI / 6))) / 24;
+    const inkH = (20.5 * 23) / 24;
+    expect(inkW).toBeCloseTo(17.02, 1);
+    expect(inkH).toBeCloseTo(19.65, 1);
+    expect(inkH / inkW).toBeCloseTo(2 / Math.sqrt(3), 3);
+    // Flag, tile and name share one BASELINE (owner: the hex sits beside the name, not floating).
+    const lineCss = /dd\.sp-name-line \{[\s\S]*?\}/.exec(styleCss)?.[0] ?? '';
+    expect(lineCss).toMatch(/align-items: baseline/);
+  });
+});
+
+describe('a signed-in player ALWAYS has a colour, so the tile is never absent', () => {
+  it('derives one from the player id when nothing was ever chosen', () => {
+    // Owner, 2026-11-02: "i cant see the color hex in profile". A player who never picked a colour
+    // still HAS one — the game assigns it deterministically (colourIdFor). The old sheet rendered
+    // nothing whenever the endpoint had no answer, which is exactly that player.
+    for (const id of ['fixture-player', 'a', 'player-1234', '']) {
+      const colour = profileColour(id);
+      expect(colour).not.toBeNull();
+      expect(colour.css).toBe(colourFor(id));
+      expect(colour.name).toBe(colourById(colourIdFor(id)).name);
+    }
+  });
+
+  it('prefers the stored choice, and stays derived when there is none', () => {
+    const chosen = profileColour('fixture-player', 12);
+    expect(chosen).toEqual({ css: TILE_COLOURS[12]!.css, name: 'Glacier' });
+    // A stale id this build does not know is treated as no choice, never as a blank tile.
+    expect(profileColour('fixture-player', 999)).toEqual(profileColour('fixture-player'));
+    expect(profileColour('fixture-player').css).not.toBe('');
+  });
+
+  it('is what the profile is opened with, before any request can fail', () => {
+    // `profileFacts` starts from the derived colour; `readColour` can only REPLACE it.
+    expect(mountSource).toMatch(/colour: profileColour\(identity\.playerId\)/);
+    expect(mountSource).not.toMatch(/colour: null/);
+  });
 });
 
 describe('the numbers are the Territory entry’s own reads, reused', () => {
