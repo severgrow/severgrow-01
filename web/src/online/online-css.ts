@@ -1005,9 +1005,10 @@ html.reduce-motion .world-selection { animation: none; }
   transform-origin: top right;
 }
 .world-panel[hidden] { display: none; }
+/* No rule under the head (owner, 2026-11-02): the centred title and the close key own the band. */
 .world-panel-head {
   display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center;
-  min-height: 46px; padding: 2px; border-bottom: 1px solid #e8ddc512;
+  min-height: 46px; padding: 2px;
 }
 /* An empty cell the close key's width (left) keeps the title exactly centred. */
 .world-panel-spacer { width: 44px; }
@@ -1041,10 +1042,11 @@ html.reduce-motion .world-selection { animation: none; }
 #online-world-history .world-challenge-chip { opacity: .78; }
 .world-panel .world-challenge-more { align-self: center; }
 
-/* YOUR STANDING: type and a quiet separator, without a second frame inside the panel. */
+/* YOUR STANDING: type and air, never a rule, and no second frame inside the panel (owner,
+   2026-11-02). The removed 1px is in the bottom pad so the block below keeps its line. */
 .world-standing {
   display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 10px; row-gap: 6px;
-  padding: 8px 8px 12px; border-bottom: 1px solid #e8ddc514;
+  padding: 8px 8px 13px;
 }
 .world-standing[hidden] { display: none; }
 .world-standing-place { font-size: 1.15rem; letter-spacing: .1em; color: #f2e7cb; text-transform: uppercase; font-variant-numeric: tabular-nums; }

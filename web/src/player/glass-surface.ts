@@ -294,9 +294,11 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass .intel-move:first-child { color:#f4ebda; }
 #futasaku-glass .intel-move[data-who='you'] { color:rgba(214,226,201,.55); }
 #futasaku-glass .intel-move[data-who='you']:first-child { color:#dfe9d3; }
-/* The readout: five facts, one rhythm, numbers first (territory / cuts / deck / hand / bombs). */
+/* The readout: five facts, one rhythm, numbers first (territory / cuts / deck / hand / bombs).
+   No rules above or below it (owner, 2026-11-02): the per-stat caps already say what each number
+   is, and the extra air keeps the strip clear of the prose on either side. */
 #futasaku-glass .intel-stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:2px 6px;
-  margin:0; padding:8px 0 7px; border-top:1px solid rgba(229,214,183,.10); border-bottom:1px solid rgba(229,214,183,.10); }
+  margin:0; padding:12px 0 11px; }
 #futasaku-glass .intel-stat { display:flex; flex-wrap:wrap; align-items:baseline; gap:0 3px; min-width:0; }
 #futasaku-glass .intel-stat-k { flex:1 0 100%; font:600 8px/1.1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.12em; color:#a99c81; white-space:nowrap; }
 #futasaku-glass .intel-stat-v { font:700 14px/1.15 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.01em; color:#f4ebda; font-variant-numeric:tabular-nums; white-space:nowrap; }
@@ -319,16 +321,16 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass :is(.intel-tip, .intel-rule):is(:hover,:focus-visible) { background:rgba(255,255,255,.08); outline:none; }
 #futasaku-glass :is(.intel-tip, .intel-rule):focus-visible { box-shadow:0 0 0 2px rgba(232,221,201,.7); }
 /* A tip is an INSTRUMENT readout: a verdict row, a headline, the decision it implies, and the
-   facts behind it. Kind and severity are carried by the word, the glyph and the rule's weight,
-   never by colour alone — the same rule the rest of the game follows. */
-#futasaku-glass .intel-tip { --tip-ink:#cbbfa0; display:grid; gap:5px; padding:10px 12px 11px; border-left:1px solid rgba(233,216,173,.16);
+   facts behind it. Kind and severity are carried by the word, the glyph and the fill, never by a
+   line and never by colour alone — the same rule the rest of the game follows. */
+#futasaku-glass .intel-tip { --tip-ink:#cbbfa0; display:grid; gap:5px; padding:10px 12px 11px;
   background:rgba(255,255,255,.045); }
 #futasaku-glass .intel-tip[data-kind='danger'] { --tip-ink:color-mix(in srgb, var(--c-danger,#c96e5c) 66%, #e8ddc9); }
 #futasaku-glass .intel-tip[data-kind='opportunity'] { --tip-ink:color-mix(in srgb, var(--c-you,#7fcf8d) 76%, #e8ddc9); }
 #futasaku-glass .intel-tip[data-kind='tempo'] { --tip-ink:#cbbfa0; }
 #futasaku-glass .intel-tip[data-kind='endgame'] { --tip-ink:color-mix(in srgb, var(--c-gold,#f2c14e) 74%, #e8ddc9); }
-#futasaku-glass .intel-tip[data-severity='high'] { border-left-width:2px; border-left-color:color-mix(in srgb, var(--tip-ink) 62%, transparent); }
-#futasaku-glass .intel-tip[data-severity='critical'] { border-left-width:3px; border-left-color:color-mix(in srgb, var(--tip-ink) 82%, transparent); background:rgba(255,255,255,.062); }
+/* Severity is the word, the glyph and the fill, never a line (owner, 2026-11-02). */
+#futasaku-glass .intel-tip[data-severity='critical'] { background:rgba(255,255,255,.062); }
 #futasaku-glass .intel-tip--primary { padding:11px 13px 12px; }
 #futasaku-glass .intel-tip-top { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
 #futasaku-glass .intel-kind { display:inline-flex; align-items:center; gap:6px; min-width:0;
@@ -348,7 +350,7 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
   font:600 8.5px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.1em; color:#b3a587; }
 #futasaku-glass .intel-fact b { font:700 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#f0e6d0; font-variant-numeric:tabular-nums; }
 /* The quiet Tips tab: composed, never blank and never a bare apology. */
-#futasaku-glass .intel-quiet { display:grid; gap:7px; padding:13px 13px 14px; border-radius:11px; background:rgba(255,255,255,.035); border-left:1px solid rgba(233,216,173,.16); }
+#futasaku-glass .intel-quiet { display:grid; gap:7px; padding:13px 13px 14px; border-radius:11px; background:rgba(255,255,255,.035); }
 #futasaku-glass .intel-quiet-line { margin:0; font:400 12.5px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.012em; color:rgba(240,233,220,.72); text-wrap:pretty; }
 #futasaku-glass .intel-rule { padding:0; }
 #futasaku-glass .intel-rule-head { display:grid; grid-template-columns:24px 1fr auto; align-items:center; gap:10px; min-height:46px; padding:0 12px; }
@@ -598,8 +600,9 @@ html.futa04-lesson .sheet { z-index: 51; }
   box-shadow:inset 0 1px rgba(243,232,202,.07),0 14px 34px rgba(0,0,0,.38);
   backdrop-filter:blur(10px) saturate(1.05); -webkit-backdrop-filter:blur(10px) saturate(1.05);
 }
+/* The 22px stage gap already separates the groups; no rule between them (owner, 2026-11-02). */
 #tutorial-bloom-demo .tutorial-bloom-group + .tutorial-bloom-group {
-  padding-top:18px; border-top:1px solid rgba(214,204,177,.1);
+  padding-top:18px;
 }
 #tutorial-bloom-demo .tutorial-bloom-group { display:flex; flex-direction:column; gap:8px; align-items:center; }
 /* Same face as tutorial glass why-copy (not a mismatched display face). */

@@ -2007,7 +2007,6 @@ html.futasaku-product .install-prompt-scrim {
   --gm-pad: 18px;
   --gm-row: 46px;
   --gm-hair: color-mix(in srgb, var(--c-line) 50%, transparent);
-  --gm-hair-strong: color-mix(in srgb, var(--c-line) 90%, transparent);
   --gm-glass: var(--dark-glass);
   left: 10px;
   right: 10px;
@@ -2065,7 +2064,6 @@ html.futasaku-product .install-prompt-scrim {
   padding: 0 0 4px;
   position: static;
   background: transparent;
-  border-bottom: 1px solid var(--gm-hair);
 }
 #sheet-menu .gm-name {
   grid-column: 2;
@@ -2112,7 +2110,9 @@ html.futasaku-product .install-prompt-scrim {
   color: var(--c-muted);
 }
 
-/* the read-out: scores mirrored across a centre hairline, the turn under them */
+/* the read-out: scores mirrored across the centre, the turn under them. The old 1px centre rule is
+   gone (owner, 2026-11-02); the two labels and the mirror are the structure, and the gap is the
+   old rule + its air so both scores stay exactly where they were. */
 #sheet-menu .gm-body {
   display: flex;
   flex-direction: column;
@@ -2130,16 +2130,10 @@ html.futasaku-product .install-prompt-scrim {
 }
 #sheet-menu .gm-scores {
   display: grid;
-  grid-template-columns: 1fr 1px 1fr;
+  grid-template-columns: 1fr 1fr;
   align-items: center;
-  column-gap: 14px;
-}
-#sheet-menu .gm-scores::before {
-  content: '';
-  grid-column: 2;
-  grid-row: 1;
-  height: 26px;
-  background: var(--gm-hair-strong);
+  /* 14px either side of where the 1px rule sat = 29px between the two halves. */
+  column-gap: 29px;
 }
 #sheet-menu .gm-you {
   grid-column: 1;
@@ -2150,7 +2144,7 @@ html.futasaku-product .install-prompt-scrim {
   gap: 4px;
 }
 #sheet-menu .gm-bot {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1;
   display: flex;
   flex-direction: column;
@@ -2287,8 +2281,8 @@ html.futasaku-product .install-prompt-scrim {
   grid-auto-columns: 1fr;
   gap: 4px;
   margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--gm-hair);
+  /* The old 1px rule is now the row's own top air: no line, same position. */
+  padding-top: 11px;
 }
 #sheet-menu .gm-tool {
   display: flex;
@@ -2438,9 +2432,12 @@ html.futasaku-product .install-prompt-scrim {
 
 /* ---------- the player's profile: the pause panel's language, five read-only lines ----------
    Owner brief (2026-10-21): a SKELETON built now, showing basic info about the player. It borrows
-   the pause panel's language on purpose — ONE content axis, hairline rules between neighbours,
-   neutral digits, no new colour, no glow — because it is the same kind of read-out surface. The
-   only control is Close: nothing is editable and there is no sign-out here (Settings owns both). */
+   the pause panel's language on purpose — ONE content axis, NO rules between neighbours (owner,
+   2026-11-02: "i also dont like the hairline divisions in profile ... id remove and not add in new
+   windows in future"), neutral digits, no new colour, no glow — because it is the same kind of
+   read-out surface. The only control is Close: nothing is editable and there is no sign-out here
+   (Settings owns both). A row is separated from its neighbour by its own padding step; the label's
+   small tracked caps and the value's weight do the reading, never a line. */
 #sheet-profile {
   --sp-pad: 16px;
   --sp-row: 46px;
@@ -2453,7 +2450,11 @@ html.futasaku-product .install-prompt-scrim {
      landscape) — well outside the corner band at any radius the family uses, so the mark cannot
      meet the curve at any size. */
   --sp-edge: 20px;
-  --sp-hair: color-mix(in srgb, var(--c-line) 58%, transparent);
+  /* THE ROW'S OWN PAD, not a rule (owner, 2026-11-02). It was 12px plus a 1px border under every
+     neighbour; the border is gone and the same 1px now lives in the neighbour's top padding, so the
+     row boxes land on exactly the same lines as before. Short screens and landscape retune the
+     token, never the selector, so the first row and its neighbours keep one rhythm. */
+  --sp-row-pad: 12px;
   /* The 22px bottom air is the same rule at the other end: the record's lowest corners must clear
      the plate's bottom arcs (all four corners are rounded in landscape), and 14px of padding
      measured only 7.9px of air there. */
@@ -2500,7 +2501,6 @@ html.futasaku-product .install-prompt-scrim {
   padding: 0 0 2px;
   position: static;
   background: transparent;
-  border-bottom: 1px solid var(--sp-hair);
 }
 #sheet-profile .sp-head h2 {
   grid-column: 2;
@@ -2557,8 +2557,10 @@ html.futasaku-product .install-prompt-scrim {
   height: 22px;
   max-width: 90px;
 }
-/* The five rows: full width, one hairline between neighbours (never a box around each), label on
-   the left in the pause panel's small tracked caps and the value on the right in tabular digits. */
+/* The five rows: full width, NO rule between neighbours and never a box around each (owner,
+   2026-11-02). The label on the left in the pause panel's small tracked caps and the value on the
+   right in tabular digits are the structure: a change of size and weight is what separates a row
+   from its neighbour here, not a line. */
 #sheet-profile .sp-body {
   display: block;
   padding: 0;
@@ -2575,11 +2577,12 @@ html.futasaku-product .install-prompt-scrim {
   justify-content: space-between;
   gap: 16px;
   min-height: var(--sp-row);
-  padding: 12px 0;
+  padding: var(--sp-row-pad) 0;
   box-sizing: border-box;
 }
+/* The 1px the separator used to occupy is now the neighbour's own top air: no line, no shift. */
 #sheet-profile .sp-row + .sp-row {
-  border-top: 1px solid var(--sp-hair);
+  padding-top: calc(var(--sp-row-pad) + 1px);
 }
 #sheet-profile dt {
   flex: none;
@@ -2691,12 +2694,11 @@ html.futasaku-product .install-prompt-scrim {
 #sheet-profile[data-mode='visitor'] .sp-play-row[data-play-row='offline'] {
   display: none;
 }
-/* The online row is the first (only) visible row in visitor mode, so it loses the separator it
+/* The online row is the first (only) visible row in visitor mode, so it loses the neighbour air it
    carried as the second row. */
 #sheet-profile[data-mode='visitor'] .sp-play-row[data-play-row='online'] {
   margin-top: 0;
   padding-top: 0;
-  border-top: 0;
 }
 /* The visitor's level, set as a quiet neighbour of the name. Hidden with the attribute, so own mode
    keeps the name line it always had (the flag and the colour tile keep their places). */
@@ -2747,8 +2749,8 @@ html.futasaku-product .install-prompt-scrim {
   #sheet-profile .sp-head h2 {
     font-size: 1.18rem;
   }
-  #sheet-profile .sp-row {
-    padding: 9px 0;
+  #sheet-profile {
+    --sp-row-pad: 9px;
   }
 }
 /* Landscape phones: the same face as a centred dialog (the shared `.sheet` wide rule), with the
@@ -2771,19 +2773,21 @@ html.futasaku-product .install-prompt-scrim {
   #sheet-profile .sp-head h2 {
     font-size: 1.2rem;
   }
-  #sheet-profile .sp-row {
-    min-height: 44px;
-    padding: 7px 0;
+  #sheet-profile {
+    --sp-row-pad: 7px;
   }
 }
 
+/* One settings row. It used to end on a 1px rule; the rule is gone (owner, 2026-11-02) and the same
+   1px is padding, so every row and every control keeps the line it had. A label on the left and its
+   control on the right are the structure — no line is needed to say "next row". */
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 48px;
   gap: 12px;
-  border-bottom: 1px solid var(--c-line);
+  padding-bottom: 1px;
 }
 /* A row must never push one of its options off the sheet (found 2026-10-17: with Large text on,
    "Confirm moves" lost its Never button and "Step guidance" its Off button past the right edge on
@@ -2970,9 +2974,9 @@ html.futasaku-product .install-prompt-scrim {
   padding-left: 20px;
   font-size: 0.9rem;
 }
+/* No rule between steps: the numbered list and the extra air do the separation (owner, 2026-11-02). */
 .history li {
-  padding: 4px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
+  padding: 6px 0;
 }
 
 /* ---------- the pre-game card ritual ---------- */
@@ -3192,8 +3196,9 @@ html.futasaku-product .install-prompt-scrim {
 .go-score .dash {
   color: var(--fu-cream-55);
 }
-/* Stat rows: thin cream dividers, not boxed cards. The number is Besley at the left, the label is
-   small tracked Commissioner and the sentence is muted Commissioner. */
+/* Stat rows: NO rules between them (owner, 2026-11-02), not boxed cards either. The number is
+   Besley at the left, the label is small tracked Commissioner and the sentence is muted
+   Commissioner; that size-and-weight step plus the row's own air is the separation. */
 .highlights {
   list-style: none;
   padding: 0;
@@ -3208,13 +3213,9 @@ html.futasaku-product .install-prompt-scrim {
   column-gap: 14px;
   align-items: baseline;
   text-align: left;
-  padding: 8px 0;
+  padding: 10px 0;
   border: 0;
-  border-top: 1px solid var(--fu-cream-14);
   border-radius: 0;
-}
-.highlights li:first-child {
-  border-top: 0;
 }
 .gameover .highlights .h-value {
   grid-row: span 2;
@@ -3750,7 +3751,6 @@ html.futasaku-product #campaign .campaign-chapters {
   width: 100%;
   padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--c-line);
   background: none;
   color: inherit;
   font: inherit;
@@ -7604,26 +7604,8 @@ body.result .corner-tools {
     0 30px 70px -46px #000,
     inset 0 1px 0 color-mix(in srgb, var(--fu-cream) 8%, transparent);
 }
-/* The one entering line: a hairline draws itself across the top edge as the plate arrives. */
-#gameover .go-card::before {
-  content: '';
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  top: 0;
-  height: 1px;
-  background: var(--fu-cream-28);
-  transform-origin: center;
-}
-#gameover[data-fresh='1'] .go-card::before {
-  animation: go-hairline var(--ix-open) var(--ix-ease-open) both;
-}
-@keyframes go-hairline {
-  from {
-    transform: scaleX(0);
-    opacity: 0;
-  }
-}
+/* The title still arrives on its own beat; the entering hairline that used to draw across the
+   plate's top edge is gone with every other window rule (owner, 2026-11-02). */
 #gameover[data-fresh='1'] .go-title {
   animation: go-title-in var(--ix-open) var(--ix-ease-open) 60ms both;
 }
@@ -7633,12 +7615,10 @@ body.result .corner-tools {
     translate: 0 4px;
   }
 }
-.reduce-motion #gameover[data-fresh='1'] .go-card::before,
 .reduce-motion #gameover[data-fresh='1'] .go-title {
   animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  #gameover[data-fresh='1'] .go-card::before,
   #gameover[data-fresh='1'] .go-title {
     animation: none;
   }
@@ -8070,8 +8050,8 @@ body.result .corner-tools {
    grid of tiles under the five identity lines — the same neutral digits and small tracked caps. */
 #sheet-profile .sp-play {
   margin-top: 10px;
-  padding-top: 12px;
-  border-top: 1px solid var(--sp-hair);
+  /* The 12px top pad plus the removed 1px rule: the record starts on exactly the line it did. */
+  padding-top: 13px;
 }
 #sheet-profile .sp-play[hidden] {
   display: none;
@@ -8100,11 +8080,11 @@ body.result .corner-tools {
   align-items: stretch;
 }
 #sheet-profile .sp-play-row + .sp-play-row {
+  /* The two records are separate facts, and the break is made by air alone (owner, 2026-11-02:
+     no interior rules). The removed 1px moved into the top pad, so the online tiles keep their
+     exact line on the plate. */
   margin-top: 8px;
-  /* A hairline under the offline row: the two records are separate facts, and the eye should see
-     the break without a second heading (owner, 2026-11-01 polish pass). */
-  padding-top: 8px;
-  border-top: 1px solid var(--sp-hair);
+  padding-top: 9px;
 }
 #sheet-profile .sp-play-side {
   display: flex;
@@ -8128,9 +8108,15 @@ body.result .corner-tools {
   justify-content: center;
   gap: 4px;
   min-height: 60px;
-  padding: 8px 4px;
-  border: 1px solid var(--sp-hair);
+  /* 9px/5px, not 8px/4px: the removed 1px contour becomes air on every side, so the tile's
+     content box, its line wrapping and the record block's height all stay exactly as they were. */
+  padding: 9px 5px;
+  /* A tile is a block, not a divider: its edge used to be a 1px hairline. It is a neutral fill now
+     (the same 4% ink the pause plate's quiet keys use), so the three facts stay distinct on the
+     glass without drawing six lines across the sheet. */
+  border: 0;
   border-radius: var(--radius);
+  background: color-mix(in srgb, var(--c-text) 4%, transparent);
   text-align: center;
 }
 #sheet-profile .sp-tile dd {
@@ -8159,7 +8145,6 @@ body.result .corner-tools {
   #sheet-profile .sp-play {
     margin-top: 0;
     padding-top: 6px;
-    border-top: 0;
   }
 }
 
@@ -8241,9 +8226,6 @@ html.futasaku-product :is(.sheet, #sheet-menu, #gameover .go-card, #play-menu .l
   border-radius: 15px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
   color: #f0e9dc;
-}
-html.futasaku-product #gameover .go-card::before {
-  display: none;
 }
 /* A sheet's title bar is part of the same glass, not a lighter band on top of it: it stays
    see-through, and blurs whatever scrolls under it instead of covering it with a solid strip. */

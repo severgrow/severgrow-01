@@ -1,7 +1,7 @@
 // THE PAUSE PANEL, locked at the source.
 //
-// Owner direction (2026-10-20): one face, warm off-white type, ONE amber lamp, hairlines where they
-// separate things, Settings last in tab order. Owner direction (2026-10-23): "even tho reworked is
+// Owner direction (2026-10-20): one face, warm off-white type, ONE amber lamp, no rules between
+// blocks (owner, 2026-11-02), Settings last in tab order. Owner direction (2026-10-23): "even tho reworked is
 // kinda lame — try to work on it a bit ... using the existing dark glass concept with the blurred,
 // darkened game interface under it". So the panel is now DARK GLASS over a veiled match: ONE lead
 // key, ONE pair of keys (New game, Main menu), the duel's own rows when they apply, and a quiet row
@@ -72,7 +72,11 @@ describe('the pause panel: dark glass, one lead, one pair, one tool row', () => 
 
   it('has ONE content axis: a mirrored nameplate, a mirrored read-out, equal columns', () => {
     expect(bodyFor('gm-head')).toContain('grid-template-columns: 44px 1fr 44px');
-    expect(bodyFor('gm-scores')).toContain('grid-template-columns: 1fr 1px 1fr');
+    // The read-out was two equal tracks around a 1px centre RULE. The rule is gone (owner,
+    // 2026-11-02): two equal tracks and the old rule's 1px + its 14px either side (29px) as air.
+    expect(bodyFor('gm-scores')).toContain('grid-template-columns: 1fr 1fr');
+    expect(bodyFor('gm-scores')).toContain('column-gap: 29px');
+    expect(styleCss).not.toMatch(/#sheet-menu \.gm-scores::before/);
     // The two-key rows derive their columns from what is VISIBLE (owner, 2026-10-29: "no orphaned
     // single button that's half the width of regular button"). A fixed `1fr 1fr` is exactly what
     // left a lone key at half width when its neighbour was `[hidden]`; `web/tests/half-width-rows`

@@ -45,9 +45,12 @@ describe('no frame around the glass, ever (owner, 2026-10-23)', () => {
     expect(rule).toMatch(/border-radius: 15px;/);
     expect(rule).toMatch(/box-shadow: 0 10px 28px rgba\(0, 0, 0, 0\.22\);/);
     expect(rule).not.toMatch(/inset/);
-    expect(tail).toMatch(/html\.futasaku-product #gameover \.go-card::before \{\s*display: none;/);
-    // nothing after it brings a frame back
-    expect(tail.slice(tail.indexOf('display: none;'))).not.toMatch(/border:\s*[1-9]/);
+    // The finish plate's entering hairline used to be switched off here; the pseudo-element and its
+    // animation are gone entirely now (owner, 2026-11-02: no interior rules in windows).
+    expect(css).not.toMatch(/#gameover \.go-card::before/);
+    expect(css).not.toMatch(/go-hairline/);
+    // nothing in the last-word block brings a frame back
+    expect(rule).not.toMatch(/border:\s*[1-9]/);
   });
   it('the glass rules themselves carry no frame', () => {
     for (const re of [/#sheet-menu \{\n  --gm-pad[^}]*\}/, /html\.futasaku-product #gameover \.go-card \{[^}]*\}/, /html\.futasaku-product \.sheet \{[^}]*\}/, /html\.futasaku-product :is\(#play-menu, #levels\) \.levels-inner \{[^}]*\}/]) {

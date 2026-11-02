@@ -25,7 +25,7 @@ export const CHAT_CSS = `
 .match-chat-panel {position:fixed;z-index:65;top:var(--chat-top,56px);left:max(8px,env(safe-area-inset-left));width:min(480px,calc(100vw - 16px - env(safe-area-inset-right) - env(safe-area-inset-left)));height:min(680px,var(--chat-height,calc(100dvh - 72px)));box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;background:var(--dark-glass,rgba(8,10,10,.42));-webkit-backdrop-filter:var(--chat-glass-blur,blur(7.4px) saturate(1.05));backdrop-filter:var(--chat-glass-blur,blur(7.4px) saturate(1.05));border:0;border-radius:12px;box-shadow:0 12px 36px #0004;transform-origin:bottom right;}
 .match-chat[data-desktop-docked='true'] .match-chat-panel{left:var(--chat-left);width:var(--chat-width);height:var(--chat-height);}
 .match-chat-panel[hidden], .match-chat [hidden], #match-chat-toggle[hidden] {display:none!important;}
-.match-chat-head {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 8px 2px 16px;flex:none;border-bottom:1px solid #e8ddc51a;background:#080a0a38;}
+.match-chat-head {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 8px 3px 16px;flex:none;background:#080a0a38;}
 .match-chat-opponent-name{display:flex;align-items:center;gap:6px;font-size:10px;color:#e8ddc58c;max-width:180px;overflow-wrap:anywhere;margin-top:3px;}
 .match-chat-presence{flex:none;width:5px;height:5px;border-radius:50%;background:#a39e91;}
 .match-chat-presence[data-presence='online']{background:#8fbf6a;}
@@ -41,11 +41,10 @@ export const CHAT_CSS = `
 .match-chat-head button {width:44px;padding:0;border:0;font-size:20px;display:grid;place-items:center;}
 .match-chat-head button svg{width:18px;height:18px;}
 .match-chat-log {flex:1;min-height:36px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:6px 18px;overflow-anchor:none;}
-.match-chat-line {display:flow-root;padding:12px 0;border-bottom:1px solid #e8ddc50b;overflow-wrap:anywhere;}
+.match-chat-line {display:flow-root;padding:12px 0;overflow-wrap:anywhere;}
 .match-chat-line[data-grouped='true']{padding-top:4px;}
-.match-chat-line[data-continues='true']{border-bottom:0;padding-bottom:3px;}
-.match-chat-unread{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#b8c8ad;display:flex;align-items:center;gap:10px;margin:14px 0 6px;}
-.match-chat-unread::before,.match-chat-unread::after{content:'';height:1px;flex:1;background:#b8c8ad38;}
+.match-chat-line[data-continues='true']{padding-bottom:3px;}
+.match-chat-unread{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#b8c8ad;display:flex;align-items:center;justify-content:center;margin:14px 0 6px;}
 .match-chat-meta {display:flex;align-items:center;gap:8px;color:#e8ddc58c;font-size:11px;letter-spacing:.07em;text-transform:uppercase;}
 .match-chat-line[data-mine='true'] .match-chat-speaker {color:#abc3a6;}
 .match-chat-line[data-mine='false'] .match-chat-speaker {color:#d4a18c;}
@@ -61,7 +60,7 @@ export const CHAT_CSS = `
 .match-chat-message-actions:not([open]) > button{display:none;}
 
 .match-chat-empty {color:#e8ddc58c;font-size:17px;line-height:1.6;padding:12px 0;}
-.match-chat-foot {position:relative;flex:none;border-top:1px solid #e8ddc51a;padding:6px 10px max(10px,env(safe-area-inset-bottom));background:#080a0a45;}
+.match-chat-foot {position:relative;flex:none;padding:7px 10px max(10px,env(safe-area-inset-bottom));background:#080a0a45;}
 .match-chat-status {font-size:11px;line-height:1.5;letter-spacing:.035em;color:#e8ddc5b3;}
 .match-chat-form {display:flex;gap:6px;}
 /* 17px, NOT 16px (owner, 2026-10-26 on an iPhone 17: the chat "zooms in awkwardly when entering
@@ -82,11 +81,11 @@ export const CHAT_CSS = `
 .match-chat-phrases button {font-size:15px;text-align:left;border:0;padding:6px 12px;}
 /* The report reason window (owner, 2026-10-26): the ··· drawer that used to hold it is gone, so it
    opens as a band directly under the chat header. A full-width reason, then the two decisions. */
-.match-chat-report-form {display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 10px;flex:none;border-bottom:1px solid #e8ddc51a;background:#080a0a5c;}
+.match-chat-report-form {display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 10px 9px;flex:none;background:#080a0a5c;}
 .match-chat-report-form select {grid-column:1/-1;min-width:0;color:#e8ddc5;background:#17181a;border:1px solid #e8ddc529;border-radius:7px;min-height:44px;font-size:16px;}
 .match-chat-report-form button {font-size:11px;padding-inline:6px;white-space:nowrap;}
 /* The opponent's mute: one quiet factual line, never a reason or a time. */
-.match-chat-note {flex:none;margin:0;padding:6px 18px;border-bottom:1px solid #e8ddc514;color:#b7a98a;font-size:11px;letter-spacing:.03em;}
+.match-chat-note {flex:none;margin:0;padding:6px 18px 7px;color:#b7a98a;font-size:11px;letter-spacing:.03em;}
 .match-chat-status-row {display:flex;align-items:center;gap:8px;margin:0 0 7px;}
 .match-chat-status {flex:1;margin:0;}
 /* Block stays reachable without a menu: a quiet word beside the status, only once the opponent has

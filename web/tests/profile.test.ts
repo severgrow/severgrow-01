@@ -374,11 +374,17 @@ describe('the sheet speaks the pause panel’s language', () => {
     expect(profileSection).toContain('id="profile-title"');
   });
 
-  it('reuses hairlines, small tracked caps and neutral digits, with no new colour', () => {
+  it('separates rows with air, small tracked caps and neutral digits, never a rule, and coins no new colour', () => {
     const block = /\/\* ---------- the player's profile[\s\S]*?\/\* Short screens/.exec(styleCss)?.[0] ?? '';
     expect(block.length).toBeGreaterThan(0);
-    expect(block).toContain('--sp-hair: color-mix(in srgb, var(--c-line) 58%, transparent)');
-    expect(block).toMatch(/\.sp-row \+ \.sp-row \{\s*border-top: 1px solid var\(--sp-hair\)/);
+    // Owner, 2026-11-02: "i also dont like the hairline divisions in profile ... id remove and not
+    // add in new widnows iin future". The one row token carries the whole rhythm, and the 1px the
+    // separator used to occupy is now the neighbour's top padding, not a line.
+    expect(block).toContain('--sp-row-pad: 12px');
+    expect(block).toContain('padding: var(--sp-row-pad) 0');
+    expect(block).toMatch(/\.sp-row \+ \.sp-row \{\s*padding-top: calc\(var\(--sp-row-pad\) \+ 1px\)/);
+    expect(block).not.toContain('--sp-hair');
+    expect(block).not.toMatch(/\.sp-row \+ \.sp-row \{\s*border-top/);
     expect(block).toContain('font-variant-numeric: lining-nums tabular-nums');
     // No new colour is coined: every colour is an existing token (the swatch reads --tile).
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgb\(|hsl\(/);
