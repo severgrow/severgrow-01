@@ -431,17 +431,37 @@ describe('the cost of the achievements read', () => {
     expect(big.statements.some((text) => text === 'select * from match_moves where match_id = $1 and revision > $2 order by revision asc')).toBe(false);
   });
 
-  it('answers with the honest empty fallback inside the deadline when the database hangs', async () => {
-    const hanging = {
-      claimedCells: () => new Promise<never>(() => undefined),
+  it('never abandons a database query to hit a deadline (the cause of the hung pool)', async () => {
+    // Measured on the deployed function: a deadline that RESOLVED early did not cancel the queries
+    // underneath it. They kept holding a connection from the Edge pool (max 2), so two abandoned
+    // reads wedged it and later requests waited 800-2900 s for a connection. The safeguard is the
+    // constant cost (one read per fact source), so the answer must be the real answer — no worker
+    // may be left running behind an early return.
+    let settled = false;
+    const store = {
+      claimedCells: async () => {
+        await new Promise((r) => setTimeout(r, 30));
+        settled = true;
+        return [];
+      },
       challengesInvolving: async () => [],
       receiptRows: async () => [],
       campaignClears: async () => [],
     } as unknown as WorldEconomyStore;
-    const service = new WorldEconomyService(hanging, new MemoryStorage(), () => START, 25);
-    const started = Date.now();
-    expect(await service.achievements(player('slow'))).toEqual([]);
-    expect(Date.now() - started).toBeLessThan(1_000);
+    const service = new WorldEconomyService(store, new MemoryStorage(), () => START);
+    await service.achievements(player('slow'));
+    // By the time the call returned, every underlying read had finished.
+    expect(settled).toBe(true);
+  });
+
+  it('the source has no timeout race around the read', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const source = readFileSync(fileURLToPath(new URL('../src/seeds/service.ts', import.meta.url)), 'utf8');
+    expect(source).toMatch(/async achievements\(player: PlayerRecord\)/);
+    // No Promise.race, no deadline constant: a resolved-early race leaks its queries.
+    expect(source).not.toMatch(/Promise\.race\(/);
+    expect(source).not.toContain('ACHIEVEMENTS_READ_DEADLINE_MS');
   });
 });
 

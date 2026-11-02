@@ -26,13 +26,6 @@ const TERRITORY_TURN_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 /** One retry for a genuine invite-code collision is plenty for a challenge-created duel. */
 const MAX_INVITE_ATTEMPTS = 5;
 
-/**
- * The achievements read answers within this budget, whatever the database does. The Edge function
- * is killed when it runs past its compute allowance (HTTP 546 WORKER_RESOURCE_LIMIT), so a slow
- * database must produce the page's waiting state in a few seconds, never a request that hangs.
- */
-export const ACHIEVEMENTS_READ_DEADLINE_MS = 4_000;
-
 export type SendChallengeOutcome =
   | { ok: true; challenge: WorldChallengeWire; replayed: boolean }
   | { ok: false; code: ChallengeSendFailure };
@@ -42,8 +35,6 @@ export class WorldEconomyService {
     readonly store: WorldEconomyStore,
     private readonly matches: Storage,
     private readonly now: () => number = () => Date.now(),
-    /** Overridable for tests that must not wait four real seconds. */
-    private readonly achievementsDeadlineMs: number = ACHIEVEMENTS_READ_DEADLINE_MS,
   ) {}
 
   async world() {
@@ -204,28 +195,17 @@ export class WorldEconomyService {
    * statement per table) and all 35 definitions are evaluated in memory from that one history, so
    * the cost is a small CONSTANT whatever the history holds.
    *
-   * DEADLINE. A hard internal budget answers instead of hanging: when the database cannot finish
-   * in `ACHIEVEMENTS_READ_DEADLINE_MS`, the honest empty answer is returned (the page shows its
-   * waiting state and keeps the list it remembers). No 100 s request for the platform to kill.
+   * NO TIMEOUT RACE. Cutting the answer short does not cancel the queries, which keep holding a
+   * pool connection (see the note on `achievements`); the fix is the constant cost, not abandonment.
    */
   async achievements(player: PlayerRecord): Promise<AchievementView[]> {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    try {
-      return await Promise.race([
-        this.achievementViews(player),
-        new Promise<AchievementView[]>((resolve) => {
-          timer = setTimeout(() => resolve([]), this.achievementsDeadlineMs);
-          // Node would keep a process alive for a pending timer. Deno's timer has no `unref`, so
-          // guard rather than assume one runtime.
-          (timer as unknown as { unref?: () => void }).unref?.();
-        }),
-      ]);
-    } finally {
-      if (timer !== null) clearTimeout(timer);
-    }
-  }
-
-  private async achievementViews(player: PlayerRecord): Promise<AchievementView[]> {
+    // NO RACING DEADLINE HERE, deliberately. A timeout that resolves early does not CANCEL the
+    // queries underneath it: they keep running and keep holding a connection from the Edge pool
+    // (max 2). Two abandoned reads therefore wedge the pool and every later request waits for a
+    // connection for ever — measured on the deployed function as responses arriving after 800 s and
+    // 2900 s (HTTP 000), with the earlier "safe" 4 s cuts turning a working endpoint into a hung
+    // one. The queries themselves are milliseconds (measured: world_claims 0.73 ms), so the honest
+    // safeguard is the cost fix above — one read per fact source — not abandoning work mid-flight.
     const { history, claimed } = await this.achievementHistory(player);
     return achievementViews(achievementFacts(history), claimed);
   }
