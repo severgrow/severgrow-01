@@ -1,5 +1,31 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-02 — Transactional mail wears the brand, and lives in the repo
+
+Owner: "if you do design emails sent to people to confirm account / remember password etc, make sure
+they're FUTASAKU, with branding, lowkey nice design, simple wording etc, matching the game and language."
+
+**The templates are files.** Supabase Auth's six templates (confirmation, recovery, magic link, email
+change, invite, reauthentication) live in `server/email-templates/`;
+`scripts/apply-email-templates.mjs` PATCHes the project's `mailer_subjects_*` /
+`mailer_templates_*_content` and reads them back. The dashboard is not the source of truth: a change
+made only there leaves no reviewable copy and no history.
+
+**Why it is plain HTML and not the game's glass.** Email is not a browser: Gmail strips `<style>`,
+most clients ignore CSS variables, `backdrop-filter` does not exist, and images and inline SVG are
+blocked or stripped. So the brand is carried by type and colour taken from `web/src/style.css`
+(`#18191a` ground, `#eeebe4` ink, `#efe5cb` accent, `#b7a98a` for the quiet wordmark tone already
+used by the privacy page). The wordmark is letter-spaced uppercase text — the profile's treeless mark
+as type — and there is one cream button with the raw link underneath for clients that drop it. No
+hexagon is drawn: a CSS hexagon needs transforms or pseudo-elements that clients drop, and an image
+would arrive broken.
+
+**Honesty about time.** The copy says "valid for one hour" because `mailer_otp_exp` is 3600. The
+apply script warns when the two disagree instead of letting the email promise a duration the server
+does not honour. Notification templates are disabled on this project and are not branded. The old
+hand-paste `server/templates/email-signin.html` was removed as a second, conflicting copy; history
+keeps it.
+
 ## 2026-11-02 — Windows keep no interior hairline divider
 
 Owner: "i also dont like the hairline divisions in profile (and if shows up anywhere else) - id

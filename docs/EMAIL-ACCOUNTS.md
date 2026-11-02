@@ -77,20 +77,48 @@ until delivery is configured and the real-mail checks above pass. The cloud deve
 has no Supabase administration identity or SMTP credentials, so it cannot safely perform that setup.
 The rest of the web release works against the current server independently.
 
-Ready-to-paste template: [server/templates/email-signin.html](../server/templates/email-signin.html).
-Use subject **FUTASAKU — your sign-in code**. Paste the HTML into the Supabase **Magic Link** email
-(the template Supabase uses for `signInWithOtp`), including its literal `{{ .Token }}` placeholder.
-Retain the same code placeholder in **Confirm signup** if that template is used for new users in
-this project's current Auth configuration. The template has no images, tracking, remote fonts or
-magic link dependency. Code expiry is configured in Auth; the email deliberately does not promise
-a duration the server may change later.
+## Branded mail — live on the project (2 November 2026)
+
+The Supabase Auth mailer is set from [`server/email-templates/`](../server/email-templates), and that
+folder is the source of truth — not the Supabase dashboard. Six templates are live: confirmation,
+recovery, magic link, email change, invite and reauthentication. Each is table-based and inline
+styled, with no `<style>` block, image, SVG, web font or CSS variable (the things Gmail and other
+clients strip). The FUTASAKU wordmark is letter-spaced type, not an image; the palette is the game's
+cream-on-ink; one cream button sits above the raw link in small muted text.
+
+| type | subject |
+| --- | --- |
+| confirmation | confirm your futasaku account |
+| recovery | reset your futasaku password |
+| magic_link | your futasaku sign-in code |
+| email_change | confirm your new email |
+| invite | your futasaku invitation |
+| reauthentication | your futasaku verification code |
+
+The game signs in with a code, so confirmation, magic link and reauthentication show the 8-digit
+`{{ .Token }}` in a plate as the primary action, with the button as the desktop path. The copy says
+"valid for one hour" because `mailer_otp_exp` is 3600; the apply script warns if that changes.
+Notification templates (password changed, identity linked, phone changed, …) are disabled on this
+project (`mailer_notifications_*_enabled = false`), so they are not branded.
+
+```sh
+node scripts/apply-email-templates.mjs --dry-run   # validate the HTML, no network
+node scripts/apply-email-templates.mjs             # PATCH the six subjects + contents, then read back
+node scripts/render-email-templates.mjs            # /tmp/futasaku-email-<type>.png, 600px, dark + light
+```
+
+`tests/email-templates.test.ts` pins the variables and the inbox rules on every `npm run check`. The
+apply script writes only `mailer_subjects_*` and `mailer_templates_*_content`; SMTP, rate limits and
+`mailer_otp_exp` are never touched. The older hand-paste `server/templates/email-signin.html` was
+removed so there is not a second, conflicting copy.
 
 Operator checklist:
 
 - Configure a production mail provider in Supabase Auth → SMTP, with a verified sender/domain.
   Set the provider's required DNS records (SPF/DKIM and its recommended DMARC policy).
-- Enable Email with confirmation, paste the template, use 6–10 digit OTPs and a 10-minute expiry.
-  Keep mail/verification limits enabled. No SMTP or service credentials belong in browser config.
+- Email OTPs are 8 digits (`mailer_otp_length`) and expire in one hour (`mailer_otp_exp` = 3600);
+  the templates state that. Keep mail/verification limits enabled. No SMTP or service credentials
+  belong in browser config.
 - Deploy the existing Edge bundle, then enable `EMAIL_ACCOUNTS_ENABLED=true` after real delivery
   is verified. Follow the full rollout steps above; there is no new migration in this polish batch.
 - Verify new-account signup and returning-account recovery on `/test/`, including an actual phone,
