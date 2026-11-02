@@ -113,16 +113,26 @@ try{
   await page.evaluate(()=>{(window as any).__livingSvg=document.querySelector('.world-map-svg');(window as any).__livingTile=document.querySelector('.world-hex');});const before=await state(page);
   if(name==='phone')await page.evaluate(()=>{
    document.getElementById('menu-world')!.addEventListener('click',()=>{
-   const frames:any[]=[];(window as any).__livingFrames=frames;const end=performance.now()+400;
+   const frames:any[]=[];(window as any).__livingFrames=frames;
+   let finish!:()=>void;(window as any).__livingFramesDone=new Promise<void>(r=>{finish=r;});
+   const start=performance.now(),end=start+400,limit=start+3000;
+   const watchdog=setTimeout(finish,3000);
    const sample=()=>{
-    const svg=document.querySelector('.world-map-svg')!,screen=document.getElementById('online-world-screen')!;
-    frames.push({at:performance.now(),box:svg.getAttribute('viewBox'),opacity:Number(getComputedStyle(svg).opacity),visible:getComputedStyle(screen).display!=='none',same:svg===(window as any).__livingSvg});
-    if(performance.now()<end)requestAnimationFrame(sample);
+    const svg=document.querySelector('.world-map-svg'),screen=document.getElementById('online-world-screen');
+    if(!svg||!screen){frames.push({at:performance.now(),box:null,opacity:0,visible:false,same:false});clearTimeout(watchdog);finish();return;}
+    const frame={at:performance.now(),box:svg.getAttribute('viewBox'),opacity:Number(getComputedStyle(svg).opacity),visible:getComputedStyle(screen).display!=='none',same:svg===(window as any).__livingSvg};
+    frames.push(frame);
+    // Software WebKit can spend a frame flushing styles. Keep the same minimum observations
+    // and exact-continuity assertions, and include a settled frame within a finite deadline.
+    const now=performance.now();
+    if(now<limit&&(now<end||frames.length<3||frame.opacity<.999))requestAnimationFrame(sample);
+    else {clearTimeout(watchdog);finish();}
    };requestAnimationFrame(sample);
    },{once:true,capture:true});
   });
   await page.click('#menu-world');await page.waitForSelector('#online-world-screen:not([hidden])');await page.waitForTimeout(name==='phone'?450:250);
   if(name==='phone'){
+   await page.evaluate(()=>(window as any).__livingFramesDone);
    const frames=await page.evaluate(()=>(window as any).__livingFrames as {at:number;box:string;opacity:number;visible:boolean;same:boolean}[]);
    const continuous=frames.length>2&&frames.every(f=>f.same&&f.visible&&f.box===before.box);
    check(`every transition frame retains the visible map and exact camera${continuous?'':' '+JSON.stringify({before:before.box,frames})}`,continuous);
