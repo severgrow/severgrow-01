@@ -51,6 +51,8 @@ import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { lastChosenCamera, rememberCamera } from './world-camera.js';
 import { menuTerritoryAnchor } from './living-camera.js';
+import { globePose, globeShade } from './map-globe.js';
+import type { GlobePose } from './map-globe.js';
 import { mountSheetViewport } from '../ui/sheet-viewport.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { TerritoryChat } from './territory-chat.js';
@@ -537,6 +539,11 @@ export class WorldView {
   private pendingRequest: string | null = null;
   private busy = false;
   private svg: SVGSVGElement | null = null;
+  /**
+   * THE MAP'S LIGHT, derived from the WORLD alone (never from a window), so the menu backdrop and the
+   * Territory panel light the same land the same way. Null before the first paint or for no world.
+   */
+  private globe: GlobePose | null = null;
   /** The single top-most path that carries the selection highlight (see `paintAccent`). */
   private accent: SVGPathElement | null = null;
   private box: ViewBox | null = null;
@@ -1142,6 +1149,7 @@ export class WorldView {
   private paint() {
     const container = document.getElementById('online-world-grid')!;
     const world = this.world!;
+    this.globe = globePose(world.cells);
     if (!world.cells.length) {
       this.observer?.disconnect(); this.observer = null;
       this.gestureCleanup?.(); this.gestureCleanup = null;
@@ -1491,6 +1499,12 @@ export class WorldView {
       spores.append(mote);
     }
     svg.append(faces, lines, marks, rings, quiet, swords);
+    // THE GLOBE'S LIGHT sits ON TOP of the tiles and UNDER every mark, so the land is shaded but the
+    // swords, rings, selection and labels stay at full contrast. One static layer, painted once.
+    if (this.globe) {
+      const box: [number, number, number, number] = [minX - PAD, minY - PAD, maxX - minX + 2 * PAD, maxY - minY + 2 * PAD];
+      svg.insertBefore(globeShade(this.globe, box), marks);
+    }
     // THE TAKEOVER paints ABOVE the tile edges so the losing colour drains over the whole ground and
     // its flash cannot be buried by a neighbour's stroke. It is data-driven (see `takeoverNodes`) and
     // is redrawn by any paint that lands inside its 900 ms beat.
