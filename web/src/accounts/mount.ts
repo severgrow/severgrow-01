@@ -17,7 +17,7 @@ import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
 import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
 import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
 import { glassBaseCss } from '../player/glass-surface.js';
-import { installProfileUI } from './profile.js';
+import { installProfileUI, profileColour } from './profile.js';
 import { EMAIL_ON_KEY, GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
 import type { ProfileFacts } from './profile.js';
 import { STATS_KEY, parseStats } from '../logic/stats.js';
@@ -668,7 +668,10 @@ export const mountAccounts = async (): Promise<void> => {
     return {
       name: shownName(identity),
       country: browserCountry(),
-      colour: null,
+      // NOT null: a player who never chose a colour still has the one the game derived for them,
+      // which is what their tiles wear on the map. The read below only replaces it with a stored
+      // choice, so the one tile can never vanish while the read is in flight or fails.
+      colour: profileColour(identity.playerId),
       seeds: pair?.seeds ?? null,
       tiles: pair?.tiles ?? null,
       matchesWon: matchesWonEver(offline, null),

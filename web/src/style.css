@@ -2412,8 +2412,30 @@ html.futasaku-product .install-prompt-scrim {
 #sheet-profile {
   --sp-pad: 16px;
   --sp-row: 46px;
+  /* THE HEADER'S OWN EDGE INSET (owner, 2026-11-02: "profile frame ... next to logo looking ugly").
+     The plate's top corners are 32px — the theme's --radius (16px) doubled by the product sheet
+     rule. A wordmark set flush in the panel's 16px gutter therefore had its top-left corner INSIDE
+     the corner square (x = 16 < 32), tucked under the arc: 9.9px of air on the arc in the owner's
+     own screenshot. 20px more puts the mark's left edge at 36px from the plate at 390x844 (28px on
+     short screens, which take 14px; 32px in landscape) — its top-left corner is outside the 32px
+     corner band altogether, so the mark cannot meet the curve at any size. */
+  --sp-edge: 20px;
   --sp-hair: color-mix(in srgb, var(--c-line) 58%, transparent);
-  padding: 4px var(--sp-pad) max(14px, env(safe-area-inset-bottom));
+  /* The 22px bottom air is the same rule at the other end: the record's lowest corners must clear
+     the plate's bottom arcs (all four corners are rounded in landscape), and 14px of padding
+     measured only 7.9px of air there. */
+  padding: 10px var(--sp-pad) max(22px, env(safe-area-inset-bottom));
+  /* THE PLATE IS A READ-OUT, NOT A WINDOW (owner, 2026-11-02: the "MATCHES WON" row had a soft
+     gradient wash across it). Nothing was fading over the content: the sheet's 0.42-alpha glass was
+     letting the menu behind it through, and a blurred bright menu key landed exactly across the
+     fifth row — measured on the owner's own screenshot, the ground lifted from 21 to 72/255 there,
+     and +5/255 in the rebuilt sheet at 0.42. A read-out plate has to be even, so its ground is the
+     page's own ground with a 3% wash of the smoked glass (alpha 0.982): still the same glass
+     FAMILY, but the light behind it can no longer draw a band across a row (residual < 2/255,
+     below the film's own grain). The shared glass and every other sheet are untouched — the
+     `web/e2e/menu-profile.ts` suite asserts this alpha so a future "make it glassier" cannot
+     bring the wash back. */
+  background: color-mix(in srgb, var(--c-bg) 97%, var(--dark-glass));
   /* Five short lines always fit; the cap is honesty about being a brief sheet, not a scroll area. */
   max-height: 94dvh;
   animation: gm-panel-in var(--dur-quick) var(--ease-standard) both;
@@ -2427,11 +2449,16 @@ html.futasaku-product .install-prompt-scrim {
     animation: none;
   }
 }
-/* The nameplate: the same three cells as the pause panel (44px close | centred title | 44px), so
-   the title sits on the panel's own centre line. */
+/* THE NAMEPLATE IS THREE BALANCED THINGS: the Futasaku wordmark, the centred word, the close key,
+   on one 44/46px line. The two side cells are equal `1fr` tracks, so the title sits on the panel's
+   own centre line; the middle track is the title's own `max-content` width (a nowrap word, so it
+   never competes for the free space the side cells need). `minmax(68px, ...)` is the wordmark's own
+   67.69px, so a side cell can never shrink under the mark. The old `44px 1fr 44px` kept the mark in
+   a cell it never fitted, which is how it ended up flush in the 16px gutter, under the corner
+   curve (owner, 2026-11-02: "profile frame ... next to logo looking ugly"). */
 #sheet-profile .sp-head {
   display: grid;
-  grid-template-columns: 44px 1fr 44px;
+  grid-template-columns: minmax(68px, 1fr) max-content minmax(68px, 1fr);
   align-items: center;
   min-height: 46px;
   padding: 0 0 2px;
@@ -2443,6 +2470,11 @@ html.futasaku-product .install-prompt-scrim {
   grid-column: 2;
   grid-row: 1;
   margin: 0;
+  /* The shared product rule pads every sheet title by 44px a side to clear an absolutely placed
+     close key. The profile is a THREE-CELL grid with its own 44px close column, so that padding
+     only inflated the `max-content` middle track and pushed the wordmark back against the edge
+     (measured: the title track became 166.66px). Here the grid owns the clearance. */
+  padding: 0;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.35rem;
@@ -2460,19 +2492,37 @@ html.futasaku-product .install-prompt-scrim {
 }
 /* The Futasaku wordmark in the nameplate's left cell — the tree-less mark the HUD badge and the
    online submenu header carry (web/src/player/branding.ts), so the sheet is signed like the game.
-   It is aria-hidden: the sheet already says Profile, and a logo read aloud is noise. */
+   It is aria-hidden: the sheet already says Profile, and a logo read aloud is noise.
+   The mark starts `--sp-edge` past the panel's gutter, which is what puts its top-left corner
+   OUTSIDE the plate's 32px corner band instead of under the arc. */
 #sheet-profile .sp-brand {
   grid-column: 1;
   grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  padding-inline-start: var(--sp-edge);
   opacity: 0.9;
 }
+/* THE MARK IS 67.69px WIDE (17.4% of a 390pt screen), SIZED BY ITS WIDTH, which is the only
+   dimension that matters for a 2200x715 wordmark (owner, 2026-11-02: the live 29px-wide mark in a
+   464-wide screenshot was a grey smudge). The height is the game's own 22px (#hud-brand on a tall
+   phone, .online-brand at every size), so this is the same mark at the same size as the one in the
+   HUD, not a second logo scale. The old `width:22px` rendered 22 x 7.14 (5.6% of 390): ~1/3 of the
+   67.69px here. A future edit must not shrink it below 64px (16.4% of 390) — `web/e2e/menu-profile.ts`
+   fails if it does. MEASURED after the change: 67.69 x 22 CSS px, with its left edge 36px from the
+   plate at 390x844 (28px at 320x568 and 360x640, 32px in landscape) — its top-left corner is
+   outside the 32px corner band on every screen — and 20.5px / 17px of air between that corner and
+   the corner arc (the e2e guard's own measure, which fails below 16px). */
 #sheet-profile .sp-brand svg {
   display: block;
-  width: 22px;
-  height: auto;
+  /* flex:none is part of the size: a replaced child with width:auto would otherwise flex-SHRINK to
+     the cell width, letterboxing the mark inside a narrow box. Unshrunk, the 2200:715 ratio at 22px
+     high gives the 67.69px above. */
+  flex: none;
+  width: auto;
+  height: 22px;
+  max-width: 90px;
 }
 /* The five rows: full width, one hairline between neighbours (never a box around each), label on
    the left in the pause panel's small tracked caps and the value on the right in tabular digits. */
@@ -2522,10 +2572,13 @@ html.futasaku-product .install-prompt-scrim {
 }
 /* The identity line (owner, 2026-11-01): the name and its tag, then the flag of the country the
    device places itself in and one tile in this player's own Territory colour. The two marks sit on
-   the name's baseline and never take a line of their own, so the four rows keep their rhythm. */
+   the name's BASELINE and never take a line of their own, so the four rows keep their rhythm.
+   `baseline` (not `center`) is what makes them read as part of the name rather than stickers beside
+   it: a baseline-aligned replaced element (the <svg> tile) rests its bottom edge on the text's
+   baseline, and the flag's emoji baseline does the same. */
 #sheet-profile .sp-row-name dd.sp-name-line {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
@@ -2548,11 +2601,18 @@ html.futasaku-product .install-prompt-scrim {
 /* One tile's worth of the player's own colour, as the MAP draws a hex: a flat vertical edge on the
    left and right, a point at the top and bottom (web/src/player/hex-tile.ts). The silhouette is an
    SVG polygon, so it stays crisp at any density; the hairline keeps a pale colour visible on the
-   sheet's own ground. */
+   sheet's own ground.
+   THE SIZE (owner, 2026-11-02: "i cant see the color hex in profile"). It was 13 x 15, whose
+   letterboxed ink measured only 10.79 x 12.46 — smaller than the lowercase of the 15.2px name it
+   sits beside, so it read as a speck. The polygon lives in a 24 x 24 viewBox with 0.83 x 0.96 of
+   ink, so a 20.5px box (sized by `preserveAspectRatio: meet`) draws ink 17.02 x 19.65: taller than
+   the name's 19px line box, and the map's 46px tile at 37% — the same object, at the scale where a
+   hexagon still reads AS a hexagon. MEASURED after the change: box 20.5 x 20.5, ink 17 x 19.65
+   (51 x 59 device px at DPR 3), bottom exactly on the name's baseline. */
 #sheet-profile .sp-swatch {
   flex: none;
-  width: 13px;
-  height: 15px;
+  width: 20.5px;
+  height: 20.5px;
   overflow: visible;
 }
 #sheet-profile .sp-swatch-face {
@@ -2567,6 +2627,13 @@ html.futasaku-product .install-prompt-scrim {
   #sheet-profile {
     --sp-pad: 14px;
     --sp-row: 44px;
+    /* THE HEADER'S OWN BUDGET. At 320px with Large text the row holds the 67.69px mark, the 81px
+       word and the 44px key in 272px, so 20px of header inset left only 7.8px of ink between the
+       mark and the "P". 14px puts the mark's left edge at 28px — still 16.9px clear of the corner
+       arc (the guard's floor) — and widens that ink gap to 13.8px. The 8px of top air is the same
+       corner rule vertically: the mark's corner measures 16.9px from the arc. */
+    --sp-edge: 14px;
+    padding-top: 8px;
   }
   #sheet-profile .sp-head {
     min-height: 44px;
