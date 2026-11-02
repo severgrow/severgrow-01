@@ -24,10 +24,12 @@ described further down ("The 2026-10-17 onboarding pass") is **not current** for
 players "surround their home to win", while most real games end when the Draw pile runs out. /3
 teaches that first.
 
-**What it is.** Levels 1-10 are ten short authored lessons, one idea each, every one ending in a real
-win. Level 11 is the first 37-hex level and has no lesson. Level ids, Seeds rules and chapter bonuses
-are unchanged. The full script of each lesson (beats, words, wrong-tap answers, finish lines) is in
-**[LESSON-SCRIPTS.md](LESSON-SCRIPTS.md)**. It must match the code.
+**What it is.** Levels 1-8 and 10 are short authored lessons, one idea each, every one ending in a
+real win. **Level 9 is a full game from scratch** on the small map (owner, 2026-11-01): a real deal,
+the real bot, every legal move, the Who-starts ritual, and the live cue display still coaching each
+action as it happens. Level 11 is the first 37-hex level and has no lesson. Level ids, Seeds rules
+and chapter bonuses are unchanged. The full script of each lesson (beats, words, wrong-tap answers,
+finish lines) is in **[LESSON-SCRIPTS.md](LESSON-SCRIPTS.md)**. It must match the code.
 
 | Level | Teaches | Ends |
 |---|---|---|
@@ -39,17 +41,18 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 | 6 | knock-out: surround their home | by surround |
 | 7 | Bomb | on points |
 | 8 | Blast (two Bombs) and its free Grow | on points |
-| 9 | the Throw pile can finish a Bloom; skip the Grow | on points |
+| 9 | a real game from scratch on the small map: every legal move, live coaching | a real result (win or loss) |
 | 10 | a normal game against the gentlest bot | on points (or surround) |
 
-**The Who-starts ritual from level 10 on** (owner, 2026-10-24). Levels 1-9 keep their authored
-openings and go straight to the board. From level 10 — the first real game — every campaign match
-opens with the same card ritual as a practice match and an online duel: same component, timing,
-reveal and sound (`logic/starter-ritual.ts` decides where it plays, `player/starter-ritual.ts` draws
-it). It is presentation only; the engine's `startingPlayerFor`/`newMatch` (and the server, online)
-still decides who starts, and a lesson opening always starts on the player's turn. After the cards,
-level 10 says one line in the info box before the first draw: "You are ready now for your first game
-of Futasaku. Good luck!" — dismissible with a tap anywhere, never repeated.
+**The Who-starts ritual from level 9 on** (owner, 2026-10-24; level 9 added 2026-11-01). Levels 1-8
+keep their authored openings and go straight to the board. From level 9 — the first real game —
+every campaign match opens with the same card ritual as a practice match and an online duel: same
+component, timing, reveal and sound (`logic/starter-ritual.ts` decides where it plays,
+`player/starter-ritual.ts` draws it). It is presentation only; the engine's
+`startingPlayerFor`/`newMatch` (and the server, online) still decides who starts, and an authored
+lesson opening always starts on the player's turn. After the cards, level 10 says one line in the
+info box before the first draw: "You are ready now for your first game of Futasaku. Good luck!" —
+dismissible with a tap anywhere, never repeated.
 
 **How a lesson is authored** (`web/src/lessons/`):
 
@@ -67,6 +70,10 @@ of Futasaku. Good luck!" — dismissible with a tap anywhere, never repeated.
   and the explanation in the info box) from the **live** game state, never from a step counter, so
   any legal alternative keeps working. `lesson-voice.ts` splits the two voices: the display says
   what to do, the box explains why — never the same words in both.
+- **Level 9 is `kind: 'free'`**: it has no `position`. `lessonOpening` calls the campaign level's
+  own `campaignOpening` (`newMatch`), so the deal, board and starting seat are the engine's. Its
+  beats are the same live ones, marked `always`: the mastery fade may soften the light, never
+  silence the action line.
 - `answer.ts` answers a wrong tap from the engine's own reasons (`claimBlocker`, `fruitTargetBlocker`, `legalActions`, the Bloom shapes).
 
 **Guidance by level.**
@@ -74,7 +81,8 @@ of Futasaku. Good luck!" — dismissible with a tap anywhere, never repeated.
 | Levels | Guidance |
 |---|---|
 | 1-3 | Locked: only the lit thing reacts. Every other tap is answered in the glass or the LED, with a small ring at the spot. |
-| 4-9 | Every legal move is played; the light adapts. The action line stays on the display. |
+| 4-8 | Every legal move is played; the light adapts. The action line stays on the display. |
+| 9 | A real game. Every legal move is played; the live cue always names the action of the moment, and mastery may soften the light but never silences it. |
 | 10 | No guidance unless idle for 6 s; one LAST TURN beat. |
 | 11-30 | The existing levels, unchanged. No lesson. |
 
@@ -84,7 +92,7 @@ of Futasaku. Good luck!" — dismissible with a tap anywhere, never repeated.
 **Storage and versioning.** The root, `/2/` and `/3/` share one origin:
 
 - `/3/` uses its own storage prefix, `futa05-3:` (`web/src/channel.ts`, by path), and its own service-worker cache, `futa05lessons3-`. Nothing in /3 reads or writes the root's or /2's progress, saves or hints.
-- Each lesson has a `version` (currently **2**). The seen explanations and that version are saved beside the level's match (`severgrow.lesson.meta.v1`). A saved match from another lesson version restarts the level cleanly.
+- Each lesson has a `version` (**3**, with levels 1 and 9 at **4**). The seen explanations and that version are saved beside the level's match (`severgrow.lesson.meta.v1`). A saved match from another lesson version restarts the level cleanly.
 - Per-action mastery (Draw / Grow / Throw / Cut / Take over / Bloom / Bomb / Blast / Strengthen / Surround) is saved in `severgrow.lesson.mastery.v1`, keyed to that lesson version. A version bump starts the fade cleanly.
 - **v3 reset (2026-10-19):** the onboarding polish changed lesson versions and several authored boards, so progress and the unfinished match moved to `.v3`. Old `.v2` (and `.v1`) keys stay in the browser, unread; every player starts the campaign at level 1 again. Completed levels therefore stay completed only within the current `.v3` record.
 
@@ -97,7 +105,9 @@ of Futasaku. Good luck!" — dismissible with a tap anywhere, never repeated.
 **Random deals from level 11, and the restart rest (owner, 2026-11-01).** "I want deals to always be
 completely random. As if you'd be playing card game in real life."
 
-- Levels 1-10 (lessons) keep their one authored opening. From level 11 every attempt — the first one
+- Levels 1-8 and 10 (lessons) keep their one authored opening; level 9 is a real game on the
+  level's fixed seed (not a random deal, so its proof stays reproducible). From level 11 every
+  attempt — the first one
   and every Restart — is a fresh shuffle (`campaignDeal(level, seed)`): hands, piles and who starts
   change; the level's authored board, rock, gold and bot level never do (`tests/campaign/random-deals.test.ts`).
 - The win proof carries the deal's seed (`dealSeed`); the server rebuilds the deal on the level's board
@@ -130,7 +140,8 @@ completely random. As if you'd be playing card game in real life."
 
 - Automated:
   - `npx vitest run web/tests/lessons.test.ts web/tests/lesson-*.test.ts`;
-  - then build the futa05 channel and run `npx tsx web/e2e/lessons-3.ts`: the lit-only tapper through levels 1-10, random taps, refresh, hints off, level 11.
+  - then build the futa05 channel and run `npx tsx web/e2e/lessons-3.ts`: the lit-only tapper through levels 1-10, random taps, refresh, hints off, level 11;
+  - with a `CHANNEL=futa04` build, `npx tsx web/e2e/futa04-lesson-9-free.ts`: level 9 is a real game — the Who-starts ritual, the 19-hex board, a cue at every action, a real finish and the record/unlock.
 - These prove the levels can always be finished. They do **not** prove a beginner understands them; that needs real new players.
 
 **The first board's art.** A cold first visit waits for the pictures the first lesson composes (the
@@ -180,9 +191,10 @@ No UI change is needed: the campaign screen is drawn from the level data, so fur
 restructuring.
 
 **As built:** Chapters I-VII — levels 1-70 — the campaign is complete. Every board is hand-authored
-(`config.board`); `boardRadius` is 2 (the small map) for levels 1-3 and 3 for the rest, so only the
-three discovery levels use the small map and every real match runs on the full hexagon. Levels 31-70
-were built one chapter at a time; the plan and its measurements are in `docs/CAMPAIGN-31-70.md`.
+(`config.board`); `boardRadius` is 2 (the small map) for levels 1-3 and 9 and 3 for the rest. Levels
+1-3 are the discovery levels; **level 9 became a real game on the small map on 2026-11-01** at the
+owner's request (every other real match still runs on the full hexagon). Levels 31-70 were built one
+chapter at a time; the plan and its measurements are in `docs/CAMPAIGN-31-70.md`.
 
 ## Validation rules
 
@@ -352,16 +364,20 @@ Playing them found two things that a unit test cannot see:
    a *strategic* match, and it is why level 8's Fruit lesson can be missed by a competent player: the
    game ends before the networks touch.
 
-   This needs an owner decision before more tuning: keep 1-10 on the 19-hex map and accept short
-   strangles, or return levels 4-10 to the 37-hex board (where the corner home has more neighbours) as
-   the pre-onboarding build had. Rules are not changed either way — only the map each level plays on.
+   This was the owner decision point for levels 1-10 on the 19-hex map; **it was answered for level
+   9 on 2026-11-01** (a real game there, accepting the short strangle), and levels 4-8 and 10 stay on
+   the 37-hex board.
 
-- **The board split is 1-3 small, 4-30 full.** The ten-level small-map experiment was reverted after
-  playing it: on the 19-hex map a corner home has three neighbours and one Bloom places three tiles,
-  so a single Bloom strangulates it (measured: L5, L6 and L9 in three turns, L8 in four). Levels 4-10
-  are back on the 37-hex board, where they run 7-30 turns instead — and level 8's Fruit lesson now
-  genuinely surfaces, because the networks have time to touch. Because `/2` and the root publish the
-  same levels again, the temporary alternate-opening fallback was removed with it.
+- **The board split is 1-3 and 9 small, the rest full.** The ten-level small-map experiment was
+  reverted after playing it: on the 19-hex map a corner home has three neighbours and one Bloom
+  places three tiles, so a single Bloom strangulates it (measured: L5, L6 and L9 in three turns, L8
+  in four). Levels 4-8 and 10 are back on the 37-hex board, where they run 7-30 turns instead — and
+  level 8's Fruit lesson now genuinely surfaces, because the networks have time to touch.
+  **On 2026-11-01 the owner asked for level 9 to be a full game on the small map anyway**; it is
+  the one real match on 19 hexes, and it is short for the same geometric reason (a strong player
+  wins by surround in 3 turns on seed 95009; a careless one loses). Because `/2` and the root
+  publish the same levels again, the c1-09 alternate-opening entry is kept (it is now identical to
+  the level's current board) so an older /2/ proof still verifies.
 - **The first ten levels keep the game's existing guidance language**, and nothing new competes with
   it: the draw/throw piles halo at their step, playable cards are outlined in the hand, and a picked
   card lights its legal hexes on the board. The cockpit's LED still owns the turn's word (GROW!,

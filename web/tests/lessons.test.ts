@@ -13,7 +13,7 @@ import { LESSON } from '../../src/strings.js';
 import { FINAL_LESSON } from '../src/lessons/final.js';
 import { lessonResumable } from '../src/lessons/lesson-save.js';
 import {
-  LESSONS, currentGoal, goalDone, goalReachable, lessonAllows, lessonBeat, lessonFor, lessonLegal, lessonLocked,
+  LESSONS, currentGoal, goalDone, goalReachable, lessonAllows, lessonBeat, lessonFor, lessonIsFree, lessonLegal, lessonLocked,
   lessonOffersBloom, lessonOpening, presentedLessonBeat, suggestMove,
 } from '../src/lessons/lessons.js';
 import type { BeatCtx, Lesson, Lit } from '../src/lessons/lessons.js';
@@ -49,10 +49,15 @@ const play = (lesson: Lesson, me: (s: State) => Action | null, guard = 600): Sta
   return s;
 };
 
-/** Turn limits from the brief (your own turns). */
+/** Turn limits from the brief (your own turns). Level 9 is a free game and has no limit. */
 const TURNS: Record<number, [number, number]> = {
-  1: [4, 4], 2: [3, 5], 3: [3, 5], 4: [3, 5], 5: [3, 5], 6: [2, 5], 7: [3, 5], 8: [2, 5], 9: [3, 5], 10: [3, 10],
+  1: [4, 4], 2: [3, 5], 3: [3, 5], 4: [3, 5], 5: [3, 5], 6: [2, 5], 7: [3, 5], 8: [2, 5], 10: [3, 10],
 };
+
+/** The hand-held lessons. Level 9 is a free game from scratch (real deal, real bot), so the
+ *  authored-opening/turn-count assertions below do not apply to it; its own tests live in
+ *  `lesson-9-free.test.ts`. */
+const GUIDED = LESSONS.filter((l) => !lessonIsFree(l));
 
 /**
  * The game's own rule for a tapped card: one that shares a face with a Bloom the page OFFERS opens
@@ -122,7 +127,10 @@ describe('lesson openings', () => {
       const real = new Map(createCards(s.config).map((c) => [c.id, c]));
       for (const c of cards) expect(real.get(c.id), `L${l.level} card ${c.id}`).toEqual(c);
       expect(s.phase).toBe('DRAW');
-      expect(s.actor).toBe(0);
+      // A guided opening starts on the player's turn (the engine's neutral start). A free lesson
+      // is a real match, so its first seat is whatever the engine's seeded lottery chose.
+      if (lessonIsFree(l)) expect(s.actor, `L${l.level} free deal`).toBe(s.startingPlayer);
+      else expect(s.actor).toBe(0);
       expect(s.hands[0]).toHaveLength(7);
       expect(s.hands[1]).toHaveLength(7);
       expect(legalActions(viewFor(s, 0)).length).toBeGreaterThan(0);
@@ -163,7 +171,7 @@ describe('lesson openings', () => {
 });
 
 describe('player (a): follows the light', () => {
-  for (const lesson of LESSONS) {
+  for (const lesson of GUIDED) {
     it(`level ${lesson.level}: wins, and the lesson's moment happens`, () => {
       const end = play(lesson, (s) => suggestMove(lesson, s)!);
       expect(end.phase).toBe('GAME_OVER');
@@ -178,7 +186,7 @@ describe('player (a): follows the light', () => {
   }
 
   it('ends on points, except the surround lesson and the real game (L10) which may surround', () => {
-    for (const lesson of LESSONS) {
+    for (const lesson of GUIDED) {
       const end = play(lesson, (s) => suggestMove(lesson, s)!);
       const expected = lesson.level === 6 ? 'strangle' : lesson.level === 10 ? end.result?.reason : 'deck_exhaustion';
       expect(end.result?.reason, `L${lesson.level}`).toBe(expected);
@@ -202,7 +210,7 @@ describe('player (a): follows the light', () => {
 });
 
 describe('player (b): random legal moves', () => {
-  for (const lesson of LESSONS) {
+  for (const lesson of GUIDED) {
     it(`level ${lesson.level}: always finishes and never deadlocks`, () => {
       for (let seed = 1; seed <= 25; seed++) {
         const rand = mulberry32(seed * 7919 + lesson.level);
@@ -283,7 +291,7 @@ const tapOnlyTheLight = (
 };
 
 describe('player (c): taps only the lit thing', () => {
-  for (const lesson of LESSONS) {
+  for (const lesson of GUIDED) {
     it(`level ${lesson.level}: wins with zero wrong taps`, () => {
       const { end, wrong } = tapOnlyTheLight(lesson);
       expect(end.result?.winner, `L${lesson.level}`).toBe(0);
@@ -408,7 +416,7 @@ describe('final sign-off (owner, 2026-10-22)', () => {
     expect(lessonBeat(lessonFor(1)!, s0, ctx)!.say, 'then the display asks for the draw').toBe(LESSON.tapDraw);
     expect(seen.filter((x) => x.id !== 'draw').every((x) => ids.includes(x.id) || x.phase !== 'DRAW' || x.turn > 1)).toBe(true);
     // No other level, and no later beat, uses the welcome.
-    for (const l of LESSONS.filter((x) => x.level > 1)) {
+    for (const l of LESSONS.filter((x) => x.level > 1 && !lessonIsFree(x))) {
       tapOnlyTheLight(l, undefined, (b) => expect(b?.say, `L${l.level} ${b?.id}`).not.toBe(LESSON.welcome));
     }
   });
@@ -441,17 +449,8 @@ describe('final sign-off (owner, 2026-10-22)', () => {
     }
   });
 
-  it('level 9: right after the skip sentence, the Undo key is explained', () => {
-    const seen = walk(lessonFor(9)!);
-    const i = seen.findIndex((x) => x.id === '9:optional');
-    expect(i).toBeGreaterThanOrEqual(0);
-    expect(seen[i + 1]?.id).toBe('9:undo');
-    expect(seen[i + 1]?.lit).toEqual({ t: 'undo' });
-    expect(seen[i + 1]?.phase).toBe('ACT');
-  });
-
   it('when the light points at one of their tiles, the display says so', () => {
-    for (const l of LESSONS.filter((x) => x.level <= 9)) {
+    for (const l of LESSONS.filter((x) => x.level <= 8)) {
       tapOnlyTheLight(l, undefined, (beat, s) => {
         if (beat?.lit.t === 'hex' && beat.id.startsWith('tile:') && s.board[beat.lit.key]?.owner === 1) {
           expect(beat.say, `L${l.level} ${beat.id}`).toBe(LESSON.tapTheirTile);
@@ -610,34 +609,18 @@ describe('the lessons teach the rules as they are', () => {
     expect(s.board['-1,-1']).toBeFalsy();
   });
 
-  it('level 9: the Throw pile top completes a Bloom', () => {
+  it('level 9 is a free game from scratch and keeps the Throw-pile sentence (owner, 2026-11-01)', () => {
     const l9 = lessonFor(9)!;
+    expect(lessonIsFree(l9)).toBe(true);
+    expect(l9.goals, 'nothing is forced any more').toEqual([]);
+    expect(l9.intro, 'the one teaching line the old lesson had').toEqual(['pile-gold']);
     const s = lessonOpening(l9);
-    expect(suggestMove(l9, s)).toEqual({ t: 'Draw', from: 'discard' });
-    const end = play(l9, (x) => suggestMove(l9, x)!);
-    expect(goalDone({ t: 'pileBloom' }, end)).toBe(true);
-  });
-
-  it('level 9: after the Bloom, one line says Bloom and Grow are optional; nothing waits for » (owner, 2026-10-20)', () => {
-    const l9 = lessonFor(9)!;
-    expect(l9.goals).toEqual([{ t: 'pileBloom' }]); // skipping is taught, never required
-    // follow the light until the Bloom has happened this turn
-    let s = lessonOpening(l9);
-    for (let i = 0; i < 20 && !(s.phase === 'ACT' && goalDone({ t: 'pileBloom' }, s)); i++) s = apply(s, suggestMove(l9, s)!);
-    expect(goalDone({ t: 'pileBloom' }, s)).toBe(true);
-    const ctx = (seen: string[]): BeatCtx => ({ card: null, placing: null, throwPending: null, seen: new Set(seen) });
-    const first = lessonBeat(l9, s, ctx([]))!;
-    expect(first.id).toBe('9:optional');
-    expect(first.explain).toBe(true);
-    expect(first.line).toBe(LESSON.optionalLine);
-    // it points at » unless a power is still playable (then nothing is lit: never » past a power)
-    const powerLeft = legalActions(viewFor(s, 0)).some((a) => a.t === 'Bloom' || a.t === 'PlayFruit' || a.t === 'MegaBomb');
-    expect(first.lit).toEqual(powerLeft ? { t: 'none' } : { t: 'end' });
-    // once read, it never comes back, and the light does not push » while a Grow is still possible
-    const next = lessonBeat(l9, s, ctx(['9:optional']));
-    expect(next?.id).not.toBe('9:optional');
-    const canGrow = legalActions(viewFor(s, 0)).some((a) => a.t === 'Sprout');
-    if (canGrow) expect(suggestMove(l9, s)?.t).not.toBe('EndAct');
+    expect(Object.keys(s.board)).toHaveLength(19); // the small map
+    expect(s.deck.length, 'the engine’s real deck, not a scripted clock').toBeGreaterThan(30);
+    expect(s.startingPlayer).toBe(0);
+    const beat = lessonBeat(l9, s, { card: null, placing: null, throwPending: null, seen: new Set() });
+    expect(beat?.id).toBe('9:intro:pile-gold');
+    expect(beat?.line).toBe(LESSON.pileGoldLine);
   });
 });
 
@@ -768,11 +751,16 @@ describe('owner review 2026-10-19', () => {
   // teaches the whole turn, so all of its steps stay lit; level 10 waits on every hint.
   it('the lesson\'s own step is lit at once; any other suggestion waits for a quiet moment', () => {
     expect(beatsOf(lessonFor(1)!).some((b) => b.idleOnly), 'L1').toBe(false);
-    for (const l of LESSONS.filter((x) => x.level >= 2 && x.level <= 9)) {
+    for (const l of LESSONS.filter((x) => x.level >= 2 && x.level <= 8)) {
       const actions = beatsOf(l).filter((b) => !b.explain && !b.status && !b.hello);
       expect(actions.some((b) => !b.idleOnly), `L${l.level}: its own step is lit at once`).toBe(true);
       expect(actions.filter((b) => b.id === 'draw' || b.id.startsWith('throw:')).every((b) => b.idleOnly), `L${l.level}: draw and throw wait`).toBe(true);
     }
+    // Level 9 is a real game: every live cue shows at once (never an idle wait), and the mastery
+    // fade may soften the light but never hides the action line.
+    const live9 = beatsOf(lessonFor(9)!).filter((b) => !b.explain && !b.status && !b.hello);
+    expect(live9.length).toBeGreaterThan(0);
+    expect(live9.every((b) => b.always && !b.idleOnly), 'L9: live cues show at once').toBe(true);
     expect(beatsOf(lessonFor(10)!).some((b) => b.idleOnly)).toBe(true);
   });
 
@@ -831,7 +819,7 @@ describe('owner review 2026-10-19', () => {
   });
 
   it('a Bloom is two steps: tap Bloom to pick it, then tap the lit tiles', () => {
-    for (const n of [5, 9]) {
+    for (const n of [5]) {
       const l = lessonFor(n)!;
       let s = lessonOpening(l);
       for (let i = 0; i < 40 && !(s.phase === 'ACT' && suggestMove(l, s)?.t === 'Bloom'); i++) s = apply(s, suggestMove(l, s)!);
@@ -977,8 +965,12 @@ describe('per-action mastery fade', () => {
     expect(LESSON_VERSION).toBe(3);
     // Level 1 was re-issued at version 4 (2026-10-24) when it stopped offering Overgrow: an
     // unfinished pre-fix level-1 save must restart, never resume under the old, taking-enabled
-    // rules. Every other lesson keeps the shared version, so their saves and teaching are untouched.
-    for (const l of LESSONS) expect(l.version, `L${l.level}`).toBe(l.level === 1 ? LESSON_VERSION + 1 : LESSON_VERSION);
+    // rules. Level 9 moved to version 4 on 2026-11-01 when it became a full game from scratch: an
+    // unfinished scripted-position save must restart too. Every other lesson keeps the shared
+    // version, so their saves and teaching are untouched.
+    for (const l of LESSONS) {
+      expect(l.version, `L${l.level}`).toBe(l.level === 1 || l.level === 9 ? LESSON_VERSION + 1 : LESSON_VERSION);
+    }
     // Saves round-trip under that version; a record from another version is ignored.
     const saved = encodeMastery(recordHello(recordAction(freshMastery(), 'draw', { level: 1, tier: 'guide' }), 'bloom'));
     const read = decodeMastery(saved, LESSON_VERSION);
@@ -1062,6 +1054,15 @@ describe('the lesson’s two voices (display + info box)', () => {
       .toEqual({ box: null, display: 'TOO WEAK: 2 VS 4', restart: false });
   });
 
+  it('on their turn the WAIT status line outranks a stale wrong-tap answer', () => {
+    // The answer belongs to MY tap; once the turn has passed it can never hide the live cue.
+    expect(lessonVoiceFor({ ...base, mine: false, beat: { say: LESSON.theirTurn }, answer: 'NOT YET' }))
+      .toEqual({ box: null, display: LESSON.theirTurn, restart: false });
+    // On my own turn the same answer still owns the display (unchanged behaviour).
+    expect(lessonVoiceFor({ ...base, mine: true, beat: { say: LESSON.theirTurn }, answer: 'NOT YET' }))
+      .toEqual({ box: null, display: 'NOT YET', restart: false });
+  });
+
   it('a lesson that cannot finish explains it and offers START AGAIN in the box, no display label', () => {
     // Owner, 2026-10-22: the way out is one tap that restarts the level in place, never a trip to
     // the menu. It is the ONE button the box ever holds, and only while the lesson is stuck.
@@ -1118,7 +1119,7 @@ describe('level 1 teaches the tile’s rank and the pile count once', () => {
     expect(grewAt!.strength).toBeGreaterThanOrEqual(1);
     expect(lits['1:pile-low']).toBe('deckCount');
     // Only level 1 lights them: the other lessons never do.
-    for (const other of LESSONS.filter((x) => x.level > 1)) {
+    for (const other of LESSONS.filter((x) => x.level > 1 && !lessonIsFree(x))) {
       let t = lessonOpening(other);
       const seen2 = new Set<string>();
       for (let i = 0; i < 400 && t.phase !== 'GAME_OVER'; i++) {

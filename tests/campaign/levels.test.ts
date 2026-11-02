@@ -71,9 +71,10 @@ describe('campaign levels: the definition is well formed', () => {
     for (const [id, c] of checks) {
       const number = CAMPAIGN_LEVELS.find((l) => l.id === id)!.number;
       // The small tutorial map (19 hexes) cannot hold 20 open; its floor is that minus the four
-      // hexes it may lose to rock. Levels 1-3 use it; levels 4-30 keep the product board's original
-      // floor of 20.
-      expect(c.openCells, id).toBeGreaterThanOrEqual(number <= 3 ? 15 : 20);
+      // hexes it may lose to rock. Levels 1-3 and the level-9 real game use it; every other level
+      // keeps the product board's original floor of 20.
+      const small = number <= 3 || number === 9;
+      expect(c.openCells, id).toBeGreaterThanOrEqual(small ? 15 : 20);
       expect(c.minHomeOpenNeighbours, id).toBeGreaterThanOrEqual(3);
     }
   });
@@ -301,15 +302,15 @@ describe('campaign levels: the definition is well formed', () => {
     ]);
   });
 
-  it('levels 1-3 use the tutorial small map (radius 2); levels 4+ the product hexagon (radius 3)', () => {
+  it('levels 1-3 and level 9 use the tutorial small map (radius 2); the rest the product hexagon', () => {
     for (const level of CAMPAIGN_LEVELS) {
       const board = level.config.board!;
-      // Owner direction 2026-10-17, after playing the guided levels: only the three discovery levels
-      // use the tutorial's map. On the 19-hex board a corner home has three neighbours and one Bloom
-      // places three tiles, so a single Bloom strangulates it — that map cannot carry a real match.
-      // Chapters IV-VII stay on the product hexagon (a bigger map was considered and set aside:
-      // 61 hexes at 360 px gives ~36 px hexes, under the 44 px tap target the cockpit uses).
-      const small = level.number <= 3;
+      // Owner direction 2026-10-17, after playing the guided levels: the three discovery levels use
+      // the tutorial's map. Level 9 joined them on 2026-11-01, when it became a real game from
+      // scratch on the small map (the /2/ line's opening for this level). Chapters IV-VII stay on
+      // the product hexagon (a bigger map was considered and set aside: 61 hexes at 360 px gives
+      // ~36 px hexes, under the 44 px tap target the cockpit uses).
+      const small = level.number <= 3 || level.number === 9;
       const expectedRadius = small ? TUTORIAL_BOARD_RADIUS : 3;
       const expectedCells = small ? CAMPAIGN_SMALL_CELLS : CAMPAIGN_CELLS;
       const expectedHomes = small ? CAMPAIGN_SMALL_HOMES : CAMPAIGN_HOMES;

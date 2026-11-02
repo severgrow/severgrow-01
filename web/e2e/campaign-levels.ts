@@ -37,6 +37,13 @@ const waitIdle = (p: Page) => p.waitForFunction(() => {
   return !!hook && !hook.busy();
 }, undefined, { timeout: 30000 });
 
+/** The Who-starts ceremony owns the screen until it resolves (levels 9 and 10). */
+const waitRitual = async (p: Page, level: number) => {
+  if (level < 9) return; // levels 1-8 keep their authored openings
+  await p.waitForSelector('#starter-lottery:not([hidden])', { timeout: 15000 }).catch(() => undefined);
+  await p.waitForSelector('#starter-lottery', { state: 'hidden', timeout: 30000 }).catch(() => undefined);
+};
+
 /** One whole match: play my turns with the engine's own strongest chooser, let the bot answer. */
 const playToEnd = async (p: Page, levelNumber: number): Promise<{ reason: string; winner: number | null }> => {
   for (let guard = 0; guard < 400; guard++) {
@@ -52,7 +59,12 @@ const playToEnd = async (p: Page, levelNumber: number): Promise<{ reason: string
     const legal = legalActions(v);
     if (!legal.length) throw new Error(`L${levelNumber}: my turn with no legal move`);
     const level = Math.min(9, 4 + levelNumber) as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
-    const action: Action = chooseLevelAction(v, 9, botSeed(s.seed, level, s.turnNumber, s.history?.length ?? 0));
+    const wanted: Action = chooseLevelAction(v, 9, botSeed(s.seed, level, s.turnNumber, s.history?.length ?? 0));
+    // The page offers the lesson's moves, which can be narrower than the engine's (no Bloom before
+    // level 5). Play one it actually offers; the strongest legal move is the usual choice.
+    const offered = await p.evaluate(() => (window as any).__severgrow.legal() as Action[]);
+    const action = offered.find((a) => JSON.stringify(a) === JSON.stringify(wanted)) ?? offered[0];
+    if (!action) throw new Error(`L${levelNumber}: the page offers no move`);
     const played = await p.evaluate((a) => !!(window as any).__severgrow.playFor(a, 0), action);
     if (!played) throw new Error(`L${levelNumber}: the page refused ${JSON.stringify(action)}`);
     await waitIdle(p);
@@ -87,6 +99,7 @@ try {
     // A DOM click: the install sheet and the room's own animations can sit over the button.
     await page.evaluate(() => (document.getElementById('menu-campaign') as HTMLButtonElement)?.click());
     await page.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
+    await waitRitual(page, n);
     await page.waitForFunction(() => {
       const lesson = (window as any).__severgrow?.lesson?.();
       return !!lesson && !lesson.stage && lesson.handSettled;
@@ -104,6 +117,7 @@ try {
       await dismissInstall();
       await page.evaluate(() => (document.getElementById('go-rematch') as HTMLButtonElement)?.click());
       await page.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
+      await waitRitual(page, level.number);
       await page.waitForFunction(() => {
         const lesson = (window as any).__severgrow?.lesson?.();
         return !!lesson && !lesson.stage && lesson.handSettled;

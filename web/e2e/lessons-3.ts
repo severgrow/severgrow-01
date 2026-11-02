@@ -89,6 +89,13 @@ const dismissInstall = (p: Page) => p.evaluate(`(() => {
   if (!prompt.hidden) prompt.hidden = true;
 })()`);
 
+/** The Who-starts ceremony owns the screen until it resolves (levels 9 and 10). */
+const waitRitual = async (p: Page, level: number) => {
+  if (level < 9) return; // levels 1-8 keep their authored openings
+  await p.waitForSelector('#starter-lottery:not([hidden])', { timeout: 15000 }).catch(() => undefined);
+  await p.waitForSelector('#starter-lottery', { state: 'hidden', timeout: 30000 }).catch(() => undefined);
+};
+
 /** From the menu: PLAY → the next level (the only way in). */
 const openNextLevel = async (p: Page) => {
   await p.waitForSelector('#menu-play:not([hidden])', { timeout: 20000 });
@@ -102,6 +109,10 @@ const openNextLevel = async (p: Page) => {
   const asked = await p.evaluate(() => !document.getElementById('sheet-campaign-start')!.hidden);
   if (asked) await p.evaluate(() => (document.getElementById('csa-resume') as HTMLButtonElement).click());
   await p.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
+  // Levels 9-10 open with the card ritual; wait for it to end before the stage/deal wait below.
+  // The level comes from the page (the entry may open a saved match, not always the next number).
+  const opened = await p.evaluate(() => (window as any).__severgrow?.lesson?.()?.level ?? 0) as number;
+  await waitRitual(p, opened);
   // The stage intro and the opening deal both finish before the board is live; a card tapped
   // before that would skip the intro instead of answering DRAW FIRST.
   await p.waitForFunction(() => {
@@ -546,6 +557,8 @@ try {
         await installDealAudit(page);
         await page.evaluate(() => (document.getElementById('go-rematch') as HTMLButtonElement).click());
         await page.waitForFunction((n) => (window as any).__severgrow?.lesson?.()?.level === n, level, { timeout: 15000 });
+        await page.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
+        await waitRitual(page, level);
       }
       await page.waitForFunction(() => {
         const l = (window as any).__severgrow?.lesson?.();

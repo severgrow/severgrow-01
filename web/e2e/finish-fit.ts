@@ -189,7 +189,7 @@ const stateSeed = (page: Page): Promise<number | null> =>
  * the lesson's seed. Asserting the old number was not a product failure; it asserted a fact that
  * had stopped being true. `level.seed` still applies to every level without a lesson (11+).
  */
-const openingSeed = (level: (typeof CAMPAIGN_LEVELS)[number]): number => lessonFor(level.number)?.position.seed ?? level.seed;
+const openingSeed = (level: (typeof CAMPAIGN_LEVELS)[number]): number => lessonFor(level.number)?.position?.seed ?? level.seed;
 
 /** The reward line as the player sees it: '' when there is no line at all (which is the answer for
  *  a game that paid nothing — absence, never a zero). */

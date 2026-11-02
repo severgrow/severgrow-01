@@ -9,8 +9,14 @@
 export type LessonVoiceInput = {
   /** What the lesson says now (already faded by the mastery tier), or null when it is silent. */
   beat: { say?: string; line?: string } | null;
-  /** A wrong tap's short answer; it owns the display for its moment. */
+  /** A wrong tap's short answer; it owns the display for its moment — while it is still my turn. */
   answer: string | null;
+  /**
+   * Is the player acting now? An answer belongs to MY tap, so on the opponent's turn the live
+   * status line (`LESSON.theirTurn`, "WAIT") owns the display instead. Defaults to true so every
+   * existing caller keeps the answer exactly as before.
+   */
+  mine?: boolean;
   /** The lesson cannot finish any more: the box says so and offers START AGAIN. */
   stuck: boolean;
   /** The explanation for a lesson that cannot finish. */
@@ -27,11 +33,13 @@ export type LessonVoice = {
 };
 
 /** What the box and the display show right now. */
-export const lessonVoiceFor = ({ beat, answer, stuck, restartLine }: LessonVoiceInput): LessonVoice => {
+export const lessonVoiceFor = ({ beat, answer, mine = true, stuck, restartLine }: LessonVoiceInput): LessonVoice => {
   if (stuck) return { box: restartLine, display: null, restart: true };
   return {
     box: beat?.line ?? null,
-    display: answer ? answer.toUpperCase() : beat?.say ?? null,
+    // Their turn has one steady cue: a wrong-tap answer from my last turn is stale and must never
+    // hide the WAIT status line (the live cue is the thing the player is meant to read now).
+    display: mine && answer ? answer.toUpperCase() : beat?.say ?? null,
     restart: false,
   };
 };

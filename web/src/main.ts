@@ -114,7 +114,7 @@ import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { tapAgainPlays, throwFlight, throwPileAction } from './logic/throw-pile.js';
 import { undoIntent } from './logic/undo.js';
 import {
-  goalReachable, lessonAllows, lessonBeat, openingDisplay, lessonFor, lessonLocked, lessonOffersBloom, lessonOpening,
+  goalReachable, lessonAllows, lessonBeat, openingDisplay, lessonFor, lessonIsFree, lessonLocked, lessonOffersBloom, lessonOpening,
   presentedLessonBeat, suggestMove, LESSONS,
 } from './lessons/lessons.js';
 import type { Beat, Lesson } from './lessons/lessons.js';
@@ -2222,7 +2222,8 @@ async function startGame(
     : overridesForMatch(campaign, IS_TEST, IS_TEST && lab ? lab.overrides() : {});
   // Futasaku 0.4 starts from the engine's versioned match setup, so the client and the server
   // verifier agree on who moves first. The classic live channel keeps its historical player-0 start.
-  // Levels 1-10 open from their lesson's authored position (the engine's own cards and board).
+  // Levels 1-8 and 10 open from their lesson's authored position (the engine's own cards and board);
+  // level 9 is a FREE lesson — `lessonOpening` deals the campaign level's own real match.
   const opening = lessonNow ? lessonOpening(lessonNow) : IS_FUTA04 ? newMatch(seed, overrides) : newGame(seed, overrides);
   const opponentStarts = opening.startingPlayer === BOT;
   const state: State = opening;
@@ -2232,16 +2233,17 @@ async function startGame(
       : `New ${matchLabel({ campaign: null, difficulty, botLevel: level })} practice match. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
   ];
   // The pre-game ritual is the product's own opening for every match — practice, a campaign level
-  // from 10 on (that is where the hand-held lessons end), and online. Levels 1-9 keep their authored
-  // openings and skip it. The board/session is prepared BEFORE the ritual so the player sees the
-  // real match behind it and the first legal tap is available the instant it leaves.
+  // from 9 on (level 9 is the first real game; the hand-held lessons end at 8), and online. Levels
+  // 1-8 keep their authored openings and skip it. The board/session is prepared BEFORE the ritual so
+  // the player sees the real match behind it and the first legal tap is available the instant it
+  // leaves.
   const playRitual = playsStarterRitual(IS_FUTA04, campaign?.number ?? null);
   // A campaign match always keeps its opening as the replay base: the save must replay under the
   // LEVEL's config (its authored board), never under the default config. A Blitz match does the same
   // for its campaign board, so a reload replays the map, not a regenerated default one.
   beginSession(state, null, [], campaign || opponentStarts || blitzStart ? state : null, playRitual);
   // A lesson's stage card waits for the ritual below: the ceremony owns the screen until it
-  // resolves, and level 10's send-off is the last beat before the first move. Levels 1-9 have no
+  // resolves, and level 10's send-off is the last beat before the first move. Levels 1-8 have no
   // ritual, so their stage starts here, exactly as it always has.
   if (lessonNow && !playRitual) startLessonStage();
   // beginSession freshens the generation token for THIS match; another entry starting a match now
@@ -3113,8 +3115,11 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   // the opponent's turn starts: work it out now, so its pace is known when its turn is shown
   if (p.after.phase === 'DRAW' && p.after.turnPlayer === BOT) void planBotTurn(p.after).then((plan) => (botPlan = plan));
   save();
-  if (!p.before.deckFinal && p.after.deckFinal) smartCockpit?.event({message:p.after.deckFinal.remaining === 2 ? 'FINAL TURNS' : 'FINAL TURN',priority:75,duration:1500,mode:'amber'});
-  else if (p.before.deckFinal?.remaining === 2 && p.after.deckFinal?.remaining === 1) smartCockpit?.event({message:'LAST TURN',priority:75,duration:1500,mode:'amber'});
+  // Same rule: the last-turn notices are facts, but a lesson's WAIT line stays the one cue while
+  // the opponent is playing (it comes back as the player's own LAST TURN beat on their turn).
+  const opponentCue = lessonOpponentCueOwnsDisplay();
+  if (!opponentCue && !p.before.deckFinal && p.after.deckFinal) smartCockpit?.event({message:p.after.deckFinal.remaining === 2 ? 'FINAL TURNS' : 'FINAL TURN',priority:75,duration:1500,mode:'amber'});
+  else if (!opponentCue && p.before.deckFinal?.remaining === 2 && p.after.deckFinal?.remaining === 1) smartCockpit?.event({message:'LAST TURN',priority:75,duration:1500,mode:'amber'});
   render();
   void pump();
   scheduleBot();
@@ -3743,7 +3748,8 @@ function settleStep(s: Step, animated: boolean) {
   revealProgress++; // one step really landed: the reveal watchdog must not treat this as a stall
   markTiming('tile', { k: s.k, animated });
   const displayEvent = displaySteps.get(s);
-  if (displayEvent && animated) smartCockpit?.event(displayEvent);
+  // A bot move's play fact must not replace a lesson's steady WAIT cue (see the helper).
+  if (displayEvent && animated && !lessonOpponentCueOwnsDisplay()) smartCockpit?.event(displayEvent);
   displaySteps.delete(s);
   const cue = outcomeSteps.get(s);
   if (cue && animated) outcomeLight?.pulse(cue.tone, cue.strength);
@@ -5234,6 +5240,19 @@ function lessonActive(): Lesson | null {
   return lessonNow;
 }
 
+/**
+ * While a lesson's opponent plays, the lesson's live status line ("WAIT") owns the display.
+ *
+ * A bot move's own play fact (`OPP +3`, `CUT-2`, `+2` for its Bloom) is board feedback, not a
+ * second instruction: it used to overwrite the WAIT line, and because the lesson's paint key had
+ * not changed it was never put back, so the sign sat silent for the rest of their turn. One steady
+ * cue is the rule (the same one the lesson's other action lines follow). The result still speaks:
+ * that event is handled by the finish path after `phase === 'GAME_OVER'`, which this excludes.
+ */
+function lessonOpponentCueOwnsDisplay(): boolean {
+  return !!lessonActive() && !!session && session.state.actor !== HUMAN && session.state.phase !== 'GAME_OVER';
+}
+
 /** Levels 1-4 never show a Bloom in any form: no button, no glow, no bracket, no gold pile. */
 function bloomsShown(): boolean {
   const l = lessonActive();
@@ -5458,12 +5477,19 @@ function lessonDecide(e: Event): boolean {
   if (target.closest('#hud, #hud-menu, #futasaku-glass, #gameover, .sheet, #scrim')) return false;
   const guided = !guidanceOff();
   const beat = lessonBeatNow;
+  const free = lessonIsFree(lesson);
   const lockedNow = lessonLocked(lesson, session.state) && guided;
   if (guided && beat?.explain) {
     // The lit thing is the move: one tap reads the sentence AND plays it. Never the dwell guard
     // here — that guard exists for a tap meant for the move that just happened, and this tap is
     // aimed at the thing the lesson is pointing at now.
     if (lessonTapMoves(beat, target, e, lockedNow)) {
+      lessonMarkSeenAfterTap(beat.id);
+      return false;
+    }
+    // A FREE lesson (level 9) is a real game: its one line must never hold a tap. The sentence
+    // closes AND the same tap reaches the game, so the first Draw is never swallowed by the box.
+    if (free) {
       lessonMarkSeenAfterTap(beat.id);
       return false;
     }
@@ -5966,7 +5992,7 @@ function renderLessonGuide(): void {
     }, 2600);
   }
   const kind = beat?.kind ?? null;
-  const tier: LessonTier = stuck ? 'spotlight'
+  let tier: LessonTier = stuck ? 'spotlight'
     : beat?.explain ? 'spotlight'
     : beat?.status ? 'guide'
     : beat?.hello ? 'whisper'
@@ -5976,6 +6002,10 @@ function renderLessonGuide(): void {
     })
     : 'silent';
   const shown = presentedLessonBeat(beat, tier);
+  // A free lesson's live cue always speaks (see `presentedLessonBeat`). Keep its light at least a
+  // whisper, so the thing the cue names is still visibly pointed at; mastery may soften it, never
+  // remove it.
+  if (shown?.always && tier === 'silent') tier = 'whisper';
   lessonBeatNow = shown;
   lessonTierShown = tier;
   lessonTierKind = kind;
@@ -5983,7 +6013,7 @@ function renderLessonGuide(): void {
   // The box explains; the display says what to do. They never carry the same words, and the box
   // never holds a title, a mission or a button.
   const voice = lessonVoiceFor({
-    beat: shown, answer: lessonAnswerText || null, stuck, restartLine: LESSON.restartLine,
+    beat: shown, answer: lessonAnswerText || null, mine, stuck, restartLine: LESSON.restartLine,
   });
   // The one moment that teaches the score: the sign shows the score itself — but only when this
   // beat has no action line. In lessons 1-10 the ACTION always wins the display (owner,
@@ -6003,7 +6033,8 @@ function renderLessonGuide(): void {
   // A lesson never lets the cockpit's own one-word step cues (DRAW!/GROW!/THROW!) speak: the
   // display is driven only by the lesson's action lines.
   smartCockpit?.quiet?.(true);
-  if (!holdScore && !lessonAnswerText) smartCockpit?.led?.(voice.display);
+  // A wrong-tap answer owns the sign only on MY turn; while they play, the status cue speaks.
+  if (!holdScore && !(mine && lessonAnswerText)) smartCockpit?.led?.(voice.display);
   if (!shown && !voice.box) {
     lessonBeatNow = null;
     lessonBreath?.clear();

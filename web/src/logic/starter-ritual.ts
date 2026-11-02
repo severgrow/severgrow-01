@@ -51,12 +51,12 @@ export const onlineRitualKey = (matchId: string): string => `online:${matchId}`;
  * The first campaign level that opens with the ritual (owner, 2026-10-24: "from level 10 onwards
  * the ritual card for picking who starts the game should be visible").
  *
- * Levels 1-9 keep their hand-held, authored openings: their first sentence is about the board, and
- * a ceremony over it would be a second thing to read before the first lesson. Level 10 is the last
- * lesson and the first real game; from there every campaign level opens exactly like a practice
- * match or an online duel — the same component, timing, reveal and sound.
+ * Levels 1-8 keep their hand-held, authored openings: their first sentence is about the board, and
+ * a ceremony over it would be a second thing to read before the first lesson. Level 9 is a real
+ * game from scratch (owner, 2026-11-01), so from level 9 on every campaign match opens exactly like
+ * a practice match or an online duel — the same component, timing, reveal and sound.
  */
-export const RITUAL_FROM_CAMPAIGN_LEVEL = 10;
+export const RITUAL_FROM_CAMPAIGN_LEVEL = 9;
 
 /**
  * Does this match open with the ritual? A presentation rule only: it never decides who starts
