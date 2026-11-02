@@ -86,11 +86,15 @@ describe('PLAY is a real screen, not a layer on the menu', () => {
 
   it('hides the menu while it is open, and its back button returns to the menu', () => {
     expect(mainSource).toMatch(/function openPlayMenu\(\)[\s\S]*?\$\('menu'\)\.hidden = true/);
-    // The back key closes the submenu EXPLICITLY before showing the menu: a redundant late
+    // The back key starts the doorway's exit EXPLICITLY before showing the menu: a redundant late
     // `showScreen('menu')` (boot finishing after async mounts) must never tear down a submenu the
     // player has just opened, so the two calls are no longer one expression.
-    expect(mainSource).toMatch(/bind\('play-back', \(\) => \{[\s\S]{0,240}?closePlayMenu\(\);[\s\S]{0,240}?showScreen\('menu'\);/);
-    expect(mainSource).toMatch(/function showScreen[\s\S]*?closePlayMenu\(\)/);
+    // 2026-11-02: the exit is a real animated exit now (`closePlayMenu(true)`), and the guard was
+    // widened for exactly ONE case — a doorway that is already `closing` — so the menu can take its
+    // place while it leaves. Every other redundant show still returns untouched.
+    expect(mainSource).toMatch(/bind\('play-back', \(\) => \{[\s\S]{0,500}?closePlayMenu\(true\);[\s\S]{0,200}?showScreen\('menu'\);/);
+    expect(mainSource).toMatch(/function showScreen[\s\S]*?closePlayMenu\(/);
+    expect(mainSource).toMatch(/dataset\.ixState === 'closing'[\s\S]{0,120}?if \(same && name === 'menu' && !\$\('play-menu'\)\.hidden/);
   });
 });
 

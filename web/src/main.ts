@@ -752,17 +752,26 @@ function arriveScreen(el: HTMLElement, head: Element | null, from: ScreenName | 
 function closePlayMenu(animated = false) {
   const menu = $('play-menu');
   const head = menu.querySelector<HTMLElement>(SCREEN_HEAD.levels);
-  if (head) resetSurface(head);
   if (menu.hidden) {
+    if (head) resetSurface(head);
+    syncBrandMark();
+    return;
+  }
+  // Already leaving: its own exit is in charge. Restarting it would flash the doorway back to
+  // full opacity for a frame (the back key calls this, then `showScreen` asks again).
+  if (menu.dataset.ixState === 'closing') {
+    if (head) resetSurface(head);
     syncBrandMark();
     return;
   }
   if (!animated) {
     menu.hidden = true;
     resetSurface(menu);
+    if (head) resetSurface(head);
     syncBrandMark();
     return;
   }
+  if (head) resetSurface(head);
   // The way back out of PLAY is the menu's arrival seen from behind: the doorway leaves downward
   // (it came up) while the menu rises under it, so the pair reads as one move, not two.
   exitSurface(menu, { travel: 6, scale: 0.99, onDone: () => { menu.hidden = true; } });
@@ -955,13 +964,12 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
     pregameHold = false;
   }
   const same = shownScreen === name;
-  // The doorways (PLAY, the online hub) sit on top of the menu without it changing, so `shownScreen`
-  // cannot say where the player actually is. `route` can: it is what the next move measures its
-  // direction against (owner, 2026-11-02: a forward move and a back move must read differently).
-  const leavingPlay = route === 'play' && name === 'menu' && !$('play-menu').hidden;
   // A redundant call to show the menu must not tear down the submenu the player has just opened.
   // (Boot finishes after async mounts and used to reset the screen here; the back key closes it.)
-  if (same && name === 'menu' && !$('play-menu').hidden && !leavingPlay) return;
+  // A doorway that is ALREADY leaving is the one exception: its back key started the exit and this
+  // call is the menu taking its place, so the guard must let it through.
+  const doorwayLeaving = !$('play-menu').hidden && $('play-menu').dataset.ixState === 'closing';
+  if (same && name === 'menu' && !$('play-menu').hidden && !doorwayLeaving) return;
   const from = route ?? shownScreen;
   shownScreen = name;
   route = name;
@@ -1209,7 +1217,10 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
     // change is a clear 1.5% — and, since 2026-11-02, its own head follows one short beat later, so
     // the eye has a second, ordered event to read instead of one diffuse fade.
     const plate = !next.classList.contains('confirm-sheet');
-    enterSurface(next, plate ? { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE } : {});
+    enterSurface(next, {
+      travel: plate ? INTERFACE_MOTION.screen : INTERFACE_MOTION.travel,
+      scale: plate ? PLATE_SCALE : INTERFACE_MOTION.scale,
+    });
     const sheetHead = next.querySelector<HTMLElement>('.sheet-head');
     if (plate && sheetHead) {
       resetSurface(sheetHead);
@@ -9681,8 +9692,10 @@ if (FEATURES.campaign) {
 bind('menu-play', openPlayMenu);
 bind('play-back', () => {
   // The submenu keeps the menu underneath (see openPlayMenu), so returning repaints its own state
-  // explicitly rather than relying on showScreen's "the screen changed" branch. `showScreen` owns
-  // the doorway's exit and the menu's arrival, so the pair is one move.
+  // explicitly rather than relying on showScreen's "the screen changed" branch. The doorway starts
+  // its own exit FIRST (an explicit close, so a late boot show can never be the thing that closes
+  // it) and showScreen's guard lets a leaving doorway through to hand the screen to the menu.
+  closePlayMenu(true);
   layoutMenu(syncMenuResume());
   showScreen('menu');
 });

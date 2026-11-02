@@ -13,8 +13,8 @@ export const LIVING_TERRITORY_CSS = `
 #online-world-screen[data-living-territory="menu"] .world-grid > :not(.world-map-svg) { visibility:hidden; }
 /* THE FRAME'S SKIN ARRIVES, IT DOES NOT APPEAR (owner, 2026-11-02: "make going into 'territory'
    from main menu look intentional ... right now it jumps"). The panel is a framed window only
-   because of two layers: the vignette inside its edge (\`::after\`) and a 1px instrument hairline
-   that sits ABOVE the map (\`::before\`). Both are off on the menu and simply existed on the panel,
+   because of two layers: the vignette inside its edge (the ::after layer) and a 1px instrument hairline
+   that sits ABOVE the map (a ::before layer). Both are off on the menu and simply existed on the panel,
    so the window snapped into being on the first frame. They now fade on the same beat as the map's
    own light, which is what turns a crop into a frame closing in. Opacity only, one composited
    layer each, nothing to measure and nothing to clean up. */
@@ -55,7 +55,7 @@ export const LIVING_TERRITORY_CSS = `
   transform-origin:center;
   transition:opacity ${motion.open}ms ${motion.easeOpen};
 }
-/* THE RETURN'S FIRST BEAT (see living-territory.ts \`leave\`): the frame's skin leaves with the
+/* THE RETURN'S FIRST BEAT (see living-territory.ts leave): the frame's skin leaves with the
    map's light, before the geometry returns to the menu's full-bleed framing. The map's own opacity
    is driven by the animation, not here. */
 #online-world-screen.living-leaving .world-grid::before,

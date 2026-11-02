@@ -147,9 +147,13 @@ describe('the face keeps its palette and its tempo', () => {
     // Whatever it asks for stays inside the vocabulary the token test pins.
     const call = mainSource.match(/enterSurface\(next(?:,\s*(\{[^}]*\}))?\);/);
     if (call?.[1]) {
-      const numbers = [...call[1].matchAll(/(?:duration|travel|scale):\s*([\d.]+)/g)].map((m) => Number(m[1]));
-      expect(numbers.length).toBeGreaterThan(0);
+      const numbers = [...call[1]!.matchAll(/(?:duration|travel|scale):\s*([\d.]+)/g)].map((m) => Number(m[1]));
+      // 2026-11-02: the plate's arrival now names its travel and scale through the ONE vocabulary
+      // (`INTERFACE_MOTION.screen` / a named plate scale) instead of repeating literals here. Both
+      // forms are inside the tokens; a raw duration or a curve is still refused either way.
+      if (numbers.length === 0) expect(call[1]).toMatch(/INTERFACE_MOTION|PLATE_SCALE/);
       for (const n of numbers) expect(n).toBeLessThanOrEqual(320); // a duration, a px travel or a scale
+      expect(call[1]).not.toMatch(/cubic-bezier|\b\d+(?:\.\d+)?(?:ms|s)\b/);
     }
     expect(panelCss).not.toMatch(/\b\d+(?:\.\d+)?(?:ms|s)\b/);
     expect(panelCss).not.toMatch(/cubic-bezier|ease-in-out|ease-out|\blinear\b/);
