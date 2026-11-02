@@ -49,7 +49,7 @@ import { meLine, ownerLine, ownerSpokenLine } from './world-selection.js';
 import { storedDisplayName } from './identity.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
-import { lastCamera, rememberCamera } from './world-camera.js';
+import { lastChosenCamera, rememberCamera } from './world-camera.js';
 import { menuTerritoryAnchor } from './living-camera.js';
 import { mountSheetViewport } from '../ui/sheet-viewport.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
@@ -792,11 +792,15 @@ export class WorldView {
     this.identity = identity;
     this.previewOwner = owner;
     if (changedWorld || firstOwner) {
-      this.box = lastCamera(browserStorage(), world.version);
-      this.previewRemembered = this.box !== null;
-      // A remembered camera is a choice made in a previous visit, so it outranks the automatic
-      // menu frame exactly as a gesture does.
-      if (this.previewRemembered) this.manualCamera = true;
+      // ONLY A GESTURE IS A CAMERA (owner, 2026-11-02: the anchor "works once and then stops").
+      // This used to read ANY remembered frame back as deliberate, including the automatic/anchored
+      // frame every earlier close wrote, so the next open skipped `anchoredView` and re-fitted. A
+      // legacy record has no `manual` flag and is treated as automatic, exactly like a frame this
+      // build never stores.
+      const chosen = lastChosenCamera(browserStorage(), world.version);
+      this.box = chosen;
+      this.previewRemembered = chosen !== null;
+      if (chosen) this.manualCamera = true;
       this.touched = this.box !== null;
     }
     this.world = world;
@@ -837,6 +841,18 @@ export class WorldView {
   }
 
   async open() {
+    // A CAMERA THE PLAYER CHOSE IS RESTORED BEFORE ANY FRAME IS DERIVED (owner, 2026-11-02). It
+    // outranks both the menu anchor and the panel's own frame, wherever this open is reached from.
+    // A remembered AUTOMATIC/anchored frame is NOT one of these (see `lastChosenCamera`): treating
+    // it as deliberate is what made the anchor apply on the first visit only.
+    if (!this.manualCamera && this.world) {
+      const chosen = lastChosenCamera(browserStorage(), this.world.version);
+      if (chosen) {
+        this.box = chosen;
+        this.touched = true;
+        this.manualCamera = true;
+      }
+    }
     // THE PANEL LOOKS AT THE MENU'S UNMOVED MAP (owner, 2026-11-02: "so tiles don't move at all").
     // `living-territory` hands over the menu's drawn viewBox + rect at the click; `anchoredView`
     // turns it into the panel's view, which keeps the menu's pixel-for-pixel mapping instead of
@@ -854,14 +870,6 @@ export class WorldView {
     if (anchored && panelRect) {
       this.aspect = panelRect.width / panelRect.height;
       this.pixels = panelRect.width;
-    }
-    // The deliberate camera is restored after the world version is known; live bounds still win.
-    const camera = this.world ? lastCamera(browserStorage(), this.world.version) : null;
-    if (!usableView(this.box)) {
-      this.touched = camera !== null;
-      this.box = camera;
-      // Restored from storage: it may be a camera the player chose, so it outranks the auto frame.
-      if (camera) this.manualCamera = true;
     }
     if (anchored) {
       this.box = anchored;
@@ -887,7 +895,7 @@ export class WorldView {
       const remembered = lastWorld(browserStorage());
       if (remembered) {
         this.world = remembered;
-        this.box = lastCamera(browserStorage(), remembered.version);
+        this.box = lastChosenCamera(browserStorage(), remembered.version);
         this.touched = this.box !== null;
         this.fromMemory = true;
         this.paint();
@@ -917,10 +925,12 @@ export class WorldView {
     await publicRefresh;
   }
   private saveCamera() {
-    if (this.active && this.touched && this.world && this.box)
-      // A deliberate camera is stored EXACTLY as the player left it (see `resizedCamera`): storing
-      // the menu's shape here is how one trip through the menu used to re-frame it for good.
-      rememberCamera(browserStorage(), this.world.version, resizedCamera(this.box, this.aspect, this.manualCamera));
+    // ONLY A CAMERA THE PLAYER CHOSE IS REMEMBERED (owner, 2026-11-02: the anchor "works once and
+    // then stops"). An anchored or automatic frame belongs to the window it was derived for; storing
+    // it and reading it back as deliberate is what re-fitted every visit after the first. `touched`
+    // cannot decide this — preview/open set it for their own automatic frames too.
+    if (this.active && this.manualCamera && this.world && this.box)
+      rememberCamera(browserStorage(), this.world.version, this.box, true);
   }
   close(instant = false) {
     this.stopGlide();
@@ -996,7 +1006,7 @@ export class WorldView {
       if (this.fromMemory || !this.world || map.world.revision > this.world.revision ||
         (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged || colourChanged))) {
         if (this.world?.version !== map.world.version) {
-          this.box = lastCamera(browserStorage(), map.world.version);
+          this.box = lastChosenCamera(browserStorage(), map.world.version);
           this.touched = this.box !== null;
         }
         this.world = map.world;

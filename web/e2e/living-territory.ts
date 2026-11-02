@@ -44,7 +44,7 @@ let activePage:Page|null=null;
 let checks=0;const check=(label:string,pass:boolean,note?:string)=>{assert.ok(pass,note?`${label} :: ${note}`:label);checks++;console.log('PASS',label,note??'');};
 const browserErrors:string[]=[];
 const identity=JSON.stringify({token:me.token,playerId:me.player.id,kind:me.player.kind,displayName:me.player.displayName});
-const boot=async(page:Page,options:{cached?:boolean;fail?:boolean;delay?:number;anonymous?:boolean;failAuth?:boolean;empty?:boolean;rawIdentity?:string;pwa?:boolean;largeText?:boolean;delayCode?:number;wideCache?:boolean}={})=>{
+const boot=async(page:Page,options:{cached?:boolean;fail?:boolean;delay?:number;anonymous?:boolean;failAuth?:boolean;empty?:boolean;rawIdentity?:string;pwa?:boolean;largeText?:boolean;delayCode?:number;wideCache?:boolean;legacyCamera?:readonly number[]}={})=>{
  activePage=page;
  page.on('pageerror',error=>{browserErrors.push(error.message);if(process.env.LIVING_DEBUG)console.log('BROWSER ERROR',error.message);});
  await page.addInitScript(({identity,anonymous})=>{
@@ -56,14 +56,24 @@ const boot=async(page:Page,options:{cached?:boolean;fail?:boolean;delay?:number;
   Object.defineProperty(navigator,'standalone',{value:true,configurable:true});
   const media=window.matchMedia.bind(window);window.matchMedia=query=>query==='(display-mode: standalone)'?Object.defineProperty(media(query),'matches',{value:true}):media(query);
  });
- if(options.cached){
+    if(options.cached){
   const payload=await(await fetch(`${base}/v1/world`)).json();
   const at=cellXY(100,0);
   if(options.wideCache){payload.world.cells.push({id:'100,0',q:100,r:0});payload.world.revision+=10;}
   await page.addInitScript(({world,camera})=>{
    localStorage.setItem('main2:futasaku.world.last.v1',JSON.stringify(world));
-   if(camera)localStorage.setItem('main2:futasaku.world.camera.v1',JSON.stringify({version:world.version,box:camera}));
+   if(camera)localStorage.setItem('main2:futasaku.world.camera.v1',JSON.stringify({version:world.version,box:camera,manual:true}));
   },{world:payload.world,camera:options.wideCache?[at.x-70,at.y-150,140,300]:null});
+ }
+ // THE OWNER'S DEVICE, REPRODUCED (2026-11-02). `1528bc3` wrote EVERY close into the camera record,
+ // so a device that has opened the Territory before arrives here with an AUTOMATIC/anchored frame
+ // in storage. The payload is the old shape on purpose: no `manual` flag. This is the state the
+ // anchor must apply from — not only the empty-storage first visit.
+ if(options.legacyCamera){
+  const payload=await(await fetch(`${base}/v1/world`)).json();
+  await page.addInitScript(({camera,version})=>{
+   localStorage.setItem('main2:futasaku.world.camera.v1',JSON.stringify({version,box:camera}));
+  },{camera:options.legacyCamera,version:payload.world.version});
  }
  if(options.failAuth)await page.route('**/v1/guests',route=>route.fulfill({status:503,contentType:'application/json',body:'{"ok":false}'}));
  if(options.empty){const payload=await(await fetch(`${base}/v1/world`)).json();payload.world.cells=[];payload.world.claims=[];await page.route('**/v1/world',route=>route.fulfill({contentType:'application/json',body:JSON.stringify(payload)}));}
@@ -120,11 +130,15 @@ const keyContrast=async(p:Page,selector:string)=>{
  },shot.toString('base64'));
 };
 try{
- for(const [name,width,height] of [['phone',390,844],['small',320,568],['large-text',320,568],['pwa',390,844],['tall',430,932],['tablet',768,1024],['desktop',1440,1000],['landscape',844,390]] as const){
-  if(process.env.LIVING_CASE)continue;
+ // THE OWNER'S OWN PHONE (464x1004, from his screenshots) is a matrix entry in its own right: it is
+ // taller than the 390x844 the suite used, so the panel's frame and the menu's full bleed differ by
+ // more, which is where a re-fit shows up as the "few pixels lower" drop.
+ const LEGACY_CAMERA=[-300,-150,600,300] as const;
+ for(const [name,width,height] of [['phone',390,844],['owner',464,1004],['small',320,568],['large-text',320,568],['pwa',390,844],['tall',430,932],['tablet',768,1024],['desktop',1440,1000],['landscape',844,390]] as const){
+  if(process.env.LIVING_CASE||(process.env.LIVING_SIZE&&process.env.LIVING_SIZE!==name))continue;
   const context=await browser.newContext({viewport:{width,height},hasTouch:name!=='desktop'});const page=await context.newPage();
   let worldReads=0,walletReads=0;page.on('request',r=>{const path=new URL(r.url()).pathname;if(path==='/v1/world')worldReads++;if(path==='/v1/seeds/wallet')walletReads++;});
-  await boot(page,{largeText:name==='large-text',pwa:name==='pwa'});await page.waitForTimeout(500);
+  await boot(page,{largeText:name==='large-text',pwa:name==='pwa',...(process.env.LIVING_NO_LEGACY?{}:{legacyCamera:LEGACY_CAMERA})});await page.waitForTimeout(500);
   if(name==='large-text')check('Large Text setting is really active',await page.evaluate(()=>document.documentElement.classList.contains('large-text')));
   if(process.env.BASELINE_ROOT){await page.screenshot({path:`${shots}/before-${name}.png`});await context.close();continue;}
   await page.waitForSelector('[data-living-territory="menu"] .world-map-svg');
@@ -185,10 +199,15 @@ try{
    if(!a||!b||!a.length||a.length!==b.length)return false;
    return a.every((tile,index)=>tile.id===b[index]!.id&&Math.abs(tile.at[0]!-b[index]!.at[0]!)<=tolerance&&Math.abs(tile.at[1]!-b[index]!.at[1]!)<=tolerance);
   };
-  let menuTiles:{id:string;at:number[]}[]|null=null;
+  /** The largest single-axis move, in px — printed on every assertion so a report can quote it. */
+  const tileDelta=(a:{id:string;at:number[]}[]|null,b:{id:string;at:number[]}[]|null)=>{
+   if(!a||!b||a.length!==b.length||!a.length)return null;
+   return +Math.max(...a.map((tile,index)=>tile.id===b[index]!.id?Math.max(Math.abs(tile.at[0]!-b[index]!.at[0]!),Math.abs(tile.at[1]!-b[index]!.at[1]!)):Infinity)).toFixed(3);
+  };
+  /** The menu's last frame, read immediately before every open: the pixels the panel must inherit. */
+  let menuTiles:{id:string;at:number[]}[]|null=await tilePoints(page);
   if(name==='phone'){
    menuFrame=await painted();
-   menuTiles=await tilePoints(page);
    await page.evaluate(()=>{
     (window as any).__firstFrame=null;
     document.getElementById('menu-world')!.addEventListener('click',()=>{
@@ -296,12 +315,11 @@ try{
   }
   await page.waitForTimeout(name==='phone'?450:500);
   const after=await state(page);
-  if(name==='phone'){
-   // THE OWNER'S ASSERTION, SETTLED. First frame and settled frame are the same pixels: nothing
-   // slides home after the light comes up either.
-   const settledTiles=await tilePoints(page);
-   check(`NO JUMP: every own tile is on its menu pixel in the settled panel (${JSON.stringify(settledTiles)})`,tilesStill(menuTiles,settledTiles),JSON.stringify({menu:menuTiles,settled:settledTiles}));
-  }
+  // THE OWNER'S ASSERTION, SETTLED, ON EVERY VIEWPORT. The menu's last frame and the panel's
+  // settled frame are the same pixels: nothing slides home after the light comes up either, and
+  // the first visit is no longer the only one measured (see the repeat cycles below).
+  const settledTiles=await tilePoints(page);
+  check(`${name}: NO JUMP: every own tile is on its menu pixel in the settled panel (max ${tileDelta(menuTiles,settledTiles)}px)`,tilesStill(menuTiles,settledTiles),JSON.stringify({menu:menuTiles,settled:settledTiles}));
   const after0=await page.evaluate(()=>{const svg=document.querySelector('.world-map-svg')!;const grid=document.getElementById('online-world-grid')!;const vb=(svg.getAttribute('viewBox')??'').split(/\s+/).map(Number);const r=svg.getBoundingClientRect(),g=grid.getBoundingClientRect();return {box:vb,rect:[r.x,r.y,r.width,r.height],gridRect:[g.x,g.y,g.width,g.height]};});
   if(name==='phone'){
    await page.evaluate(()=>(window as any).__livingFramesDone);
@@ -447,19 +465,43 @@ try{
    check(`the retreat runs the colour-out token duration (${INTERFACE_MOTION.colourOut}ms), not a literal`,
     frames.some(f=>f.out===INTERFACE_MOTION.colourOut));
   }
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(450);
   const back=await state(page);
-  if(name==='phone'){
-   // THE RETURN IS THE SAME RULE (owner: "going back ... too"): the menu's own tiles must be back on
-   // the exact pixels the panel showed them at. Not "dimmed while it settles" — the same pixels.
-   const backTiles=await tilePoints(page);
-   check(`NO JUMP: the menu returns every own tile to the panel's pixels (${JSON.stringify(backTiles)})`,tilesStill(menuTiles,backTiles),JSON.stringify({menu:menuTiles,back:backTiles}));
-  }
+  // THE RETURN IS THE SAME RULE (owner: "going back ... too"): the menu's own tiles must be back on
+  // the exact pixels the panel showed them at. Not "dimmed while it settles" — the same pixels.
+  const backTiles=await tilePoints(page);
+  check(`${name}: NO JUMP: the menu returns every own tile to the panel's pixels (max ${tileDelta(settledTiles,backTiles)}px)`,tilesStill(settledTiles,backTiles),JSON.stringify({panel:settledTiles,back:backTiles}));
   const backSame=back.same&&back.mode==='menu'&&!!back.material&&Math.abs(back.material[0]!/back.material[1]!-1)<0.002;
   check(`${name}: return retains the one map as a true, unstretched hex field`,backSame,JSON.stringify({after,back}));
   check(`${name}: returning restores keyboard focus`,await page.evaluate(()=>document.activeElement?.id==='menu-world'));
   check(`${name}: no horizontal page overflow`,await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   check(`${name}: every visible menu key fits`,await page.evaluate(()=>[...document.querySelectorAll<HTMLElement>('#menu button')].filter(e=>e.offsetWidth&&e.offsetHeight).every(e=>{const r=e.getBoundingClientRect();return r.top>=-1&&r.bottom<=innerHeight+1&&r.left>=-1&&r.right<=innerWidth+1;})));
+  // THE VISITS THE OWNER ACTUALLY MAKES (owner, 2026-11-02: the anchor "works once and then
+  // stops"). Only the FIRST visit was ever measured, and on a device with a saved camera the first
+  // was the one that worked. Boot seeded the exact record `1528bc3` left behind (a usable frame, no
+  // `manual` flag) and an automatic frame is never overwritten now, so every one of these opens
+  // reads a remembered camera and must STILL inherit the menu's pixels.
+  for(const visit of [2,3]){
+   // A NEW SESSION, WHICH IS THE PATH THAT BROKE (owner, 2026-11-02: the anchor "works once and
+   // then stops"). `preview` only reads the camera record at boot (or a new world version), so a
+   // within-session return would never exercise the promotion that made this bug live. Reload:
+   // that is the owner's next app launch, with the frame the last close wrote still in storage.
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.waitForFunction(()=>(window as any).__severgrow?.ready?.());
+   await page.waitForSelector('[data-living-territory="menu"] .world-map-svg');
+   await page.waitForFunction(()=>!!document.querySelector('.world-hex.mine'));
+   await page.waitForFunction(()=>!(document.getElementById('menu-world') as HTMLButtonElement).disabled);
+   await page.waitForTimeout(300);
+   const menuAt=await tilePoints(page);
+   await page.click('#menu-world');
+   await page.waitForSelector('#online-world-screen:not([hidden])');
+   await page.waitForTimeout(450);
+   const panelAt=await tilePoints(page);
+   check(`${name}: visit ${visit} anchors every own tile to the menu pixel (max ${tileDelta(menuAt,panelAt)}px)`,tilesStill(menuAt,panelAt),JSON.stringify({menu:menuAt,panel:panelAt}));
+   await page.click('#online-world-back');
+   await page.waitForSelector('#menu:not([hidden])');
+   await page.waitForTimeout(450);
+  }
   if(name==='phone'){
    // Interrupt the actual shared exit (before its onDone), then rapidly reopen/return repeatedly.
    for(let i=0;i<5;i++){
