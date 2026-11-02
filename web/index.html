@@ -325,6 +325,10 @@
                    2026-10-30: "keep it clean lean and elegant"). The key stays hidden on a server
                    that predates them. -->
               <div class="world-pane" data-pane="achievements">
+                <!-- The key is always present for a signed-in player (owner, 2026-11-01); this ONE
+                     quiet line is the honest waiting state until a real list arrives. No numbers
+                     and nothing claimable are drawn before the server answers. -->
+                <p id="world-achievements-empty" class="world-pane-empty" role="status" aria-live="polite" hidden></p>
                 <div id="online-world-achievements" class="world-achievements" role="list" aria-label="Achievements"></div>
               </div>
               <!-- YOUR COLOUR: the twenty swatches, four to a row, each NAMED for accessibility. -->

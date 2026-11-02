@@ -94,6 +94,25 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     }
     return highest;
   }
+  /** Mirrors the grouped Postgres read: one pass over this store's receipts, never one per player. */
+  async campaignHighestLevels(playerIds: readonly string[]): Promise<Record<string, number | null>> {
+    const wanted = new Set(playerIds);
+    const levels: Record<string, number | null> = {};
+    for (const id of wanted) levels[id] = null;
+    for (const receipt of this.receipts.values()) {
+      if (!wanted.has(receipt.input.playerId) || receipt.input.mode !== 'campaign') continue;
+      const level = campaignLevelOfSourceKey(receipt.input.sourceKey);
+      if (level !== null) {
+        const old = levels[receipt.input.playerId] ?? null;
+        if (old === null || level > old) levels[receipt.input.playerId] = level;
+      }
+    }
+    return levels;
+  }
+  /** Mirrors `select cell_id, owner_id from world_claims`: one read for the whole board. */
+  async claimedCells(): Promise<{ cellId: string; ownerId: string }[]> {
+    return [...this.claims.values()].map((claim) => ({ cellId: claim.cellId, ownerId: claim.ownerId }));
+  }
   async claim(playerId: string, cellId: string, requestId: string, now: number): Promise<ClaimResult> {
     const wallet = this.current(playerId);
     const previous = this.purchases.get(`${playerId}:${requestId}`);

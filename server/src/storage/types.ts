@@ -299,6 +299,12 @@ export interface Storage {
 
   /** Committed moves with `revision > sinceRevision`, in ascending revision order. */
   movesOf(matchId: string, sinceRevision: number): Promise<MoveRecord[]>;
+  /**
+   * EVERY move of MANY matches in ONE read, ordered by match and revision. This is the achievements
+   * read's aggregate: it must never become one `movesOf` per finished duel (the N+1 that made the
+   * endpoint slow). The `(match_id, revision)` primary key serves the `= any(...)` lookup.
+   */
+  movesOfMatches(matchIds: readonly string[]): Promise<MoveRecord[]>;
   /** The whole atomic pipeline: participant → idempotency → revision → decide → persist. */
   commitMove(input: CommitInput): Promise<CommitResult>;
   /** Atomic multi-action commit (max 12). Same requestId replays the whole batch. */

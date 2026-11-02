@@ -899,6 +899,16 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     return rows.map(rowToMove);
   },
 
+  /** ONE statement for every move of every requested match (achievements): never per match. */
+  async movesOfMatches(matchIds: readonly string[]): Promise<MoveRecord[]> {
+    if (matchIds.length === 0) return [];
+    const { rows } = await pool.query(
+      'select * from match_moves where match_id = any($1::uuid[]) order by match_id, revision asc',
+      [matchIds],
+    );
+    return rows.map(rowToMove);
+  },
+
   async applyExpiry(matchId: string, now: number): Promise<MatchRecord | null> {
     const client = await pool.connect();
     try {

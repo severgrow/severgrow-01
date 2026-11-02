@@ -235,6 +235,18 @@ export interface WorldEconomyStore {
   /** This player's recorded settlement receipts, for campaign and duel facts. Own id only. */
   receiptRows(playerId: string): Promise<ReceiptRow[]>;
   /**
+   * THE WHOLE BOARD in its minimal shape (`cellId`, `ownerId`), for the achievements' Territory
+   * facts (tiles held, a neighbour held by somebody else, rank). ONE read of `world_claims`, never
+   * one per achievement: the map is a bounded, public set (the seen world), not a player's history.
+   */
+  claimedCells(): Promise<{ cellId: string; ownerId: string }[]>;
+  /**
+   * The highest settled Campaign level for MANY players in ONE grouped read (`seed_reward_receipts`
+   * primary key), for the "beat a higher branch" achievement. Absent players read `null`; there is
+   * never one query per opponent.
+   */
+  campaignHighestLevels(playerIds: readonly string[]): Promise<Record<string, number | null>>;
+  /**
    * The shape of every verified Campaign clear this player has (migration 0021). Empty when the
    * table has not been applied yet: the achievements page then shows honest zeroes for the two
    * clear-shape achievements rather than a broken read.

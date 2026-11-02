@@ -387,6 +387,11 @@ export class MemoryStorage implements Storage {
     return copy((this.moves.get(matchId) ?? []).filter((m) => m.revision > sinceRevision));
   }
 
+  async movesOfMatches(matchIds: readonly string[]): Promise<MoveRecord[]> {
+    // One pass over the requested matches, mirroring the single `= any(...)` statement.
+    return copy(matchIds.flatMap((id) => this.moves.get(id) ?? []));
+  }
+
   async applyExpiry(matchId: string, now: number): Promise<MatchRecord | null> {
     const match = this.matches.get(matchId);
     if (!match) return null;

@@ -1,14 +1,15 @@
-// THE ACHIEVEMENTS KEY SURVIVES A FLAKY READ (owner report, 2026-10-31: "sometimes i see the
-// achievements sometimes i dont" on /test/).
+// THE ACHIEVEMENTS KEY IS ALWAYS THERE FOR A SIGNED-IN PLAYER (owner direction, 2026-11-01:
+// "should always be availalbe in territory menu"), and it survives a flaky read.
 //
 // This drives the real product build against the real memory economy, and stubs ONLY the
-// achievements route so the three states can be produced without waiting for a bad network:
+// achievements route so the states can be produced without waiting for a bad network:
 //
-//   1. the FIRST read fails (500): the key is hidden, a retry is remembered, and the ordinary world
-//      poll makes it appear once the route answers — without leaving the screen;
+//   1. the FIRST read is HELD (no answer at all): the key is visible the moment the map opens, and
+//      the panel shows its honest waiting line with no rows and no numbers. Releasing the read
+//      fills the panel in place — the key never comes and goes;
 //   2. a later read fails (500) after a good one: the key stays, and so does its ready badge (the
 //      last good list is remembered on the device), including after a full page reload;
-//   3. a definite 404: the key hides and stays hidden.
+//   3. a definite 404: the key hides and stays hidden (an old server has no broken pane).
 //
 //   PW_CHROMIUM=/opt/pw-browsers/chromium npx tsx web/e2e/achievements-key.ts
 import { spawn } from 'node:child_process';
@@ -81,12 +82,21 @@ try {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(String(error)));
 
-  // Stub ONLY `/v1/seeds/achievements` (and its preflight); null means "let the real server answer".
-  let status: number | null = 500;
+  // Stub ONLY `/v1/seeds/achievements` (and its preflight). 'hold' keeps the request unanswered so
+  // "before any achievements response" is literal; null means "let the real server answer".
+  let status: number | 'hold' | null = 'hold';
+  // A holder object: a bare `let` assigned only inside the route callback is narrowed to null by
+  // the compiler at the call site, which is not what happens at runtime.
+  const held: { release: (() => void) | null } = { release: null };
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
   await page.route(/\/v1\/seeds\/achievements$/, async (route: Route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: cors });
+      return;
+    }
+    if (status === 'hold') {
+      await new Promise<void>((resolve) => { held.release = resolve; });
+      await route.continue().catch(() => undefined);
       return;
     }
     if (status === null) {
@@ -103,17 +113,30 @@ try {
   await page.goto(origin + '/');
   await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 30_000 });
 
-  // ---- 1. the first read fails: hidden, then the existing poll retries and the key appears --------
+  // ---- 1. the first read is HELD: the key is there at once and the panel waits honestly ----------
   await openWorld(page);
   await openKeys(page);
-  await page.waitForTimeout(1_500);
-  check('a failed FIRST read hides the key (no list has ever arrived)', await keyHidden(page));
+  // No achievements answer has been sent: the route is still holding the very first GET.
+  check('the key is visible the moment the map opens, before any achievements answer', !(await keyHidden(page)));
+  await page.click('#world-key-achievements');
+  await page.waitForTimeout(400);
+  const waitingLine = await page.evaluate(() => {
+    const line = document.getElementById('world-achievements-empty');
+    return line && !line.hidden ? (line.textContent ?? '') : '';
+  });
+  check('the panel shows its quiet waiting line while the read is in flight', waitingLine.toLowerCase().includes('reading'), waitingLine);
+  const rowsWhileWaiting = await page.evaluate(() => document.querySelectorAll('.world-achievement').length);
+  check('no achievement row, number or claim key is drawn before the answer', rowsWhileWaiting === 0, String(rowsWhileWaiting));
 
   status = null;
-  const appeared = await page.waitForFunction(() => !document.getElementById('world-key-achievements')!.hasAttribute('hidden'), undefined, { timeout: 25_000 }).then(() => true).catch(() => false);
-  check('the ordinary 12 s world poll retries and the key appears without leaving the screen', appeared);
+  held.release?.();
+  held.release = null;
+  const appeared = await page.waitForFunction(() => document.querySelectorAll('.world-achievement').length > 0, undefined, { timeout: 25_000 }).then(() => true).catch(() => false);
+  check('the answering read fills the panel in place, without the key coming and going', appeared && !(await keyHidden(page)));
   const readyAfterSuccess = await keyReady(page);
   check('the key carries the ready badge from the successful read', readyAfterSuccess >= 1, String(readyAfterSuccess));
+  const lineGone = await page.evaluate(() => document.getElementById('world-achievements-empty')?.hidden === true);
+  check('the waiting line goes away once there is a real list', lineGone === true);
 
   // ---- 2. a later failure keeps the key and its remembered list, even across a reload ------------
   status = 500;

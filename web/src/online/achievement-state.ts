@@ -1,18 +1,23 @@
 // WHETHER THE TERRITORY ACHIEVEMENTS KEY EXISTS IS A STATE-MACHINE DECISION, NOT A SIDE EFFECT OF
 // ONE NETWORK READ SUCCEEDING (owner report, 2026-10-31: "sometimes i see the achievements sometimes
-// i dont").
+// i dont"; owner direction, 2026-11-01: "should always be availalbe in territory menu").
 //
 // The old rule was `key.hidden = this.achievements === null`, and `achievements` started null and was
 // only replaced by a successful GET. Any other outcome — a 500, an offline device, a timeout, a
 // dropped answer — left it null, and no retry was remembered. The key therefore appeared only when
 // the open-time read happened to win. This module makes the rule explicit and pure:
 //
-//   HIDDEN only for (a) no signed-in identity, or (b) the server DEFINITELY has no route (404 /
-//   NOT_FOUND). Every other failure keeps the last good list and leaves the key exactly as it was.
+//   THE KEY IS PRESENT WHENEVER THERE IS A SIGNED-IN PLAYER, including before the first answer and
+//   while a read is in flight or has failed. The panel then paints its honest waiting/empty state
+//   (no invented progress, nothing claimed). There is exactly one exception:
 //
-// A transient failure with no list yet is REMEMBERED (`retry`) so the ordinary 12 s world poll asks
-// again; a 404 stops that retry. Keeping the rule pure means the DOM apply in `world-view.ts` is a
-// one-line `hidden = !achievementsVisible(...)`, and this file is what the tests pin.
+//   HIDDEN for (a) no signed-in identity, or (b) the server DEFINITELY has no route (404 /
+//   NOT_FOUND) — a build pointed at an old server must not show a broken pane.
+//
+// Every other failure keeps the last good list, keeps the key, and is REMEMBERED (`retry`) so the
+// ordinary 12 s world poll asks again; a 404 stops that retry. Keeping the rule pure means the DOM
+// apply in `world-view.ts` is a one-line `hidden = !achievementsVisible(...)`, and this file is what
+// the tests pin.
 import type { AchievementView } from '../../../server/src/seeds/achievements.js';
 import type { KeyValue } from '../../../server/src/client.js';
 
@@ -46,11 +51,13 @@ export const noAchievements = (playerId: string | null = null): AchievementsStat
 });
 
 /**
- * THE RULE: the key is on screen only when there is a signed-in player, the server has not said the
- * route is missing, and there is a list to show (fresh, or remembered from last time).
+ * THE RULE (owner, 2026-11-01: "should always be availalbe in territory menu"): the key is on
+ * screen for every signed-in player, whether or not a list has arrived yet. Only a guest, or a
+ * server that has definitely said it has no such route, hides it. A read in flight or a failed
+ * read is the panel's waiting state, never a reason to take the key away.
  */
 export const achievementsVisible = (state: AchievementsState): boolean =>
-  state.playerId !== null && !state.routeMissing && state.views !== null;
+  state.playerId !== null && !state.routeMissing;
 
 /** Rewards waiting to be claimed. Follows `achievementsVisible` so the badge cannot outlive the key. */
 export const achievementsReady = (state: AchievementsState): number =>
@@ -62,8 +69,22 @@ export const afterAchievementsRead = (
   result: AchievementsResult,
 ): AchievementsState => {
   switch (result.kind) {
-    case 'loaded':
+    case 'loaded': {
+      // A REAL answer always carries the full set (the server defines 35). An EMPTY array is the
+      // server's own deadline fallback ("could not compute in time"), not "you have none": keep the
+      // list already on screen (or none yet) and let the next poll ask again. This is why the key
+      // never has to hide while the database is slow.
+      if (result.views.length === 0) {
+        const samePlayer = state.playerId === result.playerId;
+        return {
+          playerId: result.playerId,
+          views: samePlayer ? state.views : null,
+          routeMissing: false,
+          retry: !state.routeMissing,
+        };
+      }
       return { playerId: result.playerId, views: result.views, routeMissing: false, retry: false };
+    }
     case 'missing':
       // A definite "no such route": hide, and stop asking on the poll.
       return { playerId: result.playerId, views: null, routeMissing: true, retry: false };
