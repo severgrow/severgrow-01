@@ -168,3 +168,7 @@ The transition sampler waits for at least three exact-camera observations and a 
 frame, with a three-second watchdog. This accommodates slow software-WebKit style flushes without
 relaxing map identity, visibility or camera-continuity assertions. Local Chromium passed all 120
 checks with this sampler; confirm hosted WebKit and the full CI run on the final branch head.
+
+The existing world-surface source guard now follows the measured layout viewport, preserving its
+width/height aspect and zoom-limit assertions. Its former SVG-bounds expression conflicted with the
+untransformed-viewport fix; `living-viewport.test.ts` verifies the camera behavior with scaled bounds.

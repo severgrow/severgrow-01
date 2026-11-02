@@ -40,6 +40,7 @@ uses the production database. Stop with Ctrl+C. `PREVIEW_PORT` changes its port.
 | `web/src/online/lobby-ui.ts` | Share the public-map source; begin it before identity/Seed settlement; pass the same promise to menu counts. Enable the entry after binding its handler. Mount the presentation controller and resume hooks. |
 | `web/src/online/world-view.ts` | Retain the same SVG root/listeners/camera; render menu snapshots without active polling. Keep untransformed layout-viewport measurement (never the decorative SVG bounds), remembered-camera handling, current-coast clamping, empty-map cleanup and the guarded same-player menu wallet preparation. Do not reintroduce duplicate known-player metadata reads. Preserve the menu-refresh callback for actions that finish after Back; it waits for an older menu pass before revalidating. |
 | `.github/workflows/ci.yml` | Append the two living-Territory suites/artifact step; preserve the rest of the browser matrix and pinned runner. |
+| `web/tests/world-surface.test.ts` | Update the aspect source guard to the measured layout viewport; `living-viewport.test.ts` verifies scaled SVG bounds cannot alter the camera. Preserve the aspect and zoom-limit guarantees. |
 | `web/tests/menu-territory.test.ts` | Its one-map-read contract now checks the shared public-map promise. This is a wiring update; the single-read/no-poll guarantee remains. |
 
 The new modules are `living-territory.ts`, `living-territory-css.ts`, `living-world-source.ts`,
