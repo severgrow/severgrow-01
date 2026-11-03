@@ -201,7 +201,7 @@ try{
    * nothing but the stall. The wall clock must agree, so a timeline that reports 0 while it has
    * really been running cannot pass for a first frame either. */
   const FIRST_FRAME_WINDOW=INTERFACE_MOTION.open;
-  let arrivalEarly=false,arrivalSkinGraded=false,arrivalSkinNote='';
+  let arrivalEarly=false,arrivalSkinGraded=false,arrivalSkinNote='',skinPaintedEarly=false;
   const painted=()=>page.evaluate(()=>{
    const svg=document.querySelector<SVGSVGElement>('.world-map-svg')!;
    const tiles=[...document.querySelectorAll<SVGElement>('.world-hex.mine')].slice(0,3).map(h=>{const r=h.getBoundingClientRect();return [+(r.x+r.width/2).toFixed(2),+(r.y+r.height/2).toFixed(2)];});
@@ -462,8 +462,17 @@ try{
    arrivalSkinNote=skinKeys
     ?`the ${skinRunning!.duration}ms transition was caught running, ${JSON.stringify(skinKeys.map(k=>k.opacity))}`
     :`the transition had not started at the capture; the pseudo element declares ${skinDeclaredRaw||'(no transition at all)'}`;
-   check(`the window's frame ARRIVES instead of appearing (${arrivalEarly?`vignette ${first.skin} on the first painted frame`:`the frame was ${Math.round(first.elapsed)}ms old when it was painted, so the declaration is judged`}; ${arrivalSkinNote})`,
-    arrivalSkinGraded&&(!arrivalEarly||first.skin<0.99));
+   // THE SKIN'S OWN CLOCK (2026-11-03, a loaded local run). The vignette is a CSS transition started
+   // by the open, NOT by the colour beat, and its easeOpen curve rises very fast: at 70% of its
+   // 130ms it is already at 0.9942 (measured 0.9952 at 93ms). Judging the painted value on the BEAT's
+   // clock therefore failed a correct product whenever the first painted frame landed near the end
+   // of the skin's own transition while still early in the second-long colour beat. The painted
+   // value is evidence only in the transition's first half, where its easing cannot exceed ~0.96;
+   // otherwise the declaration above is what is judged. The clock is the wall time since the click,
+   // which started the transition.
+   skinPaintedEarly=!!skinDeclared&&first.elapsed<skinDeclared*0.5;
+   check(`the window's frame ARRIVES instead of appearing (${skinPaintedEarly?`vignette ${first.skin} on the first painted frame`:`the frame was ${Math.round(first.elapsed)}ms old when it was painted — half the ${skinDeclared??'?'}ms skin transition or more — so the declaration is judged`}; ${arrivalSkinNote})`,
+    arrivalSkinGraded&&(!skinPaintedEarly||first.skin<0.99));
   }
   await page.waitForTimeout(name==='phone'?450:500);
   const after=await state(page);
@@ -492,7 +501,7 @@ try{
    // rest. Read as "first frame < 1" this check was defeated by the same late capture — the 130ms
    // transition is long finished by 400ms.
    check(`the frame's skin fades in on the same beat (vignette ${firstFrame?.skin} -> ${frames.at(-1)!.skin}; ${arrivalSkinNote})`,
-    arrivalSkinGraded&&frames.at(-1)!.skin>=0.99&&(!arrivalEarly||(firstFrame?.skin??1)<0.99));
+    arrivalSkinGraded&&frames.at(-1)!.skin>=0.99&&(!skinPaintedEarly||(firstFrame?.skin??1)<0.99));
    // THE MAPPING IS UNCHANGED, PROVEN FROM GEOMETRY (not from a sampled animation frame): project
    // real tiles through both surfaces' own `meet` mappings and require the same screen pixel. The
    // old panel re-fitted itself to its width/centre, so the panel point was tens of pixels away —
@@ -602,20 +611,6 @@ try{
     start=performance.now();
     // Exposed so the suite can time the retreat from the click itself (the owner's 300ms).
     (window as any).__backStart=start;
-    // A WALL CLOCK FOR THE RETREAT THAT A STALLED RENDERER CANNOT UNDERSTATE (2026-11-03, CI
-    // `living-territory-ios`). `leave()` adds `living-leaving` in the click task and removes it in
-    // the beat's own completion, immediately before the framing swaps — and timeline time never
-    // advances faster than the wall clock, so a beat that really completed its 300ms cannot have
-    // that class removed sooner. This is the substitute for `startTime` when the only sample that
-    // caught the beat read `startTime:null` (the beat was still pending when the renderer stalled):
-    // recorded from a MutationObserver, a microtask at the end of the task that removed it, never
-    // from a sample, because a starved timer reports its own delay rather than the product's.
-    (window as any).__backLeft=null;let seenLeaving=false;
-    const screenEl=document.getElementById('online-world-screen')!;
-    new MutationObserver(()=>{
-     if(screenEl.classList.contains('living-leaving')){seenLeaving=true;return;}
-     if(seenLeaving&&(window as any).__backLeft===null)(window as any).__backLeft=performance.now();
-    }).observe(screenEl,{attributes:true,attributeFilter:['class']});
     let sinceMenu=0,stopped=false;
     const stop=()=>{stopped=true;clearTimeout(watchdog);finish();};
     const sample=()=>{
@@ -628,7 +623,10 @@ try{
      if(out&&!(window as any).__colourOutStructure){
       const effect=out.effect as KeyframeEffect;
       const timing=effect.getTiming();
-      (window as any).__colourOutStructure={duration:typeof timing.duration==='number'?timing.duration:String(timing.duration),
+      (window as any).__colourOutStructure={id:out.id,
+       // ONE beat, not a stack of them: the retreat must be the single colour-out track.
+       beats:svg!.getAnimations().filter(a=>a.id==='living-colour-out').length,
+       duration:typeof timing.duration==='number'?timing.duration:String(timing.duration),
        easing:timing.easing,fill:timing.fill,
        keyframes:effect.getKeyframes().map(k=>({offset:k.offset??k.computedOffset,computedOffset:k.computedOffset,
         easing:k.easing,opacity:'opacity' in k?Number(k.opacity):null}))};
@@ -667,80 +665,87 @@ try{
    const backStart=await page.evaluate(()=>(window as any).__backStart as number);
    const swapAt=swap>=0?frames[swap]!.at-backStart:Number.NaN;
    const note=(f:{at:number;opacity:number;out:number|null;t:number|null;leaving:boolean;mode:string})=>({at:Math.round(f.at-backStart),t:f.t===null?null:Math.round(f.t),opacity:f.opacity,out:f.out,leaving:f.leaving,mode:f.mode});
-   // THE RETREAT, MEASURED ON THE BEAT'S OWN CLOCK (2026-11-02, the CI `living-territory-ios`
-   // failure). `startTime` is milliseconds on the same origin as `performance.now()`, so the swap's
-   // wall time minus it is exactly how long the retreat took — immune to sample spacing, and still
-   // short if the product ever swapped the framing early. This replaces "the frame before the swap
-   // must be dim", which was not measuring the product: on a software-rendered engine the document
-   // timeline stops advancing for the whole beat and then jumps straight to its end in ONE rendering
-   // update (measured in WebKit: currentTime 17 -> 300, playState `finished`, in a single frame after
-   // 400ms of wall time). A sample taken in that gap reads the beat's first instant — `t:0`,
-   // `opacity:1` — no matter how long the beat had really been running, so that sample is not
-   // evidence of a bright frame and must not be judged as one.
-   const started=[...frames].reverse().find(f=>f.start!==null);
-   const beatStart=started?started.start:null;
-   const swapT=beatStart!==null&&swap>=0?frames[swap]!.at-beatStart:Number.NaN;
-   // The samples that really observed the beat running, and the ones past its landing keyframe
-   // (offset .9, where the map is at DIP and can only be dim). If the engine painted no such frame,
-   // the clock above is the evidence; if it painted one, it must show the dim.
-   const landed=frames.slice(0,Math.max(swap,0)).filter(f=>f.t!==null&&f.t>=INTERFACE_MOTION.colourOut*.9);
-   const dimBefore=landed.some(f=>f.opacity<=.35);
-   const frozen=landed.length===0;
-   const beatRan=beatStart!==null&&swapT>=INTERFACE_MOTION.colourOut;
-   // THE SAME FACT FROM THE RETREAT'S OWN WALL WINDOW, WHEN THE BEAT CLOCK WAS NEVER READ
-   // (2026-11-03, CI `living-territory-ios`: the only sample that caught the beat read
-   // `startTime:null` — still pending — and the next one already showed the menu). `finish()` removes
-   // `living-leaving` inside the beat's completion, so the tap-to-removal gap is wall time the beat
-   // was actually given; a completed 300ms beat cannot shrink it below 300ms, and a product that
-   // swapped the framing without a beat leaves it near zero. Only the lower bound is claimed here:
-   // the "not the arrival's second" half is pinned by the declaration (duration === colourOut).
-   const leftAt=await page.evaluate(()=>(window as any).__backLeft as number|null);
-   const retreatWall=leftAt!==null?leftAt-backStart:Number.NaN;
-   const wallRan=Number.isFinite(retreatWall)&&retreatWall>=INTERFACE_MOTION.colourOut;
-   const ran=beatStart!==null?beatRan:wallRan;
-   const retreatEvidence=beatStart!==null?`beat ${Number.isFinite(swapT)?Math.round(swapT):'?'}ms of ${INTERFACE_MOTION.colourOut}ms`
-    :`no beat clock was ever read; the framing left ${Number.isFinite(retreatWall)?Math.round(retreatWall)+'ms':'at an unknown time'} after the tap`;
-   const brightAtMenuWidth=frames.filter(f=>f.mode==='menu'&&f.opacity>MENU_MAP_OPACITY+0.02);
-   check(`the way back is not a hard cut: the framing changes only after the colour-out has run (frame ${swap}, ${Math.round(swapAt)}ms: ${retreatEvidence}, ${frozen?'no landing frame was painted':`${landed.length} landing sample(s), ${landed.filter(f=>f.opacity<=.35).length} dim`}: ${JSON.stringify(frames.slice(Math.max(0,swap-1),swap+2).map(note))})`,
-    swap>0&&frames[swap]!.opacity<=.35&&(ran?(dimBefore||frozen):dimBefore));
-   check(`the map is never bright in the menu's framing (${brightAtMenuWidth.length} bright frame(s))`,
-    brightAtMenuWidth.length===0);
-   // THE RETREAT'S SHAPE, PINNED FROM ITS KEYFRAMES (same reasoning as the arrival). A stalled
-   // engine paints no intermediate dim, so its samples cannot prove the 300ms graded retreat. The
-   // first keyframe is the map's PRESENT colour (whatever the interrupted arrival had reached), so
-   // only the shape is pinned: it starts brighter than its dip, touches the dim floor at its 90%
-   // landing keyframe, and ends on the menu's own rest light. A hard cut (one keyframe, or two from
-   // bright to rest) fails this.
-   const outStructure=await page.evaluate(()=>(window as any).__colourOutStructure as {duration:number|string;easing:string;fill:string;
+   // THE RETREAT'S SHAPE, FROM ITS DECLARATION, JUDGED BEFORE ANY PAINTED SAMPLE (2026-11-03, CI
+   // `living-territory-ios` run 41556406218). The previous version asked the beat's own `startTime`
+   // for the length of the retreat, but an animation that never received a start frame (CI's
+   // software WebKit leaves the colour-out PENDING) has `startTime === null`. That made `beatStart`
+   // null, `swapT` NaN and `beatRan` false, so a correct product was reported as a "hard cut". The
+   // declaration cannot be defeated that way: id, duration and keyframes are the author's data. It
+   // is asserted first because the painted evidence below may only substitute for a clock when the
+   // declaration holds.
+   const outStructure=await page.evaluate(()=>(window as any).__colourOutStructure as {id?:string;beats?:number;duration:number|string;easing:string;fill:string;
     keyframes:{offset:number;computedOffset:number;easing:string;opacity:number|null}[]}|null);
    const outKfs=(outStructure?.keyframes??[]).filter(k=>k.opacity!==null);
    const outOffsets=outKfs.map(k=>k.offset),outOps=outKfs.map(k=>k.opacity!);
    const landing=outKfs.findIndex(k=>Math.abs(k.offset-.9)<=1e-6);
+   // ONE colour-out beat, on the owner's retreat token, whose opacity track starts at (or above) the
+   // menu's own backdrop light, descends STRICTLY into the dim floor at its 90% landing keyframe,
+   // and ends on the menu's own rest light. The first keyframe is the map's PRESENT colour (an
+   // interrupted arrival can be anywhere on its climb), so the start is pinned by meaning — never
+   // darker than the place it returns to — not to a literal. A hard cut (one keyframe, two from
+   // bright to rest, a framing swapped before this beat runs) fails this.
    const retreatGraded=!!outStructure
+    &&outStructure.id==='living-colour-out'
+    &&(outStructure.beats??0)===1
     &&outStructure.duration===INTERFACE_MOTION.colourOut
     &&outKfs.length>=3
     &&outOffsets.every((o,i)=>i===0?Math.abs(o)<=1e-9:o>outOffsets[i-1]!+1e-9)
     &&Math.abs(outOffsets.at(-1)!-1)<=1e-9
-    &&outOps[0]!>outOps[1]!
-    &&landing>=0&&outOps[landing]!<=0.35
+    &&outOps[0]!>=MENU_MAP_OPACITY-1e-9
+    &&landing>=0
+    &&outOps.slice(0,landing+1).every((o,i)=>i===0||o<outOps[i-1]!)
+    &&outOps[landing]!<=0.35
     &&Math.abs(outOps.at(-1)!-MENU_MAP_OPACITY)<=1e-9;
-   check(`the retreat is a real graded colour-out, not an instant flip (${outStructure?`${outStructure.duration}ms, ${outKfs.length} keyframes ${JSON.stringify(outOffsets.map((o,i)=>[+o.toFixed(4),outOps[i]]))}`:'the colour-out beat was never created'})`,
+   check(`the retreat is one real graded colour-out, not an instant flip (${outStructure?`${outStructure.duration}ms, ${outStructure.beats??'?'} beat(s), ${outKfs.length} keyframes ${JSON.stringify(outOffsets.map((o,i)=>[+o.toFixed(4),outOps[i]]))}`:'the colour-out beat was never created'})`,
     retreatGraded,JSON.stringify(outStructure));
+   // THE CLOCK, WHEN THE ENGINE HAS ONE. `startTime` is on the same origin as `performance.now()`,
+   // so the swap's wall time minus it is exactly how long the retreat took — immune to sample
+   // spacing, and still short if the product ever swapped the framing early. It is only meaningful
+   // while the beat has a start frame; a pending animation's `startTime` is null by definition,
+   // which is a cold start of the engine, not a statement about the product.
+   const started=[...frames].reverse().find(f=>f.start!==null);
+   const beatStart=started?started.start:null;
+   const clockAdvancing=beatStart!==null;
+   const swapT=beatStart!==null&&swap>=0?frames[swap]!.at-beatStart:Number.NaN;
+   // The samples past the landing keyframe (offset .9, where the map is at DIP and can only be dim).
+   // An empty set means the engine painted nothing between the tap and the swap, not that the map
+   // was bright.
+   const landed=frames.slice(0,Math.max(swap,0)).filter(f=>f.t!==null&&f.t>=INTERFACE_MOTION.colourOut*.9);
+   const dimBefore=landed.some(f=>f.opacity<=.35);
+   const frozen=landed.length===0;
+   const brightAtMenuWidth=frames.filter(f=>f.mode==='menu'&&f.opacity>MENU_MAP_OPACITY+0.02);
+   // THE ONE CLOCK EVERY ENGINE HAS: the page's own wall clock since the click. The beat is created
+   // inside the click handler, so a correct retreat cannot swap the framing sooner than its 300ms,
+   // whether or not the document timeline ever advanced. This is what still catches an immediate
+   // swap when the animation is PENDING (proof run: a 5ms swap left no start frame, painted nothing
+   // between, and looked exactly like the CI stall until this floor was added).
+   const tooQuick=swap>=0&&swapAt<INTERFACE_MOTION.colourOut;
+   // WHICH BRANCH, IN WORDS — printed in every message so a CI log explains itself.
+   const pendingNote='no measured beat clock (pending animation on this engine); the retreat\'s shape is asserted from its keyframes';
+   const clockNote=clockAdvancing
+    ?`measured beat clock: the framing swapped ${Math.round(swapT)}ms after the beat began`
+    :`${pendingNote}; ${frozen?'the engine painted no landing frame between':'the engine painted a landing frame, and it is dim'}`;
+   check(`the way back is not a hard cut: the framing changes only after the colour-out has run (frame ${swap}, ${Math.round(swapAt)}ms after the click, floor ${INTERFACE_MOTION.colourOut}ms; ${clockNote}; beat ${clockAdvancing?Math.round(swapT):'?'}ms of ${INTERFACE_MOTION.colourOut}ms, ${frozen?'no landing frame was painted':`${landed.length} landing sample(s), ${landed.filter(f=>f.opacity<=.35).length} dim`}: ${JSON.stringify(frames.slice(Math.max(0,swap-1),swap+2).map(note))})`,
+    // The swap frame is dim on every engine (engine-independent; it measured 0.2344 on CI), every
+    // landing frame that WAS painted is dim, and the framing never swaps before the retreat's own
+    // 300ms could have elapsed since the click. Only the beat-clock LENGTH needs a live beat clock;
+    // a pending one falls back to the declaration above, with the "nothing painted" fact stated.
+    swap>0&&frames[swap]!.opacity<=.35&&(dimBefore||frozen)&&!tooQuick
+     &&(clockAdvancing?swapT>=INTERFACE_MOTION.colourOut:retreatGraded));
+   check(`the map is never bright in the menu's framing (${brightAtMenuWidth.length} bright frame(s))`,
+    brightAtMenuWidth.length===0);
    // KEEP THE PAINTED EVIDENCE WHEN THERE IS SOME, AND SAY SO WHEN THE ENGINE PAINTED NONE. An empty
-   // `landed` set used to make `every()` pass vacuously; now the clock that already proves the beat
-   // ran (see above) is the only substitute, and it is printed.
-   check(`the retreat has dimmed by its landing keyframe (${landed.length?`${landed.length} sample(s) past 90%: ${JSON.stringify(landed.slice(0,3).map(note))}`:`no landing frame was painted; ${retreatEvidence} says the colour-out had run`})`,
-    landed.length?landed.every(f=>f.opacity<=.35):ran);
+   // `landed` set used to make `every()` pass vacuously; now the declaration is the substitute, and
+   // the branch is printed.
+   check(`the retreat has dimmed by its landing keyframe (${landed.length?`${landed.length} sample(s) past 90%: ${JSON.stringify(landed.slice(0,3).map(note))}`:`${pendingNote}; no landing frame was painted`})`,
+    landed.length?landed.every(f=>f.opacity<=.35):(retreatGraded&&frozen));
    check('the way back lands the backdrop on the menu\'s own rest light',
     frames.at(-1)!.opacity<=MENU_MAP_OPACITY+0.01);
    // THE RETREAT IS 300ms, NOT THE ARRIVAL'S SECOND (owner, 2026-11-02: "and 0.3s when going back
-   // to main menu"). Same clock, and it must stay well inside the arrival's second. A beat starts on
-   // the first painted frame (on software WebKit, ~200ms after the tap), so the click's clock would
-   // read it wrong — and when no beat clock was ever read at all, only the wall window's lower bound
-   // is claimed here: the "not the arrival's second" half is already pinned by the declaration
-   // (`the retreat is a real graded colour-out` above: duration === colourOut, 300 not 1000).
-   check(`the retreat clears in one colour-out beat (${beatStart!==null?`${Math.round(swapT)}ms ≈ ${INTERFACE_MOTION.colourOut}ms`:`no beat clock; ${Number.isFinite(retreatWall)?Math.round(retreatWall)+'ms':'an unknown time'} of wall time to the framing swap`}, not the ${INTERFACE_MOTION.colourIn}ms arrival)`,
-    swap>0&&(beatStart!==null?(swapT>=INTERFACE_MOTION.colourOut&&swapT<INTERFACE_MOTION.colourIn):wallRan));
+   // to main menu"). On a live clock the swap is timed against the beat; on a pending one the
+   // declared duration is the evidence. Both say the same thing, and both are printed.
+   check(`the retreat clears in one colour-out beat (${clockAdvancing?`${Math.round(swapT)}ms measured on the beat's own clock ≈ ${INTERFACE_MOTION.colourOut}ms, not the ${INTERFACE_MOTION.colourIn}ms arrival`:`${pendingNote}; the framing still swapped ${Math.round(swapAt)}ms after the click, so the declared ${INTERFACE_MOTION.colourOut}ms colour-out token — not the ${INTERFACE_MOTION.colourIn}ms arrival — is the beat`})`,
+    swap>0&&!tooQuick&&(clockAdvancing?(swapT>=INTERFACE_MOTION.colourOut&&swapT<INTERFACE_MOTION.colourIn):retreatGraded));
    check(`the retreat runs the colour-out token duration (${INTERFACE_MOTION.colourOut}ms), not a literal`,
     frames.some(f=>f.out===INTERFACE_MOTION.colourOut));
   }
