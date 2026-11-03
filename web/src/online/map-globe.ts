@@ -30,12 +30,25 @@
 // camera (the panel is a crop of the same canvas — see `world-view.ts`), so they necessarily share
 // this pose too; there is no second calculation to disagree with.
 //
-// STRENGTH, 2026-11-03. The owner chose 8% after seeing the whole ladder, knowing it is past the 10%
+// STRENGTH, 2026-11-03 (first pass). The owner chose 8% after seeing the whole ladder, knowing it is past the 10%
 // edge-length bar (the old static pose's worst tile was 1.1499; the view-centred pose is measured in
 // `web/tests/map-globe.test.ts`): rim tiles are knowingly compressed. `docs/DECISIONS.md` records it.
 // The hexagon tests pin the HARD floor (1.20, the last rung before the tiles shear) instead of the
 // product bar, and they still count what the product bar would reject, so the cost stays a number.
 
+// THE CURVE, 2026-11-03 (owner: "I want a more expressive globe effect, ideally around 0.15 ... if
+// necessary, improve the projection/falloff curve rather than allowing outer tiles to become ugly
+// slivers"). The sphere's own curve (`sin`) concentrates its squeeze at the rim: its radial factor is
+// `cos(theta)`, so at 15% the tiles near a corner of the panel were drawn at 46% of their area with a
+// 1.42-1.65 edge ratio — slivers. The drawn radius is now `d * (1 - falloff * u^GLOBE_SHAPE)` with
+// `u = d / radius`: the SAME rim (the corner is drawn exactly `falloff` smaller), but the squeeze
+// spread from the middle outward, so the centre reads as gently enlarged and the rim as turning away
+// without collapsing. Measured on a 390 x 844 phone over the tiles the panel shows: worst edge ratio
+// 1.24-1.27 and smallest tile 53-55% at 15% (sine: 1.42-1.65, 34-46%). Radially a tile is still
+// squeezed `1 + GLOBE_SHAPE` = 2.25 times as much as it narrows — the meridional "turning away" read.
+// Past the point where the radial factor would fall below `MIN_RADIAL` the curve continues as a
+// straight line of that slope, so ground grown absurdly far out recedes and never folds back.
+//
 export const X = Math.sqrt(3);
 export const R = 10;
 
@@ -55,39 +68,40 @@ export const flatCell = (q: number, r: number): { x: number; y: number } => ({ x
  * `globe-subtle`), 0.05 (MODERATE — the strongest that stayed inside the hexagon bar on the old
  * pose), 0.08 (THIS, the owner's choice), 0.12 and up (rejected — the tiles shear). 0 is flat.
  */
-export const GLOBE_FALLOFF = 0.08;
+export const GLOBE_FALLOFF = 0.15;
+/**
+ * THE CURVE'S SHAPE: the exponent of the falloff, `k(u) = 1 - GLOBE_FALLOFF * u^GLOBE_SHAPE`. 2 is the
+ * sphere's own shape to first order (all the squeeze at the rim); 1.25 spreads it inward, which is
+ * what keeps 15% readable (see the header). 2026-11-03.
+ */
+export const GLOBE_SHAPE = 1.25;
+/** The smallest radial factor the curve ever draws; beyond it the rim continues as a straight line. */
+const MIN_RADIAL = 0.25;
 /** The drawn size of the rim relative to the middle: the smallest a tile is ever drawn. */
 export const GLOBE_RIM = 1 - GLOBE_FALLOFF;
-
-/** Past this arc the sphere would start to fold back on itself. Never reached by the real map; a
- *  guard so a cell grown absurdly far out is drawn receding, never inverted. */
-const MAX_ARC = 1.4;
 
 export type GlobePose = Readonly<{
   cx: number;
   cy: number;
-  /** Flat distance from the middle to the furthest CORNER of the warped area. */
+  /** Flat distance from the middle to the furthest CORNER of the warped area: where `falloff` applies. */
   radius: number;
-  /** The sphere the lattice is bent onto. */
-  sphere: number;
-  /** The arc the rim subtends, in radians. */
-  arc: number;
+  /** How much smaller the rim is drawn than the middle. */
+  falloff: number;
+  /** The curve's exponent (`GLOBE_SHAPE`). */
+  shape: number;
+  /** Where the curve hands over to its straight continuation, as a flat distance (`MIN_RADIAL`). */
+  knee: number;
 }>;
 
-/** `theta` for which `sin(theta)/theta = 1 - falloff`. Newton from the series' leading term. */
-export const arcFor = (falloff: number): number => {
-  const target = 1 - Math.min(0.45, Math.max(0, falloff));
-  let theta = Math.sqrt(6 * (1 - target));
-  for (let i = 0; i < 24; i++) {
-    const f = Math.sin(theta) / theta - target;
-    const slope = (theta * Math.cos(theta) - Math.sin(theta)) / (theta * theta);
-    if (!Number.isFinite(slope) || Math.abs(slope) < 1e-12) break;
-    const next = theta - f / slope;
-    if (!Number.isFinite(next) || next <= 0) break;
-    if (Math.abs(next - theta) < 1e-12) { theta = next; break; }
-    theta = next;
-  }
-  return theta;
+/** The flat distance at which the radial factor `1 - f(1+p)u^p` reaches `MIN_RADIAL`. */
+const kneeFor = (radius: number, falloff: number, shape: number): number =>
+  radius * Math.pow((1 - MIN_RADIAL) / (falloff * (1 + shape)), 1 / shape);
+
+/** The pose for a centre and a rim radius, or null when there is nothing to bend. */
+const poseAt = (cx: number, cy: number, radius: number, falloff: number, shape = GLOBE_SHAPE): GlobePose | null => {
+  if (!(radius > 0) || !(falloff > 0) || !(shape > 0) || ![cx, cy].every(Number.isFinite)) return null;
+  const f = Math.min(0.45, falloff);
+  return { cx, cy, radius, falloff: f, shape, knee: kneeFor(radius, f, shape) };
 };
 
 /**
@@ -105,11 +119,7 @@ export const viewGlobePose = (
   const width = box[2];
   const height = box[3];
   if (!(width > 0) || !(height > 0) || !(falloff > 0)) return null;
-  const arc = arcFor(falloff);
-  if (!(arc > 0)) return null;
-  const radius = Math.hypot(width, height) / 2;
-  if (!(radius > 0)) return null;
-  return { cx: box[0] + width / 2, cy: box[1] + height / 2, radius, sphere: radius / arc, arc };
+  return poseAt(box[0] + width / 2, box[1] + height / 2, Math.hypot(width, height) / 2, falloff);
 };
 
 /** The static pose for a set of cells, kept for the projection tests and for any one-off question
@@ -131,10 +141,7 @@ export const globePose = (cells: readonly { q: number; r: number }[], falloff = 
     radius = Math.max(radius, Math.hypot(at.x - cx, at.y - cy));
   }
   radius += R;
-  if (!(radius > 0)) return null;
-  const arc = arcFor(falloff);
-  if (!(arc > 0)) return null;
-  return { cx, cy, radius, sphere: radius / arc, arc };
+  return poseAt(cx, cy, radius, falloff);
 };
 
 /** Two poses that would draw the same pixels (used to skip a pointless re-warp on a sub-pixel
@@ -142,26 +149,26 @@ export const globePose = (cells: readonly { q: number; r: number }[], falloff = 
 export const sameGlobePose = (a: GlobePose | null, b: GlobePose | null): boolean =>
   a === b || (!!a && !!b &&
     Math.abs(a.cx - b.cx) < 1e-6 && Math.abs(a.cy - b.cy) < 1e-6 &&
-    Math.abs(a.sphere - b.sphere) < 1e-6 && Math.abs(a.arc - b.arc) < 1e-12);
+    Math.abs(a.radius - b.radius) < 1e-6 && a.falloff === b.falloff && a.shape === b.shape);
 
 /** Where a flat map point is DRAWN. The middle is untouched; the rim closes in and turns away. */
 export const globePoint = (pose: GlobePose, x: number, y: number): { x: number; y: number } => {
   const dx = x - pose.cx, dy = y - pose.cy;
   const d = Math.hypot(dx, dy);
   if (!(d > 1e-9)) return { x: pose.cx, y: pose.cy };
-  const k = drawnOver(d, pose.sphere) / d;
+  const k = drawnOver(d, pose) / d;
   return { x: pose.cx + dx * k, y: pose.cy + dy * k };
 };
 
 /**
- * The DRAWN radius for a flat radius. `sphere * sin(d / sphere)` up to `MAX_ARC`; past it (never
- * reached by the real map) the tangent is continued, so a cell grown absurdly far out recedes
- * instead of folding back over the map it came from.
+ * The DRAWN radius for a flat radius: `d * (1 - falloff * (d/radius)^shape)` up to the knee, and past
+ * it the straight line the curve is heading along there (slope `MIN_RADIAL`), so a cell grown
+ * absurdly far out recedes instead of folding back over the map it came from.
  */
-const drawnOver = (d: number, sphere: number): number => {
-  const limit = MAX_ARC * sphere;
-  if (d <= limit) return sphere * Math.sin(d / sphere);
-  return sphere * Math.sin(MAX_ARC) + (d - limit) * Math.cos(MAX_ARC);
+const drawnOver = (d: number, pose: GlobePose): number => {
+  const curve = (x: number) => x * (1 - pose.falloff * Math.pow(x / pose.radius, pose.shape));
+  if (d <= pose.knee) return curve(d);
+  return curve(pose.knee) + (d - pose.knee) * MIN_RADIAL;
 };
 
 /**
@@ -172,7 +179,7 @@ const drawnOver = (d: number, sphere: number): number => {
 export const globeScale = (pose: GlobePose, x: number, y: number): number => {
   const d = Math.hypot(x - pose.cx, y - pose.cy);
   if (!(d > 1e-9)) return 1;
-  return drawnOver(d, pose.sphere) / d;
+  return drawnOver(d, pose) / d;
 };
 
 /**
