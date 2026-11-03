@@ -37,6 +37,14 @@ const VIEW_H = Number(process.env.VIEW_H ?? 844);
 /** The same cap `world-view.detailFor` puts on the view: one cell is at least 46 CSS px at the rim. */
 const MENU_WIDTH = VIEW_W * (X * R) / (46 / (1 - GLOBE_FALLOFF));
 const MENU_HEIGHT = MENU_WIDTH / (VIEW_W / VIEW_H);
+/**
+ * How many LAND neighbour pairs must be on screen while the finger holds the diagonal drag, so the
+ * seam proof is a broad sample. Measured 2026-11-03: 371 at 8% (5de99411), 287 at 15%. The 15% open
+ * is zoomed so a centre tile keeps its size (`MENU_WIDTH`: (0.85/0.92)^2 = 85% of the ground), and
+ * the drag now reaches the coast, where part of the view is fog this proof does not count. The floor
+ * was 300; 250 still demands over 125 visible tiles.
+ */
+const HELD_PAIRS_FLOOR = 250;
 
 const storage = new MemoryStorage();
 const store = new MemoryWorldEconomyStore();
@@ -442,7 +450,7 @@ try {
   // on the bent paths while the finger is still down — and it only means anything if a live warp
   // happened in this same gesture.
   check(`a warp DURING the drag leaves neighbours sharing corners exactly (max seam ${heldSeam.seam.toFixed(3)}px over ${heldSeam.pairs} pairs, ${warpsDuringDrag} live warps)`,
-    warpsDuringDrag > 0 && heldSeam.pairs > 300 && heldSeam.seam < 0.02);
+    warpsDuringDrag > 0 && heldSeam.pairs > HELD_PAIRS_FLOOR && heldSeam.seam < 0.02);
   // CHECK 3: the settled frame equals the last drag frame (no drift between the two poses).
   const ids = Object.keys(heldVisible);
   const movedAtRelease = ids.filter((id) => heldVisible[id] !== releasedPaths[id]);

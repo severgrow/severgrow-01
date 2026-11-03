@@ -619,6 +619,16 @@ export class WorldView {
    * always share their corners — live during a drag, not on release.
    */
   private fogCellList: { id: string; q: number; r: number }[] = [];
+  /**
+   * WHERE EACH CELL WAS LAST DRAWN (its bent centre, written by `drawnHex`). A live pass only
+   * redraws ground near the view, so a cell further out keeps the shape the pose of its last draw
+   * gave it — and that older pose bent it further in, because it stood further from the middle then.
+   * Dragging toward it can bring that stale shape on screen while its true, current shape is still
+   * outside, so a live pass that judged by the current pose alone never touched it (owner brief,
+   * 2026-11-03: dynamic-globe measured a 7.5px seam at the right rim mid-drag, at the 15% bend). The
+   * live pass redraws a cell when EITHER shape can reach the view.
+   */
+  private drawnCentres = new Map<string, { x: number; y: number }>();
   private mistShift: FogShift | null = null;
   private mistShiftAt = 0;
   /** MENU's row of four keys is out (owner, 2026-10-28). */
@@ -972,6 +982,7 @@ export class WorldView {
   /** A cell's hexagon with its shared corners bent. Neighbours draw the same corner twice, exactly. */
   private drawnHex(q: number, r: number): string {
     const at = coords(q, r);
+    this.drawnCentres.set(`${q},${r}`, this.pose ? globePoint(this.pose, at.x, at.y) : at);
     return globeHex(this.pose, at.x, at.y);
   }
   /** The pose the shared camera implies (its centre, its half-diagonal as the rim). */
@@ -1027,22 +1038,26 @@ export class WorldView {
     const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const [bx, by, bw, bh] = this.box;
     // A LIVE pass has no margin to give away: a hex reaches `R` from its own DRAWN centre, and the
-    // bend pulls a cell inward, so the drawn centre is the honest test. A settle keeps the half-view
-    // margin it has always had, so off-screen ground is already posed when it scrolls in.
-    const pad = live ? R + 1 : Math.max(bw, bh) * 0.5;
+    // bend pulls a cell inward, so the drawn centre (padded by `reach`) is the honest test. A settle
+    // keeps the half-view margin it has always had, so off-screen ground is already posed when it
+    // scrolls in.
+    const reach = R + 1;
+    const pad = Math.max(bw, bh) * 0.5;
     const paths = new Map<string, string>();
     // One list, one pose: the discovered land AND the undiscovered rings beyond it (see
     // `fogCellList`). Ids never collide — a fog cell is by definition not a seen cell.
     for (const cell of [...this.world.cells, ...this.fogCellList]) {
       const flat = coords(cell.q, cell.r);
-      if (live) {
-        // A cell whose FLAT centre is already inside the box is drawn inside it too: the bend only
-        // pulls a point toward the middle of the view, and a box is convex, so the segment between
-        // the two stays inside. Its projection is therefore not needed to decide, and most visible
-        // cells answer here without one.
-        const flatInside = flat.x >= bx && flat.x <= bx + bw && flat.y >= by && flat.y <= by + bh;
-        if (!flatInside && !drawnInView(this.pose, this.box, flat.x, flat.y, pad)) continue;
-      } else {
+      // A cell whose FLAT centre is already inside the box is drawn inside it too: the bend only
+      // pulls a point toward the middle of the view, and a box is convex, so the segment between
+      // the two stays inside. Its projection is therefore not needed to decide, and most visible
+      // cells answer here without one.
+      const flatInside = flat.x >= bx && flat.x <= bx + bw && flat.y >= by && flat.y <= by + bh;
+      if (live && !flatInside && !drawnInView(this.pose, this.box, flat.x, flat.y, reach)) {
+        // Off the view on the current pose — but its LAST drawn shape may still be on screen.
+        const last = this.drawnCentres.get(`${cell.q},${cell.r}`);
+        if (!last || last.x < bx - reach || last.x > bx + bw + reach || last.y < by - reach || last.y > by + bh + reach) continue;
+      } else if (!live) {
         if (flat.x < bx - pad || flat.x > bx + bw + pad) continue;
         if (flat.y < by - pad || flat.y > by + bh + pad) continue;
       }
