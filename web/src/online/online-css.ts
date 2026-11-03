@@ -589,7 +589,13 @@ export const ONLINE_CSS = `
    becomes a grid item and never takes a pan or a tile tap. */
 .world-grid::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(ellipse 78% 72% at 50% 46%, transparent 42%, #070a08b8 100%);
+  /* THE CENTRE CATCHES A LITTLE LIGHT (owner, 2026-11-03: "extremely subtle illumination towards the
+     centre to support the globe illusion"). One more stop in the vignette this layer already paints:
+     static, composited, no filter, no loop, and soft enough that it never reads as a spotlight. The
+     panel's middle is the camera's middle, so the light rides the camera with the globe. */
+  background:
+    radial-gradient(ellipse 52% 44% at 50% 50%, rgba(242, 229, 197, .028), transparent 100%),
+    radial-gradient(ellipse 78% 72% at 50% 46%, transparent 42%, #070a08b8 100%);
 }
 .world-map-svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 .world-map-svg:active { cursor: grabbing; }
@@ -626,6 +632,8 @@ export const ONLINE_CSS = `
    joins so all six vertices stay crisp. */
 .world-accent-line {
   fill: none; stroke: #f2e5c5; stroke-width: 1.6; stroke-linejoin: round;
+  /* the tactile answer to a tap (world-view.ts, paintAccent): the outline lands a touch heavier and
+     brighter, then settles to this line in 180ms. Stroke only — the camera never moves. */
   vector-effect: non-scaling-stroke; pointer-events: none;
   filter: drop-shadow(0 0 3px #d4c28cb0);
 }
@@ -1326,6 +1334,11 @@ html.reduce-motion .world-chat { animation: none; }
 
 /* ---- the fog, alive: two rings breathing at different paces ---- */
 .world-fog { fill: #1b201c; stroke: #8f977f; stroke-width: .4; stroke-dasharray: 1.6 2.4; vector-effect: non-scaling-stroke; pointer-events: none; }
+/* THE FOG FALLS OFF (owner, 2026-11-03: "undiscovered hexes fade progressively into the darker
+   surrounding world ... no giant outlines or obvious hard termination"). The far ring keeps its
+   shape but sinks toward the background: a darker face and a fainter, finer dash, so the land ends in
+   a dusk rather than a drawn edge. The two-ring discovery mechanic and its breathing are unchanged. */
+.world-fog.ring-2 { fill: #161a17; stroke-opacity: .55; stroke-dasharray: 1.2 3.2; }
 .world-fog-ring.ring-1 { opacity: .42; animation: world-mist 9s ease-in-out infinite; }
 .world-fog-ring.ring-2 { opacity: .16; animation: world-mist-far 13s ease-in-out infinite; }
 @keyframes world-mist { 50% { opacity: .26; } }

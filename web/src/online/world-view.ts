@@ -2152,9 +2152,24 @@ export class WorldView {
   private paintAccent() {
     if (!this.accent) return;
     const cell = this.selected ? this.world?.cells.find((candidate) => candidate.id === this.selected) : null;
-    if (!cell) { this.accent.removeAttribute('d'); return; }
+    if (!cell) { this.accent.removeAttribute('d'); this.accentCell = null; return; }
     this.accent.setAttribute('d', this.drawnHex(cell.q, cell.r));
+    // THE TAP IS ANSWERED (owner, 2026-11-03: "an immediate, restrained edge/outline response when
+    // selecting a tile"). Only when the selection CHANGES — a re-pose of the same tile during a drag
+    // is not a new selection. One finite stroke animation on the existing outline: no camera move, no
+    // filter change, nothing on the tile itself, and none under reduced motion.
+    if (cell.id !== this.accentCell) {
+      this.accentCell = cell.id;
+      if (interfaceMotionAllowed() && typeof this.accent.animate === 'function') {
+        this.accent.animate(
+          [{ strokeWidth: '2.6px', strokeOpacity: 1 }, { strokeWidth: '1.6px', strokeOpacity: 1 }],
+          { duration: 180, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+        );
+      }
+    }
   }
+  /** The tile the outline last answered, so a drag's re-pose of the same tile does not re-answer. */
+  private accentCell: string | null = null;
   /**
    * A TAP SELECTS, NOTHING MORE (owner, 2026-10-28: "tapping empty tile should NOT open the menu and
    * still have option to grow/sell/challenge without opening the menu"). The tile bar at the map's

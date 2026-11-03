@@ -258,6 +258,33 @@ try {
   check('a slow drag that pauses stops exactly where the finger left it', Math.abs(slowRest[0]! - slowRelease[0]!) < 0.01 && Math.abs(slowRest[1]! - slowRelease[1]!) < 0.01,
     `moved ${Math.hypot(slowRest[0]! - slowRelease[0]!, slowRest[1]! - slowRelease[1]!).toFixed(3)} after release`);
 
+  // ---- 4b. SELECTION answers the tap with the outline, and the camera stays put ------------
+  {
+    await page.waitForTimeout(500);
+    const q = await panelRect(page);
+    const camBefore = await viewBox(page);
+    await page.evaluate(() => {
+      const w = window as unknown as { __widths: number[]; __on: boolean };
+      w.__widths = []; w.__on = true;
+      const loop = () => {
+        if (!w.__on) return;
+        const el = document.querySelector('.world-accent-line');
+        if (el && el.getAttribute('d')) w.__widths.push(parseFloat(getComputedStyle(el).strokeWidth));
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    });
+    await page.mouse.click(q.cx + 30, q.cy + 30);
+    await page.waitForTimeout(450);
+    const widths = await page.evaluate(() => { const w = window as unknown as { __widths: number[]; __on: boolean }; w.__on = false; return w.__widths; });
+    const camAfter = await viewBox(page);
+    const peak = Math.max(0, ...widths), rest = widths.at(-1) ?? 0;
+    check('a tap answers with the outline: a brief heavier stroke that settles', peak > 2 && Math.abs(rest - 1.6) < 0.05, `peak ${peak.toFixed(2)}px, rest ${rest.toFixed(2)}px over ${widths.length} frames`);
+    check('selecting never moves the camera', JSON.stringify(camBefore) === JSON.stringify(camAfter));
+    await page.screenshot({ path: `${OUT}/${TAG}-selected.png` });
+    await page.keyboard.press('Escape');
+  }
+
   // ---- 5. COST: a drag's frames at 1x and 4x CPU --------------------------------------------
   const cdp = await context.newCDPSession(page);
   for (const rate of [1, 4]) {
@@ -279,6 +306,40 @@ try {
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
   check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
   await context.close();
+
+  // ---- 6. REDUCED MOTION: no carry, no give, no outline animation ----------------------------
+  {
+    const rm = await browser.newContext({ viewport: { width: VIEW_W, height: VIEW_H }, deviceScaleFactor: 2, reducedMotion: 'reduce' });
+    const page2 = await rm.newPage();
+    await page2.addInitScript('window.__name = (fn) => fn;');
+    await page2.addInitScript((raw) => { for (const prefix of ['', 'main2:', 'futa04:']) localStorage.setItem(`${prefix}severgrow.duel.identity.v1`, raw); }, identity);
+    await seedSettings(page2, { sound: false, music: false, coach: false, speed: 'skip', eyeCandy: false, reduceMotion: true });
+    await page2.goto(origin, { waitUntil: 'domcontentloaded' });
+    await page2.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 30_000 });
+    await page2.waitForFunction(() => !!document.querySelector('.world-hex.mine'));
+    await page2.click('#menu-world');
+    await page2.waitForSelector('#online-world-screen:not([hidden])');
+    await settle(page2, 900);
+    for (let i = 0; i < 14; i++) { await drag(page2, 0, 320, 8); await page2.waitForTimeout(40); }
+    await settle(page2, 600);
+    const lim = await viewBox(page2);
+    await drag(page2, 0, 300, 20, 0, false);
+    await twoFrames(page2);
+    const pulled = await viewBox(page2);
+    await page2.mouse.up();
+    check('reduced motion: the edge is a plain limit (no give)', Math.abs(pulled[1]! - lim[1]!) < 0.01, `moved ${(lim[1]! - pulled[1]!).toFixed(3)}`);
+    const q = await panelRect(page2);
+    await page2.mouse.move(q.cx, q.cy + 60);
+    await page2.mouse.down();
+    for (let i = 1; i <= 5; i++) { await page2.mouse.move(q.cx, q.cy + 60 - i * 24); await page2.waitForTimeout(8); }
+    await page2.mouse.up();
+    await twoFrames(page2);
+    const released = await viewBox(page2);
+    await settle(page2, 900);
+    const after = await viewBox(page2);
+    check('reduced motion: a flick does not carry', Math.abs(after[1]! - released[1]!) < 0.01, `moved ${(after[1]! - released[1]!).toFixed(3)} after release`);
+    await rm.close();
+  }
 } finally {
   await browser.close();
   await web.close();
