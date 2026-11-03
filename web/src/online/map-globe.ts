@@ -34,14 +34,16 @@ const X = Math.sqrt(3);
 export const flatCell = (q: number, r: number): { x: number; y: number } => ({ x: X * (q + r / 2) * R, y: 1.5 * r * R });
 
 /**
- * HOW MUCH SMALLER THE RIM IS DRAWN THAN THE MIDDLE. 0.04 = 4%: at the coast a tile is 4% narrower
- * and 12% flatter along the radius (see the Jacobian above) — a quiet bow, half the strength of the
- * `fisheye-a` attempt the owner rejected for its contours. 0 is a flat map.
+ * HOW MUCH SMALLER THE RIM IS DRAWN THAN THE MIDDLE. 0.05 = 5%: at the coast a tile is 5% narrower
+ * and 15% flatter along the radius (see the Jacobian above). This is the MODERATE rung of the ladder —
+ * the strongest bend that still keeps a tile inside the hexagon bar in `map-globe.test.ts` (no edge
+ * more than 10% away from the tile's longest). 0.08 is past that bar; it is kept as a screenshot
+ * only. 0 is a flat map.
  *
- * THE LADDER the owner is choosing from, all off this one number: 0.03 (barely there), 0.04 (this,
- * the recommended one), 0.05 (still quiet), 0.08 (the rejected strength again — do not ship).
+ * THE LADDER, all off this one number: 0.03 (barely there), 0.04 (the recommended one, on
+ * `globe-subtle`), 0.05 (this, the ceiling), 0.08 (too strong — the tiles stop reading as hexes).
  */
-export const GLOBE_FALLOFF = 0.04;
+export const GLOBE_FALLOFF = 0.05;
 /** The drawn size of the rim relative to the middle: the smallest a tile is ever drawn. */
 export const GLOBE_RIM = 1 - GLOBE_FALLOFF;
 
