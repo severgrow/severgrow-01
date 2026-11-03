@@ -150,8 +150,9 @@ describe('the view poses the globe, not the world', () => {
   });
 });
 
-/** The reference view's panel, measured at the shipped strength and curve (2026-11-03). */
-const MEASURED = { worst: 0, pastBar: 0 };
+/** The reference view's panel, measured at the shipped strength and curve (2026-11-03): worst edge
+ *  ratio 1.2406 over the tiles the panel shows, 51 of them past the 1.10 product bar. */
+const MEASURED = { worst: 1.2406, pastBar: 51 };
 
 describe('the drawn map is a sphere, not a scale', () => {
   const pose = globePose(WORLD_CELLS, GLOBE_FALLOFF)!;
