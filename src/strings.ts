@@ -138,6 +138,7 @@ export const ONLINE = Object.freeze({
   worldSellFailed: 'That tile could not be sold. The map has refreshed; nothing was taken.',
   worldRankingTitle: 'Territory ranking',
   worldTiles: (n: number) => `${n} ${n === 1 ? 'TILE' : 'TILES'}`,
+  worldConnectedTiles: (n: number) => `${n} CONNECTED TILES`,
   worldMe: 'YOU',
   worldActivity: 'Recent tiles',
   /** the Seeds invitation card's button that opens the Territory (uppercase, like its LATER sibling) */
@@ -1418,7 +1419,8 @@ export const PROFILE = Object.freeze({
    *  web/src/online/seed-icon.ts (`SEEDS_WORD`): this file must stay free of that word
    *  (web/tests/seed-words.test.ts), and the profile takes it from the one place the currency is
    *  named to the player. */
-  tiles: 'Tiles',
+  tiles: 'TOTAL TILES',
+  connectedTiles: 'CONNECTED TILES',
   matchesWon: 'Matches won',
   /** An em dash is a FACT: this value is not known. It is never a made-up 0. */
   unknown: '—',

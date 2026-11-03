@@ -70,6 +70,7 @@ export const visitorFacts = (profile: PublicPlayerProfile | null | undefined): V
     name: name ? (tag ? `${name} #${tag}` : name) : null,
     level: count(profile.level),
     tiles: count(profile.tiles),
+    connectedTiles: count(profile.connectedTiles),
     colour: palette ? { css: palette.css, name: palette.name, hex: hslToHex(palette.css) } : null,
     online: record(profile.online),
   };

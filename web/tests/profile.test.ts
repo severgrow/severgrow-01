@@ -51,9 +51,9 @@ describe('the identity block is four lines, in the owner’s order', () => {
     // The currency's word lives with the wallet's own wording (web/src/online/seed-icon.ts): the
     // strings module and the page markup stay free of it (web/tests/seed-words.test.ts).
     expect(SEEDS_WORD).toBe('Seeds');
-    expect(PROFILE.tiles).toBe('Tiles');
+    expect(PROFILE.tiles).toBe('TOTAL TILES');
     expect(PROFILE.matchesWon).toBe('Matches won');
-    expect(profileRows(facts()).map((r) => r.label)).toEqual(['Name & tag', SEEDS_WORD, 'Tiles', 'Matches won']);
+    expect(profileRows(facts()).map((r) => r.label)).toEqual(['Name & tag', SEEDS_WORD, 'TOTAL TILES', 'Matches won', 'CONNECTED TILES']);
   });
 
   it('shows the name with its #TAG', () => {
@@ -71,8 +71,8 @@ describe('the identity block is four lines, in the owner’s order', () => {
     expect(profileStrings).not.toMatch(/signIn:|signedIn:|guest:/);
   });
 
-  it('has no fifth line, no control and no sign-out in the sheet', () => {
-    expect(profileSection.match(/class="sp-row[ "]/g) ?? []).toHaveLength(4);
+  it('adds only the connected count, no controls or sign-out in the sheet', () => {
+    expect(profileSection.match(/class="sp-row[ "]/g) ?? []).toHaveLength(5);
     for (const id of ['profile-name', 'profile-seeds', 'profile-tiles', 'profile-wins']) {
       expect(profileSection).toContain(`id="${id}"`);
     }
@@ -125,7 +125,7 @@ describe('an unknown value is an em dash — never a made-up 0', () => {
   it('uses the em dash for a missing name or count', () => {
     expect(PROFILE.unknown).toBe('—');
     const rows = profileRows(facts({ name: null, seeds: null, tiles: null, matchesWon: null }));
-    expect(rows.map((r) => r.value)).toEqual(['—', '—', '—', '—']);
+    expect(rows.map((r) => r.value)).toEqual(['—', '—', '—', '—', '—']);
     expect(profileRows(facts({ name: '   ' }))[0]!.value).toBe('—');
   });
 
@@ -267,7 +267,7 @@ describe('a signed-in player ALWAYS has a colour, so the tile is never absent', 
   });
 
   it('is what the profile is opened with, before any request can fail', () => {
-    // `profileFacts` starts from the derived colour; `readColour` can only REPLACE it.
+    // `profileFacts` starts from the derived colour; the public profile aggregate can only REPLACE it.
     expect(mountSource).toMatch(/colour: profileColour\(identity\.playerId\)/);
     expect(mountSource).not.toMatch(/colour: null/);
   });
@@ -319,7 +319,7 @@ describe('a signed-in player ALWAYS has a colour, so the tile is never absent', 
   });
 
   it('is what the profile is opened with, before any request can fail', () => {
-    // `profileFacts` starts from the derived colour; `readColour` can only REPLACE it.
+    // `profileFacts` starts from the derived colour; the public profile aggregate can only REPLACE it.
     expect(mountSource).toMatch(/colour: profileColour\(identity\.playerId\)/);
     expect(mountSource).not.toMatch(/colour: null/);
   });

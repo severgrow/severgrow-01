@@ -255,3 +255,19 @@ describe('a pointer the browser never released', () => {
     expect([...pointers.keys()]).toEqual([7]);
   });
 });
+
+
+it('a growing whole-world overview cannot force a readable camera out to its framed quarter',()=>{
+ const full:[number,number,number,number]=[-1200,-1200,2400,2400];
+ const close:[number,number,number,number]=[-40,-40,80,80];
+ expect(zoomedView(close,[.5,.5],2,full,80)[2]).toBe(80);
+ expect(zoomedView(close,[.5,.5],.001,full,80)[2]).toBe(2400);
+});
+
+
+it('pinch can still zoom in from a readable default when the world is very large',()=>{
+ const frame:[number,number,number,number]=[-1200,-1200,2400,2400];
+ const readable:[number,number,number,number]=[-62,-124,124,248];
+ const floor=Math.min(frame[2]/4,124/4);
+ expect(zoomedView(readable,[.5,.5],2,frame,floor)[2]).toBe(62);
+});

@@ -186,13 +186,16 @@ export const globeScale = (pose: GlobePose, x: number, y: number): number => {
  * is second order in the arc; the tests measure the worst tile at the shipped strength and pin the
  * hard floor. It still closes on every neighbour exactly.
  */
+const HEX_CORNERS = [[0, -1], [X / 2, -.5], [X / 2, .5], [0, 1], [-X / 2, .5], [-X / 2, -.5]] as const;
 export const globeHex = (pose: GlobePose | null, x: number, y: number): string => {
-  const points = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]] as const;
-  return points.map(([dx, dy], index) => {
+  let path = '';
+  for (let i = 0; i < HEX_CORNERS.length; i++) {
+    const [dx,dy] = HEX_CORNERS[i]!;
     const px = x + dx * R, py = y + dy * R;
-    const at = pose ? globePoint(pose, px, py) : { x: px, y: py };
-    return `${index ? 'L' : 'M'}${at.x.toFixed(2)},${at.y.toFixed(2)}`;
-  }).join(' ') + 'Z';
+    const at = pose ? globePoint(pose, px, py) : { x:px, y:py };
+    path += `${i ? 'L' : 'M'}${at.x.toFixed(2)},${at.y.toFixed(2)}${i===5?'':' '}`;
+  }
+  return path + 'Z';
 };
 
 /**
@@ -217,7 +220,7 @@ export const drawnInView = (
 };
 
 /**
- * THE TILE UNDER A POINT: the nearest DRAWN centre. The hit test and the paint must use the same
+ * THE TILE UNDER A POINT: containment in the exact DRAWN hexagon. The hit test and the paint must use the same
  * pose — the menu and the Territory do, and a tap uses the pose the geometry standing under it was
  * drawn with. `pose === null` is the flat map.
  */
@@ -227,13 +230,26 @@ export const nearestCell = <T extends { readonly id: string; readonly q: number;
   x: number,
   y: number,
 ): T | null => {
-  let best: T | null = null;
-  let bestDistance = Infinity;
+  if (![x, y].every(Number.isFinite)) return null;
+  // The exact six projected, rounded corners that globeHex writes to the SVG. Convex half-plane
+  // containment rejects sea and missing cells, including the compressed rim's former nearest hits.
   for (const cell of cells) {
     const flat = flatCell(cell.q, cell.r);
-    const at = pose ? globePoint(pose, flat.x, flat.y) : flat;
-    const distance = (at.x - x) ** 2 + (at.y - y) ** 2;
-    if (distance < bestDistance) { bestDistance = distance; best = cell; }
+    const centre=pose ? globePoint(pose,flat.x,flat.y) : flat;
+    if(Math.abs(x-centre.x)>R+.02 || Math.abs(y-centre.y)>R+.02)continue;
+    const corners = HEX_CORNERS.map(([dx,dy]) => {
+      const px=flat.x+dx!*R, py=flat.y+dy!*R;
+      const p=pose ? globePoint(pose,px,py) : {x:px,y:py};
+      return {x:Number(p.x.toFixed(2)),y:Number(p.y.toFixed(2))};
+    });
+    let positive=false,negative=false;
+    for(let i=0;i<6;i++) {
+      const a=corners[i]!,b=corners[(i+1)%6]!;
+      const cross=(b.x-a.x)*(y-a.y)-(b.y-a.y)*(x-a.x);
+      if(cross>1e-7)positive=true; if(cross < -1e-7)negative=true;
+      if(positive&&negative)break;
+    }
+    if(!(positive&&negative))return cell;
   }
-  return best;
+  return null;
 };

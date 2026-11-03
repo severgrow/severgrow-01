@@ -582,7 +582,7 @@ export const ONLINE_CSS = `
      means a drag is always the map's own (owner, 2026-10-21: the page must never scroll). */
   overscroll-behavior: contain; touch-action: none;
   border-radius: 14px; background: radial-gradient(ellipse at 50% 44%, #232721 0, #171b18 55%, #101412 100%);
-  box-shadow: inset 0 0 0 1px rgba(232,221,190,.04), inset 0 20px 65px #090c0b69;
+  box-shadow: inset 0 1px 0 #e8ddc50b, inset 0 0 0 1px rgba(232,221,190,.04), inset 0 20px 65px #090c0b69;
 }
 /* A faint vignette so the world feels CONTAINED inside its window, the same way the page's own
    #texture::after holds the whole screen. Absolutely positioned and click-through, so it never
@@ -595,7 +595,7 @@ export const ONLINE_CSS = `
      panel's middle is the camera's middle, so the light rides the camera with the globe. */
   background:
     radial-gradient(ellipse 52% 44% at 50% 50%, rgba(242, 229, 197, .028), transparent 100%),
-    radial-gradient(ellipse 78% 72% at 50% 46%, transparent 42%, #070a08b8 100%);
+    radial-gradient(ellipse 78% 72% at 50% 46%, #e8ddc503 0%, transparent 42%, #090c0bb8 100%);
 }
 .world-map-svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 .world-map-svg:active { cursor: grabbing; }
@@ -916,7 +916,7 @@ html.reduce-motion .world-selection { animation: none; }
    (logic/press.ts) still gives both their depth. No border, no outline, nothing drawn along an
    edge. */
 .world-invitation-card button {
-  flex: 1; min-height: 44px; padding: 0 10px; border-radius: 10px; border: 0;
+  flex: 1; min-height: 44px; padding: 0 10px; border-radius: 10px; border: 0; outline: 0;
   color: #f0e9dc; background: transparent; font: inherit; font-size: .75rem; letter-spacing: .06em;
   cursor: pointer;
 }
@@ -1037,6 +1037,7 @@ html.reduce-motion .world-selection { animation: none; }
 .world-panel[data-pane='colour'] .world-pane[data-pane='colour'] { display: flex; }
 .world-pane > .world-pane-label:first-child { margin-top: 0; }
 .world-pane-label { margin: 4px 4px 0; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: #e8ddc58f; text-align: center; }
+#world-colour-note:empty { display: none; }
 .world-pane-empty { margin: 2px 0 6px; text-align: center; font-size: .74rem; color: #e8ddc5a6; }
 .world-pane-empty[hidden] { display: none; }
 
@@ -1115,7 +1116,7 @@ html.reduce-motion .world-colour-chip { animation:none!important; }
    the row answers "what colour am I?" without opening anything. Mixed toward cream so a dark slot
    still reads on the key's near-black plate. */
 #world-key-colour .world-key-icon .fill {
-  fill: color-mix(in srgb, var(--territory, currentColor) 72%, #f6ecd2);
+  fill: var(--territory, currentColor);
 }
 
 /* the ranking */
@@ -1155,12 +1156,12 @@ html.reduce-motion .world-colour-chip { animation:none!important; }
 html.reduce-motion .world-achievement.just-claimed { animation: none; }
 .world-ranking-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .world-ranking-row {
-  width: 100%; display: grid; grid-template-columns: 2.4ch 10px minmax(0, 1fr) auto 3.5ch; align-items: center; gap: 9px;
+  width: 100%; display: grid; grid-template-columns: 2.4ch 10px minmax(0, 1fr) auto; align-items: center; gap: 9px;
   min-height: 40px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: #e8ddc5;
   font: inherit; font-size: .74rem; text-align: left; cursor: pointer; font-variant-numeric: tabular-nums;
 }
 .world-ranking-row:active { background: #e8ddc50d; }
-.world-ranking-row.mine { background: #e8ddc514; box-shadow: inset 0 0 0 1px #e8ddc51f; }
+.world-ranking-row.mine { background: linear-gradient(105deg, color-mix(in srgb, var(--territory) 13%, transparent), #e8ddc508); box-shadow: inset 0 0 0 1px #e8ddc51f; }
 .world-ranking-rank { color: #e8ddc570; letter-spacing: .08em; }
 .world-ranking-swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--territory); box-shadow: 0 0 6px color-mix(in srgb, var(--territory) 50%, transparent); }
 .world-ranking-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .06em; }
@@ -1459,6 +1460,8 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
    the soft-focus blurs are drawn sharp and the ambient loops hold still. A blur re-renders on every
    frame the view moves; this is what keeps a pan at 60 fps on a mid phone. */
 .world-grid.moving .world-map-svg [filter] { filter: none; }
+/* Pausing glints can freeze a CSS brightness filter; drop that raster pass while moving too. */
+.world-grid.moving .world-map-svg .world-hex-face.mine { filter: none !important; }
 .world-grid.moving .world-map-svg :is(.world-fog-ring, .world-fog-shift-was, .world-fog-shift-now, .world-hex-face.mine, .world-halo, .world-border-glow, .world-spore, .world-takeover-was, .world-takeover-edge, .world-takeover-label) { animation-play-state: paused; }
 .world-grid.moving .world-map-svg .world-accent-line { filter: none; }
 `;

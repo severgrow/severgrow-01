@@ -1,3 +1,5 @@
+import { territoryStandings, type TerritoryStanding } from '../../../server/src/territory-ranking.js';
+import { menuTerritoryAnchor } from './living-camera.js';
 // THE GROWING TERRITORY, the page's side (owner, 2026-10-27). Pure helpers for world-view.ts: the
 // fog of undiscovered land beyond the coast, the players' ranking, the recent-activity strip,
 // "find my land", and which cells appeared since the last look (they rise in).
@@ -25,8 +27,8 @@ export const fogRings = (seen: ReadonlySet<string>): Map<string, 1 | 2> => {
 
 export type RankRow = { ownerId: string; name: string; tag: string; colour: string; tiles: number; rank: number; mine: boolean };
 
-/** Players by tiles held; on a tie, whoever reached that count first (their latest tile is older). */
-export const ranking = (claims: readonly Claim[], me: string | null): RankRow[] => {
+/** Largest connected holding; equal scores use stable acquisition-age and owner-id ties. */
+export const ranking = (claims: readonly Claim[], me: string | null, authoritative?: readonly TerritoryStanding[]): RankRow[] => {
   const by = new Map<string, { claim: Claim; tiles: number; last: number }>();
   for (const c of claims) {
     const row = by.get(c.ownerId);
@@ -36,17 +38,12 @@ export const ranking = (claims: readonly Claim[], me: string | null): RankRow[] 
       if (c.ownerName) row.claim = c;
     } else by.set(c.ownerId, { claim: c, tiles: 1, last: c.claimedAt });
   }
-  return [...by.entries()]
-    .sort(([, a], [, b]) => b.tiles - a.tiles || a.last - b.last)
-    .map(([ownerId, row], i) => ({
-      ownerId,
-      name: row.claim.ownerName ?? 'Player',
-      tag: row.claim.ownerTag,
-      colour: row.claim.colour,
-      tiles: row.tiles,
-      rank: i + 1,
-      mine: ownerId === me,
-    }));
+  const scores = authoritative ?? territoryStandings(claims);
+  return scores.flatMap(score => {
+    const row=by.get(score.ownerId); if(!row)return [];
+    return [{ownerId:score.ownerId,name:row.claim.ownerName ?? 'Player',tag:row.claim.ownerTag,
+      colour:row.claim.colour,tiles:score.connectedTiles,rank:score.rank,mine:score.ownerId===me}];
+  });
 };
 
 /** "NOW", "2M", "3H", "2D". */
@@ -68,14 +65,9 @@ export const recentActivity = (claims: readonly Claim[], now: number, limit = 5)
     .slice(0, limit)
     .map((c) => ({ cellId: c.cellId, ownerId: c.ownerId, name: c.ownerName ?? 'Player', colour: c.colour, ago: agoLabel(now - c.claimedAt) }));
 
-/** The middle of my tiles in map units, or null when I hold none. */
+/** A real tile in the largest connected holding, or null when I hold none. */
 export const ownCentre = (cells: readonly Cell[], claims: readonly Claim[], me: string | null): { x: number; y: number } | null => {
-  if (!me) return null;
-  const mine = new Set(claims.filter((c) => c.ownerId === me).map((c) => c.cellId));
-  const pts = cells.filter((c) => mine.has(c.id)).map((c) => cellXY(c.q, c.r));
-  if (!pts.length) return null;
-  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
-  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+  return menuTerritoryAnchor(cells, claims, me);
 };
 
 /** Cells that were not on the map at the last look (none on the first look). */

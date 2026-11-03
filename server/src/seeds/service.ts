@@ -1,3 +1,4 @@
+import { territoryStandings } from '../territory-ranking.js';
 import type { Action } from '../../../src/engine/index.js';
 import { allNeighbors, coordKey, CURRENT_RULES_VERSION, homeCoord, matchSetup, stateFromSetup } from '../../../src/engine/index.js';
 import { campaignLevelById } from '../../../src/campaign/index.js';
@@ -68,7 +69,7 @@ export class WorldEconomyService {
     })));
     return {
       // The SEEN map: the v2 coast plus two rings around every tile (server/src/world.ts).
-      version: WORLD_VERSION, revision: snapshot.revision, cells: seenWorld(snapshot.claims.map((c) => c.cellId)),
+      version: WORLD_VERSION, revision: snapshot.revision, rankings: territoryStandings(snapshot.claims), cells: seenWorld(snapshot.claims.map((c) => c.cellId)),
       claims: snapshot.claims.map((claim) => ({
         cellId: claim.cellId, ownerId: claim.ownerId, ownerName: claim.ownerName,
         // Only a level NUMBER crosses the wire: no id, no email, no progress detail. `null` when the
@@ -119,6 +120,7 @@ export class WorldEconomyService {
       tag: playerTag(playerId.toLowerCase()),
       level: row.level === null || row.level <= 0 ? null : Math.floor(row.level),
       tiles: countOf(row.tiles),
+      connectedTiles: countOf(row.connectedTiles),
       colourId,
       online: { games: countOf(row.games), wins: countOf(row.wins), longestStreak: countOf(row.longestStreak) },
     };

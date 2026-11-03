@@ -168,6 +168,7 @@ describe('the public facts beside the record', () => {
       tag: playerTag(SUBJECT),
       level: 7,
       tiles: 2,
+      connectedTiles: 2,
       colourId: 4,
       online: { games: 0, wins: 0, longestStreak: 0 },
     });
@@ -191,7 +192,7 @@ describe('the allow-list is closed: nothing private can appear', () => {
     expect(Object.keys(body).sort()).toEqual(['ok', 'profile', 'serverNow']);
     const profile = body.profile as Record<string, unknown>;
     expect(Object.keys(profile).sort()).toEqual([
-      'colourId', 'displayName', 'level', 'online', 'tag', 'tiles',
+      'colourId', 'connectedTiles', 'displayName', 'level', 'online', 'tag', 'tiles',
     ]);
     expect(Object.keys(profile.online as Record<string, unknown>).sort()).toEqual([
       'games', 'longestStreak', 'wins',
@@ -211,7 +212,7 @@ describe('the allow-list is closed: nothing private can appear', () => {
         if (text.includes('information_schema.tables')) return { rows: [{ present: 1 }] };
         return {
           rows: [{
-            display_name: 'BloomHeron', level: 7, tiles: 2, colour_id: 4,
+            display_name: 'BloomHeron', level: 7, tiles: 2, cell_ids: ['0,0','1,0'], colour_id: 4,
             games: 5, wins: 3, longest_streak: 2,
           }],
         };
@@ -219,7 +220,8 @@ describe('the allow-list is closed: nothing private can appear', () => {
       connect: async () => ({ query: async (): Promise<PgQueryResult> => ({ rows: [] }), release: () => undefined }),
     };
     const store = postgresWorldEconomyStore(pool);
-    await store.publicProfile(SUBJECT);
+    const publicRow = await store.publicProfile(SUBJECT);
+    expect(publicRow?.connectedTiles).toBe(2);
     const sql = statements.find((text) => !text.includes('information_schema.tables')) ?? '';
     expect(sql, 'the profile is ONE statement').not.toBe('');
     // The tables it may read.
@@ -282,7 +284,7 @@ describe('the cost: one aggregate statement, plus a cached catalogue probe', () 
         await new Promise((resolve) => setTimeout(resolve, 5));
         inFlight--;
         if (text.includes('information_schema.tables')) return { rows: [{ present: 1 }] };
-        return { rows: [{ display_name: 'BloomHeron', level: 7, tiles: 2, colour_id: 4, games: 5, wins: 3, longest_streak: 2 }] };
+        return { rows: [{ display_name: 'BloomHeron', level: 7, tiles: 2, cell_ids: ['0,0','1,0'], colour_id: 4, games: 5, wins: 3, longest_streak: 2 }] };
       },
       connect: async () => ({ query: async (): Promise<PgQueryResult> => ({ rows: [] }), release: () => undefined }),
     };
@@ -317,4 +319,20 @@ describe('bad ids are the same honest 404', () => {
     expect(res.status).toBe(401);
     expect(res.body).toMatchObject({ ok: false, code: 'UNAUTHORIZED' });
   });
+});
+
+
+describe('authoritative connected territory',()=>{
+ it('updates map standings and profiles from the same ownership, including a bridge cut',async()=>{
+  const h=await harness();
+  for(let q=0;q<5;q++)h.store.claims.set(`${q},0`,{cellId:`${q},0`,ownerId:SUBJECT,ownerName:'BloomHeron',ownerLevel:null,claimedAt:NOW});
+  expect((await h.economy.world()).rankings.find(r=>r.ownerId===SUBJECT)).toMatchObject({connectedTiles:5,totalTiles:5});
+  const bridge=h.store.claims.get('2,0')!;h.store.claims.set('2,0',{...bridge,ownerId:RIVAL});
+  const world=await h.economy.world();
+  expect(world.claims.filter(c=>c.ownerId===SUBJECT)).toHaveLength(4);
+  expect(world.rankings.find(r=>r.ownerId===SUBJECT)).toMatchObject({connectedTiles:2,totalTiles:4});
+  expect((await get(h,SUBJECT)).body.profile).toMatchObject({connectedTiles:2,tiles:4});
+  h.store.claims.set('2,0',bridge);
+  expect((await get(h,SUBJECT)).body.profile).toMatchObject({connectedTiles:5,tiles:5});
+ });
 });

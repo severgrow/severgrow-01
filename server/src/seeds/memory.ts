@@ -1,3 +1,4 @@
+import { connectedCount } from '../territory-ranking.js';
 import {
   SEED_ECONOMY,
   WORLD_CHALLENGE_OPEN_LIMIT,
@@ -118,6 +119,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
       displayName: player.displayName,
       level: await this.campaignHighestLevel(playerId),
       tiles: [...this.claims.values()].filter((claim) => claim.ownerId === playerId).length,
+      connectedTiles: connectedCount([...this.claims.values()].filter(c => c.ownerId === playerId).map(c => c.cellId)),
       chosenColourId: this.colours.get(playerId) ?? null,
       games: finished.length,
       wins,

@@ -332,7 +332,7 @@ try {
     await page.waitForTimeout(400);
     const rows = (await page.evaluate(`(() => {
       const sheet = document.getElementById('sheet-profile');
-      const ids = ['profile-name', 'profile-seeds', 'profile-tiles', 'profile-wins'];
+      const ids = ['profile-name', 'profile-seeds', 'profile-tiles', 'profile-wins', 'profile-connected'];
       const tiles = (id) => [...(document.getElementById(id)?.querySelectorAll('.sp-tile') ?? [])]
         .map((t) => [t.querySelector('dt')?.textContent.trim(), t.querySelector('dd')?.textContent.trim()]);
       return {
@@ -567,12 +567,13 @@ try {
       rootFont: string; titleFont: string; labelFont: string; nameFont: string; largeText: boolean;
       tileOverflow: number; rowRightSpread: number;
     };
-    check(`${label}: the identity block is four rows`, rows.n === 4, String(rows.n));
+    check(`${label}: the identity block includes only the five requested rows`, rows.n === 5, String(rows.n));
     check(`${label}: the rows are name & tag, Seeds, tiles, matches won`,
-      JSON.stringify(rows.labels) === JSON.stringify([PROFILE.nameTag, SEEDS_WORD, PROFILE.tiles, PROFILE.matchesWon]), rows.labels.join(' | '));
+      JSON.stringify(rows.labels) === JSON.stringify([PROFILE.nameTag, SEEDS_WORD, PROFILE.connectedTiles, PROFILE.tiles, PROFILE.matchesWon]), rows.labels.join(' | '));
     check(`${label}: the first row is the player's name`, rows.values[0] === name, rows.values[0] ?? '');
     // No API in this build: all three numbers are unknown, so all three are em dashes — never 0.
     check(`${label}: unknown Seeds are an em dash`, rows.values[1] === PROFILE.unknown, rows.values[1] ?? '');
+    check(`${label}: unknown connected tiles are an em dash`, rows.values[4] === PROFILE.unknown, rows.values[4] ?? '');
     check(`${label}: unknown tiles are an em dash`, rows.values[2] === PROFILE.unknown, rows.values[2] ?? '');
     check(`${label}: an unknowable matches-won count is an em dash (never an invented 0)`, rows.values[3] === PROFILE.unknown, rows.values[3] ?? '');
     // Two records of the same three tiles: offline above, online below, each with its word on the edge.

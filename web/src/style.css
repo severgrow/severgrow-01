@@ -2471,6 +2471,10 @@ html.futasaku-product .install-prompt-scrim {
   }
 }
 
+/* A readout takes visual focus: dim the existing menu ink behind the classic glass. The new
+   connected row must not pick up a bright PLAY-key band; no extra veil/filter/material layer. */
+html:has(#sheet-profile:not([hidden])) #menu .menu-inner { opacity: .28; }
+
 /* ---------- the player's profile: the pause panel's language, five read-only lines ----------
    Owner brief (2026-10-21): a SKELETON built now, showing basic info about the player. It borrows
    the pause panel's language on purpose — ONE content axis, NO rules between neighbours (owner,

@@ -1,3 +1,4 @@
+import { connectedCount } from '../territory-ranking.js';
 import type { PgClient, PgPool } from '../storage/postgres.js';
 import { newId } from '../ids.js';
 import { parseWorldCell, seenCellIds, worldNeighbours } from '../world.js';
@@ -329,7 +330,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
       `with me as (
          select p.display_name from players p where p.id = $1
        ), tiles as (
-         select count(*)::int as tiles from world_claims c where c.owner_id = $1
+         select count(*)::int as tiles, coalesce(array_agg(c.cell_id), '{}'::text[]) as cell_ids from world_claims c where c.owner_id = $1
        ), level as (
          select max((substring(r.source_key from '^campaign:c[0-9]+-([0-9]+)$'))::int) as level
            from seed_reward_receipts r
@@ -352,7 +353,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
        )
        select me.display_name,
               level.level,
-              tiles.tiles,
+              tiles.tiles, tiles.cell_ids,
               colour.colour_id,
               (select count(*)::int from played) as games,
               (select count(*)::int from played where won) as wins,
@@ -371,6 +372,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
       displayName: row.display_name == null ? null : String(row.display_name),
       level: row.level == null ? null : number(row.level),
       tiles: number(row.tiles),
+      connectedTiles: connectedCount(Array.isArray(row.cell_ids) ? row.cell_ids.filter((id): id is string => typeof id === 'string') : []),
       chosenColourId: row.colour_id == null ? null : number(row.colour_id),
       games: number(row.games),
       wins: number(row.wins),

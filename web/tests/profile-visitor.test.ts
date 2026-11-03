@@ -246,12 +246,13 @@ describe('an unknown or failed read is the em dash, never an invented number', (
 describe('the wire becomes panel facts in one pure place', () => {
   it('maps a closed server payload, tag included', () => {
     expect(visitorFacts({
-      displayName: 'BloomHeron', tag: 'ABCD', level: 7, tiles: 2, colourId: 0,
+      displayName: 'BloomHeron', tag: 'ABCD', level: 7, tiles: 2, connectedTiles: 1, colourId: 0,
       online: { games: 5, wins: 3, longestStreak: 2 },
     })).toEqual({
       name: 'BloomHeron #ABCD',
       level: 7,
       tiles: 2,
+      connectedTiles: 1,
       colour: { css: 'hsl(341 42% 53%)', name: 'Rose', hex: '#b95575' },
       online: { games: 5, wins: 3, longestStreak: 2 },
     });

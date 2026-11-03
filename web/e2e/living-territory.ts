@@ -877,6 +877,22 @@ try{
    check('the map never paints over the Play submenu',await page.evaluate(()=>getComputedStyle(document.getElementById('online-world-screen')!).display==='none'));
    await page.click('#play-back');await page.waitForSelector('[data-living-territory="menu"] .world-map-svg');
   }
+  // Whole discovered coast in the actual panel crop, on Chromium AND WebKit.
+  if(['phone','small','tablet','desktop'].includes(name)){
+   if(await page.locator('#online-world-screen').evaluate(e=>(e as HTMLElement).hidden))await page.click('#menu-world');
+   await page.waitForSelector('#online-world-screen:not([hidden])');
+   await page.evaluate(()=>{
+    const p=document.getElementById('online-world-grid')!.getBoundingClientRect();
+    for(let i=0;i<32;i++)document.querySelector('.world-map-svg')!.dispatchEvent(new WheelEvent('wheel',{deltaY:100,clientX:p.x+p.width/2,clientY:p.y+p.height/2,bubbles:true,cancelable:true}));
+   });
+   await page.waitForFunction(()=>!document.getElementById('online-world-grid')!.classList.contains('moving'));
+   const fit=await page.evaluate(()=>{
+    const p=document.getElementById('online-world-grid')!.getBoundingClientRect();
+    const cells=[...document.querySelectorAll('.world-hex')].map(e=>e.getBoundingClientRect());
+    return cells.length>0&&cells.every(r=>r.left>=p.left-1&&r.right<=p.right+1&&r.top>=p.top-1&&r.bottom<=p.bottom+1);
+   });
+   check(`${name}: maximum zoom reveals the entire discovered coast inside the actual panel`,fit);
+  }
   await context.close();
  }
  if(!process.env.BASELINE_ROOT){

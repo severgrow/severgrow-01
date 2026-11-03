@@ -38,6 +38,7 @@ export type PublicProfileRow = {
   displayName: string | null;
   level: number | null;
   tiles: number;
+  connectedTiles?: number;
   /** The stored palette slot, or null when the player never chose one (the service derives it). */
   chosenColourId: number | null;
   games: number;

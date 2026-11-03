@@ -40,11 +40,12 @@ export type ProfileFacts = {
   seeds: number | null;
   /** Cells this player OWNS in the shared world, or null when the read is unknown. */
   tiles: number | null;
+  connectedTiles?: number | null;
   /** Every match this player ever won — offline and online — or null when a read is unknown. */
   matchesWon: number | null;
   /** The offline record: this device plus, signed in, the account's other devices. */
   offline: Record3 | null;
-  /** The online record, from the unbounded match list. */
+  /** The online record, from the server's public aggregate. */
   online: Record3 | null;
 };
 
@@ -77,24 +78,26 @@ export type VisitorFacts = {
   name: string | null;
   level: number | null;
   tiles: number | null;
+  connectedTiles?: number | null;
   /** The colour as the map draws it, plus its palette name and its hex for the visitor's line. */
   colour: { css: string; name: string; hex: string | null } | null;
   online: Record3 | null;
 };
 
 /** A known, sane count, or the honest em dash. A count is a whole, non-negative number. */
-const count = (n: number | null): string =>
+const count = (n: number | null | undefined): string =>
   typeof n === 'number' && Number.isFinite(n) && n >= 0 ? groupDigits(Math.floor(n)) : PROFILE.unknown;
 
 /**
- * The four identity lines, in the owner's order. Pure: the panel's DOM writes these strings verbatim,
- * so there is no second place where a value could be guessed differently.
+ * The identity values, retaining their existing indices for callers. The DOM places connected
+ * tiles immediately before total tiles. Unknown reads always retain the honest em dash.
  */
 export const profileRows = (facts: ProfileFacts): readonly ProfileRow[] => [
   { label: PROFILE.nameTag, value: facts.name && facts.name.trim() ? facts.name : PROFILE.unknown },
   { label: SEEDS_WORD, value: count(facts.seeds) },
   { label: PROFILE.tiles, value: count(facts.tiles) },
   { label: PROFILE.matchesWon, value: count(facts.matchesWon) },
+  { label: PROFILE.connectedTiles, value: count(facts.connectedTiles) },
 ];
 
 export type ProfileUI = {
@@ -146,6 +149,7 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
   setText('profile-title', PROFILE.title);
   setText('profile-name-label', PROFILE.nameTag);
   setText('profile-tiles-label', PROFILE.tiles);
+  setText('profile-connected-label', PROFILE.connectedTiles);
   setText('profile-wins-label', PROFILE.matchesWon);
   setText('profile-seeds-label', SEEDS_WORD);
   setText('profile-play-title', PROFILE.playTitle);
@@ -196,6 +200,7 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     seedsValue!.textContent = rows[1]!.value;
     tilesValue!.textContent = rows[2]!.value;
     winsValue!.textContent = rows[3]!.value;
+    setText('profile-connected', rows[4]!.value);
 
     // The flag: decoration, so it never says anything the name line does not — but it is named for
     // a screen reader rather than left as an unlabelled glyph.
@@ -255,6 +260,7 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
   const fillVisitor = (facts: VisitorFacts | null) => {
     nameText!.textContent = facts?.name && facts.name.trim() ? facts.name : PROFILE.unknown;
     tilesValue!.textContent = count(facts?.tiles ?? null);
+    setText('profile-connected', count(facts?.connectedTiles));
     const level =
       typeof facts?.level === 'number' && Number.isInteger(facts.level) && facts.level > 0 ? facts.level : null;
     if (levelText) {

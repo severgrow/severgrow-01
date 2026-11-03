@@ -25,11 +25,10 @@ import type { PlayerProfileRequest } from './profile-request.js';
 import { visitorFacts } from './visitor-profile.js';
 import type { PublicPlayerProfile } from '../../../server/src/protocol.js';
 import { STATS_KEY, parseStats } from '../logic/stats.js';
-import { accountRecord, offlineRecord, onlineRecord } from '../logic/match-record.js';
+import { accountRecord, offlineRecord } from '../logic/match-record.js';
 import { DEVICE_KEY, deviceIdFrom, matchesWonEver, newDeviceId, offlineCounters } from '../logic/offline-sync.js';
 import { browserCountry } from '../logic/country.js';
-import { TILE_COLOURS } from '../../../src/tile-colours.js';
-import type { MatchListEntry, OfflineSummary } from '../../../server/src/protocol.js';
+import type { OfflineSummary } from '../../../server/src/protocol.js';
 import {
   WELCOME_KEY,
   authorizeUrl,
@@ -684,26 +683,17 @@ export const mountAccounts = async (): Promise<void> => {
     };
   };
 
-  /** The player's tile colour, for the one tile the profile draws beside their name. */
-  const readColour = (token: string): Promise<ProfileFacts['colour'] | null> =>
-    apiGet('/v1/world/colour', token).then((body) => {
-      const colour = (body as { colour?: { colourId?: unknown; colour?: unknown } } | null)?.colour;
-      const id = typeof colour?.colourId === 'number' ? colour.colourId : null;
-      const css = typeof colour?.colour === 'string' ? colour.colour : null;
-      if (id === null || !css) return null;
-      return { css, name: TILE_COLOURS[id]?.name ?? css };
-    // A read that fails is not a reason to hide the tile: the deterministic default stays painted.
-    }).catch(() => null);
-
   const openProfile = () => {
     const s = signedIn();
     if (!s) return;
     const { identity } = s;
     const token = identity.token;
+    const seq = ++visitorRequest;
     let facts = profileFacts(identity);
     // One painter for every read: each answer repaints the sheet it is already looking at, and the
     // all-time win total is recomputed from whichever halves are known.
     const paint = (patch: Partial<ProfileFacts>) => {
+      if (seq !== visitorRequest) return;
       facts = { ...facts, ...patch };
       facts.matchesWon = matchesWonEver(facts.offline, facts.online);
       profile.show(facts);
@@ -711,17 +701,17 @@ export const mountAccounts = async (): Promise<void> => {
     facts.matchesWon = matchesWonEver(facts.offline, facts.online);
     profile.open(facts, menuLogin);
 
+    void apiGet(`/v1/players/${encodeURIComponent(identity.playerId)}/profile`,token).then(body=>{
+      const wire=(body as {profile?:PublicPlayerProfile}|null)?.profile;
+      if(wire)paint({connectedTiles:wire.connectedTiles ?? null,tiles:wire.tiles,
+        online:wire.online,colour:profileColour(identity.playerId,wire.colourId)});
+    });
     const device = deviceId();
     void syncOffline(token, device).then((offline) => {
       if (offline) paint({ offline: accountRecord(offline) });
     });
-    void apiGet('/v1/players/me/matches', token).then((body) => {
-      const list = body?.matches;
-      if (Array.isArray(list)) paint({ online: onlineRecord(list as MatchListEntry[]) });
-    });
-    void readColour(token).then((colour) => {
-      if (colour) paint({ colour });
-    });
+    // This one public aggregate also supplies the online record and colour; do not add separate
+    // match-list/colour reads to the Edge pool for facts already returned in that snapshot.
     // At most one pair read, and only when the Territory entry's read has not landed. The same
     // request also paints the Territory entry (web/src/online/lobby-ui.ts), so nothing is doubled.
     void readTerritory(identity.playerId).then((counts) => {

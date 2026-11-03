@@ -252,3 +252,19 @@ The world map's screen has its own suite: `web/e2e/world-map-header.ts` asserts,
 **The window fills the column.** The world's bounding box is 274.49 × 272 units — very nearly square — so a window sized to the map's aspect avoided letterboxing *inside* it but left the void *outside*: a square map at the top of a tall column, with roughly half the screen empty below (the owner saw exactly that at 390×844). He chose a bigger map over centring, accepting a horizontal crop. `.world-grid` therefore takes the column's whole height (`flex: 1 1 0`, no CSS `aspect-ratio`) and `world-view.ts` frames the view to the **window's** aspect via `boundsFor(aspect)`: the largest rect with the window's ratio that fits inside the world's fit box. On a portrait phone that keeps the full height and a narrower width, so the map scales up and the surplus is cropped, pannable to the edges; on a wide screen it resolves to the whole world. Because the box's aspect always equals the window's, the SVG scales both axes equally — the hexes stay true hexagons (asserted: one hex measures √3/2). The framed view is **both** zoom limits, so zooming out can never widen the box back to the world and letterbox it; a `ResizeObserver` re-frames on a shape change. The `dvh` term in the width cap is the same size expressed against the viewport (its 210px is the column's fixed chrome, derived and commented), and `max-height` plus the flex shrink stop a grown chrome — a notice line does exactly that — from overflowing. `.world-selection` anchors to the bottom edge (`margin-top: auto`) so the controls stay at thumb height, and the side gutters are the menu column's own 16px.
 
 **Tile shading and the focus ring.** Each tile's `fill` is its own SVG `linearGradient` (`<defs>` in `world-view.ts`), built in JS from the owner colour the server already sent, so territories read as coloured glass and unclaimed ground stays the quietest surface; one gradient per distinct colour, plus one flat dark one for empty hexes. A second, brighter gradient marks the caller's own territory — no new colours, and `--territory` still drives the stroke. Every hex is `tabindex=0`, and a *pointer* click focuses one **without** matching `:focus-visible`, so a `:focus-visible`-only rule left the browser painting its own rounded blue ring (the bracket the owner photographed). `.world-hex:focus { outline: none }` covers every focus state and `:focus-visible` draws our hex-following cream stroke, so keyboard users keep an indicator. The side gutters are the menu column's own 16px.
+
+
+## Current navigation and ranking — 3 November 2026
+
+The approved 15% camera-centred spread curve is preserved. The older note above describing the
+portrait crop as BOTH zoom limits is superseded: the readable default remains close, and maximum
+zoom-out contains all discovered land inside the actual Territory panel crop, in both orientations.
+Minimum interaction size never limits that overview. Intentional camera/zoom remains persistent;
+actual gestures after rotation start from the drawn camera. Selection is exact projected-polygon
+containment and never moves the camera or picks distant land from empty sea.
+
+Territory ranking now uses the largest side-connected component, not total ownership. Profiles show
+CONNECTED TILES and TOTAL TILES. Existing navigation targets a real tile in the largest holding.
+See [implementation, test evidence, measured density limits and Cursor's server deployment](TERRITORY-FINAL-POLISH.md).
+This pass needs no migration or backfill; the owner assigned the Edge deployment to Cursor. The
+web remains compatible with the current server until that deployment. Grain stays above all layers.

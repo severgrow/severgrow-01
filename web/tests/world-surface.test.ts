@@ -184,8 +184,10 @@ describe('the world map rests on the ONE shared page surface', () => {
     const stepAt = worldView.indexOf('export const zoomedView');
     expect(stepAt, 'the zoom step must have one home').toBeGreaterThan(-1);
     const zoomStep = worldView.slice(stepAt, worldView.indexOf('export const clampedView'));
-    expect(zoomStep, 'zoom-out must stop at the framed view, not the whole world')
-      .toMatch(/Math\.max\(frame\[2\] \/ 4, Math\.min\(frame\[2\], bw \/ step\)\)/);
+    // Whole-map overview and readable interaction now have independent zoom limits (owner, Nov 3).
+    expect(zoomStep, 'legacy callers retain the framed-quarter default').toContain('closestWidth = frame[2] / 4');
+    expect(zoomStep, 'zoom stays between its readable floor and the whole-map frame')
+      .toMatch(/Math\.max\(closestWidth, Math\.min\(frame\[2\], bw \/ step\)\)/);
     expect(worldView, 'a resize must re-frame the view').toContain('ResizeObserver');
   });
 

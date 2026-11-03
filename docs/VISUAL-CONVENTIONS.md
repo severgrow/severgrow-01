@@ -253,3 +253,18 @@ is editing; they are reported, not touched. The race bar's `--share` transition 
 custom property) paints each frame but is the score's only read-out; the hand's 1.35s Throw breath
 and the step cue's 260/320/900ms choreography are designed beats. `perf-phone` stays green
 (idle: 0 game rAF frames, no paint-property animation; a turn: p95 16.8ms at 4x CPU).
+
+## Connected Territory — November 2026
+
+- Ranking counts the largest side-connected holding, never summed islands. Reuse the server's
+  `territory-ranking.ts` calculation and authoritative standings. Profiles show CONNECTED TILES
+  and TOTAL TILES; do not add chase sentences or instructional filler to the map's submenus.
+- The colour key is one solid droplet in the player's resolved ground colour. Preserve the existing
+  podium/swords/chat/medal vocabulary, 44px keys and shared motion tokens.
+- Whole-map zoom fits the actual panel crop, independently of the readable default and zoom-in
+  floor. Deliberate input after rotation starts from the drawn camera; ordinary menu navigation
+  preserves the shared camera. Sea taps never select a nearest distant tile.
+- Build atmosphere from existing light, vignette, panel lip, ownership tint and the global grain.
+  Do not add decorative blur layers or idle loops. Selection never flies the camera to a tile.
+- The software-browser 3,000-cell overview remains a measured performance limit; the current
+  renderer is not certified for 60fps at that density. See `TERRITORY-FINAL-POLISH.md` for evidence.

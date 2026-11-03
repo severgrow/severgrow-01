@@ -274,7 +274,14 @@ try {
       };
       requestAnimationFrame(loop);
     });
-    await page.mouse.click(q.cx + 30, q.cy + 30);
+    // Empty sea is deliberately inert now. Select a visible, unselected polygon rather than
+    // relying on the former nearest-tile fallback at an arbitrary point near the panel centre.
+    const current=await page.evaluate(()=>document.querySelector('.world-hex.selected')?.getAttribute('data-cell-id')??null);
+    const land=(await drawn(page)).land;
+    const candidates=land.map(t=>({id:t.id,at:centroid(t.pts) as [number,number]})).filter(t=>t.id!==current&&t.at[0]>q.left+20&&t.at[0]<q.left+q.width-20&&t.at[1]>q.top+20&&t.at[1]<q.top+q.height-20);
+    candidates.sort((a,b)=>Math.hypot(a.at[0]-q.cx,a.at[1]-q.cy)-Math.hypot(b.at[0]-q.cx,b.at[1]-q.cy));
+    if(!candidates.length)throw Error('No actual polygon available for selection proof');
+    await page.mouse.click(candidates[0]!.at[0],candidates[0]!.at[1]);
     await page.waitForTimeout(450);
     const widths = await page.evaluate(() => { const w = window as unknown as { __widths: number[]; __on: boolean }; w.__on = false; return w.__widths; });
     const camAfter = await viewBox(page);

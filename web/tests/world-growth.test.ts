@@ -21,9 +21,9 @@ describe('the fog beyond the coast', () => {
 
 describe('the ranking', () => {
   const claims = [claim('0,0', 'a', 5), claim('1,0', 'b', 1), claim('2,0', 'b', 2), claim('3,0', 'c', 3), claim('4,0', 'a', 6)];
-  it('orders players by tiles held, the first to reach a count ahead on a tie', () => {
+  it('orders by largest connected holding, then deterministic age ties', () => {
     const r = ranking(claims, 'c');
-    expect(r.map((x) => [x.ownerId, x.tiles, x.rank])).toEqual([['b', 2, 1], ['a', 2, 2], ['c', 1, 3]]);
+    expect(r.map((x) => [x.ownerId, x.tiles, x.rank])).toEqual([['b', 2, 1], ['c', 1, 2], ['a', 1, 3]]);
     expect(r.find((x) => x.ownerId === 'c')!.mine).toBe(true);
     expect(r.find((x) => x.ownerId === 'a')!.mine).toBe(false);
   });
@@ -47,11 +47,11 @@ describe('the recent activity strip', () => {
 });
 
 describe('find my land', () => {
-  it('is the middle of my tiles, or nothing when I hold none', () => {
+  it('chooses a real tile in the largest holding, or nothing when I hold none', () => {
     const cells = [{ id: '0,0', q: 0, r: 0 }, { id: '2,0', q: 2, r: 0 }];
     const c = ownCentre(cells, [claim('0,0', 'me', 1), claim('2,0', 'me', 2)], 'me');
     expect(c).not.toBeNull();
-    expect(c!.x).toBeCloseTo(Math.sqrt(3) * 10, 5);
+    expect(c!.x).toBeCloseTo(0, 5);
     expect(ownCentre(cells, [claim('0,0', 'x', 1)], 'me')).toBeNull();
   });
 });

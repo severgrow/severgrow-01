@@ -1,3 +1,4 @@
+import type { TerritoryStanding } from './territory-ranking.js';
 // The wire format shared by the server and its TypeScript client. These are the ONLY shapes
 // that cross the network: a match summary and a player-specific view. The authoritative engine
 // `State` (deck order, both hands, seed) is never part of any payload.
@@ -107,6 +108,7 @@ export type PublicPlayerProfile = {
   level: number | null;
   /** Cells they own in the shared world (`world_claims`). */
   tiles: number;
+  connectedTiles?: number;
   /** Their Territory colour slot, already resolved to the palette default if they never chose. */
   colourId: number;
   /** The ONLINE record only: finished duels they took part in, and their best winning run. */
@@ -257,6 +259,7 @@ export type WorldMapPayload = {
      * be talking to a server deployed before this field existed; the client treats it as empty.
      */
     disputes?: WorldDispute[];
+    rankings?: TerritoryStanding[];
   };
 };
 export type WorldMapResponse = { ok: true } & WorldMapPayload;

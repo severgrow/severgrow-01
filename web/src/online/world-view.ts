@@ -9,6 +9,7 @@ import {
   MINE_LIGHT,
   MINE_MID,
   TILE_COLOURS,
+  colourIdFor,
   shiftLightness,
 } from '../../../src/tile-colours.js';
 import { CHALLENGE } from './challenge-copy.js';
@@ -63,7 +64,7 @@ import {
   type GlobePose,
 } from './map-globe.js';
 import { mountSheetViewport } from '../ui/sheet-viewport.js';
-import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
+import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface, INTERFACE_MOTION } from '../ui/interface-motion.js';
 import { TerritoryChat } from './territory-chat.js';
 import {
   FLICK_MIN,
@@ -123,13 +124,12 @@ const WORLD_KEY_ICONS = {
   ranking: KEY_ICON('<path class="line" d="M3 20.5h18M9 20.5V8.5h6v12M3.5 20.5v-8h5.5M20.5 20.5V14H15"/>' +
     '<text x="12" y="14.6" text-anchor="middle">1</text><text x="6.2" y="18.4" text-anchor="middle">2</text><text x="17.8" y="19.1" text-anchor="middle">3</text>', '2.5 5 19 19'),
   challenges: KEY_ICON(`<path class="fill" d="${SWORD_PATH}"/>`, '-7.6 -7.6 15.2 15.2'),
-  chat: KEY_ICON('<path class="line" d="M5 5h14v11H10l-5 4V5Z"/><path class="line" d="M8 9h8M8 12h5"/>'),
+  chat: KEY_ICON('<path class="line" d="M6 5.5h12a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5h-7L5 20V7A1.5 1.5 0 0 1 6.5 5.5Z"/><path class="line" d="M8.5 9h7M8.5 12h4.5"/>'),
   // ACHIEVEMENTS (owner, 2026-10-29): a medal on its ribbon, the star in the key's own ink.
   achievements: KEY_ICON('<path class="line" d="M8.2 3.5 12 9.2l3.8-5.7"/><circle class="line" cx="12" cy="15" r="5.6"/>' +
     '<path class="fill" d="m12 11.9 1 2 2.2.3-1.6 1.5.4 2.2-2-1.1-2 1.1.4-2.2-1.6-1.5 2.2-.3Z"/>'),
-  // YOUR COLOUR (owner, 2026-10-30): a paint drop, half filled — the key's own ink, like the rest.
-  colour: KEY_ICON('<path class="line" d="M12 3.6c3.5 3.9 5.9 6.9 5.9 9.4a5.9 5.9 0 0 1-11.8 0c0-2.5 2.4-5.5 5.9-9.4Z"/>' +
-    '<path class="fill" d="M12 11.2a3.6 3.6 0 0 1 3.6 3.6H8.4A3.6 3.6 0 0 1 12 11.2Z"/>'),
+  // One solid drop, wearing the same resolved colour as the player's ground.
+  colour: KEY_ICON('<path class="fill world-colour-drop" d="M12 3.6c3.5 3.9 5.9 6.9 5.9 9.4a5.9 5.9 0 0 1-11.8 0c0-2.5 2.4-5.5 5.9-9.4Z"/>'),
 } as const;
 type Pane = 'ranking' | 'challenges' | 'achievements' | 'colour';
 
@@ -282,12 +282,13 @@ export const zoomedView = (
   anchor: readonly [number, number],
   scale: number,
   frame: ViewBox,
+  closestWidth = frame[2] / 4,
 ): ViewBox => {
   const [bx, by, bw, bh] = finiteView(box, frame);
   const step = Number.isFinite(scale) && scale > 0 ? scale : 1;
   const ax = unit(anchor[0]);
   const ay = unit(anchor[1]);
-  const width = Math.max(frame[2] / 4, Math.min(frame[2], bw / step));
+  const width = Math.max(closestWidth, Math.min(frame[2], bw / step));
   const height = width * bh / bw;
   return finiteView([bx + ax * (bw - width), by + ay * (bh - height), width, height], frame);
 };
@@ -668,7 +669,12 @@ export class WorldView {
   /** The single top-most path that carries the selection highlight (see `paintAccent`). */
   private accent: SVGPathElement | null = null;
   private box: ViewBox | null = null;
+  private borderWorld: World | null = null;
+  private borderOwner: string | null = null;
+  private borderEdges: ReturnType<typeof borderSegments> = [];
+  private borderColour: string | undefined;
   private fit: ViewBox | null = null;
+  private fitAfterZoom = false;
   /** The smallest view the window allows — the framed view; see `boundsFor`. */
   private bounds: ViewBox | null = null;
   /** True once the player has panned or zoomed, so a re-frame never throws their view away. */
@@ -987,7 +993,10 @@ export class WorldView {
   }
   /** The pose the shared camera implies (its centre, its half-diagonal as the rim). */
   private poseFor(box: ViewBox | null): GlobePose | null {
-    return box && usableView(box) ? viewGlobePose([box[0], box[1], box[2], box[3]]) : null;
+    // Rotation can change the drawn aspect while a manual camera remains stored verbatim.
+    // Bend the SAME rectangle applyView paints, so the next gesture cannot change the globe's pose.
+    const drawn = reconciledView(box, this.aspect);
+    return drawn ? viewGlobePose(drawn) : null;
   }
   /**
    * THE CAMERA SETTLED: re-pose the globe on the view and redraw the geometry standing on it.
@@ -1046,7 +1055,7 @@ export class WorldView {
     const paths = new Map<string, string>();
     // One list, one pose: the discovered land AND the undiscovered rings beyond it (see
     // `fogCellList`). Ids never collide — a fog cell is by definition not a seen cell.
-    for (const cell of [...this.world.cells, ...this.fogCellList]) {
+    for (const collection of [this.world.cells, this.fogCellList]) for (const cell of collection) {
       const flat = coords(cell.q, cell.r);
       // A cell whose FLAT centre is already inside the box is drawn inside it too: the bend only
       // pulls a point toward the middle of the view, and a box is convex, so the segment between
@@ -1173,6 +1182,7 @@ export class WorldView {
     // The canvas is the menu's physical box now, so the crop is the panel's frame inside it. Both
     // writes happen in this task, before the next paint: no frame ever shows a re-fitted map.
     this.applyCrop();
+    this.bounds = this.boundsFor(this.aspect);
     if (this.svg) this.applyView();
     this.settleWarp(true);
     this.notice(this.svg ? '' : ONLINE.worldLoading);
@@ -1889,13 +1899,8 @@ export class WorldView {
    */
   private boundsFor(aspect: number): [number, number, number, number] | null {
     if (!this.fit || !Number.isFinite(aspect) || aspect <= 0) return null;
-    // THE STAGE's widest view is the whole world with sea around it (its pills float over the sea).
-    if (desktopStage()) return this.containFor(aspect);
-    const inset = PAD - FIT_EDGE;
-    const [fx, fy, fw, fh] = [this.fit[0] + inset, this.fit[1] + inset, this.fit[2] - 2 * inset, this.fit[3] - 2 * inset];
-    let w = fh * aspect, h = fh;
-    if (w > fw) { w = fw; h = fw / aspect; }
-    return [fx + (fw - w) / 2, fy + (fh - h) / 2, w, h];
+    // Maximum zoom-out is independent of the readable default/touch-size floor on every device.
+    return this.containFor(aspect);
   }
   /**
    * THE LARGE VIEW AT REST (owner, 2026-10-21: "keep it large and pannable in both axes"). It is the
@@ -1920,7 +1925,7 @@ export class WorldView {
     }
     const width = Math.min(fw, pixelWidth * (X * R) / MIN_CELL_DRAWN);
     const height = width / aspect;
-    const home = this.menuPreview && this.world ? menuTerritoryAnchor(this.world.cells, this.world.claims, this.identity?.playerId ?? null) : null;
+    const home = this.world ? menuTerritoryAnchor(this.world.cells, this.world.claims, this.identity?.playerId ?? null) : null;
     const centre = home ? this.warpPoint(home.x, home.y) : null;
     return centre ? this.frameInside([centre.x-width/2,centre.y-height/2,width,height])
       : [fx + (fw - width) / 2, fy + (fh - height) / 2, width, height];
@@ -1942,13 +1947,16 @@ export class WorldView {
     if (!this.fit || !Number.isFinite(aspect) || aspect <= 0) return null;
     const inset = PAD - FIT_EDGE;
     const [fx, fy, fw, fh] = [this.fit[0] + inset, this.fit[1] + inset, this.fit[2] - 2 * inset, this.fit[3] - 2 * inset];
-    let w = fw, h = fh;
-    if (fw / fh > aspect) h = fw / aspect; else w = fh * aspect;
-    // THE DESKTOP STAGE floats its pills over the map (Seeds on top; notice, selection and the menu
-    // key at the foot), so the whole-world view leaves them a band of sea above and below.
-    // The foot carries more than the top, so the island sits a touch above the stage's centre.
-    if (desktopStage()) { w *= 1.24; h *= 1.24; return [fx + (fw - w) / 2, fy + (fh - h) / 2 + h * 0.035, w, h]; }
-    return [fx + (fw - w) / 2, fy + (fh - h) / 2, w, h];
+    // The shared canvas is full-bleed; Territory is a smaller crop. Fit the discovered coast
+    // inside that usable crop, not merely inside the SVG's larger, clipped CSS rectangle.
+    const panel = this.active && this.canvas ? this.panelLayout() : null;
+    const sx = panel && this.canvas ? this.canvas.width / panel.width : 1;
+    const sy = panel && this.canvas ? this.canvas.height / panel.height : 1;
+    let w = Math.max(fw * sx, fh * sy * aspect), h = w / aspect;
+    const margin = desktopStage() ? 1.24 : 1.04;
+    w *= margin; h *= margin;
+    const focus = panel ? this.focus : {fx:.5,fy:.5};
+    return [fx + fw/2 - w*focus.fx, fy + fh/2 - h*focus.fy + (desktopStage() ? h*.035 : 0), w, h];
   }
   /**
    * THE VIEW, RECOVERED IF IT IS EVER MISSING OR POISONED (see the note at `usableView`).
@@ -2118,7 +2126,7 @@ export class WorldView {
   private setMoving(on: boolean) {
     const grid = document.getElementById('online-world-grid');
     if (this.settleTimer) { clearTimeout(this.settleTimer); this.settleTimer = null; }
-    if (on) { grid?.classList.add('moving'); return; }
+    if (on) { this.fitAfterZoom = false; grid?.classList.add('moving'); return; }
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null;
       grid?.classList.remove('moving');
@@ -2126,6 +2134,10 @@ export class WorldView {
       // It is deliberately NOT on the release frame — no visible pixel changes here, and the eye is
       // still watching the map it just released.
       this.settleWarp();
+      if (this.fitAfterZoom && !this.pointers.size && this.box && this.bounds && this.box[2] >= this.bounds[2] * .999 &&
+          Math.hypot(this.box[0]-this.bounds[0],this.box[1]-this.bounds[1]) > .01) {
+        this.flyTo(this.bounds[0]+this.bounds[2]/2,this.bounds[1]+this.bounds[3]/2);
+      }
     }, SETTLE_MS);
   }
   /**
@@ -2138,14 +2150,26 @@ export class WorldView {
     const world = this.world;
     if (!group || !world) return;
     const me = this.identity?.playerId ?? null;
-    const own = new Set(me ? world.claims.filter((claim) => claim.ownerId === me).map((claim) => claim.cellId) : []);
-    const ownCells = world.cells.filter((cell) => own.has(cell.id));
-    if (!ownCells.length) { group.replaceChildren(); return; }
-    const d = borderSegments(ownCells).map(([x1, y1, x2, y2]) => {
-      const a = this.warpPoint(x1, y1), b = this.warpPoint(x2, y2);
-      return `M${a.x.toFixed(2)},${a.y.toFixed(2)}L${b.x.toFixed(2)},${b.y.toFixed(2)}`;
-    }).join('');
-    const colour = world.claims.find((claim) => own.has(claim.cellId))?.colour;
+    // Ownership/topology are stable while dragging. Cache the flat outline once per snapshot;
+    // every camera frame still projects ALL its corners through the current live pose.
+    if (this.borderWorld !== world || this.borderOwner !== me) {
+      const own = new Set(me ? world.claims.filter(c=>c.ownerId===me).map(c=>c.cellId) : []);
+      this.borderEdges = borderSegments(world.cells.filter(c=>own.has(c.id)));
+      this.borderColour = world.claims.find(c=>own.has(c.cellId))?.colour;
+      this.borderWorld = world; this.borderOwner = me;
+    }
+    if (!this.borderEdges.length) { group.replaceChildren(); return; }
+    let d = '';
+    const box = this.box, pad = R * 2;
+    for (const [x1,y1,x2,y2] of this.borderEdges) {
+      const a = this.warpPoint(x1,y1), b = this.warpPoint(x2,y2);
+      // A short straight projected edge wholly beyond the canvas cannot paint a visible pixel.
+      // Keep two hex radii of margin for the existing glow, avoiding an enormous off-screen path.
+      if(box && (Math.max(a.x,b.x)<box[0]-pad || Math.min(a.x,b.x)>box[0]+box[2]+pad ||
+        Math.max(a.y,b.y)<box[1]-pad || Math.min(a.y,b.y)>box[1]+box[3]+pad))continue;
+      d += `M${a.x.toFixed(2)},${a.y.toFixed(2)}L${b.x.toFixed(2)},${b.y.toFixed(2)}`;
+    }
+    const colour = this.borderColour;
     let paths = [...group.querySelectorAll<SVGPathElement>('path')];
     if (paths.length !== 2) {
       group.replaceChildren();
@@ -2511,7 +2535,11 @@ export class WorldView {
   private flyToOwner(ownerId: string) {
     if (!this.world) return;
     const centre = ownCentre(this.world.cells, this.world.claims, ownerId);
-    if (centre) this.flyTo(centre.x, centre.y);
+    if (centre && this.box) {
+      // The visible panel is a crop of the shared canvas: land belongs under its focus, not
+      // behind the centre of the full screen. Keep the user's existing zoom.
+      this.flyTo(centre.x + this.box[2] * (.5-this.focus.fx), centre.y + this.box[3] * (.5-this.focus.fy));
+    }
   }
 
   private async sell(cellId: string) {
@@ -2593,6 +2621,7 @@ export class WorldView {
 
   /** The lamps on MENU and the challenges key, which key is lit, and the window's open page. */
   private paintPanel() {
+    this.paintKeyColour();
     const panel = document.getElementById('online-world-panel');
     if (!panel || !this.world) return;
     const me = this.identity?.playerId ?? null;
@@ -2743,12 +2772,16 @@ export class WorldView {
     }
   }
 
-  /** Paint the key's own swatch: a 2px bar of the player's colour, under the drop. */
+  /** The whole drop uses known ground immediately; a slow palette read must not blank it. */
   private paintKeyColour(): void {
     const key = document.getElementById('world-key-colour');
-    if (!key || this.myColourId === null) return;
-    key.style.setProperty('--territory', TILE_COLOURS[this.myColourId]!.css);
-    key.dataset.colour = String(this.myColourId);
+    if (!key) return;
+    const me = this.identity?.playerId;
+    const id = this.myColourId ?? (me ? colourIdFor(me) : null);
+    const colour = this.world?.claims.find(c=>c.ownerId===me)?.colour ?? (id===null ? null : TILE_COLOURS[id]?.css);
+    if (colour) key.style.setProperty('--territory', colour);
+    else key.style.removeProperty('--territory');
+    if(id!==null)key.dataset.colour = String(id);else delete key.dataset.colour;
   }
 
   /**
@@ -2767,7 +2800,7 @@ export class WorldView {
     // otherwise; the swatches are always live. The window constant is 0, so `colourCooldown()`
     // returns 0 and there is nothing to report.
     if (note) {
-      note.textContent = this.colourSaving !== null ? ONLINE.worldColourSaving : ONLINE.worldColourHint;
+      note.textContent = this.colourSaving !== null ? ONLINE.worldColourSaving : '';
     }
     const signature = `colour|${this.myColourId ?? -1}|${this.colourSaving ?? -1}`;
     if (signature === this.colourSignature) return;
@@ -2972,7 +3005,8 @@ export class WorldView {
   private paintRanking(me: string | null) {
     const list = document.getElementById('online-world-ranking');
     if (!list || !this.world) return;
-    const rows = ranking(this.world.claims, me);
+    const rows = ranking(this.world.claims, me, this.world.rankings);
+    const previous = new Map([...list.querySelectorAll<HTMLElement>('[data-owner]')].map(el=>[el.dataset.owner,el.querySelector('.world-ranking-tiles')?.textContent]));
     // An unchanged table is left alone: a poll must not reset a press or the list's scroll.
     const signature = `ranking|${JSON.stringify(rows)}`;
     if (signature === this.paneSignature) return;
@@ -2983,6 +3017,7 @@ export class WorldView {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = `world-ranking-row${row.mine ? ' mine' : ''}`;
+      button.dataset.owner = row.ownerId;
       button.style.setProperty('--territory', row.colour);
       const rank = document.createElement('span');
       rank.className = 'world-ranking-rank';
@@ -3003,7 +3038,9 @@ export class WorldView {
       const tiles = document.createElement('span');
       tiles.className = 'world-ranking-tiles';
       tiles.textContent = String(row.tiles);
-      tiles.setAttribute('aria-label', ONLINE.worldTiles(row.tiles));
+      if(previous.has(row.ownerId) && previous.get(row.ownerId)!==tiles.textContent && interfaceMotionAllowed())
+        tiles.animate([{opacity:.5,translate:'0 2px'},{opacity:1,translate:'0 0'}],{duration:INTERFACE_MOTION.open,easing:INTERFACE_MOTION.easeOpen});
+      tiles.setAttribute('aria-label', ONLINE.worldConnectedTiles(row.tiles));
       button.append(rank, swatch, name, tiles);
       button.addEventListener('click', () => { this.setPane(null, false); this.flyToOwner(row.ownerId); });
       item.append(button);
@@ -3023,27 +3060,11 @@ export class WorldView {
     else card.style.removeProperty('--territory');
     const big = document.createElement('strong');
     big.className = 'world-standing-place';
-    const line = document.createElement('span');
-    line.className = 'world-standing-line';
-    const meter = document.createElement('span');
-    meter.className = 'world-standing-meter';
-    meter.setAttribute('aria-hidden', 'true');
-    const fill = document.createElement('i');
-    meter.append(fill);
-    if (!at) {
-      big.textContent = '—';
-      line.textContent = ONLINE.worldNoStanding;
-      fill.style.width = '0%';
-    } else {
-      big.textContent = ONLINE.worldPlace(at.rank, at.players);
-      line.textContent = at.next ? ONLINE.worldToPass(at.next.gap, at.next.name) : ONLINE.worldLeading;
-      // the meter: how close you are to the player above (full when you lead)
-      fill.style.width = `${at.next ? Math.max(6, Math.round(100 * at.tiles / (at.next.tiles + 1))) : 100}%`;
-    }
+    big.textContent = at ? ONLINE.worldPlace(at.rank, at.players) : '—';
     const tiles = document.createElement('span');
     tiles.className = 'world-standing-tiles';
-    tiles.textContent = ONLINE.worldTiles(at?.tiles ?? 0);
-    card.replaceChildren(big, tiles, line, meter);
+    tiles.textContent = ONLINE.worldConnectedTiles(at?.tiles ?? 0);
+    card.replaceChildren(big, tiles);
   }
 
   // ---- the challenge layer -------------------------------------------------
@@ -4031,7 +4052,7 @@ export class WorldView {
       // A view wider (or taller) than the world — the stage zoomed out — stays centred on it.
       // The maths is pure (`clampedView`), so a NaN anywhere in it can only ever produce a legal
       // view: this is the gate the poisoning used to walk through.
-      const closest = Math.min(frame[2] / 4, this.cellFloor());
+      const closest = Math.min(frame[2] / 4, this.cellFloor() / (desktopStage() ? 1 : 4));
       // ZOOM LIMITS from the framed view (as before); the PAN limit is the focus one (`panLimits`):
       // every edge tile can be brought to the middle of the panel, at every zoom.
       this.box = this.panLimits
@@ -4051,32 +4072,24 @@ export class WorldView {
     const liveRect = (rect: DOMRect): DOMRect =>
       rect.width > 0 && rect.height > 0 ? rect : svg.getBoundingClientRect();
     const zoom = (scale: number, x: number, y: number, rect: DOMRect = frameRect ?? svg.getBoundingClientRect()) => {
-      const box = this.recoverBox();
+      // A deliberate gesture starts on the actual drawn frame after rotation. Stored camera
+      // coordinates remain untouched during ordinary menu/viewport presentation.
+      const stored = this.recoverBox();
+      const box = reconciledView(stored, this.aspect);
       if (!box || !this.fit) return;
       const frame = this.bounds ?? this.fit;
       // The anchor is a fraction of the LIVE map, so a rect that cannot be measured falls back to the
       // centre instead of turning into Infinity (see `viewAnchor`). Scaled by the box's OWN aspect
       // (which is the window's), not the world's, so zooming keeps the view framed and the two axes
       // scale equally at every zoom level.
-      this.box = zoomedView(box, viewAnchor(x, y, liveRect(rect)), scale, frame);
+      this.box = zoomedView(box, viewAnchor(x, y, liveRect(rect)), scale, frame, Math.min(frame[2] / 4, this.cellFloor() / (desktopStage() ? 1 : 4)));
       this.touched = true;
       this.manualCamera = true;
       set();
+      this.fitAfterZoom = !!this.box && this.box[2] >= frame[2] * .999;
     };
-    /**
-     * A TAP RESOLVES TO THE CELL THE FINGER IS NEAREST (owner, 2026-10-21). The large view already
-     * draws a cell at MIN_CELL_PX, so a hex is its own >=44px target; this is the second half of the
-     * guarantee — a tap in the padding, between two cells, or anywhere in the small FIT view still
-     * selects the nearest cell and never nothing. Nearest CENTRE is the honest rule: the hexagons
-     * tile the plane, so "nearest centre" is the cell under the finger, and a shared edge cannot pick
-     * an arbitrary neighbour from DOM paint order.
-     *
-     * THE CENTRES MUST BE THE DRAWN ONES (CI `territory-gestures-ios`, 8%). The map is bent by the
-     * view-centred globe, so the cell under a finger is the one whose BENT centre is nearest. The
-     * pose here is the very pose the geometry standing on screen was built with (`this.pose`), not a
-     * fresh one: mid-pan the drawing is the older pose and the tap must agree with what is drawn.
-     */
-    /** The nearest cell to a point, without selecting it (the double-tap arbiter needs it first). */
+    /** Exact projected polygon containment. Sea and missing tiles never resolve to distant land.
+     * Use the pose actually drawn, including mid-gesture, not a freshly invented camera pose. */
     const cellAt = (x: number, y: number): string | null => {
       if (svg !== this.svg) return null;
       const cells = this.world?.cells;
@@ -4103,7 +4116,8 @@ export class WorldView {
       const box = this.recoverBox();
       const frame = this.bounds ?? this.fit;
       if (!box || !frame) return;
-      const deep = box[2] <= frame[2] * 0.72;
+      const readable = Math.min(frame[2], this.cellFloor());
+      const deep = box[2] <= readable * 0.72;
       this.stopGlide();
       this.setMoving(true);
       zoom(deep ? DOUBLE_TAP_OUT : DOUBLE_TAP_IN, x, y, frameRect ?? svg.getBoundingClientRect());
@@ -4230,6 +4244,7 @@ export class WorldView {
         if (Math.hypot(event.clientX - start.x, event.clientY - start.y) <= TAP_SLOP) return;
       }
       if (!this.dragged) {
+        this.box = reconciledView(this.box, this.aspect) ?? this.box;
         this.dragged = true;
         // The gesture is a PAN, so it can never be the first half of a double tap.
         this.lastTap = null;
@@ -4303,7 +4318,7 @@ export class WorldView {
       // A tap, not the end of a pan: hand it to the double-tap arbiter. (Mouse's right/middle
       // buttons, a second finger, and a CANCELLED touch are not taps — a cancel means the browser
       // took the gesture, so it can never select a tile.)
-      if (wasSingle && !this.dragged && !this.multiGesture && event.type === 'pointerup' && event.button === 0) finishTap(event.clientX, event.clientY);
+      if (wasSingle && !this.dragged && !this.multiGesture && event.type === 'pointerup' && event.button === 0) { this.fitAfterZoom = false; finishTap(event.clientX, event.clientY); }
       if (!this.pointers.size) {
         this.dragged = false;
         this.multiGesture = false;

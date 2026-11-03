@@ -178,6 +178,7 @@ try {
   await page.waitForSelector('#online-world-panel:not([hidden])');
   check('RANKING opens its own page', (await page.getAttribute('#online-world-panel', 'data-pane')) === 'ranking' && (await page.textContent('#world-panel-title')) === 'Ranking');
   check('the ranking lists every player', (await count(page, '.world-ranking-row')) === 4);
+  check('ranking has no chase sentence or progress meter', (await count(page, '.world-standing-line, .world-standing-meter')) === 0);
   check('the open key is lit', await page.evaluate(() => document.getElementById('world-key-ranking')!.classList.contains('on')));
   const under = await page.evaluate(() => { const p = document.getElementById('online-world-panel')!.getBoundingClientRect(); const k = document.getElementById('online-world-menu')!.getBoundingClientRect(); return p.top - k.bottom; });
   check('the window hangs under the key row, so the keys stay in reach', under >= 4 && under <= 12, String(under));
@@ -353,6 +354,15 @@ try {
   check('reloading also restores the Territory camera',await sameCamera(),JSON.stringify({before:cameraBefore,after:await page.getAttribute('.world-map-svg','viewBox')}));
   await page.click('#online-world-menu');await page.click('#world-key-colour');
   await page.waitForSelector('.world-colour-swatch');
+  check('colour picker has no instructional filler', (await page.textContent('#world-colour-note')) === '');
+  const drop=await page.evaluate(()=>{
+    const key=document.getElementById('world-key-colour')!;
+    const paths=key.querySelectorAll('.world-key-icon path');
+    const probe=document.createElement('span');probe.style.color=getComputedStyle(key).getPropertyValue('--territory');document.body.append(probe);
+    const expected=getComputedStyle(probe).color;probe.remove();
+    return {paths:paths.length,fill:paths[0]?getComputedStyle(paths[0]).fill:null,expected,ink:getComputedStyle(key).getPropertyValue('--territory'),inline:key.style.cssText};
+  });
+  check('the entire drop wears the resolved tile colour',drop.paths===1&&drop.fill===drop.expected,JSON.stringify(drop));
   check('colour names remain comfortably legible',await page.locator('.world-colour-name').evaluateAll(nodes=>nodes.every(e=>parseFloat(getComputedStyle(e).fontSize)>=10)));
   await page.screenshot({path:`${SHOTS}/territory-colours-390.png`});
   await page.evaluate(()=>{

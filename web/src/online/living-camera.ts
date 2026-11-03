@@ -1,4 +1,4 @@
-import { cellXY } from './world-growth.js';
+import { flatCell as cellXY } from './map-globe.js';
 type Cell={id:string;q:number;r:number};
 type Claim={cellId:string;ownerId:string};
 /** First visit only. Centre a real tile in the largest connected holding, not an empty midpoint
