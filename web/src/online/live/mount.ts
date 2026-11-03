@@ -1,4 +1,5 @@
 import { publishOpponentStatus } from './opponent-status.js';
+import { FEATURES } from '../../channel.js';
 // Live duels — the client controller, mounted once from main.ts (only when online is enabled and an
 // identity exists on this device). It reads the page through `window.__severgrow` (read-only test
 // hooks that already exist) and the online session handle; it never changes the replay gate, the
@@ -413,7 +414,12 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     void refresh().finally(() => window.setTimeout(loop, delay));
   };
   loop();
-  center.start();
+  if(FEATURES.sphereTest){
+    // The isolated mock surface must not keep sending presence or running an inbox behind it.
+    const syncTestSurface=()=>{if(document.querySelector('.sphere-test'))center.stop();else center.start();};
+    document.addEventListener('futasaku:test-surface',syncTestSurface);
+    syncTestSurface();
+  }else center.start();
 
   (window as unknown as { __futasakuLive?: () => LiveDebug }).__futasakuLive = () => ({
     status,

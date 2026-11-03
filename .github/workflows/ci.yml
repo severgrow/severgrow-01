@@ -35,7 +35,7 @@ jobs:
         # this branch never publishes; smoke also flaked and cost a full re-run of a deploy. They still
         # run wherever that channel is developed. territory-gestures-ios runs on WebKit: it is the suite
         # that would have caught the iPhone pan/pinch freeze that Chromium missed (2026-10-28).
-        suite: [futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock, futa04-lesson-9-free, futa04-motion, cut-severe, lessons-3, territory-menu, territory-challenges, territory-gestures, territory-gestures-ios, living-territory, living-territory-ios, territory-final-polish]
+        suite: [futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock, futa04-lesson-9-free, futa04-motion, cut-severe, lessons-3, territory-menu, territory-challenges, territory-gestures, territory-gestures-ios, living-territory, living-territory-ios, territory-final-polish, first-experience, first-experience-course, sphere-test, sphere-test-ios]
     # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
     # Playwright 1.56.1 refuses it ("Playwright does not support chromium on ubuntu26.04-x64"),
     # which failed EVERY browser job at `playwright-core install` before a single test ran. Pin the
@@ -67,13 +67,20 @@ jobs:
             # like the real ones and nothing in lessons-3 talks to them.
             lessons-3) CHANNEL=futa05 VITE_FIND_OPPONENT=1 VITE_DUEL_API_URL=https://ci.invalid/functions/v1/duel \
                 VITE_SUPABASE_URL=https://ci.invalid VITE_SUPABASE_ANON_KEY=ci-placeholder npm run web:build ;;
+            first-experience*|sphere-test*) CHANNEL=futa05 VITE_FIND_OPPONENT=1 VITE_DUEL_API_URL=http://127.0.0.1:9/functions/v1/duel \
+                VITE_SUPABASE_URL=http://127.0.0.1:9 VITE_SUPABASE_ANON_KEY=local npm run web:build ;;
           esac
-      - run: node --import tsx web/e2e/${{ matrix.suite }}.ts
+      - run: |
+          if [ "${{ matrix.suite }}" = first-experience-course ]; then
+            SHOTS=/tmp/first-experience-course node --import tsx web/e2e/${{ matrix.suite }}.ts
+          else
+            node --import tsx web/e2e/${{ matrix.suite }}.ts
+          fi
 
       - name: Keep living Territory visual evidence
-        if: always() && (startsWith(matrix.suite, 'living-territory') || matrix.suite == 'territory-final-polish')
+        if: always() && (startsWith(matrix.suite, 'living-territory') || matrix.suite == 'territory-final-polish' || startsWith(matrix.suite, 'first-experience') || startsWith(matrix.suite, 'sphere-test'))
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.suite }}-screens
-          path: ${{ matrix.suite == 'territory-final-polish' && '/tmp/territory-final-polish/' || '/tmp/living-territory/' }}
+          path: ${{ matrix.suite == 'territory-final-polish' && '/tmp/territory-final-polish/' || startsWith(matrix.suite, 'sphere-test') && '/tmp/sphere-test/' || matrix.suite == 'first-experience-course' && '/tmp/first-experience-course/' || matrix.suite == 'first-experience' && '/tmp/first-experience/' || '/tmp/living-territory/' }}
           retention-days: 7

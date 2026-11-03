@@ -1657,6 +1657,13 @@ export const FIRST_EXPERIENCE = Object.freeze({
   draw: 'Each turn: Draw, Grow, Throw. Take one card from the Draw pile or the Throw pile.',
 });
 
+export const SPHERE_TEST = Object.freeze({
+  title: 'SPHERE TEST', retry: 'RETRY SPHERE TEST', back: 'Back to menu', home: 'Return to your land',
+  controls: 'Territory sphere. Drag or use arrow keys to rotate. Pinch or use plus and minus to zoom. Enter selects a cell. Home returns to your land.',
+  unoccupied: 'UNOCCUPIED', unknown: 'UNDISCOVERED',
+  unavailable: 'The sphere needs WebGL, which is unavailable on this device.', restoring: 'Restoring the sphere…',
+});
+
 export const LESSON = Object.freeze({
   // ---- the display: what to do now (never more than three words) ----
   // Owner, 2026-10-20: the LED is small and read at a glance, so the action is at most three

@@ -57,9 +57,15 @@ that selection or the environment's allowed branches.
 
 ## What /test/ is
 
-The same game as the root (same channel, same API and database, same saves and account, so your own
-Territory land is there), with a small **TEST · <sha>** badge, `noindex`, `TEST ·` in the tab title, and
-its own service-worker cache (`futa05test-`), so it can never purge the live game's cache.
+The same `futa05` channel, with a small **TEST · <sha>** badge, `noindex`, `TEST ·` in the tab title,
+and its own service-worker cache (`futa05test-`), so it can never purge the live game's cache.
+
+**3 November experiments:** `/test/` has separate `futa05-test:` local/session storage. It never
+migrates or deletes live `futa05:` or `/3/`'s `futa05-3:` saves. Experimental campaign results do
+not upload account progress or reward proofs. Normal online entries still use the same backend;
+Sphere Test is a separate mock surface without economy/ownership calls. See
+[FIRST-EXPERIENCE-TEST.md](FIRST-EXPERIENCE-TEST.md) and [SPHERE-TEST.md](SPHERE-TEST.md).
+Do not promote these experiments.
 
 **It shares the live server.** /test/ is the web page only. Server code (`server/`, the Supabase `duel`
 Edge Function) and database migrations still roll out on their own (docs/DEPLOY-ONLINE.md). A page
@@ -83,8 +89,10 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
 
 - `ci.yml` `check`: typecheck + every unit test + the futa04 and futa-test builds.
 - `ci.yml` `browser`: futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock,
-  futa04-motion, cut-severe, lessons-3, territory-menu, territory-challenges,
-  territory-gestures, and **territory-gestures-ios on WebKit** (the iPhone engine).
+  futa04-lesson-9-free, futa04-motion, cut-severe, lessons-3, territory-menu, territory-challenges,
+  territory-gestures, territory-gestures-ios, living-territory, living-territory-ios,
+  territory-final-polish, first-experience, first-experience-course, sphere-test and sphere-test-ios.
+  The `-ios` suites use WebKit (the Safari engine), not physical-device automation.
 - `extra-regressions.yml`: admin-dashboard, online-stale-token-recovery, online-soak-teardown,
   settings-visual, accounts-email, pwa-viewport-layout.
 

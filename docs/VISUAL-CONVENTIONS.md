@@ -268,3 +268,16 @@ and the step cue's 260/320/900ms choreography are designed beats. `perf-phone` s
   Do not add decorative blur layers or idle loops. Selection never flies the camera to a tile.
 - The software-browser 3,000-cell overview remains a measured performance limit; the current
   renderer is not certified for 60fps at that density. See `TERRITORY-FINAL-POLISH.md` for evidence.
+
+## Isolated /test/ experiments
+
+The first-experience refinement and Sphere Test use the existing `FEATURES` route/channel gates.
+Keep them exclusive to `/test/`; do not change production defaults or the approved real map.
+`futa05-test:` saves are separate and experimental campaign results never sync real rewards/progress.
+Keep the existing caption, legality, feedback and three-second deliberate-dismissal floor. Legal
+gameplay never waits for prose; random taps never acknowledge it. See `FIRST-EXPERIENCE-TEST.md`.
+
+The spherical prototype reuses the real palette, typography, grain and shared micro-motion. It has
+only Back, the planet and the existing-colour home key. No toolbar, floating labels, glossy bloom,
+idle render loop or backend feature. Reduced motion stays static; raster detail returns at rest.
+Treat WebGL fallback, cleanup and device limitations as part of the experience. See `SPHERE-TEST.md`.

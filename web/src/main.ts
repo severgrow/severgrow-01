@@ -2,6 +2,7 @@
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 // EXPERIMENTAL Blitz (/test/ only): presentation + wiring; its rules live in logic/blitz.ts.
 import type { BlitzPractice } from './blitz/practice.js';
+import type { mountSphereTest } from './sphere/entry.js';
 import { showLiveStrike } from './ui/live-strike.js';
 import { readAppViewport } from './ui/app-viewport.js';
 import { mountMatchChat } from './online/chat/view.js';
@@ -1971,6 +1972,9 @@ async function mountPlayerEnhancements() {
     loads.push(import('./player/fonts.js').then((f) => f.applyFont('new')));
   }
 
+  // Only /test/ gets the cheap Sphere Test entry; its renderer stays lazy until a tap.
+  if(FEATURES.sphereTest) loads.push(import('./sphere/entry.js').then(m=>{sphereTest=m.mountSphereTest();}));
+
   // EXPERIMENTAL Blitz. The channel guard keeps its module out of the futa04 product build
   // entirely; the module's own FEATURES.blitz gate (channel + the /test/ route) keeps it off the
   // live root, which is the same futa05 build one promote behind the staging copy.
@@ -3547,6 +3551,7 @@ let campaignLevel: CampaignLevel | null = null;
  * the test hook. Every other way a match starts clears both.
  */
 let blitz: BlitzPractice | null = null;
+let sphereTest: ReturnType<typeof mountSphereTest> = null;
 let blitzMatch = false;
 let blitzMap: number | null = null;
 /**
@@ -10683,6 +10688,7 @@ let appReady = false;
     return !!p;
   },
   settings: () => ({ ...settings }),
+  sphere: () => sphereTest?.snapshot() ?? null,
   /** The campaign place the page is on, as the menu's LEVEL <n> reads it (tests/screenshots). */
   campaignLevel: () => currentLevel(campaignProgress).number,
   /**
