@@ -1,5 +1,40 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-03 — The globe is drawn at 8%, the owner's choice over the 5% recommendation
+
+Owner decision, after being shown the strength ladder for the bent lattice in
+`web/src/online/map-globe.ts`: **the shipped strength is `GLOBE_FALLOFF = 0.08`** (8% smaller at the
+rim), replacing the 5% that had just merged.
+
+**What was said before he chose.** 8% is past the repo's own hexagon-shape rule, `HEX_TOLERANCE = 1.10`
+(no edge more than 10% from the tile's longest). Measured on the frozen world, the worst tile is the
+outer corner `8,-10`:
+
+| strength | worst max/min edge | shortest vs longest | sharpest interior angle | tiles past 1.10 |
+| --- | --- | --- | --- | --- |
+| 0.04 (recommended) | 1.0687 | 6.4% | 116.2° | 0 |
+| 0.05 (was shipped) | 1.0877 | 8.1% | 115.2° | 0 |
+| **0.08 (this)** | **1.1499** | **13.0%** | **111.7°** | **56 / 274** |
+| 0.12 (rejected) | 1.2469 | 19.8% | 106.3° | — |
+| 0.20 | 1.5056 | 33.6% | 91.4° | — |
+
+He was also told that 8% is the same intensity as the earlier `fisheye-a` attempt he rejected — but
+that the technique now is a **true sphere projection with no added contours**: the lattice itself
+bends, nothing is drawn on top. He chose 8% anyway.
+
+**The visual trade accepted.** Rim tiles are visibly compressed: at the map's edge a tile's two radial
+edges are about 13% shorter than its four tangential ones, so it reads as a hexagon turning away from
+the viewer rather than a regular one. Interior angles stay between 111.7° and 125.7° (regular 120°).
+The middle of the map is untouched, and neighbours still share every corner exactly (no seams). The
+median tile is 1.0571 and the 90th percentile 1.1188, so the compression is concentrated at the rim.
+
+**The guard was re-pointed, not deleted.** `web/tests/map-globe.test.ts` used to assert that 8% fails
+`HEX_TOLERANCE` and that the shipped strength passes it. It now pins a **hard floor of 1.20** — the
+last rung before the tiles shear into trapezoids — for the shipped strength, and still fails for 0.12,
+0.2 and 0.4. `HEX_TOLERANCE` keeps its 1.10 meaning and the test counts how many tiles exceed it (56),
+so the cost cannot be quietly widened later. A 0.05 strength remains reachable by changing the one
+constant; `globe-subtle` (0.04) is the previous recommendation.
+
 ## 2026-11-02 — The menu paints before the module; no filter on an animating part
 
 Owner: "run couple extra smoothness checks and smoothness pack … making sure everything appears as

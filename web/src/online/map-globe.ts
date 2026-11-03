@@ -34,16 +34,19 @@ const X = Math.sqrt(3);
 export const flatCell = (q: number, r: number): { x: number; y: number } => ({ x: X * (q + r / 2) * R, y: 1.5 * r * R });
 
 /**
- * HOW MUCH SMALLER THE RIM IS DRAWN THAN THE MIDDLE. 0.05 = 5%: at the coast a tile is 5% narrower
- * and 15% flatter along the radius (see the Jacobian above). This is the MODERATE rung of the ladder —
- * the strongest bend that still keeps a tile inside the hexagon bar in `map-globe.test.ts` (no edge
- * more than 10% away from the tile's longest). 0.08 is past that bar; it is kept as a screenshot
- * only. 0 is a flat map.
+ * HOW MUCH SMALLER THE RIM IS DRAWN THAN THE MIDDLE. 0.08 = 8%: at the coast a tile is 8% narrower
+ * and 23.6% flatter along the radius (`cos(theta) = 0.764`; see the Jacobian above). THIS IS THE
+ * OWNER'S CHOSEN STRENGTH, set 2026-11-03 after he was shown the whole ladder and told plainly what
+ * 8% costs: it is past the 10% edge-length bar in `map-globe.test.ts` (worst tile 1.1499, its
+ * shortest edge 13.0% shorter than its longest; 56 of 274 tiles past the bar), so the rim tiles read
+ * as visibly compressed rather than as regular hexagons. He accepted that trade knowingly, over the
+ * recommended 0.04/0.05, because the bend must be visible. Recorded in `docs/DECISIONS.md`.
  *
- * THE LADDER, all off this one number: 0.03 (barely there), 0.04 (the recommended one, on
- * `globe-subtle`), 0.05 (this, the ceiling), 0.08 (too strong — the tiles stop reading as hexes).
+ * THE LADDER, all off this one number: 0.03 (barely there), 0.04 (the recommended rung, on
+ * `globe-subtle`), 0.05 (MODERATE — the strongest that stays inside the hexagon bar), 0.08 (THIS,
+ * the owner's choice, knowingly past the bar), 0.12 and up (rejected — the tiles shear). 0 is flat.
  */
-export const GLOBE_FALLOFF = 0.05;
+export const GLOBE_FALLOFF = 0.08;
 /** The drawn size of the rim relative to the middle: the smallest a tile is ever drawn. */
 export const GLOBE_RIM = 1 - GLOBE_FALLOFF;
 
@@ -151,8 +154,10 @@ export const mapScale = (x: number, y: number): number => (POSE ? globeScale(POS
  * ONE HEXAGON WITH ITS CORNERS BENT. Warping the shared CORNERS (not each tile about its own centre)
  * is what keeps neighbours touching exactly: two cells share a corner, so both draw that corner at
  * the same bent point and the shared edge cannot open a seam. The deviation from a regular hexagon
- * is second order in the arc — under 0.05 map units at 4%, a third of a pixel at 46px cells — so a
- * tile still reads as the same hexagon everywhere.
+ * is second order in the arc, and at the shipped 8% the worst tile (the outer corner, 8,-10) has its
+ * two radial edges 13.0% shorter than its four tangential ones, with interior angles 111.7-125.7
+ * against a regular hexagon's 120 — compressed, and the owner accepted that when he chose 0.08. It
+ * still closes on every neighbour exactly.
  */
 export const mapHex = (x: number, y: number): string => {
   const points = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]] as const;

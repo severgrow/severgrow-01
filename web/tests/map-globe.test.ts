@@ -8,6 +8,12 @@
 //   1. the projection is a real sphere, so the bow and the compression cannot drift apart;
 //   2. neighbours still share their exact corners — a warp may never open a seam;
 //   3. the middle is untouched and the rim only recedes, so no tile anywhere grows.
+//
+// STRENGTH, 2026-11-03. The owner chose 8% after seeing the whole ladder, knowing it is past the 10%
+// edge-length bar (worst tile 1.1499, 56 of 274 tiles past it): rim tiles are knowingly compressed.
+// `docs/DECISIONS.md` records it. The hexagon tests below therefore pin the HARD floor (1.20, the last
+// rung before the tiles shear) instead of the product bar. The bar itself is kept and its breach is
+// counted, so the cost stays a number rather than a deleted test.
 import { describe, expect, it } from 'vitest';
 import { WORLD_CELLS } from '../../server/src/world.js';
 import {
@@ -53,12 +59,23 @@ describe('the arc a strength means', () => {
 describe('the drawn map is a sphere, not a scale', () => {
   const pose = worldGlobe()!;
   /**
-   * THE BAR FOR "A HEX IS A HEX". The sphere squashes a rim tile radially (that IS the tilt), so an
-   * edge-length ratio is how far a tile has been allowed to go. 1.10 means no edge may be more than
-   * 10% away from the tile's longest: a hexagon the eye still reads as a hexagon. It is a product
-   * rule, not a fit to the current number — the ladder is measured against it in the last test here.
+   * THE PRODUCT BAR FOR "A HEX IS A HEX". The sphere squashes a rim tile radially (that IS the tilt),
+   * so an edge-length ratio is how far a tile has been allowed to go. 1.10 means no edge may be more
+   * than 10% away from the tile's longest: a hexagon the eye still reads as a hexagon.
+   *
+   * This stays the honest line, and the owner's 2026-11-03 choice of 8% sits PAST it (1.1499) by his
+   * explicit decision (docs/DECISIONS.md). It is kept, not loosened, so the cost stays measurable.
    */
   const HEX_TOLERANCE = 1.1;
+  /**
+   * THE HARD FLOOR — what the geometry can tolerate before a tile stops reading as a hexagon at all.
+   * Measured ladder for the worst tile (8,-10), max/min edge: 0.05 = 1.0877, 0.08 = 1.1499 (shipped),
+   * 0.10 = 1.1962 (sharpest interior angle 109.1 degrees), 0.12 = 1.2469 (106.3 degrees — starts to
+   * read as a trapezoid), 0.20 = 1.5056 (91.4 degrees, nearly rectangular), 0.40 = 3.7242. 1.20 sits
+   * between the last still-hexagonal rung and the first sheared one: it leaves the owner room to nudge
+   * the strength (to 0.09 or 0.10, still inside) while any jump to 0.12 or beyond fails here.
+   */
+  const SHEAR_CEILING = 1.2;
   const worstEdgeRatio = (strength: number) => {
     let worst = 0;
     for (const cell of WORLD_CELLS) {
@@ -69,20 +86,39 @@ describe('the drawn map is a sphere, not a scale', () => {
   };
 
   it('keeps every tile a hexagon — no sliver, no pinch', () => {
-    // At the shipped strength the worst tile in the frozen world is the outer corner, whose two
-    // RADIAL edges are 6.9% shorter than its four tangential ones — the flank that reads as the tile
-    // turning away from the light.
+    // THE HONEST READING OF THE SHIPPED 8%. The worst tile in the frozen world is the outer corner
+    // (8,-10): max/min edge = 1.1499, its two RADIAL edges 13.0% shorter than its four tangential
+    // ones, interior angles 111.7/111.8 and 125.7/124.8 against a regular hexagon's 120. It reads as
+    // visibly COMPRESSED — the flank turning away from the light — not as a sliver or a pinch, and
+    // that is past HEX_TOLERANCE by the owner's explicit choice. So the product bar above is recorded,
+    // and this test pins the HARD floor: no tile anywhere may cross it. Measured distribution at 8%:
+    // median 1.0571, p90 1.1188, max 1.1499, so the compression is concentrated at the rim exactly as
+    // the projection predicts.
+    let worst = 0;
     for (const cell of WORLD_CELLS) {
       const lengths = edges(corners(pose, cell.q, cell.r));
-      expect(Math.max(...lengths) / Math.min(...lengths)).toBeLessThan(HEX_TOLERANCE);
+      const ratio = Math.max(...lengths) / Math.min(...lengths);
+      expect(ratio).toBeLessThan(SHEAR_CEILING);
+      worst = Math.max(worst, ratio);
     }
+    expect(worst).toBeCloseTo(1.1499, 3);
+    // The cost of the owner's choice, stated as a number rather than hidden: 56 of 274 tiles are past
+    // the 1.10 product bar (they were 0 at 0.05). If that count moves, the strength or the world moved.
+    const pastBar = WORLD_CELLS.filter((cell) => {
+      const lengths = edges(corners(pose, cell.q, cell.r));
+      return Math.max(...lengths) / Math.min(...lengths) > HEX_TOLERANCE;
+    }).length;
+    expect(pastBar).toBe(56);
   });
 
-  it('rules out the strength the owner rejected: 8% is past the hexagon bar', () => {
-    // The ladder's top rung is kept as a screenshot, not as a setting. If someone raises
-    // GLOBE_FALLOFF to it, this says why that is wrong before an owner ever sees it.
-    expect(worstEdgeRatio(0.08)).toBeGreaterThan(HEX_TOLERANCE);
-    expect(worstEdgeRatio(GLOBE_FALLOFF)).toBeLessThan(HEX_TOLERANCE);
+  it('still refuses a bend that shears the tiles — the guard above the owner’s 8%', () => {
+    // Re-pointed when the owner chose 0.08 on 2026-11-03 (docs/DECISIONS.md). Not deleted and not
+    // loosened into nothing: the SHIPPED strength must stay inside the hard floor, and a bend the
+    // geometry cannot carry must fail here before an owner ever sees it.
+    expect(worstEdgeRatio(GLOBE_FALLOFF)).toBeLessThan(SHEAR_CEILING);
+    expect(worstEdgeRatio(0.12)).toBeGreaterThan(SHEAR_CEILING); // 1.2469, sharpest angle 106.3 deg
+    expect(worstEdgeRatio(0.2)).toBeGreaterThan(SHEAR_CEILING);  // 1.5056, nearly rectangular
+    expect(worstEdgeRatio(0.4)).toBeGreaterThan(SHEAR_CEILING);  // 3.7242, folded over
   });
 
   it('leaves the middle exactly where it was and only lets the rim recede', () => {
