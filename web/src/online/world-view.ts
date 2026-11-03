@@ -53,6 +53,7 @@ import { lastChosenCamera, rememberCamera } from './world-camera.js';
 import { menuTerritoryAnchor } from './living-camera.js';
 import {
   GLOBE_RIM,
+  drawnInView,
   globeHex,
   globePoint,
   globeScale,
@@ -501,11 +502,27 @@ export class WorldView {
   /**
    * THE WARP'S POSE — the sphere the lattice is currently bent onto (see `map-globe.ts`). It is
    * derived from the shared camera box, never from the window, so the menu backdrop and the
-   * Territory panel draw the very same geometry. It is refreshed when the camera SETTLES, not on
-   * every pointer move: a pan therefore moves the painted map by the viewBox alone (cheap, one
-   * attribute write per frame) and the globe is re-posed once the finger is still.
+   * Territory panel draw the very same geometry.
+   *
+   * IT IS REFRESHED ON EVERY PAINTED FRAME OF A GESTURE (owner, 2026-11-03: "it doesnt change while
+   * dragging but only when 'drag' is released - it should work smoothly with no time taken and also
+   * while dragging"). The bend used to be re-posed only once the camera settled, so the tiles rode
+   * the viewBox rigidly and the whole lattice jumped to the new pose at the release. Now a live
+   * pass (see `liveWarp`) re-poses and redraws once per painted frame, and the settle that follows
+   * the release (`settleWarp`) is the authoritative pass over the margin the eye could not see.
    */
   private pose: GlobePose | null = null;
+  /**
+   * TRUE WHEN A LIVE PASS LEFT OFF-SCREEN GROUND ON AN OLDER POSE. A live warp deliberately skips
+   * the half-view margin a settle covers, so "the pose has not changed" is not a reason to skip the
+   * settle that follows a release: it still owes that margin its redraw. Cleared only by a full pass.
+   */
+  private warpStale = false;
+  /**
+   * The cells `paintFrontier` has marked right now. A drag re-runs that pass every painted frame,
+   * and the common case (no frontier) has nothing to show or clear — this set is what proves it.
+   */
+  private frontierShown = new Set<string>();
   /**
    * THE CANVAS THE CAMERA IS DRAWN ON. In the menu and the Territory this is the same full-bleed
    * screen rectangle; the panel is only a CLIP over it, so a tile's absolute screen rect cannot
@@ -911,15 +928,32 @@ export class WorldView {
   }
   /**
    * THE CAMERA SETTLED: re-pose the globe on the view and redraw the geometry standing on it.
-   * Called after a pan/zoom/glide ends (and at the end of a paint), never per pointer move. Panning
-   * in between is a viewBox write only; the same world geometry keeps riding the same camera, and
-   * when the finger is still the fat middle of the globe is moved to the new view centre.
+   * This is the AUTHORITATIVE pass: it covers the visible ground plus half a view of margin (see
+   * `rewarp`), so off-screen tiles an earlier live pass skipped are brought up to date here. It runs
+   * at the end of a paint, after a resize, when a gesture releases and when the soft-focus timer
+   * fires — never per pointer move (the live pass does those, one per painted frame).
    */
   private settleWarp(force = false): void {
     const next = this.poseFor(this.box);
-    if (!force && sameGlobePose(this.pose, next)) return;
+    // A live pass skipped the margin, so an identical pose still owes that margin its redraw.
+    if (!force && !this.warpStale && sameGlobePose(this.pose, next)) return;
     this.pose = next;
-    this.rewarp();
+    this.rewarp(false);
+    this.warpStale = false;
+  }
+  /**
+   * ONE LIVE WARP PER PAINTED FRAME, never one per pointermove event. A phone delivers several moves
+   * inside one frame; each moves the box, and the frame that follows re-poses the globe once. The
+   * caller is the same frame that writes the camera (`queueView`), so the two writes cannot disagree
+   * by a frame: no frame ever paints a bend for a camera the viewBox is not showing. The pending
+   * frame is cancelled at release, where `settleWarp` does the final authoritative pass.
+   */
+  private liveWarp(): void {
+    const next = this.poseFor(this.box);
+    if (sameGlobePose(this.pose, next)) return;
+    this.pose = next;
+    this.rewarp(true);
+    this.warpStale = true;
   }
   /**
    * REDRAW THE BENT GEOMETRY IN PLACE. Nodes are kept (their focus, their animations and the fog's
@@ -927,29 +961,49 @@ export class WorldView {
    * camera can see plus half a view of margin are touched, because off-screen ground is not read by
    * the eye and will be re-posed when it scrolls in. Measured and published on the SVG's dataset so
    * the browser proof can quote the real cost; the product reads none of it.
+   *
+   * `live` is the same projection over the cells whose DRAWN hexagon can touch the view only: a
+   * gesture frame must stay cheap, and the hexes just outside the window are re-posed by the frame
+   * that brings them in (and exactly by the settle). One `d` string per cell is shared by its face
+   * and its edge, instead of being built once per node.
    */
-  private rewarp(): void {
+  private rewarp(live = false): void {
     if (!this.svg || !this.world || !this.box) return;
     const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const [bx, by, bw, bh] = this.box;
-    const margin = Math.max(bw, bh) * 0.5;
-    const seen = new Set<string>();
+    // A LIVE pass has no margin to give away: a hex reaches `R` from its own DRAWN centre, and the
+    // bend pulls a cell inward, so the drawn centre is the honest test. A settle keeps the half-view
+    // margin it has always had, so off-screen ground is already posed when it scrolls in.
+    const pad = live ? R + 1 : Math.max(bw, bh) * 0.5;
+    const paths = new Map<string, string>();
     for (const cell of this.world.cells) {
       const flat = coords(cell.q, cell.r);
-      if (flat.x < bx - margin || flat.x > bx + bw + margin) continue;
-      if (flat.y < by - margin || flat.y > by + bh + margin) continue;
-      seen.add(cell.id);
+      if (live) {
+        // A cell whose FLAT centre is already inside the box is drawn inside it too: the bend only
+        // pulls a point toward the middle of the view, and a box is convex, so the segment between
+        // the two stays inside. Its projection is therefore not needed to decide, and most visible
+        // cells answer here without one.
+        const flatInside = flat.x >= bx && flat.x <= bx + bw && flat.y >= by && flat.y <= by + bh;
+        if (!flatInside && !drawnInView(this.pose, this.box, flat.x, flat.y, pad)) continue;
+      } else {
+        if (flat.x < bx - pad || flat.x > bx + bw + pad) continue;
+        if (flat.y < by - pad || flat.y > by + bh + pad) continue;
+      }
+      paths.set(cell.id, this.drawnHex(cell.q, cell.r));
     }
     let writes = 0;
     // Every hex-shaped node: mist, face, edge/tap target, halo, timer ring and stake. Markers carry
-    // `data-cell-id` too but their `d` is the sword trace, so they are not in this selector.
-    for (const node of this.svg.querySelectorAll<SVGPathElement>('.world-fog, .world-hex-face, .world-hex, .world-halo, .world-ring, .world-stake')) {
-      const id = node.getAttribute('data-cell-id');
-      if (!id || !seen.has(id)) continue;
-      const [q, r] = id.split(',').map(Number);
-      if (!Number.isFinite(q) || !Number.isFinite(r)) continue;
-      const d = this.drawnHex(q!, r!);
-      if (node.getAttribute('d') !== d) { node.setAttribute('d', d); writes++; }
+    // `data-cell-id` too but their `d` is the sword trace, so they are not in this selector. The
+    // cell's own `d` is built once above and shared by every node standing on that cell.
+    const nodes = this.svg.querySelectorAll<SVGPathElement>('.world-fog, .world-hex-face, .world-hex, .world-halo, .world-ring, .world-stake');
+    for (const node of nodes) {
+      const d = paths.get(node.getAttribute('data-cell-id') ?? '');
+      if (d === undefined) continue;
+      // A live pass only runs after the pose CHANGED (`liveWarp` early-outs otherwise), and any
+      // change of pose moves every point it draws — so every visible `d` here is different, and
+      // reading the old one back to compare would only buy an extra DOM read per node. The settle
+      // still compares, because that is where most nodes are already correct.
+      if (live || node.getAttribute('d') !== d) { node.setAttribute('d', d); writes++; }
     }
     // The layers that are cheap and stateful in their own right: a handful of notches, one transform
     // per dispute, the own-land outline and the selection accent. Each keeps its nodes.
@@ -969,7 +1023,7 @@ export class WorldView {
       writes += 2;
     }
     const ms = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - started;
-    this.warpStats = { ms: +ms.toFixed(2), writes, cells: seen.size, settles: this.warpStats.settles + 1 };
+    this.warpStats = { ms: +ms.toFixed(2), writes, cells: paths.size, settles: this.warpStats.settles + 1 };
     if (this.svg.dataset) {
       this.svg.dataset.warpMs = String(this.warpStats.ms);
       this.svg.dataset.warpWrites = String(this.warpStats.writes);
@@ -1293,7 +1347,7 @@ export class WorldView {
       this.gestureCleanup?.(); this.gestureCleanup = null;
       this.stopGlide();
       if (this.viewFrame) cancelAnimationFrame(this.viewFrame);
-      this.viewFrame = 0; this.pointers.clear(); this.selected = null;
+      this.viewFrame = 0; this.warpStale = false; this.pointers.clear(); this.selected = null;
       this.svg?.remove(); this.svg = null; this.box = this.fit = this.bounds = null;
       this.accent = null;
       this.marksGroup = this.ringsGroup = this.swordsGroup = this.disputesGroup = null;
@@ -1927,10 +1981,21 @@ export class WorldView {
    * ONE VIEW WRITE PER FRAME (owner, 2026-10-28: "always looks smooth"). A phone can deliver several
    * pointer moves inside one frame; each used to re-draw the whole map. They now only move `box`,
    * and the frame that follows writes it once.
+   *
+   * THE BEND RIDES THAT SAME FRAME (owner, 2026-11-03: the map "doesnt change while dragging but
+   * only when 'drag' is released"). The globe is re-posed and redrawn here, after the camera, so a
+   * gesture frame moves the viewBox AND bends the lattice onto the new view together: the tiles
+   * curve continuously instead of sliding rigidly and snapping at the release. Writing the two in
+   * one callback is also what keeps them from ever disagreeing by a frame. Several moves still
+   * produce ONE warp, because the pending frame is never rescheduled.
    */
   private queueView() {
     if (this.viewFrame) return;
-    this.viewFrame = requestAnimationFrame(() => { this.viewFrame = 0; this.applyView(false); });
+    this.viewFrame = requestAnimationFrame(() => {
+      this.viewFrame = 0;
+      this.applyView(false);
+      this.liveWarp();
+    });
   }
   /**
    * THE MAP IN MOTION. The soft-focus layers (mist, halos, the outline's glow, the motes) are SVG
@@ -2213,7 +2278,14 @@ export class WorldView {
     const to = this.clampBox([x - w / 2, y - h / 2, w, h]);
     this.touched = true;
     this.manualCamera = true;
-    if (!interfaceMotionAllowed()) { this.box = to; this.applyView(false); return; }
+    if (!interfaceMotionAllowed()) {
+      // Reduced motion is an instant cut, not an un-posed one: the geometry lands on the new camera
+      // in the same task (the live pass would have done it frame by frame).
+      this.box = to;
+      this.applyView(false);
+      this.settleWarp();
+      return;
+    }
     const from = [...this.box] as [number, number, number, number];
     const start = performance.now();
     this.setMoving(true);
@@ -2222,6 +2294,9 @@ export class WorldView {
       const eased = glideProgress(t);
       this.box = from.map((value, i) => value + (to[i]! - value) * eased) as [number, number, number, number];
       this.applyView(false);
+      // A glide is a programmed pan: its bend rides it the same way a finger's does (one warp per
+      // frame), so the sphere never lags the camera and there is no step at the end.
+      this.liveWarp();
       if (t < 1) { this.glideFrame = requestAnimationFrame(step); return; }
       this.glideFrame = 0;
       this.setMoving(false);
@@ -2785,7 +2860,6 @@ export class WorldView {
   private paintFrontier() {
     const group = this.marksGroup;
     if (!group || !this.world) return;
-    group.replaceChildren();
     const me = this.identity?.playerId ?? null;
     const selected = this.selected;
     const selectedMine = !!me && !!selected &&
@@ -2797,6 +2871,12 @@ export class WorldView {
         if (claim && claim.ownerId !== me) frontier.add(id);
       }
     }
+    // NOTHING TO SHOW AND NOTHING TO CLEAR is the common case, and it used to sweep all 279 tiles
+    // with a class write each time this ran — which, since a drag re-poses the geometry every
+    // painted frame, made an empty frontier cost more than a whole warp. The set below is the only
+    // record of what this group has marked, so its emptiness is the honest licence to skip.
+    if (!frontier.size && !this.frontierShown.size) return;
+    group.replaceChildren();
     for (const path of this.svg?.querySelectorAll('.world-hex') ?? []) {
       path.classList.toggle('frontier', frontier.has(path.getAttribute('data-cell-id') ?? ''));
     }
@@ -2819,6 +2899,7 @@ export class WorldView {
       notch.style.setProperty('--territory', claim.colour);
       group.append(notch);
     }
+    this.frontierShown = frontier;
   }
 
   /** A rival tile that shares a side with any of my cells can be challenged from the map. */
@@ -2900,6 +2981,9 @@ export class WorldView {
     if (!group || !quietGroup || !this.world) return;
     const me = this.identity?.playerId ?? null;
     const markers = disputeMarkersFor(this.allChallenges, this.disputes, me);
+    // NO MARKERS AND NO NODES LEFT OVER: nothing to place and nothing to remove, so the 279-entry
+    // cell map below (rebuilt on every painted frame of a drag) is not worth building.
+    if (!markers.length && !this.markerNodes.size && !this.quietNodes.size) return;
     // One Map for the cells instead of a linear search per marker: with many disputes the old
     // `world.cells.find` was markers × cells on every poll.
     const cells = new Map(this.world.cells.map((cell) => [cell.id, cell] as const));
@@ -3753,7 +3837,8 @@ export class WorldView {
       // view: this is the gate the poisoning used to walk through.
       this.box = clampedView(box, this.fit, frame, Math.min(frame[2] / 4, this.cellFloor()));
       // A pan never re-measures: `this.aspect` is kept by the ResizeObserver (and by open/repaint).
-      // The write itself waits for the next frame (see `queueView`).
+      // The write itself waits for the next frame, and that frame bends the globe onto it too (see
+      // `queueView`).
       this.queueView();
     };
     // The map's on-screen box, read once when a finger lands rather than on every move: nothing
@@ -4011,9 +4096,11 @@ export class WorldView {
         // finger lifts: whichever frame comes next, the gesture has already been written.
         if (this.viewFrame) { cancelAnimationFrame(this.viewFrame); this.viewFrame = 0; }
         this.applyView(false);
-        // THE CAMERA SETTLED AT THE RELEASE. Re-pose the globe now, while the eye is still on the
-        // gesture, rather than 140ms later when the soft-focus class comes back (the wheel path has
-        // no release, so its settle stays on that timer). Identical pose = no work.
+        // THE CAMERA SETTLED AT THE RELEASE. The pending frame (which would have carried this
+        // gesture's last live warp) is cancelled above, and this authoritative pass lands on the
+        // FINAL box: the visible ground it redraws is the geometry the live warps already stood on,
+        // plus the margin they deliberately left on an older pose (`warpStale`). So the released
+        // frame is the last drag frame at the same position — never a second, different pose.
         this.settleWarp();
       }
     };

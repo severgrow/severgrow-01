@@ -192,6 +192,27 @@ export const globeHex = (pose: GlobePose | null, x: number, y: number): string =
 };
 
 /**
+ * CAN A CELL BE SEEN FROM HERE? The honest test for the live warp, which may only spend a frame on
+ * ground the eye can actually reach. It is the DRAWN centre that decides: the bend pulls every cell
+ * toward the middle of the view, so a cell whose flat centre is outside the box can still be drawn
+ * inside it (and a flat test would drop it, leaving it un-posed while it is on screen). `pad` is the
+ * cell's own reach — `R` for a hexagon, plus the hairline of its stroke — so a tile that merely
+ * touches the edge is included. Off-screen ground is not lost: the frame that brings it in includes
+ * it, and the settle after the gesture re-poses the whole margin.
+ */
+export const drawnInView = (
+  pose: GlobePose | null,
+  box: readonly [number, number, number, number],
+  x: number,
+  y: number,
+  pad = 0,
+): boolean => {
+  const at = pose ? globePoint(pose, x, y) : { x, y };
+  return at.x >= box[0] - pad && at.x <= box[0] + box[2] + pad &&
+    at.y >= box[1] - pad && at.y <= box[1] + box[3] + pad;
+};
+
+/**
  * THE TILE UNDER A POINT: the nearest DRAWN centre. The hit test and the paint must use the same
  * pose — the menu and the Territory do, and a tap uses the pose the geometry standing under it was
  * drawn with. `pose === null` is the flat map.

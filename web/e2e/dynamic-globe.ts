@@ -135,6 +135,114 @@ const stats = (page: Page) => page.evaluate(() => {
     viewWrites: Number(svg.dataset.viewWrites ?? 0), viewMs: Number(svg.dataset.viewMs ?? 0),
   };
 });
+/** Wait until the browser has painted two frames: whatever a gesture queued has landed. */
+const twoFrames = (page: Page) => page.evaluate(() => new Promise<void>((resolve) => {
+  requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+}));
+/**
+ * SAMPLE THE PRODUCT'S OWN WARP INSTRUMENT ONCE PER PAINTED FRAME. No new instrument: it reads the
+ * `data-warp-*` the warp pass already publishes, and records one entry each time a pass happened,
+ * plus the gap between frames (so a dropped frame is a number, not an opinion). The loop itself is
+ * one rAF per frame, the same as any animation, and it is stopped after the measurement.
+ */
+const startProbe = (page: Page) => page.evaluate(() => {
+  // tsx/esbuild names inner functions with a `__name` helper the page does not have. This is the
+  // repo's usual stand-in, stated here explicitly.
+  (window as unknown as { __name: (fn: unknown) => unknown }).__name = (fn: unknown) => fn;
+  const w = window as unknown as { __warpProbe: { frames: number[]; warps: { ms: number; writes: number; cells: number }[]; stop: boolean } };
+  const svg = (): SVGSVGElement | null => document.querySelector('.world-map-svg');
+  w.__warpProbe = { frames: [], warps: [], stop: false };
+  let last = performance.now();
+  let passes = Number(svg()?.dataset.warpSettles ?? 0);
+  const loop = (t: number) => {
+    if (w.__warpProbe.stop) return;
+    w.__warpProbe.frames.push(t - last);
+    last = t;
+    const node = svg();
+    const now = Number(node?.dataset.warpSettles ?? 0);
+    if (node && now > passes) {
+      w.__warpProbe.warps.push({
+        ms: Number(node.dataset.warpMs ?? 0),
+        writes: Number(node.dataset.warpWrites ?? 0),
+        cells: Number(node.dataset.warpCells ?? 0),
+      });
+      passes = now;
+    }
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+});
+const stopProbe = (page: Page) => page.evaluate(() => {
+  const w = window as unknown as { __warpProbe: { frames: number[]; warps: { ms: number; writes: number; cells: number }[]; stop: boolean } };
+  w.__warpProbe.stop = true;
+  // The first gap starts at an arbitrary moment inside a frame; the rest are real frame gaps.
+  return { warps: w.__warpProbe.warps, frames: w.__warpProbe.frames.slice(1) };
+});
+const percentile = (values: number[], p: number): number => {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1)))]!;
+};
+/** One tile's drawn path, so a caller can prove the geometry itself moved mid-gesture. */
+const oneTilePath = (page: Page) => page.evaluate(() =>
+  document.querySelector<SVGPathElement>('.world-hex[data-cell-id="0,0"]')?.getAttribute('d') ?? '');
+/** The drawn path of every tile that touches the visible panel, keyed by cell id. */
+const visiblePaths = (page: Page) => page.evaluate(() => {
+  const grid = document.getElementById('online-world-grid')!.getBoundingClientRect();
+  const out: Record<string, string> = {};
+  for (const el of document.querySelectorAll<SVGPathElement>('.world-hex')) {
+    const r = el.getBoundingClientRect();
+    if (r.right < grid.left || r.left > grid.right || r.bottom < grid.top || r.top > grid.bottom) continue;
+    out[el.getAttribute('data-cell-id') ?? ''] = el.getAttribute('d') ?? '';
+  }
+  return out;
+});
+/** The cell ids whose DRAWN hex touches the visible panel right now. */
+const visibleHexIds = (page: Page) => page.evaluate(() => {
+  const grid = document.getElementById('online-world-grid')!.getBoundingClientRect();
+  return [...document.querySelectorAll<SVGPathElement>('.world-hex')]
+    .filter((el) => {
+      const r = el.getBoundingClientRect();
+      return !(r.right < grid.left || r.left > grid.right || r.bottom < grid.top || r.top > grid.bottom);
+    })
+    .map((el) => el.getAttribute('data-cell-id') ?? '');
+});
+/** The worst seam between two neighbouring DRAWN hexes, in screen pixels (0 = they share corners).
+ *  `only` restricts the proof to a set of cells: a live pass deliberately leaves OFF-SCREEN ground
+ *  on its older pose, so a seam out there is invisible and is not what this check is about. */
+const worstSeam = (page: Page, only?: Set<string>) => corners(page).then((drawn) => {
+  const pointsOf = new Map(drawn);
+  let seam = 0;
+  let pairs = 0;
+  for (const [id, mine] of pointsOf) {
+    if (only && !only.has(id)) continue;
+    const [q, r] = id.split(',').map(Number);
+    for (const [dq, dr] of [[1, 0], [1, -1], [0, -1]] as const) {
+      const theirs = pointsOf.get(`${q! + dq},${r! + dr}`);
+      if (!theirs || (only && !only.has(`${q! + dq},${r! + dr}`))) continue;
+      pairs++;
+      const closest = Math.min(...mine.map((a) => Math.min(...theirs.map((b) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!)))));
+      seam = Math.max(seam, closest);
+    }
+  }
+  return { seam, pairs };
+});
+/** Press and drag ONE MOVE PER ~16 ms (a finger's pace), so each move lands in its own frame. */
+const pressAndDrag = async (page: Page, moves: number, stepX: number, stepY: number, mid?: (i: number) => Promise<void>) => {
+  const box = await page.locator('.world-map-svg').boundingBox();
+  if (!box) return null;
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  for (let i = 1; i <= moves; i++) {
+    await page.mouse.move(cx - i * stepX, cy - i * stepY);
+    await page.waitForTimeout(16);
+    if (mid) await mid(i);
+  }
+  await twoFrames(page);
+  return { cx, cy };
+};
+
 /** Seed the camera the product would have saved after a deliberate pan (unprefixed key). Written
  *  directly on the live page, not through an init script, so the next reload reads exactly this. */
 const seedCamera = async (page: Page, cx: number, cy: number, offsetX = 0, offsetY = 0) =>
@@ -224,40 +332,83 @@ try {
   console.log(`INFO visible tiles: worst max/min edge ratio ${edgesNow.worst.toFixed(4)} on ${edgesNow.worstId}; ${edgesNow.tiles} tiles touch the window`);
   check(`the shipped 8% is a compressed hexagon, not a sliver (worst visible edge ratio ${edgesNow.worst.toFixed(4)} < 1.35)`, edgesNow.tiles > 20 && edgesNow.worst < 1.35);
 
-  // ---- 3. cost: a pan is one viewBox write per frame, then one settle -------------------
+  // ---- 3. THE BEND RIDES THE DRAG (owner, 2026-11-03) ----------------------------------
+  // "it doesnt change while dragging but only when 'drag' is released - it should work smoothly
+  // with no time taken and also while dragging". This used to be asserted as the OPPOSITE ("a pan
+  // writes only the viewBox"), which is exactly what made the map jump at the release; the check
+  // now pins the new rule on the same instrumentation.
   const beforePan = await stats(page);
-  const box = await page.locator('.world-map-svg').boundingBox();
-  if (box) {
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    for (let i = 1; i <= 16; i++) await page.mouse.move(box.x + box.width / 2 - i * 7, box.y + box.height / 2 - i * 3, { steps: 1 });
-    await page.mouse.up();
-  }
-  await page.waitForTimeout(360);
+  await startProbe(page);
+  const midPaths: string[] = [];
+  await pressAndDrag(page, 18, 6, 3, async (i) => {
+    if (i === 6) midPaths.push(await oneTilePath(page));
+  });
+  // STILL HOLDING THE MAP: everything below is measured with the finger down.
+  const dragPaths = await oneTilePath(page);
+  const held = await stats(page);
+  const heldSeam = await worstSeam(page, new Set(await visibleHexIds(page)));
+  const heldVisible = await visiblePaths(page);
+  await page.mouse.up();
+  // The release's authoritative pass (and the soft-focus settle behind it) has landed.
+  await page.waitForTimeout(120);
+  await twoFrames(page);
+  const releasedPaths = await visiblePaths(page);
   const afterPan = await stats(page);
+  const probe = await stopProbe(page);
+  const live = probe.warps.slice(0, -1); // the last entry is the release's settle, not a drag frame
+  const liveMs = live.map((warp) => warp.ms);
+  const liveWrites = live.map((warp) => warp.writes);
+  const warpsDuringDrag = held.warpSettles - beforePan.warpSettles;
   const viewWrites = afterPan.viewWrites - beforePan.viewWrites;
-  const viewMs = afterPan.viewMs - beforePan.viewMs;
-  const settleWrites = afterPan.warpWrites;
-  console.log(`INFO pan: ${viewWrites} viewBox writes in ${viewMs.toFixed(2)}ms (${(viewMs / Math.max(1, viewWrites)).toFixed(3)}ms per write, geometry untouched)`);
-  check('a pan writes only the viewBox (no settle during the drag)', afterPan.warpSettles <= beforePan.warpSettles + 1 && viewWrites > 0);
-  console.log(`INFO settle after the pan: ${afterPan.warpMs}ms, ${settleWrites} attribute writes, ${afterPan.warpCells} cells`);
+  const gap95 = percentile(probe.frames, 0.95);
+  const gapMax = Math.max(0, ...probe.frames);
 
-  // ---- 3b. the same work with the CPU slowed 4x (a mid-range-phone proxy) --------------
+  // CHECK 1: the pose is re-computed DURING the drag (the bug the owner reported).
+  const geometryMoved = midPaths.length === 1 && midPaths[0] !== dragPaths && !!dragPaths;
+  check(`the globe is re-posed WHILE the finger is down (${warpsDuringDrag} live warps, ${viewWrites} viewBox writes, tile path moved mid-gesture: ${geometryMoved})`,
+    warpsDuringDrag >= 8 && geometryMoved);
+  // CHECK 2: a live warp still leaves neighbours sharing their corners exactly (no gaps), measured
+  // on the bent paths while the finger is still down — and it only means anything if a live warp
+  // happened in this same gesture.
+  check(`a warp DURING the drag leaves neighbours sharing corners exactly (max seam ${heldSeam.seam.toFixed(3)}px over ${heldSeam.pairs} pairs, ${warpsDuringDrag} live warps)`,
+    warpsDuringDrag > 0 && heldSeam.pairs > 300 && heldSeam.seam < 0.02);
+  // CHECK 3: the settled frame equals the last drag frame (no drift between the two poses).
+  const ids = Object.keys(heldVisible);
+  const movedAtRelease = ids.filter((id) => heldVisible[id] !== releasedPaths[id]);
+  check(`the release settles the SAME pose, not a second one (${movedAtRelease.length} of ${ids.length} visible tiles moved at the release)`,
+    ids.length > 20 && movedAtRelease.length === 0);
+
+  console.log(`INFO drag: ${live.length} live warps over the probe — warp ${percentile(liveMs, 0.5)}ms median / ${Math.max(0, ...liveMs)}ms worst, ${percentile(liveWrites, 0.5)} writes median (${Math.max(0, ...liveWrites)} worst), ${live[0]?.cells ?? 0}-${Math.max(0, ...live.map((warp) => warp.cells))} cells; frames ${gap95.toFixed(1)}ms p95 / ${gapMax.toFixed(1)}ms worst`);
+  console.log(`INFO settle after the pan: ${afterPan.warpMs}ms, ${afterPan.warpWrites} attribute writes, ${afterPan.warpCells} cells (only the margin the live passes skipped)`);
+
+  // ---- 3b. the same drag with the CPU slowed 4x (a mid-range-phone proxy) --------------
   const cdp = await (context as unknown as { newCDPSession(page: Page): Promise<{ send(method: string, params?: unknown): Promise<unknown> }> }).newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   const beforeSlow = await stats(page);
-  const slowBox = await page.locator('.world-map-svg').boundingBox();
-  if (slowBox) {
-    await page.mouse.move(slowBox.x + slowBox.width / 2, slowBox.y + slowBox.height / 2);
-    await page.mouse.down();
-    for (let i = 1; i <= 10; i++) await page.mouse.move(slowBox.x + slowBox.width / 2 - i * 9, slowBox.y + slowBox.height / 2 - i * 4, { steps: 1 });
-    await page.mouse.up();
-  }
-  await page.waitForTimeout(700);
+  await startProbe(page);
+  await pressAndDrag(page, 12, 9, 4);
+  const slowHeld = await stats(page);
+  const slowHeldVisible = await visiblePaths(page);
+  await page.mouse.up();
+  await page.waitForTimeout(260);
+  await twoFrames(page);
+  const slowReleased = await visiblePaths(page);
   const afterSlow = await stats(page);
+  const slowProbe = await stopProbe(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
-  check(`a settle stays cheap at 4x CPU (${afterSlow.warpMs}ms, ${afterSlow.warpWrites} writes, ${afterSlow.warpCells} cells)`, afterSlow.warpMs < 33);
+  const slowLive = slowProbe.warps.slice(0, -1);
+  const slowMs = slowLive.map((warp) => warp.ms);
+  const slowWrites = slowLive.map((warp) => warp.writes);
+  const slowWarps = slowHeld.warpSettles - beforeSlow.warpSettles;
+  const slowGap95 = percentile(slowProbe.frames, 0.95);
+  const slowGapMax = Math.max(0, ...slowProbe.frames);
+  const slowDrift = Object.keys(slowHeldVisible).filter((id) => slowHeldVisible[id] !== slowReleased[id]).length;
+  console.log(`INFO drag at 4x CPU: ${slowWarps} live warps — warp ${percentile(slowMs, 0.5)}ms median / ${Math.max(0, ...slowMs)}ms worst, ${percentile(slowWrites, 0.5)} writes median (${Math.max(0, ...slowWrites)} worst); frames ${slowGap95.toFixed(1)}ms p95 / ${slowGapMax.toFixed(1)}ms worst`);
   console.log(`INFO settle at 4x CPU: ${afterSlow.warpMs}ms, ${afterSlow.warpWrites} attribute writes, ${afterSlow.warpCells} cells; pan ${afterSlow.viewWrites - beforeSlow.viewWrites} viewBox writes in ${(afterSlow.viewMs - beforeSlow.viewMs).toFixed(2)}ms`);
+  check(`the bend still rides the drag at 4x CPU (${slowWarps} live warps, ${slowDrift} of ${Object.keys(slowHeldVisible).length} visible tiles drift at the release, worst warp ${Math.max(0, ...slowMs)}ms)`,
+    slowWarps >= 6 && slowDrift === 0 && Math.max(0, ...slowMs) < 33);
+  check(`a throttled drag holds ~60fps (p95 frame gap ${slowGap95.toFixed(1)}ms < 34ms; worst single frame ${slowGapMax.toFixed(1)}ms)`, slowGap95 < 34);
+  check(`a settle stays cheap at 4x CPU (${afterSlow.warpMs}ms, ${afterSlow.warpWrites} writes, ${afterSlow.warpCells} cells)`, afterSlow.warpMs < 33);
 
   await backToMenu();
 

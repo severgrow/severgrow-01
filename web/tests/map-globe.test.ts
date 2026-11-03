@@ -26,6 +26,7 @@ import {
   X,
   R,
   arcFor,
+  drawnInView,
   flatCell,
   globeHex,
   globePoint,
@@ -251,6 +252,60 @@ describe('neighbours still touch at the shipped view', () => {
     const hex = globeHex(pose, at.x, at.y);
     expect(hex.startsWith('M')).toBe(true);
     expect(hex.endsWith('Z')).toBe(true);
+  });
+});
+
+describe('the live pass only spends a frame on ground it can show', () => {
+  const width = 135.1, height = 292.37;
+  it('keeps a tile the bend has pulled in from beyond the flat margin', () => {
+    // The bend moves every point toward the middle of the view, so a cell whose FLAT centre is
+    // outside the camera can still be DRAWN inside it. Near the top/bottom edge that pull is ~9.6
+    // world units, nearly a whole hexagon: a live pass that trusted the flat centre plus the hex's
+    // own reach would leave such a tile on an older pose while it is on screen. This measures how
+    // far past the edge a cell can sit and still be drawn inside.
+    let furthest = 0;
+    for (let over = 0; over <= height; over += 0.1) {
+      const box = [-width / 2, -over - height / 2, width, height] as const;
+      const pose = viewGlobePose(box)!;
+      if (drawnInView(pose, box, 0, 0, 0)) furthest = over;
+    }
+    expect(furthest - height / 2).toBeGreaterThan(R);
+  });
+
+  it('leaves the off-screen margin to the settle, so a gesture frame is a fraction of a settle', () => {
+    const pose = viewGlobePose(REFERENCE_BOX)!;
+    const margin = Math.max(REFERENCE_BOX[2], REFERENCE_BOX[3]) * 0.5;
+    let live = 0;
+    let settle = 0;
+    for (const cell of WORLD_CELLS) {
+      const at = flatCell(cell.q, cell.r);
+      if (drawnInView(pose, REFERENCE_BOX, at.x, at.y, R + 1)) live++;
+      if (at.x >= REFERENCE_BOX[0] - margin && at.x <= REFERENCE_BOX[0] + REFERENCE_BOX[2] + margin &&
+        at.y >= REFERENCE_BOX[1] - margin && at.y <= REFERENCE_BOX[1] + REFERENCE_BOX[3] + margin) settle++;
+    }
+    expect(live).toBeGreaterThan(20);
+    expect(live).toBeLessThan(settle * 0.75);
+  });
+
+  it('draws a shared corner at one point from a MID-GESTURE camera too', () => {
+    // A drag re-poses on every painted frame, so the seam proof must hold on an arbitrary camera,
+    // not only on a settled one: this is a camera a third of a view into a pan.
+    const box = [REFERENCE_BOX[0] + REFERENCE_BOX[2] / 3, REFERENCE_BOX[1] + REFERENCE_BOX[3] / 7, REFERENCE_BOX[2], REFERENCE_BOX[3]] as const;
+    const pose = viewGlobePose(box, GLOBE_FALLOFF)!;
+    const byId = new Map(WORLD_CELLS.map((cell) => [cell.id, cell] as const));
+    let pairs = 0;
+    for (const cell of WORLD_CELLS) {
+      const mine = corners(pose, cell.q, cell.r);
+      for (const [dq, dr] of [[1, 0], [1, -1], [0, -1]] as const) {
+        const near = byId.get(`${cell.q + dq},${cell.r + dr}`);
+        if (!near) continue;
+        pairs++;
+        const theirs = corners(pose, near.q, near.r);
+        const shared = mine.filter((point) => theirs.some((other) => Math.abs(other.x - point.x) < 1e-9 && Math.abs(other.y - point.y) < 1e-9));
+        expect(shared).toHaveLength(2);
+      }
+    }
+    expect(pairs).toBeGreaterThan(400);
   });
 });
 

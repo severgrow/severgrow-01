@@ -1,5 +1,40 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-03 — The bend rides the drag, one live warp per painted frame
+
+Owner: *"on the test one its kinda working, but jumpy -- doesnt change while dragging but only when
+'drag' is released - it should work smoothly with no time taken and also while dragging"*.
+
+**What was wrong.** The pose was re-derived only when the camera SETTLED: during a pan the code
+wrote the `viewBox` and nothing else, so every tile rode the camera rigidly, and the release then
+rewarped all of them to the new pose in one step. That single step is the jump he saw.
+
+**What happens now.** `WorldView.queueView` writes the camera and then calls `liveWarp` in the SAME
+animation frame, so the `viewBox` and a fresh pose land in one paint and cannot disagree by a frame.
+Several `pointermove` events inside one frame still produce one warp, because the pending frame is
+never rescheduled. The live pass (`rewarp(live)`) re-poses only the ground whose DRAWN hexagon can
+touch the view (the drawn centre plus the hexagon's own reach), while the release's `settleWarp`
+remains the authoritative pass over the visible cells plus the half-view margin a live pass skips
+(`warpStale` records that debt, so an unchanged pose cannot let it be dropped). A glide re-poses per
+frame the same way, and `prefers-reduced-motion` settles in the same task instead of arriving
+un-posed.
+
+**Measured** (`web/e2e/dynamic-globe.ts`, 390x844, 18-move drag at one move per 16ms, on the
+`data-warp-*` counters the warp already publishes): **1.1-1.6ms median / 1.8-3.4ms worst per live
+warp, 367 attribute writes, 163-181 cells** (of 279) on Chromium desktop; **4.2-5.4ms median /
+5.4-7.4ms worst at 4x CPU throttle**. Frames during the drag: 16.7ms p95 both unthrottled and at 4x
+(one 33-50ms outlier at 4x in some runs) versus 16.8ms for the old settle-only pan, so the live pass
+costs no frame at 60Hz on desktop and stays at 60Hz p95 when throttled. The release settle measured
+against the last drag frame moves **0 of 137 visible tiles** (it used to move all of them — the
+jump); afterwards the settle covers only the margin (212-230 writes, down from 507-581).
+
+**Cost was taken from honest work, not shortcuts.** (a) ONE `d` string per cell is shared by that
+cell's face and edge (it was built twice per cell); (b) a live pass touches only the visible ground,
+restoring the margin at the settle; (c) an empty frontier no longer sweeps 279 tiles with a class
+toggle and an empty dispute layer no longer rebuilds a 279-entry map on every painted frame. The
+shared-corner guarantee is untouched: the projection still bends the shared CORNERS, and the seam is
+measured on the bent paths mid-drag (**0.000px over 362 visible neighbour pairs**).
+
 ## 2026-11-03 — The globe is drawn at 8%, the owner's choice over the 5% recommendation
 
 Owner decision, after being shown the strength ladder for the bent lattice in
@@ -59,9 +94,10 @@ both surfaces by construction. Measured: **0.000px max rect delta over 279 tiles
 **The globe is posed by the camera.** `viewGlobePose(box)` puts the sphere's centre under the view
 centre and takes the view's half-diagonal as its rim, so the middle of the view is the fat point and
 the edges recede; panning carries the fat point with the finger, zooming keeps the on-screen effect
-the same size. The projection maths and `GLOBE_FALLOFF = 0.08` are unchanged. Geometry is re-posed
-on camera SETTLE (140ms after the last pointer/glide), never per move: a pan is one `viewBox` write
-per frame, and the settle rewrites only the visible cells plus half a view of margin.
+the same size. The projection maths and `GLOBE_FALLOFF = 0.08` are unchanged. (Superseded the same
+day: geometry used to be re-posed only on camera settle, "never per move" — that is exactly what made
+the map jump at the release. It is now re-posed once per painted frame during a gesture; see "The
+bend rides the drag" above. The settle still rewrites the visible cells plus half a view of margin.)
 
 Measured on the reference 390x844 view: worst max/min edge at 8% = **1.2234** (91/274 tiles past the
 1.10 product bar); 0.12 = 1.3870. The hard floor in `web/tests/map-globe.test.ts` is re-pointed from
