@@ -57,7 +57,8 @@ WebKit engine results must be distinguished from physical-device verification.
 
 The owner has explicitly assigned the Edge deployment to Cursor. The web client is compatible with
 the old server, but profiles cannot show their new connected count until this step is done.
-No SQL migration or data backfill is required. The regenerated Edge bundle is committed with this work.
+No SQL migration or data backfill is required for this pass. The regenerated Edge bundle is committed
+with this work.
 
 ```sh
 git pull --ff-only origin futa0.5-online
@@ -112,7 +113,7 @@ Physical-device profiling remains necessary, including the normal-density pinch 
 ## Local verification recorded
 
 - `npm ci` passed; full check passed **388 files / 3,956 tests**, with one expected failure and
-  66 optional integration skips. TypeScript passed. Live Postgres execution was unavailable.
+  66 optional integration skips. TypeScript passed. Production Postgres access was unavailable.
 - The final frontend rerun passed **247 files / 2,375 tests**, with one expected failure; TypeScript
   passed again after the final colour-read fallback. No tests were skipped to make the suite green.
 - Both futa04 and futa05 production builds and asset guards passed (101 / 104 files).
@@ -129,6 +130,16 @@ Physical-device profiling remains necessary, including the normal-density pinch 
   the new 3,000-cell probe. Physical Safari/iOS PWA hardware remains unverified.
 - The challenge browser suite passed on 320/360/390px phones, landscape and reduced motion. The
   frameless action keys explicitly reset their idle outline width while retaining keyboard focus.
+- A disposable, loopback-only Postgres 17 database subsequently passed the four existing account
+  integration/security checks. The changed REAL profile aggregate returned 3 connected / 9 total;
+  the real world service ranked another player's 4 connected / 4 total higher. Transferring just
+  the bridge changed the first player's count 3 → 1, total 9 → 8, and kept all 13 world cells.
+  Returning that tile restored 3 immediately. Empty ownership returned 0. The container/data were
+  removed afterwards. These were local database fixtures, not a Supabase deployment check.
+- The final isolated dynamic-globe probe retained shared corners, no release drift, sane world
+  edges, stable reload pixels and no page exceptions. It measured 16.7 ms frame p95 at 1× CPU;
+  its TWO 4× timing assertions failed (66.7 ms frame p95 / 35.9 ms worst warp). Its final printed
+  `PASS 17 ...` line counts checks and is not an all-green result; the failures remain disclosed.
 
 ## Visual evidence
 
@@ -146,3 +157,24 @@ Representative current captures (local fixtures, not production players):
 Earlier reference captures remain in `docs/screens/living-territory/` and
 `docs/screens/territory-icons/`; the approved globe curve and shared glass are retained. The
 continuity suite compares actual menu/Territory tile pixels, not just these static captures.
+
+## Release checkpoint
+
+Implementation: `06a4ed56a5240380c7e401ca0c9e75bb0397c7c5`.
+[CI #1017](https://github.com/severgrow/severgrow-01/actions/runs/41689864168) passed its unit/build
+job and all **15 browser suites**, including the new 3,000-cell probe and both WebKit suites.
+[Extra regressions #136](https://github.com/severgrow/severgrow-01/actions/runs/41689863972) passed.
+
+The owner-authorised `npm run promote -- 06a4ed56a5240380c7e401ca0c9e75bb0397c7c5` fast-forwarded
+`live` to this tested commit. This documentation update also triggers publication from the approved
+`futa0.5-online` branch, as required by the environment policy in `docs/RELEASE-FLOW.md`. A moved
+branch alone is not proof of publication; the Pages workflow must finish successfully.
+
+Direct access to `futasaku.com`, the Pages release manifest and Supabase is blocked by this cloud
+environment's domain policy. Hosted workflow results can be inspected, but direct production
+browser/API checks and a physical iPhone/PWA check cannot be claimed. Cursor owns the separate Edge
+deployment above; until then the web has its compatible ownership-snapshot ranking fallback and
+unknown connected profile counts remain an em dash.
+
+The newly queued onboarding refinement and genuine spherical prototype are a SEPARATE `/test/`
+experiment. They are not part of this promoted commit and must not be promoted with it.
