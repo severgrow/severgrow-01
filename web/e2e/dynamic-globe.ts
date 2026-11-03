@@ -26,7 +26,7 @@ import { WorldEconomyService } from '../../server/src/seeds/service.js';
 import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { WORLD_CELLS } from '../../server/src/world.js';
-import { flatCell } from '../src/online/map-globe.js';
+import { GLOBE_FALLOFF, flatCell } from '../src/online/map-globe.js';
 import { seedSettings } from './helpers/settings-seed.js';
 
 const OUT = process.env.SHOTS ?? '/tmp';
@@ -35,7 +35,7 @@ const X = Math.sqrt(3), R = 10;
 const VIEW_W = Number(process.env.VIEW_W ?? 390);
 const VIEW_H = Number(process.env.VIEW_H ?? 844);
 /** The same cap `world-view.detailFor` puts on the view: one cell is at least 46 CSS px at the rim. */
-const MENU_WIDTH = VIEW_W * (X * R) / (46 / (1 - 0.08));
+const MENU_WIDTH = VIEW_W * (X * R) / (46 / (1 - GLOBE_FALLOFF));
 const MENU_HEIGHT = MENU_WIDTH / (VIEW_W / VIEW_H);
 
 const storage = new MemoryStorage();
@@ -378,7 +378,7 @@ try {
   console.log(`INFO settle: ${afterStats.warpMs}ms, ${afterStats.warpWrites} attribute writes, ${afterStats.warpCells} visible+margin cells, ${afterStats.warpSettles} settle(s)`);
   check('the first Territory frame is already posed (a settle happened before the screenshot)', afterStats.warpSettles > menuStats.warpSettles);
 
-  // ---- 2. the seams of the DRAWN hexes at 8% --------------------------------------------
+  // ---- 2. the seams of the DRAWN hexes at the shipped strength -------------------------
   const drawn = await corners(page);
   const pointsOf = new Map(drawn);
   let seam = 0;
@@ -394,10 +394,10 @@ try {
       seam = Math.max(seam, closest);
     }
   }
-  check(`neighbours still share their drawn corners exactly at 8% (max seam ${seam.toFixed(3)}px over ${pairs} pairs)`, pairs > 300 && seam < 0.02);
+  check(`neighbours still share their drawn corners exactly at ${GLOBE_FALLOFF * 100}% (max seam ${seam.toFixed(3)}px over ${pairs} pairs)`, pairs > 300 && seam < 0.02);
   const edgesNow = await edgeRatios(page);
   console.log(`INFO visible tiles: worst max/min edge ratio ${edgesNow.worst.toFixed(4)} on ${edgesNow.worstId}; ${edgesNow.tiles} tiles touch the window`);
-  check(`the shipped 8% is a compressed hexagon, not a sliver (worst visible edge ratio ${edgesNow.worst.toFixed(4)} < 1.35)`, edgesNow.tiles > 20 && edgesNow.worst < 1.35);
+  check(`the shipped ${GLOBE_FALLOFF * 100}% is a compressed hexagon, not a sliver (worst visible edge ratio ${edgesNow.worst.toFixed(4)} < 1.35)`, edgesNow.tiles > 20 && edgesNow.worst < 1.35);
 
   // ---- 3. THE BEND RIDES THE DRAG (owner, 2026-11-03) ----------------------------------
   // "it doesnt change while dragging but only when 'drag' is released - it should work smoothly

@@ -203,6 +203,21 @@ tapping empty tile should NOT open the menu and still have option to grow/sell/c
   new endpoint behaviour and the recording. Until the migration is applied, the rest of the 35 work
   from data that already exists.
 
+## v3.8: the globe at 15%, every edge reachable, the fog on the same pose (owner, 2026-11-03)
+
+- **Globe:** `GLOBE_FALLOFF = 0.15` on the spread curve `1 - f u^1.25` (`map-globe.ts`), centred on
+  the camera as before. Why the curve changed, and the measurements: `docs/DECISIONS.md`.
+- **Reach:** the pan limit is the FOCUS — the world point under the middle of the visible panel —
+  and it may visit every discovered cell centre plus one cell (`world-pan.ts`). At every zoom, the
+  outermost tile in each direction can be brought to the middle of the panel. The automatic first
+  frame still opens full of land.
+- **Feel:** a soft edge that gives and eases back, a flick that carries and decelerates, a pause that
+  stops dead; none under reduced motion. A tap answers with a 180ms outline response.
+- **Fog:** posed in the same pass as the land, live while dragging (it used to drift up to 21px off
+  its neighbours); the far ring falls into dusk.
+- **Proof:** `web/e2e/globe-camera.ts` (reach x4 directions x3 zooms, fog seams mid-drag, edge give
+  and return, flick, pause, selection, reduced motion, frame times).
+
 ## Ownership and economy
 
 - The world is one versioned, frozen axial hex map. v2 (2026-10-21) is **274 cells** (21 rows, r −10…10): the 183-cell v1 landmass plus an irregular coastal growth, baked into `server/src/world.ts` by `scripts/gen-world-v2.mjs` (no runtime randomness). Its cell IDs are `q,r`. Expansions only ADD ids; every v1 id is unchanged, so an existing claim can never be orphaned — verified against the nine live claims when the coastline shape shipped (none dropped). Historical 8×8 `world_tiles` owners are copied into the central 64 positions by migration `0011_seeds_world.sql`; the historical table and migration remain intact.

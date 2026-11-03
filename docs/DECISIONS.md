@@ -83,6 +83,32 @@ toggle and an empty dispute layer no longer rebuilds a 279-entry map on every pa
 shared-corner guarantee is untouched: the projection still bends the shared CORNERS, and the seam is
 measured on the bent paths mid-drag (**0.000px over 362 visible neighbour pairs**).
 
+## 2026-11-03 (later) — The globe at 15% on a spread curve; every edge reachable; the fog posed live
+
+Owner brief ("TERRITORY GLOBE: FINAL CAMERA, GEOMETRY & INTERACTION POLISH"): a stronger globe,
+"ideally around 0.15", every edge tile able to reach the middle of the visible panel, and the
+disconnected fog hexes fixed.
+
+- **Strength 0.15, curve `k(u) = 1 - 0.15 * u^1.25`** (`GLOBE_SHAPE`), replacing the sphere's own
+  `sin` at 0.08. Rendered and measured at 0.12, 0.135 and 0.15 on the real page (all pass the camera,
+  fog and seam proofs in `web/e2e/globe-camera.ts`). The sphere's curve at 0.15 put all its squeeze at
+  the rim: the panel's outer tiles measured 1.42-1.65 edge ratio at 34-46% of their area, i.e.
+  slivers. The spread curve keeps the same rim but distributes the squeeze inward: 1.24-1.27 and
+  53-55% (reference panel 1.2406, 51 tiles past the 1.10 product bar). Radially a tile is squeezed
+  2.25x its tangential narrowing (the sphere's ~3x), so it still turns away rather than shrinking.
+  A sphere-like power 2 at 0.15 failed 5 of the proof checks. The hexagon bar is now measured on the
+  tiles the PANEL shows, at four cameras; every world tile must still be a positive, finite hexagon.
+- **Pan limit on the focus** (the world point under the middle of the visible panel), not the box:
+  every cell centre plus one cell of overscan (`web/src/online/world-pan.ts`). The product's own
+  automatic first frame keeps the old inside-the-world rule so it opens full of land.
+- **Feel:** soft edge (rubber band, max 15% of the view, 280ms return), flick carry (tau 220ms, from
+  0.3 px/ms), none of it under reduced motion or in a pinch.
+- **Fog:** posed with the same pose in the same pass as the land, live during a drag (it used to keep
+  its paint-time pose: up to 21px off its neighbours). The far ring sinks toward the background.
+- Measured cost: live warp writes +4% (the fog is now included); 1x drag frames p95 16.8ms. The 4x-CPU
+  60fps check in `dynamic-globe.ts` fails on this machine for the unchanged baseline too (p95 66.7ms),
+  so it is not a regression of this pass.
+
 ## 2026-11-03 — The globe is drawn at 8%, the owner's choice over the 5% recommendation
 
 Owner decision, after being shown the strength ladder for the bent lattice in

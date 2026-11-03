@@ -56,17 +56,14 @@ export const R = 10;
 export const flatCell = (q: number, r: number): { x: number; y: number } => ({ x: X * (q + r / 2) * R, y: 1.5 * r * R });
 
 /**
- * HOW MUCH SMALLER THE RIM IS DRAWN THAN THE MIDDLE. 0.08 = 8%: at the rim a tile is 8% narrower
- * and 23.6% flatter along the radius (`cos(theta) = 0.764`; see the Jacobian above). THIS IS THE
- * OWNER'S CHOSEN STRENGTH, set 2026-11-03 after he was shown the whole ladder and told plainly what
- * 8% costs: at the OLD static pose it was past the 10% edge-length bar in `map-globe.test.ts`, so
- * the rim tiles read as visibly compressed rather than as regular hexagons. He accepted that trade
- * knowingly, over the recommended 0.04/0.05, because the bend must be visible. Recorded in
- * `docs/DECISIONS.md`.
- *
- * THE LADDER, all off this one number: 0.03 (barely there), 0.04 (the recommended rung, on
- * `globe-subtle`), 0.05 (MODERATE — the strongest that stayed inside the hexagon bar on the old
- * pose), 0.08 (THIS, the owner's choice), 0.12 and up (rejected — the tiles shear). 0 is flat.
+ * HOW MUCH SMALLER THE RIM IS DRAWN THAN THE MIDDLE. 0.15 = 15%: at the view's corner a tile is 15%
+ * narrower and, on the spread curve, 33.75% flatter along the radius (`1 - (1 + shape) * falloff`).
+ * THE OWNER'S STRENGTH, 2026-11-03: "I want a more expressive globe effect, ideally around 0.15".
+ * Chosen after rendering 0.12, 0.135 and 0.15 on the real page (all three pass the camera, fog and
+ * seam proofs in `web/e2e/globe-camera.ts`); 0.15 is used on the spread curve because the sphere's own
+ * curve at 0.15 turned the panel's outer tiles into slivers. Measured on the reference phone panel:
+ * worst edge ratio 1.2406, no visible tile below half its flat area (`map-globe.test.ts`). The first
+ * pass (8% on the sphere's curve) and its ladder are recorded in `docs/DECISIONS.md`.
  */
 export const GLOBE_FALLOFF = 0.15;
 /**
