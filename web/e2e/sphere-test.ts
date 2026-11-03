@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import {mkdirSync} from 'node:fs';
 import {chromium,webkit,type Page} from 'playwright-core';
 import {productFixture} from './helpers/product-fixture.js';
+import {captureWebKitTouch} from './helpers/webkit-touch.js';
 import {EYE,focal} from '../src/sphere/renderer.js';
 import {rotate,type Quat} from '../src/sphere/rotation.js';
 import {WORLD_VERSION,seenWorld} from '../../server/src/world.js';
 const fixture=await productFixture(),out=process.env.SHOTS??'/tmp/sphere-test';mkdirSync(out,{recursive:true});
 const ios=process.env.SPHERE_WEBKIT==='1';
+const webkitTouch=ios?captureWebKitTouch():null;
 const browser=await (ios?webkit:chromium).launch(ios?{}:{...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 const state=(p:Page):Promise<any>=>p.evaluate('window.__severgrow.sphere()');
 const ready=(p:Page)=>p.waitForFunction(()=>(window as any).__severgrow?.ready?.());
@@ -42,7 +44,7 @@ try{
   await p.locator('#menu-sphere').click();await p.waitForFunction(()=>{const s=(window as any).__severgrow.sphere();return s?.open&&(s.ready||s.fallback);});
   if(ios&&!(await state(p)).ready){
     assert.ok(await p.locator('.sphere-test-fallback').isVisible());await p.screenshot({path:`${out}/webkit-fallback-${width}.png`});await p.locator('.sphere-test-back').click();
-    assert.equal(await p.locator('.sphere-test').count(),0);assert.deepEqual(errors,[]);
+    assert.equal(await p.locator('.sphere-test').count(),0);assert.deepEqual(errors,[],`sphere ${width}x${height} page errors: ${JSON.stringify(errors)}`);
     console.log(`LIMIT WebKit ${width}: this runner has no WebGL; fallback and return passed, interactive rendering unverified`);await context.close();continue;
   }
   checking=true;
@@ -64,8 +66,16 @@ try{
   await p.mouse.move(x-50,y);await p.mouse.down();await p.mouse.move(x+80,y+35,{steps:12});await p.mouse.up();await settle(p);
   s=await state(p);assert.notDeepEqual(s.q,q0);assert.equal(s.selected,pent.id);
   const pointerPinch=(ios||process.env.SPHERE_POINTER_PINCH==='1')&&width!<900;
+  if(ios&&width!<900){await p.touchscreen.tap(box.x+4,box.y+4);assert.ok(webkitTouch?.session,'trusted WebKit multi-touch adapter must be available');}
   const controlledPinch=async(from:number,to:number)=>{
-    // Controlled pointer-handler integration, not a claim of a native iOS two-finger gesture.
+    if(ios){
+      const touch=(type:string,points:{x:number;y:number;id:number}[])=>webkitTouch!.session.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(p=>({...p,x:Math.round(p.x),y:Math.round(p.y)}))});
+      await touch('touchStart',[{x:x-from/2,y,id:1}]);await p.waitForTimeout(16);
+      await touch('touchStart',[{x:x-from/2,y,id:1},{x:x+from/2,y,id:2}]);
+      for(let i=1;i<=8;i++){const d=from+(to-from)*i/8;await touch('touchMove',[{x:x-d/2,y,id:1},{x:x+d/2,y,id:2}]);await p.waitForTimeout(16);}
+      await touch('touchEnd',[{x:x-to/2,y,id:1}]);await p.waitForTimeout(16);await touch('touchEnd',[{x:x+to/2,y,id:2}]);await settle(p);return;
+    }
+    // Portable controlled-pointer integration, also exercised locally alongside native CDP touch.
     await canvas.evaluate((el,{x,y,from,to})=>{
       const send=(type:string,id:number,px:number)=>el.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerId:id,pointerType:'touch',isPrimary:id===11,button:0,buttons:type==='pointerup'?0:1,clientX:px,clientY:y}));
       send('pointerdown',11,x-from/2);send('pointerdown',12,x+from/2);
@@ -137,7 +147,7 @@ try{
   }else {checking=false;await p.locator('.sphere-test-back').click();}
   assert.equal(await p.locator('#menu').evaluate(el=>(el as HTMLElement).inert),false);
   assert.equal(await p.evaluate(()=>document.querySelector('.world-map-svg')?.getAttribute('viewBox')??null),menuBox,'normal Territory camera stays untouched');
-  assert.deepEqual(errors,[]);assert.deepEqual(writes,[],'mock sphere never writes backend');
+  assert.deepEqual(errors,[],`sphere ${width}x${height} page errors: ${JSON.stringify(errors)}`);assert.deepEqual(writes,[],'mock sphere never writes backend');
   console.log(`PASS ${width}x${height}: sphere, pentagon, rotation, zoom, focus, occlusion and idle`);await context.close();
  }
  const reduced=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});await seed(reduced,true);
@@ -151,4 +161,4 @@ try{
  await fallback.addInitScript(`(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...args){return this.classList.contains('sphere-test-canvas')&&kind==='webgl'?null:original.call(this,kind,...args);};})()`);
  await fallback.goto(fixture.origin+'/test/');await ready(fallback);await fallback.locator('#menu-sphere').click();await fallback.locator('.sphere-test-fallback:not([hidden])').waitFor();
  await fallback.locator('.sphere-test-back').click();assert.equal(await fallback.locator('.sphere-test').count(),0);console.log('PASS unavailable WebGL: readable fallback and return');await fallback.close();
-}catch(e){failures.push(String(e));throw e;}finally{if(failures.length)console.error('::error::'+failures.join('\n'));await browser.close();await fixture.close();}
+}catch(e){failures.push(e instanceof Error ? e.stack??String(e) : String(e));throw e;}finally{if(failures.length)console.error('::error title=Sphere verification::'+failures.join('\n').replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A'));await browser.close();await fixture.close();}

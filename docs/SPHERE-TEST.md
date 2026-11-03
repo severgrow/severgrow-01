@@ -50,9 +50,11 @@ Browser checks cover 320×568, 390×844, 844×390, 768×1024 and 1440×1000: mou
 precise pentagons, camera-still selection, empty taps, full rotation, interrupted inertia, slow
 release, resizing, context loss/restore, reduced motion, fallback, idle and repeated cleanup.
 They compare the real menu map camera before/after and check that `/`, `/2/`, `/3/` have no entry.
-Chromium uses native CDP two-finger input. Mobile WebKit exercises controlled two-pointer
-events because Playwright does not support a mobile mouse wheel or native multi-touch there;
-desktop WebKit retains native wheel checks. Native iOS pinch still requires device evaluation.
+Chromium uses native CDP two-finger input. Mobile WebKit reuses the existing Territory suite's
+trusted multi-touch transport through `helpers/webkit-touch.ts`; it fails explicitly if the pinned
+Playwright adapter stops being available. Desktop WebKit retains native wheel checks. A portable
+controlled-pointer variant is additionally exercised in local Chromium. None of these are a
+physical iOS-device check.
 Network assertions use a pre-existing guest fixture and prohibit writes during the mock interval;
 ordinary app bootstrap/return presence is outside it. No test touches Supabase.
 

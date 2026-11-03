@@ -22,8 +22,6 @@
 //   - a genuinely cancelled gesture leaves nothing behind (the next drag is not offset).
 //
 //   npx tsx web/e2e/territory-gestures-ios.ts
-import { createRequire } from 'node:module';
-import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { AddressInfo } from 'node:net';
 import { webkit, devices, type Page } from 'playwright-core';
@@ -38,22 +36,10 @@ import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { createTerritoryChatRouter, memoryTerritoryChatStore } from '../../server/src/chat/territory.js';
 import { seedSettings } from './helpers/settings-seed.js';
+import { captureWebKitTouch } from './helpers/webkit-touch.js';
 
 // ---- REAL WEBKIT TOUCH ------------------------------------------------------------------------
-const require = createRequire(import.meta.url);
-/** The WebKit page-proxy session, captured from the first packaged tap. */
-const proxy: { session: any } = { session: null };
-try {
-  const root = path.dirname(require.resolve('playwright-core/package.json'));
-  const wkInput = require(path.join(root, 'lib/server/webkit/wkInput.js'));
-  const original = wkInput.RawTouchscreenImpl.prototype.tap;
-  wkInput.RawTouchscreenImpl.prototype.tap = async function (this: any, progress: any, x: number, y: number, modifiers: number) {
-    proxy.session = this._pageProxySession;
-    return original.call(this, progress, x, y, modifiers);
-  };
-} catch {
-  // Reported by the first check below: a suite that cannot drive touch must never look green.
-}
+const proxy = captureWebKitTouch();
 
 const storage = new MemoryStorage();
 const config = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'] };
@@ -123,7 +109,7 @@ const origin = web.resolvedUrls?.local?.[0]?.replace(/\/$/, '') ?? '';
 const fmt = (n?: number) => (typeof n === 'number' ? n.toFixed(2) : '?');
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
-  if (!ok) failed++;
+  if (!ok) {failed++;console.error('::error title=Territory WebKit gesture::'+`${name}: ${note}`.replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A'));}
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
 
