@@ -602,6 +602,20 @@ try{
     start=performance.now();
     // Exposed so the suite can time the retreat from the click itself (the owner's 300ms).
     (window as any).__backStart=start;
+    // A WALL CLOCK FOR THE RETREAT THAT A STALLED RENDERER CANNOT UNDERSTATE (2026-11-03, CI
+    // `living-territory-ios`). `leave()` adds `living-leaving` in the click task and removes it in
+    // the beat's own completion, immediately before the framing swaps — and timeline time never
+    // advances faster than the wall clock, so a beat that really completed its 300ms cannot have
+    // that class removed sooner. This is the substitute for `startTime` when the only sample that
+    // caught the beat read `startTime:null` (the beat was still pending when the renderer stalled):
+    // recorded from a MutationObserver, a microtask at the end of the task that removed it, never
+    // from a sample, because a starved timer reports its own delay rather than the product's.
+    (window as any).__backLeft=null;let seenLeaving=false;
+    const screenEl=document.getElementById('online-world-screen')!;
+    new MutationObserver(()=>{
+     if(screenEl.classList.contains('living-leaving')){seenLeaving=true;return;}
+     if(seenLeaving&&(window as any).__backLeft===null)(window as any).__backLeft=performance.now();
+    }).observe(screenEl,{attributes:true,attributeFilter:['class']});
     let sinceMenu=0,stopped=false;
     const stop=()=>{stopped=true;clearTimeout(watchdog);finish();};
     const sample=()=>{
@@ -673,9 +687,22 @@ try{
    const dimBefore=landed.some(f=>f.opacity<=.35);
    const frozen=landed.length===0;
    const beatRan=beatStart!==null&&swapT>=INTERFACE_MOTION.colourOut;
+   // THE SAME FACT FROM THE RETREAT'S OWN WALL WINDOW, WHEN THE BEAT CLOCK WAS NEVER READ
+   // (2026-11-03, CI `living-territory-ios`: the only sample that caught the beat read
+   // `startTime:null` — still pending — and the next one already showed the menu). `finish()` removes
+   // `living-leaving` inside the beat's completion, so the tap-to-removal gap is wall time the beat
+   // was actually given; a completed 300ms beat cannot shrink it below 300ms, and a product that
+   // swapped the framing without a beat leaves it near zero. Only the lower bound is claimed here:
+   // the "not the arrival's second" half is pinned by the declaration (duration === colourOut).
+   const leftAt=await page.evaluate(()=>(window as any).__backLeft as number|null);
+   const retreatWall=leftAt!==null?leftAt-backStart:Number.NaN;
+   const wallRan=Number.isFinite(retreatWall)&&retreatWall>=INTERFACE_MOTION.colourOut;
+   const ran=beatStart!==null?beatRan:wallRan;
+   const retreatEvidence=beatStart!==null?`beat ${Number.isFinite(swapT)?Math.round(swapT):'?'}ms of ${INTERFACE_MOTION.colourOut}ms`
+    :`no beat clock was ever read; the framing left ${Number.isFinite(retreatWall)?Math.round(retreatWall)+'ms':'at an unknown time'} after the tap`;
    const brightAtMenuWidth=frames.filter(f=>f.mode==='menu'&&f.opacity>MENU_MAP_OPACITY+0.02);
-   check(`the way back is not a hard cut: the framing changes only after the colour-out has run (frame ${swap}, ${Math.round(swapAt)}ms: beat ${Number.isFinite(swapT)?Math.round(swapT):'?'}ms of ${INTERFACE_MOTION.colourOut}ms, ${frozen?'no landing frame was painted':`${landed.length} landing sample(s), ${landed.filter(f=>f.opacity<=.35).length} dim`}: ${JSON.stringify(frames.slice(Math.max(0,swap-1),swap+2).map(note))})`,
-    swap>0&&frames[swap]!.opacity<=.35&&(beatRan?(dimBefore||frozen):dimBefore));
+   check(`the way back is not a hard cut: the framing changes only after the colour-out has run (frame ${swap}, ${Math.round(swapAt)}ms: ${retreatEvidence}, ${frozen?'no landing frame was painted':`${landed.length} landing sample(s), ${landed.filter(f=>f.opacity<=.35).length} dim`}: ${JSON.stringify(frames.slice(Math.max(0,swap-1),swap+2).map(note))})`,
+    swap>0&&frames[swap]!.opacity<=.35&&(ran?(dimBefore||frozen):dimBefore));
    check(`the map is never bright in the menu's framing (${brightAtMenuWidth.length} bright frame(s))`,
     brightAtMenuWidth.length===0);
    // THE RETREAT'S SHAPE, PINNED FROM ITS KEYFRAMES (same reasoning as the arrival). A stalled
@@ -702,16 +729,18 @@ try{
    // KEEP THE PAINTED EVIDENCE WHEN THERE IS SOME, AND SAY SO WHEN THE ENGINE PAINTED NONE. An empty
    // `landed` set used to make `every()` pass vacuously; now the clock that already proves the beat
    // ran (see above) is the only substitute, and it is printed.
-   check(`the retreat has dimmed by its landing keyframe (${landed.length?`${landed.length} sample(s) past 90%: ${JSON.stringify(landed.slice(0,3).map(note))}`:`no landing frame was painted; the beat clock shows the framing swapped ${Number.isFinite(swapT)?Math.round(swapT):'?'}ms after the beat began`})`,
-    landed.length?landed.every(f=>f.opacity<=.35):beatRan);
+   check(`the retreat has dimmed by its landing keyframe (${landed.length?`${landed.length} sample(s) past 90%: ${JSON.stringify(landed.slice(0,3).map(note))}`:`no landing frame was painted; ${retreatEvidence} says the colour-out had run`})`,
+    landed.length?landed.every(f=>f.opacity<=.35):ran);
    check('the way back lands the backdrop on the menu\'s own rest light',
     frames.at(-1)!.opacity<=MENU_MAP_OPACITY+0.01);
    // THE RETREAT IS 300ms, NOT THE ARRIVAL'S SECOND (owner, 2026-11-02: "and 0.3s when going back
    // to main menu"). Same clock, and it must stay well inside the arrival's second. A beat starts on
    // the first painted frame (on software WebKit, ~200ms after the tap), so the click's clock would
-   // read it wrong.
-   check(`the retreat clears in one colour-out beat (${Math.round(swapT)}ms ≈ ${INTERFACE_MOTION.colourOut}ms, not the ${INTERFACE_MOTION.colourIn}ms arrival)`,
-    swap>0&&!!started&&swapT>=INTERFACE_MOTION.colourOut&&swapT<INTERFACE_MOTION.colourIn);
+   // read it wrong — and when no beat clock was ever read at all, only the wall window's lower bound
+   // is claimed here: the "not the arrival's second" half is already pinned by the declaration
+   // (`the retreat is a real graded colour-out` above: duration === colourOut, 300 not 1000).
+   check(`the retreat clears in one colour-out beat (${beatStart!==null?`${Math.round(swapT)}ms ≈ ${INTERFACE_MOTION.colourOut}ms`:`no beat clock; ${Number.isFinite(retreatWall)?Math.round(retreatWall)+'ms':'an unknown time'} of wall time to the framing swap`}, not the ${INTERFACE_MOTION.colourIn}ms arrival)`,
+    swap>0&&(beatStart!==null?(swapT>=INTERFACE_MOTION.colourOut&&swapT<INTERFACE_MOTION.colourIn):wallRan));
    check(`the retreat runs the colour-out token duration (${INTERFACE_MOTION.colourOut}ms), not a literal`,
     frames.some(f=>f.out===INTERFACE_MOTION.colourOut));
   }
