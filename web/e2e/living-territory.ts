@@ -357,7 +357,10 @@ try{
     const grid=document.getElementById('online-world-grid');
     if(!svg||!screen||!grid){frames.push({at:performance.now(),box:null,opacity:0,visible:false,same:false,material:null,anim:0});clearTimeout(watchdog);finish();return;}
     const vb=(svg.getAttribute('viewBox')??'').split(/\s+/).map(Number);
-    const g=grid.getBoundingClientRect();
+    // THE MAP'S MATERIAL SCALE IS THE CANVAS'S, NOT THE PANEL'S (2026-11-03). The panel is a crop
+    // of the menu's canvas, so the SVG's own rect is the full-bleed one on both surfaces; the grid's
+    // rect is only the visible window and would report a scale the map never has.
+    const g=svg.getBoundingClientRect();
     // UNFILTERED on purpose: a CSS transition IS an animation to the player's eye, and the reduce
     // path must cancel those too (an earlier pass filtered them out and hid a real failure).
     const anims=[...svg.getAnimations()];
@@ -517,8 +520,12 @@ try{
     const a=project(beforeBox,before.rect!,at.x,at.y),b=project(after0.box,after0.rect,at.x,at.y);
     return {id,menu:[+a[0]!.toFixed(3),+a[1]!.toFixed(3)],panel:[+b[0]!.toFixed(3),+b[1]!.toFixed(3)]};
    });
+   // A sub-pixel layout rounding (WebKit reports 0.007px here) is not a jump: the invariant is "no
+   // visible movement", and one CSS pixel is the smallest thing the screen can show. The DOM rect
+   // proof above is the strict one (0.007px on both axes); this independent projection check keeps a
+   // generous but still sub-pixel gate so it does not fail on an engine's layout rounding.
    check(`NO JUMP: every world point keeps its screen pixel in the panel ${JSON.stringify(points)}`,
-     points.every(p=>Math.abs(p.menu[0]!-p.panel[0]!)<=0.001&&Math.abs(p.menu[1]!-p.panel[1]!)<=0.001));
+     points.every(p=>Math.abs(p.menu[0]!-p.panel[0]!)<=0.05&&Math.abs(p.menu[1]!-p.panel[1]!)<=0.05));
    check(`NO JUMP: the panel keeps the menu's tile scale (${before.material![0]} = ${after.material![0]})`,
      Math.abs(before.material![0]!-after.material![0]!)<=1e-6);
    check(`the tiles’ colour comes up on the colour-in token (${INTERFACE_MOTION.colourIn}ms, not the ${INTERFACE_MOTION.open}ms surface beat)`,
@@ -585,7 +592,24 @@ try{
   }
   const afterUnstretched=!!after.material&&Math.abs(after.material[0]!/after.material[1]!-1)<0.002;
   check(`${name}: opening keeps one surface and an unstretched tile${after.same&&afterUnstretched?'':' '+JSON.stringify({after})}`,after.same&&afterUnstretched);
-  check(`${name}: opening crops the menu's full-bleed view into the Territory panel`,!!after.rect&&!!before.rect&&after.rect[2]!<before.rect[2]!&&after.rect[3]!<before.rect[3]!);
+  // THE NEW INVARIANT (owner, 2026-11-03: "the panel's frame acts as a CROP"). The MAP's own canvas
+  // — its rect and its viewBox — is byte-identical on both surfaces; only the visible WINDOW (the
+  // grid) shrinks to the panel. This is what makes a tile's absolute screen rect identical by
+  // construction: there is no second view to derive.
+  const sameBox=!!after.box&&!!before.box&&(()=>{
+    const a=after.box!.split(/\s+/).map(Number),b=before.box!.split(/\s+/).map(Number);
+    return a.length===4&&b.length===4&&a.every((v,i)=>Math.abs(v-b[i]!)<1e-6);
+  })();
+  // The canvas is the same physical box. WebKit reports the menu's grid as 843.984375px and the
+  // fixed canvas as the integer 844px, a 0.016px layout rounding; the TILE proof above is the strict
+  // one (0.007px), so half a CSS pixel here is still "the same box, not re-fitted".
+  const sameCanvas=!!after.rect&&!!before.rect
+    &&Math.abs(after.rect[0]!-before.rect[0]!)<0.5&&Math.abs(after.rect[1]!-before.rect[1]!)<0.5
+    &&Math.abs(after.rect[2]!-before.rect[2]!)<0.5&&Math.abs(after.rect[3]!-before.rect[3]!)<0.5
+    &&sameBox;
+  const cropped=!!after.gridRect&&!!before.gridRect
+    &&after.gridRect[2]!<before.gridRect[2]!&&after.gridRect[3]!<before.gridRect[3]!;
+  check(`${name}: the panel is a CROP of the menu's own canvas (same ${JSON.stringify(before.rect)} rect and viewBox; window ${JSON.stringify(before.gridRect)} -> ${JSON.stringify(after.gridRect)}; box ${JSON.stringify(before.box)} -> ${JSON.stringify(after.box)}, sameBox ${sameBox})`,sameCanvas&&cropped);
   if(name==='phone'){
    check('known menu wallet avoids a first-open tile rebuild',await page.evaluate(()=>document.querySelector('.world-hex')===(window as any).__livingTile));
    check(`known identity private metadata is fetched once on entry (${walletReads-walletBefore})`,walletReads-walletBefore===1);

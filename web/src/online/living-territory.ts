@@ -1,5 +1,4 @@
 import { INTERFACE_MOTION, enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
-import { anchoredView } from './world-view.js';
 import { LIVING_TERRITORY_CSS, MENU_MAP_OPACITY } from './living-territory-css.js';
 
 type Hooks = { menu: HTMLElement; screen: HTMLElement; preview: () => void; stop: () => void;
@@ -203,48 +202,24 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
    * ONE LAYER, NOT N TILES (owner, 2026-11-02, same evening: "make it the color of tiles fade in in
    * like 1 second or so"). The colour of the tiles is their fill multiplied by the map's own
    * `opacity`; that single track is what the menu already dims to `MENU_MAP_OPACITY`. So the fade
-   * is one composited animation on the map SVG — never a per-tile loop, never a filter. Transform
-   * (when the two views really differ) + opacity only, one layout read at the handoff, and the
-   * screen is already live underneath, so it never delays a tap.
+   * is one composited animation on the map SVG — never a per-tile loop, never a filter. Opacity
+   * only, one composited layer, and the screen is already live underneath, so it never delays a tap.
+   *
+   * NO HANDOFF TRANSFORM AT ALL (owner, 2026-11-03: "we need a diffrent approach"). The panel no
+   * longer derives a view: `WorldView` keeps the menu's exact canvas and camera and simply CROPS it
+   * (`applyCrop`), so the first frame after the swap is already the menu's pixels. There is nothing
+   * to translate or scale home — a transform here could only introduce the jump it used to paper
+   * over. (The old `anchoredView` re-derivation, and the error term it needed, are gone.)
    */
   enter(){
-   const from=menuView;menuView=null;
-   if(!from)return;
-   const grid=gridOf();
+   menuView=null;
    const map=mapOf();
-   if(!grid||!map)return;
-   const to=(map.getAttribute('viewBox')??'').split(/\s+/).map(Number);
-   const frame=grid.getBoundingClientRect();
-   if(from.box.length!==4||to.length!==4||!(frame.width>0)||!(frame.height>0))return;
-   const mm=from.box[2]!/from.rect.width;   // the menu's world-units-per-px
-   const mt=to[2]!/frame.width;             // the panel's (they differ only when the world fit caps one)
-   if(!(mm>0)||!(mt>0))return;
+   if(!map)return;
    const reduce=!interfaceMotionAllowed();
    // The panel's head is the second thing that lands: one short beat after the map, never before.
    const head=screen.querySelector<HTMLElement>('.online-head');
    if(head){resetSurface(head);if(!reduce)enterSurface(head,{travel:-INTERFACE_MOTION.travel,delay:INTERFACE_MOTION.stagger});}
    if(reduce)return;
-   // A pure translate when the two views share a material scale; when the world fit caps the
-   // panel (a very tall screen), the same formula plus the matching scale keeps the pixels exact.
-   const s=mt/mm;
-   const dx=(to[0]!-from.box[0]!)/mm+(from.rect.left-frame.left)+(frame.width/2)*(s-1);
-   const dy=(to[1]!-from.box[1]!)/mm+(from.rect.top-frame.top)+(frame.height/2)*(s-1);
-   // ZERO MOVEMENT IS THE POINT (owner, 2026-11-02: "tiles don't move at all ... not a smooth
-   // settle"). The panel's viewBox is the menu's own mapping seen through the panel's box (see
-   // `anchoredView`), so the handoff transform is the identity and must not be animated at all.
-   // Compare the DRAWn box to that mapping instead of trusting a hand-rolled error term: the menu's
-   // own `meet` letterbox (sub-pixel when its viewBox is reconciled to a rounded layout size) is
-   // part of the real mapping, and `anchoredView` already carries it.
-   const mapped=anchoredView({box:from.box,rect:{left:from.rect.left,top:from.rect.top,width:from.rect.width,height:from.rect.height}},
-     {left:frame.left,top:frame.top,width:frame.width,height:frame.height});
-   const still=!!mapped&&mapped.every((value,index)=>Math.abs(value-to[index]!)<=1e-6);
-   if(!still){
-    const hand=map.animate([{transform:`translate(${dx}px,${dy}px) scale(${s})`},{transform:'none'}],
-      {duration:INTERFACE_MOTION.open,easing:INTERFACE_MOTION.easeOpen,fill:'both'});
-    hand.id='living-handoff';
-    settleBeat=hand;
-    hand.finished.then(()=>{if(settleBeat===hand)settleBeat=stop(settleBeat);}).catch(()=>undefined);
-   }
    // THE COLOUR COMES UP OVER THE OWNER'S SECOND, not the surface's 150ms beat. The dip stays
    // inside the 150ms geometry handoff (`COLOUR_DIP_AT`), so the moving crop is never lit; the rest
    // of the arrival is the tiles' fills climbing from DIP back to their saturated rest.

@@ -328,7 +328,10 @@ try {
   const wheelFrom = await page.getAttribute('.world-map-svg', 'viewBox');
   await page.mouse.move(x, y); await page.mouse.wheel(0, -80); await page.waitForTimeout(100);
   check('wheel zoom works', (await page.getAttribute('.world-map-svg', 'viewBox')) !== wheelFrom);
-  await tapTile(page, '0,0'); await tapTile(page, '0,0');
+  // A NORMAL-PACE second tap releases the tile; two taps inside `DOUBLE_TAP_MS` (280ms) are a
+  // double tap, which the map deliberately spends on the zoom toggle instead of deselecting. The
+  // suite used to take its chances on the gap between two `tapTile` calls.
+  await tapTile(page, '0,0'); await page.waitForTimeout(350); await tapTile(page, '0,0');
   const beforePinch = await page.getAttribute('.world-map-svg', 'viewBox');
   const cdp = await context.newCDPSession(page);
   const points = (d: number) => [{ x: x - d, y, id: 1 }, { x: x + d, y, id: 2 }];

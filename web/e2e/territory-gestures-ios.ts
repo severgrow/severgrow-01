@@ -286,13 +286,31 @@ try {
   // Pinching apart must zoom IN: the visible view gets narrower.
   check('pinching the fingers apart zooms IN', !!before && !!after && after[2]! < before[2]!, `view width ${fmt(before?.[2])} -> ${fmt(after?.[2])}`);
 
-  // ---- 4. a real tap selects, and does not zoom ----------------------------------------------
+  // ---- 4. a real tap selects the tile DRAWN under the finger, and does not zoom ---------------
+  // THE 8% FAILURE, KEPT AS A GUARD (CI, 2026-11-03: "-2,-1 -> null"). The old suite tapped a fixed
+  // offset that happened to land on the SAME already-selected tile, which the product deliberately
+  // toggles off — so it read as "selected nothing" and told us nothing about the hit test. The tap
+  // now targets a DIFFERENT tile's drawn centre, chosen from the live map, and the assertion is the
+  // real invariant: the cell the browser paints under that pixel is the cell the tap selects.
   const atTap = await view();
   const wasSelected = await selected();
-  await tap(cx + 40, cy + 30);
+  const target = await page.evaluate((skip) => {
+    const grid = document.getElementById('online-world-grid')!.getBoundingClientRect();
+    for (const el of document.querySelectorAll<SVGElement>('.world-hex')) {
+      const id = el.getAttribute('data-cell-id') ?? '';
+      if (!id || id === skip) continue;
+      const r = el.getBoundingClientRect();
+      const x = r.left + r.width / 2, y = r.top + r.height / 2;
+      if (x > grid.left + 12 && x < grid.right - 12 && y > grid.top + 12 && y < grid.bottom - 12) return { id, x, y };
+    }
+    return null;
+  }, wasSelected) as { id: string; x: number; y: number } | null;
+  if (!target) throw new Error('no unselected tile centre is visible to tap');
+  await tap(target.x, target.y);
   await page.waitForTimeout(400);
   const nowSelected = await selected();
   check('a real touch tap selects a tile', nowSelected !== null, `${wasSelected} -> ${nowSelected}`);
+  check('the tap selects the tile DRAWN under the finger', nowSelected === target.id, `${wasSelected} -> ${nowSelected} at the centre of ${target.id}`);
   check('a real touch tap does not zoom', !!atTap && Math.abs((await view())![2]! - atTap[2]!) < 0.05);
 
   // ---- 5. THE REGRESSION: a release the SVG never sees must not freeze the map ----------------

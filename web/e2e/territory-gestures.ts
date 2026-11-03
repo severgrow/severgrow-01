@@ -197,7 +197,12 @@ try {
   check('the pan distance matches the drag (no drift, no double-apply)', Math.abs(panDx - expectedDx) < expectedDx * 0.2, `moved ${panDx.toFixed(2)}, expected ~${expectedDx.toFixed(2)}`);
 
   // ---- 2. the pan keeps working, from an edge, and does not drift -------------------------------
-  const edgeFrom = { x: rect.x + 8, y: rect.y + rect.height - 8 };
+  // The MAP's canvas is the menu's full-bleed screen and the panel is a crop of it (owner,
+  // 2026-11-03), so "the edge of the map" is the edge of the VISIBLE window, not the canvas corner
+  // (which is clipped away and correctly receives no pointer). The SVG rect above is still the right
+  // denominator for world-units-per-pixel.
+  const grid = (await page.locator('#online-world-grid').boundingBox())!;
+  const edgeFrom = { x: grid.x + 8, y: grid.y + grid.height - 8 };
   const beforeEdge = await box();
   await drag(edgeFrom, { x: edgeFrom.x + 50, y: edgeFrom.y - 50 });
   const afterEdge = await box();

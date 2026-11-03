@@ -35,6 +35,50 @@ last rung before the tiles shear into trapezoids — for the shipped strength, a
 so the cost cannot be quietly widened later. A 0.05 strength remains reachable by changing the one
 constant; `globe-subtle` (0.04) is the previous recommendation.
 
+**Superseded the same day:** the pose became view-centred ("Later the same day — the globe is
+VIEW-CENTRED, and the panel is a CROP"), so the measured worst tile moved from 1.1499 to 1.2234 and
+the hard floor to 1.30. The 8% and the reasoning above are unchanged; only the reference view is.
+
+### Later the same day — the globe is VIEW-CENTRED, and the panel is a CROP
+
+Owner: *"position still jumps, map still isnt the same on main menu and in territory -- we need a
+diffrent approach to fixing this"*; *"the geometry was supposed to be dynamic - when edge of the map
+is in the centre of the view, those tiles on the edge becoming larger - and what's around it on edges
+is getting 'squished' ... so going through map almost feels like turning a globe ball object"*; and
+*"so always the middle of the view - what's currently in the centre of the view is 'larger'"*. The
+strength stays 8%; he explicitly did not want it talked down.
+
+**The anchor is no longer a second viewBox.** The old `anchoredView` calculated what viewBox the
+Territory panel needed to reproduce the menu's mapping. The panel now keeps the menu's physical
+canvas (origin, pixel size) and its viewBox, and is clipped to its own frame with
+`clip-path: inset(... round 14px)`; `WorldView` measures the panel's frame from the layout offset
+chain, not from a transform-sensitive rect. A tile's absolute screen rect is therefore the same on
+both surfaces by construction. Measured: **0.000px max rect delta over 279 tiles** in Chromium,
+0.007px in WebKit (layout rounding), and **0.000px after a reload**.
+
+**The globe is posed by the camera.** `viewGlobePose(box)` puts the sphere's centre under the view
+centre and takes the view's half-diagonal as its rim, so the middle of the view is the fat point and
+the edges recede; panning carries the fat point with the finger, zooming keeps the on-screen effect
+the same size. The projection maths and `GLOBE_FALLOFF = 0.08` are unchanged. Geometry is re-posed
+on camera SETTLE (140ms after the last pointer/glide), never per move: a pan is one `viewBox` write
+per frame, and the settle rewrites only the visible cells plus half a view of margin.
+
+Measured on the reference 390x844 view: worst max/min edge at 8% = **1.2234** (91/274 tiles past the
+1.10 product bar); 0.12 = 1.3870. The hard floor in `web/tests/map-globe.test.ts` is re-pointed from
+1.20 to **1.30** (0.10 = 1.2995 still inside; 0.12 fails). The worst tile *visible in the Territory
+window* measures 1.11-1.19 across the camera positions and viewports tested, so rim tiles read as
+compressed hexagons, not slivers. Cost per settle: 2.4-4.2ms and 507-581 attribute writes on
+Chromium desktop, 8.5-12.2ms at 4x CPU throttle; a pan is 0.006-0.03ms per viewBox write.
+
+**The CI failure was not the flat-centre hit test.** The 8% commit already resolved taps against
+`drawnAt` (the bent centres). On `cefe8521` the failing tap landed on the tile that was ALREADY
+selected, and the product deliberately toggles a second tap off — so the suite read "selected
+nothing". The hit test is now a pure `nearestCell` used by both the paint and the tap (the same pose
+that is standing on screen), with unit tests proving a tap at a drawn tile's centre selects it at the
+view centre and near the edge, and that the old flat-centre rule would have selected `-1,8` instead
+of `-1,9` at the edge. The WebKit suite now taps a different tile's drawn centre and asserts the
+selected cell is the one drawn under the finger.
+
 ## 2026-11-02 — The menu paints before the module; no filter on an animating part
 
 Owner: "run couple extra smoothness checks and smoothness pack … making sure everything appears as

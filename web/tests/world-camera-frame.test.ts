@@ -14,10 +14,16 @@
 //   reopened: -124.46396793470825 -160.8064191379804  110.36387126390635 238.8343151570473
 //
 // The numbers below are those two lines. A deliberate camera must survive the frame change
-// untouched; an automatic frame is still derived (and stays the same as it always was: both
-// surfaces' auto viewBoxes are byte-identical to before this rule).
+// untouched; an automatic frame is still derived.
+//
+// AND THE PANEL IS NO LONGER A SECOND VIEW AT ALL (owner, 2026-11-03: "we need a diffrent
+// approach"). The old `anchoredView` calculated a viewBox for the panel that would reproduce the
+// menu's mapping. The product now keeps the menu's own canvas, origin and viewBox and only clips
+// the panel out of it (`cropInsets`), so a tile's screen rect is the same number on both surfaces
+// by construction. The tests below pin that one mapping and the crop, and keep the old re-fit as
+// the counter-example it must never become.
 import { describe, expect, it } from 'vitest';
-import { anchoredView, reconciledView, resizedCamera, type ViewBox } from '../src/online/world-view.js';
+import { cropInsets, reconciledView, resizedCamera, screenMap, type ViewBox } from '../src/online/world-view.js';
 
 /** The camera the player zoomed to inside the Territory panel, from the CI log. */
 const DELIBERATE: ViewBox = [-124.46396793470825, -153.29211924396444, 110.36387126390635, 223.8057153690154];
@@ -72,84 +78,62 @@ describe('an automatic frame is still derived from the window', () => {
   });
 });
 
-// THE WINDOW IS A WINDOW, NOT A RE-FIT (owner, 2026-11-02: "entering territory still 'drops' the
-// territory few pixels lower ... so tiles don't move at all when entering/exiting territory from
-// main menu"). The menu and the panel are two windows onto ONE map at ONE material scale. The panel
-// is the sub-rectangle of the menu's screen that its own box covers — nothing about the map may be
-// re-fitted to the panel's width or aspect.
-describe('the panel is the menu’s map seen through a smaller window', () => {
+// THE PANEL IS A CROP, NOT A RE-FIT (owner, 2026-11-03: "render the SAME full-bleed map with the
+// SAME camera transform the menu used and let the Territory panel's frame act as a CROP over it").
+// The menu and the panel therefore share ONE `screenMap`; the panel's frame only decides which part
+// of that canvas is visible. The old re-fit is kept as the counter-example: it moves a tile.
+describe('the panel is the menu’s canvas seen through a crop', () => {
   /** The menu's own phone surface: the full viewport, and its reconciled full-bleed view. */
   const MENU_RECT = { left: 0, top: 0, width: 390, height: 843.984375 };
   const PANEL_RECT = { left: 16, top: 102, width: 358, height: 725.984375 };
-  // The menu's automatic frame on that phone (R = 10, X = sqrt(3), PAD = 18): a little wider than
-  // the panel's old auto frame, and centred on the player's home. Its aspect is the MENU's own, as
-  // `reconciledView` guarantees.
   const MENU_BOX: ViewBox = [-136.1814, -177.5, 146.8602, 146.8602 / (390 / 843.984375)];
 
-  /** What the browser paints: the SVG's own `meet` mapping from world units to CSS pixels. */
-  const project = (box: ViewBox, rect: typeof MENU_RECT) => {
-    const k = Math.min(rect.width / box[2], rect.height / box[3]);
-    const ox = (rect.width - box[2] * k) / 2;
-    const oy = (rect.height - box[3] * k) / 2;
-    return { x: (wx: number) => rect.left + ox + (wx - box[0]) * k, y: (wy: number) => rect.top + oy + (wy - box[1]) * k };
-  };
-
-  it('maps every world point to the same screen pixel in the panel as in the menu', () => {
-    const panel = anchoredView({ box: MENU_BOX, rect: MENU_RECT }, PANEL_RECT);
-    expect(panel).not.toBeNull();
-    const menuAt = project(MENU_BOX, MENU_RECT);
-    const panelAt = project(panel!, PANEL_RECT);
+  it('projects every world point through ONE mapping — the menu’s own', () => {
+    const map = screenMap(MENU_BOX, MENU_RECT)!;
+    // The same four numbers paint the panel: the canvas is the menu's, so this is not a second
+    // calculation that could disagree. A tile's absolute screen rect is therefore identical.
+    const again = screenMap(MENU_BOX, MENU_RECT)!;
     for (const [wx, wy] of [[-120, -150], [-60, -100], [0, 0], [40, 90], [100, 160]] as const) {
-      expect(panelAt.x(wx)).toBeCloseTo(menuAt.x(wx), 10);
-      expect(panelAt.y(wy)).toBeCloseTo(menuAt.y(wy), 10);
+      expect(again.x(wx)).toBe(map.x(wx));
+      expect(again.y(wy)).toBe(map.y(wy));
     }
+    // The mapping is the browser's own `meet` rule: one scale, centred letterbox.
+    expect(map.k).toBeCloseTo(Math.min(MENU_RECT.width / MENU_BOX[2], MENU_RECT.height / MENU_BOX[3]), 12);
   });
 
-  it('keeps exactly the panel’s own aspect, so its SVG never letterboxes or stretches', () => {
-    const panel = anchoredView({ box: MENU_BOX, rect: MENU_RECT }, PANEL_RECT)!;
-    expect(panel[2] / panel[3]).toBeCloseTo(PANEL_RECT.width / PANEL_RECT.height, 12);
+  it('cuts the panel’s own frame out of that canvas with inset()', () => {
+    const insets = cropInsets(MENU_RECT, PANEL_RECT);
+    expect(MENU_RECT.left + insets.left).toBe(PANEL_RECT.left);
+    expect(MENU_RECT.top + insets.top).toBe(PANEL_RECT.top);
+    expect(MENU_RECT.left + MENU_RECT.width - insets.right).toBe(PANEL_RECT.left + PANEL_RECT.width);
+    expect(MENU_RECT.top + MENU_RECT.height - insets.bottom).toBe(PANEL_RECT.top + PANEL_RECT.height);
+    // Nothing negative: a panel outside its canvas is not a crop the geometry can honour.
+    for (const value of Object.values(insets)) expect(value).toBeGreaterThanOrEqual(0);
   });
 
-  it('is the menu’s mapping translated, not the panel’s old re-fit', () => {
-    const panel = anchoredView({ box: MENU_BOX, rect: MENU_RECT }, PANEL_RECT)!;
-    const menuK = MENU_RECT.width / MENU_BOX[2];
-    // Same world-units-per-pixel as the menu — the tile scale does not change.
-    expect(panel[2] / PANEL_RECT.width).toBeCloseTo(MENU_BOX[2] / MENU_RECT.width, 12);
-    // The panel's box is shifted by its own offset in the menu's world units.
-    expect(panel[0]).toBeCloseTo(MENU_BOX[0] + PANEL_RECT.left / menuK, 12);
-    expect(panel[1]).toBeCloseTo(MENU_BOX[1] + PANEL_RECT.top / menuK, 12);
-    // And it is NOT the re-fit that moved the tiles: that rule keeps the menu's width.
-    expect(panel[2]).not.toBeCloseTo(reconciledView(MENU_BOX, PANEL_RECT.width / PANEL_RECT.height)![2], 6);
-  });
-
-  it('leaves the settle transform as the identity (dx = dy = 0, scale = 1)', () => {
-    const panel = anchoredView({ box: MENU_BOX, rect: MENU_RECT }, PANEL_RECT)!;
-    // The exact formula `enter()` used to slide the panel's map onto the menu's pixels.
-    const mm = MENU_BOX[2] / MENU_RECT.width;
-    const mt = panel[2] / PANEL_RECT.width;
-    const s = mt / mm;
-    const dx = (panel[0] - MENU_BOX[0]) / mm + (MENU_RECT.left - PANEL_RECT.left) + (PANEL_RECT.width / 2) * (s - 1);
-    const dy = (panel[1] - MENU_BOX[1]) / mm + (MENU_RECT.top - PANEL_RECT.top) + (PANEL_RECT.height / 2) * (s - 1);
-    expect(dx).toBeCloseTo(0, 10);
-    expect(dy).toBeCloseTo(0, 10);
-    expect(s).toBeCloseTo(1, 12);
+  it('would move a tile if the panel re-derived its own view — the old failure, kept as a guard', () => {
+    const correct = screenMap(MENU_BOX, MENU_RECT)!;
+    const refit = reconciledView(MENU_BOX, PANEL_ASPECT)!;
+    const wrong = screenMap(refit, PANEL_RECT)!;
+    // The re-fit shifts the same world point by more than a pixel on this phone: that is the jump.
+    expect(Math.abs(correct.x(0) - wrong.x(0))).toBeGreaterThan(1);
+    expect(Math.abs(correct.y(0) - wrong.y(0))).toBeGreaterThan(1);
   });
 
   it('accounts for a letterboxed menu box instead of assuming an exact aspect', () => {
     // A stale/unreconciled menu view is up to 0.2% off the window's aspect (see `reconciledView`).
-    // The browser centres it with `meet`; the panel must inherit that offset, not drop it.
+    // The browser centres it with `meet`; the panel inherits that offset because it is the same map.
     const letterboxed: ViewBox = [-136.1814, -177.5, 146.8602, 300];
-    const panel = anchoredView({ box: letterboxed, rect: MENU_RECT }, PANEL_RECT)!;
-    const menuAt = project(letterboxed, MENU_RECT);
-    const panelAt = project(panel, PANEL_RECT);
-    expect(panelAt.x(12)).toBeCloseTo(menuAt.x(12), 10);
-    expect(panelAt.y(70)).toBeCloseTo(menuAt.y(70), 10);
+    const map = screenMap(letterboxed, MENU_RECT)!;
+    expect(map.oy).toBeGreaterThan(0);
+    const k = Math.min(MENU_RECT.width / letterboxed[2], MENU_RECT.height / letterboxed[3]);
+    expect(map.y(70)).toBeCloseTo(MENU_RECT.top + map.oy + (70 - letterboxed[1]) * k, 12);
   });
 
-  it('refuses a window that cannot be measured, and never invents a view', () => {
-    expect(anchoredView({ box: MENU_BOX, rect: MENU_RECT }, { ...PANEL_RECT, width: 0 })).toBeNull();
-    expect(anchoredView({ box: MENU_BOX, rect: { ...MENU_RECT, height: 0 } }, PANEL_RECT)).toBeNull();
-    expect(anchoredView({ box: [0, 0, 0, 0], rect: MENU_RECT }, PANEL_RECT)).toBeNull();
+  it('refuses a canvas that cannot be measured, and never invents a mapping', () => {
+    expect(screenMap([0, 0, 100, 100], { ...MENU_RECT, width: 0 })).toBeNull();
+    expect(screenMap([0, 0, 100, 100], { ...MENU_RECT, height: 0 })).toBeNull();
+    expect(screenMap([0, 0, 0, 0], MENU_RECT)).toBeNull();
   });
 });
 

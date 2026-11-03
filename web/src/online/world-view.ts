@@ -51,7 +51,16 @@ import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { lastChosenCamera, rememberCamera } from './world-camera.js';
 import { menuTerritoryAnchor } from './living-camera.js';
-import { GLOBE_RIM, mapHex, mapPoint, mapScale } from './map-globe.js';
+import {
+  GLOBE_RIM,
+  globeHex,
+  globePoint,
+  globeScale,
+  nearestCell,
+  sameGlobePose,
+  viewGlobePose,
+  type GlobePose,
+} from './map-globe.js';
 import { mountSheetViewport } from '../ui/sheet-viewport.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { TerritoryChat } from './territory-chat.js';
@@ -327,43 +336,45 @@ export const resizedCamera = (box: ViewBox | null, aspect: number, manual: boole
 export type ScreenRect = { left: number; top: number; width: number; height: number };
 
 /**
- * THE PANEL IS A WINDOW ONTO THE MENU'S OWN MAP (owner, 2026-11-02: "entering territory still
- * 'drops' the territory few pixels lower, it should have exact same positon as in main menu
- * background, so tiles don't move at all").
+ * THE PANEL IS A CROP OF THE MENU'S CANVAS (owner, 2026-11-03: "render the SAME full-bleed map with
+ * the SAME camera transform the menu used and let the Territory panel's frame act as a CROP over
+ * it"). The old `anchoredView` answered a harder question — what SECOND viewBox would reproduce the
+ * menu's mapping inside a differently-shaped panel — and every extra derivation was a chance to
+ * disagree. The product no longer asks it: the SVG keeps the menu's box, origin and physical size,
+ * so `screenMap` below is the ONE mapping on both surfaces, and the panel only decides what is
+ * visible through `cropInsets`.
  *
- * The menu and the Territory panel draw the SAME SVG, but through boxes of different sizes. Framing
- * the panel with `detailFor`/`reconciledView` re-fits the world to the PANEL's width and centre, so
- * the map travels behind the frame — the "drop" the owner saw. This function instead answers one
- * question: what viewBox must the panel carry so that the world point under every CSS pixel is the
- * one the menu was already showing there?
- *
- * Let the menu draw `box` into `menu.rect`. The browser's `meet` mapping (the SVG default, and what
- * an aspect-matched box reduces to) is `screen = menu.topLeft + letterbox + (world - box.origin) *
- * k`, with ONE scale `k` on both axes. The panel keeps that same `k`, so its window is simply the
- * menu's world-space rectangle under `panel.rect` — translated, never re-scaled. Its viewBox aspect
- * is then exactly the panel's own, so the panel fills without a band; and because `k` is inherited
- * from the menu, a tile keeps the very size the menu's floor already gave it (MIN_CELL_PX or more).
+ * `screenMap` is the browser's own `meet` mapping (the SVG default, and what an aspect-matched box
+ * reduces to): `screen = rect.topLeft + letterbox + (world - box.origin) * k`, with one `k` on both
+ * axes. It is exported so a test can prove the pixel rather than trust the DOM.
  */
-export const anchoredView = (
-  menu: { box: readonly number[]; rect: ScreenRect },
-  panel: ScreenRect,
-): ViewBox | null => {
-  const box = menu.box;
-  const from = menu.rect;
-  if (!usableView(box) || !(from.width > 0) || !(from.height > 0) || !(panel.width > 0) || !(panel.height > 0)) return null;
-  // The scale the menu is ACTUALLY painted at. `meet` takes the smaller axis; a reconciled view
-  // matches both, so this is normally `width / box[2]` and the letterbox is zero.
-  const k = Math.min(from.width / box[2], from.height / box[3]);
+export const screenMap = (
+  box: readonly number[],
+  rect: ScreenRect,
+): { k: number; ox: number; oy: number; x: (wx: number) => number; y: (wy: number) => number } | null => {
+  if (!usableView(box) || !(rect.width > 0) || !(rect.height > 0)) return null;
+  const k = Math.min(rect.width / box[2]!, rect.height / box[3]!);
   if (!(k > 0) || !Number.isFinite(k)) return null;
-  const ox = (from.width - box[2] * k) / 2;
-  const oy = (from.height - box[3] * k) / 2;
-  const view: ViewBox = [
-    box[0] + (panel.left - from.left - ox) / k,
-    box[1] + (panel.top - from.top - oy) / k,
-    panel.width / k,
-    panel.height / k,
-  ];
-  return usableView(view) ? view : null;
+  const ox = (rect.width - box[2]! * k) / 2;
+  const oy = (rect.height - box[3]! * k) / 2;
+  return {
+    k, ox, oy,
+    x: (wx: number) => rect.left + ox + (wx - box[0]!) * k,
+    y: (wy: number) => rect.top + oy + (wy - box[1]!) * k,
+  };
+};
+
+/** The panel's frame as `clip-path: inset(...)` values inside the menu's canvas, in CSS pixels.
+ *  Nothing here reads the camera: a crop cannot move a tile, only show less of the canvas. */
+export const cropInsets = (canvas: ScreenRect, panel: ScreenRect): { top: number; left: number; right: number; bottom: number } => {
+  const left = panel.left - canvas.left;
+  const top = panel.top - canvas.top;
+  return {
+    top,
+    left,
+    right: Math.max(0, canvas.width - left - panel.width),
+    bottom: Math.max(0, canvas.height - top - panel.height),
+  };
 };
 
 
@@ -450,14 +461,12 @@ const hexPath = (x: number, y: number) => {
   return points.map(([dx, dy], index) => `${index ? 'L' : 'M'}${(x + dx! * R).toFixed(2)},${(y + dy! * R).toFixed(2)}`).join(' ') + 'Z';
 };
 /**
- * THE MAP ON THE GLOBE (see `map-globe.ts`). Every piece of MAP geometry goes through these two, so
- * the whole picture bends as one: a cell's centre lands where the sphere puts it, and its hexagon is
- * drawn with the bent corner positions, which neighbours share exactly. Nothing here reads a window,
- * a camera or a clock — the bend is a property of the WORLD, so the menu backdrop and the Territory
- * panel cannot disagree.
+ * THE MAP ON THE GLOBE (see `map-globe.ts`), POSED BY THE VIEW. Every piece of MAP geometry goes
+ * through the instance methods below, so the whole picture bends as one: a cell's centre lands where
+ * the sphere puts it, and its hexagon is drawn with the bent corner positions, which neighbours
+ * share exactly. The pose comes from `this.box` — the camera the menu and the Territory share — so
+ * the two surfaces cannot disagree, and panning carries the fat middle of the globe with the view.
  */
-const drawnAt = (q: number, r: number) => { const at = coords(q, r); return mapPoint(at.x, at.y); };
-const drawnHex = (q: number, r: number) => { const at = coords(q, r); return mapHex(at.x, at.y); };
 /**
  * TILE JITTER (owner, 2026-10-30: "a slight per-tile hue/brightness jitter derived from the CELL id
  * (so a mass of one colour is not a single flat slab)"). `TILE_JITTER` are lightness offsets in
@@ -484,14 +493,37 @@ export class WorldView {
   private active = false;
   private menuPreview = false;
   /**
-   * THE MENU'S LAST FRAME, handed over at the instant the Territory is requested (see
-   * `anchoredView`). It is not camera state: `open` consumes it once, and it may only move an
-   * AUTOMATIC frame — a deliberate camera outranks it, byte for byte.
+   * THE MENU'S LAST FRAME, handed over at the instant the Territory is requested. It is the CANVAS
+   * the camera is drawn on, not camera state: the panel does not re-derive a view from it, it keeps
+   * the same box and crops the same pixels (see `open`).
    */
   private menuAnchor: { box: ViewBox; rect: ScreenRect } | null = null;
+  /**
+   * THE WARP'S POSE — the sphere the lattice is currently bent onto (see `map-globe.ts`). It is
+   * derived from the shared camera box, never from the window, so the menu backdrop and the
+   * Territory panel draw the very same geometry. It is refreshed when the camera SETTLES, not on
+   * every pointer move: a pan therefore moves the painted map by the viewBox alone (cheap, one
+   * attribute write per frame) and the globe is re-posed once the finger is still.
+   */
+  private pose: GlobePose | null = null;
+  /**
+   * THE CANVAS THE CAMERA IS DRAWN ON. In the menu and the Territory this is the same full-bleed
+   * screen rectangle; the panel is only a CLIP over it, so a tile's absolute screen rect cannot
+   * differ between the two surfaces by construction. See `open`/`applyCrop`.
+   */
+  private canvas: ScreenRect | null = null;
+  /** Cost of the last settle warp, for the browser proof (not read by the product). */
+  private warpStats = { ms: 0, writes: 0, cells: 0, settles: 0 };
+  /** Cost of the viewBox writes, for the same proof: a pan is one write per frame and nothing else. */
+  private viewStats = { ms: 0, writes: 0 };
   private visited = false;
   private previewOwner: string | null = null;
   private previewRemembered = false;
+  /** The saved camera has been consulted once for this page load. Without this, a first preview
+   *  that lands before the identity resolves (owner null) skips the read and the menu derives a
+   *  fresh frame — the "works once and then stops" symptom, seen as a different tile scale on some
+   *  boots. */
+  private previewCameraRead = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private identity: Identity | null = null;
   private wallet: SeedWallet | null = null;
@@ -801,6 +833,9 @@ export class WorldView {
   /** The same surface at rest: no private reads, poll, chat subscription or new renderer. */
   preview(world: World | null, identity: Identity | null, fromMemory = false) {
     if (this.active) this.close(true);
+    // Back on the menu the same element is simply the full-bleed backdrop again: the crop is a
+    // declaration on the element, so dropping it restores the menu's own box with no re-fit.
+    this.releaseCrop();
     this.menuPreview = true;
     if (!world) return;
     const owner = identity?.playerId ?? null;
@@ -808,7 +843,8 @@ export class WorldView {
     const firstOwner = !this.visited && !this.previewRemembered && owner !== this.previewOwner;
     this.identity = identity;
     this.previewOwner = owner;
-    if (changedWorld || firstOwner) {
+    if (changedWorld || firstOwner || !this.previewCameraRead) {
+      this.previewCameraRead = true;
       // ONLY A GESTURE IS A CAMERA (owner, 2026-11-02: the anchor "works once and then stops").
       // This used to read ANY remembered frame back as deliberate, including the automatic/anchored
       // frame every earlier close wrote, so the next open skipped `anchoredView` and re-fitted. A
@@ -849,6 +885,99 @@ export class WorldView {
     return auto && usableView(auto) ? [...auto] : null;
   }
 
+  // ---- the view-centred globe -------------------------------------------------
+
+  /** A flat map point in DRAWING coordinates, under the pose standing on screen. */
+  private warpPoint(x: number, y: number): { x: number; y: number } {
+    return this.pose ? globePoint(this.pose, x, y) : { x, y };
+  }
+  /** A mark's scale on its tile (the tangential factor; see `map-globe.ts`). */
+  private warpScale(x: number, y: number): number {
+    return this.pose ? globeScale(this.pose, x, y) : 1;
+  }
+  /** A cell's centre in DRAWING coordinates: the exact point its hexagon is built around. */
+  private drawnAt(q: number, r: number): { x: number; y: number } {
+    const at = coords(q, r);
+    return this.warpPoint(at.x, at.y);
+  }
+  /** A cell's hexagon with its shared corners bent. Neighbours draw the same corner twice, exactly. */
+  private drawnHex(q: number, r: number): string {
+    const at = coords(q, r);
+    return globeHex(this.pose, at.x, at.y);
+  }
+  /** The pose the shared camera implies (its centre, its half-diagonal as the rim). */
+  private poseFor(box: ViewBox | null): GlobePose | null {
+    return box && usableView(box) ? viewGlobePose([box[0], box[1], box[2], box[3]]) : null;
+  }
+  /**
+   * THE CAMERA SETTLED: re-pose the globe on the view and redraw the geometry standing on it.
+   * Called after a pan/zoom/glide ends (and at the end of a paint), never per pointer move. Panning
+   * in between is a viewBox write only; the same world geometry keeps riding the same camera, and
+   * when the finger is still the fat middle of the globe is moved to the new view centre.
+   */
+  private settleWarp(force = false): void {
+    const next = this.poseFor(this.box);
+    if (!force && sameGlobePose(this.pose, next)) return;
+    this.pose = next;
+    this.rewarp();
+  }
+  /**
+   * REDRAW THE BENT GEOMETRY IN PLACE. Nodes are kept (their focus, their animations and the fog's
+   * clock all survive), only their `d`/transform attributes are rewritten. Only the cells the
+   * camera can see plus half a view of margin are touched, because off-screen ground is not read by
+   * the eye and will be re-posed when it scrolls in. Measured and published on the SVG's dataset so
+   * the browser proof can quote the real cost; the product reads none of it.
+   */
+  private rewarp(): void {
+    if (!this.svg || !this.world || !this.box) return;
+    const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const [bx, by, bw, bh] = this.box;
+    const margin = Math.max(bw, bh) * 0.5;
+    const seen = new Set<string>();
+    for (const cell of this.world.cells) {
+      const flat = coords(cell.q, cell.r);
+      if (flat.x < bx - margin || flat.x > bx + bw + margin) continue;
+      if (flat.y < by - margin || flat.y > by + bh + margin) continue;
+      seen.add(cell.id);
+    }
+    let writes = 0;
+    // Every hex-shaped node: mist, face, edge/tap target, halo, timer ring and stake. Markers carry
+    // `data-cell-id` too but their `d` is the sword trace, so they are not in this selector.
+    for (const node of this.svg.querySelectorAll<SVGPathElement>('.world-fog, .world-hex-face, .world-hex, .world-halo, .world-ring, .world-stake')) {
+      const id = node.getAttribute('data-cell-id');
+      if (!id || !seen.has(id)) continue;
+      const [q, r] = id.split(',').map(Number);
+      if (!Number.isFinite(q) || !Number.isFinite(r)) continue;
+      const d = this.drawnHex(q!, r!);
+      if (node.getAttribute('d') !== d) { node.setAttribute('d', d); writes++; }
+    }
+    // The layers that are cheap and stateful in their own right: a handful of notches, one transform
+    // per dispute, the own-land outline and the selection accent. Each keeps its nodes.
+    this.paintFrontier();
+    this.paintSwords();
+    this.paintBorder();
+    this.paintAccent();
+    // The drifting motes follow the ground they rise from; they are decorative, but leaving them on
+    // the old pose would read as dust hovering over the sea.
+    for (const mote of this.svg.querySelectorAll<SVGCircleElement>('.world-spore[data-cell-id]')) {
+      const [q, r] = (mote.getAttribute('data-cell-id') ?? '').split(',').map(Number);
+      if (!Number.isFinite(q) || !Number.isFinite(r)) continue;
+      const at = this.drawnAt(q!, r!);
+      const index = Number(mote.dataset.sporeIndex ?? 0);
+      mote.setAttribute('cx', (at.x + ((index * 37) % 9) - 4).toFixed(1));
+      mote.setAttribute('cy', (at.y + ((index * 53) % 7) - 3).toFixed(1));
+      writes += 2;
+    }
+    const ms = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - started;
+    this.warpStats = { ms: +ms.toFixed(2), writes, cells: seen.size, settles: this.warpStats.settles + 1 };
+    if (this.svg.dataset) {
+      this.svg.dataset.warpMs = String(this.warpStats.ms);
+      this.svg.dataset.warpWrites = String(this.warpStats.writes);
+      this.svg.dataset.warpCells = String(this.warpStats.cells);
+      this.svg.dataset.warpSettles = String(this.warpStats.settles);
+    }
+  }
+
   /** Reuse the authoritative wallet the menu already read, for this same identity only.
    * Prepare affordability while the map is inert; opening must not rebuild every tile for it. */
   useMenuWallet(playerId: string, wallet: SeedWallet): void {
@@ -870,41 +999,40 @@ export class WorldView {
         this.manualCamera = true;
       }
     }
-    // THE PANEL LOOKS AT THE MENU'S UNMOVED MAP (owner, 2026-11-02: "so tiles don't move at all").
-    // `living-territory` hands over the menu's drawn viewBox + rect at the click; `anchoredView`
-    // turns it into the panel's view, which keeps the menu's pixel-for-pixel mapping instead of
-    // re-fitting the world to this window. Only an AUTOMATIC camera may be anchored; a camera the
-    // player chose (or restored from storage) stays byte-for-byte untouched (see `resizedCamera`).
-    const panelRect = this.panelWindow();
-    const anchored = !this.manualCamera && this.menuPreview && this.menuAnchor && panelRect
-      ? anchoredView(this.menuAnchor, panelRect)
-      : null;
-    // The fallback for a menu frame that could not be captured (no world yet): the panel's own frame.
-    const auto = !anchored && !this.manualCamera && this.menuPreview ? this.autoBox() : null;
+    // THE PANEL IS A CROP OF THE MENU'S OWN CANVAS (owner, 2026-11-03): "render the SAME full-bleed
+    // map with the SAME camera transform the menu used and let the Territory panel's frame act as a
+    // CROP over it". There is no second view to derive: the camera box, the physical canvas and the
+    // viewBox all stay exactly as the menu had them, and `applyCrop` only clips. A tile's absolute
+    // screen rect is therefore identical on both surfaces BY CONSTRUCTION — there is no calculation
+    // that could disagree, and no timing that could make it drift.
+    const anchor = this.menuAnchor;
+    // The fallback for a first open with no captured menu frame (or the hub's own entry): derive the
+    // frame while the menu's own anchor is still the rule. One layout read, before the swap.
+    const fallback = !anchor && !usableView(this.box) ? this.autoBox() : null;
+    const canvas = anchor?.rect ?? (typeof window !== 'undefined'
+      ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+      : { left: 0, top: 0, width: 0, height: 0 });
     this.active = true;
     this.menuPreview = false;
     this.visited = true;
-    if (anchored && panelRect) {
-      this.aspect = panelRect.width / panelRect.height;
-      this.pixels = panelRect.width;
-    }
-    if (anchored) {
-      this.box = anchored;
+    this.canvas = { ...canvas };
+    this.aspect = canvas.width / canvas.height;
+    this.pixels = canvas.width;
+    if (anchor) {
+      // Exactly the menu's four numbers. A camera the player chose is already what the menu painted.
+      this.box = [anchor.box[0], anchor.box[1], anchor.box[2], anchor.box[3]];
       this.touched = true;
-    } else if (auto) {
-      this.box = auto;
+    } else if (fallback && usableView(fallback)) {
+      this.box = fallback;
       this.touched = true;
     }
     // The handover is one-shot: a later open (or a resize) must never resurrect a stale menu frame.
     this.menuAnchor = null;
-    // THE PANEL'S FRAME IS WRITTEN NOW, NOT ON SOME LATER FRAME (CI, 2026-11-02). The menu and the
-    // panel have different aspects, so the drawn viewBox must change the moment the panel owns the
-    // map. It used to wait for the resize observer's `queueView` — a requestAnimationFrame — which
-    // on a slow renderer lands after the next thing the player (or a test) looks at, leaving the
-    // panel showing the MENU's frame. This is one layout read at the one moment the window's shape
-    // is known, and it only DRAWS the camera: `this.box` is not re-framed (see `resizedCamera`), so
-    // a deliberate camera's four numbers are written exactly as the player left them.
-    if ((anchored || auto || this.manualCamera) && this.svg) this.applyView();
+    // The canvas is the menu's physical box now, so the crop is the panel's frame inside it. Both
+    // writes happen in this task, before the next paint: no frame ever shows a re-fitted map.
+    this.applyCrop();
+    if (this.svg) this.applyView();
+    this.settleWarp(true);
     this.notice(this.svg ? '' : ONLINE.worldLoading);
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
@@ -954,6 +1082,7 @@ export class WorldView {
     this.saveCamera();
     this.active = false;
     this.menuPreview = false;
+    this.releaseCrop();
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.chat.setOpen(false);
@@ -1174,6 +1303,9 @@ export class WorldView {
       this.paintSignature = ''; return;
     }
     this.paintSignature = this.paintSignatureOf();
+    // Pose the geometry with the camera that is already standing. A first paint has no box yet, so
+    // it draws flat and `settleWarp` re-poses it in the same task once the frame is derived.
+    if (this.box) this.pose = this.poseFor(this.box);
     const occupied = new Map(world.claims.map((claim) => [claim.cellId, claim]));
     const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('role', 'group');
@@ -1326,7 +1458,7 @@ export class WorldView {
     const fogPath = (id: string, ring: FogRing): SVGPathElement => {
       const [q, r] = id.split(',').map(Number) as [number, number];
       const fog = document.createElementNS(NS, 'path');
-      fog.setAttribute('d', drawnHex(q, r));
+      fog.setAttribute('d', this.drawnHex(q, r));
       fog.setAttribute('data-cell-id', id);
       fog.classList.add('world-fog', `ring-${ring}`);
       return fog;
@@ -1398,10 +1530,15 @@ export class WorldView {
     halos.setAttribute('aria-hidden', 'true');
     halos.setAttribute('filter', 'url(#world-blur-glow)');
     for (const cell of world.cells) {
-      const at = drawnAt(cell.q, cell.r);
-      const d = drawnHex(cell.q, cell.r);
-      minX = Math.min(minX, at.x - R); maxX = Math.max(maxX, at.x + R);
-      minY = Math.min(minY, at.y - R); maxY = Math.max(maxY, at.y + R);
+      // THE PAN BOUNDS ARE THE WORLD'S TRUE EXTENT, NOT THE POSED ONE. A view-centred warp moves
+      // every rim cell inward toward the current camera; deriving `fit` from the drawn points would
+      // therefore make the bounds depend on where the camera already is, and a settled warp would
+      // shrink the legal frame under itself (measured: a seeded edge camera re-framed from 135.1 to
+      // 122.6 world units). The fit is geography, so it uses the flat lattice.
+      const flat = coords(cell.q, cell.r);
+      minX = Math.min(minX, flat.x - R); maxX = Math.max(maxX, flat.x + R);
+      minY = Math.min(minY, flat.y - R); maxY = Math.max(maxY, flat.y + R);
+      const d = this.drawnHex(cell.q, cell.r);
       const owner = occupied.get(cell.id);
       const mine = !!owner && owner.ownerId === this.identity?.playerId;
       // The FACE: the tile's surface, and nothing else. Its fill is inline so it beats the
@@ -1443,6 +1580,7 @@ export class WorldView {
           path.classList.add('fresh');
           const halo = document.createElementNS(NS, 'path');
           halo.setAttribute('d', d);
+          halo.setAttribute('data-cell-id', cell.id);
           halo.classList.add('world-halo');
           halo.style.setProperty('--territory', owner.colour);
           halo.style.setProperty('--halo-delay', `${-((halos.childElementCount * 0.9) % 3.6).toFixed(1)}s`);
@@ -1497,11 +1635,13 @@ export class WorldView {
       const pick = held[(i * 7 + world.revision) % held.length];
       const cell = pick ? world.cells.find((c) => c.id === pick.cellId) : undefined;
       if (!cell) continue;
-      const at = drawnAt(cell.q, cell.r);
+      const at = this.drawnAt(cell.q, cell.r);
       const mote = document.createElementNS(NS, 'circle');
       mote.setAttribute('cx', (at.x + ((i * 37) % 9) - 4).toFixed(1));
       mote.setAttribute('cy', (at.y + ((i * 53) % 7) - 3).toFixed(1));
       mote.setAttribute('r', i % 3 === 0 ? '0.9' : '0.6');
+      mote.setAttribute('data-cell-id', cell.id);
+      mote.dataset.sporeIndex = String(i);
       mote.classList.add('world-spore');
       mote.style.setProperty('--spore-delay', `${-(i * 1.9).toFixed(1)}s`);
       spores.append(mote);
@@ -1521,24 +1661,10 @@ export class WorldView {
     const border = document.createElementNS(NS, 'g');
     border.classList.add('world-border');
     border.setAttribute('aria-hidden', 'true');
-    const ownCells = world.cells.filter((cell) => own.has(cell.id));
-    if (ownCells.length) {
-      const d = borderSegments(ownCells).map(([x1, y1, x2, y2]) => {
-        const a = mapPoint(x1, y1), b = mapPoint(x2, y2);
-        return `M${a.x.toFixed(2)},${a.y.toFixed(2)}L${b.x.toFixed(2)},${b.y.toFixed(2)}`;
-      }).join('');
-      const colour = world.claims.find((claim) => own.has(claim.cellId))?.colour;
-      for (const kind of ['glow', 'edge'] as const) {
-        const line = document.createElementNS(NS, 'path');
-        line.setAttribute('d', d);
-        line.classList.add(`world-border-${kind}`);
-        if (kind === 'glow') line.setAttribute('filter', 'url(#world-blur-glow)');
-        if (colour) line.style.setProperty('--territory', colour);
-        border.append(line);
-      }
-    }
     svg.insertBefore(halos, lines);
     svg.insertBefore(border, marks);
+    // Filled once the group is in the tree, so a re-pose can rewrite the same two paths in place.
+    this.paintBorder();
     svg.append(spores);
     // The accent: ONE path, above every outline, that carries the selection highlight.
     const accentGroup = document.createElementNS(NS, 'g');
@@ -1589,6 +1715,10 @@ export class WorldView {
     this.paintFrontier();
     this.paintRings();
     this.paintSwords();
+    // The frame may just have been derived (or the coast re-measured): pose the whole map on it
+    // before the player sees a frame, and make sure a newly built SVG still wears the crop.
+    this.settleWarp(true);
+    this.applyCrop();
   }
   /**
    * The smallest view the window allows: the largest rect with the WINDOW's own aspect that fits
@@ -1625,14 +1755,14 @@ export class WorldView {
       const height = width / aspect;
       const home = this.world ? (this.menuPreview ? menuTerritoryAnchor : ownCentre)(this.world.cells, this.world.claims, this.identity?.playerId ?? null) : null;
       // The anchor names a FLAT cell centre; the view is framed on where that cell is DRAWN.
-      const centre = home ? mapPoint(home.x, home.y) : null;
+      const centre = home ? this.warpPoint(home.x, home.y) : null;
       const cx = centre ? centre.x : fx + fw / 2, cy = centre ? centre.y : fy + fh / 2;
       return this.clampBox([cx - width / 2, cy - height / 2, width, height]);
     }
     const width = Math.min(fw, pixelWidth * (X * R) / MIN_CELL_DRAWN);
     const height = width / aspect;
     const home = this.menuPreview && this.world ? menuTerritoryAnchor(this.world.cells, this.world.claims, this.identity?.playerId ?? null) : null;
-    const centre = home ? mapPoint(home.x, home.y) : null;
+    const centre = home ? this.warpPoint(home.x, home.y) : null;
     return centre ? this.clampBox([centre.x-width/2,centre.y-height/2,width,height])
       : [fx + (fw - width) / 2, fy + (fh - height) / 2, width, height];
   }
@@ -1682,9 +1812,23 @@ export class WorldView {
     this.box = [...recovered];
     return this.box;
   }
-  /** Camera geometry belongs to the layout viewport, not the SVG's decorative CSS scale.
-   * Resolved layout dimensions keep transforms and subpixel rounding out of the logical view. */
+  /**
+   * THE SIZE OF THE CANVAS THE CAMERA IS DRAWN ON. In the menu that is the full-bleed grid; in the
+   * Territory it is the SAME canvas the menu used (the panel is a crop, not a new window), so the
+   * camera's aspect and pixel width cannot change on the way in. This is what makes the two
+   * surfaces agree by construction instead of by a re-derivation.
+   */
   private viewportSize(): { width: number; height: number } {
+    if (this.active && this.canvas) return { width: this.canvas.width, height: this.canvas.height };
+    // THE MENU'S CANVAS IS THE VIEWPORT, NOT A GRID MID-TRANSITION. The menu's grid is full-bleed
+    // (`inset: 0` in a fixed screen), but its computed width is read while the menu's own arrival
+    // may still be laying out; a 354px reading instead of 390 made the auto camera 12% narrower on
+    // some boots — the "it works once and then stops" family of bugs. The screen is the window, so
+    // ask the window.
+    if ((this.menuPreview || !this.active) && typeof window !== 'undefined') {
+      const width = window.innerWidth, height = window.innerHeight;
+      if (width > 0 && height > 0) return { width, height };
+    }
     const grid = document.getElementById('online-world-grid');
     if (!grid) return { width: 0, height: 0 };
     const style = getComputedStyle(grid);
@@ -1692,16 +1836,60 @@ export class WorldView {
     if (Number.isFinite(width) && Number.isFinite(height)) return { width, height };
     return grid.getBoundingClientRect();
   }
-  /** THE PANEL'S WINDOW ON SCREEN, position included. `viewportSize` answers "how big is the layout
-   * box"; the menu handoff needs where that box IS, because it preserves a screen mapping (see
-   * `anchoredView`). It is read before the open animation can transform the SVG, so the box is the
-   * browser's own layout rect. */
-  private panelWindow(): ScreenRect | null {
+  /**
+   * THE PANEL'S FRAME, IN VIEWPORT PIXELS, FROM LAYOUT. Deliberately the offset chain rather than
+   * `getBoundingClientRect`: the screen's arrival is a transform, and a rect read mid-animation is
+   * the transformed box. The crop must be the frame's final geometry from its first frame, or a
+   * steady few-pixel offset can survive (the owner's once-seen 11.7px drop). Offsets are the
+   * browser's layout answer and ignore transforms entirely.
+   */
+  private panelLayout(): { left: number; top: number; width: number; height: number; radius: number } | null {
     const grid = document.getElementById('online-world-grid');
     if (!grid) return null;
-    const rect = grid.getBoundingClientRect();
-    if (!(rect.width > 0) || !(rect.height > 0)) return null;
-    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    const width = grid.offsetWidth, height = grid.offsetHeight;
+    if (!(width > 0) || !(height > 0)) return null;
+    let left = 0, top = 0;
+    let node: HTMLElement | null = grid;
+    while (node) { left += node.offsetLeft; top += node.offsetTop; node = node.offsetParent as HTMLElement | null; }
+    const radius = Number.parseFloat(getComputedStyle(grid).borderTopLeftRadius) || 0;
+    return { left, top, width, height, radius };
+  }
+  /**
+   * THE CROP (owner, 2026-11-03): "render the SAME full-bleed map with the SAME camera transform the
+   * menu used and let the Territory panel's frame act as a CROP over it". So the SVG keeps the
+   * menu's physical canvas — its origin, its pixel size, its viewBox — and a `clip-path` cuts it to
+   * the panel. Tile positions do not depend on the panel at all: there is nothing left to drift.
+   */
+  private applyCrop(): void {
+    const svg = this.svg;
+    if (!svg) return;
+    if (!this.active) { this.releaseCrop(); return; }
+    const canvas = this.canvas ?? this.menuAnchor?.rect ?? null;
+    const panel = this.panelLayout();
+    if (!canvas || !panel) { this.releaseCrop(); return; }
+    svg.style.position = 'fixed';
+    svg.style.left = `${canvas.left}px`;
+    svg.style.top = `${canvas.top}px`;
+    svg.style.width = `${canvas.width}px`;
+    svg.style.height = `${canvas.height}px`;
+    svg.style.maxWidth = 'none';
+    svg.style.maxHeight = 'none';
+    // The clip is expressed in the SVG's own CSS box, which is the canvas: the panel's frame minus
+    // the canvas origin. Nothing here reads the camera.
+    const { top, left, right, bottom } = cropInsets(canvas, panel);
+    const clip = `inset(${top}px ${right}px ${bottom}px ${left}px round ${panel.radius}px)`;
+    svg.style.clipPath = clip;
+    svg.style.setProperty('-webkit-clip-path', clip);
+  }
+  /** Back to the menu's own full-bleed element: drop every crop declaration. */
+  private releaseCrop(): void {
+    const svg = this.svg;
+    this.canvas = null;
+    if (!svg) return;
+    for (const property of ['position', 'left', 'top', 'width', 'height', 'max-width', 'max-height', 'clip-path']) {
+      svg.style.removeProperty(property);
+    }
+    svg.style.removeProperty('-webkit-clip-path');
   }
   /**
    * Write the view: one viewBox attribute on the SAME svg, so cell identity is never touched.
@@ -1721,7 +1909,19 @@ export class WorldView {
     const box = this.recoverBox();
     if (!box) return;
     const target = reconciledView(box, aspect);
-    if (usableView(target)) this.svg.setAttribute('viewBox', target.join(' '));
+    if (usableView(target)) {
+      const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      this.svg.setAttribute('viewBox', target.join(' '));
+      // (A bare prototype-backed instance in a unit test has no class fields; the counters are
+      // instrumentation only, so they are created lazily and never gate the write.)
+      this.viewStats ??= { ms: 0, writes: 0 };
+      this.viewStats.writes++;
+      this.viewStats.ms += (typeof performance !== 'undefined' ? performance.now() : Date.now()) - started;
+      if (this.svg.dataset) {
+        this.svg.dataset.viewWrites = String(this.viewStats.writes);
+        this.svg.dataset.viewMs = this.viewStats.ms.toFixed(2);
+      }
+    }
   }
   /**
    * ONE VIEW WRITE PER FRAME (owner, 2026-10-28: "always looks smooth"). A phone can deliver several
@@ -1742,14 +1942,55 @@ export class WorldView {
     const grid = document.getElementById('online-world-grid');
     if (this.settleTimer) { clearTimeout(this.settleTimer); this.settleTimer = null; }
     if (on) { grid?.classList.add('moving'); return; }
-    this.settleTimer = setTimeout(() => { this.settleTimer = null; grid?.classList.remove('moving'); }, SETTLE_MS);
+    this.settleTimer = setTimeout(() => {
+      this.settleTimer = null;
+      grid?.classList.remove('moving');
+      // THE CAMERA HAS SETTLED: this is the one moment the globe is re-posed and the geometry on
+      // it redrawn. Everything before it is a viewBox move at frame cost only.
+      this.settleWarp();
+    }, SETTLE_MS);
   }
+  /**
+   * THE OUTLINE OF YOUR LAND, rebuilt from the CURRENT pose. One soft line around every piece of it,
+   * so your tiles read as one country rather than scattered cells: a blurred glow under a fine crisp
+   * edge. Two paths, re-used across a re-pose (and across paints, until the group is replaced).
+   */
+  private paintBorder(): void {
+    const group = this.svg?.querySelector<SVGGElement>('.world-border');
+    const world = this.world;
+    if (!group || !world) return;
+    const me = this.identity?.playerId ?? null;
+    const own = new Set(me ? world.claims.filter((claim) => claim.ownerId === me).map((claim) => claim.cellId) : []);
+    const ownCells = world.cells.filter((cell) => own.has(cell.id));
+    if (!ownCells.length) { group.replaceChildren(); return; }
+    const d = borderSegments(ownCells).map(([x1, y1, x2, y2]) => {
+      const a = this.warpPoint(x1, y1), b = this.warpPoint(x2, y2);
+      return `M${a.x.toFixed(2)},${a.y.toFixed(2)}L${b.x.toFixed(2)},${b.y.toFixed(2)}`;
+    }).join('');
+    const colour = world.claims.find((claim) => own.has(claim.cellId))?.colour;
+    let paths = [...group.querySelectorAll<SVGPathElement>('path')];
+    if (paths.length !== 2) {
+      group.replaceChildren();
+      paths = (['glow', 'edge'] as const).map((kind) => {
+        const line = document.createElementNS(NS, 'path');
+        line.classList.add(`world-border-${kind}`);
+        if (kind === 'glow') line.setAttribute('filter', 'url(#world-blur-glow)');
+        group.append(line);
+        return line;
+      });
+    }
+    for (const line of paths) {
+      if (line.getAttribute('d') !== d) line.setAttribute('d', d);
+      if (colour && line.style.getPropertyValue('--territory') !== colour) line.style.setProperty('--territory', colour);
+    }
+  }
+
   /** The selection highlight, drawn in the ONE accent path above every tile edge. */
   private paintAccent() {
     if (!this.accent) return;
     const cell = this.selected ? this.world?.cells.find((candidate) => candidate.id === this.selected) : null;
     if (!cell) { this.accent.removeAttribute('d'); return; }
-    this.accent.setAttribute('d', drawnHex(cell.q, cell.r));
+    this.accent.setAttribute('d', this.drawnHex(cell.q, cell.r));
   }
   /**
    * A TAP SELECTS, NOTHING MORE (owner, 2026-10-28: "tapping empty tile should NOT open the menu and
@@ -1933,7 +2174,7 @@ export class WorldView {
     group.setAttribute('filter', 'url(#world-blur-mote)');
     for (const wave of [0, 1]) {
       const ring = document.createElementNS(NS, 'path');
-      ring.setAttribute('d', drawnHex(cell.q, cell.r));
+      ring.setAttribute('d', this.drawnHex(cell.q, cell.r));
       ring.classList.add('world-ripple');
       ring.style.setProperty('--ripple-delay', `${wave * 180}ms`);
       if (colour) ring.style.setProperty('--territory', colour);
@@ -2563,8 +2804,8 @@ export class WorldView {
       if (!cell || !claim) continue;
       const flat = coords(cell.q, cell.r);
       // The top-right vertex of this tile: a small L inset from it reads as a notched corner.
-      const vertex = mapPoint(flat.x + (X / 2) * R, flat.y - 0.5 * R);
-      const size = mapScale(flat.x, flat.y);
+      const vertex = this.warpPoint(flat.x + (X / 2) * R, flat.y - 0.5 * R);
+      const size = this.warpScale(flat.x, flat.y);
       const vx = vertex.x;
       const vy = vertex.y;
       const notch = document.createElementNS(NS, 'path');
@@ -2613,7 +2854,7 @@ export class WorldView {
       let entry = this.ringPaths.get(challenge.id);
       if (!entry) {
         const path = document.createElementNS(NS, 'path');
-        path.setAttribute('d', drawnHex(cell.q, cell.r));
+        path.setAttribute('d', this.drawnHex(cell.q, cell.r));
         path.setAttribute('pathLength', '1');
         path.setAttribute('stroke-dasharray', '1');
         path.setAttribute('fill', 'none');
@@ -2666,9 +2907,9 @@ export class WorldView {
       const cell = cells.get(marker.cellId);
       if (!cell) continue;
       const flat = coords(cell.q, cell.r);
-      const at = mapPoint(flat.x, flat.y);
+      const at = this.warpPoint(flat.x, flat.y);
       // A mark on a receding tile narrows with it: the globe's local scale at that tile.
-      const withTile = mapScale(flat.x, flat.y);
+      const withTile = this.warpScale(flat.x, flat.y);
       const transform = `translate(${at.x.toFixed(2)} ${at.y.toFixed(2)}) scale(${withTile.toFixed(4)})`;
       if (marker.mine) {
         mine.add(marker.key);
@@ -2740,7 +2981,7 @@ export class WorldView {
         group.append(path);
         this.stakeNodes.set(id, path);
       }
-      path.setAttribute('d', drawnHex(cell.q, cell.r));
+      path.setAttribute('d', this.drawnHex(cell.q, cell.r));
       path.setAttribute('data-challenge-id', id);
       path.setAttribute('data-cell-id', marker.cellId);
       const claim = this.world.claims.find((candidate) => candidate.cellId === marker.cellId);
@@ -2873,9 +3114,9 @@ export class WorldView {
       const cell = this.world.cells.find((candidate) => candidate.id === tile.cellId);
       if (!cell) continue;
       const flat = coords(cell.q, cell.r);
-      const at = mapPoint(flat.x, flat.y);
-      const withTile = mapScale(flat.x, flat.y);
-      const d = drawnHex(cell.q, cell.r);
+      const at = this.warpPoint(flat.x, flat.y);
+      const withTile = this.warpScale(flat.x, flat.y);
+      const d = this.drawnHex(cell.q, cell.r);
       const was = document.createElementNS(NS, 'path');
       was.setAttribute('d', d);
       was.classList.add('world-takeover-was');
@@ -3541,6 +3782,11 @@ export class WorldView {
      * selects the nearest cell and never nothing. Nearest CENTRE is the honest rule: the hexagons
      * tile the plane, so "nearest centre" is the cell under the finger, and a shared edge cannot pick
      * an arbitrary neighbour from DOM paint order.
+     *
+     * THE CENTRES MUST BE THE DRAWN ONES (CI `territory-gestures-ios`, 8%). The map is bent by the
+     * view-centred globe, so the cell under a finger is the one whose BENT centre is nearest. The
+     * pose here is the very pose the geometry standing on screen was built with (`this.pose`), not a
+     * fresh one: mid-pan the drawing is the older pose and the tap must agree with what is drawn.
      */
     /** The nearest cell to a point, without selecting it (the double-tap arbiter needs it first). */
     const cellAt = (x: number, y: number): string | null => {
@@ -3553,14 +3799,7 @@ export class WorldView {
       if (!(rect.width > 0) || !(rect.height > 0)) return null;
       const wx = box[0]! + (x - rect.left) / rect.width * box[2]!;
       const wy = box[1]! + (y - rect.top) / rect.height * box[3]!;
-      let best: string | null = null;
-      let bestDistance = Infinity;
-      for (const cell of cells) {
-        const at = drawnAt(cell.q, cell.r);
-        const distance = (at.x - wx) ** 2 + (at.y - wy) ** 2;
-        if (distance < bestDistance) { bestDistance = distance; best = cell.id; }
-      }
-      return best;
+      return nearestCell(cells, this.pose, wx, wy)?.id ?? null;
     };
     const tapAt = (x: number, y: number) => {
       // The svg may have been replaced by a repaint since the tap was queued; a stale viewBox would
@@ -3799,6 +4038,12 @@ export class WorldView {
     // player's zoom level is kept and re-derived at the new aspect, so the view stays band-free.
     if (typeof ResizeObserver === 'function') {
       this.observer = new ResizeObserver(() => {
+        // THE CANVAS ANSWERED FIRST. The fixed SVG and the window both resize; the camera is drawn
+        // on the window, so the crop is re-applied against the new frame before anything reads it.
+        if (this.active) {
+          this.canvas = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+          this.applyCrop();
+        }
         const r = this.viewportSize();
         const aspect = r.height > 0 ? r.width / r.height : 0;
         const next = this.boundsFor(aspect);
@@ -3825,8 +4070,12 @@ export class WorldView {
           this.box = resizedCamera(this.box, aspect, this.manualCamera);
         }
         set();
+        // The window's shape is also the globe's: a rotated phone re-poses it once, after the view.
+        this.settleWarp(true);
       });
       this.observer.observe(svg);
+      const grid = document.getElementById('online-world-grid');
+      if (grid) this.observer.observe(grid);
     }
   }
 }
