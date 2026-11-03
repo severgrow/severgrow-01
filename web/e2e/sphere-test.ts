@@ -11,7 +11,8 @@ const browser=await (ios?webkit:chromium).launch(ios?{}:{...(process.env.PW_CHRO
 const state=(p:Page):Promise<any>=>p.evaluate('window.__severgrow.sphere()');
 const ready=(p:Page)=>p.waitForFunction(()=>(window as any).__severgrow?.ready?.());
 const settle=(p:Page)=>p.waitForFunction(()=>{const s=(window as any).__severgrow.sphere();return s&&!s.pendingFrame;});
-const seed=async(p:Page,reduce=false)=>p.addInitScript(`
+const seed=async(p:Page,reduce=false)=>p.addInitScript(`window.__name=(f)=>f;
+
 localStorage.setItem('futa05-test:severgrow.settings.v1',${JSON.stringify(JSON.stringify({sound:false,music:false,coach:false,reduceMotion:reduce}))});
 // A pre-existing guest excludes the normal app's first-boot guest creation from this component test.
 localStorage.setItem('futa05-test:severgrow.duel.identity.v1',${JSON.stringify(JSON.stringify({token:'local-sphere-existing-guest-token',playerId:'11111111-1111-4111-8111-111111111111',displayName:'Cedar',kind:'guest'}))});
@@ -59,12 +60,26 @@ try{
   await p.mouse.click(x+v[0]*f/aspect/(EYE-v[2])*box.width/2,y-v[1]*f/(EYE-v[2])*box.height/2);
   await settle(p);assert.equal((await state(p)).selected,pent.id,'visible pentagon is precisely selectable');
   await p.screenshot({path:`${out}/sphere-pentagon-${width}.png`});
-  // Mouse navigation and wheel are available on every layout, without selecting during a drag.
+  // Drag never selects. Desktop wheel is native; mobile WebKit has no wheel automation API.
   await p.mouse.move(x-50,y);await p.mouse.down();await p.mouse.move(x+80,y+35,{steps:12});await p.mouse.up();await settle(p);
   s=await state(p);assert.notDeepEqual(s.q,q0);assert.equal(s.selected,pent.id);
-  await p.mouse.move(x,y);await p.mouse.wheel(0,-700);await settle(p);assert.ok((await state(p)).zoom>2);
+  const pointerPinch=(ios||process.env.SPHERE_POINTER_PINCH==='1')&&width!<900;
+  const controlledPinch=async(from:number,to:number)=>{
+    // Controlled pointer-handler integration, not a claim of a native iOS two-finger gesture.
+    await canvas.evaluate((el,{x,y,from,to})=>{
+      const send=(type:string,id:number,px:number)=>el.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerId:id,pointerType:'touch',isPrimary:id===11,button:0,buttons:type==='pointerup'?0:1,clientX:px,clientY:y}));
+      send('pointerdown',11,x-from/2);send('pointerdown',12,x+from/2);
+      for(let i=1;i<=8;i++){const d=from+(to-from)*i/8;send('pointermove',11,x-d/2);send('pointermove',12,x+d/2);}
+      send('pointerup',11,x-to/2);send('pointerup',12,x+to/2);
+    },{x,y,from,to});await settle(p);
+  };
+  if(pointerPinch)await controlledPinch(40,150);
+  else {await p.mouse.move(x,y);await p.mouse.wheel(0,-700);await settle(p);}
+  assert.ok((await state(p)).zoom>2);
   await p.screenshot({path:`${out}/sphere-close-${width}.png`});
-  await p.mouse.wheel(0,6000);await settle(p);assert.equal((await state(p)).zoom,1);
+  if(pointerPinch)await controlledPinch(160,20);
+  else {await p.mouse.wheel(0,6000);await settle(p);}
+  assert.equal((await state(p)).zoom,1);
   await canvas.focus();for(let i=0;i<54;i++){
     await p.keyboard.press('ArrowRight');
     if(i===26){await settle(p);await p.screenshot({path:`${out}/sphere-back-${width}.png`});}

@@ -50,6 +50,9 @@ Browser checks cover 320×568, 390×844, 844×390, 768×1024 and 1440×1000: mou
 precise pentagons, camera-still selection, empty taps, full rotation, interrupted inertia, slow
 release, resizing, context loss/restore, reduced motion, fallback, idle and repeated cleanup.
 They compare the real menu map camera before/after and check that `/`, `/2/`, `/3/` have no entry.
+Chromium uses native CDP two-finger input. Mobile WebKit exercises controlled two-pointer
+events because Playwright does not support a mobile mouse wheel or native multi-touch there;
+desktop WebKit retains native wheel checks. Native iOS pinch still requires device evaluation.
 Network assertions use a pre-existing guest fixture and prohibit writes during the mock interval;
 ordinary app bootstrap/return presence is outside it. No test touches Supabase.
 
@@ -85,3 +88,10 @@ Reviewed captures: [menu](screens/sphere-test/menu-test-390.png),
 [landscape](screens/sphere-test/sphere-rotated-landscape.png).
 The global grain remains above the globe and controls. No cracks or rear borders were visible
 in the reviewed poses. This does not replace interactive real-device review.
+
+The first hosted run exposed an unsupported mobile-WebKit wheel call in the test driver. The
+corrected driver retains all zoom-limit assertions using the engine-appropriate inputs above.
+Its separate existing Living Territory WebKit check reported a 1,073ms scheduling delay on the
+unchanged 300ms return track. No transition code, timing token or assertion was relaxed. The same
+current-source Chromium regression passed all 231 checks locally; hosted checks must pass again
+before publication.
