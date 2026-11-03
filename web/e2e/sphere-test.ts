@@ -6,19 +6,21 @@ import {captureWebKitTouch} from './helpers/webkit-touch.js';
 import {EYE,focal} from '../src/sphere/renderer.js';
 import {rotate,type Quat} from '../src/sphere/rotation.js';
 import {WORLD_VERSION,seenWorld} from '../../server/src/world.js';
-const fixture=await productFixture(),out=process.env.SHOTS??'/tmp/sphere-test';mkdirSync(out,{recursive:true});
+const fixture=await productFixture({offlineApiPort:65530}),out=process.env.SHOTS??'/tmp/sphere-test';mkdirSync(out,{recursive:true});
 const ios=process.env.SPHERE_WEBKIT==='1';
 const webkitTouch=ios?captureWebKitTouch():null;
 const browser=await (ios?webkit:chromium).launch(ios?{}:{...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 const state=(p:Page):Promise<any>=>p.evaluate('window.__severgrow.sphere()');
 const ready=(p:Page)=>p.waitForFunction(()=>(window as any).__severgrow?.ready?.());
 const settle=(p:Page)=>p.waitForFunction(()=>{const s=(window as any).__severgrow.sphere();return s&&!s.pendingFrame;});
-const seed=async(p:Page,reduce=false)=>p.addInitScript(`window.__name=(f)=>f;
+const seed=async(p:Page,reduce=false)=>{
+ await p.addInitScript(`window.__name=(f)=>f;
 
 localStorage.setItem('futa05-test:severgrow.settings.v1',${JSON.stringify(JSON.stringify({sound:false,music:false,coach:false,reduceMotion:reduce}))});
 // A pre-existing guest excludes the normal app's first-boot guest creation from this component test.
 localStorage.setItem('futa05-test:severgrow.duel.identity.v1',${JSON.stringify(JSON.stringify({token:'local-sphere-existing-guest-token',playerId:'11111111-1111-4111-8111-111111111111',displayName:'Cedar',kind:'guest'}))});
 localStorage.setItem('futa05-test:futasaku.world.last.v1',${JSON.stringify(JSON.stringify({version:WORLD_VERSION,revision:1,cost:100,cells:seenWorld(['0,0']),claims:[]}))});`);
+};
 const failures:string[]=[];
 try{
  for(const path of ['/','/2/','/3/']){

@@ -102,3 +102,10 @@ For hosted offline fixtures, use an ordinary closed port (65530), not reserved p
 rejects WebSocket construction on port 9 before normal connection-error handling. Page-error
 assertions stay strict. The existing Territory iOS distance checks now use a stationary finger
 before release, keeping intentional flick momentum outside the precise-pan measurement. Double-tap input uses a genuinely short inter-tap gap. No timing, distance or zoom assertion was relaxed.
+
+The component fixture starts a disposable local HTTP server on port 65530 and returns explicit
+CORS-correct HTTP 503 offline responses for ordinary
+app-bootstrap requests. This prevents intentionally absent test services from producing WebKit
+network page errors; it does not filter or ignore page exceptions. Presence/write assertions and
+all renderer checks remain enabled. This server stores nothing, closes with the fixture and never enters the shipped bundle.
+The default fixture used by onboarding remains unchanged.
