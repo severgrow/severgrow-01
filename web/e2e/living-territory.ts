@@ -17,6 +17,9 @@ import { seedSettings } from './helpers/settings-seed.js';
 import { cellXY } from '../src/online/world-growth.js';
 import { MENU_MAP_OPACITY } from '../src/online/living-territory-css.js';
 import { INTERFACE_MOTION } from '../src/ui/interface-motion.js';
+/** The dip's offset as the source derives it (`COLOUR_DIP_AT = 0.3 * open / colourIn`), never a
+ * typed literal: the arrival's dip must sit inside the geometry handoff. */
+const COLOUR_DIP_AT=0.3*(INTERFACE_MOTION.open/INTERFACE_MOTION.colourIn);
 const shots=process.env.SHOTS??'/tmp/living-territory';mkdirSync(shots,{recursive:true});
 const storage=new MemoryStorage(),store=new MemoryWorldEconomyStore();
 const config={...DEFAULT_SERVER_CONFIG,corsOrigins:['*']};
@@ -181,7 +184,24 @@ try{
   // from paint: the player's own tiles' screen centres, the map's real opacity, and the frame's own
   // skin (the vignette). A position jump means these two reads disagree.
   let menuFrame:{tiles:number[][];opacity:number;skin:number}|null=null;
-  let firstFrame:{tiles:number[][];opacity:number|null;skin:number;settle:boolean}|null=null;
+  // THE ARRIVAL'S DECLARATION, NOT JUST ITS PIXELS (2026-11-02, CI `living-territory-ios`). The
+  // first-frame capture below also records the `living-colour-in` beat's keyframes/timing and the
+  // frame's own skin transition, read while the beat exists. Those are the author's data: a
+  // software renderer that stalls and then completes a beat in one update cannot change them, so
+  // they can carry the invariant even when the painted sample happens to land mid-beat.
+  type ArrivalKeyframe={offset:number;computedOffset:number;easing:string;opacity:number|null};
+  type ArrivalStructure={id:string;duration:number|string;easing:string;fill:string;currentTime:number|null;keyframes:ArrivalKeyframe[]};
+  type SkinStructure={declared:string[];running:{pseudo:string|null;prop:string|null;duration:number|string|null;keyframes:{offset:number;opacity:number|null}[]|null}[]};
+  type FirstFrame={tiles:number[][];opacity:number|null;skin:number;settle:boolean;at:number;elapsed:number;
+   beatTime:number|null;structure:ArrivalStructure|null;skinStructure:SkinStructure|null};
+  let firstFrame:FirstFrame|null=null;
+  /** How far into the arrival a capture must be to count as its first painted frame. A genuine
+   * first frame lands inside the 150ms geometry handoff (`INTERFACE_MOTION.open`); a stalled engine
+   * fires the same callback hundreds of milliseconds later, and that sample is evidence about
+   * nothing but the stall. The wall clock must agree, so a timeline that reports 0 while it has
+   * really been running cannot pass for a first frame either. */
+  const FIRST_FRAME_WINDOW=INTERFACE_MOTION.open;
+  let arrivalEarly=false,arrivalSkinGraded=false,arrivalSkinNote='';
   const painted=()=>page.evaluate(()=>{
    const svg=document.querySelector<SVGSVGElement>('.world-map-svg')!;
    const tiles=[...document.querySelectorAll<SVGElement>('.world-hex.mine')].slice(0,3).map(h=>{const r=h.getBoundingClientRect();return [+(r.x+r.width/2).toFixed(2),+(r.y+r.height/2).toFixed(2)];});
@@ -211,6 +231,7 @@ try{
    await page.evaluate(()=>{
     (window as any).__firstFrame=null;
     document.getElementById('menu-world')!.addEventListener('click',()=>{
+     const clickAt=performance.now();
      requestAnimationFrame(()=>{
       const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
       // The first painted frame is READ, not rewound. Pausing freezes every beat for the read, so a
@@ -220,11 +241,38 @@ try{
       const held=document.getAnimations();
       for(const a of held){try{a.pause();}catch{/* finished: already at rest */}}
       const tiles=svg?[...document.querySelectorAll<SVGElement>('.world-hex.mine')].slice(0,3).map(h=>{const r=h.getBoundingClientRect();return [+(r.x+r.width/2).toFixed(2),+(r.y+r.height/2).toFixed(2)];}):[];
+      // THE BEAT'S OWN DECLARATION, captured while the beat exists (a finished beat is cancelled, so
+      // `getAnimations()` no longer lists it at rest). Keyframes and timing are the author's data, not
+      // a renderer's opinion, so Node can judge the invariant even when this callback fired late.
+      const light=svg?.getAnimations().find(a=>a.id==='living-colour-in');
+      const lightEffect=light?.effect as KeyframeEffect|null|undefined,lightTiming=lightEffect?.getTiming();
+      const structure=light&&lightEffect&&lightTiming?{id:light.id,
+       duration:typeof lightTiming.duration==='number'?lightTiming.duration:String(lightTiming.duration),
+       easing:lightTiming.easing,fill:lightTiming.fill,
+       currentTime:light.currentTime==null?null:Number(light.currentTime),
+       keyframes:lightEffect.getKeyframes().map(k=>({offset:k.offset??k.computedOffset,computedOffset:k.computedOffset,
+        easing:k.easing,opacity:'opacity' in k?Number(k.opacity):null}))}:null;
+      // THE FRAME'S OWN SKIN (the `::after` vignette) fades on a real CSSTransition. Its DECLARED
+      // duration is readable on the pseudo itself at any moment — the product's statement that the
+      // skin arrives over time — and, unlike a painted value, a late frame cannot invalidate it.
+      const grid=document.getElementById('online-world-grid');
+      const skinStyle=grid?getComputedStyle(grid,'::after'):null;
+      const skinStructure=grid&&skinStyle?{
+       declared:[skinStyle.transitionDuration,skinStyle.transitionTimingFunction],
+       running:grid.getAnimations().map(a=>{const effect=a.effect as KeyframeEffect|null;return {
+        pseudo:effect?.pseudoElement??null,prop:(a as any).transitionProperty??null,
+        duration:effect?.getTiming().duration??null,
+        keyframes:effect?.getKeyframes?.().map(k=>({offset:k.offset??k.computedOffset,opacity:'opacity' in k?Number(k.opacity):null}))??null};})}:null;
+      const at=performance.now();
       (window as any).__firstFrame={tiles,opacity:svg?+Number(getComputedStyle(svg).opacity).toFixed(4):null,
        skin:+Number(getComputedStyle(document.getElementById('online-world-grid')!,'::after').opacity).toFixed(4),
        // The MAP's own beats only: the head/screen transitions on the same page also carry
        // transforms, and counting them would report a handoff the map never ran.
-       settle:!!svg&&svg.getAnimations().some(a=>(a.effect as KeyframeEffect)?.getKeyframes?.().some(k=>'transform' in k))};
+       settle:!!svg&&svg.getAnimations().some(a=>(a.effect as KeyframeEffect)?.getKeyframes?.().some(k=>'transform' in k)),
+       // WHEN this frame happened, on both clocks: the arrival's own time (immune to a tap that
+       // sat waiting for a busy thread) and the wall time since the tap (which a stalled timeline
+       // cannot understate). Both must agree before a painted value is treated as a first frame.
+       at,elapsed:at-clickAt,beatTime:structure?.currentTime??null,structure,skinStructure};
       for(const a of held){try{a.play();}catch{/* finished */}}
      });
     },{once:true,capture:true});
@@ -337,7 +385,7 @@ try{
   await page.click('#menu-world');await page.waitForSelector('#online-world-screen:not([hidden])');
   if(name==='phone'){
    await page.waitForFunction(()=>(window as any).__firstFrame);
-   firstFrame=await page.evaluate(()=>(window as any).__firstFrame as {tiles:number[][];opacity:number|null;skin:number;settle:boolean});
+   firstFrame=await page.evaluate(()=>(window as any).__firstFrame as FirstFrame);
    const first=firstFrame;
    const menuFrameHere=menuFrame!;
    const moved=first.tiles.length>0&&first.tiles.length===menuFrameHere.tiles.length&&first.tiles.every((t,i)=>Math.abs(t[0]!-menuFrameHere.tiles[i]![0]!)<=0.5&&Math.abs(t[1]!-menuFrameHere.tiles[i]![1]!)<=0.5);
@@ -346,16 +394,76 @@ try{
    // no transform to animate at all. The old handoff beat moved the whole map by the re-fit; its
    // absence is the proof that nothing travels behind the frame.
    check('NO JUMP: opening runs no map transform (the menu mapping is already the panel mapping)',first.settle===false);
-   // THE COLOUR MAY ONLY GO DOWN ON THAT FRAME. Before the owner's one-second climb the map held
-   // the menu's value through the handoff; now the dip begins on the arrival's first frame, so on a
-   // slow engine that frame is legitimately DARKER. What must never happen is a flash brighter than
-   // the menu's last frame (the old lit crop).
-   check(`NO JUMP: the map does not brighten on that first frame (${first.opacity} <= the menu's ${menuFrameHere.opacity})`,
-    first.opacity!==null&&first.opacity<=menuFrameHere.opacity+0.01);
-   // THE FIRST PAINTED FRAME IS NOT THE FINISHED FRAME. It used to be read at exactly 0ms; on a slow
-   // open the browser paints no frame at all until ~100ms in, so the honest assertion is that the
-   // skin is still arriving on the first frame it actually shows (a snap would be exactly 1).
-   check(`the window's frame ARRIVES instead of appearing (vignette ${first.skin} on the first frame)`,first.skin<1);
+   // WAS THIS CAPTURE ACTUALLY THE ARRIVAL'S FIRST FRAME? A rAF callback does not run at the instant
+   // of the tap: on CI's software WebKit the document timeline can stall and the same callback fires
+   // 400ms+ into the beat (measured: a correct beat sampled at 0.4543, ~42% up the climb, from a
+   // 1000ms fade). The two clocks below must BOTH say it is early — the beat's own `currentTime`
+   // (a tap that waited on a busy thread does not move it) and the wall time since the click (which
+   // a stalled timeline cannot understate). Only then is the painted value evidence about the first
+   // frame; otherwise it is evidence about when the sample happened.
+   arrivalEarly=first.beatTime!==null&&first.beatTime>=0&&first.beatTime<=FIRST_FRAME_WINDOW&&first.elapsed<=FIRST_FRAME_WINDOW+100;
+   // THE COLOUR MAY ONLY GO DOWN BEFORE THE CLIMB — PINNED FROM THE BEAT'S OWN KEYFRAMES
+   // (2026-11-02, CI `living-territory-ios`: "the map does not brighten on that first frame"
+   // failed at 0.4543 <= 0.2344 on a correct product, because the sample was late, not because the
+   // map flashed). The real invariant is not "one sample on one frame": it is that NOTHING in the
+   // arrival is brighter than the menu's last frame until the climb begins. That is a property of
+   // the declaration — first keyframe exactly the menu's light, the dip strictly below it, offsets
+   // strictly ascending, a monotone climb to offset 1 at full light, on the colour-in token — and a
+   // stalled renderer cannot make it untrue. This is strictly stronger than the single painted
+   // sample it replaces: a first keyframe brighter than the menu, a dip above it, a two-keyframe
+   // snap or a stretched duration all fail here.
+   const arrival=first.structure;
+   const arrivalKeys=(arrival?.keyframes??[]).filter(k=>k.opacity!==null);
+   const arrivalOffsets=arrivalKeys.map(k=>k.offset),arrivalOps=arrivalKeys.map(k=>k.opacity!);
+   const arrivalDip=arrivalOps.length?arrivalOps.indexOf(Math.min(...arrivalOps)):-1;
+   const arrivalFloor=arrivalDip>=0?arrivalOps[arrivalDip]!:null;
+   const cannotFlash=!!arrival
+    &&arrival.id==='living-colour-in'
+    &&arrival.duration===INTERFACE_MOTION.colourIn
+    &&arrivalKeys.length>=3
+    &&Math.abs(arrivalOps[0]!-MENU_MAP_OPACITY)<=1e-9
+    &&arrivalOffsets.every((o,i)=>i===0?Math.abs(o)<=1e-9:o>arrivalOffsets[i-1]!+1e-9)
+    &&Math.abs(arrivalOffsets.at(-1)!-1)<=1e-9&&Math.abs(arrivalOps.at(-1)!-1)<=1e-9
+    // Nothing up to and including the dip is brighter than the menu's own last frame...
+    &&arrivalFloor!==null&&arrivalFloor<MENU_MAP_OPACITY
+    &&arrivalOps.slice(0,arrivalDip+1).every(o=>o<=MENU_MAP_OPACITY+1e-9)
+    // ...the dip sits exactly where the geometry handoff puts it...
+    &&Math.abs(arrivalOffsets[arrivalDip]!-COLOUR_DIP_AT)<=1e-6
+    // ...and from there the colour only rises, to full light.
+    &&arrivalOps.slice(arrivalDip).every((o,i)=>i===0||o>arrivalOps[arrivalDip+i-1]!+1e-9);
+   // BOTH CLOCKS ARE PRINTED: on CI's software WebKit the beat's own `currentTime` is read at the
+   // frame's START and can still say 0 after a long stall (reproduced here: a capture held 420ms
+   // into the beat read beat clock 0 and 444ms of wall time), so the wall clock is what catches that
+   // sample. Either way the statement is the same: it is not the arrival's first frame, and the
+   // declaration above is what is judged.
+   const arrivalBranch=arrivalEarly
+    ?`painted first frame ${Math.round(first.beatTime!)}ms into the beat: ${first.opacity} vs the menu's ${menuFrameHere.opacity} (must be no brighter)`
+    :first.beatTime===null
+     ?'the painted sample carried no beat clock, so only the declaration is judged'
+     :`the painted sample came ${Math.round(first.elapsed)}ms after the tap (beat clock ${Math.round(first.beatTime!)}ms), not on the first frame, so only the declaration is judged`;
+   check(`NO JUMP: the arrival cannot brighten past the menu before its climb (${arrival?'keyframes '+JSON.stringify(arrivalOffsets.map((o,i)=>[+o.toFixed(4),arrivalOps[i]])):'the colour-in beat was never created'}; ${arrivalBranch})`,
+    cannotFlash&&(!arrivalEarly||(first.opacity!==null&&first.opacity<=menuFrameHere.opacity+0.01)));
+   // THE FRAME'S SKIN, HARDENED THE SAME WAY. The vignette is a CSS transition from the menu's 0 to
+   // the panel's 1; a first-frame read of `<1` is invalidated by exactly the same late callback (by
+   // 420ms the 130ms transition is long finished). The product's own statement is the transition's
+   // declared duration on the pseudo element, plus the keyframes when the engine was caught running
+   // it; the painted value is corroboration only on a provably early frame.
+   const skinDeclaredRaw=(first.skinStructure?.declared??[])[0];
+   const skinDeclared=(()=>{
+    const raw=skinDeclaredRaw;
+    if(!raw)return null;
+    const value=raw.split(',').map(v=>v.trim()).map(v=>/ms$/i.test(v)?parseFloat(v):parseFloat(v)*1000).find(v=>Number.isFinite(v)&&v>0);
+    return value??null;
+   })();
+   const skinRunning=(first.skinStructure?.running??[]).find(a=>(a.pseudo==='::after'||a.prop==='opacity')&&!!a.keyframes?.length);
+   const skinKeys=skinRunning?.keyframes??null;
+   arrivalSkinGraded=!!skinDeclared&&skinDeclared>0&&skinDeclared<=INTERFACE_MOTION.colourOut
+    &&(!skinKeys||((skinKeys[0]!.opacity??1)===0&&(skinKeys.at(-1)!.opacity??0)===1));
+   arrivalSkinNote=skinKeys
+    ?`the ${skinRunning!.duration}ms transition was caught running, ${JSON.stringify(skinKeys.map(k=>k.opacity))}`
+    :`the transition had not started at the capture; the pseudo element declares ${skinDeclaredRaw||'(no transition at all)'}`;
+   check(`the window's frame ARRIVES instead of appearing (${arrivalEarly?`vignette ${first.skin} on the first painted frame`:`the frame was ${Math.round(first.elapsed)}ms old when it was painted, so the declaration is judged`}; ${arrivalSkinNote})`,
+    arrivalSkinGraded&&(!arrivalEarly||first.skin<0.99));
   }
   await page.waitForTimeout(name==='phone'?450:500);
   const after=await state(page);
@@ -379,7 +487,12 @@ try{
    // of travel remained.
    const bright=frames.filter(f=>Math.abs(f.ty)>=2&&f.opacity>0.35);
    check(`while the map is still moving it stays dim (${bright.length} bright frame(s): ${JSON.stringify(bright.slice(0,3))})`,bright.length===0);
-   check(`the frame's skin fades in on the same beat (vignette ${firstFrame?.skin} -> ${frames.at(-1)!.skin})`,(firstFrame?.skin??1)<0.99&&frames.at(-1)!.skin>=0.99);
+   // Same shape as the arrival's colour: the START of the skin is the transition's declaration (and,
+   // when the engine was caught running it, its 0 -> 1 keyframes); the END is a real painted frame at
+   // rest. Read as "first frame < 1" this check was defeated by the same late capture — the 130ms
+   // transition is long finished by 400ms.
+   check(`the frame's skin fades in on the same beat (vignette ${firstFrame?.skin} -> ${frames.at(-1)!.skin}; ${arrivalSkinNote})`,
+    arrivalSkinGraded&&frames.at(-1)!.skin>=0.99&&(!arrivalEarly||(firstFrame?.skin??1)<0.99));
    // THE MAPPING IS UNCHANGED, PROVEN FROM GEOMETRY (not from a sampled animation frame): project
    // real tiles through both surfaces' own `meet` mappings and require the same screen pixel. The
    // old panel re-fitted itself to its width/centre, so the panel point was tens of pixels away —
@@ -415,12 +528,10 @@ try{
    const colour=await page.evaluate(()=>(window as any).__colourFrames as {at:number;opacity:number;duration:number|null;t:number|null;raf:number;timeline:number|null}[]);
    const structure=await page.evaluate(()=>(window as any).__colourStructure as {id:string;duration:number|string;easing:string;fill:string;
     keyframes:{offset:number;computedOffset:number;easing:string;opacity:number|null}[];currentTime:number|null;playState:string;timeline:number|null}|null);
-   // The dip's OFFSET is re-derived from the source's own formula (`COLOUR_DIP_AT = 0.3 * open /
-   // colourIn`), never a typed literal. The dip's VALUE is an internal floor the source does not
-   // export, so it is pinned by meaning: strictly darker than the menu's light and never a blink
-   // out. A missing middle keyframe, a two-keyframe 0 -> 1 ramp or a shorter/longer duration all
-   // fail this.
-   const COLOUR_DIP_AT=0.3*(INTERFACE_MOTION.open/INTERFACE_MOTION.colourIn);
+   // The dip's OFFSET is re-derived from the source's own formula (`COLOUR_DIP_AT`, hoisted above),
+   // never a typed literal. The dip's VALUE is an internal floor the source does not export, so it
+   // is pinned by meaning: strictly darker than the menu's light and never a blink out. A missing
+   // middle keyframe, a two-keyframe 0 -> 1 ramp or a shorter/longer duration all fail this.
    const kfs=(structure?.keyframes??[]).filter(k=>k.opacity!==null);
    const offsets=kfs.map(k=>k.offset),ops=kfs.map(k=>k.opacity!);
    const dip=ops.length?Math.min(...ops):null,dipAt=dip===null?-1:ops.indexOf(dip);
