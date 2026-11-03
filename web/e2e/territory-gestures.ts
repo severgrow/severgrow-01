@@ -219,6 +219,15 @@ try {
   await page.waitForTimeout(120);
   const afterOut = await box();
   check('a drag that leaves the map still pans', beforeOut !== null && afterOut !== null && Math.abs((afterOut[0] ?? 0) - (beforeOut[0] ?? 0)) > 0.4);
+  // That drag ran out at a flick's pace, and a flick now CARRIES after the release (owner,
+  // 2026-11-03: "a quick drag release should carry a small amount of momentum"). Wait for the carry
+  // to come to rest, so the measurement below is the next drag's own distance and nothing else.
+  for (let i = 0, last = ''; i < 40; i++) {
+    const now = JSON.stringify(await box());
+    if (now === last) break;
+    last = now;
+    await page.waitForTimeout(100);
+  }
   // If a pointer were left behind, this next small drag would jump by the stale offset.
   const beforeNext = await box();
   await drag({ x: cx, y: cy }, { x: cx - 30, y: cy });

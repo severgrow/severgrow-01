@@ -342,6 +342,14 @@ try {
   // middle of a zoomed-in view is not the first hex in document order).
   {
     await page.waitForTimeout(450); // well past the double-tap window: this is one tap, not a toggle
+    // The double tap above SELECTED the tile under the centre with its first tap, and the camera no
+    // longer drifts on its own (2026-11-03: the pan limit is the panel's focus, so zooming about the
+    // centre keeps that tile there). Tapping a selected tile lets it go, by design — so clear it
+    // first (Escape steps back one layer per press), and this one tap is a fresh selection.
+    for (let i = 0; i < 3 && await page.evaluate(`!!document.querySelector('.world-hex.selected')`); i++) {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+    }
     const r = await mapRect();
     await page.mouse.click(r.x + r.width / 2, r.y + r.height / 2);
     await page.waitForTimeout(500);
