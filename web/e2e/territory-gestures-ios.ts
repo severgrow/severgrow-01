@@ -199,7 +199,8 @@ try {
     await touch('touchStart', [{ x, y, id: 1 }]);
     await page.waitForTimeout(holdMs);
     await touch('touchEnd', [{ x, y, id: 1 }]);
-    await page.waitForTimeout(120);
+    // A genuinely quick second tap, including on a busy software-WebKit runner.
+    await page.waitForTimeout(16);
   };
   /** A real one-finger drag. `during` runs after the first move, while the finger is still down. */
   const drag = async (from: { x: number; y: number }, to: { x: number; y: number }, steps = 20, during?: () => Promise<void>) => {
@@ -211,6 +212,9 @@ try {
       await page.waitForTimeout(16);
       if (i === 1 && during) await during();
     }
+    // This suite measures finger distance, not a flick's intentional extra momentum. Let the
+    // finger rest before lifting; keep every distance/ghost-pointer assertion unchanged.
+    await page.waitForTimeout(120);
     await touch('touchEnd', [{ ...last, id: 1 }]);
     await page.waitForTimeout(160);
     await settle();

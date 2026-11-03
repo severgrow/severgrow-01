@@ -67,8 +67,9 @@ jobs:
             # like the real ones and nothing in lessons-3 talks to them.
             lessons-3) CHANNEL=futa05 VITE_FIND_OPPONENT=1 VITE_DUEL_API_URL=https://ci.invalid/functions/v1/duel \
                 VITE_SUPABASE_URL=https://ci.invalid VITE_SUPABASE_ANON_KEY=ci-placeholder npm run web:build ;;
-            first-experience*|sphere-test*) CHANNEL=futa05 VITE_FIND_OPPONENT=1 VITE_DUEL_API_URL=http://127.0.0.1:9/functions/v1/duel \
-                VITE_SUPABASE_URL=http://127.0.0.1:9 VITE_SUPABASE_ANON_KEY=local npm run web:build ;;
+            # WebKit rejects reserved port 9 in WebSocket constructors; use an ordinary closed port.
+            first-experience*|sphere-test*) CHANNEL=futa05 VITE_FIND_OPPONENT=1 VITE_DUEL_API_URL=http://127.0.0.1:65530/functions/v1/duel \
+                VITE_SUPABASE_URL=http://127.0.0.1:65530 VITE_SUPABASE_ANON_KEY=local npm run web:build ;;
           esac
       - run: |
           if [ "${{ matrix.suite }}" = first-experience-course ]; then

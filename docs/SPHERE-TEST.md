@@ -97,3 +97,8 @@ Its separate existing Living Territory WebKit check reported a 1,073ms schedulin
 unchanged 300ms return track. No transition code, timing token or assertion was relaxed. The same
 current-source Chromium regression passed all 231 checks locally; hosted checks must pass again
 before publication.
+
+For hosted offline fixtures, use an ordinary closed port (65530), not reserved port 9: WebKit
+rejects WebSocket construction on port 9 before normal connection-error handling. Page-error
+assertions stay strict. The existing Territory iOS distance checks now use a stationary finger
+before release, keeping intentional flick momentum outside the precise-pan measurement. Double-tap input uses a genuinely short inter-tap gap. No timing, distance or zoom assertion was relaxed.
