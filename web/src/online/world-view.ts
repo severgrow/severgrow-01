@@ -2225,6 +2225,8 @@ export class WorldView {
       if (t < 1) { this.glideFrame = requestAnimationFrame(step); return; }
       this.glideFrame = 0;
       this.setMoving(false);
+      // A glide is a programmatic pan: its end is the camera's settle.
+      this.settleWarp();
     };
     this.glideFrame = requestAnimationFrame(step);
   }
@@ -4009,6 +4011,10 @@ export class WorldView {
         // finger lifts: whichever frame comes next, the gesture has already been written.
         if (this.viewFrame) { cancelAnimationFrame(this.viewFrame); this.viewFrame = 0; }
         this.applyView(false);
+        // THE CAMERA SETTLED AT THE RELEASE. Re-pose the globe now, while the eye is still on the
+        // gesture, rather than 140ms later when the soft-focus class comes back (the wheel path has
+        // no release, so its settle stays on that timer). Identical pose = no work.
+        this.settleWarp();
       }
     };
     svg.addEventListener('pointerup', finish);
