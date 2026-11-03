@@ -49,7 +49,7 @@ html.futa04-information #hand .card.futa04-bloom-pick {
   opacity: .38 !important;
   filter: grayscale(.85) brightness(.72) !important;
   box-shadow: none !important;
-  transition: opacity calc(180ms * var(--anim,1)) ease-out, filter calc(180ms * var(--anim,1)) ease-out !important;
+  transition: opacity calc(var(--dur-quick) * var(--anim,1)) ease-out, filter calc(var(--dur-quick) * var(--anim,1)) ease-out !important;
 }
 .futa04-information #moves .futa04-skip {
   color: var(--c-muted); background: transparent; border: 1px solid var(--c-line);
@@ -323,14 +323,14 @@ html.futa04-information[data-thumb='left'] .dock #futa04-box #moves .bloom-optio
 html.futa04-information #board .badge.weak { display: none !important; }
 html.futa04-information #board .futa04-boink { transform-box: fill-box; transform-origin: center; }
 html.futa04-information[data-step='throw'] #futa04-box #deck {
-  opacity: .48; filter: grayscale(.7); transition: opacity 160ms ease, filter 160ms ease;
+  opacity: .48; filter: grayscale(.7); transition: opacity var(--ix-open) ease, filter var(--ix-open) ease;
 }
 /* The Throw pile is the target of the Throw step, so it is never dimmed there: the deck
    recedes, the pile is the brightest thing in the cockpit. (The pile's own .dim used to apply.) */
 html.futa04-information[data-step='throw'] #futa04-box #discard {
   opacity: 1;
   filter: brightness(1.14) saturate(1.03);
-  transition: opacity 160ms ease, filter 160ms ease;
+  transition: opacity var(--ix-open) ease, filter var(--ix-open) ease;
 }
 /* A picked card swells its target once, on the acknowledgement beat (owner, 2026-10-30:
    "make the pile bigger after player selects a card to throw"). Transform only: nothing reflows,
@@ -403,8 +403,13 @@ html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #hand:not(
 html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #moves > :is(.kind[data-kind^='bloom-'],.bloom-toggle):not(.on) .futa04-combination {
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
+/* THROW: the hand recedes by OPACITY and a cool ember edge, never by a filter. This rule used to
+   desaturate every card with grayscale(.54) while the whole hand breathed on futa04-card-breathe
+   (below): a filter on an animating node re-rasterises all eight cards every frame for the length of
+   every Throw step. The ember edge and the 12% step-back already say "the pile is the target", and
+   the card's own colours stay readable (which is what the check names). */
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) {
-  opacity: .88; filter: grayscale(.54) brightness(.94);
+  opacity: .88;
   outline-color: rgba(223,105,77,.35) !important;
   box-shadow: 0 0 0 1px rgba(222,110,83,.29), 0 0 9px 1px rgba(186,66,47,.24), 0 5px 15px rgba(20,11,10,.34);
   animation: futa04-card-breathe 1.35s ease-in-out infinite;

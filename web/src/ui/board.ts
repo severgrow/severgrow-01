@@ -155,6 +155,13 @@ export class BoardView {
   private pressTimer: ReturnType<typeof setTimeout> | undefined;
   private pressed: string | null = null;
   private longPressed = false;
+  /**
+   * The screen→board transform for the CURRENT paint gesture. Read once on pointerdown and reused
+   * for every pointermove: reading `getScreenCTM()` per move after the ghost's own style writes
+   * forces a layout flush on each move (a read-after-write in the hottest input loop). The camera
+   * never moves while a Bloom is painted, and a rotation/resize cancels the pointer.
+   */
+  private drawInverse: DOMMatrix | null = null;
   protected look: MaterialLook = FULL_LOOK;
   /** Material pass 2: the world-space material picture (null without a canvas). */
   protected world: WorldLayer | null = null;
@@ -176,9 +183,9 @@ export class BoardView {
   ) {
     // drawing: the board itself listens, so a drag can run across hexes and gaps
     const at = (e: PointerEvent) => {
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return { x: 0, y: 0 };
-      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+      const inverse = this.drawInverse ?? svg.getScreenCTM()?.inverse();
+      if (!inverse) return { x: 0, y: 0 };
+      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(inverse);
       return { x: p.x, y: p.y };
     };
     const inside = (e: PointerEvent) => {
@@ -187,6 +194,8 @@ export class BoardView {
     };
     svg.addEventListener('pointerdown', (e) => {
       if (!this.drawing || !this.drawHandlers) return;
+      // One geometry read per gesture, before any ghost node is written.
+      this.drawInverse = svg.getScreenCTM()?.inverse() ?? null;
       // capture every pointer (the mouse too), so a release outside the board still arrives
       svg.setPointerCapture?.(e.pointerId);
       this.drawHandlers.down(at(e), e);
@@ -196,14 +205,17 @@ export class BoardView {
     });
     svg.addEventListener('pointerup', (e) => {
       if (this.drawing && this.drawHandlers) this.drawHandlers.up(at(e), e, inside(e));
+      this.drawInverse = null;
     });
     svg.addEventListener('pointercancel', () => {
       if (this.drawing && this.drawHandlers) this.drawHandlers.cancel();
+      this.drawInverse = null;
     });
     svg.addEventListener('contextmenu', (e) => {
       if (!this.drawing || !this.drawHandlers) return;
       e.preventDefault();
       this.drawHandlers.cancel();
+      this.drawInverse = null;
     });
   }
 
@@ -211,6 +223,7 @@ export class BoardView {
   setDrawing(on: boolean, h: DrawHandlers | null) {
     this.drawing = on;
     this.drawHandlers = on ? h : null;
+    if (!on) this.drawInverse = null;
     this.svg.classList.toggle('drawing', on);
     if (!on) { this.layers?.draw.replaceChildren(); this.ghostPool.clear(); }
   }

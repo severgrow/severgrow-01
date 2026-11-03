@@ -52,7 +52,7 @@ const BREATH_PROBE = `(() => {
   const hand = document.getElementById('hand');
   const cards = [...hand.querySelectorAll('.card')];
   const states = document.getAnimations()
-    .filter(a => a.animationName === 'hand-breath')
+    .filter(a => (a.animationName ?? '').startsWith('hand-breath'))
     .map(a => a.playState);
   return {
     breathing: hand.classList.contains('breathing'),
@@ -61,7 +61,13 @@ const BREATH_PROBE = `(() => {
     running: states.filter(p => p === 'running').length,
     paused: states.filter(p => p === 'paused').length,
     periods: cards.map(c => { const css = getComputedStyle(c); return { name: css.animationName, duration: css.animationDuration, delay: css.animationDelay }; }),
-    amps: cards.map(c => Number(c.style.getPropertyValue('--breath-scale')) || 1),
+    amps: cards.map(c => {
+      const a = c.getAnimations().find(x => (x.animationName ?? '').startsWith('hand-breath'));
+      const frames = a && a.effect && a.effect.getKeyframes ? a.effect.getKeyframes() : [];
+      let max = 1;
+      for (const f of frames) { const v = Number.parseFloat(String(f.scale ?? '')); if (Number.isFinite(v)) max = Math.max(max, v); }
+      return max;
+    }),
     weights: cards.map(c => Number(c.style.getPropertyValue('--weight')) || 0),
   };
 })()`;
@@ -113,12 +119,12 @@ try {
     check(b1.breathing, `${w}x${h}: the interactive hand carries .breathing`);
     check(b1.running >= 1 && b1.running <= 7, `${w}x${h}: between 1 and 7 cards breathe (${b1.running} of ${b1.cards})`);
     check(b1.paused === 0, `${w}x${h}: no breath starts paused`);
-    check(b1.periods.filter((p) => p.name === 'hand-breath').length <= 7, `${w}x${h}: at most 7 breath animations exist`);
-    const periods = b1.periods.filter((p) => p.name === 'hand-breath')
+    check(b1.periods.filter((p) => p.name.startsWith('hand-breath')).length <= 7, `${w}x${h}: at most 7 breath animations exist`);
+    const periods = b1.periods.filter((p) => p.name.startsWith('hand-breath'))
       .map((p) => parseFloat(p.duration) * (p.duration.trim().endsWith('ms') ? 1 : 1000));
     check(periods.length > 0 && periods.every((ms) => ms >= 4500 && ms <= 6000),
       `${w}x${h}: every breath is 4.5-6 s (${periods.map((n) => Math.round(n)).join(', ')})`);
-    const delays = b1.periods.filter((p) => p.name === 'hand-breath').map((p) => p.delay);
+    const delays = b1.periods.filter((p) => p.name.startsWith('hand-breath')).map((p) => p.delay);
     check(new Set(delays).size > 1, `${w}x${h}: cards do not breathe in step (${delays.join(', ')})`);
     const amps = b1.amps.filter((a) => a > 1);
     check(amps.length > 0 && amps.every((a) => a >= 1.004 && a <= 1.008),
@@ -201,7 +207,7 @@ try {
     const b = await breath(page);
     check(!b.breathing, 'reduce motion: the hand does not carry .breathing');
     check(b.running === 0 && b.paused === 0, 'reduce motion: no breath animation runs');
-    check(b.periods.every((p) => p.name !== 'hand-breath'), 'reduce motion: no hand-breath animation is applied');
+    check(b.periods.every((p) => !p.name.startsWith('hand-breath')), 'reduce motion: no hand-breath animation is applied');
     const motion = await page.evaluate(`(() => ({
       html: document.documentElement.classList.contains('reduce-motion'),
       transition: getComputedStyle(document.querySelector('#hand .card')).transitionDuration,

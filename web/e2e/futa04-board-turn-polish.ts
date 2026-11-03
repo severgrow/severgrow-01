@@ -489,9 +489,12 @@ async function finishTurn(page: Page, label: string) {
       haloShadow:getComputedStyle(halo).boxShadow, haloAnimation:getComputedStyle(halo).animationName,
       ringAnimation:getComputedStyle(ring).animationName };
   });
-  check(throwLook.cardFilter.includes('grayscale(0.54)') && throwLook.edge.includes('222, 110, 83') && throwLook.handBlob === 'none' && throwLook.cardAnimation === 'none' &&
+  // The Throw step recedes the hand by opacity + the ember edge, NEVER by a filter: the whole hand
+  // breathes on the same element (checked below), and a filter on an animating node re-rasterises
+  // every card every frame. The check is deliberately the opposite of the old grayscale assertion.
+  check(throwLook.cardFilter === 'none' && throwLook.edge.includes('222, 110, 83') && throwLook.handBlob === 'none' && throwLook.cardAnimation === 'none' &&
     throwLook.haloShadow !== 'none' && throwLook.haloAnimation === 'none' && throwLook.ringAnimation === 'none',
-    `${label}: Throw keeps readable color and a steady ember light on each card edge (${JSON.stringify(throwLook)})`);
+    `${label}: Throw keeps readable colour and a steady ember light on each card edge (${JSON.stringify(throwLook)})`);
   const throwPulse = await page.evaluate(() => {
     const root = document.documentElement;
     const reduced = root.classList.contains('reduce-motion');

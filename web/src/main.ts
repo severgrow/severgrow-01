@@ -222,8 +222,15 @@ import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import { glintSeedStone, setSeedStoneStrength } from './ui/seedstone.js';
 import { duelSeedsMessage, paintSeedReward, seedReward } from './ui/seed-reveal.js';
 let DesignView: typeof BoardView = BoardView;
-const branding = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')
-  ? await import('./player/branding.js') : null;
+// BOTH boot modules start downloading together. They used to be two top-level awaits in a row, so
+// the second request did not even begin until the first had arrived: two round trips on the critical
+// path before the menu's first layout (measured 2026-11-02 on a throttled phone). Starting the
+// promises first turns that into one wait.
+const brandingLoad = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')
+  ? import('./player/branding.js') : null;
+// V3 art is archived on this branch; always use the default painted board for Futa04.
+const defaultArtLoad = IS_FUTA04 ? import('./ui/defaultArtBoard.js') : null;
+const branding = brandingLoad ? await brandingLoad : null;
 if (branding && (window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true)) {
   document.documentElement.classList.add('home-screen-app');
@@ -233,8 +240,7 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
   await import('./ui/design-v2.css');
   DesignView = (await import('./ui/designBoard.js')).DesignBoardView;
 }
-// V3 art is archived on this branch; always use the default painted board for Futa04.
-const defaultArt = IS_FUTA04 ? await import('./ui/defaultArtBoard.js') : null;
+const defaultArt = defaultArtLoad ? await defaultArtLoad : null;
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, heavyShakeFrames, removeAfter, shakeFrames, suitClass } from './ui/effects.js';

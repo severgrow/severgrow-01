@@ -199,3 +199,57 @@ Images: [challenge](screens/glass/territory-challenge-390x844.png),
 [profile](screens/glass/profile-390x844.png), and their before-shots
 [challenge](screens/glass/before-territory-challenge-390x844.png),
 [profile](screens/glass/before-profile-390x844.png).
+
+## Smoothness + efficiency pass — 2 November 2026
+
+Owner: *"run couple extra smoothness checks and smoothness pack … making sure everything appears as
+quickly as possible … focus on efficiency and reliability of everything."*
+
+**The product menu paints its finished column before the module runs.** The menu's shape is static
+(logo, wordmark, beta line, PLAY, TERRITORY's slot, Settings), so it is now in the built HTML:
+`vite.config.ts` fills the beta line from `src/strings.ts`, drops PLAY's `hidden`, and adds
+`world-reserved` only when the build has an online endpoint; `style.css` shows the product keys
+behind `html.test-typography-v2` and holds TERRITORY's exact 50px slot invisible until
+`layoutMenu`. The emblem paints from the same silhouette as a CSS mask (`:has(> svg)` steps the
+mask aside when the SVG logo replaces it). Measured at 390x844: PLAY's y is **568.06px before and
+after layout** (0.00px shift), and PLAY is visible from the first CSS paint instead of after the
+module. A tap that lands in that window is delivered once the module attaches its listener (input
+events queue on the busy main thread). No skeleton: the beta line, logo and PLAY are the real ones.
+The numerals font and the emblem are preloaded; the two boot modules (branding, board art) now start
+their imports together instead of one after the other.
+
+**Never a filter on an animating node — enforced in the four places this pass found.** The idle
+hint animated `filter: brightness()` on the hand; the Throw step put `grayscale(.54)` on every card
+while the whole hand breathed; the Bloom recipe animated a `drop-shadow` on the always-drifting
+combination; and a primary key brightened with `filter` on press/hover. All four now move
+opacity/colour/background only. The hand's dimmed cards keep their 0.62 opacity and drop the extra
+`filter: saturate(.6)`. The territory heartbeat branch loses its permanent `filter: blur(.8px)`.
+Measured on the Throw step at DPR 3: compositor raster **186.9 → 168.6ms per 2.5s** with the
+grayscale filter gone (the breathe itself is the larger cost and is kept; it is the owner's cue).
+
+**One animation, one name.** `futa04-hardware-reflect` was defined twice (a key-bezel filter and the
+display bloom's opacity); the later definition won, so a major event ran the bloom's opacity on the
+key bezel. The key-bezel animation is now `futa04-hardware-reflect-key`.
+
+**Cheap transitions use the shared tokens, not literals.** 150ms states use `--ix-open`, 140ms
+uses `--ix-open`, 200/220ms lifts use `--dur-quick`, 300ms cross-fades use `--dur-consequence`, and
+120ms proximity uses `--ix-press`. The card lift's private `cubic-bezier(…1.2/1.3)` curves are now
+`--ease-settle`; the bespoke curves that remain belong to the board's own choreography (the
+starter ritual, the cut, the tutorial curtain), not to a control's lift. Board cut choreography (withering fills, the 2.5s end-game
+vignette) keeps its designed timings and is called out here as deliberately not tokenised.
+
+**Two interaction reads moved off the hot path.** A Bloom paint reads the board's screen transform
+**once per gesture** (`pointerdown`) instead of once per `pointermove`; the drag ghost uses its
+written size instead of `getBoundingClientRect()` on every move, sampling the box only during the
+180ms mini/full morph. Both are read-after-write removals in the two loops a finger drives.
+
+**One obvious missing transition.** The finish card's `More` disclosure now fades its extras in on
+`--ix-open` (opacity only; the plate's height change is layout and is not animated). Reduced motion
+shows them at once.
+
+**Left alone, and why.** `online-css.ts`'s `world-glint` (an 11s infinite filter brightness on every
+owned tile) and `world-lamp`'s box-shadow breath are on the Territory map, which a concurrent change
+is editing; they are reported, not touched. The race bar's `--share` transition (0.6s, registered
+custom property) paints each frame but is the score's only read-out; the hand's 1.35s Throw breath
+and the step cue's 260/320/900ms choreography are designed beats. `perf-phone` stays green
+(idle: 0 game rAF frames, no paint-property animation; a turn: p95 16.8ms at 4x CPU).

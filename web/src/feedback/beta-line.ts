@@ -14,11 +14,17 @@ export const paintBetaLine = (beta: HTMLElement | null): HTMLButtonElement | nul
     link.textContent = FEEDBACK.betaLink;
     link.type = 'button';
     link.dataset.fb = 'menu-link';
+    beta.append(link);
+  }
+  // The link may already exist in the built HTML (the line is painted at build time so the menu's
+  // first frame carries it — see vite.config.ts). It still needs the early-tap guard: a tap made
+  // before the feedback module takes ownership must open the form once it arrives.
+  if (link.dataset.owned !== '1' && link.dataset.earlyBound !== '1') {
+    link.dataset.earlyBound = '1';
     const early = link;
     early.addEventListener('click', () => {
       if (early.dataset.owned !== '1') early.dataset.earlyClick = '1';
     });
-    beta.append(link);
   }
   beta.hidden = false;
   return link;

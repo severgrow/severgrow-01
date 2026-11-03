@@ -243,7 +243,7 @@ button {
   font-size: 0.95rem;
   line-height: 1.1;
   touch-action: manipulation;
-  transition: transform var(--dur-ack) var(--ease-standard), background-color 0.15s, border-color 0.15s;
+  transition: transform var(--dur-ack) var(--ease-standard), background-color var(--ix-open), border-color var(--ix-open);
 }
 .btn.primary {
   background: var(--c-accent);
@@ -445,6 +445,48 @@ button {
    still appear after 1.5 s rather than never. */
 #menu:not([data-laid-out]) .menu-buttons { visibility: hidden; animation: menu-keys-fallback 0s linear 1.5s forwards; }
 @keyframes menu-keys-fallback { to { visibility: visible; } }
+/* THE PRODUCT MENU'S FIRST PAINT (owner, 2026-11-02: "making sure everything appears as quickly as
+   possible"). On the product channels the module used to be the only thing that could show a way to
+   play: the keys waited for `data-laid-out`, and the 1.5s fallback then flashed the LEGACY set
+   ("Play offline", "Tutorial") before the product keys replaced them. The product menu's shape is
+   STATIC (PLAY + the footer) and only its labels are data — so it is shown here from the first paint,
+   with the two legacy-only entries kept out until layout. A tap that lands before the module has
+   attached its listener is delivered once it does (input events queue on the busy main thread), so
+   the early key is not a dead key. `world-reserved` (added by vite.config.ts only when this build has
+   an online endpoint) holds TERRITORY's exact slot invisible, so the column does not shift when the
+   map key is revealed. Channels that are not the product keep the gate unchanged. */
+html.test-typography-v2 #menu:not([data-laid-out]) .menu-buttons {
+  visibility: visible;
+  animation: none;
+}
+html.test-typography-v2 #menu:not([data-laid-out]) :is(#menu-tutorial, #menu-continue, #menu-new, #menu-campaign, #menu-online) {
+  display: none !important;
+}
+html.test-typography-v2.world-reserved #menu:not([data-laid-out]) #menu-world[hidden] {
+  display: grid !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* The emblem is the last thing that used to arrive: `drawLogo()` builds it from an SVG filter
+   during the module's boot, so the whole menu column sat 73px higher until it did. The same
+   silhouette paints the logo's exact box from the first frame (as a CSS mask, no filter); the SVG
+   replaces it in place and the rule steps aside while an SVG child exists (same shape, same size). */
+html.test-typography-v2 #menu #logo {
+  display: block;
+  width: min(240px, 58vw, 26dvh);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  background: var(--c-accent);
+  opacity: 0.9;
+  -webkit-mask: url('./assets/futasaku-emblem-silhouette.webp') center / contain no-repeat;
+  mask: url('./assets/futasaku-emblem-silhouette.webp') center / contain no-repeat;
+}
+html.test-typography-v2 #menu #logo:has(> svg) {
+  background: none;
+  -webkit-mask: none;
+  mask: none;
+  opacity: 1;
+}
 .menu-buttons {
   width: 100%;
   display: flex;
@@ -1656,7 +1698,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   background: none;
   color: var(--c-muted);
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: opacity var(--dur-quick);
 }
 .pile-card {
   position: relative;
@@ -1726,10 +1768,10 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 @keyframes ready {
   0%,
   100% {
-    filter: none;
+    opacity: 1;
   }
   50% {
-    filter: brightness(1.25);
+    opacity: 0.82;
   }
 }
 .pile.ready .pile-stack,
@@ -1784,7 +1826,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .hand .card {
   transform-origin: 50% 100%;
   transform: rotate(var(--rot, 0deg)) translateY(var(--dy, 0px));
-  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1.2), opacity 0.2s;
+  transition: transform var(--dur-quick) var(--ease-settle), opacity var(--dur-quick);
   margin-left: min(-6px, calc((100% - 28px - var(--n) * var(--cw)) / max(var(--n) - 1, 1)));
   /* Phase 1: a card's weight is a shadow under it, set once per render (never per frame). */
   box-shadow: 0 var(--shadow-y, 2px) var(--shadow-blur, 4px) rgba(0, 0, 0, var(--shadow-alpha, 0.28));
@@ -2812,7 +2854,7 @@ html.futasaku-product .install-prompt-scrim {
   position: relative;
   cursor: pointer;
   flex: none;
-  transition: background-color 0.15s;
+  transition: background-color var(--ix-open);
 }
 .row input[type='checkbox']::after {
   content: '';
@@ -2823,7 +2865,7 @@ html.futasaku-product .install-prompt-scrim {
   height: 22px;
   border-radius: 50%;
   background: var(--c-text);
-  transition: transform 0.15s;
+  transition: transform var(--ix-open);
 }
 .row input[type='checkbox']:checked {
   background: var(--c-accent);
@@ -3106,7 +3148,7 @@ html.futasaku-product .install-prompt-scrim {
   text-align: center;
   opacity: 0;
   translate: 0 7px;
-  transition: opacity .3s ease, translate .3s ease;
+  transition: opacity var(--dur-consequence) ease, translate var(--dur-consequence) ease;
   pointer-events: none;
   will-change: transform, opacity;
 }
@@ -3560,7 +3602,7 @@ html.futasaku-product .install-prompt-scrim {
   background: var(--c-surface);
   color: var(--c-text);
   cursor: pointer;
-  transition: transform var(--dur-ack) var(--ease-standard), border-color 0.15s;
+  transition: transform var(--dur-ack) var(--ease-standard), border-color var(--ix-open);
 }
 .level-tile.on:not(.difficulty-tile) {
   border-color: var(--c-accent);
@@ -3587,7 +3629,7 @@ html.futasaku-product .install-prompt-scrim {
   width: 100%;
   text-align: center;
   cursor: pointer;
-  transition: transform var(--dur-ack) var(--ease-standard), border-color 0.15s, background 0.15s, color 0.15s;
+  transition: transform var(--dur-ack) var(--ease-standard), border-color var(--ix-open), background var(--ix-open), color var(--ix-open);
 }
 .go-sub {
   margin: 6px 0 0;
@@ -3665,7 +3707,7 @@ html.futasaku-product .install-prompt-scrim {
   text-align: center;
   cursor: pointer;
   font-family: var(--font-ui);
-  transition: transform var(--dur-ack) var(--ease-standard), background-color 0.15s, color 0.15s;
+  transition: transform var(--dur-ack) var(--ease-standard), background-color var(--ix-open), color var(--ix-open);
 }
 .campaign-tile:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
 .campaign-tile .ct-num {
@@ -3855,23 +3897,30 @@ html.futasaku-product #campaign .campaign-chapters {
   background: var(--c-accent);
   color: var(--c-accentInk);
 }
-/* Idle hint: one very quiet pulse on the next control. */
+/* Idle hint: one very quiet pulse on the next control. COMPOSITOR ONLY: the old keyframe animated
+   `filter: brightness()`, which re-rasterised the control (and every card in the hand) every frame.
+   The hand reuses the glow layer it already owns for the turn hand-over, so only an opacity moves. */
 .idle-hint {
   animation: idle-pulse 2.4s ease-in-out 2;
 }
-.hand.idle-hint .card.playable {
-  animation: idle-pulse 2.4s ease-in-out 2;
+.hand.idle-hint .card.playable::before {
+  animation: idle-pulse-glow 2.4s ease-in-out 2;
 }
 .hand.idle-hint {
   animation: none;
 }
 @keyframes idle-pulse {
   50% {
-    filter: brightness(1.18);
+    opacity: 0.82;
+  }
+}
+@keyframes idle-pulse-glow {
+  50% {
+    opacity: 0.55;
   }
 }
 .reduce-motion .idle-hint,
-.reduce-motion .hand.idle-hint .card.playable {
+.reduce-motion .hand.idle-hint .card.playable::before {
   animation: none;
 }
 
@@ -4611,8 +4660,8 @@ html.futasaku-product #campaign .campaign-chapters {
 .edge-wash.you { box-shadow: inset 0 0 26px color-mix(in srgb, var(--c-you) 30%, transparent); }
 .edge-wash.bot { box-shadow: inset 0 0 26px color-mix(in srgb, var(--c-bot) 30%, transparent); }
 /* the header capsule cross-fades between "Your turn" and "Bot's turn" */
-.turn { transition: border-color 300ms ease, background-color 300ms ease; }
-.turn b, .turn small { transition: color 300ms ease; }
+.turn { transition: border-color var(--dur-consequence) ease, background-color var(--dur-consequence) ease; }
+.turn b, .turn small { transition: color var(--dur-consequence) ease; }
 @media (prefers-reduced-motion: reduce) {
   .turn-pill.sweep::after, .turn-pill .tp-dots i { animation: none; }
 }
@@ -5100,14 +5149,16 @@ html[data-layout='side'] .dock-overlays {
 /* lift with a small spring; others stay legible */
 .dock .hand-row > .hand .card {
   transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(var(--dy, 0px)) rotateY(var(--tilt-x, 0deg)) rotateX(var(--tilt-y, 0deg));
-  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3), opacity 0.2s, filter 0.2s;
+  /* NO `filter` here (documented invariant): the card is the element that lifts, and a filter on an
+     animating node re-rasterises it every frame. The dimmed card below reaches its state with
+     opacity alone. */
+  transition: transform var(--dur-quick) var(--ease-settle), opacity var(--dur-quick);
 }
 .dock .hand-row > .hand .card.lifted {
   transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - var(--lift, 18px))) scale(1.04);
 }
 .dock .hand-row > .hand .card.dim {
   opacity: 0.62;
-  filter: saturate(0.6);
 }
 @media (hover: hover) and (pointer: fine) {
   .dock .hand-row > .hand .card:not(.lifted):hover {
@@ -5119,7 +5170,7 @@ html[data-layout='side'] .dock-overlays {
 .dock .hand-row > .hand .card.bloom-hint {
   box-shadow: inset 0 -1.5px 0 rgba(232, 221, 201, 0.45);
   opacity: 1;
-  transition: box-shadow 200ms ease, opacity 200ms ease;
+  transition: box-shadow var(--dur-quick) ease, opacity var(--dur-quick) ease;
 }
 .reduce-motion .dock .hand-row > .hand .card.bloom-hint { transition: none; }
 /* LESSON: the suggested card is genuinely lifted out of the fan — raised above its neighbours,
@@ -5138,12 +5189,11 @@ html[data-layout='side'] .dock-overlays {
     0 2px 6px -2px color-mix(in srgb, #000 55%, transparent),
     0 0 20px rgba(233,216,173,.14);
   transition:
-    transform .22s cubic-bezier(.2,.9,.3,1.3),
-    translate .22s cubic-bezier(.2,.72,.24,1),
-    scale .22s cubic-bezier(.2,.72,.24,1),
-    box-shadow .22s ease,
-    opacity .2s,
-    filter .2s;
+    transform var(--dur-quick) var(--ease-settle),
+    translate var(--dur-quick) var(--ease-settle),
+    scale var(--dur-quick) var(--ease-settle),
+    box-shadow var(--dur-quick) ease,
+    opacity var(--dur-quick);
 }
 /* Picked for a throw as well: the fan's own lift already raises it; do not double the scale. */
 .hand .card.tutorial-target-card.lifted { translate: 0 -8px; scale: 1; }
@@ -5212,8 +5262,8 @@ html[data-layout='stack'] .board-wrap {
   fill-opacity: calc(0.07 + var(--near, 0) * 0.22);
   stroke-width: 1;
   stroke-opacity: calc(0.42 + var(--near, 0) * 0.55);
-  animation: target-in 0.24s ease-out both;
-  transition: fill-opacity 0.12s linear, stroke-opacity 0.12s linear;
+  animation: target-in var(--dur-quick) ease-out both;
+  transition: fill-opacity var(--ix-press) linear, stroke-opacity var(--ix-press) linear;
 }
 .target.kind-strengthen {
   stroke-width: 1.8;
@@ -5356,7 +5406,7 @@ html[data-layout='stack'] .board-wrap {
 }
 .pile[data-layers] .pile-stack,
 .pile[data-layers] .pile-top.card {
-  transition: box-shadow 0.3s;
+  transition: box-shadow var(--dur-consequence);
 }
 .pile[data-layers='0'] .pile-stack {
   opacity: 0.25;
@@ -5777,7 +5827,10 @@ html.final-turns .game::after {
 .territory-branch {
   fill:none; stroke:#dcf3b7; stroke-width:1.8; stroke-linecap:round;
   stroke-dasharray:13 87; stroke-dashoffset:100; stroke-opacity:0;
-  filter:blur(.8px); animation:territory-heartbeat 10s linear infinite;
+  /* NO `filter: blur()`: the branch animates its dash offset forever, so a blur here re-rasterised
+     the stroke every frame — the same cost the Territory fog and the surrounded-home glow lost. The
+     pulse's own softness comes from its low stroke-opacity and round cap. */
+  animation:territory-heartbeat 10s linear infinite;
 }
 .territory-branch.p1 { stroke:#ffd090; stroke-width:1.55; }
 @keyframes territory-heartbeat {
@@ -5913,7 +5966,7 @@ html.final-turns .game::after {
 .l-dim {
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity var(--dur-quick) ease;
 }
 .l-dim.on {
   opacity: 1;
@@ -5995,7 +6048,7 @@ html.final-turns .game::after {
   gap: 8px;
   background: var(--c-bg);
   pointer-events: none; /* never blocks a tap; any tap ends it */
-  transition: opacity 0.3s ease;
+  transition: opacity var(--dur-consequence) ease;
 }
 .splash[hidden] {
   display: none;
@@ -6368,7 +6421,7 @@ html.final-turns .game::after {
   place-items: center;
   cursor: pointer;
   pointer-events: auto;
-  transition: background 0.14s ease-out, color 0.14s ease-out, box-shadow 0.14s ease-out;
+  transition: background var(--ix-open) ease-out, color var(--ix-open) ease-out, box-shadow var(--ix-open) ease-out;
 }
 .ctool::after {
   content: '';
@@ -6483,7 +6536,7 @@ html.final-turns .game::after {
 .dock .pile.ready .pile-card {
   box-shadow: 0 0 18px -4px color-mix(in srgb, var(--c-accent) 60%, transparent);
   transform: translateY(-2px);
-  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.22s ease-out;
+  transition: transform var(--dur-quick) var(--ease-settle), box-shadow var(--dur-quick) ease-out;
   animation: none;
 }
 .dock .pile.ready .pile-stack,
@@ -7455,14 +7508,22 @@ html.settings-essentials #settings-report {
 [data-ix-press] {
   transition:
     transform var(--ix-press) var(--ix-ease-open),
-    background-color 140ms var(--ix-ease-open),
-    border-color 140ms var(--ix-ease-open),
-    color 140ms var(--ix-ease-open),
-    box-shadow var(--ix-press) var(--ix-ease-open),
-    filter var(--ix-press) var(--ix-ease-open);
+    background-color var(--ix-open) var(--ix-ease-open),
+    border-color var(--ix-open) var(--ix-ease-open),
+    color var(--ix-open) var(--ix-ease-open),
+    box-shadow var(--ix-press) var(--ix-ease-open);
 }
 /* Physical key depth belongs to logic/press.ts. Keeping a second :active transform here
    doubles compression and can reappear after a cancelled scroll gesture. */
+/* A KEY NEVER DIMS ITSELF WITH A `filter` (documented invariant: never a filter on an animating
+   node, and every key animates transform/box-shadow on press). Both answers are compositor/paint
+   only: the pressed key loses 5% opacity (the same read as the old brightness(0.96), whatever its
+   fill), the hovered primary gains a 3.5% white wash over its own background (so cream menu keys
+   and amber action keys both lighten without a colour token of their own). */
+.btn.primary:active:not(:disabled),
+.gm-lead.primary:active:not(:disabled) {
+  opacity: 0.95;
+}
 /* Reduce motion keeps the control's answer (colour/light) but never the movement. */
 .reduce-motion :is(.btn, .chip, .icon-only, .gm-lead, .gm-act, .gm-key, .gm-tool, .ctool, .seg-btn, [data-ix-press]):active {
   transform: none;
@@ -7471,10 +7532,6 @@ html.settings-essentials #settings-report {
   :is(.btn, .chip, .icon-only, .gm-lead, .gm-act, .gm-key, .gm-tool, .ctool, .seg-btn, [data-ix-press]):active {
     transform: none;
   }
-}
-.btn.primary:active:not(:disabled),
-.gm-lead.primary:active:not(:disabled) {
-  filter: brightness(0.96);
 }
 @media (hover: hover) and (pointer: fine) {
   .btn.ghost:hover:not(:disabled),
@@ -7485,7 +7542,7 @@ html.settings-essentials #settings-report {
     border-color: color-mix(in srgb, var(--c-line) 90%, var(--c-text));
   }
   .btn.primary:hover:not(:disabled) {
-    filter: brightness(1.03);
+    background-image: linear-gradient(rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.035));
   }
 }
 
@@ -7606,6 +7663,21 @@ body.result .dock,
 body.result .corner-tools {
   opacity: 0.34;
   transition: opacity var(--ix-open) var(--ix-ease-open);
+}
+/* The finish card's ONE disclosure: its detail lines and extra keys used to appear on a hard cut.
+   They now fade in on the shared arrival beat (opacity only: the plate's own height change is
+   layout, and no layout property may be animated here). Reduce motion shows them at once. */
+#gameover [data-go-extra]:not([hidden]) {
+  animation: go-extra-in var(--ix-open) var(--ix-ease-open) both;
+}
+@keyframes go-extra-in {
+  from { opacity: 0; }
+}
+.reduce-motion #gameover [data-go-extra] {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #gameover [data-go-extra] { animation: none; }
 }
 #gameover .go-card {
   position: relative;

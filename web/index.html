@@ -41,6 +41,26 @@
         window.addEventListener('severor-ready', function () {
           try { remove.call(sessionStorage, key); } catch (_) {}
         });
+        // THE PRODUCT MENU IS PAINTED BEFORE THE MODULE (see vite.config.ts / style.css). Its PLAY
+        // key is real and focusable from the first frame, so a tap can land before main.ts has
+        // bound its handler. Record that tap; when the app says it is ready, make the same tap
+        // again. A tap the module DID receive simply opens the same doorway twice, which is a
+        // repaint, not a second action.
+        document.addEventListener('click', function (e) {
+          var t = e.target;
+          var p = t && t.closest ? t.closest('#menu-play') : null;
+          if (p && !window.__severgrow) p.setAttribute('data-early-tap', '1');
+        }, true);
+        window.addEventListener('severor-ready', function () {
+          var p = document.getElementById('menu-play');
+          if (!p || p.getAttribute('data-early-tap') !== '1') return;
+          p.removeAttribute('data-early-tap');
+          // The module may already have handled that tap: the doorway is open, so there is nothing
+          // to replay (a second open would replay the same arrival beat on top of itself).
+          var play = document.getElementById('play-menu');
+          if (play && !play.hidden) return;
+          p.click();
+        });
       })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -74,6 +94,13 @@
     <link rel="apple-touch-icon" href="./futasaku-icon-180.png" />
     <link rel="preload" href="./src/fonts/v2/besley-wght.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="./src/fonts/v2/fragment-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- The numerals face carries every score, count and card number. It was the one face NOT
+         preloaded, so a cold load painted digits in Fragment Mono until it arrived (font-display:
+         block, so they were briefly absent rather than swapped). One 2.6 KB request, no flash. -->
+    <link rel="preload" href="./src/fonts/v2/futasaku-numerals-700.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- The menu emblem paints from the first frame (see the mask rule in style.css) and the
+         boot then replaces it with the filtered SVG of the same silhouette. -->
+    <link rel="preload" href="./src/assets/futasaku-emblem-silhouette.webp" as="image" type="image/webp" />
     <link rel="preload" href="./hardware/display-frame-supplied.webp" as="image" type="image/webp" />
     <link rel="preload" href="./hardware/button-frame-supplied.webp" as="image" type="image/webp" />
     <link rel="preload" href="./hardware/counter-frame-supplied.webp" as="image" type="image/webp" />

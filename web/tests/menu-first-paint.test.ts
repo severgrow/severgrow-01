@@ -16,6 +16,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
+const vite = readFileSync(fileURLToPath(new URL('../vite.config.ts', import.meta.url)), 'utf8');
+const css = readFileSync(fileURLToPath(new URL('../src/style.css', import.meta.url)), 'utf8');
+const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
 
 describe('the product menu shows a way to play with the first paint', () => {
   it('lays the menu out in the synchronous prefix, before boot\u2019s first await', () => {
@@ -43,5 +46,30 @@ describe('the product menu shows a way to play with the first paint', () => {
     expect(main).toMatch(/void import\('\.\/accounts\/mount\.js'\)/);
     expect(main).not.toMatch(/await import\('\.\/accounts\/mount\.js'\)/);
     expect(main).not.toMatch(/await\s+[^\n;]*mountAccounts/);
+  });
+});
+
+describe('the product menu paints its finished column before the module runs', () => {
+  // 2026-11-02 smoothness pass. The menu's shape is static, so the built HTML carries the finished
+  // column: the beta line, an unhidden PLAY, and TERRITORY's reserved slot. `layoutMenu` then only
+  // fills data and reveals the map key into the space already held for it. The early PLAY must
+  // carry a replay guard, or a tap before the module bound its handler would be lost.
+  it('builds the product menu into the HTML it ships', () => {
+    expect(vite, 'the build drops PLAY\u2019s hidden attribute').toMatch(/menu-play.*\?\) hidden>/);
+    expect(vite, 'the beta line comes from src/strings.ts').toMatch(/FEEDBACK\.betaNote/);
+    expect(vite, 'TERRITORY\u2019s slot is reserved only with a real endpoint').toMatch(/worldReserved[\s\S]*VITE_DUEL_API_URL/);
+    expect(html, 'an early tap is replayed once the app is ready').toMatch(/data-early-tap[\s\S]*severor-ready/);
+  });
+
+  it('shows those keys behind the product scope and reserves the map slot invisibly', () => {
+    expect(css).toMatch(/html\.test-typography-v2 #menu:not\(\[data-laid-out\]\) \.menu-buttons\s*\{[\s\S]*?visibility: visible/);
+    expect(css).toMatch(/html\.test-typography-v2\.world-reserved #menu:not\(\[data-laid-out\]\) #menu-world\[hidden\]\s*\{[\s\S]*?visibility: hidden/);
+    // The legacy-only entries must never paint on the product menu before its layout.
+    expect(css).toMatch(/#menu-new[\s\S]{0,120}display: none !important/);
+  });
+
+  it('preloads the two assets the first frame actually uses', () => {
+    expect(html).toMatch(/rel="preload"[^>]*futasaku-numerals-700\.woff2/);
+    expect(html).toMatch(/rel="preload"[^>]*futasaku-emblem-silhouette\.webp/);
   });
 });

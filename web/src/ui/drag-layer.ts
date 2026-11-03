@@ -155,6 +155,15 @@ export function mountDragLayer(hooks: DragLayerHooks) {
   let suppressTimer = 0;
   let deckEl: HTMLElement | null = null;
   let discardEl: HTMLElement | null = null;
+  /**
+   * The ghost's own size, kept as numbers. Reading `getBoundingClientRect()` after every pointermove
+   * (after the previous move wrote the ghost's transform) forces a layout flush per move — a
+   * read-after-write in the hottest input loop. The size is written once and, while the 180ms
+   * mini/full morph is actually playing, sampled from the box; the rest of the drag uses the numbers.
+   */
+  let ghostW = 0;
+  let ghostH = 0;
+  let ghostMorphUntil = 0;
 
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
   const reduced = () => hooks.reducedMotion();
@@ -203,6 +212,8 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     g.style.height = `${h}px`;
     g.dataset.fullW = String(w);
     g.dataset.fullH = String(h);
+    ghostW = w;
+    ghostH = h;
     // Chevron element exists for hand grow morph; CSS keeps it hidden until drag-mini.
     if (!fromPile) {
       const chev = document.createElement('span');
@@ -228,15 +239,16 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     const grow = a.resolution.mode === 'place' || a.resolution.mode === 'bloom'
       || a.resolution.mode === 'bloom-open' || a.resolution.mode === 'mega';
     const mini = overBoard || grow;
-    ghost.classList.toggle('drag-mini', mini);
-    ghost.classList.toggle('futa04-mini-card', mini);
-    if (mini) {
-      // Match the smart-bloom mini-card proportions.
-      ghost.style.width = `${MINI_W}px`;
-      ghost.style.height = `${MINI_H}px`;
-    } else {
-      ghost.style.width = `${fullW}px`;
-      ghost.style.height = `${fullH}px`;
+    // Only WRITE on a real change: setting the same width/height every move still invalidates style.
+    if (ghost.classList.contains('drag-mini') !== mini) {
+      ghost.classList.toggle('drag-mini', mini);
+      ghost.classList.toggle('futa04-mini-card', mini);
+      ghost.style.width = `${mini ? MINI_W : fullW}px`;
+      ghost.style.height = `${mini ? MINI_H : fullH}px`;
+      ghostW = mini ? MINI_W : fullW;
+      ghostH = mini ? MINI_H : fullH;
+      // The box is mid-transition for this long; sample it while it moves, never after.
+      ghostMorphUntil = performance.now() + 220;
     }
   };
 
@@ -245,7 +257,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     const g = ghost;
     const mini = !!g?.classList.contains('drag-mini');
     // Stable mini height so a mid-morph bounding box does not shove aim off the board.
-    const h = mini ? MINI_H : (g ? g.getBoundingClientRect().height : 72);
+    const h = mini ? MINI_H : (ghostH || 72);
     // Full card: a little below the top edge. Mini: card-top / chevron-base tip cluster
     // (tiles under the raised bloom icon + arrow — thumb stays lower and uses finger fallback).
     const lift = mini
@@ -385,10 +397,16 @@ export function mountDragLayer(hooks: DragLayerHooks) {
         targetY += (dy / len) * 10;
       }
     }
-    const r = ghost.getBoundingClientRect();
+    // Only a live mini/full morph needs the real box; a settled ghost uses its written size, so a
+    // pointermove never has to flush layout after the previous move's style write.
+    if (performance.now() < ghostMorphUntil) {
+      const r = ghost.getBoundingClientRect();
+      ghostW = r.width;
+      ghostH = r.height;
+    }
     const mini = ghost.classList.contains('drag-mini');
-    tx = targetX - r.width / 2;
-    ty = targetY - r.height * ghostLift(mini);
+    tx = targetX - (ghostW || 48) / 2;
+    ty = targetY - (ghostH || 72) * ghostLift(mini);
     if (reduced()) {
       gx = tx;
       gy = ty;

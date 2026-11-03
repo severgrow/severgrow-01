@@ -77,9 +77,12 @@ html.futa04-information .dock #futa04-box :is(#smart-context,#futa04-actions > .
    brighten themselves; they receive light only through the reflected wash below, so
    nothing reads as a second light source. */
 html.futa04-information #smart-panel.hardware-reflect #smart-led::before {
-  animation:futa04-hardware-reflect 640ms ease-out;
+  animation:futa04-hardware-reflect-key 640ms ease-out;
 }
-@keyframes futa04-hardware-reflect {
+/* TWO ANIMATIONS USED TO SHARE THE NAME futa04-hardware-reflect (this key-bezel filter and the
+   display bloom's opacity, later in the sheet). The later @keyframes won, so a major event ran the
+   BLOOM's opacity on the key bezel instead of its own filter. One name per animation. */
+@keyframes futa04-hardware-reflect-key {
   0%,100% { filter:none; }
   27% { filter:brightness(1.06); }
   55% { filter:brightness(1.02); }
@@ -418,10 +421,16 @@ html.futa04-information #smart-bloom-button::after {
 html.futa04-information #smart-bloom-button::before { top:5px; left:6px; border-width:1px 0 0 1px; }
 html.futa04-information #smart-bloom-button::after { right:6px; bottom:7px; border-width:0 1px 1px 0; }
 /* A tiny film registration drift lives on the projected recipe alone. The control
-   remains transparent; the coloured ink and card edges provide all its light. */
+   remains transparent; the coloured ink and card edges provide all its light.
+   The ready pulse is OPACITY on the mini-cards, not a filter on the combination: the combination
+   is always animating (the projector), and a drop-shadow filter on an animating node was
+   re-rasterised every frame while Bloom was available. */
 html.futa04-information #smart-bloom-button .futa04-combination {
-  animation:futa04-recipe-projector 7.3s steps(1,end) infinite, futa04-bloom-ready 2.6s ease-in-out infinite;
+  animation:futa04-recipe-projector 7.3s steps(1,end) infinite;
   filter:drop-shadow(.25px .2px 1.2px rgba(244,227,186,.38));
+}
+html.futa04-information #smart-bloom-button .futa04-combination .futa04-mini-card {
+  animation:futa04-bloom-ready 2.6s ease-in-out infinite;
 }
 html.futa04-information #smart-bloom-button .futa04-mini-card {
   opacity:.92; text-shadow:0 0 2px currentColor;
@@ -433,8 +442,8 @@ html.futa04-information #smart-bloom-button .futa04-mini-card {
   84% { opacity:.94; translate:-.22px .16px; }
 }
 @keyframes futa04-bloom-ready {
-  0%,100% { filter:drop-shadow(.25px .2px 1.2px rgba(244,227,186,.28)); }
-  50% { filter:drop-shadow(.25px .2px 3px rgba(255,225,167,.55)); }
+  0%,100% { opacity:.86; }
+  50% { opacity:1; }
 }
 @keyframes futa04-bloom-corners {
   0%,100% { opacity:.42; }
@@ -442,11 +451,13 @@ html.futa04-information #smart-bloom-button .futa04-mini-card {
 }
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #smart-bloom-button::before,
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #smart-bloom-button::after,
-html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #smart-bloom-button .futa04-combination { animation:none !important; }
+html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #smart-bloom-button .futa04-combination,
+html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #smart-bloom-button .futa04-mini-card { animation:none !important; }
 @media (prefers-reduced-motion:reduce) {
   html.futa04-information #smart-bloom-button::before,
   html.futa04-information #smart-bloom-button::after,
-  html.futa04-information #smart-bloom-button .futa04-combination { animation:none !important; }
+  html.futa04-information #smart-bloom-button .futa04-combination,
+  html.futa04-information #smart-bloom-button .futa04-mini-card { animation:none !important; }
 }
 html.futa04-information #futa04-box #smart-bloom-button .futa04-combination { display:flex; flex-wrap:nowrap; justify-content:center; gap:3px; width:100%; max-width:100%; }
 /* The recipe must always FIT its own button. The designed cards are 26px wide (30px on a large

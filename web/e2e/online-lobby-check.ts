@@ -52,10 +52,14 @@ try {
   const menuColumn = await page.evaluate(() => {
     // No named inner functions here on purpose: tsx/esbuild rewrites them with a `__name` helper
     // that does not exist in the page.
-    const inner = document.querySelector('#menu .menu-inner')!;
+    const stack = document.querySelector('#menu .menu-stack') as HTMLElement;
     const title = document.querySelector('#menu .title') as HTMLElement;
     const buttons = document.querySelector('#menu .menu-buttons') as HTMLElement;
-    const kids = [...inner.children];
+    // The wordmark, the beta line and the entries are ONE group inside `.menu-stack` (owner,
+    // 2026-10-31). The slot is measured on that group: the old read of `.menu-inner`'s direct
+    // children found the terrarium and the logo instead (neither is between the wordmark and the
+    // buttons), so it could never see the beta line it exists to guard.
+    const kids = [...stack.children];
     const slot = kids.slice(kids.indexOf(title) + 1, kids.indexOf(buttons)).map((k) => {
       const rect = k.getBoundingClientRect();
       const style = getComputedStyle(k);
@@ -69,7 +73,7 @@ try {
         text: (k.textContent ?? '').replace(/\s+/g, ' ').trim(),
       };
     });
-    const rowGap = Number.parseFloat(getComputedStyle(inner).rowGap) || 0;
+    const rowGap = Number.parseFloat(getComputedStyle(stack).rowGap) || 0;
     const buttonsMarginTop = Number.parseFloat(getComputedStyle(buttons).marginTop) || 0;
     return {
       slot,

@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
-import { PRIVACY } from '../src/strings.js';
+import { FEEDBACK, PRIVACY } from '../src/strings.js';
 import { writePrivacyPage } from './src/privacy-page.js';
 
 // The playable web version. Builds to web/dist with relative paths so it works
@@ -40,8 +40,26 @@ export default defineConfig({
   }, { name: 'futasaku-preview-icons', transformIndexHtml: { order: 'pre', handler(html) {
     const modern = process.env.CHANNEL === 'futa04' || process.env.CHANNEL === 'futa-test'
       || process.env.CHANNEL === 'futa05' || !process.env.CHANNEL;
+    // The product menu is now usable before the module runs (see the "FIRST PAINT" block in
+    // style.css). `world-reserved` reserves TERRITORY's slot at first paint only when this build
+    // really has an online endpoint (the same build-time fact `onlineBuildEnabled()` reads), so the
+    // key appears later into a space that is already the right size and the column never jumps.
+    const worldReserved = !!(process.env.VITE_DUEL_API_URL ?? '').trim();
+    const htmlClass = `test-typography-v2${worldReserved ? ' world-reserved' : ''}`;
+    // The beta line is static words from `src/strings.ts` (no network, no storage), and it used to
+    // be the LAST thing to appear on the menu: `paintBetaLine` reveals it during the module's first
+    // layout. Painting it into the built HTML puts it on the first frame with the wordmark, which
+    // also means the column's final height is there from the start — PLAY does not jump down when
+    // the line arrives. `paintBetaLine` reuses the button and its early-click guard.
+    const escapeHtml = (text: string) => text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+    const betaLine = `<p id="menu-beta" class="tagline">${escapeHtml(FEEDBACK.betaNote(FEEDBACK.betaVersion))} <button type="button" data-fb="menu-link">${escapeHtml(FEEDBACK.betaLink)}</button></p>`;
     return modern ? html
-      .replace('<html lang="en"', '<html lang="en" class="test-typography-v2"')
+      .replace('<html lang="en"', `<html lang="en" class="${htmlClass}"`)
+      .replace('<p id="menu-beta" class="tagline" hidden></p>', betaLine)
+      // PLAY is the product's one way in, and on these channels FEATURES.campaign is true. It ships
+      // `hidden` (main.ts owns the flag) but the menu now paints before the module, so the attribute
+      // is dropped for a real, focusable key at first paint. The JS assignment stays the authority.
+      .replace(/(<button id="menu-play"[^>]*?) hidden>/, '$1>')
       .replace('    <div id="splash" class="splash" hidden aria-hidden="true"></div>\n', '') : html
       .replace('./futasaku-icon-192.png', './icon-192.png')
       .replace('./futasaku-icon-180.png', './icon-180.png')

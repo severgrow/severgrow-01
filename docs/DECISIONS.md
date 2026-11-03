@@ -1,5 +1,45 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-02 — The menu paints before the module; no filter on an animating part
+
+Owner: "run couple extra smoothness checks and smoothness pack … making sure everything appears as
+quickly as possible, all animations and transitions are smooth and satisfying … focus on efficiency
+and reliability."
+
+**The menu is static, so it is painted statically.** The product menu has a fixed shape (emblem,
+wordmark, beta line, PLAY, TERRITORY, Settings); only labels and numbers are data. `vite.config.ts`
+now fills the beta line (from `src/strings.ts`), drops PLAY's `hidden`, and adds `world-reserved`
+only when the build has an online endpoint. `style.css` shows the product keys from the first frame
+and reserves TERRITORY's 50px slot invisibly; `layoutMenu` reveals the key into the slot it already
+occupies. The emblem paints from the same silhouette as a CSS mask until the SVG replaces it. This
+is why the column no longer moves: measured at 390x844, PLAY's y is 568.06px both before and after
+layout (0.00px), and the beta line/logo are on the first frame instead of arriving last. The legacy
+channels keep the old gate; no skeleton state and no invented words are shown.
+
+**A filter never rides an animating element.** Owner rule, already in `docs/UX.md` and this file; this
+pass found four violations and removed them: the idle hint's `brightness` on the hand, the Throw
+step's `grayscale` on every breathing card, the Bloom recipe's animated `drop-shadow`, and a primary
+key's `brightness` on press/hover. They now use opacity/colour/background. Measured on the Throw
+step: compositor raster 186.9 → 168.6ms per 2.5s at DPR 3. The Throw e2e assertion was changed with
+it (it had pinned the old grayscale; the design intent — readable colour plus the ember edge — is
+unchanged and now pinned by the absence of the filter).
+
+**Two hot-path reads moved out of the loop.** Painting a Bloom reads the board transform once per
+gesture; the drag ghost uses its written size, sampling the box only during the 180ms mini/full
+morph.
+
+**Deliberately not touched.** The Territory map's `world-glint` (an infinite filter on every owned
+tile) and `world-lamp` box-shadow breath, and everything in `world-view.ts` / `world-camera.ts` /
+`living-territory*.ts`: a concurrent change owns that map. The race bar's registered-property
+transition and the hand's designed Throw breath are reported, not changed.
+
+**Pre-existing test drift corrected, not hidden.** `web/e2e/hand-life.ts` still looked for a single
+`hand-breath` animation and a `--breath-scale` property that the five-baked-amplitude pass replaced;
+`web/e2e/online-lobby-check.ts` measured the wordmark→buttons slot on `.menu-inner` after that group
+moved into `.menu-stack`, so it could not see the beta line it exists to guard. Both now measure the
+current structure (the same intent, stronger). `hand-life`'s final Speed Off assertion remains the
+documented pre-existing failure; every breath/reduce-motion check before it passes.
+
 ## 2026-11-02 — Transactional mail wears the brand, and lives in the repo
 
 Owner: "if you do design emails sent to people to confirm account / remember password etc, make sure
