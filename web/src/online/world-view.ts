@@ -1901,13 +1901,13 @@ export class WorldView {
       // The anchor names a FLAT cell centre; the view is framed on where that cell is DRAWN.
       const centre = home ? this.warpPoint(home.x, home.y) : null;
       const cx = centre ? centre.x : fx + fw / 2, cy = centre ? centre.y : fy + fh / 2;
-      return this.clampBox([cx - width / 2, cy - height / 2, width, height]);
+      return this.frameInside([cx - width / 2, cy - height / 2, width, height]);
     }
     const width = Math.min(fw, pixelWidth * (X * R) / MIN_CELL_DRAWN);
     const height = width / aspect;
     const home = this.menuPreview && this.world ? menuTerritoryAnchor(this.world.cells, this.world.claims, this.identity?.playerId ?? null) : null;
     const centre = home ? this.warpPoint(home.x, home.y) : null;
-    return centre ? this.clampBox([centre.x-width/2,centre.y-height/2,width,height])
+    return centre ? this.frameInside([centre.x-width/2,centre.y-height/2,width,height])
       : [fx + (fw - width) / 2, fy + (fh - height) / 2, width, height];
   }
   /**
@@ -2352,6 +2352,15 @@ export class WorldView {
   /** Keep a view on the world: inside the fit box, or centred on it when it is the larger. */
   private clampBox(box: [number, number, number, number]): [number, number, number, number] {
     if (this.panLimits) return hardPan(box, this.panLimits, this.focus);
+    return this.frameInside(box);
+  }
+  /**
+   * AN AUTOMATIC FRAME STAYS FULL OF LAND. The player may drag the panel's middle out to the last
+   * tile and beyond (`panLimits`), but a view the PRODUCT chooses — the first frame, centred on your
+   * land — keeps the old rule: the whole box inside the world's fit box, so it opens on a panel of
+   * tiles rather than half fog (measured: 128 tiles in the panel, as before, not 77).
+   */
+  private frameInside(box: [number, number, number, number]): [number, number, number, number] {
     if (!this.fit) return box;
     const [fx, fy, fw, fh] = this.fit;
     const [x, y, w, h] = box;

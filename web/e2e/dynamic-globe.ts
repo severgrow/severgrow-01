@@ -464,6 +464,10 @@ try {
   const beforeSlow = await stats(page);
   await startProbe(page);
   await pressAndDrag(page, 12, 9, 4);
+  // The finger rests before lifting: this drag moves at a flick's pace, and a flick now CARRIES
+  // after the release (owner, 2026-11-03). Resting makes the release a placement, so what is
+  // measured below is the release's own pose — the thing this check is about — and not the carry.
+  await page.waitForTimeout(160);
   const slowHeld = await stats(page);
   const slowHeldVisible = await visiblePaths(page);
   await page.mouse.up();
