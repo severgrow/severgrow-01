@@ -309,6 +309,95 @@ describe('the live pass only spends a frame on ground it can show', () => {
   });
 });
 
+describe('why the bend is a shared projection and not a per-tile transform', () => {
+  /**
+   * THE ARCHITECTURE QUESTION the 2026-11-03 pass had to answer: an SVG `transform` per tile looks
+   * cheaper than rewriting six `d` points, so why not approximate the sphere with one affine per
+   * hexagon? Because an affine has 6 degrees of freedom and the projection gives each corner its
+   * own position, so neighbours would each draw their shared corners with a DIFFERENT map. This
+   * test measures that seam on the shipped strength and reference view: sub-pixel, but not zero —
+   * while the shared-corner projection above is exact (0 by construction).
+   *
+   * Measured on the reference phone view: worst corner residual 0.151px, worst neighbour seam
+   * 0.261px, mean 0.150px. On the same view a live warp costs ~1ms of a 16.7ms frame, so the exact
+   * projection fits the budget and the approximation buys nothing. `docs/DECISIONS.md` records it.
+   */
+  const bestFit = (local: { x: number; y: number }[], target: { x: number; y: number }[]) => {
+    const n = local.length;
+    let sx = 0, sy = 0, sxx = 0, sxy = 0, syy = 0;
+    for (let i = 0; i < n; i++) {
+      const { x, y } = local[i]!;
+      sx += x; sy += y; sxx += x * x; sxy += x * y; syy += y * y;
+    }
+    const solve = (rhs: [number, number, number]) => {
+      // Cramer's rule on the 3x3 normal matrix [sxx sxy sx; sxy syy sy; sx sy n].
+      const m = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]];
+      const det = (a: number[][]) =>
+        a[0]![0]! * (a[1]![1]! * a[2]![2]! - a[1]![2]! * a[2]![1]!) -
+        a[0]![1]! * (a[1]![0]! * a[2]![2]! - a[1]![2]! * a[2]![0]!) +
+        a[0]![2]! * (a[1]![0]! * a[2]![1]! - a[1]![1]! * a[2]![0]!);
+      const d = det(m);
+      const swapped = (column: number) => m.map((row, i) => row.map((value, j) => j === column ? rhs[i]! : value));
+      return [det(swapped(0)) / d, det(swapped(1)) / d, det(swapped(2)) / d] as const;
+    };
+    let xtx = 0, ytx = 0, ttx = 0, xty = 0, yty = 0, tty = 0, sumTx = 0, sumTy = 0;
+    for (let i = 0; i < n; i++) {
+      const { x, y } = local[i]!, { x: tx, y: ty } = target[i]!;
+      xtx += x * tx; ytx += y * tx; sumTx += tx;
+      xty += x * ty; yty += y * ty; sumTy += ty;
+    }
+    ttx = sumTx; tty = sumTy;
+    const [a, b, e] = solve([xtx, ytx, ttx]);
+    const [c, d, f] = solve([xty, yty, tty]);
+    return (p: { x: number; y: number }) => ({ x: a * p.x + b * p.y + e, y: c * p.x + d * p.y + f });
+  };
+
+  it('a per-tile affine would open a seam the shared projection does not', () => {
+    const pose = viewGlobePose(REFERENCE_BOX, GLOBE_FALLOFF)!;
+    const px = 390 / REFERENCE_BOX[2];
+    const local = CORNERS.map(([dx, dy]) => ({ x: dx * R, y: dy * R }));
+    const maps = new Map<string, ReturnType<typeof bestFit>>();
+    let worstResidual = 0;
+    for (const cell of WORLD_CELLS) {
+      const at = flatCell(cell.q, cell.r);
+      const target = CORNERS.map(([dx, dy]) => globePoint(pose, at.x + dx * R, at.y + dy * R));
+      const map = bestFit(local, target);
+      maps.set(cell.id, map);
+      for (let i = 0; i < 6; i++) {
+        const drawn = map(local[i]!);
+        worstResidual = Math.max(worstResidual, Math.hypot(drawn.x - target[i]!.x, drawn.y - target[i]!.y) * px);
+      }
+    }
+    const byId = new Map(WORLD_CELLS.map((cell) => [cell.id, cell] as const));
+    let worstSeam = 0;
+    for (const cell of WORLD_CELLS) {
+      const mine = maps.get(cell.id)!;
+      const centre = flatCell(cell.q, cell.r);
+      for (const [dq, dr] of [[1, 0], [1, -1], [0, -1]] as const) {
+        const near = byId.get(`${cell.q + dq},${cell.r + dr}`);
+        if (!near) continue;
+        const theirs = maps.get(near.id)!;
+        const otherCentre = flatCell(near.q, near.r);
+        for (let i = 0; i < 6; i++) {
+          const world = { x: centre.x + CORNERS[i]![0] * R, y: centre.y + CORNERS[i]![1] * R };
+          for (let j = 0; j < 6; j++) {
+            const otherWorld = { x: otherCentre.x + CORNERS[j]![0] * R, y: otherCentre.y + CORNERS[j]![1] * R };
+            if (Math.abs(world.x - otherWorld.x) > 1e-9 || Math.abs(world.y - otherWorld.y) > 1e-9) continue;
+            const a = mine(local[i]!), b = theirs(local[j]!);
+            worstSeam = Math.max(worstSeam, Math.hypot(a.x - b.x, a.y - b.y) * px);
+          }
+        }
+      }
+    }
+    // Sub-pixel: the affine is a GOOD approximation. Not zero: it is a different map, which is why
+    // the product projects every shared corner once instead. Measured 0.151px / 0.261px.
+    expect(worstResidual).toBeGreaterThan(0.05);
+    expect(worstResidual).toBeLessThan(1);
+    expect(worstSeam).toBeGreaterThan(0.1);
+    expect(worstSeam).toBeLessThan(1);
+  });
+});
+
 describe('a tap resolves against what is DRAWN', () => {
   const pose = viewGlobePose(REFERENCE_BOX, GLOBE_FALLOFF)!;
   /** The flat-centre rule the 8% commit's hit test was wrongly described as using. */

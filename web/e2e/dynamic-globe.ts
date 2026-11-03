@@ -132,6 +132,7 @@ const stats = (page: Page) => page.evaluate(() => {
   return {
     warpMs: Number(svg.dataset.warpMs ?? 0), warpWrites: Number(svg.dataset.warpWrites ?? 0),
     warpCells: Number(svg.dataset.warpCells ?? 0), warpSettles: Number(svg.dataset.warpSettles ?? 0),
+    warpLive: Number(svg.dataset.warpLive ?? 0),
     viewWrites: Number(svg.dataset.viewWrites ?? 0), viewMs: Number(svg.dataset.viewMs ?? 0),
   };
 });
@@ -149,11 +150,12 @@ const startProbe = (page: Page) => page.evaluate(() => {
   // tsx/esbuild names inner functions with a `__name` helper the page does not have. This is the
   // repo's usual stand-in, stated here explicitly.
   (window as unknown as { __name: (fn: unknown) => unknown }).__name = (fn: unknown) => fn;
-  const w = window as unknown as { __warpProbe: { frames: number[]; warps: { ms: number; writes: number; cells: number }[]; stop: boolean } };
+  const w = window as unknown as { __warpProbe: { frames: number[]; warps: { ms: number; writes: number; cells: number; live: boolean }[]; stop: boolean } };
   const svg = (): SVGSVGElement | null => document.querySelector('.world-map-svg');
   w.__warpProbe = { frames: [], warps: [], stop: false };
   let last = performance.now();
   let passes = Number(svg()?.dataset.warpSettles ?? 0);
+  let live = Number(svg()?.dataset.warpLive ?? 0);
   const loop = (t: number) => {
     if (w.__warpProbe.stop) return;
     w.__warpProbe.frames.push(t - last);
@@ -161,19 +163,22 @@ const startProbe = (page: Page) => page.evaluate(() => {
     const node = svg();
     const now = Number(node?.dataset.warpSettles ?? 0);
     if (node && now > passes) {
+      const liveNow = Number(node.dataset.warpLive ?? 0);
       w.__warpProbe.warps.push({
         ms: Number(node.dataset.warpMs ?? 0),
         writes: Number(node.dataset.warpWrites ?? 0),
         cells: Number(node.dataset.warpCells ?? 0),
+        live: liveNow > live,
       });
       passes = now;
+      live = liveNow;
     }
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
 });
 const stopProbe = (page: Page) => page.evaluate(() => {
-  const w = window as unknown as { __warpProbe: { frames: number[]; warps: { ms: number; writes: number; cells: number }[]; stop: boolean } };
+  const w = window as unknown as { __warpProbe: { frames: number[]; warps: { ms: number; writes: number; cells: number; live: boolean }[]; stop: boolean } };
   w.__warpProbe.stop = true;
   // The first gap starts at an arbitrary moment inside a frame; the rest are real frame gaps.
   return { warps: w.__warpProbe.warps, frames: w.__warpProbe.frames.slice(1) };
@@ -206,6 +211,68 @@ const visibleHexIds = (page: Page) => page.evaluate(() => {
       return !(r.right < grid.left || r.left > grid.right || r.bottom < grid.top || r.top > grid.bottom);
     })
     .map((el) => el.getAttribute('data-cell-id') ?? '');
+});
+/** The four numbers the camera currently shows. */
+const viewBoxOf = (page: Page) => page.evaluate(() =>
+  (document.querySelector<SVGSVGElement>('.world-map-svg')?.getAttribute('viewBox') ?? '').split(/\s+/).map(Number));
+/**
+ * EVERY drawn hex at once, in drawing coordinates: all six corners finite, a positive area (an
+ * inverted tile has a negative winding) and its max/min edge ratio. This is the "no gaps, no
+ * inverted tiles, no NaN" proof for a camera at the rim.
+ */
+const tileGeometry = (page: Page) => page.evaluate(() => {
+  let count = 0, inverted = 0, finite = true, minArea = Infinity, worstRatio = 0, visibleRatio = 0, visible = 0;
+  const grid = document.getElementById('online-world-grid')!.getBoundingClientRect();
+  for (const el of document.querySelectorAll<SVGPathElement>('.world-hex')) {
+    const points = [...(el.getAttribute('d') ?? '').matchAll(/(?:M|L)\s*(-?[\d.]+)[ ,](-?[\d.]+)/g)]
+      .map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
+    if (points.length !== 6) continue;
+    count++;
+    if (points.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) { finite = false; continue; }
+    let area = 0;
+    for (let i = 0; i < 6; i++) {
+      const a = points[i]!, b = points[(i + 1) % 6]!;
+      area += a.x * b.y - b.x * a.y;
+    }
+    area /= 2;
+    if (area <= 0) inverted++;
+    minArea = Math.min(minArea, Math.abs(area));
+    const lengths = points.map((a, i) => { const b = points[(i + 1) % 6]!; return Math.hypot(b.x - a.x, b.y - a.y); });
+    const ratio = Math.max(...lengths) / Math.min(...lengths);
+    worstRatio = Math.max(worstRatio, ratio);
+    // Only what the panel can SHOW is held to the hexagon bar: ground far beyond the window is
+    // projected by the same continuous function but is never seen, and calling it a sliver says
+    // nothing about the picture.
+    const r = el.getBoundingClientRect();
+    if (r.right < grid.left || r.left > grid.right || r.bottom < grid.top || r.top > grid.bottom) continue;
+    visible++;
+    visibleRatio = Math.max(visibleRatio, ratio);
+  }
+  return {
+    count, inverted, finite, visible,
+    minArea: Number.isFinite(minArea) ? minArea : 0, worstRatio, visibleRatio,
+  };
+});
+/** Sample one tile's absolute screen rect on every painted frame, across a transition. */
+const startTileTrace = (page: Page, id: string) => page.evaluate((cellId) => {
+  (window as unknown as { __name: (fn: unknown) => unknown }).__name = (fn: unknown) => fn;
+  const w = window as unknown as { __tileTrace: { frames: { left: number; top: number; width: number; height: number }[]; stop: boolean } };
+  w.__tileTrace = { frames: [], stop: false };
+  const loop = () => {
+    if (w.__tileTrace.stop) return;
+    const el = document.querySelector(`.world-hex[data-cell-id="${cellId}"]`);
+    if (el) {
+      const r = el.getBoundingClientRect();
+      w.__tileTrace.frames.push({ left: r.left, top: r.top, width: r.width, height: r.height });
+    }
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}, id);
+const stopTileTrace = (page: Page) => page.evaluate(() => {
+  const w = window as unknown as { __tileTrace: { frames: { left: number; top: number; width: number; height: number }[]; stop: boolean } };
+  w.__tileTrace.stop = true;
+  return { frames: w.__tileTrace.frames };
 });
 /** The worst seam between two neighbouring DRAWN hexes, in screen pixels (0 = they share corners).
  *  `only` restricts the proof to a set of cells: a live pass deliberately leaves OFF-SCREEN ground
@@ -340,7 +407,9 @@ try {
   const beforePan = await stats(page);
   await startProbe(page);
   const midPaths: string[] = [];
-  await pressAndDrag(page, 18, 6, 3, async (i) => {
+  // A TRUE DIAGONAL: neither axis dominates, so a projection that only ever squashed along one
+  // direction would show up here.
+  await pressAndDrag(page, 18, 7, 5, async (i) => {
     if (i === 6) midPaths.push(await oneTilePath(page));
   });
   // STILL HOLDING THE MAP: everything below is measured with the finger down.
@@ -349,16 +418,18 @@ try {
   const heldSeam = await worstSeam(page, new Set(await visibleHexIds(page)));
   const heldVisible = await visiblePaths(page);
   await page.mouse.up();
-  // The release's authoritative pass (and the soft-focus settle behind it) has landed.
+  // THE RELEASED FRAME, read before the 140ms margin pass can land: a release must cost NOTHING.
+  const justReleased = await stats(page);
+  // The release's deferred authoritative pass (and the soft-focus settle behind it) has landed.
   await page.waitForTimeout(120);
   await twoFrames(page);
   const releasedPaths = await visiblePaths(page);
   const afterPan = await stats(page);
   const probe = await stopProbe(page);
-  const live = probe.warps.slice(0, -1); // the last entry is the release's settle, not a drag frame
+  const live = probe.warps.filter((warp) => warp.live); // the release's later full pass is not one
   const liveMs = live.map((warp) => warp.ms);
   const liveWrites = live.map((warp) => warp.writes);
-  const warpsDuringDrag = held.warpSettles - beforePan.warpSettles;
+  const warpsDuringDrag = held.warpLive - beforePan.warpLive;
   const viewWrites = afterPan.viewWrites - beforePan.viewWrites;
   const gap95 = percentile(probe.frames, 0.95);
   const gapMax = Math.max(0, ...probe.frames);
@@ -377,6 +448,12 @@ try {
   const movedAtRelease = ids.filter((id) => heldVisible[id] !== releasedPaths[id]);
   check(`the release settles the SAME pose, not a second one (${movedAtRelease.length} of ${ids.length} visible tiles moved at the release)`,
     ids.length > 20 && movedAtRelease.length === 0);
+  // CHECK 3b: and the released frame does not even do the WORK of a full pass. A pass may only have
+  // run if the last pointermove had not been painted yet — and then it must be a LIVE pass over the
+  // visible ground, never the 279-cell authoritative settle. That settle belongs 140ms later.
+  const releasedPasses = justReleased.warpSettles - held.warpSettles;
+  check(`the release itself runs no full pass (${releasedPasses} pass(es), ${justReleased.warpCells} cells; the full ${afterPan.warpCells}-cell margin pass lands after the camera rests)`,
+    releasedPasses <= 1 && justReleased.warpCells < afterPan.warpCells && afterPan.warpCells > 200);
 
   console.log(`INFO drag: ${live.length} live warps over the probe — warp ${percentile(liveMs, 0.5)}ms median / ${Math.max(0, ...liveMs)}ms worst, ${percentile(liveWrites, 0.5)} writes median (${Math.max(0, ...liveWrites)} worst), ${live[0]?.cells ?? 0}-${Math.max(0, ...live.map((warp) => warp.cells))} cells; frames ${gap95.toFixed(1)}ms p95 / ${gapMax.toFixed(1)}ms worst`);
   console.log(`INFO settle after the pan: ${afterPan.warpMs}ms, ${afterPan.warpWrites} attribute writes, ${afterPan.warpCells} cells (only the margin the live passes skipped)`);
@@ -396,10 +473,10 @@ try {
   const afterSlow = await stats(page);
   const slowProbe = await stopProbe(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
-  const slowLive = slowProbe.warps.slice(0, -1);
+  const slowLive = slowProbe.warps.filter((warp) => warp.live);
   const slowMs = slowLive.map((warp) => warp.ms);
   const slowWrites = slowLive.map((warp) => warp.writes);
-  const slowWarps = slowHeld.warpSettles - beforeSlow.warpSettles;
+  const slowWarps = slowHeld.warpLive - beforeSlow.warpLive;
   const slowGap95 = percentile(slowProbe.frames, 0.95);
   const slowGapMax = Math.max(0, ...slowProbe.frames);
   const slowDrift = Object.keys(slowHeldVisible).filter((id) => slowHeldVisible[id] !== slowReleased[id]).length;
@@ -410,6 +487,60 @@ try {
   check(`a throttled drag holds ~60fps (p95 frame gap ${slowGap95.toFixed(1)}ms < 34ms; worst single frame ${slowGapMax.toFixed(1)}ms)`, slowGap95 < 34);
   check(`a settle stays cheap at 4x CPU (${afterSlow.warpMs}ms, ${afterSlow.warpWrites} writes, ${afterSlow.warpCells} cells)`, afterSlow.warpMs < 33);
 
+  await backToMenu();
+
+  // ---- 3c. THE EDGE OF THE WORLD: drag the camera past the settled land ------------------
+  // The view centre ends outside the world's own land, where the fit box can no longer move with
+  // the finger. Nothing may open a gap, invert a tile, write a NaN or unclamp the camera.
+  const worldExtent = WORLD_CELLS.reduce((box, cell) => {
+    const at = flatCell(cell.q, cell.r);
+    return [Math.min(box[0], at.x - R), Math.min(box[1], at.y - R), Math.max(box[2], at.x + R), Math.max(box[3], at.y + R)] as const;
+  }, [Infinity, Infinity, -Infinity, -Infinity] as const);
+  await seedCamera(page, worldExtent[2] + 40, worldExtent[3] + 40);
+  await boot();
+  await openTerritory();
+  const rimBefore = await stats(page);
+  const rimBoxBefore = await viewBoxOf(page);
+  await startProbe(page);
+  await pressAndDrag(page, 10, -9, -7);
+  const rimHeld = await stats(page);
+  const rimGeometry = await tileGeometry(page);
+  const rimSeam = await worstSeam(page, new Set(await visibleHexIds(page)));
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  await twoFrames(page);
+  const rimAfter = await stats(page);
+  const rimBox = await viewBoxOf(page);
+  const rimProbe = await stopProbe(page);
+  const rimWarps = rimHeld.warpLive - rimBefore.warpLive;
+  const finiteBox = rimBox.length === 4 && rimBox.every((n) => Number.isFinite(n)) && rimBox[2]! > 0 && rimBox[3]! > 0;
+  // The camera may never leave the world's own fit box: its centre stays within the world extent
+  // plus the product's PAD, however hard the finger pushes at the rim.
+  const centreX = rimBox[0]! + rimBox[2]! / 2, centreY = rimBox[1]! + rimBox[3]! / 2;
+  const clamped = centreX >= worldExtent[0] - 18 - 1 && centreX <= worldExtent[2] + 18 + 1 &&
+    centreY >= worldExtent[1] - 18 - 1 && centreY <= worldExtent[3] + 18 + 1;
+  check(`the edge of the world stays sane (viewBox ${rimBox.map((n) => n.toFixed(1)).join(' ')} finite: ${finiteBox}, centre clamped: ${clamped}, ${rimWarps} live warps, seam ${rimSeam.seam.toFixed(3)}px)`,
+    finiteBox && clamped && rimWarps >= 3 && rimSeam.seam < 0.02);
+  check(`no tile is inverted or empty at the rim (${rimGeometry.count} drawn hexes, smallest area ${rimGeometry.minArea.toFixed(1)}, all finite: ${rimGeometry.finite}, inverted: ${rimGeometry.inverted}; ${rimGeometry.visible} visible, worst visible edge ratio ${rimGeometry.visibleRatio.toFixed(4)})`,
+    rimGeometry.count > 50 && rimGeometry.finite && rimGeometry.minArea > 0 && rimGeometry.inverted === 0 && rimGeometry.visibleRatio < 1.35);
+  console.log(`INFO edge of world: ${rimProbe.warps.filter((w) => w.live).length} live warps, ${percentile(rimProbe.warps.filter((w) => w.live).map((w) => w.ms), 0.5)}ms median, frames ${percentile(rimProbe.frames, 0.95).toFixed(1)}ms p95; camera moved ${Math.hypot(rimBox[0]! - rimBoxBefore[0]!, rimBox[1]! - rimBoxBefore[1]!).toFixed(1)} world units; settles ${rimAfter.warpSettles - rimHeld.warpSettles}`);
+
+  // ---- 3d. THE MENU -> TERRITORY OPENING: the SAME tile, frame by frame ---------------------
+  // The old proof compared only before and after. The owner's complaint was a jump AT a moment, so
+  // the moment itself is sampled: one tile's absolute screen rect, every painted frame, across the
+  // whole transition. It may not move or resize by even a hundredth of a pixel.
+  await backToMenu();
+  await seedCamera(page, flatCell(-2, -4).x, flatCell(-2, -4).y);
+  await boot();
+  await startTileTrace(page, '0,0');
+  await openTerritory();
+  await page.waitForTimeout(700); // the colour-in is a full second; sample past its first half
+  const trace = await stopTileTrace(page);
+  const spread = trace.frames.reduce((worst, f) => Math.max(worst,
+    Math.abs(f.left - trace.frames[0]!.left), Math.abs(f.top - trace.frames[0]!.top),
+    Math.abs(f.width - trace.frames[0]!.width), Math.abs(f.height - trace.frames[0]!.height)), 0);
+  check(`a tile does not move across the opening, sampled every frame (${trace.frames.length} frames, max ${spread.toFixed(3)}px, tile ${trace.frames[0]?.width.toFixed(2)}px wide)`,
+    trace.frames.length >= 12 && spread < 0.01);
   await backToMenu();
 
   // ---- 4. centre vs edge: the SAME tile at the fat middle and at the view edge ----------

@@ -1,5 +1,53 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-03 — The projection stays one shared map; the release does nothing
+
+Owner: *"evaluate a cleaner implementation before committing to the current solution … a
+camera-centred, continuous fisheye projection that gives the impression of physically rotating a
+globe … no snapping, stepping, delayed updates or changes that happen only when dragging ends"*.
+
+**The architecture was measured, not assumed.** Three candidates were compared on the real page at
+390x844 (Chromium, DPR 2, `data-warp-*` counters plus a per-frame probe, CDP CPU throttle 1x/4x):
+
+| candidate | live warp | verdict |
+| --- | --- | --- |
+| per-tile `d` rebuild, shared-corner projection (shipped) | 0.8-1.0ms, 369 writes, 163-183 cells at 1x; 3.0ms at 4x | **chosen** |
+| per-tile `transform` (local-space `d` + affine) | *not cheaper*: writing `transform` measured 1.40ms against 1.30ms for `d` over the same 696 nodes at 1x (2.6 vs 2.7 at 4x) | rejected |
+| one group transform / nested affines | a single affine cannot express a falloff that varies with distance from the view centre; concentric rings are the old per-tile falloff with visible steps | rejected |
+| canvas / WebGL | no budget to win: the warp is 1-3ms of a 16.7ms frame and the frame p95 is 16.7ms at 4x | rejected |
+
+**Why the affine loses on more than speed.** A best-fit affine per hexagon leaves a **0.151px**
+worst corner residual and a **0.261px** worst neighbour seam at the reference view (mean 0.150px over
+1514 shared corners) — sub-pixel, so it is a *good* approximation, but it is a different map per
+tile and the neighbours no longer meet exactly. The shipped projection draws every shared CORNER
+once, so the seam is **0.000px** by construction, at every camera including mid-drag. The affine also
+buys nothing measurable: the DOM write is the cost, not the length of the string. `web/tests/
+map-globe.test.ts` now pins both numbers so a future "just use transforms" change has to argue with
+them.
+
+**What changed in this pass (the other agent's per-frame work is kept).**
+
+- **The release runs no warp pass at all.** It used to end with the authoritative 279-cell pass
+  (232 writes, 3.6-10.2ms at 4x) on the exact frame the eye is watching for the jump. It cannot
+  change a visible pixel — the live warps already stood on that pose — so it moved to the existing
+  `SETTLE_MS` (140ms) soft-focus timer, where the camera has rested. The release now flushes the
+  pending frame with the SAME live pass a gesture frame uses.
+- **The warp's node list is collected once per paint** instead of re-matched on every frame
+  (0.018ms at 1x / 0.085ms at 4x over 711 nodes). Small, but it was pure per-frame overhead.
+- `data-warp-live` publishes live passes separately from the settle, so a proof can tell them apart.
+
+**Measured after the change** (`web/e2e/dynamic-globe.ts`, which now also drags diagonally, drags at
+the world's rim and samples a tile every frame across the opening): 18 live warps in an 18-move drag,
+**0.8ms** median / 0.9ms worst at 1x and **3.0ms** median / 3.4ms worst at 4x, 369 writes; frames
+**16.7ms p95 / 16.8ms worst at both throttles**; **0 of 140 visible tiles move at the release**; the
+release performs **0 passes**. Diagonal drag seam 0.000px over 371 pairs; rim drag finite and
+uninverted with a 0.000px seam; a tracked tile moves **0.000px over 122 sampled frames** of the
+menu → Territory opening; tile rects 0.000px menu vs panel and 0.000px after a reload.
+
+**Cost accepted.** The off-screen margin is on the previous pose for 140ms after a release. It is
+outside the panel, and the first live pass that brings it into view re-poses it, so nothing visible
+depends on it.
+
 ## 2026-11-03 — The bend rides the drag, one live warp per painted frame
 
 Owner: *"on the test one its kinda working, but jumpy -- doesnt change while dragging but only when
