@@ -47,11 +47,11 @@ export const tapIsLit = (lit: Lit, tap: Tap): boolean => {
  * Why this tap cannot do anything now, or null when it can. `locked` (levels 1-3): a legal tap that is
  * not the lit one is answered too, so the player is led back to the light instead of off the lesson.
  */
-export const tapAnswer = (s: State, selected: number | null, tap: Tap, lit: Lit | null = null, locked = false, placing = false): string | null => {
+export const tapAnswer = (s: State, selected: number | null, tap: Tap, lit: Lit | null = null, locked = false, placing = false, allowed?: readonly Action[]): string | null => {
   if (s.phase === 'GAME_OVER' || tap.t === 'other') return null;
   if (s.actor !== YOU) return W.theirTurnNow;
   const v = viewFor(s, YOU);
-  const legal = legalActions(v);
+  const legal = allowed ?? legalActions(v);
   const litOk = lit ? tapIsLit(lit, tap) : false;
   const refuse = (why: string | null): string | null => why;
 

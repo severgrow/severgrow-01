@@ -42,6 +42,8 @@ export const FEATURES = Object.freeze({
    * what makes this true only for the staging copy and always false for the futa04 product.
    */
   blitz: CHANNEL === 'futa05' && IS_TEST_ROUTE,
+  firstExperience: CHANNEL === 'futa05' && IS_TEST_ROUTE,
+  sphereTest: CHANNEL === 'futa05' && IS_TEST_ROUTE,
 });
 const isPreviewHost = typeof location !== 'undefined' && (
   location.hostname.endsWith('.chatgpt.site') ||
@@ -56,7 +58,7 @@ const isPreviewHost = typeof location !== 'undefined' && (
  */
 export const IS_PREVIEW_3 = typeof location !== 'undefined' && /^\/3(\/|$)/.test(location.pathname);
 export const STORAGE_PREFIX = CHANNEL === 'futa-test' ? 'futa-test:'
-  : CHANNEL === 'futa05' ? (IS_PREVIEW_3 ? 'futa05-3:' : 'futa05:')
+  : CHANNEL === 'futa05' ? (IS_TEST_ROUTE ? 'futa05-test:' : IS_PREVIEW_3 ? 'futa05-3:' : 'futa05:')
   : CHANNEL === 'test' ? 'test:'
   : IS_FUTA04 ? (isPreviewHost ? 'futa04:' : 'main2:')
   : '';

@@ -1,5 +1,11 @@
 # Lesson scripts — levels 1-10 (the tutorial)
 
+**Staging experiment:** `/test/` has an opt-in input refinement documented in
+[`FIRST-EXPERIENCE-TEST.md`](FIRST-EXPERIENCE-TEST.md). There, gameplay taps never acknowledge prose,
+random taps retain it, and its small intentional close target unlocks after three seconds. The
+first three messages have test-only wording. The approved scripts and production behaviour below
+remain unchanged at `/`, `/2/` and `/3/`; authored positions and progression are not revised.
+
 This file is the script of what the game shows in levels 1-10. It must match the code:
 
 - data and beats: `web/src/lessons/lessons.ts`

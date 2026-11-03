@@ -17,6 +17,32 @@ const boot = (channel: string, pathname?: string) => {
   return { policy: module.exports, Storage };
 };
 describe('release channel policy', () => {
+  it('the real service worker assigns disjoint caches to root, /2/, /3/ and /test/',()=>{
+    const worker=readFileSync(new URL('../public/futa04-sw.js',import.meta.url),'utf8');
+    const prefixes=['/','/2/','/3/','/test/'].map(path=>runInNewContext(worker+'\nPREFIX',{
+      URL,self:{registration:{scope:'https://futasaku.com'+path},addEventListener:()=>{}},
+    }));
+    expect(new Set(prefixes).size).toBe(4);
+    for(const a of prefixes)for(const b of prefixes)if(a!==b)expect(a.startsWith(b)).toBe(false);
+  });
+  it('new experience and sphere are exclusive to /test/, with their own untouched save namespace', () => {
+    for (const path of ['/', '/2/', '/3/', '/test2/', '/2/test/']) {
+      const p=boot('futa05',path).policy;
+      expect(p.FEATURES.firstExperience).toBe(false);
+      expect(p.FEATURES.sphereTest).toBe(false);
+    }
+    const {policy,Storage}=boot('futa05','/test/');
+    expect(policy.FEATURES.firstExperience).toBe(true);
+    expect(policy.FEATURES.sphereTest).toBe(true);
+    expect(policy.STORAGE_PREFIX).toBe('futa05-test:');
+    const store=new Storage();store.data.set('futa05:save','real progress');
+    expect(store.getItem('save')).toBeNull();store.setItem('save','experiment');
+    expect(store.data.get('futa05:save')).toBe('real progress');
+    for(const channel of ['futa04','futa-test','test','live']){
+      expect(boot(channel,'/test/').policy.FEATURES.firstExperience).toBe(false);
+      expect(boot(channel,'/test/').policy.FEATURES.sphereTest).toBe(false);
+    }
+  });
   it.each(['live', 'test', 'futa04', 'futa-test', 'futa05'])('%s isolates local and session storage', (channel) => {
     const { policy, Storage } = boot(channel);
     for (const store of [new Storage(), new Storage()]) {

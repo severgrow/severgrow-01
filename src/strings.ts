@@ -1649,6 +1649,14 @@ export const CAMPAIGN = Object.freeze({
 // "set" or "run"; no tile colours. Scoring words follow SPEC ("Ending the game").
 // docs/LESSON-SCRIPTS.md holds the same text beat by beat; web/tests/lesson-words.test.ts pins both.
 // ======================================================================================
+/** Staging-only refinements; the approved production lesson copy below stays unchanged. */
+export const FIRST_EXPERIENCE = Object.freeze({
+  dismiss: 'Dismiss explanation',
+  home: 'This is your home. Grow from here. Surround theirs to win — or finish with more points.',
+  opponent: 'Surround their home to win. When the Draw pile runs out, finish the final turns and score.',
+  draw: 'Each turn: Draw, Grow, Throw. Take one card from the Draw pile or the Throw pile.',
+});
+
 export const LESSON = Object.freeze({
   // ---- the display: what to do now (never more than three words) ----
   // Owner, 2026-10-20: the LED is small and read at a glance, so the action is at most three
