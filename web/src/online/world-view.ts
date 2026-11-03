@@ -65,6 +65,19 @@ import {
 import { mountSheetViewport } from '../ui/sheet-viewport.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { TerritoryChat } from './territory-chat.js';
+import {
+  FLICK_MIN,
+  focusLimits,
+  hardPan,
+  isOutside,
+  momentumStep,
+  rawFor,
+  releaseVelocity,
+  softPan,
+  type Focus,
+  type FocusLimits,
+  type Sample,
+} from './world-pan.js';
 import { borderSegments, cellXY, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ranking, ringPhase, standing, takeovers } from './world-growth.js';
 import type { FogRing, FogShift, Takeover } from './world-growth.js';
 import { ONLINE } from '../../../src/strings.js';
@@ -157,6 +170,8 @@ export const glideProgress = (t: number): number => {
 };
 /** The soft-focus layers stay off this long after a gesture ends, so a quick second flick never re-blurs mid-motion. */
 const SETTLE_MS = 140;
+/** How long a camera left past an edge takes to ease back to it: one quick, decelerating breath. */
+const EDGE_RETURN_MS = 280;
 /**
  * THE MIST'S HAND-OFF (owner, 2026-10-28: "the way the empty tiles around the 'discovered' is
  * changing colors, shading — i like that, but make it smooth more transition like rather than
@@ -428,6 +443,8 @@ const X = Math.sqrt(3);
  * the large view's scale, so the outermost column/row is never clipped by the border.
  */
 const PAD = 18;
+/** A fit box no camera can leave: `clampedView` then applies only its zoom limits (the pan is the focus's). */
+const UNBOUNDED: ViewBox = [-1e7, -1e7, 2e7, 2e7];
 /**
  * THE FIT VIEW'S EDGE, in world units (owner, 2026-10-23: "max zoom out leaves minimal margin on
  * the sides of the whole map"). Zoomed all the way out nothing is panned, so the large view's PAD
@@ -532,6 +549,19 @@ export class WorldView {
    * differ between the two surfaces by construction. See `open`/`applyCrop`.
    */
   private canvas: ScreenRect | null = null;
+  /**
+   * THE CAMERA'S LIMIT AND FEEL (world-camera.ts). `panLimits` is where the FOCUS — the world point
+   * under the middle of the visible panel — may go: every discovered cell centre plus one cell beyond.
+   * `focus` is that middle as a fraction of the canvas, read from the panel's layout and KEPT after
+   * the Territory closes, so the menu (which never pans) clamps exactly as the Territory did and a
+   * camera can never be nudged by the trip back. `dragRaw` is the finger's unclamped camera during a
+   * one-finger pan (the shown camera gives softly past the edge); `samples` feed the flick.
+   */
+  private panLimits: FocusLimits | null = null;
+  private focus: Focus = { fx: 0.5, fy: 0.5 };
+  private dragRaw: ViewBox | null = null;
+  private samples: Sample[] = [];
+  private momentumFrame = 0;
   /** Cost of the last warp pass, for the browser proof (not read by the product). */
   private warpStats = { ms: 0, writes: 0, cells: 0, settles: 0, live: 0 };
   /**
@@ -1792,6 +1822,8 @@ export class WorldView {
     // Re-measured on every paint: the map GROWS (owner, 2026-10-27), so its extent is not fixed.
     const previousFit = this.fit;
     this.fit = [minX - PAD, minY - PAD, maxX - minX + 2 * PAD, maxY - minY + 2 * PAD];
+    // The pan limit is the cells themselves (plus one beyond), not this box: see `panLimits`.
+    this.panLimits = focusLimits(world.cells);
     // Frame the view to the WINDOW, so the map scales up to fill it. A portrait phone crops the
     // surplus width and pans to the edges; a wide screen resolves to the whole world. The DEFAULT
     // view is then the framed view capped so one cell is at least MIN_CELL_PX (see `detailFor`).
@@ -1988,6 +2020,13 @@ export class WorldView {
     svg.style.maxHeight = 'none';
     // The clip is expressed in the SVG's own CSS box, which is the canvas: the panel's frame minus
     // the canvas origin. Nothing here reads the camera.
+    // THE FOCUS is the middle of what the player can see: the panel, as a fraction of the canvas.
+    if (canvas.width > 0 && canvas.height > 0) {
+      this.focus = {
+        fx: Math.min(1, Math.max(0, (panel.left + panel.width / 2 - canvas.left) / canvas.width)),
+        fy: Math.min(1, Math.max(0, (panel.top + panel.height / 2 - canvas.top) / canvas.height)),
+      };
+    }
     const { top, left, right, bottom } = cropInsets(canvas, panel);
     const clip = `inset(${top}px ${right}px ${bottom}px ${left}px round ${panel.radius}px)`;
     svg.style.clipPath = clip;
@@ -2312,6 +2351,7 @@ export class WorldView {
 
   /** Keep a view on the world: inside the fit box, or centred on it when it is the larger. */
   private clampBox(box: [number, number, number, number]): [number, number, number, number] {
+    if (this.panLimits) return hardPan(box, this.panLimits, this.focus);
     if (!this.fit) return box;
     const [fx, fy, fw, fh] = this.fit;
     const [x, y, w, h] = box;
@@ -2366,10 +2406,68 @@ export class WorldView {
   }
   /** A finger on the map takes the view back from a glide at once. */
   private stopGlide() {
+    // A finger on the map also takes it back from a carry or an edge return, at the pixel it is on.
+    if (this.momentumFrame) {
+      cancelAnimationFrame(this.momentumFrame);
+      this.momentumFrame = 0;
+      this.setMoving(false);
+    }
     if (!this.glideFrame) return;
     cancelAnimationFrame(this.glideFrame);
     this.glideFrame = 0;
     this.setMoving(false);
+  }
+  /**
+   * THE CARRY (owner brief, 2026-11-03: "a quick drag release should carry a small amount of momentum,
+   * decelerating smoothly"). The release speed (px/ms) keeps moving the raw camera, decaying on a
+   * short time constant (`momentumStep`); the map is shown through the same soft edge as the drag,
+   * and a carry that runs into an edge is braked hard there and eased back. One viewBox write and one
+   * live warp per frame, exactly like a finger's frame. Never during a pinch or under reduced motion.
+   */
+  private carry(v: { x: number; y: number }, rect: { width: number; height: number }, raw: ViewBox | null): void {
+    if (!this.box || !this.panLimits) return;
+    this.stopGlide();
+    const limits = this.panLimits;
+    let speed = { ...v };
+    let camera: ViewBox = raw ? [...raw] : rawFor(this.box, limits, this.focus);
+    let last = performance.now();
+    this.setMoving(true);
+    const step = (now: number) => {
+      const s = momentumStep(speed, now - last);
+      last = now;
+      speed = s.v;
+      camera = [camera[0] - s.dx / rect.width * camera[2], camera[1] - s.dy / rect.height * camera[3], camera[2], camera[3]];
+      // Past an edge the carry is braked hard, so it eases into the give instead of flying through it.
+      if (isOutside(camera, limits, this.focus)) speed = { x: speed.x * 0.6, y: speed.y * 0.6 };
+      this.box = softPan(camera, limits, this.focus);
+      this.applyView(false);
+      this.liveWarp();
+      if (!s.done && Math.hypot(speed.x, speed.y) >= 0.03) { this.momentumFrame = requestAnimationFrame(step); return; }
+      this.momentumFrame = 0;
+      if (isOutside(this.box, limits, this.focus)) { this.returnToEdge(); return; }
+      this.setMoving(false);
+    };
+    this.momentumFrame = requestAnimationFrame(step);
+  }
+  /** A camera left past the edge eases back to it: short, decelerating, no bounce (`EDGE_RETURN_MS`). */
+  private returnToEdge(): void {
+    if (!this.box || !this.panLimits) return;
+    const from: ViewBox = [...this.box];
+    const to = hardPan(from, this.panLimits, this.focus);
+    if (!interfaceMotionAllowed()) { this.box = to; this.applyView(false); this.settleWarp(); return; }
+    const start = performance.now();
+    this.setMoving(true);
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / EDGE_RETURN_MS);
+      const eased = 1 - (1 - t) ** 3;
+      this.box = from.map((value, i) => value + (to[i]! - value) * eased) as ViewBox;
+      this.applyView(false);
+      this.liveWarp();
+      if (t < 1) { this.momentumFrame = requestAnimationFrame(step); return; }
+      this.momentumFrame = 0;
+      this.setMoving(false);
+    };
+    this.momentumFrame = requestAnimationFrame(step);
   }
   private flyToOwner(ownerId: string) {
     if (!this.world) return;
@@ -3894,7 +3992,12 @@ export class WorldView {
       // A view wider (or taller) than the world — the stage zoomed out — stays centred on it.
       // The maths is pure (`clampedView`), so a NaN anywhere in it can only ever produce a legal
       // view: this is the gate the poisoning used to walk through.
-      this.box = clampedView(box, this.fit, frame, Math.min(frame[2] / 4, this.cellFloor()));
+      const closest = Math.min(frame[2] / 4, this.cellFloor());
+      // ZOOM LIMITS from the framed view (as before); the PAN limit is the focus one (`panLimits`):
+      // every edge tile can be brought to the middle of the panel, at every zoom.
+      this.box = this.panLimits
+        ? hardPan(clampedView(box, UNBOUNDED, frame, closest), this.panLimits, this.focus)
+        : clampedView(box, this.fit, frame, closest);
       // A pan never re-measures: `this.aspect` is kept by the ResizeObserver (and by open/repaint).
       // The write itself waits for the next frame, and that frame bends the globe onto it too (see
       // `queueView`).
@@ -4032,6 +4135,9 @@ export class WorldView {
       this.pointers.delete(event.pointerId);
       if (this.lastRelease?.id === event.pointerId) this.lastRelease = null;
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, touch: event.pointerType === 'touch' });
+      // A new gesture: its raw camera is taken from wherever the map is now (see the pan below).
+      this.dragRaw = null;
+      this.samples = [];
       frameRect = svg.getBoundingClientRect();
       if (this.pointers.size > 1) { this.multiGesture = true; this.dragged = true; this.lastTap = null; this.setMoving(true); }
       else { this.dragged = false; this.multiGesture = false; this.gestureStart = { x: event.clientX, y: event.clientY }; }
@@ -4104,9 +4210,26 @@ export class WorldView {
       }
       if (this.pointers.size === 1) {
         const box = this.recoverBox()!;
-        this.box = [box[0] - dx / rect.width * box[2], box[1] - dy / rect.height * box[3], box[2], box[3]];
-        set();
+        if (this.panLimits) {
+          // THE FINGER MOVES A RAW CAMERA; THE MAP SHOWS IT WITH A SOFT EDGE (world-pan.ts). Inside
+          // the limits the two are the same box; past an edge the map gives a little, with growing
+          // resistance, instead of stopping at a wall. Reduced motion keeps the plain hard limit.
+          const raw = this.dragRaw ?? rawFor(box, this.panLimits, this.focus);
+          this.dragRaw = [raw[0] - dx / rect.width * raw[2], raw[1] - dy / rect.height * raw[3], raw[2], raw[3]];
+          this.box = interfaceMotionAllowed()
+            ? softPan(this.dragRaw, this.panLimits, this.focus)
+            : hardPan(this.dragRaw, this.panLimits, this.focus);
+          this.samples.push({ t: performance.now(), x: event.clientX, y: event.clientY });
+          if (this.samples.length > 12) this.samples.shift();
+          this.queueView();
+        } else {
+          this.box = [box[0] - dx / rect.width * box[2], box[1] - dy / rect.height * box[3], box[2], box[3]];
+          set();
+        }
       } else {
+        // A second finger makes it a pinch: the raw pan ends, and the pinch's own clamp is hard.
+        this.dragRaw = null;
+        this.samples = [];
         const other = [...this.pointers.entries()].find(([id]) => id !== event.pointerId)?.[1];
         if (other) {
           const before = Math.hypot(old.x - other.x, old.y - other.y);
@@ -4135,6 +4258,8 @@ export class WorldView {
     /** The one place a gesture finishes: shared by the map and by the window (see below). */
     const finish = (event: PointerEvent) => {
       const wasSingle = this.pointers.size === 1;
+      // Read before `end` clears them: was this the end of a ONE-finger pan?
+      const wasPan = wasSingle && this.dragged && !this.multiGesture;
       end(event);
       // A tap, not the end of a pan: hand it to the double-tap arbiter. (Mouse's right/middle
       // buttons, a second finger, and a CANCELLED touch are not taps — a cancel means the browser
@@ -4163,6 +4288,18 @@ export class WorldView {
         // exact moment the eye is watching for a jump is what a "settle" used to look like. It
         // happens 140ms later, once the camera rests (see `setMoving`), while nothing is moving.
         this.liveWarp();
+        // THE RELEASE'S FEEL (world-pan.ts): a flick carries on and decelerates; a pan left past the
+        // edge eases back to it; a slow, deliberate pan stops exactly where the finger left it.
+        const samples = this.samples;
+        this.samples = [];
+        const raw = this.dragRaw;
+        this.dragRaw = null;
+        if (wasPan && event.type === 'pointerup' && this.panLimits && interfaceMotionAllowed()) {
+          const v = releaseVelocity(samples, performance.now());
+          const rect = liveRect(frameRect ?? svg.getBoundingClientRect());
+          if (Math.hypot(v.x, v.y) >= FLICK_MIN && rect.width > 0 && rect.height > 0) this.carry(v, rect, raw);
+          else if (this.box && isOutside(this.box, this.panLimits, this.focus)) this.returnToEdge();
+        }
       }
     };
     svg.addEventListener('pointerup', finish);

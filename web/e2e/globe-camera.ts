@@ -187,11 +187,16 @@ try {
         : dir === 'left' ? (t: typeof tiles[0]) => t.flatX : (t: typeof tiles[0]) => -t.flatX;
       const extreme = Math.min(...tiles.map(key));
       const outer = tiles.filter((t) => Math.abs(key(t) - extreme) < 0.01);
-      const along = dir === 'top' || dir === 'bottom' ? (t: typeof tiles[0]) => Math.abs(t.y - p.cy) : (t: typeof tiles[0]) => Math.abs(t.x - p.cx);
-      const best = outer.reduce((a, t) => (along(t) < along(a) ? t : a), outer[0]!);
-      const gap = along(best);
+      // How far the outermost tile has travelled PAST the panel's centre line toward the middle of
+      // the screen, at the limit. >= 0 means it reached (and crossed) the centre; the limit lets it
+      // go one cell further (the overscan), so the fog beyond it shows, and no more.
+      const past = dir === 'top' ? (t: typeof tiles[0]) => t.y - p.cy : dir === 'bottom' ? (t: typeof tiles[0]) => p.cy - t.y
+        : dir === 'left' ? (t: typeof tiles[0]) => t.x - p.cx : (t: typeof tiles[0]) => p.cx - t.x;
+      const best = outer.reduce((a, t) => (Math.abs(past(t)) < Math.abs(past(a)) ? t : a), outer[0]!);
+      const crossed = past(best);
       const cell = Math.abs(area(land.find((t) => t.id === best.id)!.pts)) ** 0.5;
-      check(`${label}: the ${dir}most tile reaches the panel centre`, gap <= Math.max(12, cell * 0.6), `${best.id} is ${gap.toFixed(1)}px from the centre line (cell ~${cell.toFixed(0)}px)`);
+      check(`${label}: the ${dir}most tile reaches the panel centre`, crossed >= -2 && crossed <= cell * 1.6,
+        `${best.id} sits ${crossed.toFixed(1)}px past the centre line at the limit (cell ~${cell.toFixed(0)}px)`);
       if (label === 'default zoom' && dir === 'top') await page.screenshot({ path: `${OUT}/${TAG}-top-limit.png` });
       if (label === 'default zoom' && dir === 'right') await page.screenshot({ path: `${OUT}/${TAG}-right-limit.png` });
     }
@@ -221,8 +226,9 @@ try {
   check('released past the edge, it returns to the limit and never sticks beyond', Math.abs(back[1]! - limit[1]!) < 0.05, `limit y ${limit[1]!.toFixed(2)}, after ${back[1]!.toFixed(2)}`);
 
   // ---- 4. FEEL: a flick carries; a pause stops -----------------------------------------------
-  await drag(page, 0, -900, 6);                      // back toward the middle
-  await settle(page, 1200);
+  // The camera rests at the TOP limit (above); a flick upward carries it back INTO the land, clear
+  // of every edge, so what follows the release is the carry alone.
+  await settle(page, 400);
   const beforeFlick = await viewBox(page);
   // a quick 120px flick in 5 fast moves, released at speed
   {
