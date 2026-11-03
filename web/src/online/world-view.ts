@@ -580,6 +580,15 @@ export class WorldView {
    * next paint redraw the same hand-off instead of cutting it (see `fogShift`).
    */
   private fogCells: Map<string, FogRing> | null = null;
+  /**
+   * THE FOG'S CELLS, parsed once per paint. The undiscovered rings are not in `world.cells`, and the
+   * warp used to build its geometry from `world.cells` only, so every fog hex kept the pose it was
+   * painted with while the discovered land re-posed under the moving camera: the two drifted apart
+   * and, near the rim, the stale fog read as enormous disconnected hexes (owner, 2026-11-03). The
+   * warp now poses these with the SAME pose, in the same pass, so a fog hex and the land beside it
+   * always share their corners — live during a drag, not on release.
+   */
+  private fogCellList: { id: string; q: number; r: number }[] = [];
   private mistShift: FogShift | null = null;
   private mistShiftAt = 0;
   /** MENU's row of four keys is out (owner, 2026-10-28). */
@@ -992,7 +1001,9 @@ export class WorldView {
     // margin it has always had, so off-screen ground is already posed when it scrolls in.
     const pad = live ? R + 1 : Math.max(bw, bh) * 0.5;
     const paths = new Map<string, string>();
-    for (const cell of this.world.cells) {
+    // One list, one pose: the discovered land AND the undiscovered rings beyond it (see
+    // `fogCellList`). Ids never collide — a fog cell is by definition not a seen cell.
+    for (const cell of [...this.world.cells, ...this.fogCellList]) {
       const flat = coords(cell.q, cell.r);
       if (live) {
         // A cell whose FLAT centre is already inside the box is drawn inside it too: the bend only
@@ -1584,6 +1595,14 @@ export class WorldView {
       fogShiftLayer.append(shiftWas, shiftNow);
     }
     this.fogCells = fogNow;
+    // Every fog id a node is standing on: the ambient rings AND a hand-off overlay still in flight
+    // (whose `lift` cells may already be seen; the warp de-duplicates by id through its map).
+    const fogIds = new Set<string>(fogNow.keys());
+    if (shown) for (const list of [shown.lift, shown.deepen, shown.arrive]) for (const cell of list) fogIds.add(cell.id);
+    this.fogCellList = [...fogIds].map((id) => {
+      const [q, r] = id.split(',').map(Number) as [number, number];
+      return { id, q, r };
+    }).filter((cell) => Number.isFinite(cell.q) && Number.isFinite(cell.r));
     this.mistShift = shown;
     this.mistShiftAt = inFlight ? this.mistShiftAt : nowMs;
     // NEW LAND RISES IN: cells that were not on the map at the last look come up one after another,
