@@ -27,7 +27,12 @@ const FAR = .35;
 const SCREENS = ['menu', 'play-menu', 'game'] as const;
 
 const CSS = `
-#texture:has(> #space-backdrop:not([hidden])) { background: #030404; }
+#texture:has(> #space-backdrop:not([hidden]):not(.in-game)) { background: #030404; }
+/* IN GAME the game's own background stays; the sky (black) and its stars lie over it at 35% (owner,
+   2026-11-04: "still use background we have now, put the black and stars on top of existing one with
+   like 35% opacity"). */
+#space-backdrop.in-game { background-color: #030404; }
+#space-backdrop.in-game.lit { opacity: .35; }
 #space-backdrop { position: absolute; inset: 0; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity 260ms ease-out; }
 #space-backdrop.lit { opacity: 1; }
 #space-backdrop[hidden] { display: none; }
@@ -94,6 +99,7 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
   const paint = () => {
     const w = innerWidth, h = innerHeight;
     paintedStill = still();
+    root.classList.toggle('in-game', paintedStill);
     far.hidden = paintedStill;
     near.hidden = paintedStill;
     if (paintedStill) {

@@ -9,7 +9,7 @@ import type { Action, View } from '../../../src/engine/index.js';
 import { simulate, threats } from '../../../src/bots/evaluate.js';
 import { kindOf } from './interaction.js';
 import type { Sel } from './interaction.js';
-import { S, centerOf, tileBulge, unbend } from '../ui/geom.js';
+import { S, centerOf, flatCentreOf, unbend } from '../ui/geom.js';
 import { toBoard } from './orient.js';
 
 export type Bloom = Extract<Action, { t: 'Bloom' }>;
@@ -33,9 +33,11 @@ export const pixelOf = (key: string): Pt => centerOf(key);
 export const hexAtPoint = (sx: number, sy: number, keys: ReadonlySet<string>, hit = HIT): string | null => {
   // The board may be bent into a small planet (ui/geom.ts): find the cell on the flat lattice under
   // the point's unbent position, then test the point against that cell AS DRAWN (moved in, smaller).
+  // The bend is one smooth map of the whole board (corners and all), so the test is done on the flat
+  // lattice: the unbent point against the flat cell, which is exactly the cell as drawn.
   const flat = unbend(sx, sy);
-  const { x: fx, y: fy } = toBoard(flat.x, flat.y);
-  const { x, y } = toBoard(sx, sy);
+  const { x, y } = toBoard(flat.x, flat.y);
+  const fx = x, fy = y;
   const qf = ((SQ3 / 3) * fx - fy / 3) / S;
   const rf = ((2 / 3) * fy) / S;
   let q = Math.round(qf);
@@ -48,11 +50,11 @@ export const hexAtPoint = (sx: number, sy: number, keys: ReadonlySet<string>, hi
   else if (dr > ds) r = -q - s;
   const key = coordKey({ q: q + 0, r: r + 0 });
   if (!keys.has(key)) return null;
-  const cs = centerOf(key);
+  const cs = flatCentreOf(key);
   const c = toBoard(cs.x, cs.y);
   const px = x - c.x;
   const py = y - c.y;
-  return NORMALS.every((n) => Math.abs(px * n.x + py * n.y) <= hit * INRADIUS * tileBulge(key)) ? key : null;
+  return NORMALS.every((n) => Math.abs(px * n.x + py * n.y) <= hit * INRADIUS) ? key : null;
 };
 
 /**

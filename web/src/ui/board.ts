@@ -431,8 +431,16 @@ export class BoardView {
     let cells = '';
     for (const key of this.keys) cells += hexPath(key, S, 'flat');
     el('path', { d: cells, fill: this.url('planet-slab'), class: 'planet-slab' }, skin);
-    el('path', { d: cells, fill: 'none', class: 'planet-grout' }, skin);
     el('path', { d: cells, fill: this.url('planet-rim'), class: 'planet-limb' }, skin);
+    // A PIECE OF PLANET IN SPACE (owner, 2026-11-04: "The board should feel like real piece of planet
+    // flying but lowkey"): the board's own silhouette, twice, offset below it at low alpha: a soft
+    // shadow with no filter, drawn once under every tile.
+    const shadow = el('g', { class: 'l-planet-shadow', 'aria-hidden': 'true', 'pointer-events': 'none' });
+    this.svg.insertBefore(shadow, this.layers.base);
+    let wide = '';
+    for (const key of this.keys) wide += hexPath(key, S * 1.06, 'flat');
+    el('path', { d: wide, transform: 'translate(0 14)', class: 'planet-shadow-far' }, shadow);
+    el('path', { d: cells, transform: 'translate(0 6)', class: 'planet-shadow-near' }, shadow);
     // The outline: every cell side with no neighbour across it, as drawn (bent corners).
     const set = new Set(this.keys);
     let rim = '';

@@ -51,10 +51,18 @@ html.v075 :is(#menu, #play-menu, #levels, #campaign, #online-hub, #online-waitin
     inset 0 -1px 0 rgba(0, 0, 0, .42),
     0 1px 1px rgba(0, 0, 0, .38) !important;
 }
-/* The lead key: the same metal, its edge drawn in full cream. */
+/* EVERY MENU KEY IS THE SAME KEY (owner, 2026-11-04: "All buttons should be the same in menu and sub
+   menu tho no more highlight diff style for play or level1"): the lead key has no outline of its own
+   and no halo; it leads by its place at the top of the column. */
 html.v075 :is(#menu, #play-menu, #levels, #campaign, #online-hub, #online-waiting, #online-join) .menu-buttons .btn.primary {
-  border-color: var(--fu-cream, #e8ddc5) !important;
+  border-color: color-mix(in srgb, var(--fu-cream, #e8ddc5) 24%, transparent) !important;
 }
+html.v075 :is(#menu, #play-menu) .menu-buttons > .btn.suggest::after,
+html.v075 :is(#menu, #play-menu) .menu-buttons > .btn.suggest::before { content: none !important; box-shadow: none !important; }
+html.v075 :is(#menu, #play-menu) .menu-buttons > .btn.suggest { box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .13),
+    inset 0 -1px 0 rgba(0, 0, 0, .42),
+    0 1px 1px rgba(0, 0, 0, .38) !important; }
 /* Pressed: the housing's shadow falls inside the key and its top light goes out. */
 html.v075 :is(#menu, #play-menu, #levels, #campaign, #online-hub, #online-waiting, #online-join) .menu-buttons .btn[data-pressed='true'] {
   box-shadow: inset 0 2px 3px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(0, 0, 0, .18) !important;
@@ -68,8 +76,10 @@ html.v075 :is(#game, #gameover, #sheet-menu, .hud, .dock, #board, .pile, .go-sco
 }
 
 /* ---- 4. THE BOARD AS A SMALL PLANET (the skin; the bend itself is geometry, web/src/ui/geom.ts) --
-   The grout is a fine dark line; the slab light and the limb shade are gradients drawn once. */
-html.v075 #board .planet-grout { stroke: rgba(4, 6, 6, .62); stroke-width: .9; vector-effect: non-scaling-stroke; }
+   One seamless surface (the bent corners are shared, so no gap opens between tiles), the slab light
+   and the limb shade drawn once, and a soft shadow beneath: a piece of planet floating in space. */
+html.v075 #board .planet-shadow-far { fill: rgba(0, 0, 0, .22); }
+html.v075 #board .planet-shadow-near { fill: rgba(0, 0, 0, .34); }
 
 /* ---- B. TURN RIM -------------------------------------------------------------------------------
    The board's own edge carries a thin atmosphere: cream on the player's turn, dim on the opponent's.

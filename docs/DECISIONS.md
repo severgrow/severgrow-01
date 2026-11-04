@@ -32,10 +32,18 @@ Owner-approved polish pass (live game only: `html.v075` written by the build for
 - **No flash at start-up.** The built HTML carries `space-first`: a still CSS star field on the page
   background until the shader's stars have drawn (`space-lit`).
 - **The board as a small planet.** The Territory globe's spread curve (`k(u) = 1 - f*u^1.25`) at 5%
-  bends the game board (`web/src/ui/geom.ts`): centres move in on the curve and each tile is drawn at
-  the curve's RADIAL factor, so neighbours never overlap (the grout opens by at most a tenth of a
-  tile at the rim). The hit test un-bends the point and checks it against the tile as drawn;
-  `web/tests/board-bulge.test.ts` taps the centre, the sides and the corners of every tile.
+  bends the game board (`web/src/ui/geom.ts`). Every hex CORNER is bent (as on the Territory globe),
+  so neighbours share their corners and the board stays one seamless surface (owner, same day: "gaps
+  in the map between empty piles - should never happen"; a first cut that shrank each tile about its
+  centre opened hairline gaps and was replaced). A soft two-step shadow under the board's silhouette
+  (no filter) floats it over space. The hit test un-bends the point and tests the flat cell;
+  `web/tests/board-bulge.test.ts` pins the shared corners and taps every tile's centre, sides and
+  corners.
+- **In game the game's own background stays** (owner: "put the black and stars on top of existing one
+  with like 35% opacity"): the backdrop's sky and stars lie over it at 35%. Measured with that
+  layer: idle main thread 8.5 ms/s, a move 42.2 fps, p95 26.7 ms (5 runs).
+- **Every menu key is the same key** (owner: "no more highlight diff style for play or level1"): no
+  lead outline and no suggestion halo in the menu and submenus.
 - **Sharper in-game motion.** Tempo 96/336 -> 80/264 ms, the pinned beats about a fifth shorter,
   the cut's own table with them, and the settle curve's overshoot 1.1 -> 1.03 (a click, not a
   bounce). Reading time (the display's 1 s and lessons' 2 s dwells) is unchanged.

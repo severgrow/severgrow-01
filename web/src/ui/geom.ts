@@ -67,12 +67,12 @@ export const getPixelGrid = () => quantum;
 /**
  * THE BOARD AS A SMALL PLANET (0.75, owner 2026-11-04: "A 5% bulge on the board, using the spread
  * curve from the flat Territory globe ... Must never make the board harder to read or to tap").
- * Every tile's centre is drawn on the Territory globe's own spread curve (web/src/online/map-globe.ts,
- * `k(u) = 1 - f * u^1.25`) at 5% for the board's outer corner, and the tile itself is drawn at the
- * curve's RADIAL factor there, so neighbours can never overlap (the grout opens a hair at the rim
- * instead). Everything that places anything on the board reads `centerOf`/`cornerPts`, so the art,
- * the overlays, the effects and the hit test all bend together. Off (null) everywhere but the live
- * game's board.
+ * Every point of the board is drawn on the Territory globe's own spread curve (web/src/online/map-globe.ts,
+ * `k(u) = 1 - f * u^1.25`) at 5% for the board's outer corner: tile centres (`centerOf`) and every
+ * hex corner (`cornerPts`) are bent, so neighbours keep sharing their corners and the board stays one
+ * seamless surface. Everything that places anything on the board reads `centerOf`/`cornerPts`, so
+ * the art, the overlays, the effects and the hit test all bend together. Off (null) everywhere but
+ * the live game's board.
  */
 export const BOARD_BULGE = 0.05;
 let bulgeKeys: readonly string[] | null = null;
@@ -104,6 +104,11 @@ export const tileBulge = (key: string): number => {
   if (!pose) return 1;
   const c = parseKey(key), flat = latticeCentre(c.q, c.r);
   return globeRadialScale(pose, flat.x, flat.y);
+};
+/** A hex's centre on the FLAT lattice (before any bend): the hit test and the bent corners read it. */
+export const flatCentreOf = (key: string) => {
+  const c = parseKey(key);
+  return latticeCentre(c.q, c.r);
 };
 /** The flat (unbent) screen point under a drawn one: the hit test's way back to the lattice. */
 export const unbend = (x: number, y: number): { x: number; y: number } => {
@@ -137,13 +142,18 @@ export const hash = (s: string) => {
 };
 
 export const cornerPts = (key: string, size: number, jitter = 0) => {
-  const { x, y } = centerOf(key);
-  const bent = tileBulge(key);
+  const pose = boardBulge();
+  // On the bent board every CORNER is bent (not the tile about its centre), exactly as the Territory
+  // globe does it: two neighbours share a corner, so both draw it at the same bent point and no gap
+  // can open between them (owner, 2026-11-04: "gaps in the map ... should never happen").
+  const { x, y } = pose ? flatCentreOf(key) : centerOf(key);
   return Array.from({ length: 6 }, (_, i) => {
     const a = (Math.PI / 180) * (60 * i - 30);
-    const r = size * bent * (1 + (jitter ? (hash(`${key}:${i}`) - 0.5) * jitter : 0));
+    const r = size * (1 + (jitter ? (hash(`${key}:${i}`) - 0.5) * jitter : 0));
     const o = toScreen(r * Math.cos(a), r * Math.sin(a));
-    return [x + o.x, y + o.y] as const;
+    if (!pose) return [x + o.x, y + o.y] as const;
+    const at = globePoint(pose, x + o.x, y + o.y);
+    return [at.x, at.y] as const;
   });
 };
 export const polyPoints = (pts: readonly (readonly [number, number])[]) => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
