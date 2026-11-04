@@ -1,6 +1,6 @@
 /** Frozen shared world geometry. IDs are axial coordinates; expansion only ADDS IDs. */
 import { colourFor } from '../../src/tile-colours.js';
-import { buildSphere, latticeMap, neighbourIds, type LatticeMap, type Sphere } from '../../src/planet/geometry.js';
+import { PLANET_FLAT_RADIUS, buildSphere, latticeMap, neighbourIds, type LatticeMap, type Sphere } from '../../src/planet/geometry.js';
 
 export type WorldCell = { id: string; q: number; r: number };
 
@@ -107,7 +107,9 @@ export const worldCell = (id: string): WorldCell | null => parseWorldCell(id);
 export const worldNeighbours = (id: string): string[] => {
   const cell = parseWorldCell(id);
   if (!cell) return [];
-  if (PLANET_GROWTH && isPlanetCell(id)) { const { sphere, map } = planetOf(); return neighbourIds(sphere, map, id); }
+  // Inside the flat disc the planet's neighbours are the flat six: answer without building the planet
+  // (the flat map and every rule near today's world stay as cheap as they were).
+  if (PLANET_GROWTH && hexDistance(cell.q, cell.r) >= PLANET_FLAT_RADIUS && isPlanetCell(id)) { const { sphere, map } = planetOf(); return neighbourIds(sphere, map, id); }
   return DIRECTIONS
     .map(([dq, dr]) => `${cell.q + dq},${cell.r + dr}`)
     .filter((key) => parseWorldCell(key) !== null);

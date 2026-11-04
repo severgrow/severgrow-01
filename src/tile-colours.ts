@@ -31,7 +31,7 @@
  */
 
 /** A tile colour. `css` is the face; `light`/`dark` are the gradient stops the map already uses. */
-import { buildSphere, latticeMap, neighbourIds, type LatticeMap, type Sphere } from './planet/geometry.js';
+import { PLANET_FLAT_RADIUS, buildSphere, latticeMap, neighbourIds, type LatticeMap, type Sphere } from './planet/geometry.js';
 export type TileColour = {
   readonly id: number;
   readonly name: string;
@@ -175,9 +175,12 @@ let planet: { sphere: Sphere; map: LatticeMap } | null = null;
 export const neighbourCellIds = (cellId: string): string[] => {
   const m = /^(-?\d{1,3}),(-?\d{1,3})$/.exec(cellId);
   if (!m) return [];
-  if (!planet) { const sphere = buildSphere(); planet = { sphere, map: latticeMap(sphere) }; }
-  if (planet.map.cellOf.has(cellId)) return neighbourIds(planet.sphere, planet.map, cellId);
   const q = Number(m[1]), r = Number(m[2]);
+  // Inside the flat disc the planet's neighbours are the flat six: no geometry to build.
+  if ((Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2 >= PLANET_FLAT_RADIUS) {
+    if (!planet) { const sphere = buildSphere(); planet = { sphere, map: latticeMap(sphere) }; }
+    if (planet.map.cellOf.has(cellId)) return neighbourIds(planet.sphere, planet.map, cellId);
+  }
   return DIRECTIONS.map(([dq, dr]) => `${q + dq},${r + dr}`);
 };
 

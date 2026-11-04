@@ -26,6 +26,12 @@ export const unit = (p: V3): V3 => scale(p, 1 / (Math.hypot(...p) || 1));
  */
 export const PLANET_FREQUENCY = 24;
 const RELAX_ROUNDS = 40;
+/**
+ * The flat disc around 0,0 that no pentagon reaches (the same number as `latticeMap(...).radius`, with
+ * no geometry built): inside it a tile's planet neighbours ARE its six flat ones, so a rule may answer
+ * with plain arithmetic and never pay for building the planet (pinned by sphere.test).
+ */
+export const PLANET_FLAT_RADIUS = Math.floor((2 * PLANET_FREQUENCY) / 3) - 1;
 /** Every tile the planet has to grow on: all its hexagons (its twelve pentagons are never land). */
 export const planetTileCount = (n = PLANET_FREQUENCY) => 10 * n * n - 10;
 
