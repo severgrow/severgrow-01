@@ -50,10 +50,21 @@ const planet = (p: Page): Promise<Snapshot | null> => p.evaluate(() => {
 const screenOf = (p: Page, id: string) => p.evaluate((tile) =>
   (window as unknown as { __severgrow: { planet: () => { screenOf: (id: string) => { x: number; y: number } | null } } }).__severgrow.planet().screenOf(tile), id);
 const ready = (p: Page) => p.waitForFunction(() => (window as unknown as { __severgrow?: { ready?: () => boolean } }).__severgrow?.ready?.());
+/**
+ * At rest: no flight, nothing spinning, and the same pose and zoom across a quarter second. One idle
+ * read is not enough on a slow software GPU: it can land in the gap between two frames of a flight
+ * or a zoom ease, and the next check then reads a planet still on its way. (The slow star slide may
+ * keep frames coming while the planet itself is still: that is rest.)
+ */
 const settled = (p: Page) => p.waitForFunction(() => {
-  const s = (window as unknown as { __severgrow: { planet: () => { pendingFrame: boolean; spinning: boolean } | null } }).__severgrow.planet();
-  return !!s && !s.pendingFrame && !s.spinning;
-});
+  type S = { flying: boolean; spinning: boolean; q: number[]; zoom: number };
+  const w = window as unknown as { __severgrow: { planet: () => S | null }; __settle?: { key: string; since: number } };
+  const s = w.__severgrow.planet();
+  if (!s || s.flying || s.spinning) { w.__settle = undefined; return false; }
+  const key = `${s.q.map((v) => v.toFixed(6)).join(',')}|${s.zoom.toFixed(6)}`, now = performance.now();
+  if (!w.__settle || w.__settle.key !== key) { w.__settle = { key, since: now }; return false; }
+  return now - w.__settle.since >= 250;
+}, undefined, { polling: 50, timeout: 15_000 });
 const openPlanet = async (p: Page) => {
   await p.locator('#menu-world').click();
   await p.waitForFunction(() => {
