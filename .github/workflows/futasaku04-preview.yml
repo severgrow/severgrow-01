@@ -105,7 +105,12 @@ jobs:
             for i in $(seq 1 150); do
               json=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$sha&per_page=20" || echo '{}')
-              state=$(echo "$json" | jq -r '[.workflow_runs // [] | .[]] | sort_by(.created_at) | last | if . == null then "waiting none" else "\(.status) \(.conclusion // "none")" end')
+              # The release branches' own CI decides. The same commit pushed to a working branch runs CI
+              # a second time; that copy used to be the newest and could refuse a publish the release
+              # run had passed (2026-11-04). Other branches count only when no release-branch run exists.
+              state=$(echo "$json" | jq -r '[.workflow_runs // [] | .[]] as $all
+                | ([$all[] | select(.head_branch == "futa0.5-online" or .head_branch == "live")] | if length > 0 then . else $all end)
+                | sort_by(.created_at) | last | if . == null then "waiting none" else "\(.status) \(.conclusion // "none")" end')
               echo "CI on $sha: $state"
               case "$state" in
                 "completed success") ok=1; break ;;
