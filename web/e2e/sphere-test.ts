@@ -98,6 +98,14 @@ try {
     check(`${path}: the globe is centred on the logo group and encloses it`, !!lock.disc &&
       Math.hypot(lock.disc.x - cx, lock.disc.y - cy) < 3 && lock.disc.r > Math.hypot(lr - ll, tb - lt) / 2,
       lock.disc ? `centre ${lock.disc.x.toFixed(1)},${lock.disc.y.toFixed(1)} vs ${cx.toFixed(1)},${cy.toFixed(1)}, r ${lock.disc.r.toFixed(0)}` : 'no disc');
+    // NEVER AN EGG (owner, 2026-11-04, iPhone Safari): the canvas box is the window it is drawn for,
+    // so its shape on screen is its drawing's shape and the globe stays round.
+    const box = await p.evaluate(() => {
+      const c = document.querySelector<HTMLCanvasElement>('.planet-canvas')!, r = c.getBoundingClientRect();
+      return { w: r.width, h: r.height, iw: innerWidth, ih: innerHeight, aspect: r.width / r.height, drawn: c.width / c.height };
+    });
+    check(`${path}: the planet's canvas is exactly the window, never stretched`,
+      Math.abs(box.w - box.iw) < 1 && Math.abs(box.h - box.ih) < 1 && Math.abs(box.aspect - box.drawn) < .01, JSON.stringify(box));
     check(`${path}: the menu stays on top and tappable`, await p.locator('#menu-play').isVisible() &&
       await p.locator('.planet-canvas').evaluate((el) => getComputedStyle(el).pointerEvents === 'none'));
     await p.close();

@@ -286,6 +286,12 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     // ground jump closer or further. The canvas itself only changes with the screen.
     const keep = renderer && view.width > 1 ? tilePx(zoom) : 0;
     view = viewOf();
+    // THE CANVAS IS EXACTLY THE SIZE IT IS DRAWN FOR (owner, 2026-11-04, iPhone Safari: "the sphere
+    // get squished and looks like an egg - should never happen"). CSS 100vh there is the LARGE
+    // viewport (under the toolbars), taller than innerHeight, which the picture is drawn for: the
+    // browser stretched it vertically. The box now takes the measured size, in px, every resize.
+    canvas.style.width = `${view.width}px`;
+    canvas.style.height = `${view.height}px`;
     if (!renderer) return;
     renderer.resize(view.width, view.height);
     if (!flight && !frameTween) {
