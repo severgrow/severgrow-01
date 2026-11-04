@@ -109,11 +109,17 @@ try {
     if (lastMenu?.ready) {
       await p.locator('#menu-world').click();
       const firstWindow = (await pose())!;
+      const panel = (await p.locator('#online-world-grid').boundingBox())!;
       const dot = Math.abs(lastMenu.q.reduce((sum, x, i) => sum + x * firstWindow.q[i]!, 0));
+      // The frame starts where the menu's was and has made at most one small step of its journey to
+      // the panel (a slow software GPU paints few, long frames, so a step is measured as a share of
+      // the whole travel, not in pixels).
+      const share = (from: number, now: number, to: number) => (Math.abs(to - from) < 1 ? 0 : Math.abs(now - from) / Math.abs(to - from));
+      const step = Math.max(share(lastMenu.frame.x, firstWindow.frame.x, panel.x), share(lastMenu.frame.y, firstWindow.frame.y, panel.y),
+        share(lastMenu.frame.width, firstWindow.frame.width, panel.width), share(lastMenu.frame.height, firstWindow.frame.height, panel.height));
       check(`[${tag}] no jump: the window's first frame is the menu's last`,
-        dot > .9995 && Math.abs(firstWindow.zoom / lastMenu.zoom - 1) < .02 && Math.abs(firstWindow.light - lastMenu.light) < .06 &&
-        Math.abs(firstWindow.frame.x - lastMenu.frame.x) < 24 && Math.abs(firstWindow.frame.y - lastMenu.frame.y) < 24,
-        `turn ${dot.toFixed(5)}, zoom ${lastMenu.zoom.toFixed(3)}->${firstWindow.zoom.toFixed(3)}, light ${lastMenu.light.toFixed(2)}->${firstWindow.light.toFixed(2)}, frame y ${lastMenu.frame.y.toFixed(1)}->${firstWindow.frame.y.toFixed(1)}`);
+        dot > .9995 && Math.abs(firstWindow.zoom / lastMenu.zoom - 1) < .02 && Math.abs(firstWindow.light - lastMenu.light) < .06 && step < .35,
+        `turn ${dot.toFixed(5)}, zoom ${lastMenu.zoom.toFixed(3)}->${firstWindow.zoom.toFixed(3)}, light ${lastMenu.light.toFixed(2)}->${firstWindow.light.toFixed(2)}, frame ${(step * 100).toFixed(0)}% of its way`);
       await p.waitForFunction(() => {
         const s = (window as unknown as { __severgrow: { planet: () => { ready: boolean; fallback: boolean } | null } }).__severgrow.planet();
         return !!s && (s.ready || s.fallback);
