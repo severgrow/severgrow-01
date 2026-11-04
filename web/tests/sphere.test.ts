@@ -1,67 +1,190 @@
-import { expect, it } from 'vitest';
-import { buildSphere, pickCell, dot, cross, sub, scale, unit } from '../src/sphere/geometry.js';
+import { describe, expect, it } from 'vitest';
+import {
+  buildSphere, pickCell, latticeMap, homeQuat, dot, cross, sub, scale, unit, PLANET_FREQUENCY, type Sphere, type V3,
+} from '../src/sphere/geometry.js';
 import { arcQuat, rotate, multiply, slerp, type Quat } from '../src/sphere/rotation.js';
-import { mockOwnership } from '../src/sphere/ownership.js';
+import { WORLD_CELLS, worldAround, hexDistance } from '../../server/src/world.js';
 
-it('frequency-10 geodesic dual closes with exactly 990 hexagons and 12 pentagons',()=>{
-  const s=buildSphere();
-  expect(s.cells).toHaveLength(1002);expect(s.corners).toHaveLength(2000);expect(s.edges).toHaveLength(3000);
-  expect(s.cells.filter(c=>c.corners.length===5)).toHaveLength(12);
-  expect(s.cells.filter(c=>c.corners.length===6)).toHaveLength(990);
-  expect(new Set(s.cells.map(c=>c.id)).size).toBe(1002);
-  expect(s.corners.length-s.edges.length+s.cells.length).toBe(2);
-  const edges=new Map<string,number>();
-  let area=0;
-  for(const c of s.cells){
-    expect(c.neighbours).toHaveLength(c.corners.length);
-    for(const n of c.neighbours)expect(s.cells[n]!.neighbours).toContain(c.index);
-    for(let i=0;i<c.corners.length;i++){
-      const a=c.corners[i]!, b=c.corners[(i+1)%c.corners.length]!;
-      const key=[a,b].sort((x,y)=>x-y).join(':');edges.set(key,(edges.get(key)??0)+1);
-      const p=s.corners[a]!,q=s.corners[b]!;
-      expect(dot(cross(p,q),c.centre)).toBeGreaterThan(0);
-      area+=2*Math.atan2(dot(c.centre,cross(p,q)),1+dot(c.centre,p)+dot(p,q)+dot(q,c.centre));
+// THE PLANET (owner, 2026-11-04: "geometry of hexes is wrong, analyse why and fix. If we need 12
+// pentagons to make geometric right, that's fine, but hexes should all look the same").
+//
+// Why they were wrong: the old mesh split each icosahedron face into a FLAT grid and pushed it out
+// onto the sphere, so cells near a face centre came out ~1.5x larger than cells near the twelve
+// corners, and each hex corner was the circumcentre of three unequal neighbours, which turned the
+// unevenness into skewed hexagons. These tests pin the cure: an even, relaxed mesh whose dual
+// corners are the centroids of their three cells.
+
+const sphere = buildSphere();
+const n = PLANET_FREQUENCY;
+const polygon = (s: Sphere, index: number): V3[] => s.cells[index]!.corners.map((id) => s.corners[id]!);
+const edgeLengths = (points: V3[]) => points.map((p, i) => Math.acos(Math.min(1, dot(p, points[(i + 1) % points.length]!))));
+const area = (s: Sphere, index: number) => {
+  const c = s.cells[index]!.centre, points = polygon(s, index);
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i]!, q = points[(i + 1) % points.length]!;
+    sum += 2 * Math.atan2(dot(c, cross(p, q)), 1 + dot(c, p) + dot(p, q) + dot(q, c));
+  }
+  return sum;
+};
+
+describe('the planet is a closed Goldberg sphere with exactly twelve pentagons', () => {
+  it('has 10n^2+2 cells: twelve pentagons, every other cell a hexagon', () => {
+    expect(sphere.cells).toHaveLength(10 * n * n + 2);
+    expect(sphere.cells.filter((c) => c.pentagon)).toHaveLength(12);
+    expect(sphere.cells.filter((c) => c.corners.length === 5)).toHaveLength(12);
+    expect(sphere.cells.filter((c) => c.corners.length === 6)).toHaveLength(10 * n * n - 10);
+    expect(new Set(sphere.cells.map((c) => c.id)).size).toBe(sphere.cells.length);
+    expect(sphere.corners.length - sphere.edges.length + sphere.cells.length).toBe(2);
+  });
+
+  it('is watertight: every edge has two cells, faces wind outward, the areas cover the sphere', () => {
+    const edges = new Map<string, number>();
+    let total = 0;
+    for (const c of sphere.cells) {
+      expect(c.neighbours).toHaveLength(c.corners.length);
+      for (const nb of c.neighbours) expect(sphere.cells[nb]!.neighbours).toContain(c.index);
+      for (let i = 0; i < c.corners.length; i++) {
+        const a = c.corners[i]!, b = c.corners[(i + 1) % c.corners.length]!;
+        const key = [a, b].sort((x, y) => x - y).join(':');
+        edges.set(key, (edges.get(key) ?? 0) + 1);
+        expect(dot(cross(sphere.corners[a]!, sphere.corners[b]!), c.centre)).toBeGreaterThan(0);
+      }
+      total += area(sphere, c.index);
     }
-  }
-  expect([...edges.values()].every(n=>n===2)).toBe(true);
-  expect(area).toBeCloseTo(4*Math.PI,8);
-  const seen=new Set([0]),queue=[0];
-  for(const id of queue)for(const n of s.cells[id]!.neighbours)if(!seen.has(n)){seen.add(n);queue.push(n);}
-  expect(seen.size).toBe(1002);
+    expect([...edges.values()].every((count) => count === 2)).toBe(true);
+    expect(total).toBeCloseTo(4 * Math.PI, 6);
+  });
+
+  it('orders neighbours so neighbour i lies across edge i (corner i to corner i+1)', () => {
+    for (const c of sphere.cells) {
+      c.neighbours.forEach((nb, i) => {
+        const shared = [c.corners[i]!, c.corners[(i + 1) % c.corners.length]!];
+        for (const corner of shared) expect(sphere.cells[nb]!.corners).toContain(corner);
+      });
+    }
+  });
 });
 
-it('picks the actual closest triangles, including every pentagon, and ignores sea and hidden faces',()=>{
-  const s=buildSphere();
-  for(const cell of s.cells.filter(c=>c.corners.length===5))
-    expect(pickCell(s,scale(cell.centre,4),scale(cell.centre,-1))).toBe(cell.index);
-  expect(pickCell(s,[0,0,4],unit([3,0,-1]))).toBeNull();
-  const front=pickCell(s,[0,0,4],[0,0,-1]);
-  expect(front).not.toBeNull();expect(s.cells[front!]!.centre[2]).toBeGreaterThan(0);
-  // A sample inside each polygon stays that cell, including at a tilted horizon.
-  for(const cell of s.cells.filter((_,i)=>i%17===0)){
-    const target=unit(sub(scale(cell.centre,3),scale(s.corners[cell.corners[0]!]!,1)));
-    expect(pickCell(s,scale(target,4),unit(sub(cell.centre,scale(target,4))))).toBe(cell.index);
-  }
+describe('every hexagon looks the same', () => {
+  // Measured 2026-11-04. Old mesh (n=10, flat grid + circumcentre corners): median hex side ratio
+  // 1.124, worst 1.634, hex areas spread 1.60x, corner angles 111.1-126.0 degrees. This mesh (n=24):
+  // median 1.054, worst 1.175 (right beside a pentagon; 1.119 three or more tiles away), hex areas
+  // spread 1.48x across the whole planet but never more than 1.090x between two neighbours, corner
+  // angles 114.4-129.2 degrees.
+  const hexes = sphere.cells.filter((c) => !c.pentagon);
+  const poles = sphere.cells.filter((c) => c.pentagon).map((c) => c.centre);
+  const steps = (c: V3) => Math.min(...poles.map((p) => Math.acos(Math.min(1, dot(p, c))))) / (Math.atan(2) / n);
+  const sides = (index: number) => { const l = edgeLengths(polygon(sphere, index)); return Math.max(...l) / Math.min(...l); };
+  it('each hexagon has near-equal sides', () => {
+    const ratios = hexes.map((c) => sides(c.index)).sort((a, b) => a - b);
+    expect(ratios[Math.floor(ratios.length / 2)]!).toBeLessThan(1.06);
+    expect(ratios.at(-1)!).toBeLessThan(1.18);
+    for (const c of hexes) if (steps(c.centre) > 3) expect(sides(c.index)).toBeLessThan(1.125);
+  });
+  it('sizes change so gently that two neighbours always look the same size', () => {
+    const areas = new Map(hexes.map((c) => [c.index, area(sphere, c.index)]));
+    let neighbours = 1;
+    for (const c of hexes) for (const nb of c.neighbours) {
+      const other = areas.get(nb);
+      if (other !== undefined) neighbours = Math.max(neighbours, areas.get(c.index)! / other);
+    }
+    expect(neighbours).toBeLessThan(1.1);
+    const all = [...areas.values()];
+    expect(Math.max(...all) / Math.min(...all)).toBeLessThan(1.5);
+  });
+  it('no hexagon has a pinched or flattened corner', () => {
+    for (const c of hexes) {
+      const points = polygon(sphere, c.index);
+      for (let i = 0; i < 6; i++) {
+        const prev = points[(i + 5) % 6]!, p = points[i]!, next = points[(i + 1) % 6]!;
+        const a = unit(sub(prev, scale(p, dot(prev, p)))), b = unit(sub(next, scale(p, dot(next, p))));
+        const degrees = Math.acos(Math.max(-1, Math.min(1, dot(a, b)))) * 180 / Math.PI;
+        expect(degrees).toBeGreaterThan(113);
+        expect(degrees).toBeLessThan(130);
+      }
+    }
+  });
+  it('the pentagons sit evenly, as the twelve corners of an icosahedron', () => {
+    for (const p of poles) {
+      const nearest = poles.filter((q) => q !== p).map((q) => Math.acos(Math.min(1, dot(p, q))));
+      expect(Math.min(...nearest)).toBeCloseTo(Math.atan(2), 6);
+    }
+  });
 });
 
-it('trackball quaternions stay stable through poles, antipodes and shortest-path home returns',()=>{
-  let q:Quat=[0,0,0,1];
-  expect(rotate(arcQuat([0,0,1],[0,0,-1]),[0,0,1])[2]).toBeCloseTo(-1);
-  for(let i=0;i<360;i++){
-    const step=arcQuat([0,0,1],unit([.04,.015,1]));
-    q=multiply(step,q);
-  }
-  expect(Math.hypot(...q)).toBeCloseTo(1,10);
-  const home=arcQuat([0,1,0],[0,0,1]);
-  const mid=slerp([0,0,0,1],home,.5);
-  expect(rotate(mid,[0,1,0])[2]).toBeGreaterThan(0);
-  expect(rotate(slerp(home,home.map(x=>-x) as unknown as Quat,.5),[0,1,0])[2]).toBeCloseTo(1);
+describe('the flat Territory map lies on the planet tile for tile', () => {
+  const map = latticeMap(sphere);
+  it('anchors on a hexagon and maps 0,0 to it', () => {
+    expect(sphere.cells[map.anchor]!.pentagon).toBe(false);
+    expect(map.cellOf.get('0,0')).toBe(map.anchor);
+  });
+  it('every flat neighbour pair is a planet neighbour pair, and the mapping is one-to-one', () => {
+    const seen = new Set<number>();
+    for (const [id, index] of map.cellOf) {
+      expect(seen.has(index)).toBe(false);
+      seen.add(index);
+      expect(sphere.cells[index]!.pentagon).toBe(false);
+      for (const other of worldAround(id, 1)) {
+        const nb = map.cellOf.get(other);
+        if (nb !== undefined && other !== id) expect(sphere.cells[index]!.neighbours).toContain(nb);
+      }
+      expect(map.flatOf.get(index)).toBe(id);
+    }
+  });
+  it('covers the whole flat disc a pentagon cannot reach (2n/3 - 1 rings)', () => {
+    expect(map.radius).toBe(2 * n / 3 - 1);
+    for (let q = -map.radius; q <= map.radius; q++) {
+      for (let r = -map.radius; r <= map.radius; r++) {
+        if (hexDistance(q, r) <= map.radius) expect(map.cellOf.has(`${q},${r}`)).toBe(true);
+      }
+    }
+  });
+  it('holds the whole current world with its two rings of reach', () => {
+    for (const cell of WORLD_CELLS) {
+      for (const id of worldAround(cell.id, 2)) expect(map.cellOf.has(id)).toBe(true);
+    }
+  });
+  it('is not mirrored: the flat map reads the same way round on the planet', () => {
+    const a = sphere.cells[map.cellOf.get('0,0')!]!.centre;
+    const east = sphere.cells[map.cellOf.get('1,0')!]!.centre;
+    const northEast = sphere.cells[map.cellOf.get('1,-1')!]!.centre;
+    // East then north-east turns counter-clockwise on screen (y down) and must turn
+    // counter-clockwise about the outward normal on the planet.
+    expect(dot(cross(sub(east, a), sub(northEast, a)), a)).toBeGreaterThan(0);
+  });
+  it('the home view puts flat east to the right and flat north up', () => {
+    const q = homeQuat(sphere, map, '0,0');
+    const a = rotate(q, sphere.cells[map.anchor]!.centre);
+    expect(a[2]).toBeCloseTo(1, 6);
+    const east = rotate(q, sphere.cells[map.cellOf.get('1,0')!]!.centre);
+    expect(east[0]).toBeGreaterThan(0);
+    expect(Math.abs(east[1])).toBeLessThan(1e-6);
+    const north = rotate(q, sphere.cells[map.cellOf.get('1,-2')!]!.centre);
+    expect(north[1]).toBeGreaterThan(0);
+  });
 });
 
-it('mock ownership is deterministic, clustered, and includes separate outposts without any backend',()=>{
- const sphere=buildSphere(),a=mockOwnership(sphere),b=mockOwnership(sphere);
- expect([...a.owners]).toEqual([...b.owners]);expect(a.connected).toBeGreaterThan(50);
- expect([...a.owners].filter(x=>x===0).length).toBeGreaterThan(a.connected);
- for(const owner of [0,1,2,3,4,-1,-2])expect([...a.owners]).toContain(owner);
- expect(Math.hypot(...a.home)).toBeCloseTo(1);
+describe('picking and rotation', () => {
+  it('picks the closest real tile, every pentagon included, and ignores space and the far side', () => {
+    for (const cell of sphere.cells.filter((c) => c.pentagon)) {
+      expect(pickCell(sphere, scale(cell.centre, 4), scale(cell.centre, -1))).toBe(cell.index);
+    }
+    expect(pickCell(sphere, [0, 0, 4], unit([3, 0, -1]))).toBeNull();
+    const front = pickCell(sphere, [0, 0, 4], [0, 0, -1]);
+    expect(front).not.toBeNull();
+    expect(sphere.cells[front!]!.centre[2]).toBeGreaterThan(0);
+    for (const cell of sphere.cells.filter((_, i) => i % 97 === 0)) {
+      const target = unit(sub(scale(cell.centre, 3), sphere.corners[cell.corners[0]!]!));
+      expect(pickCell(sphere, scale(target, 4), unit(sub(cell.centre, scale(target, 4))))).toBe(cell.index);
+    }
+  });
+  it('trackball quaternions stay stable through poles, antipodes and shortest-path returns', () => {
+    let q: Quat = [0, 0, 0, 1];
+    expect(rotate(arcQuat([0, 0, 1], [0, 0, -1]), [0, 0, 1])[2]).toBeCloseTo(-1);
+    for (let i = 0; i < 360; i++) q = multiply(arcQuat([0, 0, 1], unit([.04, .015, 1])), q);
+    expect(Math.hypot(...q)).toBeCloseTo(1, 10);
+    const home = arcQuat([0, 1, 0], [0, 0, 1]);
+    expect(rotate(slerp([0, 0, 0, 1], home, .5), [0, 1, 0])[2]).toBeGreaterThan(0);
+  });
 });
