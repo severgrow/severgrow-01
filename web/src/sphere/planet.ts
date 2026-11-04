@@ -356,14 +356,21 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     const index = cellAt(x, y);
     const now = performance.now(), double = now - lastTap < 320;
     lastTap = double ? 0 : now;
-    // A quick second tap zooms in on that spot, like the flat map's double tap.
-    if (double) { if (index !== null) flyToCell(index, clampZoom(zoom * 1.8)); return; }
+    // A quick second tap zooms in on that spot, like the flat map's double tap; fully zoomed in, it
+    // zooms back out to the opening size (owner, 2026-11-04: "double tap when full zoomed in should
+    // zoom out not not do anything").
+    if (double) {
+      if (index === null) return;
+      const closer = clampZoom(zoom * 1.8);
+      flyToCell(index, closer > zoom * 1.02 ? closer : clampZoom(zoomFor(OPEN_TILE_PX)));
+      return;
+    }
     if (index === null) { hooks.onTile(null); return; }
     // Tiles too small to hit reliably: the tap brings you closer instead of guessing.
     if (tilePx() < TAP_TILE_PX) { flyToCell(index, clampZoom(zoomFor(OPEN_TILE_PX))); return; }
-    // Known land and owned tiles are always tiles; with grow-anywhere every hexagon of the planet is.
-    const tile = ground && ((ground.kind[index]! >= KIND.land && ground.kind[index]! <= KIND.mine) || (input?.growAnywhere && ground.kind[index]! !== KIND.pentagon));
-    const id = tile ? tileForCell(map, index) : null;
+    // EVERY hexagon is a tile you can tap (owner, 2026-11-04: "ALL can be taped"); only the twelve
+    // pentagons are not ground.
+    const id = ground && ground.kind[index]! !== KIND.pentagon ? tileForCell(map, index) : null;
     hooks.onTile(id);
   };
   canvas.addEventListener('keydown', (e) => {

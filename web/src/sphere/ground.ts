@@ -28,7 +28,7 @@ export type GroundInput = {
   /** The known (seen) cells of the flat world. */
   cells: readonly { id: string }[];
   claims: readonly { cellId: string; ownerId: string; colour: string }[];
-  /** The undiscovered rings beyond the known land, by flat id. */
+  /** The flat map's undiscovered rings. Not drawn on the planet (owner, 2026-11-04); kept for callers. */
   fog?: Iterable<string>;
   /** Cells under an open challenge. */
   disputes?: Iterable<string>;
@@ -73,20 +73,22 @@ export const groundOf = (sphere: Sphere, map: LatticeMap, input: GroundInput): G
     colour[index * 3] = rgb[0]!; colour[index * 3 + 1] = rgb[1]!; colour[index * 3 + 2] = rgb[2]!;
   };
   for (let i = 0; i < count; i++) paint(i, sphere.cells[i]!.pentagon ? KIND.pentagon : KIND.void, sphere.cells[i]!.pentagon ? GROUND_RGB.pentagon : GROUND_RGB.void);
-  if (input.growAnywhere) {
-    for (const claim of input.claims) {
-      const index = map.cellOf.get(claim.cellId);
-      if (index === undefined) continue;
-      for (const nb of sphere.cells[index]!.neighbours) if (!sphere.cells[nb]!.pentagon) paint(nb, KIND.land, GROUND_RGB.land);
-    }
-  } else {
-    for (const id of input.fog ?? []) {
-      const index = map.cellOf.get(id);
-      if (index !== undefined) paint(index, KIND.fog, GROUND_RGB.fog);
-    }
-    for (const cell of input.cells) {
-      const index = map.cellOf.get(cell.id);
-      if (index !== undefined) paint(index, KIND.land, GROUND_RGB.land);
+  // THE LIT GROUND IS VISUAL ONLY (owner, 2026-11-04: "it expand by 2 tiles around like it did in flat
+  // territory - but it's visual only, players can tap and use any tile on the planet"): the two rings
+  // of tiles around every placed tile, by the planet's own adjacency. The flat map's coastline and
+  // fog are not drawn on the planet; every other hexagon is plain ground, tappable like the rest.
+  for (const claim of input.claims) {
+    const start = map.cellOf.get(claim.cellId);
+    if (start === undefined) continue;
+    let ring = [start];
+    for (let step = 0; step < 2; step++) {
+      const next: number[] = [];
+      for (const cell of ring) for (const nb of sphere.cells[cell]!.neighbours) {
+        if (sphere.cells[nb]!.pentagon || kind[nb] === KIND.land) continue;
+        paint(nb, KIND.land, GROUND_RGB.land);
+        next.push(nb);
+      }
+      ring = next;
     }
   }
   for (const claim of input.claims) {

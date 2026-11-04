@@ -194,6 +194,14 @@ try {
       check(`[${tag}] a rival's disputed tile selects`, (await planet(p))!.selected === '4,0');
     }
 
+    // EVERY TILE CAN BE TAPPED (owner, 2026-11-04): plain ground well away from any land selects too.
+    const plainAt = await screenOf(p, '0,-4');
+    if (plainAt && plainAt.y > grid.y + 70 && plainAt.y < grid.y + grid.height - 90 && plainAt.x > grid.x + 30 && plainAt.x < grid.x + grid.width - 30) {
+      await p.waitForTimeout(400); // apart from the last tap, so it is not read as a double tap
+      await p.mouse.click(plainAt.x, plainAt.y);
+      await p.waitForTimeout(150);
+      check(`[${tag}] plain ground far from any land is a tile you can tap`, (await planet(p))!.selected === '0,-4', String((await planet(p))!.selected));
+    }
     // A drag turns the planet and never selects.
     const before = (await planet(p))!;
     const ground0 = (await screenOf(p, '0,0'))!;
@@ -251,6 +259,18 @@ try {
     await settled(p);
     check(`[${tag}] ...to a tappable size`, (await planet(p))!.tilePx >= 40);
 
+    // FULLY ZOOMED IN, A DOUBLE TAP ZOOMS BACK OUT (owner, 2026-11-04). The wheel is not automatable on
+    // mobile WebKit, so this runs where it is.
+    if (!ios) {
+      await p.mouse.move(cx, cy);
+      for (let i = 0; i < 12; i++) { await p.mouse.wheel(0, -600); await p.waitForTimeout(30); }
+      await settled(p).catch(() => undefined);
+      const closest = (await planet(p))!.tilePx;
+      await p.mouse.click(cx, cy); await p.waitForTimeout(60); await p.mouse.click(cx, cy);
+      await settled(p).catch(() => undefined);
+      const after = (await planet(p))!.tilePx;
+      check(`[${tag}] fully zoomed in, a double tap zooms back out`, closest > 70 && after < closest * .8, `${closest.toFixed(0)}px -> ${after.toFixed(0)}px tiles`);
+    }
     // The ranking's "fly to" (flyToOwner) brings my land back to the middle.
     await p.locator('#online-world-menu').click();
     await p.locator('#world-key-ranking').click();

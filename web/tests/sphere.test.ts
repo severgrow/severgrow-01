@@ -224,15 +224,15 @@ describe('the planet shows the real Territory', () => {
     cells: WORLD_CELLS, claims, fog: ['20,20', '11,0'], disputes: ['2,0'], me: 'me',
   });
   const at = (id: string) => map.cellOf.get(id)!;
-  it('tells mine, a rival\'s, free, undiscovered, unreached and pentagon ground apart', () => {
+  // OWNER CHANGED THE RULE (2026-11-04): the planet no longer draws the flat map's coastline or fog;
+  // the lit ground is the two rings around placed tiles (visual only) and the rest is plain ground.
+  it('tells mine, a rival\'s, the lit rings, plain ground and pentagons apart', () => {
     expect(ground.kind[at('0,0')]).toBe(KIND.mine);
     expect(ground.kind[at('2,0')]).toBe(KIND.owned);
-    expect(ground.kind[at('-3,0')]).toBe(KIND.land);
-    expect(ground.kind[at('11,0')]).toBe(KIND.fog);
-    expect(ground.kind[at('14,0')]).toBe(KIND.void);
+    expect(ground.kind[at('-2,0')]).toBe(KIND.land);
+    expect(ground.kind[at('-3,0')]).toBe(KIND.void);
+    expect(ground.kind[at('11,0')]).toBe(KIND.void);
     expect([...ground.kind].filter((k) => k === KIND.pentagon)).toHaveLength(12);
-    // Every known world tile is on the planet and free unless claimed.
-    expect([...ground.kind].filter((k) => k >= KIND.land && k <= KIND.mine)).toHaveLength(WORLD_CELLS.length);
   });
   it('wears each owner\'s own colour and marks the disputed tile', () => {
     const rgb = (id: string) => [...ground.colour.slice(at(id) * 3, at(id) * 3 + 3)];
@@ -254,19 +254,19 @@ describe('the planet shows the real Territory', () => {
   });
 });
 
-describe('grow anywhere: plain planet, a lit ring only around placed tiles', () => {
+describe('the lit ground: two rings around every placed tile, anywhere on the planet', () => {
   const map = latticeMap(sphere);
   const at = (id: string) => map.cellOf.get(id)!;
   const ground = groundOf(sphere, map, {
     cells: WORLD_CELLS, fog: ['11,0'], me: 'me', growAnywhere: true,
     claims: [{ cellId: '0,0', ownerId: 'me', colour: 'hsl(150 30% 50%)' }, { cellId: '30,-10', ownerId: 'r', colour: '#cc8844' }],
   });
-  it('lights only the tiles beside a placed tile; the old coast and fog are plain ground', () => {
-    for (const id of ['1,0', '0,1', '-1,0']) expect(ground.kind[at(id)]).toBe(KIND.land);
-    for (const id of neighbourIds(sphere, map, '30,-10')) expect(ground.kind[at(id)]).toBe(KIND.land);
-    expect(ground.kind[at('-5,0')]).toBe(KIND.void);
-    expect(ground.kind[at('11,0')]).toBe(KIND.void);
+  const ring2 = (id: string) => [...new Set(neighbourIds(sphere, map, id).flatMap((nb) => [nb, ...neighbourIds(sphere, map, nb)]))].filter((x) => x !== id);
+  it('lights exactly the two rings around a placed tile, even past a pentagon', () => {
+    for (const id of ['1,0', '0,1', '-1,0', '2,0', '-2,0', '0,-2']) expect(ground.kind[at(id)]).toBe(KIND.land);
+    for (const id of ring2('30,-10')) expect(ground.kind[at(id)]).toBe(KIND.land);
+    expect(ground.kind[at('3,0')]).toBe(KIND.void);
     expect(ground.kind[at('30,-10')]).toBe(KIND.owned);
-    expect([...ground.kind].filter((k) => k === KIND.pentagon)).toHaveLength(12);
+    expect([...ground.kind].filter((k) => k === KIND.land)).toHaveLength(18 + ring2('30,-10').length);
   });
 });
