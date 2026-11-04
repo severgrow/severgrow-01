@@ -1,0 +1,80 @@
+# Task for Cursor: deploy the server (Supabase `duel` function) — 2026-11-04
+
+Read `AGENTS.md` first. This task needs a machine that can log in to Supabase (the cloud agent
+could not: no `SUPABASE_ACCESS_TOKEN`, and its network blocks `*.supabase.co`).
+
+## Why
+
+`futa0.5-online` (commit `e7a52999` or later) carries server changes that are written and tested
+but **not deployed**. Until the `duel` Edge Function is redeployed, players see the old rules:
+
+| Owner asked for | Old server does | New server does |
+|---|---|---|
+| "I should be able to grow anywhere" on THE PLANET | Only tiles next to the known map; far tiles read "OUT OF REACH FOR NOW" | Any free planet hexagon (`growAnywhere: true` in `GET /v1/world`) |
+| Selling a tile pays 50 Seeds | Pays 100 | Pays 50 (`saleReturn: 50` in `GET /v1/world`) |
+
+**No database migration is needed for this.** Both rules live in server code
+(`server/src/world.ts` `PLANET_GROWTH`, `server/src/seeds/config.ts` `tileSaleReturn`). Planet tile
+ids are plain text in `world_claims.cell_id`, which has no format check.
+
+## Steps
+
+```sh
+git fetch origin futa0.5-online && git checkout futa0.5-online && git pull --ff-only
+npm ci
+
+# 1. The committed bundle must match the source. Expect NO diff after rebuilding.
+npm run server:build-edge
+git status --short supabase/functions/duel/bundle.ts   # must print nothing
+```
+
+**2. Check the latest migrations are on the live database.** Run this in the Supabase dashboard → SQL editor:
+
+```sql
+select
+  to_regclass('public.player_tile_colours') is not null as m0020_tile_colours,
+  to_regclass('public.campaign_clears')     is not null as m0021_campaign_clears,
+  to_regclass('public.offline_stats')       is not null as m0022_offline_stats,
+  exists (select 1 from information_schema.columns
+          where table_name = 'world_challenges' and column_name = 'stake_cell_id') as m0019_stake;
+```
+
+- **All `true`:** go to step 3.
+- **Any `false`:** run that one file from `server/migrations/` in the SQL editor, then re-check.
+  These files only add things and are safe to run twice.
+- Never edit an old migration.
+- Never drop anything.
+
+```sh
+# 3. Deploy (CLI login opens a browser once)
+npx supabase login
+npx supabase functions deploy duel --project-ref wbfrbeedlvjercrukngn --no-verify-jwt
+
+# 4. Verify
+curl -sS 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel/v1/health?db=1'
+#    expect "ok" and db.ok
+curl -sS 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel/v1/world' | grep -o '"growAnywhere":true\|"saleReturn":50'
+#    expect both strings printed
+BASE_URL=https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel npm run server:smoke
+```
+
+5. Open futasaku.com/test/ → THE PLANET and check these by hand:
+   - Tap a far, empty hexagon: it offers the Grow key.
+   - Tap your own tile: the key reads `SELL · +50`.
+
+## Rules while doing this
+
+- **One deploy at a time.** A redeploy drops duels in progress, so deploy at a quiet moment. Do not
+  run load tests at the same time (`docs/DEPLOY-ONLINE.md`, "Only one driver at a time").
+- **Branches:** do not push to `main`, `dev` or `Main2.0`. Do not force-push `futa0.5-online`. Do not
+  run `npm run promote` unless the owner says "promote".
+- **Secrets:** do not print or commit any of them (`DATABASE_URL`, access tokens, keys).
+- **If something fails:** stop and report the exact error. Rollback = check out the previous
+  `futa0.5-online` commit, run `npm run server:build-edge`, and deploy again.
+- **Report to the owner in plain English:** what was deployed, what each check showed, and anything
+  not checked.
+
+The server is shared by /test and the live site. Old pages keep working against it, because the new
+fields are optional. One known mismatch: until the owner promotes, the live page's sell key still
+describes the sale as "+100" in its hidden label, while the server pays 50. Tell the owner, so they can
+promote soon after the deploy.
