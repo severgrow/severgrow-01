@@ -69,9 +69,10 @@ void main(){
 const GROUND_VERTEX = `
 attribute vec4 aPosition; attribute vec4 aLook;
 uniform vec4 uRotation; uniform float uAspect; uniform float uFocal; uniform vec2 uShift;
-varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed;
+varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed; varying vec3 vLocal;
 void main(){
   vec3 q = aPosition.xyz;
+  vLocal = q;
   vec3 t = 2.0 * cross(uRotation.xyz, q);
   vec3 p = q + uRotation.w * t + cross(uRotation.xyz, t);
   float z = p.z - ${EYE.toFixed(1)};
@@ -82,9 +83,16 @@ void main(){
 const groundFragment = (derivatives: boolean) => `
 ${derivatives ? '#extension GL_OES_standard_derivatives : enable' : ''}
 precision highp float;
-varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed;
+varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed; varying vec3 vLocal;
 uniform float uPulse; uniform float uPixel; uniform float uDpr;
 float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+// Value noise fixed to the planet (not the screen), so the grain turns with the ground.
+float hash3(vec3 p){ p = fract(p * .3183099 + .1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float noise3(vec3 x){
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x), mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x), mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
 void main(){
   float f = floor(vFlags + .5);
   float kind = mod(f, 8.0);
@@ -92,6 +100,7 @@ void main(){
   float disputed = mod(floor(f / 16.0), 2.0);
   float selected = mod(floor(f / 32.0), 2.0);
   float kin = mod(floor(f / 64.0), 2.0);
+  float below = mod(floor(f / 128.0), 2.0);
   // vEdge runs 0 at a tile's centre to 0.999 along its sides.
   float e = vEdge / .999;
   float w = ${derivatives ? 'max(fwidth(e), 1e-4)' : 'uPixel'};
@@ -102,16 +111,31 @@ void main(){
   // the curve, and the night side fades through a broad dusk instead of a hard line.
   float day = smoothstep(-.32, 1.0, ndl);
   vec3 c = vColour;
-  // Unreached ground and fog carry a faint per-tile variation, so the planet reads as terrain.
-  if (kind < 1.5) c *= .9 + .2 * vSeed;
-  // Chunky tiles: a bevel toward each side, LIT BY THE SUN. The side ramp's screen gradient points
-  // from a tile's middle out to the side under this pixel, so the sun-facing rim catches light and
-  // the far rim falls into shadow. Owned ground stands highest, free land a little, the unknown flat.
-  float rise = kind > 2.5 && kind < 4.5 ? .26 : kind > 1.5 && kind < 2.5 ? .13 : .05;
-  float slope = smoothstep(.5, .97, e);
-  c *= mix(1.03, .9, slope);
+  // THE TILE'S MATERIAL (owner, 2026-11-04: the tiles "stand out as too baloony or plasticky ...
+  // make them look more organic more real but cool and cheap"). A tile is a FLAT slab, not a
+  // cushion: its top is lit evenly and only a narrow chamfer at the very edge turns toward or away
+  // from the sun. A fine grain fixed to the planet and a slight tone of its own per tile make a
+  // holding read as fields, or glazed clay, rather than one moulded piece of plastic.
+  float owned = step(2.5, kind) * step(kind, 4.5);
+  float landish = step(1.5, kind) * step(kind, 2.5);
+  // Colour: a touch less saturated and darker, the matte of a real pigment.
+  c = mix(c, vec3(dot(c, vec3(.3, .59, .11))), .14 * owned) * mix(1.0, .93, owned);
+  // Each tile its own faint tone; the unknown a little more (it is terrain, not ground anyone keeps).
+  c *= kind < 1.5 ? .9 + .2 * vSeed : .975 + .05 * vSeed;
+  // Grain: two octaves, about three and ten blobs across a tile, a few percent either way.
+  float grain = noise3(vLocal * 95.0) * .62 + noise3(vLocal * 330.0) * .38;
+  c *= mix(.955, 1.045, grain) * (1.0 - .035 * landish * (1.0 - grain));
+  // The chamfer: only the last eighth of the way to the side. Owned slabs stand a little proud,
+  // free land barely, the unknown is flat. A soft, very slight occlusion where it meets the grout.
+  float rise = owned > .5 ? 1.0 : landish > .5 ? .5 : .15;
+  float lip = smoothstep(.8, .975, e);
 ${derivatives ? `  vec2 grad = vec2(dFdx(e), dFdy(e));
-  if (dot(grad, grad) > 1e-12) c *= 1.0 + rise * slope * dot(normalize(grad), normalize(vec2(-.52, .58)));` : ''}
+  float toSun = dot(grad, grad) > 1e-12 ? dot(normalize(grad), normalize(vec2(-.52, .58))) : 0.0;
+  c *= 1.0 + rise * lip * (.34 * toSun - .07);
+  // A RAISED NEIGHBOUR CASTS A SHADOW: lower ground beside an owned slab darkens toward that side
+  // when the slab stands between it and the sun. Soft, short, and only where it is true.
+  c *= 1.0 - below * .42 * smoothstep(.5, 1.0, e) * max(0.0, toSun);` : `  c *= 1.0 - rise * lip * .05;`}
+  c *= 1.0 - .07 * smoothstep(.9, 1.0, e);
   if (disputed > .5) c *= .82 + .18 * step(.5, fract((gl_FragCoord.x + gl_FragCoord.y) / (7.0 * uDpr)));
   if (kin > .5 && selected < .5) c = mix(c, vec3(.95, .92, .82), .07);
   float lit = .13 + .95 * day;
@@ -125,13 +149,13 @@ ${derivatives ? `  vec2 grad = vec2(dFdx(e), dFdy(e));
   }
   // A broad sheen where the sun is reflected, so the ball reads as a solid body.
   vec3 halfway = normalize(sun + v);
-  colour += vec3(.9, .88, .8) * pow(max(dot(n, halfway), 0.0), 28.0) * .045;
+  colour += vec3(.9, .88, .8) * pow(max(dot(n, halfway), 0.0), 28.0) * .018;
   // The atmosphere seen edge-on.
   float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
   colour += vec3(.36, .5, .44) * rim * (.25 + .75 * day) * .55;
-  // Owner borders: a bright inner band in the tile's own colour.
-  float band = smoothstep(1.0 - w * 4.6, 1.0 - w * 2.6, e) * border * step(2.5, kind) * step(kind, 4.5);
-  colour = mix(colour, mix(c, vec3(.96, .93, .84), .55) * lit + c * .15, band * .85);
+  // Owner borders: a quiet inner line in the tile's own colour, lifted a little (no glowing rim).
+  float band = smoothstep(1.0 - w * 4.2, 1.0 - w * 2.6, e) * border * owned;
+  colour = mix(colour, mix(c, vec3(.94, .91, .82), .3) * lit, band * .6);
   // The selection ring.
   float ring = smoothstep(1.0 - w * 6.0, 1.0 - w * 3.5, e) * selected;
   colour = mix(colour, vec3(.97, .94, .85), ring * (.82 + .18 * uPulse));
@@ -142,6 +166,9 @@ ${derivatives ? `  vec2 grad = vec2(dFdx(e), dFdy(e));
   colour += (hash(gl_FragCoord.xy) - .5) * .022;
   gl_FragColor = vec4(colour, 1.0);
 }`;
+
+/** Owned ground (anyone's) stands as a raised slab. */
+const owned = (kind: number) => kind === KIND.owned || kind === KIND.mine;
 
 export class PlanetRenderer {
   readonly gl: WebGLRenderingContext;
@@ -241,7 +268,9 @@ export class PlanetRenderer {
       const i = c.index, r = Math.round(ground.colour[i * 3]! * 255), g = Math.round(ground.colour[i * 3 + 1]! * 255), b = Math.round(ground.colour[i * 3 + 2]! * 255);
       const base = this.flags[i]! + (i === selected ? 32 : 0) + (this.kin.includes(i) ? 64 : 0);
       for (let k = 0; k < c.corners.length; k++) {
-        const flag = base + (ground.border[i]! & (1 << k) ? 8 : 0);
+        // 128: the tile across this edge is a raised (owned) slab and this one is not.
+        const raised = !owned(ground.kind[i]!) && owned(ground.kind[c.neighbours[k]!]!) ? 128 : 0;
+        const flag = base + (ground.border[i]! & (1 << k) ? 8 : 0) + raised;
         for (let v = 0; v < 3; v++) {
           const o = (this.start[i]! + k * 3 + v) * 4;
           this.look[o] = r; this.look[o + 1] = g; this.look[o + 2] = b; this.look[o + 3] = flag;
