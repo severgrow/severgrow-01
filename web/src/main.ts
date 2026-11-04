@@ -277,6 +277,10 @@ import { requestTrainingTicket, settleQueuedSeedsOnBoot, settleSeedProof } from 
 import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
 import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
+import { installStaleBuildReload } from './logic/stale-build.js';
+
+// First thing: a page left open across a deploy reloads onto the new build instead of half-breaking.
+installStaleBuildReload();
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;

@@ -10,6 +10,9 @@ import { PLANET } from '../../../src/strings.js';
 
 const CSS = `
 .world-grid.planet-on > .world-map-svg { visibility: hidden !important; pointer-events: none !important; }
+/* The flat map's faint survey contours read as a stray hair over a planet in space (owner,
+   2026-11-04: "this very thin circle like thing ... like a hair - is that intentional?"). */
+.online-world.planet-screen::before { display: none; }
 .world-grid > .planet-canvas {
   position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; display: block;
   border-radius: inherit; touch-action: none; cursor: grab; outline: 0; background: #07090a;
@@ -63,6 +66,8 @@ export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | 
   try { module = await import('../sphere/planet.js'); } catch { return null; }
   const planet = module.mountPlanet(grid, { onTile, label: PLANET.controls, unavailable: PLANET.unavailable });
   grid.classList.add('planet-on');
+  const screen = grid.closest('.online-world');
+  screen?.classList.add('planet-screen');
   current = planet;
   return {
     update: (input) => planet.update(input),
@@ -70,6 +75,7 @@ export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | 
     dispose: () => {
       planet.dispose();
       grid.classList.remove('planet-on');
+      screen?.classList.remove('planet-screen');
       if (current === planet) current = null;
     },
   };
