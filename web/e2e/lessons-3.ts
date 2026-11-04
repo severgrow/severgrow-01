@@ -613,8 +613,28 @@ try {
           !card.seeds || card.seeds.startsWith(unverifiedLine),
           `L10 finish card shows no Seeds number without a receipt (${JSON.stringify(card.seeds)})`,
         );
-        check(card.territory === 'Seeds are earned by winning.Spend 100 to claim a tile of Territory on the world map.', `L10 finish card explains Seeds and Territory (${card.territory})`);
-        check(card.territoryKey, 'L10 finish card offers Open Territory');
+        // OWNER CHANGED THE RULE (2026-11-04: "at the end of the level 10, over the end of game screen
+        // there should be a lesson window popped up explaining THE PLANET ... and a button that takes
+        // you to the planet"). The card's two inline Territory lines gave way to that window; the
+        // card keeps its own key to the Planet for a player who taps Later.
+        check(card.territory === '', `L10 finish card leaves the explaining to the Planet's window (${card.territory})`);
+        check(card.territoryKey, 'L10 finish card offers the way to the Planet');
+        await page.waitForSelector('#planet-intro:not([hidden])', { timeout: 5000 });
+        const intro = await page.evaluate(() => ({
+          title: document.getElementById('planet-intro-title')?.textContent,
+          lines: [...document.querySelectorAll('#planet-intro .pi-lines li')].map((li) => li.textContent),
+          focused: document.activeElement?.id,
+          fits: (() => { const r = document.querySelector('#planet-intro .pi-panel')!.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth; })(),
+          keys: [...document.querySelectorAll<HTMLElement>('#planet-intro .pi-keys .btn')].map((k) => ({ text: k.textContent, h: k.getBoundingClientRect().height })),
+        }));
+        check(intro.title === 'THE PLANET' && intro.lines.length === 3, `L10: the Planet's window opens over the card (${JSON.stringify(intro.lines)})`);
+        check(intro.focused === 'planet-intro-open', `L10: Open The Planet takes focus (${intro.focused})`);
+        check(intro.fits && intro.keys.every((k) => k.h >= 44), `L10: the window fits the screen with 44px keys (${JSON.stringify(intro.keys)})`);
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/L10-planet-window.png` });
+        await page.evaluate(() => (document.getElementById('planet-intro-later') as HTMLButtonElement).click());
+        await page.waitForSelector('#planet-intro', { state: 'hidden', timeout: 3000 });
+        const after = await page.evaluate(() => ({ key: document.getElementById('go-territory-open')?.textContent, focused: document.activeElement?.id }));
+        check(after.key === 'Open The Planet' && after.focused === 'go-territory-open', `L10: Later leaves the card with its key to the Planet (${JSON.stringify(after)})`);
       }
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/L${level}-finish.png` });
       results.push(`L${level}: ${r.reason}, ${r.turns} turns, ${r.wrong} wrong taps`);

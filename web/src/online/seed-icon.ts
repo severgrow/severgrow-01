@@ -21,6 +21,24 @@ export const SEEDS_INTRO = Object.freeze({
 });
 
 /**
+ * THE PLANET'S INTRODUCTION over the won level 10 card (owner, 2026-11-04: "the planet is a seasonal
+ * map where you spend your seeds to grow tiles. the players occupying the most tiles at the end of
+ * planet get prizes ... but phrased way better"). Three short lines: what it is, what Seeds do there,
+ * why land matters. Kept here with the currency's name (src/strings.ts reserves "seed").
+ */
+export const PLANET_INTRO = Object.freeze({
+  eyebrow: 'Lessons complete',
+  title: 'THE PLANET',
+  lines: Object.freeze([
+    'One world, shared by every player, played in seasons.',
+    `Spend your ${SEEDS_WORD} to grow tiles anywhere on it.`,
+    'Hold the most land when the season ends to win prizes.',
+  ]),
+  open: 'Open The Planet',
+  later: 'Later',
+});
+
+/**
  * A finished game whose replay the server refused (HTTP 400). Those Seeds are gone — the proof is
  * dropped from the queue — so the finish card says so, calmly and once, instead of leaving the
  * player with a line that never arrives or a line that never existed. The refusal's own message is

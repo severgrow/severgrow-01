@@ -122,7 +122,8 @@ import {
 } from './lessons/lessons.js';
 import type { Beat, Lesson } from './lessons/lessons.js';
 import { FINAL_LESSON } from './lessons/final.js';
-import { SEEDS_INTRO } from './online/seed-icon.js';
+import { PLANET_INTRO, SEEDS_INTRO } from './online/seed-icon.js';
+import { mountPlanetIntro, type PlanetIntro } from './player/planet-intro.js';
 import { scriptedOpponentAction } from './lessons/opponent.js';
 import { tapAnswer } from './lessons/answer.js';
 import { litTarget, litTargetAndQuiet, tapOf } from './lessons/lesson-view.js';
@@ -1761,6 +1762,7 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   finalShown = false;
   lastDeckSeen = -1;
   goCounted = false;
+  planetIntroAsked = false;
   goSeedSettled = false;
   goSeedSlot = false;
   goSeedShown = null;
@@ -8122,7 +8124,21 @@ function presentResult(go: HTMLElement, wasHidden: boolean): void {
   }
 }
 /** One exit for every path that puts the result away, so the board always comes back to life. */
+/** The Planet's lesson window over the won level 10 card (web/src/player/planet-intro.ts). */
+let planetIntro: PlanetIntro | null = null, planetIntroAsked = false;
+function planetIntroOf(): PlanetIntro {
+  planetIntro ??= mountPlanetIntro($('gameover'), {
+    onOpen: () => {
+      hideGameOver();
+      showScreen('menu');
+      onlineLobbyCtl?.openWorld('menu');
+    },
+    returnFocus: () => document.getElementById('go-territory-open'),
+  });
+  return planetIntro;
+}
 function hideGameOver(): void {
+  planetIntro?.hide();
   const go = $('gameover');
   if (!go.hidden) {
     go.hidden = true;
@@ -8570,9 +8586,15 @@ function renderGameOver() {
   paintGoSeeds();
   $('go-territory-earned').textContent = SEEDS_INTRO.earned;
   $('go-territory-spend').textContent = SEEDS_INTRO.spend;
-  $('go-territory').hidden = !territoryIntro;
-  $('go-territory-open').textContent = SEEDS_INTRO.open;
+  // THE PLANET'S OWN WINDOW (owner, 2026-11-04): where the Territory is THE PLANET, a lesson window
+  // over this card introduces it, so the card's two inline lines step aside; the card keeps its key
+  // to the Planet for a player who chose Later.
+  const planetWindow = territoryIntro && FEATURES.planet;
+  $('go-territory').hidden = !territoryIntro || planetWindow;
+  $('go-territory-open').textContent = planetWindow ? PLANET_INTRO.open : SEEDS_INTRO.open;
   $('go-territory-open').hidden = !territoryIntro;
+  // Once per finished game: a later repaint of this card (the Seeds receipt arriving) never reopens it.
+  if (planetWindow && !planetIntroAsked) { planetIntroAsked = true; planetIntroOf().show(); }
   syncTerritoryGrow();
   const other = $('go-other');
   // On the last level, on a replay and in the Tutorial the primary already IS the way back to the
