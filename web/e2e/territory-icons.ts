@@ -236,7 +236,9 @@ try {
   const ownKeys = await keys(page);
   check('my own tile offers only the sell key (no profile key for myself)',
     ownKeys.length === 1 && ownKeys[0]!.action === 'sell' && (ownKeys[0]!.label ?? '').includes('Sell'), JSON.stringify(ownKeys));
-  check('the sell key is icon-only with a label', ownKeys[0]!.text === '' && !!ownKeys[0]!.label && ownKeys[0]!.icon);
+  // OWNER CHANGED THE RULE (2026-11-04: "Replace the selling icon button with 'Sell'"): the sell key
+  // used to be icon-only; it now says SELL and what it pays, still at least 44 px tall.
+  check('the sell key says SELL and its price in words, with a label', /^SELL · \+\d+$/.test(ownKeys[0]!.text) && !!ownKeys[0]!.label && ownKeys[0]!.h >= 44, JSON.stringify(ownKeys[0]));
 
   // A free tile: ONE grow key, and the first press arms it (the icon becomes a tick).
   const free = await page.evaluate(() => {

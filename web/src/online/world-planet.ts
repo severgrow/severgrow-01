@@ -29,6 +29,20 @@ const CSS = `
   visibility: visible; pointer-events: none; background: transparent;
 }
 .world-grid > .planet-canvas:focus-visible { outline: 2px solid #e8ddc5; outline-offset: -3px; }
+/* A TILE WAS JUST GROWN (planet.ts \`grown\`): two rings leave it and fade. Ends by itself. */
+.world-grid > .planet-grown {
+  position: fixed; z-index: 1; pointer-events: none; border-radius: 50%;
+  width: calc(var(--tile) * 1.2); height: calc(var(--tile) * 1.2);
+  margin: calc(var(--tile) * -.6) 0 0 calc(var(--tile) * -.6);
+  box-shadow: 0 0 0 1.5px #e8ddc5d9, 0 0 14px #e8ddc540;
+  animation: planet-grown 1150ms cubic-bezier(.2, .7, .2, 1) both;
+}
+.world-grid > .planet-grown::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 1px #e8ddc58c;
+  animation: planet-grown 1150ms 200ms cubic-bezier(.2, .7, .2, 1) both;
+}
+@keyframes planet-grown { from { transform: scale(.55); opacity: 1; } to { transform: scale(4.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .world-grid > .planet-grown { display: none; } }
 .world-grid > .planet-fallback {
   position: absolute; inset: 0; z-index: 0; margin: 0; display: flex; align-items: center; justify-content: center;
   padding: 24px; text-align: center; font-size: .8rem; line-height: 1.7; color: #e8ddc5a6;
@@ -75,11 +89,12 @@ export type WorldPlanet = {
   update: (input: PlanetInput) => void;
   home: (id: string | null) => void;
   setMode: (mode: PlanetMode) => void;
+  grown: (id: string) => void;
   dispose: () => void;
 };
 
 /** Mount the planet into the Territory grid. Resolves to null when it could not load. */
-export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | null) => void, mode: PlanetMode): Promise<WorldPlanet | null> => {
+export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | null) => void, mode: PlanetMode, onBlocked?: () => void): Promise<WorldPlanet | null> => {
   if (!document.getElementById('world-planet-css')) {
     const style = document.createElement('style');
     style.id = 'world-planet-css';
@@ -88,7 +103,7 @@ export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | 
   }
   let module: typeof import('../sphere/planet.js');
   try { module = await import('../sphere/planet.js'); } catch { return null; }
-  const planet = module.mountPlanet(grid, { onTile, label: PLANET.controls, unavailable: PLANET.unavailable, mode, panel: () => grid.getBoundingClientRect(), enclose: lockupBox });
+  const planet = module.mountPlanet(grid, { onTile, label: PLANET.controls, unavailable: PLANET.unavailable, mode, panel: () => grid.getBoundingClientRect(), enclose: lockupBox, ...(onBlocked ? { onBlocked } : {}) });
   grid.classList.add('planet-on');
   const screen = grid.closest('.online-world');
   screen?.classList.add('planet-screen');
@@ -97,6 +112,7 @@ export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | 
     update: (input) => planet.update(input),
     home: (id) => planet.home(id),
     setMode: (next) => planet.setMode(next),
+    grown: (id) => planet.grown(id),
     dispose: () => {
       planet.dispose();
       grid.classList.remove('planet-on');

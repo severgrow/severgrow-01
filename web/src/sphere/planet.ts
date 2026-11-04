@@ -12,6 +12,7 @@
 // slide"); that is the only loop, it runs at ~30 fps, and it stops when the planet fills the window,
 // the page is hidden, or reduced motion is on.
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
+import { menuDiscRadius } from '../player/planet-lockup.js';
 import { buildSphere, homeQuat, latticeMap, pickCell, unit, type Sphere, type V3 } from './geometry.js';
 import { arcQuat, inverse, multiply, rotate, slerp, trackball, type Quat } from './rotation.js';
 import { groundOf, KIND, tileForCell, type Ground, type GroundInput } from './ground.js';
@@ -36,7 +37,12 @@ const DRIFT_PX_PER_MS = .006;
 /** Behind the menu the planet turns slowly on its own (owner, 2026-11-04): one turn in 160 s. */
 const MENU_SPIN_RAD_PER_MS = (2 * Math.PI) / 160_000;
 /** The planet's light behind the menu, and in the window (the flat map's own "fade in"). */
-const MENU_LIGHT = .46;
+// Brighter behind the menu (owner, 2026-11-04: "make the sphere when on main menu brighter/ higher
+// opacity - with low brightness of screen is barely visible"): was .46. It is the canvas's opacity.
+const MENU_LIGHT = .9;
+/** A tapped tile below this share of the window (the tile bar's band), or this near an edge, comes clear. */
+const CLEAR_FOOT = .7;
+const CLEAR_EDGE = .1;
 /** The window's corner radius, matching `.world-grid`. */
 const FRAME_RADIUS = 14;
 
@@ -56,6 +62,8 @@ export type PlanetHooks = {
    * whole screen, as before.
    */
   enclose?: () => DOMRect | null;
+  /** A tap landed on one of the twelve black pentagons: nothing can grow there. */
+  onBlocked?: () => void;
 };
 /**
  * WHERE THE MENU'S PLANET WAS (owner, 2026-11-04: "the animation of rotating the sphere goes back to
@@ -125,7 +133,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       // Behind the menu: centred on the logo group, sized so the globe's disc encloses it.
       const box = hooks.enclose?.();
       if (!box || !(box.width > 0) || !(box.height > 0)) return full();
-      const radius = Math.min(Math.hypot(box.width, box.height) / 2 * 1.12, Math.min(view.width, view.height) * .49);
+      const radius = menuDiscRadius(box, view.width, view.height);
       const side = (2 * radius) / (.82 * MENU_ZOOM);
       return { x: box.left - view.left + box.width / 2 - side / 2, y: box.top - view.top + box.height / 2 - side / 2, width: side, height: side };
     }
@@ -155,6 +163,36 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     const nx = (x - view.left) / view.width * 2 - 1 - at.ox, ny = 1 - (y - view.top) / view.height * 2 - at.oy;
     const direction = rotate(inv, unit([nx * at.aspect / at.f, ny / at.f, -1]));
     return pickCell(sphere, origin, direction);
+  };
+  /** The planet's surface point (planet coords) under screen point (x, y), or null off the planet. */
+  const surfaceAt = (x: number, y: number): V3 | null => {
+    const at = projection(view, frameNow, zoom), inv = inverse(q);
+    const o = rotate(inv, [0, 0, EYE]);
+    const nx = (x - view.left) / view.width * 2 - 1 - at.ox, ny = 1 - (y - view.top) / view.height * 2 - at.oy;
+    const d = rotate(inv, unit([nx * at.aspect / at.f, ny / at.f, -1]));
+    const b = o[0] * d[0] + o[1] * d[1] + o[2] * d[2], c = o[0] * o[0] + o[1] * o[1] + o[2] * o[2] - 1, h = b * b - c;
+    if (h < 0) return null;
+    const t = -b - Math.sqrt(h);
+    return [o[0] + t * d[0], o[1] + t * d[1], o[2] + t * d[2]];
+  };
+  /**
+   * ZOOM TOWARDS THE FINGERS (a pinch's midpoint, the mouse under the wheel): after a zoom step, turn
+   * the planet so the ground that was under that point is under it again, like any map.
+   */
+  let anchor: { x: number; y: number; at: V3 } | null = null;
+  const keepAnchor = () => {
+    if (!anchor) return;
+    const now = surfaceAt(anchor.x, anchor.y);
+    if (!now) { anchor = null; return; }
+    const from = rotate(q, anchor.at), to = rotate(q, now);
+    if (Math.hypot(from[0] - to[0], from[1] - to[1], from[2] - to[2]) > 1e-6) q = multiply(arcQuat(unit(from), unit(to)), q);
+  };
+  /** Where planet cell `index` sits on screen (CSS px), or null when it faces away. */
+  const screenOfCell = (index: number) => {
+    const p = rotate(q, sphere.cells[index]!.centre);
+    if (p[2] < 0) return null;
+    const at = projection(view, frameNow, zoom), w = EYE - p[2];
+    return { x: view.left + (p[0] * at.f / at.aspect / w + at.ox + 1) / 2 * view.width, y: view.top + (1 - (p[1] * at.f / w + at.oy)) / 2 * view.height };
   };
   /** Fly so `index` faces the camera, at `toZoom`. */
   const flyToCell = (index: number, toZoom: number, ms = FLY_MS, ease = easeOut) => {
@@ -218,6 +256,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     }
     if (Math.abs(targetZoom - zoom) > zoom * .0005) zoom += (targetZoom - zoom) * (1 - Math.exp(-dt / 70));
     else zoom = targetZoom;
+    if (anchor && !flight) { keepAnchor(); if (zoom === targetZoom) anchor = null; }
     const drifting = motion() && (spaceVisible() || mode === 'menu');
     // THE STARS RUSH during a flight (fastest mid-way) and settle as it lands; at rest, the slow slide.
     const rush = flight ? 1 + 16 * Math.sin(Math.PI * flight.t) : 1;
@@ -300,7 +339,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (e.button !== 0 || lost || !renderer || mode === 'menu') return;
     e.preventDefault();
     canvas.focus({ preventScroll: true });
-    stop(); lastFrame = 0;
+    stop(); lastFrame = 0; anchor = null;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { canvas.setPointerCapture(e.pointerId); } catch { /* a cancelled touch */ }
     if (pointers.size === 1) { start = { x: e.clientX, y: e.clientY }; dragged = false; multi = false; lastBall = ball(start); lastMove = performance.now(); }
@@ -313,7 +352,13 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     pointers.set(e.pointerId, p);
     if (pointers.size > 1) {
       const d = spread();
-      if (pinch > 0) { zoom = targetZoom = clampZoom(zoom * d / pinch); ask(); }
+      if (pinch > 0) {
+        const [a, b] = [...pointers.values()] as [{ x: number; y: number }, { x: number; y: number }];
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, at = surfaceAt(mid.x, mid.y);
+        zoom = targetZoom = clampZoom(zoom * d / pinch);
+        if (at) { anchor = { ...mid, at }; keepAnchor(); anchor = null; }
+        ask();
+      }
       pinch = d;
       return;
     }
@@ -349,7 +394,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (mode === 'menu') return;
     const pixels = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? frameNow.height : 1);
     targetZoom = clampZoom(targetZoom * Math.exp(-pixels * .0018));
-    if (!motion()) zoom = targetZoom;
+    const at = surfaceAt(e.clientX, e.clientY);
+    anchor = at ? { x: e.clientX, y: e.clientY, at } : null;
+    if (!motion()) { zoom = targetZoom; keepAnchor(); anchor = null; }
     ask();
   }, { signal, passive: false });
   const tapAt = (x: number, y: number) => {
@@ -370,8 +417,16 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (tilePx() < TAP_TILE_PX) { flyToCell(index, clampZoom(zoomFor(OPEN_TILE_PX))); return; }
     // EVERY hexagon is a tile you can tap (owner, 2026-11-04: "ALL can be taped"); only the twelve
     // pentagons are not ground.
-    const id = ground && ground.kind[index]! !== KIND.pentagon ? tileForCell(map, index) : null;
+    if (ground && ground.kind[index]! === KIND.pentagon) { hooks.onTile(null); hooks.onBlocked?.(); return; }
+    const id = tileForCell(map, index);
     hooks.onTile(id);
+    // THE TAPPED TILE COMES CLEAR of the tile bar along the window's foot and of the frame's edges:
+    // the planet turns it towards the middle, at the same zoom.
+    const at = id === null ? null : screenOfCell(index);
+    if (at) {
+      const f = frameNow, fx = (at.x - view.left - f.x) / f.width, fy = (at.y - view.top - f.y) / f.height;
+      if (fy > CLEAR_FOOT || fy < CLEAR_EDGE || fx < CLEAR_EDGE || fx > 1 - CLEAR_EDGE) flyToCell(index, zoom, FLY_MS);
+    }
   };
   canvas.addEventListener('keydown', (e) => {
     if (mode === 'menu') return;
@@ -440,6 +495,26 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       flyTo(back, MENU_ZOOM, OUT_MS, easeInOut);
     },
     /** Bring flat tile `id` (e.g. the player's own land) to the middle at a comfortable size. */
+    /**
+     * A TILE WAS JUST GROWN: two soft rings leave it over the ground it lights up (the planet's own
+     * version of the flat map's grow ripple). One DOM element, one CSS animation that ends and removes
+     * itself: no render loop, nothing left behind. Reduce motion: nothing.
+     */
+    grown(id: string) {
+      const index = map.cellOf.get(id);
+      const at = index === undefined || !motion() || mode !== 'world' ? null : screenOfCell(index);
+      if (!at) return;
+      const ring = document.createElement('span');
+      ring.className = 'planet-grown';
+      ring.setAttribute('aria-hidden', 'true');
+      ring.style.left = `${at.x.toFixed(1)}px`;
+      ring.style.top = `${at.y.toFixed(1)}px`;
+      ring.style.setProperty('--tile', `${Math.max(12, tilePx()).toFixed(1)}px`);
+      canvas.after(ring);
+      const done = () => ring.remove();
+      ring.addEventListener('animationend', (e) => { if (e.target === ring) done(); });
+      window.setTimeout(done, 2000);
+    },
     home(id: string | null) {
       const index = id ? map.cellOf.get(id) : undefined;
       if (index === undefined || !renderer) return;
@@ -464,11 +539,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       /** Where a flat tile's centre is on screen right now (CSS px), or null when it faces away. */
       screenOf: (id: string) => {
         const index = map.cellOf.get(id);
-        if (index === undefined) return null;
-        const p = rotate(q, sphere.cells[index]!.centre);
-        if (p[2] < 0) return null;
-        const at = projection(view, frameNow, zoom), w = EYE - p[2];
-        return { x: view.left + (p[0] * at.f / at.aspect / w + at.ox + 1) / 2 * view.width, y: view.top + (1 - (p[1] * at.f / w + at.oy)) / 2 * view.height };
+        return index === undefined ? null : screenOfCell(index);
       },
     }),
   };

@@ -72,6 +72,7 @@ export class WorldEconomyService {
       version: WORLD_VERSION, revision: snapshot.revision, rankings: territoryStandings(snapshot.claims), cells: seenWorld(snapshot.claims.map((c) => c.cellId)),
       // The planet's growth rule, announced so the page offers far-away tiles only to a server that takes them.
       growAnywhere: PLANET_GROWTH,
+      saleReturn: SEED_ECONOMY.tileSaleReturn,
       claims: snapshot.claims.map((claim) => ({
         cellId: claim.cellId, ownerId: claim.ownerId, ownerName: claim.ownerName,
         // Only a level NUMBER crosses the wire: no id, no email, no progress detail. `null` when the

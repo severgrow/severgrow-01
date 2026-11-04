@@ -92,10 +92,14 @@ describe('the keys speak, because their text is gone', () => {
     expect(source).toMatch(/key\.title = action\.label/);
   });
 
-  it('a visible text node is no longer written into the tile bar key', () => {
+  // OWNER CHANGED THE RULE (2026-11-04: "Replace the selling icon button with 'Sell'"): the SELL key
+  // alone speaks in words; every other key stays an icon with no visible text.
+  it('only the sell key writes visible text; it says SELL and the Seeds it pays back', () => {
     const paint = source.slice(source.indexOf('private paintSelection()'), source.indexOf('private async claim()'));
-    expect(paint).not.toMatch(/key\.(textContent|innerText)\s*=/);
-    expect(paint).not.toMatch(/key\.textContent\s*=/);
+    expect(paint.match(/key\.(textContent|innerText)\s*=/g) ?? []).toHaveLength(1);
+    expect(paint).toMatch(/if \(action\.kind === 'sell'\) \{[^}]*key\.textContent = /);
+    expect(ONLINE.worldSellKey(50)).toBe('SELL · +50');
+    expect(ONLINE.worldSellKeyArmed).toBe('TAP TO SELL');
   });
 
   it('the key keeps the old class (handlers/tests) and joins the MENU key family', () => {

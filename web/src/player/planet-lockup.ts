@@ -28,6 +28,13 @@ const inkBox = (title: HTMLElement): DOMRect => {
   return new DOMRect(box.left, box.top, Math.max(0, box.width - spacing), box.height);
 };
 
+/** The globe's radius behind the menu (px): it encloses the logo group, never wider than the screen. */
+export const menuDiscRadius = (box: { width: number; height: number }, width: number, height: number): number =>
+  Math.min(Math.hypot(box.width, box.height) / 2 * 1.12, Math.min(width, height) * .49);
+
+/** Keep the menu this far inside the screen even when the group is taller than it. */
+const EDGE = 8;
+
 /** The logo and its wordmark as one box (viewport px), or null when the menu is not laid out. */
 export const lockupBox = (): DOMRect | null => {
   const logo = document.getElementById('logo'), title = document.querySelector<HTMLElement>('#menu .title');
@@ -63,8 +70,33 @@ export const mountPlanetLockup = (): void => {
     const shift = box.left - at.left;
     logo.style.translate = `${shift.toFixed(2)}px 0`;
   };
-  fit();
-  window.addEventListener('resize', fit, { passive: true });
-  void document.fonts?.ready.then(fit);
-  new ResizeObserver(fit).observe(title);
+  // THE WHOLE GROUP SITS IN THE MIDDLE (owner, 2026-11-04: "There should be the same amount of space on
+  // top and bottom, so logo together with the buttons and globe should be centered vertically too").
+  // The group runs from the globe's top edge to the lowest key; the column moves by one translate so
+  // the space above it equals the space below. The globe follows, since it is centred on the lockup.
+  // The keys never leave the screen: on a short screen the globe may run past an edge instead.
+  const inner = stack.closest<HTMLElement>('.menu-inner');
+  let shift = 0;
+  const centre = () => {
+    const box = lockupBox();
+    if (!inner || !box) return;
+    const keys = [...stack.querySelectorAll<HTMLElement>('*')].map((el) => el.getBoundingClientRect()).filter((r) => r.height > 0 && r.width > 0);
+    if (!keys.length) return;
+    // Everything is measured where it would be with no shift.
+    const vh = window.innerHeight, cy = box.top + box.height / 2 - shift, r = menuDiscRadius(box, window.innerWidth, vh);
+    const contentTop = Math.min(box.top, ...keys.map((k) => k.top)) - shift, contentBottom = Math.max(...keys.map((k) => k.bottom)) - shift;
+    const top = Math.min(cy - r, contentTop), bottom = Math.max(cy + r, contentBottom);
+    let next = (vh - bottom - top) / 2;
+    next = Math.max(EDGE - contentTop, Math.min(vh - EDGE - contentBottom, next));
+    if (!Number.isFinite(next) || Math.abs(next - shift) < .5) return;
+    shift = next;
+    inner.style.translate = `0 ${shift.toFixed(1)}px`;
+  };
+  const both = () => { fit(); centre(); };
+  both();
+  window.addEventListener('resize', both, { passive: true });
+  void document.fonts?.ready.then(both);
+  const watch = new ResizeObserver(both);
+  watch.observe(title);
+  watch.observe(stack);
 };

@@ -266,6 +266,8 @@ export type WorldMapPayload = {
      * then keeps the seen-map rule.
      */
     growAnywhere?: boolean;
+    /** What selling a tile back pays (owner, 2026-11-04: 50). OPTIONAL: an older server pays `cost`. */
+    saleReturn?: number;
   };
 };
 export type WorldMapResponse = { ok: true } & WorldMapPayload;

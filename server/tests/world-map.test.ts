@@ -321,7 +321,9 @@ describe('selling a tile', () => {
     const before = (await store.wallet('a')).balance;
     const sold = await store.sell('a', '0,0', 'request-sell-1', 2);
     expect(sold).toMatchObject({ ok: true, cellId: '0,0', replayed: false, wallet: { balance: before + SEED_ECONOMY.tileSaleReturn } });
-    expect(SEED_ECONOMY.tileSaleReturn).toBe(SEED_ECONOMY.tileCost);
+    // OWNER CHANGED THE RULE (2026-11-04): a sale pays 50, half the tile's price (it used to equal it).
+    expect(SEED_ECONOMY.tileSaleReturn).toBe(50);
+    expect(SEED_ECONOMY.tileSaleReturn).toBe(SEED_ECONOMY.tileCost / 2);
     expect((await store.world()).claims.some((c) => c.cellId === '0,0')).toBe(false);
     // the same request again pays nothing more
     expect(await store.sell('a', '0,0', 'request-sell-1', 3)).toMatchObject({ ok: true, replayed: true, wallet: { balance: before + SEED_ECONOMY.tileSaleReturn } });

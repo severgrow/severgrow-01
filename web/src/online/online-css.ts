@@ -1190,6 +1190,18 @@ html.reduce-motion .world-achievement.just-claimed { animation: none; }
   cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   transition: transform 90ms ease, box-shadow 140ms ease, color 140ms ease, opacity 140ms ease;
 }
+/* THE SELL KEY SPEAKS (owner, 2026-11-04): the same key, wide enough for its words. */
+.world-key.world-key-text {
+  width: auto; min-width: 88px; padding: 0 14px; line-height: 1; white-space: nowrap;
+  font-size: .64rem; letter-spacing: .16em; font-variant-numeric: tabular-nums;
+}
+.world-key.world-key-text.armed { color: #1a1d17; background: #e8ddc5; }
+/* The supplied hardware frame is a square: on the wide key its bezel is drawn instead, the same
+   hairline-and-shade the frame paints, so no square floats in the middle of the words. */
+.world-key.world-key-text::before {
+  background: none; border-radius: inherit;
+  box-shadow: inset 0 0 0 1px #e8ddc524, inset 0 1px 0 #ffffff14, inset 0 -2px 3px #0006;
+}
 .world-grid > .world-corner::before, .world-key::before {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: url('./hardware/button-frame-supplied.webp') center / contain no-repeat;

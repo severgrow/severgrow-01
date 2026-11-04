@@ -26,8 +26,9 @@ export const BETA_PAYOUT_MULTIPLIER = 2;
 export const SEED_ECONOMY = Object.freeze({
   version: 1,
   tileCost: 100,
-  /** What selling a tile back returns (owner, 2026-10-27: "selling your tile for 100 seeds"). */
-  tileSaleReturn: 100,
+  /** What selling a tile back returns. Owner, 2026-10-27: "selling your tile for 100 seeds"; then
+   *  2026-11-04: "Replace the selling icon button with 'Sell' and pay 50 seeds for that instead of 100". */
+  tileSaleReturn: 50,
   utcDailyRepeatableCap: 600,
   online: {
     queue: { win: 30, loss: 8, draw: 12, dailyMatches: 20, pairDailyMatches: 5 },

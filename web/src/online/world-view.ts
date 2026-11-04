@@ -33,7 +33,7 @@ import {
 import { stakedCellFor } from '../../../server/src/seeds/stake.js';
 import { stakeName } from './challenge-copy.js';
 import { waitingActionCount } from './territory-attention.js';
-import { seedBalanceLabel, seedIcon } from './seed-icon.js';
+import { SEEDS_WORD, seedBalanceLabel, seedIcon } from './seed-icon.js';
 import type { AchievementView } from '../../../server/src/seeds/achievements.js';
 import { ACHIEVEMENT_COPY, ACHIEVEMENT_GROUP_TITLES, ACHIEVEMENTS_UI } from './achievement-copy.js';
 import {
@@ -2255,7 +2255,9 @@ export class WorldView {
     const grid = document.getElementById('online-world-grid');
     if (!grid) return;
     this.planetLoading = true;
-    void mountWorldPlanet(grid, (id) => (id ? this.select(id) : this.deselect()), mode).then((planet) => {
+    void mountWorldPlanet(grid, (id) => { this.notice(''); if (id) this.select(id); else this.deselect(); }, mode,
+      // The twelve black pentagons say why nothing happens there.
+      () => this.notice(PLANET.pentagon)).then((planet) => {
       this.planetLoading = false;
       if (!planet) return;
       // Neither the window nor the menu wants it any more (a match started while it loaded).
@@ -2320,7 +2322,7 @@ export class WorldView {
     let actions: TileBarAction[] = [];
     if (world && cellId && this.working) {
       const tile = world.claims.find((claim) => claim.cellId === cellId);
-      line = tile ? ownerLine(tile, true, this.myLevel()) : `FREE TILE · ${world.cost} SEEDS`;
+      line = tile ? ownerLine(tile, true, this.myLevel()) : ONLINE.worldUnclaimed(world.cost, SEEDS_WORD);
       spoken = tile ? ownerSpokenLine(tile, true, this.myLevel()) : line;
       actions = [{
         kind: this.working === 'grow' ? 'grow' : 'sell',
@@ -2345,7 +2347,7 @@ export class WorldView {
           const armed = this.sellArmed === cellId;
           actions.push({
             kind: 'sell',
-            label: armed ? ONLINE.worldSellConfirm : ONLINE.worldSell(world.cost), armed,
+            label: armed ? ONLINE.worldSellConfirm : ONLINE.worldSell(world.saleReturn ?? world.cost), armed,
             run: () => { if (armed) void this.sell(cellId); else { this.sellArmed = cellId; this.paintSelection(); } },
           });
         } else if (!mine && this.isFrontier(cellId)) {
@@ -2360,7 +2362,13 @@ export class WorldView {
         // OWNER WORDING (2026-10-16): "when placing a tile dont say 'claim hex' say grow a tile
         // everywhere". The verb is GROW and the noun is TILE throughout this screen - it also matches
         // the game's own Grow action, so the world map and the board speak the same language.
-        line = !available && this.wallet && this.wallet.balance < world.cost ? `${world.cost} SEEDS NEEDED` : `FREE TILE · ${world.cost} SEEDS`;
+        // NOT "FREE TILE" (owner, 2026-11-04: it "sounds like you can take it for free"): nobody holds
+        // it, and growing it costs Seeds.
+        line = !available && this.wallet && this.wallet.balance < world.cost ? ONLINE.worldUnclaimedShort(world.cost, SEEDS_WORD)
+          // Out of reach today (a server that still keeps the seen-map rule): say so, rather than show
+          // a price with no key to pay it.
+          : !available && this.wallet ? ONLINE.worldUnclaimedFar
+          : ONLINE.worldUnclaimed(world.cost, SEEDS_WORD);
         if (available && !this.busy) {
           const armed = this.growArmed === cellId;
           actions = [{
@@ -2394,7 +2402,12 @@ export class WorldView {
         // technology and the title is the same words for a pointer. Not decoration — the replacement.
         key.setAttribute('aria-label', action.label);
         key.title = action.label;
-        key.insertAdjacentHTML('afterbegin', action.armed ? TILE_BAR_ICONS.confirm : TILE_BAR_ICONS[action.kind]);
+        // SELL IS A WORD, NOT AN ICON (owner, 2026-11-04: "Replace the selling icon button with 'Sell'"):
+        // the key says what it does and what it pays; armed, it asks for the second press in words.
+        if (action.kind === 'sell') {
+          key.classList.add('world-key-text');
+          key.textContent = action.armed ? ONLINE.worldSellKeyArmed : ONLINE.worldSellKey(this.world?.saleReturn ?? this.world?.cost ?? 0);
+        } else key.insertAdjacentHTML('afterbegin', action.armed ? TILE_BAR_ICONS.confirm : TILE_BAR_ICONS[action.kind]);
         return key;
       });
       bar.replaceChildren(text, ...keys);
@@ -2429,6 +2442,7 @@ export class WorldView {
       this.pendingRequest = null;
       await this.refresh(true);
       this.ripple(cellId);
+      this.planet?.grown(cellId);
     } catch {
       this.notice('That tile may have changed. The map has refreshed; no Seeds were taken.');
       this.pendingRequest = null;

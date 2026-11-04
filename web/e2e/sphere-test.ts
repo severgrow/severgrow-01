@@ -192,6 +192,8 @@ try {
       await p.mouse.click(rivalAt.x, rivalAt.y);
       await p.waitForTimeout(150);
       check(`[${tag}] a rival's disputed tile selects`, (await planet(p))!.selected === '4,0');
+      // Near the window's edge the planet turns it clear; let that finish before the next tap.
+      await settled(p).catch(() => undefined);
     }
 
     // EVERY TILE CAN BE TAPPED (owner, 2026-11-04): plain ground well away from any land selects too.
@@ -201,6 +203,18 @@ try {
       await p.mouse.click(plainAt.x, plainAt.y);
       await p.waitForTimeout(150);
       check(`[${tag}] plain ground far from any land is a tile you can tap`, (await planet(p))!.selected === '0,-4', String((await planet(p))!.selected));
+    }
+    // A TILE TAPPED UNDER THE TILE BAR COMES CLEAR: the planet turns it up into the window, at the same zoom.
+    {
+      await p.waitForTimeout(400);
+      const z = (await planet(p))!.zoom;
+      await p.mouse.click(grid.x + grid.width / 2, grid.y + grid.height * .86);
+      await p.waitForTimeout(80);
+      await settled(p).catch(() => undefined);
+      const now = (await planet(p))!;
+      const at = now.selected ? await screenOf(p, now.selected) : null;
+      check(`[${tag}] a tile tapped under the tile bar turns up clear of it`, !!at && at.y < grid.y + grid.height * .72 && Math.abs(now.zoom - z) < z * .01,
+        at ? `${now.selected} now at ${((at.y - grid.y) / grid.height * 100).toFixed(0)}% of the window` : 'nothing selected');
     }
     // A drag turns the planet and never selects.
     const before = (await planet(p))!;
@@ -228,6 +242,25 @@ try {
     if (rest.spaceVisible) check(`[${tag}] at rest only the slow star slide runs`, rest.frames - frames <= 20, `${rest.frames - frames} frames in .5s`);
     else check(`[${tag}] no idle rendering while the ground fills the window`, rest.frames === frames, `frames ${frames}->${rest.frames}`);
 
+    // THE WHEEL ZOOMS TOWARDS THE POINTER, like any map: the tile under it stays under it. (Out, so
+    // a window already fully zoomed in still moves.)
+    if (!ios) {
+      // A tile in the open upper part of the window (never under the tile bar), chosen by a tap.
+      await p.waitForTimeout(400);
+      await p.mouse.click(grid.x + grid.width * .3, grid.y + grid.height * .35);
+      await p.waitForTimeout(400);
+      await settled(p).catch(() => undefined);
+      const s0 = (await planet(p))!;
+      const target = s0.selected ?? '1,0', at0 = await screenOf(p, target);
+      if (at0 && Math.hypot(at0.x - cx, at0.y - cy) > 40) {
+        await p.mouse.move(at0.x, at0.y);
+        for (let i = 0; i < 3; i++) { await p.mouse.wheel(0, 120); await p.waitForTimeout(30); }
+        await settled(p).catch(() => undefined);
+        const at1 = await screenOf(p, target), z1 = (await planet(p))!.zoom;
+        check(`[${tag}] the wheel zooms towards the pointer`, !!at1 && z1 < s0.zoom * .95 && Math.hypot(at1.x - at0.x, at1.y - at0.y) < 6,
+          at1 ? `moved ${Math.hypot(at1.x - at0.x, at1.y - at0.y).toFixed(1)}px, zoom ${s0.zoom.toFixed(2)} -> ${z1.toFixed(2)}` : 'tile gone');
+      }
+    }
     // Zoom out to space: the stars slide slowly, and only while space is visible.
     await p.mouse.move(cx, cy);
     if (ios) {

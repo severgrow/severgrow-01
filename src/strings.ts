@@ -126,6 +126,14 @@ export const ONLINE = Object.freeze({
   worldNoStanding: 'Grow a tile to join the ranking',
   worldSell: (price: number) => `Sell this tile · +${price}`,
   worldSellConfirm: 'Confirm sell',
+  /** The sell key's own words (owner, 2026-11-04: a word, not an icon). */
+  worldSellKey: (price: number) => `SELL · +${price}`,
+  worldSellKeyArmed: 'TAP TO SELL',
+  /** A tile nobody holds (owner, 2026-11-04: "'Free tile' sounds like you can take it for free"). */
+  /** `currency` is the economy's own word (web/src/online/seed-icon.ts SEEDS_WORD): this file stays free of it. */
+  worldUnclaimed: (cost: number, currency: string) => `UNCLAIMED · ${cost} ${currency.toUpperCase()} TO GROW`,
+  worldUnclaimedShort: (cost: number, currency: string) => `UNCLAIMED · NEEDS ${cost} ${currency.toUpperCase()}`,
+  worldUnclaimedFar: 'UNCLAIMED · OUT OF REACH FOR NOW',
   /** The tile bar's icon keys (owner, 2026-11-01: actions are icons, not text). The visible text is
    *  gone, so these words are the keys' SPOKEN labels and titles — the label is not extra, it is
    *  the replacement. */
@@ -1666,6 +1674,8 @@ export const PLANET = Object.freeze({
   /** The ranking's meter (owner, 2026-11-04: "x/2347 ... tiles on the planet taken ... phrase it better"). */
   grown: 'PLANET GROWN',
   grownSpoken: (taken: string, total: string) => `${taken} of ${total} tiles on the planet are grown`,
+  /** A tap on one of the twelve black pentagons. */
+  pentagon: 'Black stone: nothing grows here. Try any hexagon.',
 });
 
 export const LESSON = Object.freeze({
