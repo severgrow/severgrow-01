@@ -5,13 +5,17 @@ could not: no `SUPABASE_ACCESS_TOKEN`, and its network blocks `*.supabase.co`).
 
 ## Why
 
-`futa0.5-online` (commit `e7a52999` or later) carries server changes that are written and tested
+`futa0.5-online` (latest commit) carries server changes that are written and tested
 but **not deployed**. Until the `duel` Edge Function is redeployed, players see the old rules:
 
 | Owner asked for | Old server does | New server does |
 |---|---|---|
 | "I should be able to grow anywhere" on THE PLANET | Only tiles next to the known map; far tiles read "OUT OF REACH FOR NOW" | Any free planet hexagon (`growAnywhere: true` in `GET /v1/world`) |
 | Selling a tile pays 50 Seeds | Pays 100 | Pays 50 (`saleReturn: 50` in `GET /v1/world`) |
+| Level 10 is a "real first game, big board" | Only confirms (and pays 100 Seeds for) the old small-map opening | Confirms the new full-board game too, and still the old one |
+
+**Deploy the server BEFORE the owner promotes the new level 10.** Until then, a level 10 win from the
+new page cannot be confirmed, and its 100 Seeds are not paid.
 
 **No database migration is needed for this.** Both rules live in server code
 (`server/src/world.ts` `PLANET_GROWTH`, `server/src/seeds/config.ts` `tileSaleReturn`). Planet tile

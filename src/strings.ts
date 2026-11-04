@@ -1738,7 +1738,8 @@ export const LESSON = Object.freeze({
   wonByKo: 'You surrounded their home.',
   goldDecided: 'Gold put you ahead.',
   canPlay: 'YOU CAN PLAY FUTASAKU',
-  canPlayLine: 'Next: the big board.',
+  // Level 10 is itself the big board now (owner, 2026-11-04): what follows is Chapter II.
+  canPlayLine: 'Next: Chapter II, Broken Ground.',
   // wrong taps (the engine says why; these are its words)
   drawFirst: 'DRAW FIRST',
   notYet: 'NOT YET',

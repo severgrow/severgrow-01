@@ -178,7 +178,7 @@ const geometry = (p: Page) => p.evaluate(GEOMETRY) as Promise<{
 type Box = { x: number; y: number; w: number; h: number; right: number; bottom: number };
 
 /** Header is the menu and the logo. Sentences sit in the plate under the map, which is not padded. */
-const checkCockpit = (g: Awaited<ReturnType<typeof geometry>>, tag: string, phone: boolean) => {
+const checkCockpit = (g: Awaited<ReturnType<typeof geometry>>, tag: string, phone: boolean, minHex = 72) => {
   check(!g.headerTitle, `${tag}: the header has no lesson title`);
   check(!g.tutorial, `${tag}: the lesson does not use the tutorial band`);
   check(g.padTop < 2, `${tag}: the map is not padded down (${g.padTop}px)`);
@@ -186,7 +186,7 @@ const checkCockpit = (g: Awaited<ReturnType<typeof geometry>>, tag: string, phon
   check(!!g.menu && g.menu.w > 0 && !!g.brand && g.brand.w > 0, `${tag}: the header is the menu and the logo`);
   if (phone && g.hex) {
     const size = Math.max(g.hex.w, g.hex.h);
-    check(size >= 72, `${tag}: a hex stays full size (${g.hex.w}x${g.hex.h}, was about 43 when the window padded the map)`);
+    check(size >= minHex, `${tag}: a hex stays full size (${g.hex.w}x${g.hex.h}, was about 43 when the window padded the map)`);
   }
   if (!g.plateHidden && g.plate && g.union) {
     // The plate follows the lit action on a phone, so it may sit over unlit hexes; the hard rule
@@ -566,11 +566,13 @@ try {
       }, undefined, { timeout: 15000 });
       if (SHOTS && (level === 1 || level === 5 || level === 10)) await page.screenshot({ path: `${SHOTS}/L${level}-first-frame.png` });
       const hexes = await page.evaluate(() => document.querySelectorAll('#board .hex-cell').length);
-      check(hexes === 19, `L${level} plays on the 19-hex map (${hexes})`);
+      // OWNER CHANGED THE RULE (2026-11-04: "Real first game, big board"): level 10 is the full board.
+      check(hexes === (level === 10 ? 37 : 19), `L${level} plays on the ${level === 10 ? '37' : '19'}-hex map (${hexes})`);
       // The header stays the menu and the logo. Teaching sits under the map, which stays full size.
       await page.waitForFunction((n) => document.documentElement.dataset.lesson === String(n), level, { timeout: 10000 }).catch(() => undefined);
       const lg = await geometry(page);
-      checkCockpit(lg, `L${level}`, true);
+      // Level 10 is the full 37-hex board (owner, 2026-11-04): its full-size hex is smaller on a phone.
+      checkCockpit(lg, `L${level}`, true, level === 10 ? 60 : 72);
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/L${level}-open.png` });
       const r = await tapOnlyTheLight(page, level);
       // The observer saw the whole level: no hint may have appeared before the deal settled, and

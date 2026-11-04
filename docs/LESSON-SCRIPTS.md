@@ -389,10 +389,14 @@ The same in every level:
 
 ## LEVEL 10 — FINALE
 
-- **Setup:**
-  - Gold 0,0, rock 0,1.
-  - Your tile -1,1 (4); their tiles 1,-1 (4), 1,-2 (6), 2,-1 (7).
-  - The gentlest bot (level 1). Draw pile: 14 cards.
+- **Setup (owner, 2026-11-04: "Real first game, big board"):**
+  - A real game from scratch: campaign level 10's own match ("The First Grove") on the full 37-hex
+    board, a fresh deal, only the two homes on it. The server replays exactly this opening to pay
+    the 100 Seeds (`web/src/lessons/final.ts`).
+  - The gentlest bot (level 1).
+  - (Until 2026-11-04 it was an authored small-map position with tiles already grown: gold 0,0,
+    rock 0,1, your -1,1 (4), their 1,-1 (4), 1,-2 (6), 2,-1 (7). It is kept only so a win from an
+    old page still verifies.)
   - **This level also opens with the Who-starts ritual** (owner, 2026-10-24): the same card
     ceremony as a practice match and an online duel, before the board is yours. It presents the
     engine's starter — `authoredState` opens every authored lesson on your turn — and decides
@@ -406,7 +410,7 @@ The same in every level:
     (never a lone word, never a button).
   - When the Draw pile is empty: DISPLAY: LAST TURN | BOX: "The Draw pile is empty – this is your
     last turn." | tap anywhere
-- **Finish:** YOU CAN PLAY FUTASAKU / YOU LEARNED: THE WHOLE GAME (★), then Next: the big board.
+- **Finish:** YOU CAN PLAY FUTASAKU / YOU LEARNED: THE WHOLE GAME (★), then Next: Chapter II, Broken Ground.
 
 Level 11 is the first 37-hex level. It has no lesson, and it also opens with the ritual.
 

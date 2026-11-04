@@ -10,7 +10,7 @@ import { botSeed } from '../../src/bots/levels.js';
 import { botFor, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { SMALL_BOARD_RADIUS } from '../../src/campaign/small-board.js';
 import { LESSON } from '../../src/strings.js';
-import { FINAL_LESSON } from '../src/lessons/final.js';
+import { FINAL_LESSON, finalLessonLegacyOpening, finalLessonOpening } from '../src/lessons/final.js';
 import { lessonResumable } from '../src/lessons/lesson-save.js';
 import {
   LESSONS, currentGoal, goalDone, goalReachable, lessonAllows, lessonBeat, lessonFor, lessonIsFree, lessonLegal, lessonLocked,
@@ -110,9 +110,12 @@ describe('levels 11+ are untouched', () => {
 });
 
 describe('lesson openings', () => {
-  it('there are ten lessons, levels 1-10, each on the 19-hex board', () => {
+  // OWNER CHANGED THE RULE (2026-11-04: "Real first game, big board"): levels 1-9 teach on the
+  // 19-hex board; level 10, the first real game, is on the full 37-hex board.
+  it('there are ten lessons, levels 1-10: 1-9 on the 19-hex board, 10 on the full board', () => {
     expect(LESSONS.map((l) => l.level)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    for (const l of LESSONS) {
+    expect(Object.keys(lessonOpening(lessonFor(10)!).board)).toHaveLength(37);
+    for (const l of LESSONS.filter((x) => x.level !== 10)) {
       const s = lessonOpening(l);
       expect(s.config.boardRadius, `L${l.level}`).toBe(SMALL_BOARD_RADIUS);
       expect(Object.keys(s.board)).toHaveLength(19);
@@ -344,11 +347,24 @@ describe('level 10’s send-off (owner, 2026-10-24)', () => {
     for (const l of LESSONS.filter((x) => x.level !== 10)) expect(l.intro, `L${l.level}`).not.toContain('first-game');
   });
 
-  it('changes nothing else about level 10 — its goals, its idle guide, its finish and the Seeds proof', () => {
+  it('changes nothing else about level 10 — its goals, its idle guide and its finish', () => {
     expect(l10.goals).toEqual([]);
     expect(l10.guide).toBe('idle');
     expect(l10.finish.learned).toBe('THE WHOLE GAME');
-    expect(l10.position, 'the one copy the server replays').toBe(FINAL_LESSON.position);
+  });
+
+  // OWNER CHANGED THE RULE (2026-11-04: "level 10 says its the first full game, but it seems like its
+  // using the small map and starts from some tiles already on the board ---- bug"; asked, the owner
+  // chose "Real first game, big board"). Level 10 was an authored opening on the 19-hex map with tiles
+  // already grown; it is now a real game dealt from scratch on the full 37-hex board.
+  it('is a real first game: the full 37-hex board, dealt fresh, only the two homes on it', () => {
+    expect(lessonIsFree(l10), 'its coaching stays guided: quiet, lit when the player waits').toBe(false);
+    const s = lessonOpening(l10);
+    expect(Object.keys(s.board).length).toBe(37);
+    const grown = Object.values(s.board).filter((t) => t !== null);
+    expect(grown.map((t) => t!.owner).sort()).toEqual([0, 1]);
+    expect(JSON.stringify(s), 'the one opening the server replays').toBe(JSON.stringify(finalLessonOpening()));
+    expect(l10.opponent).toEqual({ bot: FINAL_LESSON.botLevel });
   });
 
   it('needs no version bump: the greeting is a start beat, so a saved game still resumes', () => {
@@ -357,8 +373,12 @@ describe('level 10’s send-off (owner, 2026-10-24)', () => {
     // speaks before the first draw (it is already past in a resumed game, so it is simply skipped).
     // LESSON_VERSION is one number for all ten levels, so bumping it for a greeting would restart
     // every unfinished lesson in the game.
-    expect(l10.version).toBe(LESSON_VERSION);
+    // The greeting itself still needs no bump. Level 10's own version moved once, for its new opening
+    // (owner, 2026-11-04: "Real first game, big board"): a save at that version resumes, an older one
+    // (the small-map game) does not.
+    expect(l10.version).toBe(LESSON_VERSION + 1);
     expect(lessonResumable({ level: 10, version: l10.version, seen: [] }, l10)).toBe(true);
+    expect(lessonResumable({ level: 10, version: LESSON_VERSION, seen: [] }, l10)).toBe(false);
   });
 });
 
@@ -966,10 +986,11 @@ describe('per-action mastery fade', () => {
     // Level 1 was re-issued at version 4 (2026-10-24) when it stopped offering Overgrow: an
     // unfinished pre-fix level-1 save must restart, never resume under the old, taking-enabled
     // rules. Level 9 moved to version 4 on 2026-11-01 when it became a full game from scratch: an
-    // unfinished scripted-position save must restart too. Every other lesson keeps the shared
-    // version, so their saves and teaching are untouched.
+    // unfinished scripted-position save must restart too. Level 10 moved to version 4 on 2026-11-04
+    // (owner: "Real first game, big board"): a half-played small-map level 10 restarts on the big
+    // board instead of resuming the old one. Every other lesson keeps the shared version.
     for (const l of LESSONS) {
-      expect(l.version, `L${l.level}`).toBe(l.level === 1 || l.level === 9 ? LESSON_VERSION + 1 : LESSON_VERSION);
+      expect(l.version, `L${l.level}`).toBe([1, 9, 10].includes(l.level) ? LESSON_VERSION + 1 : LESSON_VERSION);
     }
     // Saves round-trip under that version; a record from another version is ignored.
     const saved = encodeMastery(recordHello(recordAction(freshMastery(), 'draw', { level: 1, tier: 'guide' }), 'bloom'));
@@ -984,8 +1005,9 @@ describe('per-action mastery fade', () => {
     const l10 = lessonFor(10)!;
     const seen = (...powers: ('bloom' | 'bomb' | 'blast')[]) => new Set(powers);
     const baseCtx = { card: null, placing: null, throwPending: null, seen: new Set<string>() };
-    // L10's authored hand holds three 5s: Bloom is legal on the first acting turn.
-    const bloomState = apply(lessonOpening(l10), { t: 'Draw', from: 'deck' });
+    // L10's OLD authored hand (kept for verifying old wins) holds three 5s: Bloom is legal on the
+    // first acting turn, so it is the ready-made position for reading L10's power hellos.
+    const bloomState = apply(finalLessonLegacyOpening(), { t: 'Draw', from: 'deck' });
     const bloom = lessonBeat(l10, bloomState, { ...baseCtx, powerSeen: seen() });
     expect(bloom?.hello).toBe('bloom');
     expect(bloom?.say).toBe(LESSON.bloomHello);

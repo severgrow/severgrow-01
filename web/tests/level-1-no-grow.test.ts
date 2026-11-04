@@ -77,7 +77,7 @@ describe('level 1: taking their tile is impossible, not merely hidden', () => {
     expect(L1.position!.rules?.allowOvergrow).toBe(false);
     expect(lessonOpening(L1).config.allowOvergrow).toBe(false);
     for (const lesson of [L2, lessonFor(3)!, lessonFor(10)!]) {
-      expect(lesson.position!.rules?.allowOvergrow, `L${lesson.level}`).toBeUndefined();
+      expect(lesson.position?.rules?.allowOvergrow, `L${lesson.level}`).toBeUndefined();
       expect(lessonOpening(lesson).config.allowOvergrow, `L${lesson.level}`).toBe(true);
     }
   });

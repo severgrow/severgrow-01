@@ -6,7 +6,7 @@ import { apply, viewFor } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
 import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
-import { FINAL_LESSON, finalLessonOpening } from '../../web/src/lessons/final.js';
+import { FINAL_LESSON, finalLessonLegacyOpening, finalLessonOpening } from '../../web/src/lessons/final.js';
 import { LESSONS, lessonOpening } from '../../web/src/lessons/lessons.js';
 import { BETA_PAYOUT_MULTIPLIER, LESSON_SEED_REWARD } from '../src/seeds/config.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
@@ -41,6 +41,26 @@ describe('the final lesson pays 100 Seeds once', () => {
     const ten = LESSONS.find((l) => l.level === 10)!;
     expect(JSON.stringify(lessonOpening(ten))).toBe(JSON.stringify(finalLessonOpening()));
     expect(ten.opponent).toEqual({ bot: FINAL_LESSON.botLevel });
+  });
+
+  // OWNER CHANGED THE RULE (2026-11-04): level 10 is now a real game from scratch on the big board.
+  // A win from a page still on the OLD opening (the small map, tiles already grown) keeps paying.
+  it('a win from the old small-map opening still verifies, so no player loses a payout to the change', () => {
+    let state = finalLessonLegacyOpening();
+    expect(Object.keys(state.board).length).toBe(19);
+    for (const salt of [0x9e3779b9, 0x1234567, 0x7f4a7c15, 0x2545f491]) {
+      state = finalLessonLegacyOpening();
+      const actions: Action[] = [];
+      while (state.phase !== 'GAME_OVER' && actions.length < 400) {
+        const actor = state.actor, botLevel = actor === 0 ? 9 : FINAL_LESSON.botLevel;
+        const action = chooseLevelAction(viewFor(state, actor), botLevel,
+          botSeed(state.seed ^ (actor === 0 ? salt : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
+        actions.push(action);
+        state = apply(state, action);
+      }
+      if (state.result?.winner === 0) { expect(verifyLessonProof(FINAL_LESSON.id, actions, CURRENT_BOT_VERSION)?.winner).toBe(0); return; }
+    }
+    throw new Error('no winning line found on the old opening');
   });
 
   it('a genuine win verifies; a cut-short or altered replay does not; no other lesson id is accepted', () => {

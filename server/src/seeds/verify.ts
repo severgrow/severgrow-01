@@ -3,7 +3,7 @@ import type { Action, State } from '../../../src/engine/index.js';
 import { botSeed } from '../../../src/bots/levels.js';
 import { botFor, CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
 import { ALTERNATE_OPENINGS, campaignDeal, campaignLevelById, campaignOpening, dealsRandomly, isDealSeed } from '../../../src/campaign/index.js';
-import { FINAL_LESSON, finalLessonOpening } from '../../../web/src/lessons/final.js';
+import { FINAL_LESSON, finalLessonLegacyOpening, finalLessonOpening } from '../../../web/src/lessons/final.js';
 
 export type OfflineProof = { actions: readonly Action[]; botVersion: string };
 /**
@@ -96,5 +96,10 @@ export const verifyTrainingProof = (seed: number, botLevel: number, actions: rea
  * bot from its one authored opening (web/src/lessons/final.ts), replayed exactly like a Campaign
  * level. Levels 1-9 are scripted lessons and pay nothing, so no other lesson id is accepted.
  */
-export const verifyLessonProof = (levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION): VerifiedOffline | null =>
-  levelId === FINAL_LESSON.id ? verifyOfflineMatch(finalLessonOpening(), FINAL_LESSON.botLevel, { actions, botVersion }) : null;
+export const verifyLessonProof = (levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION): VerifiedOffline | null => {
+  if (levelId !== FINAL_LESSON.id) return null;
+  // Since 2026-11-04 level 10 is a real game on the full board. A win from a page still on the old
+  // small-map opening is checked against that opening, so nobody loses a payout to the change.
+  return verifyOfflineMatch(finalLessonOpening(), FINAL_LESSON.botLevel, { actions, botVersion })
+    ?? verifyOfflineMatch(finalLessonLegacyOpening(), FINAL_LESSON.botLevel, { actions, botVersion });
+};

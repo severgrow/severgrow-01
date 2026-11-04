@@ -14,7 +14,7 @@ import type { Action, Card, Coord, Event, State } from '../../../src/engine/inde
 import type { Level } from '../../../src/bots/levels.js';
 import { LESSON as W } from '../../../src/strings.js';
 import { authoredState } from './authored.js';
-import { FINAL_LESSON } from './final.js';
+import { FINAL_LESSON, finalLessonOpening } from './final.js';
 import { campaignLevelByNumber } from '../../../src/campaign/levels.js';
 import { campaignOpening } from '../../../src/campaign/play.js';
 import type { PositionSpec } from './authored.js';
@@ -55,6 +55,11 @@ export type Lesson = {
   kind?: 'guided' | 'free';
   /** A guided lesson's authored opening; a free lesson has none — its deal comes from the level. */
   position?: PositionSpec;
+  /**
+   * A guided lesson that is nonetheless a real game from scratch (level 10, owner 2026-11-04: "Real
+   * first game, big board"): its deal, instead of an authored position. Its coaching stays guided.
+   */
+  deal?: () => State;
   /** The scripted opponent, or a real bot level (levels 9 and 10 are normal games). */
   opponent: { script: OpponentScript } | { bot: Level };
   /** Levels 1-3: only the lit thing (and its quiet alternatives) answers a tap. */
@@ -254,14 +259,16 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'PLAY A FULL GAME', icon: '↦' },
   },
   {
-    level: 10, version: 3, locked: false, guide: 'idle',
+    level: 10, version: 4, locked: false, guide: 'idle',
     // The last level opens like a real game (the ritual plays from level 9 on), then says this one
     // thing before the first draw: you know the game now, go and play it (owner, 2026-10-24).
     intro: ['first-game'],
     goals: [],
     newActions: [],
-    // A normal opening, the one copy the server's Seeds verifier also replays (final.ts).
-    position: FINAL_LESSON.position,
+    // A REAL FIRST GAME (owner, 2026-11-04: "Real first game, big board"): campaign level 10's own
+    // match on the full board, the same opening the Seeds verifier replays. Its coaching is
+    // unchanged: quiet, lit only when the player waits.
+    deal: finalLessonOpening,
     opponent: { bot: FINAL_LESSON.botLevel },
     finish: { title: W.canPlay, line: W.canPlayLine, learned: 'THE WHOLE GAME', icon: '★' },
   },
@@ -284,6 +291,7 @@ export const lessonOpening = (lesson: Lesson): State => {
     if (!level) throw new Error(`free lesson ${lesson.level} has no campaign level`);
     return campaignOpening(level);
   }
+  if (lesson.deal) return lesson.deal();
   if (!lesson.position) throw new Error(`guided lesson ${lesson.level} has no opening`);
   return authoredState(lesson.position);
 };
