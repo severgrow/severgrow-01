@@ -25,19 +25,12 @@ describe('release channel policy', () => {
     expect(new Set(prefixes).size).toBe(4);
     for(const a of prefixes)for(const b of prefixes)if(a!==b)expect(a.startsWith(b)).toBe(false);
   });
-  it('the new experience is exclusive to /test/, with its own untouched save namespace', () => {
-    for (const path of ['/', '/2/', '/3/', '/test2/', '/2/test/']) {
-      expect(boot('futa05',path).policy.FEATURES.firstExperience).toBe(false);
-    }
+  it('/test/ keeps its own save namespace, so staging never touches real progress', () => {
     const {policy,Storage}=boot('futa05','/test/');
-    expect(policy.FEATURES.firstExperience).toBe(true);
     expect(policy.STORAGE_PREFIX).toBe('futa05-test:');
     const store=new Storage();store.data.set('futa05:save','real progress');
     expect(store.getItem('save')).toBeNull();store.setItem('save','experiment');
     expect(store.data.get('futa05:save')).toBe('real progress');
-    for(const channel of ['futa04','futa-test','test','live']){
-      expect(boot(channel,'/test/').policy.FEATURES.firstExperience).toBe(false);
-    }
   });
   // OWNER CHANGED THE RULE (2026-11-04): THE PLANET was /test/-only; asked "When you promote, should
   // THE PLANET go live for everyone?", the owner answered "Yes, planet goes live". So it is the whole

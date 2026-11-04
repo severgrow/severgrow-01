@@ -1,5 +1,4 @@
 import { mountSheetViewport } from '../ui/sheet-viewport.js';
-import { FEATURES } from '../channel.js';
 import { authJson } from './email-auth.js';
 import { mountEmailPanel } from './email-panel.js';
 import { enterSurface, exitSurface } from '../ui/interface-motion.js';
@@ -656,7 +655,6 @@ export const mountAccounts = async (): Promise<void> => {
    * reads, so it does not create an empty row.
    */
   const syncOffline = async (token: string, device: string): Promise<OfflineSummary | null> => {
-    if(FEATURES.firstExperience) return null;
     const counters = offlineCounters(parseStats(readLocal(STATS_KEY)), device);
     const body = counters.played > 0
       ? await apiPost('/v1/players/me/offline', counters, token)

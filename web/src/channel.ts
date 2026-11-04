@@ -48,7 +48,6 @@ export const FEATURES = Object.freeze({
    * what makes this true only for the staging copy and always false for the futa04 product.
    */
   blitz: CHANNEL === 'futa05' && IS_TEST_ROUTE,
-  firstExperience: CHANNEL === 'futa05' && IS_TEST_ROUTE,
   /**
    * THE PLANET (owner, 2026-11-04): the Territory window shows its ground as a planet in space,
    * called THE PLANET, and the planet is the main menu's backdrop. First on the staging copy; then

@@ -20,10 +20,6 @@ import { SEEDS_IDENTITY_UNVERIFIED } from '../src/online/seed-icon.js';
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
 const SHOTS = process.env.SHOTS ?? '';
 const ONLY = process.env.ONLY ?? 'all';
-const EXPERIENCE = process.env.EXPERIENCE_TEST === '1';
-const NO_READ = EXPERIENCE && process.env.EXPERIENCE_NO_READ === '1';
-const ROUTE = EXPERIENCE ? '/test/' : '/3/';
-const PREFIX = EXPERIENCE ? 'futa05-test:' : 'futa05-3:';
 const types: Record<string, string> = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.webp': 'image/webp', '.webmanifest': 'application/manifest+json', '.json': 'application/json',
@@ -31,14 +27,14 @@ const types: Record<string, string> = {
 // The /3/ copy is served at /3/, as on futasaku.com, so its own storage prefix is the one in use.
 const server = createServer((req, res) => {
   const path = decodeURIComponent((req.url ?? '/').split('?')[0]!);
-  if (!path.startsWith(ROUTE)) { res.writeHead(404); res.end(); return; }
-  let file = join(DIST, path.slice(ROUTE.length) || 'index.html');
+  if (!path.startsWith('/3/')) { res.writeHead(404); res.end(); return; }
+  let file = join(DIST, path.slice(3) || 'index.html');
   if (!existsSync(file) || file.endsWith('/')) file = join(DIST, 'index.html');
   res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' });
   res.end(readFileSync(file));
 });
 await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-const URL3 = `http://127.0.0.1:${(server.address() as AddressInfo).port}${ROUTE}`;
+const URL3 = `http://127.0.0.1:${(server.address() as AddressInfo).port}/3/`;
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 
 const browser = await chromium.launch({
@@ -65,26 +61,24 @@ const newPage = async (w = 390, h = 844) => {
   await page.bringToFront();
   // No audio in a headless run: a machine without an output device raises an AudioContext
   // pageerror, which the suite (rightly) counts, and it has nothing to do with the lessons.
-  await page.addInitScript((scope) => {
+  await page.addInitScript(() => {
     const quiet = JSON.stringify({ sound: false, music: false });
     // ONLY the prefixes this page can actually use: /3 on a futa05 build reads `futa05-3:`, and
     // `main2:` is the fallback a futa04 build installs. Planting `futa05:` here would write the
     // ROOT channel's key from the /3 page and make the isolation check at the end of this suite
     // fail on the fixture's own key rather than on anything the app did.
-    for (const prefix of [scope, 'main2:']) {
+    for (const prefix of ['futa05-3:', 'main2:']) {
       const key = `${prefix}severgrow.settings.v1`;
       try {
         const current = JSON.parse(localStorage.getItem(key) ?? '{}');
         localStorage.setItem(key, JSON.stringify({ ...current, ...JSON.parse(quiet) }));
       } catch { /* a page that has not written settings yet */ }
     }
-  }, PREFIX);
+  });
   const errors: string[] = [];
-  const uploads:string[]=[];
-  page.on('request',r=>{if(r.method()==='POST'&&/\/v1\/(seeds\/campaign|players\/me\/offline)/.test(r.url()))uploads.push(r.url());});
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::ERR|127\.0\.0\.1:9/.test(m.text())) errors.push(m.text()); });
-  return { page, errors, uploads };
+  return { page, errors };
 };
 
 /** Close the install invitation the way a person does, and only when it is actually showing. */
@@ -206,7 +200,7 @@ const checkCockpit = (g: Awaited<ReturnType<typeof geometry>>, tag: string, phon
     check(g.plateCss.outline === 'none' || parseFloat(g.plateCss.outlineWidth) === 0, `${tag}: no outline`);
     check(g.plateCss.shadow === 'none', `${tag}: no box shadow/edge (${g.plateCss.shadow})`);
     check(g.plateCss.pointer === 'none', `${tag}: the box is pointer-events:none`);
-    check(g.plateCss.buttons === (EXPERIENCE ? 1 : 0), `${tag}: the caption has only its approved controls`);
+    check(g.plateCss.buttons === 0, `${tag}: the box has no buttons`);
     check(!!g.plateCopy, `${tag}: the box carries the explanation sentence`);
   }
   check(g.scroll.h <= g.scroll.ih + 1 && g.scroll.w <= g.scroll.iw + 1, `${tag}: no page scroll (${g.scroll.w}x${g.scroll.h} in ${g.scroll.iw}x${g.scroll.ih})`);
@@ -416,17 +410,8 @@ const waitReadFloor = async (p: Page) => {
   if (left > 0) await p.waitForTimeout(left + 120);
 };
 const dismissExplanation = async (p: Page) => {
-  const before=EXPERIENCE?await hook<any>(p,'lesson'):null;
   await waitReadFloor(p);
-  if(EXPERIENCE) {
-    const after=await hook<any>(p,'lesson');
-    if(after?.beat?.id!==before?.beat?.id||!after?.beat?.explain)
-      throw Error(`Explanation changed while reading: ${JSON.stringify({before,after,state:await hook(p,'state'),sel:await hook(p,'sel')})}`);
-    const r=await p.locator('.lesson-dismiss').boundingBox();
-    if(!r)throw Error(`Dismiss control absent for current explanation: ${JSON.stringify(after)}`);
-    await p.mouse.click(r.x+r.width/2,r.y+r.height/2);
-  }
-  else await tapAnywhere(p);
+  await tapAnywhere(p);
   await p.waitForTimeout(320);
 };
 
@@ -474,39 +459,6 @@ const wordCount = (t: string) => t.replace(/[»:]/g, ' ').split(/\s+/).filter((w
  * Player (c): ignores the words, taps only the lit thing (and anywhere on an explanation). Counts
  * every answer the game gives (a wrong tap). Returns when the level is over.
  */
-/** The experiment also tests quiet/independent steps with physical input, not playFor. */
-const tapSuggested = async (p:Page,level:number,move:any) => {
-  const sel=await hook<any>(p,'sel'),pending=await hook<any>(p,'pending');
-  const before=(await hook<any>(p,'lesson'))?.answers??0;
-  let next:Lit|null=null;
-  if(move?.t==='Draw')next={t:move.from==='deck'?'deck':'discard'};
-  else if(move?.t==='Sprout')next=sel?.card===move.card?{t:'hex',key:`${move.coord.q},${move.coord.r}`}:{t:'card',id:move.card};
-  else if(move?.t==='PlayFruit')next=sel?.card===move.card?{t:'hex',key:`${move.target.q},${move.target.r}`}:{t:'card',id:move.card};
-  else if(move?.t==='Bloom')next=sel?.kind?.startsWith('bloom-')?{t:'hexes',keys:move.hexes.map((c:any)=>`${c.q},${c.r}`)}:{t:'bloom'};
-  else if(move?.t==='MegaBomb')next=sel?.kind?.startsWith('bloom-mega')?{t:'hex',key:`${move.target.q},${move.target.r}`}:{t:'bloom'};
-  else if(move?.t==='EndAct')next={t:'end'};
-  else if(move?.t==='Discard')next=pending?.t==='Discard'&&pending.card===move.card?{t:'discard'}:{t:'card',id:move.card};
-  const points=next?(await litPoints(p,next)).filter((pt):pt is {x:number;y:number}=>!!pt):[];
-  if(!points.length)throw Error(`L${level}: no playable input: ${JSON.stringify({move,sel,pending})}`);
-  for(const point of points){await p.mouse.click(point.x,point.y);await p.waitForTimeout(140);}
-  // Skip can share the context key with other legal actions. Use its actual menu item.
-  if(move?.t==='EndAct'){
-    const skip=p.locator('#smart-selector:not([hidden]) button[data-action^="skip:"]');
-    if(await skip.count()){await skip.click();await p.waitForTimeout(140);}
-  }
-  // Multiple Bloom recipes use a second, visible drawer. Select the matching real cards.
-  if(move?.t==='Bloom'||move?.t==='MegaBomb'){
-    const recipes=p.locator('#smart-bloom-selector:not([hidden]) > button');
-    for(let i=0;i<await recipes.count();i++){
-      const recipe=recipes.nth(i);
-      const ids=await recipe.locator('.futa04-mini-card').evaluateAll(nodes=>nodes.map(n=>Number((n as HTMLElement).dataset.card)).sort((a,b)=>a-b));
-      if(JSON.stringify(ids)===JSON.stringify([...move.cards].sort((a:number,b:number)=>a-b))){await recipe.click({position:{x:2,y:2}});await p.waitForTimeout(140);break;}
-    }
-  }
-  const after=await hook<any>(p,'lesson');
-  return {taps:points.length,wrong:Math.max(0,(after?.answers??before)-before)};
-};
-
 const tapOnlyTheLight = async (p: Page, level: number) => {
   let wrong = 0; let taps = 0; let still = 0; let last = ''; let lastPlate = '';
   const t0 = Date.now();
@@ -530,7 +482,7 @@ const tapOnlyTheLight = async (p: Page, level: number) => {
       const under = pts[0] ? await p.evaluate(`(() => { const e = document.elementFromPoint(${pts[0].x}, ${pts[0].y}); return e ? (e.tagName + '#' + e.id + '.' + (e.getAttribute('class') || '') + ' < ' + (e.closest('[id]') || {}).id) : 'none'; })()`) : 'no point';
       const sel = await hook(p, 'sel');
       if (SHOTS) await p.screenshot({ path: `${SHOTS}/stuck-L${level}.png` });
-      throw new Error(`L${level}: stuck at ${pos}; point ${JSON.stringify(pts[0])} is ${under}; sel ${JSON.stringify(sel)}; next ${JSON.stringify(await hook(p,'lessonMove'))}; pending ${JSON.stringify(await hook(p,'pending'))}; lesson ${JSON.stringify(lesson)}`);
+      throw new Error(`L${level}: stuck at ${pos}; point ${JSON.stringify(pts[0])} is ${under}; sel ${JSON.stringify(sel)}; lesson ${JSON.stringify(lesson)}`);
     }
     const beat = lesson.beat;
     if (!beat) {
@@ -539,7 +491,6 @@ const tapOnlyTheLight = async (p: Page, level: number) => {
       if (lesson.stage || !lesson.handSettled) { await p.waitForTimeout(120); continue; }
       const move = await hook<any>(p, 'lessonMove');
       if (move) {
-        if(EXPERIENCE){const r=await tapSuggested(p,level,move);taps+=r.taps;wrong+=r.wrong;await idle(p);continue;}
         const ok = await p.evaluate((a) => (window as any).__severgrow.playFor(a, 0), move);
         if (ok) { taps++; await idle(p); continue; }
       }
@@ -553,14 +504,7 @@ const tapOnlyTheLight = async (p: Page, level: number) => {
       await p.waitForTimeout(220);
       await checkPlateClear(p, beat.lit, `L${level} ${beat.id}`);
     }
-    if (beat.explain) {
-      if(NO_READ || (EXPERIENCE && !beat.line)){
-        // Use real pointer input on the next legal action; never call the dismiss control.
-        const r=await tapSuggested(p,level,await hook<any>(p,'lessonMove'));taps+=r.taps;wrong+=r.wrong;
-        await idle(p);continue;
-      }
-      await dismissExplanation(p); taps++; continue;
-    }
+    if (beat.explain) { await dismissExplanation(p); taps++; continue; }
     // A power hello is information, not a target. It fades by itself; then the ordinary move.
     if ((beat as { hello?: string }).hello) { await p.waitForTimeout(2800); continue; }
     const points = (await litPoints(p, beat.lit)).filter((x): x is { x: number; y: number } => !!x);
@@ -596,7 +540,7 @@ const results: string[] = [];
 try {
   if (ONLY === 'all' || ONLY === 'run') {
     console.log('Levels 1-10 in a row, tapping only the light:');
-    const { page, errors, uploads } = await newPage();
+    const { page, errors } = await newPage();
     await page.goto(URL3, { waitUntil: 'networkidle' });
     await installDealAudit(page);
     await openNextLevel(page);
@@ -629,7 +573,6 @@ try {
       checkCockpit(lg, `L${level}`, true);
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/L${level}-open.png` });
       const r = await tapOnlyTheLight(page, level);
-      if(EXPERIENCE)assert.equal(r.wrong,0,`L${level}: legal physical inputs must not be refused`);
       // The observer saw the whole level: no hint may have appeared before the deal settled, and
       // the first one (where the level has one) came after it.
       await checkDealAudit(page, level, level !== 10);
@@ -688,9 +631,8 @@ try {
     check((await hook(page, 'lesson')) === null, 'level 11 has no lesson');
     // /3 kept its own storage: nothing written under the root's prefix.
     const keys = await page.evaluate(() => Object.keys(localStorage));
-    check(keys.some((k) => k.startsWith(PREFIX)), `${ROUTE} writes under its own prefix`);
+    check(keys.some((k) => k.startsWith('futa05-3:')), '/3 writes under its own prefix');
     check(!keys.some((k) => k.startsWith('futa05:')), '/3 never writes the root or /2 keys');
-    if(EXPERIENCE)assert.deepEqual(uploads,[],'experimental campaign never uploads progress or reward proofs');
     assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
 
     // A REPEAT VISIT ADDS NOTHING (owner, 2026-10-20): the cold board wrote the warmed marker, so a

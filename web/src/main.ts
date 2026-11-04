@@ -126,7 +126,6 @@ import { SEEDS_INTRO } from './online/seed-icon.js';
 import { scriptedOpponentAction } from './lessons/opponent.js';
 import { tapAnswer } from './lessons/answer.js';
 import { litTarget, litTargetAndQuiet, tapOf } from './lessons/lesson-view.js';
-import { explanationTap, experienceCopy, mountExplanationDismiss } from './lessons/experience.js';
 import { LESSON_BREATH_ID } from './player/lesson-breath.js';
 import { LESSON_META_KEY, decodeLessonMeta, encodeLessonMeta, lessonResumable } from './lessons/lesson-save.js';
 import {
@@ -3168,7 +3167,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
           : gameDifficulty && trainingRewardTicketId
             ? { kind: 'training' as const, ticketId: trainingRewardTicketId, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
             : null;
-        if (proof && !(FEATURES.firstExperience && proof.kind === 'campaign')) {
+        if (proof) {
           queueSeedProof(store, proof);
           // NOTHING is claimed until the server has answered. The card used to be handed a line
           // saying the Seeds were "pending verification", and it stayed there for the whole session
@@ -3694,7 +3693,7 @@ async function syncRandomDeals(): Promise<void> {
  * levels the suggestion unions.
  */
 async function syncAccountLevel(): Promise<void> {
-  if (!FEATURES.campaign || !onlineBuildEnabled() || FEATURES.firstExperience) return;
+  if (!FEATURES.campaign || !onlineBuildEnabled()) return;
   const beforeProgress = campaignProgress;
   const beforeClears = accountClears;
   const result = await loadAccountClears({
@@ -5567,21 +5566,6 @@ function lessonDecide(e: Event): boolean {
   const beat = lessonBeatNow;
   const free = lessonIsFree(lesson);
   const lockedNow = lessonLocked(lesson, session.state) && guided;
-  if (FEATURES.firstExperience && guided && beat?.explain) {
-    if (busy() && session.state.actor === HUMAN) return false;
-    const pe=e as PointerEvent;
-    const tap=tapOf(target as never,()=>Number.isFinite(pe.clientX)?board.keyAtClient(pe.clientX,pe.clientY):null);
-    if(tap.t==='other') {
-      if(lockedNow && target.closest('button') && !(beat.lit.t==='bloom' && target.closest('#smart-bloom'))){
-        lessonSay(LESSON.tapLit,null,null);return true;
-      }
-      return false;
-    }
-    const result=explanationTap(session.state,session.sel.card,tap,beat.lit,lockedNow,!!lessonPlacing(),session.legal);
-    if(result.moves){lessonMarkSeenAfterTap(beat.id);return false;}
-    if(result.answer){lessonSay(result.answer,Number.isFinite(pe.clientX)?pe.clientX:null,Number.isFinite(pe.clientY)?pe.clientY:null);lessonWrongTap();}
-    return true;
-  }
   if (guided && beat?.explain) {
     // The lit thing is the move: one tap reads the sentence AND plays it. Never the dwell guard
     // here — that guard exists for a tap meant for the move that just happened, and this tap is
@@ -5691,7 +5675,6 @@ function syncLessonPile(st: State | null) {
 }
 
 let lessonPlateTimer = 0;
-let lessonDismiss: ReturnType<typeof mountExplanationDismiss> | null = null;
 
 /**
  * ONE info box for lessons: a caption floating over the felt. It holds an explanation sentence
@@ -5707,11 +5690,6 @@ function lessonPlate(): HTMLElement {
   // One box: the sentence, then (on the Bloom lesson only) a small static example inside it.
   plate.innerHTML = '<p class="lesson-copy"></p><div class="lesson-example" hidden aria-hidden="true"></div>';
   document.body.append(plate);
-  if(FEATURES.firstExperience) lessonDismiss=mountExplanationDismiss(plate,{
-    now:()=>performance.now(),readMs:LESSON_READ_MS,
-    dismiss:id=>{if(lessonBeatNow?.explain && lessonBeatNow.id===id)lessonMarkSeen(id);},
-    acknowledge:()=>lessonAckFloor(),
-  });
   window.addEventListener('resize', () => placeLessonPlate(), { passive: true });
   return plate;
 }
@@ -5775,7 +5753,6 @@ const PLATE_MAX_WIDTH = 420;
 const PLATE_KEEP_CLEAR = ['#hud', '#hud-menu', '#deck', '#discard', '#hand', '#smart-led', '#smart-bloom-button', '#moves', '#smart-context', '#dock'] as const;
 
 function hideLessonPlate() {
-  lessonDismiss?.sync(null,0);
   const plate = document.getElementById('lesson-plate') as PlateEl | null;
   if (plate) {
     plate.hidden = true;
@@ -5996,9 +5973,7 @@ function showLessonPlate(text: string, lift: readonly string[], example: 'bloom'
   const plate = lessonPlate();
   plate.hidden = false;
   const copy = plate.querySelector<HTMLElement>('.lesson-copy');
-  const words=FEATURES.firstExperience && lessonBeatNow ? experienceCopy(lessonBeatNow.id,text) : text;
-  if (copy && copy.textContent !== words) copy.textContent = words;
-  lessonDismiss?.sync(lessonBeatNow?.explain ? lessonBeatNow.id : null,lessonExplainAt);
+  if (copy && copy.textContent !== text) copy.textContent = text;
   setLessonExample(example);
   setLessonRestart(plate, restart);
   (plate as PlateEl)._avoid = lift;

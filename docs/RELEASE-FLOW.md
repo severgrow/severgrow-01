@@ -91,7 +91,7 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
 - `ci.yml` `browser`: futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock,
   futa04-lesson-9-free, futa04-motion, cut-severe, lessons-3, territory-menu, territory-challenges,
   territory-gestures, territory-gestures-ios, living-territory, living-territory-ios,
-  territory-final-polish, first-experience, first-experience-course, sphere-test and sphere-test-ios
+  territory-final-polish, sphere-test and sphere-test-ios
   (THE PLANET on /test/, docs/PLANET.md).
   The `-ios` suites use WebKit (the Safari engine), not physical-device automation.
 - `extra-regressions.yml`: admin-dashboard, online-stale-token-recovery, online-soak-teardown,

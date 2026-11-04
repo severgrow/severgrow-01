@@ -41,11 +41,8 @@ describe('the card never rests on "Seeds pending verification" (owner report, 20
     // The lie was the resting state: a claim on screen while no receipt existed. Nothing may write it.
     expect(main).not.toContain('Seeds pending verification');
     expect(reveals()).not.toContain('Seeds pending verification');
-    // Production wins still queue, clear the line, then ask. The owner's /test/ experiment
-    // deliberately excludes campaign proofs so experimental progress cannot earn real rewards.
-    const guard="if (proof && !(FEATURES.firstExperience && proof.kind === 'campaign')) {";
-    expect(main).toContain(guard);
-    const queued = main.slice(main.indexOf(guard), main.indexOf(guard) + 900);
+    // A win queues its proof, clears the line, and only then asks the server.
+    const queued = main.slice(main.indexOf('if (proof) {'), main.indexOf('if (proof) {') + 900);
     expect(queued).toContain('queueSeedProof(store, proof);');
     expect(queued).toMatch(/seedRewardMessage = '';/);
     expect(queued).toContain('settleSeedsForCard(key);');

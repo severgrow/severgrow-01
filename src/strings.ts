@@ -1657,14 +1657,6 @@ export const CAMPAIGN = Object.freeze({
 // "set" or "run"; no tile colours. Scoring words follow SPEC ("Ending the game").
 // docs/LESSON-SCRIPTS.md holds the same text beat by beat; web/tests/lesson-words.test.ts pins both.
 // ======================================================================================
-/** Staging-only refinements; the approved production lesson copy below stays unchanged. */
-export const FIRST_EXPERIENCE = Object.freeze({
-  dismiss: 'Dismiss explanation',
-  home: 'This is your home. Grow from here. Surround theirs to win — or finish with more points.',
-  opponent: 'Surround their home to win. When the Draw pile runs out, finish the final turns and score.',
-  draw: 'Each turn: Draw, Grow, Throw. Take one card from the Draw pile or the Throw pile.',
-});
-
 /** THE PLANET: the Territory's name and words on the staging copy (owner, 2026-11-04). */
 export const PLANET = Object.freeze({
   title: 'THE PLANET',
