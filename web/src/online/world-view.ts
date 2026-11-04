@@ -2,6 +2,7 @@ import type { DuelClient } from '../../../server/src/client.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
 import { isPlanetCell, worldNeighbours } from '../../../server/src/world.js';
+import { planetTileCount } from '../../../src/planet/geometry.js';
 import {
   HELD_DARK,
   HELD_LIGHT,
@@ -83,7 +84,7 @@ import {
 } from './world-pan.js';
 import { borderSegments, cellXY, fogAtLastLook, fogRings, fogShift, loopPhase, newCellIds, ownCentre, ranking, ringPhase, standing, takeovers } from './world-growth.js';
 import type { FogRing, FogShift, Takeover } from './world-growth.js';
-import { ONLINE } from '../../../src/strings.js';
+import { ONLINE, PLANET } from '../../../src/strings.js';
 
 /** A tile grown this recently keeps its halo (the map shows where the world is moving). */
 const FRESH_MS = 6 * 60 * 60 * 1000;
@@ -3063,6 +3064,7 @@ export class WorldView {
     const list = document.getElementById('online-world-ranking');
     if (!list || !this.world) return;
     const rows = ranking(this.world.claims, me, this.world.rankings);
+    this.paintGrown();
     const previous = new Map([...list.querySelectorAll<HTMLElement>('[data-owner]')].map(el=>[el.dataset.owner,el.querySelector('.world-ranking-tiles')?.textContent]));
     // An unchanged table is left alone: a poll must not reset a press or the list's scroll.
     const signature = `ranking|${JSON.stringify(rows)}`;
@@ -3105,6 +3107,26 @@ export class WorldView {
     }));
   }
 
+  /**
+   * HOW MUCH OF THE PLANET IS GROWN (owner, 2026-11-04: "In ranking say on top 'x/2347 ... tiles on the
+   * planet taken' but phrase it better"). Taken tiles over every tile there is to grow on: the whole
+   * planet once the server takes a tile anywhere (`growAnywhere`), the known land before that.
+   */
+  private paintGrown() {
+    const box = document.getElementById('world-planet-grown');
+    const world = this.world;
+    if (!box || !world) return;
+    const taken = world.claims.length;
+    const total = world.growAnywhere ? planetTileCount() : Math.max(taken, world.cells.length);
+    const label = box.querySelector('.world-planet-grown-label'), count = box.querySelector('.world-planet-grown-count');
+    const fill = box.querySelector<HTMLElement>('.world-planet-grown-meter > i');
+    const number = (n: number) => n.toLocaleString('en-US');
+    if (label) label.textContent = PLANET.grown;
+    if (count) count.textContent = `${number(taken)} / ${number(total)}`;
+    fill?.style.setProperty('--grown', `${total ? Math.min(100, (taken / total) * 100).toFixed(2) : 0}%`);
+    box.setAttribute('aria-label', PLANET.grownSpoken(number(taken), number(total)));
+    box.hidden = !FEATURES.planet;
+  }
   /** YOUR STANDING: rank, tiles, and the next player to pass — the one number to chase. */
   private paintStanding(rows: ReturnType<typeof ranking>) {
     const card = document.getElementById('world-standing');

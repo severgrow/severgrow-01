@@ -1058,6 +1058,16 @@ html.reduce-motion .world-selection { animation: none; }
   padding: 8px 8px 13px;
 }
 .world-standing[hidden] { display: none; }
+/* THE PLANET'S METER: how much of it is grown, as a label, a tabular count and one thin bar. */
+.world-planet-grown {
+  display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 6px 10px; margin: 0 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+.world-planet-grown[hidden] { display: none; }
+.world-planet-grown-label { font-size: .62rem; letter-spacing: .2em; color: #e8ddc5a6; }
+.world-planet-grown-count { font-size: .78rem; letter-spacing: .12em; color: #f2e7cb; }
+.world-planet-grown-meter { grid-column: 1 / -1; height: 3px; border-radius: 2px; background: #e8ddc514; overflow: hidden; }
+.world-planet-grown-meter > i { display: block; height: 100%; min-width: 2px; border-radius: inherit; background: #e8ddc5; width: var(--grown, 0%); }
 .world-standing-place { font-size: 1.15rem; letter-spacing: .1em; color: #f2e7cb; text-transform: uppercase; font-variant-numeric: tabular-nums; }
 .world-standing-tiles { justify-self: end; font-size: .62rem; letter-spacing: .18em; color: #e8ddc5a6; }
 .world-standing-line { grid-column: 1 / -1; font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; color: #cfc6ac; }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildSphere, pickCell, latticeMap, homeQuat, neighbourIds, dot, cross, sub, scale, unit, PLANET_FREQUENCY, type Sphere, type V3,
+  buildSphere, pickCell, latticeMap, homeQuat, neighbourIds, planetTileCount, dot, cross, sub, scale, unit, PLANET_FREQUENCY, type Sphere, type V3,
 } from '../src/sphere/geometry.js';
 import { arcQuat, rotate, multiply, slerp, type Quat } from '../src/sphere/rotation.js';
 import { WORLD_CELLS, worldAround, hexDistance } from '../../server/src/world.js';
@@ -143,6 +143,10 @@ describe('the flat Territory map lies on the planet tile for tile', () => {
   });
   // GROW ANYWHERE ON THE PLANET (owner, 2026-11-04). The walk reaches every hexagon, so every tile
   // the player can see and tap has an id the server understands.
+  it('the ranking\'s total is exactly the planet\'s growable tiles (5,750)', () => {
+    expect(planetTileCount()).toBe(sphere.cells.filter((c) => !c.pentagon).length);
+    expect(planetTileCount()).toBe(5750);
+  });
   it('gives every hexagon on the planet its own id, and no pentagon one', () => {
     const hexes = sphere.cells.filter((c) => !c.pentagon);
     expect(map.flatOf.size).toBe(hexes.length);

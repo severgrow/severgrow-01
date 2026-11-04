@@ -230,6 +230,11 @@ try {
     // The ranking's "fly to" (flyToOwner) brings my land back to the middle.
     await p.locator('#online-world-menu').click();
     await p.locator('#world-key-ranking').click();
+    // HOW MUCH OF THE PLANET IS GROWN, on top of the ranking (owner, 2026-11-04).
+    const meter = await p.locator('#world-planet-grown').evaluate((el) => ({ shown: !(el as HTMLElement).hidden && (el as HTMLElement).offsetHeight > 0, text: el.textContent ?? '', spoken: el.getAttribute('aria-label') ?? '' }));
+    check(`[${tag}] the ranking opens on how much of the planet is grown`,
+      meter.shown && new RegExp(`PLANET GROWN\\s*${claims.length} / ${world.cells.length.toLocaleString('en-US')}`).test(meter.text) && /tiles on the planet are grown/.test(meter.spoken),
+      `${meter.text} · ${meter.spoken}`);
     const row = p.locator('#online-world-ranking button').first();
     if (await row.count()) {
       await row.click();

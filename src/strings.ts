@@ -1663,6 +1663,9 @@ export const PLANET = Object.freeze({
   menu: 'The Planet',
   controls: 'The Planet. Drag or use the arrow keys to turn it. Pinch or use plus and minus to zoom. Enter selects the tile in the middle.',
   unavailable: 'The Planet needs WebGL, which this device has turned off.',
+  /** The ranking's meter (owner, 2026-11-04: "x/2347 ... tiles on the planet taken ... phrase it better"). */
+  grown: 'PLANET GROWN',
+  grownSpoken: (taken: string, total: string) => `${taken} of ${total} tiles on the planet are grown`,
 });
 
 export const LESSON = Object.freeze({

@@ -26,6 +26,8 @@ export const unit = (p: V3): V3 => scale(p, 1 / (Math.hypot(...p) || 1));
  */
 export const PLANET_FREQUENCY = 24;
 const RELAX_ROUNDS = 40;
+/** Every tile the planet has to grow on: all its hexagons (its twelve pentagons are never land). */
+export const planetTileCount = (n = PLANET_FREQUENCY) => 10 * n * n - 10;
 
 /**
  * `corners[i]` and `corners[i+1]` bound the edge shared with `neighbours[i]`, counter-clockwise
