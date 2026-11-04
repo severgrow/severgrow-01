@@ -13,6 +13,7 @@
 // the page is hidden, or reduced motion is on.
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
 import { menuDiscRadius } from '../player/planet-lockup.js';
+import { claimSpace, DRIFT_PX_PER_MS, DRIFT_Y_SHARE, freeSpace, spaceDrift } from './space.js';
 import { buildSphere, homeQuat, latticeMap, pickCell, unit, type Sphere, type V3 } from './geometry.js';
 import { arcQuat, inverse, multiply, rotate, slerp, trackball, type Quat } from './rotation.js';
 import { groundOf, KIND, tileForCell, type Ground, type GroundInput } from './ground.js';
@@ -33,7 +34,6 @@ const MENU_ZOOM = .78;
 const OUT_MS = 900;
 const FLY_MS = 620;
 const INTRO_MS = 1150;
-const DRIFT_PX_PER_MS = .006;
 /** Behind the menu the planet turns slowly on its own (owner, 2026-11-04): one turn in 160 s. */
 const MENU_SPIN_RAD_PER_MS = (2 * Math.PI) / 160_000;
 /** The planet's light behind the menu, and in the window (the flat map's own "fade in"). */
@@ -260,12 +260,20 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     const drifting = motion() && (spaceVisible() || mode === 'menu');
     // THE STARS RUSH during a flight (fastest mid-way) and settle as it lands; at rest, the slow slide.
     const rush = flight ? 1 + 16 * Math.sin(Math.PI * flight.t) : 1;
-    if (drifting || flight) { drift = [drift[0] + dt * DRIFT_PX_PER_MS * rush, drift[1] + dt * DRIFT_PX_PER_MS * .38 * rush]; }
     // The stars also answer the planet's turn a little, so space has depth.
     const turn = rotate(q, [0, 0, 1]);
+    // THE STARS ARE ONE SKY (0.75): taking the screen from the space backdrop, the planet starts its
+    // slide where the backdrop left it, so the star field never cuts between the menu and a game.
+    if (spaceDrift.owner !== 'planet') {
+      claimSpace();
+      drift = [spaceDrift.x - turn[0] * 40, spaceDrift.y - turn[1] * 40];
+    }
+    if (drifting || flight) { drift = [drift[0] + dt * DRIFT_PX_PER_MS * rush, drift[1] + dt * DRIFT_PX_PER_MS * DRIFT_Y_SHARE * rush]; }
     const pulse = pulseUntil > now ? Math.sin(Math.PI * (1 - (pulseUntil - now) / 420)) : 0;
     paintFrame();
-    renderer.render(q, zoom, pulse, [drift[0] + turn[0] * 40, drift[1] + turn[1] * 40], frameNow);
+    const offset: [number, number] = [drift[0] + turn[0] * 40, drift[1] + turn[1] * 40];
+    renderer.render(q, zoom, pulse, offset, frameNow);
+    spaceDrift.x = offset[0]; spaceDrift.y = offset[1];
     const busy = !!flight || !!frameTween || (speed > 0 && !pointers.size) || zoom !== targetZoom || pulseUntil > now;
     if (busy) ask();
     // The slow slide: about 30 frames a second, only while there is space to see.
@@ -534,6 +542,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       disposed = true;
       abort.abort(); observer.disconnect(); cancelAnimationFrame(raf); raf = 0;
       if (renderer) renderer.dispose(true);
+      // The sky goes back to the space backdrop, which carries on from the planet's last stars.
+      freeSpace();
       canvas.remove(); fallback.remove();
     },
     snapshot: () => ({

@@ -11,20 +11,23 @@ const token = (name: string) => css.match(new RegExp(`--${name}:\\s*([^;]+);`))?
 const declarations = (prefix: string): string[] =>
   [...css.matchAll(new RegExp(`--${prefix}-([\\w-]+):`, 'g'))].map((m) => m[1]!);
 
+// OWNER CHANGED THE VALUES (0.75 polish pass, 2026-11-04: "Tighten all in-game animations ... shorter,
+// crisper, precise, tactile; never bouncy or floaty"). This test pins the NEW numbers: tempo 96/336 ->
+// 80/264, the pinned beats about a fifth shorter, and the settle curve's overshoot 1.1 -> 1.03.
 describe('motion tokens', () => {
   it('has exactly two tempo tokens: ack and consequence', () => {
-    expect(TEMPO).toEqual({ ack: 96, consequence: 336 });
+    expect(TEMPO).toEqual({ ack: 80, consequence: 264 });
     expect(Object.keys(TEMPO)).toEqual(['ack', 'consequence']);
   });
 
   it('derives quick and moment, and keeps the legacy names at today’s numbers', () => {
     expect(MOTION).toEqual({
-      ack: 96,
-      consequence: 336,
-      tap: 96,
-      quick: 192,
-      move: 336,
-      moment: 720,
+      ack: 80,
+      consequence: 264,
+      tap: 80,
+      quick: 160,
+      move: 264,
+      moment: 568,
     });
     expect(MOTION.quick).toBe(TEMPO.ack * 2);
     expect(MOTION.moment).toBe(TEMPO.consequence * 2 + TEMPO.ack / 2);
@@ -32,34 +35,34 @@ describe('motion tokens', () => {
     expect(MOTION.move).toBe(TEMPO.consequence);
   });
 
-  it('the thrown card lands inside the throw step: a 320 ms flight within the 396 ms wait (fix 32359b5)', () => {
+  it('the thrown card lands inside the throw step: a 248 ms flight within the 312 ms wait (fix 32359b5)', () => {
     expect(PINNED.throwFlight).toBeLessThan(PINNED.throw);
   });
 
   it('pins the choreography that must never drift', () => {
     expect(PINNED).toEqual({
-      humanDraw: 396,
-      throw: 396,
-      throwFlight: 320,
-      liveReveal: 700,
+      humanDraw: 312,
+      throw: 312,
+      throwFlight: 248,
+      liveReveal: 600,
       displayDwell: 1000,
       lessonDwell: 2000,
-      cutCap: 1800,
+      cutCap: 1400,
       flash: 60,
-      hitStopShort: 60,
-      hitStop: 100,
-      ripple: 70,
-      growHold: 160,
-      growOverlap: 0.6,
+      hitStopShort: 48,
+      hitStop: 80,
+      ripple: 56,
+      growHold: 120,
+      growOverlap: 0.5,
     });
   });
 
   it('has one easing family: standard and settle over the same control points', () => {
     expect(EASE).toEqual({
-      standard: 'cubic-bezier(0.2, 0.8, 0.3, 1)',
-      settle: 'cubic-bezier(0.2, 0.8, 0.3, 1.1)',
-      out: 'cubic-bezier(0.2, 0.8, 0.3, 1)',
-      spring: 'cubic-bezier(0.2, 0.8, 0.3, 1.1)',
+      standard: 'cubic-bezier(0.2, 0.9, 0.2, 1)',
+      settle: 'cubic-bezier(0.2, 0.9, 0.2, 1.03)',
+      out: 'cubic-bezier(0.2, 0.9, 0.2, 1)',
+      spring: 'cubic-bezier(0.2, 0.9, 0.2, 1.03)',
     });
     expect(EASE.out).toBe(EASE.standard);
     expect(EASE.spring).toBe(EASE.settle);
@@ -69,8 +72,8 @@ describe('motion tokens', () => {
   });
 
   it('the CSS durations are the same two tokens and the same derivations', () => {
-    expect(token('dur-ack')).toBe('96ms');
-    expect(token('dur-consequence')).toBe('336ms');
+    expect(token('dur-ack')).toBe('80ms');
+    expect(token('dur-consequence')).toBe('264ms');
     expect(token('dur-tap')).toBe('var(--dur-ack)');
     expect(token('dur-quick')).toBe('calc(var(--dur-ack) * 2)');
     expect(token('dur-move')).toBe('var(--dur-consequence)');

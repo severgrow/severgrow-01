@@ -56,6 +56,9 @@ export const FEATURES = Object.freeze({
    * keeps its flat Territory.
    */
   planet: CHANNEL === 'futa05' && !FLAT_TERRITORY,
+  /** ONE SPACE (0.75 polish pass, owner 2026-11-04): the planet's sky behind the Play submenu and the
+   *  board, and on the menu until the planet draws. The live game only; futa04 keeps its own room. */
+  space: CHANNEL === 'futa05',
 });
 const isPreviewHost = typeof location !== 'undefined' && (
   location.hostname.endsWith('.chatgpt.site') ||

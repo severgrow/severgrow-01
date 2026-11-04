@@ -168,6 +168,32 @@ const drawnOver = (d: number, pose: GlobePose): number => {
   return curve(pose.knee) + (d - pose.knee) * MIN_RADIAL;
 };
 
+/** A pose for any centre and rim radius (the game board's small planet, 0.75, uses it). */
+export const globePoseAt = (cx: number, cy: number, radius: number, falloff: number, shape = GLOBE_SHAPE): GlobePose | null =>
+  poseAt(cx, cy, radius, falloff, shape);
+
+/** The RADIAL size factor at a flat point: how much the curve squeezes a tile toward the rim. */
+export const globeRadialScale = (pose: GlobePose, x: number, y: number): number => {
+  const d = Math.hypot(x - pose.cx, y - pose.cy);
+  if (d >= pose.knee) return MIN_RADIAL;
+  return 1 - pose.falloff * (1 + pose.shape) * Math.pow(d / pose.radius, pose.shape);
+};
+
+/** The inverse of `globePoint`: the flat point that is DRAWN at (x, y). Exact to a hundredth. */
+export const globeUnpoint = (pose: GlobePose, x: number, y: number): { x: number; y: number } => {
+  const dx = x - pose.cx, dy = y - pose.cy;
+  const drawn = Math.hypot(dx, dy);
+  if (!(drawn > 1e-9)) return { x: pose.cx, y: pose.cy };
+  // The drawn radius grows with the flat one, so a bisection finds it.
+  let lo = 0, hi = drawn / MIN_RADIAL + pose.radius;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (drawnOver(mid, pose) < drawn) lo = mid; else hi = mid;
+  }
+  const k = ((lo + hi) / 2) / drawn;
+  return { x: pose.cx + dx * k, y: pose.cy + dy * k };
+};
+
 /**
  * The local size factor at a flat map point — the TANGENTIAL one, i.e. how much a mark on a tile
  * (the crossed swords) narrows with it. The radial factor is a little smaller still; a glyph is not

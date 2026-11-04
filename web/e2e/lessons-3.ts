@@ -1136,7 +1136,10 @@ try {
     const ops = frames.map((f) => f.o[0] ?? 0);
     check(frames[0]!.n > 0 && frames.every((f) => f.n === f.targets), `every legal tile has its invitation (${frames[0]!.n} of ${frames[0]!.targets})`);
     check(Math.max(...ops) - Math.min(...ops) > 0.08 && Math.max(...ops) <= 0.2, `it breathes softly (opacity ${Math.min(...ops).toFixed(2)}-${Math.max(...ops).toFixed(2)})`);
-    check(frames.every((f) => f.w.every((w) => w === frames[0]!.w[0]) && f.tf.every((t) => t === 'none')), `light only: the tile never changes size (${frames[0]!.w[0]}px, no transform)`);
+    // Each invitation keeps ITS OWN width frame to frame. (0.75: the board is a small planet, so a
+    // tile near the rim is drawn a little smaller than one in the middle; what must never happen is
+    // a tile changing size over time.)
+    check(frames.every((f) => f.w.every((w, j) => w === frames[0]!.w[j]) && f.tf.every((t) => t === 'none')), `light only: the tile never changes size (${frames[0]!.w.join('/')}px, no transform)`);
     assert.deepEqual(errors, [], `welcome: no page errors: ${errors.join(' | ')}`);
     await page.close();
   }

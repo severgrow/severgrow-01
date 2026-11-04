@@ -34,7 +34,8 @@ try {
     return {pile:pile.toJSON(),card:card.getBoundingClientRect().toJSON(),
       frames:(anim?.effect as KeyframeEffect | undefined)?.getKeyframes(),duration:(anim?.effect as KeyframeEffect | undefined)?.getTiming().duration};
   });
-  assert.equal(draw.duration,396,'draw card travels for the intended short beat');
+  // The pinned beat, not a literal (0.75: the owner tightened it from 396 to 312 ms).
+  assert.equal(draw.duration,PINNED.humanDraw,'draw card travels for the intended short beat');
   const first = String(draw.frames?.[0]?.translate ?? '');
   assert(first.includes('px') && first !== '0 0','draw starts at the actual pile, not already in hand');
   await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'ACT' && !(window as any).__severgrow.busy());

@@ -1,5 +1,45 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-04 — 0.75, "the planet standard": one space, metal keys, the board as a small planet
+
+Owner-approved polish pass (live game only: `html.v075` written by the build for CHANNEL=futa05,
+`web/src/polish-075.css`; `FEATURES.space`). What changed and why it is built the way it is:
+
+- **One shared space.** The planet's SPACE shader moved to `web/src/sphere/space.ts` and is used by
+  both the planet and the new backdrop (`web/src/player/space-backdrop.ts`) behind the Play submenu,
+  the game and the menu until the planet draws. Without a planet the shader gets a vanishing radius,
+  so the halo and glow fall away by their own maths. The star offset is shared (`spaceDrift`), so the
+  stars carry on between the menu's planet and a game without a cut.
+- **Space backdrop cost** (`web/e2e/perf-phone.ts`, 390x844, DPR 3, 4x CPU, idle game, means of the
+  runs; this host is shared and noisy):
+
+  | idle game | before | shader every frame, 10/s | ~15/s (menu pace) | shipped |
+  | --- | --- | --- | --- | --- |
+  | game rAF/s | 0.0 | 8.6 | 15.1 | **0.0** |
+  | main-thread task ms/s | 12.1 | 565 | 928 | **11.1** |
+  | style recalcs/s | 0.3 | 9.0 | 15.1 | **0.3** |
+  | a move: fps / p95 | 41.0 / 41.7 ms | 25.8 / 208 ms | 16.5 / 250 ms | **42.3 / 41.7 ms** |
+
+  Redrawing the shader per frame was significant (and on this probe stuttered a move), so it is
+  drawn RARELY: each star layer once onto a canvas a little larger than the screen, slid by the
+  compositor at the menu's own pace (two layers, the far one at 0.35 of the near: the same parallax),
+  and redrawn exactly one slide further on every 20 s. Two moving full-screen layers still cost a
+  move ~6 fps here, so IN GAME the stars stand still, painted once as a background image of the
+  backdrop (no layer of their own): measured equal to the build without stars (8 runs each: idle
+  task 11.1 vs 12.1 ms/s, a move 42.3 vs 41.0 fps; the p95 guard reads 41.7 ms for BOTH builds on
+  this host). The Play submenu and the menu keep the slow slide. Hidden tab: the slide pauses (0
+  animations running); Reduce motion: still stars.
+- **No flash at start-up.** The built HTML carries `space-first`: a still CSS star field on the page
+  background until the shader's stars have drawn (`space-lit`).
+- **The board as a small planet.** The Territory globe's spread curve (`k(u) = 1 - f*u^1.25`) at 5%
+  bends the game board (`web/src/ui/geom.ts`): centres move in on the curve and each tile is drawn at
+  the curve's RADIAL factor, so neighbours never overlap (the grout opens by at most a tenth of a
+  tile at the rim). The hit test un-bends the point and checks it against the tile as drawn;
+  `web/tests/board-bulge.test.ts` taps the centre, the sides and the corners of every tile.
+- **Sharper in-game motion.** Tempo 96/336 -> 80/264 ms, the pinned beats about a fifth shorter,
+  the cut's own table with them, and the settle curve's overshoot 1.1 -> 1.03 (a click, not a
+  bounce). Reading time (the display's 1 s and lessons' 2 s dwells) is unchanged.
+
 ## 2026-11-04 — THE PLANET replaces the flat map on /test/
 
 Owner: *"geometry of hexes is wrong ... replace and call it THE PLANET instead of TERRITORY ... Full

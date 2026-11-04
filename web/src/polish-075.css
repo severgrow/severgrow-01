@@ -1,0 +1,105 @@
+/* ================================================================================================
+   0.75 — THE PLANET STANDARD (owner-approved polish pass, 2026-11-04)
+   "The planet sets the new standard: modern, sharp, smooth, while staying true to the tactile,
+   premium, minimalist hardware inspiration (teenage engineering / Nintendo). No extra text."
+
+   The live game only: every rule is scoped to html.v075, which the build writes into the page for
+   CHANNEL=futa05 (web/vite.config.ts), so it is on the very first paint and the locked 0.4 line never
+   sees it. CSS only: no images, no extra blur layers, no idle animation.
+   ================================================================================================ */
+
+/* ---- H. ONE GLASS -----------------------------------------------------------------------------
+   Every sheet and panel: the same blur, no frame (the owner's standing rule: "no frames around the
+   glass ever"), the same 15px corner. Each surface keeps its own shade and its own drop shadow. */
+html.v075 :is(.sheet, #sheet-menu, #gameover .go-card, #play-menu .levels-inner, #levels .levels-inner,
+  #futasaku-glass, #tutorial-chapter-menu, #tutorial-bloom-demo .tutorial-bloom-stage,
+  .world-panel, .world-chat, .fb-glass, .acct-glass, .live-glass, #install-prompt .install-sheet) {
+  -webkit-backdrop-filter: var(--dark-glass-blur) !important;
+  backdrop-filter: var(--dark-glass-blur) !important;
+  border: 0 !important;
+  border-radius: 15px !important;
+}
+
+/* ---- 2. NO CREAM-FILLED BUTTONS ---------------------------------------------------------------
+   Every cream-FILLED key becomes a cream OUTLINE on dark glass. The lead key keeps its lead by a full
+   cream line where its neighbours have a faint one. Tabs, switches and sliders are not buttons and are
+   left as they were (the selected difficulty, the checkbox, the toggled tools). */
+html.v075 :is(.btn.primary, .menu-buttons .btn.primary, .gameover .go-buttons .btn.primary,
+  #gameover .go-buttons .btn.primary, #levels .level-grid .difficulty-tile.primary,
+  .campaign-tile[data-state='current'], .world-key.world-key-text.armed) {
+  background: var(--dark-glass) !important;
+  border: 1px solid var(--fu-cream, #e8ddc5) !important;
+  color: var(--fu-cream, #e8ddc5) !important;
+}
+html.v075 .campaign-tile[data-state='current'] * { color: inherit; }
+
+/* ---- 3. METAL KEYS ----------------------------------------------------------------------------
+   The menu's and the submenus' keys are lowkey machined metal: a fine highlight along the top edge,
+   a very faint brushed grain, a hairline edge; pressed, the key sinks one pixel into its housing with
+   an inner shadow (the one press, web/src/logic/press.ts: a pure 1px drop, no shrink). Quiet, not
+   shiny. The 50px key, its focus ring and Reduce motion (no travel) are unchanged. */
+html.v075 :is(#menu, #play-menu, #levels, #campaign, #online-hub, #online-waiting, #online-join) .menu-buttons .btn {
+  --press-drop: 1px;
+  --press-depth: 1;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .052) 0%, rgba(255, 255, 255, .012) 42%, rgba(0, 0, 0, .1) 100%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .016) 0 1px, transparent 1px 3px),
+    var(--dark-glass) !important;
+  border: 1px solid color-mix(in srgb, var(--fu-cream, #e8ddc5) 24%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .13),
+    inset 0 -1px 0 rgba(0, 0, 0, .42),
+    0 1px 1px rgba(0, 0, 0, .38) !important;
+}
+/* The lead key: the same metal, its edge drawn in full cream. */
+html.v075 :is(#menu, #play-menu, #levels, #campaign, #online-hub, #online-waiting, #online-join) .menu-buttons .btn.primary {
+  border-color: var(--fu-cream, #e8ddc5) !important;
+}
+/* Pressed: the housing's shadow falls inside the key and its top light goes out. */
+html.v075 :is(#menu, #play-menu, #levels, #campaign, #online-hub, #online-waiting, #online-join) .menu-buttons .btn[data-pressed='true'] {
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(0, 0, 0, .18) !important;
+}
+
+/* ---- C. STEADY NUMBERS ------------------------------------------------------------------------
+   Scores and counters use fixed-width digits everywhere in play, so a 9 becoming a 10 never nudges
+   its neighbours. */
+html.v075 :is(#game, #gameover, #sheet-menu, .hud, .dock, #board, .pile, .go-score, #levels, #campaign) {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* ---- 4. THE BOARD AS A SMALL PLANET (the skin; the bend itself is geometry, web/src/ui/geom.ts) --
+   The grout is a fine dark line; the slab light and the limb shade are gradients drawn once. */
+html.v075 #board .planet-grout { stroke: rgba(4, 6, 6, .62); stroke-width: .9; vector-effect: non-scaling-stroke; }
+
+/* ---- B. TURN RIM -------------------------------------------------------------------------------
+   The board's own edge carries a thin atmosphere: cream on the player's turn, dim on the opponent's.
+   Opacity only (compositor), one beat, never a loop. */
+html.v075 #board .planet-turn-glow { fill: none; stroke: #e8ddc5; stroke-width: 6; stroke-linejoin: round; opacity: .13; }
+html.v075 #board .planet-turn-line { fill: none; stroke: #f2e8cf; stroke-width: 1.1; stroke-linejoin: round; opacity: .85; }
+html.v075 #board .planet-turn-rim { opacity: .22; transition: opacity var(--dur-consequence) var(--ease-standard); }
+html.v075 body[data-turn='you'] #board .planet-turn-rim { opacity: 1; }
+
+/* ---- A. SEAMLESS MENU -> GAME ------------------------------------------------------------------
+   The stars carry on (one shared offset, web/src/sphere/space.ts); the board rises into the place the
+   planet held, once, as the game screen appears. Compositor only. */
+@keyframes v075-board-rise {
+  from { opacity: 0; translate: 0 18px; scale: .955; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+html.v075 #game:not([hidden]) #board-wrap {
+  animation: v075-board-rise calc(var(--dur-consequence) * 2) var(--ease-standard) both;
+}
+
+/* ---- D. GAME OVER INTO SPACE -------------------------------------------------------------------
+   The board eases back a little into the stars; the result sits over open space, not over a wash. */
+html.v075 #game #board-wrap { transition: scale var(--dur-consequence) var(--ease-standard), opacity var(--dur-consequence) var(--ease-standard); }
+html.v075 body:has(#gameover:not([hidden])) #game #board-wrap { scale: .93; opacity: .55; }
+html.v075.futasaku-product #gameover { background: transparent; }
+
+/* Reduce motion: no rise, no easing back; the states simply are. */
+html.v075.reduce-motion #game:not([hidden]) #board-wrap { animation: none; }
+html.v075.reduce-motion #game #board-wrap { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  html.v075 #game:not([hidden]) #board-wrap { animation: none; }
+  html.v075 #game #board-wrap { transition: none; }
+}

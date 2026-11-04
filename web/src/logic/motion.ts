@@ -13,18 +13,23 @@
 // and asserted by web/tests/motion.test.ts. Code imports these names instead of repeating literals.
 
 /** The only two tempo tokens. */
-export const TEMPO = Object.freeze({ ack: 96, consequence: 336 });
+// 0.75, "the planet standard" (owner, 2026-11-04: "Tighten all in-game animations (card play, Grow,
+// Bomb, Blast, turn change, scoring): shorter, crisper, precise, tactile; never bouncy or floaty").
+// Every in-game beat is about a fifth shorter, and the settle curve no longer overshoots into a
+// bounce: it lands with a hair of give (1.03), a click, not a spring. Reading time is untouched (the
+// display's 1 s and the lessons' 2 s dwells), so nothing becomes harder to follow.
+export const TEMPO = Object.freeze({ ack: 80, consequence: 264 });
 
 /** Values that are part of the game's feel and are deliberately pinned. */
 export const PINNED = Object.freeze({
   /** A human card leaves the pile and lands in the hand. */
-  humanDraw: 396,
+  humanDraw: 312,
   /** A human card leaves the hand and reaches the discard pile (the step's wait). */
-  throw: 396,
+  throw: 312,
   /** The thrown card's own flight, which lands inside that wait (32359b5: the snappier beat). */
-  throwFlight: 320,
+  throwFlight: 248,
   /** The shortest hold for a live enemy turn, so a quiet turn cannot blink past. */
-  liveReveal: 700,
+  liveReveal: 600,
   /** The LED display's minimum dwell before another message may replace it (normal play). */
   displayDwell: 1000,
   /**
@@ -34,18 +39,18 @@ export const PINNED = Object.freeze({
    */
   lessonDwell: 2000,
   /** A whole cut at Normal speed, whatever the number of tiles or chained cuts. */
-  cutCap: 1800,
+  cutCap: 1400,
   /** The cut's local flash never exceeds this, even at Slow speed. */
   flash: 60,
   /** Two short freezes used by the existing choreography (light and heavy impacts). */
-  hitStopShort: 60,
-  hitStop: 100,
+  hitStopShort: 48,
+  hitStop: 80,
   /** One ripple ring starts every this many ms, capped by the plan itself. */
-  ripple: 70,
+  ripple: 56,
   /** How long a grown tile holds after it lands. */
-  growHold: 160,
+  growHold: 120,
   /** A multi-tile grow starts the next tile when the previous one is this far through its pop. */
-  growOverlap: 0.6,
+  growOverlap: 0.5,
 });
 
 /** The derived durations, plus the legacy aliases that existing code already reads. */
@@ -64,8 +69,8 @@ export const MOTION = Object.freeze({
 });
 
 /** One easing family: the same control points, with the settle variant overshooting to 1.1. */
-const STANDARD_EASE = 'cubic-bezier(0.2, 0.8, 0.3, 1)';
-const SETTLE_EASE = 'cubic-bezier(0.2, 0.8, 0.3, 1.1)';
+const STANDARD_EASE = 'cubic-bezier(0.2, 0.9, 0.2, 1)';
+const SETTLE_EASE = 'cubic-bezier(0.2, 0.9, 0.2, 1.03)';
 export const EASE = Object.freeze({
   /** The canonical easing: decelerate into the resting position. */
   standard: STANDARD_EASE,

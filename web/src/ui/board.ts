@@ -10,7 +10,7 @@ import type { Spot } from '../logic/weakspots.js';
 import { looseEdges, networkEdges, veinLook } from '../logic/network.js';
 import type { ThemeStyle } from '../logic/themes.js';
 import type { MaterialLook } from '../logic/materials.js';
-import { FULL_LOOK, S, centerOf, cornerPts, el, hash, hexPath, noiseTile, star } from './geom.js';
+import { FULL_LOOK, S, boardBulge, centerOf, cornerPts, el, hash, hexPath, noiseTile, setBoardBulge, star } from './geom.js';
 import { drawMaterial, materialDefs } from './materials.js';
 import { WorldLayer } from './worldlayer.js';
 import { boardUnits } from '../logic/layout.js';
@@ -290,6 +290,8 @@ export class BoardView {
     svg.replaceChildren();
     const coords = boardCoords(config);
     this.keys = coords.map(coordKey);
+    // THE BOARD AS A SMALL PLANET (0.75): the live game's board bends on the Territory globe's curve.
+    setBoardBulge(FEATURES.space ? this.keys : null);
     this.richKeys = new Set(this.keys.filter(key => terrain[key] === 'rich'));
     // Step 3: just the tiles, a thin margin and headroom for the homes, in the board's orientation
     const u = boardUnits(config.boardRadius, getOrient());
@@ -400,7 +402,53 @@ export class BoardView {
     }
     // Step 4: the homes as landmarks (my tree, the opponent's volcano), drawn once, kept across renders
     this.homeEls = ([0, 1] as const).map((p) => this.drawHome(p, coordKey(homeCoord(p, config))));
+    if (FEATURES.space) this.drawPlanetSkin(defs);
     this.afterSetup(terrain);
+  }
+
+  /**
+   * THE BOARD'S PLANET SKIN (0.75, owner 2026-11-04: "Board edges darken slightly, like the planet's
+   * rim. Tiles take the planet's matte slabs and fine grout lines" and "Turn rim: a thin glow around the
+   * board's edge like the planet's atmosphere: cream on the player's turn, dim on the opponent's").
+   * Drawn once per setup, above the tiles and homes and below every overlay, and never hit-tested:
+   *  - the slab: one soft top light and bottom shade per cell (the planet's chamfered, matte tiles);
+   *  - the grout: a fine dark line round every cell;
+   *  - the rim: a radial shade toward the board's edge, like the planet's limb;
+   *  - the turn rim: the board's outline, a hairline over a soft glow, lit by `body[data-turn]` (CSS).
+   */
+  private drawPlanetSkin(defs: SVGDefsElement) {
+    const pose = boardBulge();
+    if (!pose) return;
+    const shade = el('radialGradient', { id: this.id('planet-rim'), gradientUnits: 'userSpaceOnUse', cx: pose.cx, cy: pose.cy, r: pose.radius * 0.97 }, defs);
+    el('stop', { offset: 0.58, 'stop-color': '#000', 'stop-opacity': 0 }, shade);
+    el('stop', { offset: 1, 'stop-color': '#000', 'stop-opacity': 0.34 }, shade);
+    const slab = el('linearGradient', { id: this.id('planet-slab'), x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+    el('stop', { offset: 0, 'stop-color': '#fff', 'stop-opacity': 0.07 }, slab);
+    el('stop', { offset: 0.42, 'stop-color': '#fff', 'stop-opacity': 0 }, slab);
+    el('stop', { offset: 1, 'stop-color': '#000', 'stop-opacity': 0.16 }, slab);
+    const skin = el('g', { class: 'l-planet-skin', 'aria-hidden': 'true', 'pointer-events': 'none' });
+    this.svg.insertBefore(skin, this.layers.contour);
+    let cells = '';
+    for (const key of this.keys) cells += hexPath(key, S, 'flat');
+    el('path', { d: cells, fill: this.url('planet-slab'), class: 'planet-slab' }, skin);
+    el('path', { d: cells, fill: 'none', class: 'planet-grout' }, skin);
+    el('path', { d: cells, fill: this.url('planet-rim'), class: 'planet-limb' }, skin);
+    // The outline: every cell side with no neighbour across it, as drawn (bent corners).
+    const set = new Set(this.keys);
+    let rim = '';
+    for (const key of this.keys) {
+      const c = centerOf(key), pts = cornerPts(key, S);
+      for (let i = 0; i < 6; i++) {
+        const a = pts[i]!, b = pts[(i + 1) % 6]!;
+        const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+        const out = hexAtPoint(mx + (mx - c.x) * 0.9, my + (my - c.y) * 0.9, set, 1);
+        if (out) continue;
+        rim += `M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`;
+      }
+    }
+    const turn = el('g', { class: 'planet-turn-rim' }, skin);
+    el('path', { d: rim, class: 'planet-turn-glow' }, turn);
+    el('path', { d: rim, class: 'planet-turn-line' }, turn);
   }
 
   // ---- drawing steps a skinned board (ui/skin/) can replace; these defaults are the board's own look ----

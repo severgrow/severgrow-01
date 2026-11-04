@@ -279,6 +279,9 @@ import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { installStaleBuildReload } from './logic/stale-build.js';
 import { mountPlanetLockup } from './player/planet-lockup.js';
+import { holdStars, mountSpaceBackdrop, spaceBackdrop } from './player/space-backdrop.js';
+// ONE SPACE (0.75): the stars are on screen before anything else mounts (no plain background).
+if (FEATURES.space) mountSpaceBackdrop();
 
 // First thing: a page left open across a deploy reloads onto the new build instead of half-breaking.
 installStaleBuildReload();
@@ -4025,6 +4028,7 @@ async function pump() {
   /** Actions already played in THIS pump: the first needs no leading beat. */
   let actionsPlayed = 0;
   animLog('pump:enter', { pending: queue.pending, epoch: my });
+  holdStars(true);
   watchFrames();
   try {
     for (;;) {
@@ -4080,6 +4084,7 @@ async function pump() {
   } finally {
     if (pumpRun === run) {
       pumping = false;
+      holdStars(false);
       currentStep = null;
       liveReveal = false;
       replaying = false;
@@ -10695,6 +10700,8 @@ let appReady = false;
   settings: () => ({ ...settings }),
   /** THE PLANET (/test/ only): null when the Territory shows the flat map. */
   planet: () => planetSnapshot(),
+  /** The space backdrop (0.75): whether its stars slide, how often it has redrawn, whether it shows. */
+  space: () => spaceBackdrop()?.snapshot() ?? null,
   /** The campaign place the page is on, as the menu's LEVEL <n> reads it (tests/screenshots). */
   campaignLevel: () => currentLevel(campaignProgress).number,
   /**

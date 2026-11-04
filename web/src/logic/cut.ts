@@ -107,10 +107,11 @@ const dist = (a: string, b: string) => {
 // Severe (3-4) has real weight — a short beat, a 60ms hit-stop, a small shiver and a slight zoom —
 // but stays below Big. Big and Huge move the board more, always within their ceilings.
 const LOOK: Record<CutTier, { anticipation: number; hitstop: number; flashAlpha: number; zoom: number; pulse: number; shake: number; death: number; crumble: number; payoff: number }> = {
-  small: { anticipation: 0, hitstop: 0, flashAlpha: 0.22, zoom: 1, pulse: 80, shake: 0, death: 440, crumble: 220, payoff: 300 },
-  severe: { anticipation: 60, hitstop: SEVERE_HITSTOP_MS, flashAlpha: 0.3, zoom: 1.012, pulse: 100, shake: SHAKE_SEVERE, death: 400, crumble: 240, payoff: 360 },
-  big: { anticipation: 140, hitstop: HITSTOP_MS, flashAlpha: 0.28, zoom: 1.02, pulse: 130, shake: SHAKE_MAX_BIG, death: 380, crumble: 280, payoff: 400 },
-  huge: { anticipation: 180, hitstop: HITSTOP_MS + 20, flashAlpha: FLASH_MAX_ALPHA, zoom: 1.03, pulse: 150, shake: SHAKE_MAX_HUGE, death: 400, crumble: 300, payoff: 420 },
+  // 0.75, "sharper in-game feel" (owner, 2026-11-04): every beat a fifth shorter, like the tokens.
+  small: { anticipation: 0, hitstop: 0, flashAlpha: 0.22, zoom: 1, pulse: 64, shake: 0, death: 352, crumble: 176, payoff: 240 },
+  severe: { anticipation: 48, hitstop: SEVERE_HITSTOP_MS, flashAlpha: 0.3, zoom: 1.012, pulse: 80, shake: SHAKE_SEVERE, death: 320, crumble: 192, payoff: 288 },
+  big: { anticipation: 112, hitstop: HITSTOP_MS, flashAlpha: 0.28, zoom: 1.02, pulse: 104, shake: SHAKE_MAX_BIG, death: 304, crumble: 224, payoff: 320 },
+  huge: { anticipation: 144, hitstop: HITSTOP_MS + 16, flashAlpha: FLASH_MAX_ALPHA, zoom: 1.03, pulse: 120, shake: SHAKE_MAX_HUGE, death: 320, crumble: 240, payoff: 336 },
 };
 
 const HAPTIC: Record<CutTier, FeedbackEvent> = { small: 'cutSmall', severe: 'cutMedium', big: 'cutBig', huge: 'cutHuge' };

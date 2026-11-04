@@ -45,7 +45,11 @@ export default defineConfig({
     // really has an online endpoint (the same build-time fact `onlineBuildEnabled()` reads), so the
     // key appears later into a space that is already the right size and the column never jumps.
     const worldReserved = !!(process.env.VITE_DUEL_API_URL ?? '').trim();
-    const htmlClass = `test-typography-v2${worldReserved ? ' world-reserved' : ''}`;
+    // NO FLASH AT START-UP (0.75, owner: "stars from the very first frame, with no plain background
+    // while loading"): the live game paints a still star field in CSS before any script runs; the
+    // shared space shader takes over as soon as it has drawn (web/src/player/space-backdrop.ts).
+    const spaceFirst = process.env.CHANNEL === 'futa05';
+    const htmlClass = `test-typography-v2${worldReserved ? ' world-reserved' : ''}${spaceFirst ? ' space-first v075' : ''}`;
     // The beta line is static words from `src/strings.ts` (no network, no storage), and it used to
     // be the LAST thing to appear on the menu: `paintBetaLine` reveals it during the module's first
     // layout. Painting it into the built HTML puts it on the first frame with the wordmark, which

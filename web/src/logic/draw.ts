@@ -9,7 +9,7 @@ import type { Action, View } from '../../../src/engine/index.js';
 import { simulate, threats } from '../../../src/bots/evaluate.js';
 import { kindOf } from './interaction.js';
 import type { Sel } from './interaction.js';
-import { S, centerOf } from '../ui/geom.js';
+import { S, centerOf, tileBulge, unbend } from '../ui/geom.js';
 import { toBoard } from './orient.js';
 
 export type Bloom = Extract<Action, { t: 'Bloom' }>;
@@ -31,9 +31,13 @@ export const pixelOf = (key: string): Pt => centerOf(key);
 
 /** The hex whose (slightly smaller) hit area holds the point, or null (a gap, a corner, off the board). */
 export const hexAtPoint = (sx: number, sy: number, keys: ReadonlySet<string>, hit = HIT): string | null => {
+  // The board may be bent into a small planet (ui/geom.ts): find the cell on the flat lattice under
+  // the point's unbent position, then test the point against that cell AS DRAWN (moved in, smaller).
+  const flat = unbend(sx, sy);
+  const { x: fx, y: fy } = toBoard(flat.x, flat.y);
   const { x, y } = toBoard(sx, sy);
-  const qf = ((SQ3 / 3) * x - y / 3) / S;
-  const rf = ((2 / 3) * y) / S;
+  const qf = ((SQ3 / 3) * fx - fy / 3) / S;
+  const rf = ((2 / 3) * fy) / S;
   let q = Math.round(qf);
   let r = Math.round(rf);
   const s = Math.round(-qf - rf);
@@ -48,7 +52,7 @@ export const hexAtPoint = (sx: number, sy: number, keys: ReadonlySet<string>, hi
   const c = toBoard(cs.x, cs.y);
   const px = x - c.x;
   const py = y - c.y;
-  return NORMALS.every((n) => Math.abs(px * n.x + py * n.y) <= hit * INRADIUS) ? key : null;
+  return NORMALS.every((n) => Math.abs(px * n.x + py * n.y) <= hit * INRADIUS * tileBulge(key)) ? key : null;
 };
 
 /**

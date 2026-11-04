@@ -135,6 +135,26 @@ button {
   z-index: 0;
   background: var(--c-bg);
 }
+/* NO FLASH AT START-UP (0.75): a still star field on the page background before the module runs,
+   in the shared space shader's own deep sky (#030404). The live stars replace it the moment they have
+   drawn (html.space-lit), so the two never show together. Static: no animation, no script. */
+html.space-first:not(.space-lit) #texture {
+  background-color: #030404;
+  background-image:
+    radial-gradient(1.2px 1.2px at 23px 41px, rgba(219, 214, 199, .82), transparent),
+    radial-gradient(1.2px 1.2px at 131px 17px, rgba(219, 214, 199, .55), transparent),
+    radial-gradient(1.2px 1.2px at 207px 96px, rgba(219, 214, 199, .7), transparent),
+    radial-gradient(1.2px 1.2px at 74px 163px, rgba(219, 214, 199, .5), transparent),
+    radial-gradient(1.2px 1.2px at 188px 211px, rgba(219, 214, 199, .78), transparent),
+    radial-gradient(1.2px 1.2px at 248px 152px, rgba(219, 214, 199, .46), transparent),
+    radial-gradient(.9px .9px at 12px 88px, rgba(219, 214, 199, .38), transparent),
+    radial-gradient(.9px .9px at 97px 23px, rgba(219, 214, 199, .26), transparent),
+    radial-gradient(.9px .9px at 61px 119px, rgba(219, 214, 199, .33), transparent),
+    radial-gradient(.9px .9px at 128px 74px, rgba(219, 214, 199, .22), transparent),
+    radial-gradient(.9px .9px at 140px 129px, rgba(219, 214, 199, .4), transparent);
+  background-size: 263px 241px, 263px 241px, 263px 241px, 263px 241px, 263px 241px, 263px 241px,
+    149px 137px, 149px 137px, 149px 137px, 149px 137px, 149px 137px;
+}
 #texture::after {
   content: '';
   position: absolute;
@@ -3938,16 +3958,16 @@ html.futasaku-product #campaign .campaign-chapters {
 :root {
   /* Phase 0: two tempo tokens, everything else derived (web/src/logic/motion.ts is the source).
      ack = the immediate answer, consequence = a physical move. */
-  --dur-ack: 96ms;
-  --dur-consequence: 336ms;
+  --dur-ack: 80ms;
+  --dur-consequence: 264ms;
   --dur-quick: calc(var(--dur-ack) * 2);
   --dur-moment: calc(var(--dur-consequence) * 2 + var(--dur-ack) / 2);
   /* Legacy names resolve to the same values. */
   --dur-tap: var(--dur-ack);
   --dur-move: var(--dur-consequence);
   /* One easing family; `linear` is only for continuous marquees and `steps(1)` only for the LED. */
-  --ease-standard: cubic-bezier(0.2, 0.8, 0.3, 1);
-  --ease-settle: cubic-bezier(0.2, 0.8, 0.3, 1.1);
+  --ease-standard: cubic-bezier(0.2, 0.9, 0.2, 1);
+  --ease-settle: cubic-bezier(0.2, 0.9, 0.2, 1.03);
   --ease-out: var(--ease-standard);
   --ease-spring: var(--ease-settle);
   --pill: 999px;

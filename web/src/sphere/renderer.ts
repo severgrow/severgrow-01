@@ -9,6 +9,7 @@
 import type { Sphere } from './geometry.js';
 import type { Quat } from './rotation.js';
 import { KIND, type Ground } from './ground.js';
+import { compileProgram, spacePass } from './space.js';
 
 export const EYE = 3.6;
 /** Focal length; at zoom 1 the planet's disc is 82% of the shorter half-side. */
@@ -35,36 +36,7 @@ export const projection = (view: { width: number; height: number }, frame: Frame
   return { aspect, f, ox, oy, radius: discRadius(frame.width, frame.height, zoom), cx: frame.x + frame.width / 2, cy: frame.y + frame.height / 2 };
 };
 
-const SPACE_VERTEX = `
-attribute vec2 aCorner;
-void main(){ gl_Position = vec4(aCorner, 0.0, 1.0); }`;
-const SPACE_FRAGMENT = `
-precision highp float;
-uniform vec2 uSize; uniform vec2 uCentre; uniform float uRadius; uniform vec2 uDrift; uniform float uScale;
-float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-float stars(vec2 p, float cell, float density){
-  vec2 c = floor(p / cell), f = fract(p / cell);
-  float h = hash(c);
-  if (h < density) return 0.0;
-  vec2 at = vec2(hash(c + 7.1), hash(c + 3.7)) * .7 + .15;
-  float d = length((f - at) * cell);
-  float size = mix(.55, 1.35, hash(c + 1.9)) * uScale;
-  return smoothstep(size, 0.0, d) * mix(.35, 1.0, (h - density) / (1.0 - density));
-}
-void main(){
-  vec2 p = gl_FragCoord.xy;
-  // Deep space, a touch warmer toward the planet so it never floats on flat black.
-  float d = length(p - uCentre) / uRadius;
-  vec3 sky = mix(vec3(.030, .036, .034), vec3(.012, .014, .015), smoothstep(.9, 3.2, d));
-  float s = stars(p + uDrift * .35, 9.0 * uScale, .965) * .55 + stars(p + uDrift, 17.0 * uScale, .955);
-  sky += vec3(.86, .84, .78) * s * smoothstep(1.0, 1.25, d);
-  // The halo: the atmosphere's light scattered past the limb, falling off into space.
-  float out_ = max(0.0, d - 1.0);
-  sky += vec3(.44, .58, .52) * (exp(-out_ * 11.0) * .30 + exp(-out_ * 3.2) * .07) * step(1.0, d);
-  // Still grain, the same film the flat map wears.
-  sky += (hash(p) - .5) * .022;
-  gl_FragColor = vec4(sky, 1.0);
-}`;
+// The SPACE pass is shared with the space backdrop (space.ts): one shader for the whole game.
 
 const GROUND_VERTEX = `
 attribute vec4 aPosition; attribute vec4 aLook;
@@ -175,7 +147,7 @@ export class PlanetRenderer {
   bytes = 0;
   frames = 0;
   disposed = false;
-  private space: WebGLProgram;
+  private space: ReturnType<typeof spacePass>;
   private ground: WebGLProgram;
   private buffers: WebGLBuffer[] = [];
   private triangle: WebGLBuffer;
@@ -199,11 +171,10 @@ export class PlanetRenderer {
     if (!gl) throw Error('WebGL unavailable');
     this.gl = gl;
     this.derivatives = !!gl.getExtension('OES_standard_derivatives');
-    this.space = this.program(SPACE_VERTEX, SPACE_FRAGMENT);
     this.ground = this.program(GROUND_VERTEX, groundFragment(this.derivatives));
-    for (const name of ['uSize', 'uCentre', 'uRadius', 'uDrift', 'uScale']) this.u[`space.${name}`] = gl.getUniformLocation(this.space, name);
     for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel', 'uDpr']) this.u[name] = gl.getUniformLocation(this.ground, name);
     this.triangle = this.buffer(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]));
+    this.space = spacePass(gl, (v, f) => this.program(v, f), this.triangle);
     // Fans: centre, corner i, corner i+1 for every side of every tile. A cell's `w` packs its seed
     // (integer part) with the distance-to-side ramp (fraction: 0 at the centre, .999 on a side).
     const cells = sphere.cells;
@@ -233,21 +204,7 @@ export class PlanetRenderer {
     gl.cullFace(gl.BACK);
     gl.clearColor(0, 0, 0, 1);
   }
-  private program(vertex: string, fragment: string): WebGLProgram {
-    const gl = this.gl;
-    const shader = (kind: number, source: string) => {
-      const s = gl.createShader(kind);
-      if (!s) throw Error('Graphics context unavailable');
-      gl.shaderSource(s, source); gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { const log = gl.getShaderInfoLog(s); gl.deleteShader(s); throw Error(`Graphics shader unavailable: ${log}`); }
-      return s;
-    };
-    const vs = shader(gl.VERTEX_SHADER, vertex), fs = shader(gl.FRAGMENT_SHADER, fragment), p = gl.createProgram();
-    if (!p) throw Error('Graphics context unavailable');
-    gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p); gl.deleteShader(vs); gl.deleteShader(fs);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { gl.deleteProgram(p); throw Error('Graphics program unavailable'); }
-    return p;
-  }
+  private program(vertex: string, fragment: string): WebGLProgram { return compileProgram(this.gl, vertex, fragment); }
   private buffer(target: number, data: BufferSource, usage?: number) {
     const gl = this.gl, b = gl.createBuffer();
     if (!b) throw Error('Graphics buffer unavailable');
@@ -313,19 +270,8 @@ export class PlanetRenderer {
     const at = projection({ width: this.cssWidth, height: this.cssHeight }, frame ?? { x: 0, y: 0, width: this.cssWidth, height: this.cssHeight }, zoom);
     gl.viewport(0, 0, w, h);
     // 1. Space.
-    gl.useProgram(this.space);
-    gl.uniform2f(this.u['space.uSize']!, w, h);
-    gl.uniform2f(this.u['space.uCentre']!, at.cx * this.pixel, h - at.cy * this.pixel);
-    gl.uniform1f(this.u['space.uRadius']!, at.radius * this.pixel);
-    gl.uniform2f(this.u['space.uDrift']!, drift[0] * this.pixel, drift[1] * this.pixel);
-    gl.uniform1f(this.u['space.uScale']!, this.pixel);
-    const corner = gl.getAttribLocation(this.space, 'aCorner');
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.triangle);
-    gl.enableVertexAttribArray(corner);
-    gl.vertexAttribPointer(corner, 2, gl.FLOAT, false, 0, 0);
     gl.disable(gl.CULL_FACE);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.disableVertexAttribArray(corner);
+    this.space.draw(w, h, [at.cx * this.pixel, h - at.cy * this.pixel], at.radius * this.pixel, drift, this.pixel);
     gl.enable(gl.CULL_FACE);
     // 2. Ground.
     gl.useProgram(this.ground);
@@ -352,7 +298,7 @@ export class PlanetRenderer {
     if (this.disposed) return;
     this.disposed = true;
     for (const b of this.buffers) this.gl.deleteBuffer(b);
-    this.gl.deleteProgram(this.space);
+    this.gl.deleteProgram(this.space.program);
     this.gl.deleteProgram(this.ground);
     if (release) this.gl.getExtension('WEBGL_lose_context')?.loseContext();
   }

@@ -53,8 +53,9 @@ describe('the beta line is a quiet version line between the wordmark and the ent
     // PINNED to the shipped value, not merely the shape: the menu line is what a player reads, so a
     // silent drift (0.7 -> 0.8 half-deployed) must fail here rather than ship. Bump this in the same
     // commit that bumps FEEDBACK.betaVersion.
-    expect(FEEDBACK.betaVersion).toBe('0.7');
-    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('0.7');
+    // 0.7 -> 0.75 with the owner's "planet standard" polish pass (2026-11-04).
+    expect(FEEDBACK.betaVersion).toBe('0.75');
+    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('0.75');
     // Owner (2026-10-31): one quiet line, not a sentence — "BETA 0.7 · FEEDBACK".
     expect(FEEDBACK.betaLink).toBe('Feedback');
     expect(lineSource).toContain('FEEDBACK.betaLink');

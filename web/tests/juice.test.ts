@@ -76,8 +76,9 @@ describe('effect budget per tier and intensity', () => {
     expect(s.shake).toBe(0);
     expect(m.shake).toBe(0);
     expect(sv.shake).toBe(2.5); // a shiver, not the 4-6px Big shake
-    expect(sv.hitStopMs).toBe(60);
-    expect(sv.anticipationMs).toBe(60);
+    // OWNER CHANGED THE VALUES (0.75, 2026-11-04: sharper in-game feel): Severe's stop and beat 60 -> 48 ms.
+    expect(sv.hitStopMs).toBe(48);
+    expect(sv.anticipationMs).toBe(48);
     expect(sv.thud && sv.vibrate !== null).toBe(true);
     expect(b.shake).toBeGreaterThan(sv.shake);
     expect(b.hitStopMs).toBeGreaterThanOrEqual(80);

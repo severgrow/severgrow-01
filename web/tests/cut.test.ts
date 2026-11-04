@@ -112,11 +112,14 @@ describe('the timeline limits', () => {
     }
   });
 
-  it('a 3-tile cut is Severe: short beat, 60ms stop, shiver and seam flash; a 2-tile cut stays quiet', () => {
+  // OWNER CHANGED THE VALUES (0.75, 2026-11-04: "Tighten all in-game animations ... shorter, crisper"):
+  // Severe's beat and stop 60 -> 48 ms, Big's beat 140 -> 112 ms (the pinned hit-stops follow PINNED).
+  it('a 3-tile cut is Severe: short beat, 48ms stop, shiver and seam flash; a 2-tile cut stays quiet', () => {
     const three = cutPlan(cut(3), NORMAL);
     expect(three.tier).toBe('severe');
-    expect(three.stages.find((s) => s.name === 'anticipation')!.dur).toBe(60);
-    expect(three.stages.find((s) => s.name === 'hitstop')!.dur).toBe(60);
+    expect(three.stages.find((s) => s.name === 'anticipation')!.dur).toBe(48);
+    expect(three.stages.find((s) => s.name === 'hitstop')!.dur).toBe(SEVERE_HITSTOP_MS);
+    expect(SEVERE_HITSTOP_MS).toBe(48);
     expect(three.shakePx).toBe(2.5);
     expect(three.zoom).toBeCloseTo(1.012, 4);
     expect(three.flash.ms).toBeGreaterThan(0);
@@ -133,10 +136,11 @@ describe('the timeline limits', () => {
     expect([two.shakePx, two.zoom]).toEqual([0, 1]);
   });
 
-  it('a 5-tile cut is unchanged: Big keeps its 140ms beat, 100ms stop, 4px shake and 1.02 zoom', () => {
+  it('a 5-tile cut: Big keeps its beat (112ms), its stop (80ms), 4px shake and 1.02 zoom', () => {
     const p = cutPlan(cut(5), NORMAL);
     expect(p.tier).toBe('big');
-    expect(p.stages.find((s) => s.name === 'anticipation')!.dur).toBe(140);
+    expect(p.stages.find((s) => s.name === 'anticipation')!.dur).toBe(112);
+    expect(HITSTOP_MS).toBe(80);
     expect(p.stages.find((s) => s.name === 'hitstop')!.dur).toBe(HITSTOP_MS);
     expect(p.shakePx).toBe(SHAKE_MAX_BIG);
     expect(p.zoom).toBeCloseTo(1.02, 4);
