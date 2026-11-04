@@ -252,13 +252,16 @@ try {
     const moved = (await screenOf(p, '0,0'))!;
     check(`[${tag}] the ground follows the finger`, moved.x - ground0.x > 60, `${(moved.x - ground0.x).toFixed(0)}px`);
 
-    // Nothing renders at rest while the planet fills the window.
-    const frames = s.frames;
-    await p.waitForTimeout(500);
+    // Nothing renders at rest while the planet fills the window. A slow software GPU may still be
+    // finishing the frame the drag asked for, so the count starts after a beat; from then on, across
+    // 600 ms, nothing at all may draw (a loop would draw dozens).
+    await p.waitForTimeout(300);
+    const frames = (await planet(p))!.frames;
+    await p.waitForTimeout(600);
     const rest = (await planet(p))!;
     // A wide window shows space round the planet even close in; then the slow slide is the only
     // loop, and it must stay slow. Otherwise nothing renders at all.
-    if (rest.spaceVisible) check(`[${tag}] at rest only the slow star slide runs`, rest.frames - frames <= 20, `${rest.frames - frames} frames in .5s`);
+    if (rest.spaceVisible) check(`[${tag}] at rest only the slow star slide runs`, rest.frames - frames <= 24, `${rest.frames - frames} frames in .6s`);
     else check(`[${tag}] no idle rendering while the ground fills the window`, rest.frames === frames, `frames ${frames}->${rest.frames}`);
 
     // THE WHEEL ZOOMS TOWARDS THE POINTER, like any map: the tile under it stays under it. (Out, so
@@ -296,10 +299,12 @@ try {
     await p.waitForTimeout(300);
     s = (await planet(p))!;
     check(`[${tag}] zoomed out, the whole planet sits in space`, s.spaceVisible && s.zoom < 1, `zoom ${s.zoom.toFixed(2)}, ${s.tilePx.toFixed(1)}px tiles`);
+    // Measured across 2 s: a big window on CI's software GPU draws a frame in ~400 ms, so one second
+    // could hold only two. Moving at all and never at full rate is what matters.
     const spaceFrames = s.frames;
-    await p.waitForTimeout(1000);
+    await p.waitForTimeout(2000);
     const slide = (await planet(p))!.frames - spaceFrames;
-    check(`[${tag}] the stars slide gently (a slow loop, never a full-rate one)`, slide >= 3 && slide <= 40, `${slide} frames in 1s`);
+    check(`[${tag}] the stars slide gently (a slow loop, never a full-rate one)`, slide >= 3 && slide <= 80, `${slide} frames in 2s`);
     await p.screenshot({ path: `${out}/planet-space-${tag}.png` });
 
     // A tap on tiles too small to hit flies in rather than guessing.
