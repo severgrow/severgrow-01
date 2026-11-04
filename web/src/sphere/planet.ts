@@ -470,18 +470,21 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       const disputes = [...(next.disputes ?? [])];
       const sig = `${next.me}|${next.growAnywhere ? 1 : 0}|${next.cells.length}|${next.claims.map((c) => `${c.cellId}:${c.ownerId}:${c.colour}`).join(',')}|${fog.length}|${disputes.join(',')}`;
       const index = next.selected ? map.cellOf.get(next.selected) ?? null : null;
-      if (sig !== signature) {
+      // A REFRESH THAT CHANGES NOTHING DRAWS NOTHING: Territory re-sends the same world on every
+      // poll, and that used to repaint the planet and re-pulse the selected tile each time.
+      const newGround = sig !== signature, newSelection = index !== selected;
+      if (newGround) {
         signature = sig;
         ground = groundOf(sphere, map, { ...next, fog, disputes });
         selected = index;
         renderer?.setGround(ground, selected, kinOf(selected));
-      } else if (index !== selected) {
+      } else if (newSelection) {
         selected = index;
         renderer?.setSelection(selected, kinOf(selected));
       }
-      if (index !== null && motion()) pulseUntil = performance.now() + 420;
+      if (newSelection && index !== null && motion()) pulseUntil = performance.now() + 420;
       if (!introduced && renderer) intro();
-      ask();
+      if (newGround || newSelection) ask();
     },
     /**
      * Behind the menu, or in the Territory window. Into the window: the opening flight from the

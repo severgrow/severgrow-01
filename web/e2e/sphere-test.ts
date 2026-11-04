@@ -58,7 +58,7 @@ const ready = (p: Page) => p.waitForFunction(() => (window as unknown as { __sev
  */
 const settled = (p: Page) => p.waitForFunction(() => {
   type S = { flying: boolean; spinning: boolean; q: number[]; zoom: number };
-  const w = window as unknown as { __severgrow: { planet: () => S | null }; __settle?: { key: string; since: number } };
+  const w = window as unknown as { __severgrow: { planet: () => S | null }; __settle?: { key: string; since: number } | undefined };
   const s = w.__severgrow.planet();
   if (!s || s.flying || s.spinning) { w.__settle = undefined; return false; }
   const key = `${s.q.map((v) => v.toFixed(6)).join(',')}|${s.zoom.toFixed(6)}`, now = performance.now();
