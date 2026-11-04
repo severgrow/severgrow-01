@@ -17,6 +17,24 @@ export const focal = (aspect: number, zoom: number) => .82 * Math.sqrt(EYE * EYE
 export const discRadius = (width: number, height: number, zoom: number) =>
   .82 * Math.min(1, width / height) * zoom * height / 2;
 
+/** A rectangle in CSS px, relative to the canvas's own top-left. */
+export type Frame = { x: number; y: number; width: number; height: number };
+/**
+ * ONE CANVAS, ANY FRAME (owner, 2026-11-04: "There is a jump of the planet as it's not exactly the same
+ * in menu and the planet ... they have to be in identical position"). The canvas never moves or
+ * resizes between the menu and the Territory window; the planet is drawn centred on, and sized to, a
+ * FRAME inside it (the whole screen behind the menu, the panel in the window). Moving the frame
+ * smoothly moves the planet smoothly; the same frame always draws the same pixels.
+ */
+export const projection = (view: { width: number; height: number }, frame: Frame, zoom: number) => {
+  const aspect = view.width / view.height;
+  // The frame's own focal length, rescaled to the canvas's NDC (which spans the canvas height).
+  const f = focal(frame.width / frame.height, zoom) * (frame.height / view.height);
+  const ox = ((frame.x + frame.width / 2) / view.width) * 2 - 1;
+  const oy = 1 - ((frame.y + frame.height / 2) / view.height) * 2;
+  return { aspect, f, ox, oy, radius: discRadius(frame.width, frame.height, zoom), cx: frame.x + frame.width / 2, cy: frame.y + frame.height / 2 };
+};
+
 const SPACE_VERTEX = `
 attribute vec2 aCorner;
 void main(){ gl_Position = vec4(aCorner, 0.0, 1.0); }`;
@@ -50,14 +68,14 @@ void main(){
 
 const GROUND_VERTEX = `
 attribute vec4 aPosition; attribute vec4 aLook;
-uniform vec4 uRotation; uniform float uAspect; uniform float uFocal;
+uniform vec4 uRotation; uniform float uAspect; uniform float uFocal; uniform vec2 uShift;
 varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed;
 void main(){
   vec3 q = aPosition.xyz;
   vec3 t = 2.0 * cross(uRotation.xyz, q);
   vec3 p = q + uRotation.w * t + cross(uRotation.xyz, t);
   float z = p.z - ${EYE.toFixed(1)};
-  gl_Position = vec4(p.x * uFocal / uAspect, p.y * uFocal, 0.0, -z);
+  gl_Position = vec4(p.x * uFocal / uAspect - uShift.x * z, p.y * uFocal - uShift.y * z, 0.0, -z);
   vNormal = p; vColour = aLook.rgb; vFlags = aLook.a * 255.0;
   vEdge = fract(aPosition.w); vSeed = floor(aPosition.w) / 4096.0;
 }`;
@@ -157,7 +175,7 @@ export class PlanetRenderer {
     this.space = this.program(SPACE_VERTEX, SPACE_FRAGMENT);
     this.ground = this.program(GROUND_VERTEX, groundFragment(this.derivatives));
     for (const name of ['uSize', 'uCentre', 'uRadius', 'uDrift', 'uScale']) this.u[`space.${name}`] = gl.getUniformLocation(this.space, name);
-    for (const name of ['uRotation', 'uAspect', 'uFocal', 'uPulse', 'uPixel', 'uDpr']) this.u[name] = gl.getUniformLocation(this.ground, name);
+    for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel', 'uDpr']) this.u[name] = gl.getUniformLocation(this.ground, name);
     this.triangle = this.buffer(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]));
     // Fans: centre, corner i, corner i+1 for every side of every tile. A cell's `w` packs its seed
     // (integer part) with the distance-to-side ramp (fraction: 0 at the centre, .999 on a side).
@@ -258,17 +276,18 @@ export class PlanetRenderer {
     this.canvas.width = Math.max(1, Math.round(width * dpr));
     this.canvas.height = Math.max(1, Math.round(height * dpr));
   }
-  render(q: Quat, zoom: number, pulse: number, drift: readonly [number, number]) {
+  render(q: Quat, zoom: number, pulse: number, drift: readonly [number, number], frame?: Frame) {
     const gl = this.gl;
     if (this.disposed || gl.isContextLost()) return;
     this.frames++;
-    const w = this.canvas.width, h = this.canvas.height, aspect = w / h;
+    const w = this.canvas.width, h = this.canvas.height;
+    const at = projection({ width: this.cssWidth, height: this.cssHeight }, frame ?? { x: 0, y: 0, width: this.cssWidth, height: this.cssHeight }, zoom);
     gl.viewport(0, 0, w, h);
     // 1. Space.
     gl.useProgram(this.space);
     gl.uniform2f(this.u['space.uSize']!, w, h);
-    gl.uniform2f(this.u['space.uCentre']!, w / 2, h / 2);
-    gl.uniform1f(this.u['space.uRadius']!, discRadius(w, h, zoom));
+    gl.uniform2f(this.u['space.uCentre']!, at.cx * this.pixel, h - at.cy * this.pixel);
+    gl.uniform1f(this.u['space.uRadius']!, at.radius * this.pixel);
     gl.uniform2f(this.u['space.uDrift']!, drift[0] * this.pixel, drift[1] * this.pixel);
     gl.uniform1f(this.u['space.uScale']!, this.pixel);
     const corner = gl.getAttribLocation(this.space, 'aCorner');
@@ -282,12 +301,13 @@ export class PlanetRenderer {
     // 2. Ground.
     gl.useProgram(this.ground);
     gl.uniform4f(this.u.uRotation!, q[0], q[1], q[2], q[3]);
-    gl.uniform1f(this.u.uAspect!, aspect);
-    gl.uniform1f(this.u.uFocal!, focal(aspect, zoom));
+    gl.uniform1f(this.u.uAspect!, at.aspect);
+    gl.uniform1f(this.u.uFocal!, at.f);
+    gl.uniform2f(this.u.uShift!, at.ox, at.oy);
     gl.uniform1f(this.u.uPulse!, pulse);
     gl.uniform1f(this.u.uDpr!, this.pixel);
     // Without derivatives, one pixel of the side ramp is estimated from the tile's size on screen.
-    gl.uniform1f(this.u.uPixel!, 1 / Math.max(4, discRadius(this.cssWidth, this.cssHeight, zoom) * this.pixel * (Math.PI / 5) / this.sphere.frequency));
+    gl.uniform1f(this.u.uPixel!, 1 / Math.max(4, at.radius * this.pixel * (Math.PI / 5) / this.sphere.frequency));
     const position = gl.getAttribLocation(this.ground, 'aPosition'), look = gl.getAttribLocation(this.ground, 'aLook');
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positions);
     gl.enableVertexAttribArray(position);

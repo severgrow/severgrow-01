@@ -14,20 +14,23 @@ promote. The locked futa04 line keeps the flat Territory.
 
 ## Behind the menu, and the journey
 
-The planet is the main menu's backdrop: whole, dim (46%), untouchable, at the exact pose the opening
-flight starts from. Opening THE PLANET continues that flight down to your land while the frame
-shrinks to the window; Back puts the menu up at once and the planet flies out behind it (0.9 s). One
-canvas serves both and is freed when the menu goes away (a game starts). Flights advance by painted
-frame time (at most 250 ms a frame), so a busy main thread pauses them instead of skipping them.
+The planet is the main menu's backdrop: whole, dim (46%), untouchable, turning slowly on its own
+(one turn in 160 s). ONE canvas covers the screen in both places and never moves or resizes; the
+planet is drawn into a FRAME inside it (`projection`, renderer.ts): the whole screen behind the menu,
+the panel in the window. So the window's first frame is the menu's last, pixel for pixel (owner:
+"There is a jump of the planet ... they have to be in identical position"; `sphere-test` checks pose,
+zoom, light and frame across the tap). Opening flies from wherever the spin left it to the middle of
+your largest connected holding (`homeTile`). On the way:
 
-## Why the first sphere's hexes looked wrong, and the cure
+1. the frame closes in on the panel like an iris (done by ~60% of the flight), with the window's
+   rounded crop;
+2. the light rises from the menu's 46% to full over the flight (the flat map's own fade);
+3. the stars stream past mid-flight and settle as it lands.
 
-The first version split each icosahedron face into a flat grid pushed onto the sphere, and put
-every hex corner at the circumcentre of three unequal cells. Measured: median hex side ratio 1.124,
-worst 1.634, hex areas 1.60x apart. Now (`web/src/sphere/geometry.ts`): frequency 24 (5,762 tiles),
-40 rounds of equal-length springs between neighbouring centres, corners at centroids. Median 1.054,
-worst 1.175 (right beside a pentagon), two neighbours never more than 1.090x apart in area. The
-twelve pentagons are the twelve icosahedron corners: black, uninhabitable, never selectable.
+Back puts the menu up at once and the same journey runs in reverse behind it (0.9 s). Flights and the
+frame advance by painted frame time (at most 250 ms a frame), so a busy main thread pauses them
+instead of skipping them. Freed when the menu goes away (a game starts). Reduced motion: no spin, no
+flights, no stream; the planet is simply in place.
 
 ## Grow anywhere (server + page, 2026-11-04)
 

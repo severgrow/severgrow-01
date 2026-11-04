@@ -7,25 +7,26 @@
 // Territory's own `select`. The heavy geometry and WebGL load lazily, the first time the window opens.
 import type { Planet, PlanetInput, PlanetMode } from '../sphere/planet.js';
 import { PLANET } from '../../../src/strings.js';
+import { worldNeighbours } from '../../../server/src/world.js';
 
 const CSS = `
 .world-grid.planet-on > .world-map-svg { visibility: hidden !important; pointer-events: none !important; }
 /* The flat map's faint survey contours read as a stray hair over a planet in space (owner,
    2026-11-04: "this very thin circle like thing ... like a hair - is that intentional?"). */
 .online-world.planet-screen::before { display: none; }
+/* ONE SHEET OVER THE WHOLE SCREEN, behind the menu and in the window alike (owner, 2026-11-04: "There is
+   a jump of the planet ... they have to be in identical position"). The canvas never moves or resizes
+   between the two; the planet module crops it to the window's panel and centres the planet there. */
 .world-grid > .planet-canvas {
-  position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; display: block;
-  border-radius: inherit; touch-action: none; cursor: grab; outline: 0; background: #07090a;
+  position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; z-index: 0; display: block;
+  touch-action: none; cursor: grab; outline: 0; background: #07090a;
 }
 .world-grid > .planet-canvas:active { cursor: grabbing; }
 /* BEHIND THE MENU the planet is the backdrop (owner, 2026-11-04): whole, dim, untouchable. The
    menu's living backdrop already stretches this grid over the whole screen. */
 #online-world-screen[data-living-territory="menu"] .world-grid > .planet-canvas {
-  visibility: visible; opacity: .46; pointer-events: none; background: transparent;
+  visibility: visible; pointer-events: none; background: transparent;
 }
-.world-grid > .planet-canvas { transition: opacity 700ms cubic-bezier(.22, 1, .36, 1); }
-html.reduce-motion .world-grid > .planet-canvas { transition: none; }
-@media (prefers-reduced-motion: reduce) { .world-grid > .planet-canvas { transition: none; } }
 .world-grid > .planet-canvas:focus-visible { outline: 2px solid #e8ddc5; outline-offset: -3px; }
 .world-grid > .planet-fallback {
   position: absolute; inset: 0; z-index: 0; margin: 0; display: flex; align-items: center; justify-content: center;
@@ -34,22 +35,35 @@ html.reduce-motion .world-grid > .planet-canvas { transition: none; }
 .world-grid > .planet-fallback[hidden], .world-grid > .planet-canvas[hidden] { display: none; }
 `;
 
-type Claim = { cellId: string; ownerId: string; colour: string };
+type Claim = { cellId: string; ownerId: string; colour: string; claimedAt?: number };
 const axial = (id: string) => { const [q, r] = id.split(',').map(Number); return { q: q!, r: r! }; };
 
 /**
- * The tile to open on: the player's own tile nearest the middle of their land, or the world's
- * centre for a player with no land yet.
+ * The tile to open on (owner, 2026-11-04: "always smoothly takes you to your biggest territory"): the
+ * middle of the player's LARGEST connected holding, by the planet's own adjacency. Ties go to the
+ * holding with the oldest tile, so the answer never flips between visits. A player with no land
+ * opens on the world's centre.
  */
 export const homeTile = (claims: readonly Claim[], me: string | null): string => {
   const mine = claims.filter((claim) => claim.ownerId === me);
   if (!mine.length) return '0,0';
-  const points = mine.map((claim) => axial(claim.cellId));
+  const own = new Map(mine.map((claim) => [claim.cellId, claim]));
+  const left = new Set(own.keys());
+  let best: string[] = [], bestOldest = Infinity;
+  for (const claim of mine) {
+    if (!left.delete(claim.cellId)) continue;
+    const group = [claim.cellId];
+    for (let i = 0; i < group.length; i++) for (const id of worldNeighbours(group[i]!)) if (left.delete(id)) group.push(id);
+    const oldest = Math.min(...group.map((id) => (own.get(id) as { claimedAt?: number } | undefined)?.claimedAt ?? Infinity));
+    if (group.length > best.length || (group.length === best.length && oldest < bestOldest)) { best = group; bestOldest = oldest; }
+  }
+  const points = best.map(axial);
   const q = points.reduce((sum, p) => sum + p.q, 0) / points.length, r = points.reduce((sum, p) => sum + p.r, 0) / points.length;
   const distance = (p: { q: number; r: number }) => (Math.abs(p.q - q) + Math.abs(p.r - r) + Math.abs(p.q + p.r - q - r)) / 2;
-  let best = mine[0]!, bestDistance = Infinity;
-  mine.forEach((claim, i) => { const d = distance(points[i]!); if (d < bestDistance) { best = claim; bestDistance = d; } });
-  return best.cellId;
+  let home = best[0]!, near = Infinity;
+  // Equally near tiles (a two-tile holding, say) are ordered by id, so the list order never decides.
+  best.forEach((id, i) => { const d = distance(points[i]!); if (d < near - 1e-9 || (Math.abs(d - near) <= 1e-9 && id < home)) { home = id; near = d; } });
+  return home;
 };
 
 let current: Planet | null = null;
@@ -73,7 +87,7 @@ export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | 
   }
   let module: typeof import('../sphere/planet.js');
   try { module = await import('../sphere/planet.js'); } catch { return null; }
-  const planet = module.mountPlanet(grid, { onTile, label: PLANET.controls, unavailable: PLANET.unavailable, mode });
+  const planet = module.mountPlanet(grid, { onTile, label: PLANET.controls, unavailable: PLANET.unavailable, mode, panel: () => grid.getBoundingClientRect() });
   grid.classList.add('planet-on');
   const screen = grid.closest('.online-world');
   screen?.classList.add('planet-screen');

@@ -96,7 +96,29 @@ try {
     await p.goto(fixture.origin + '/test/');
     await ready(p);
     check(`[${tag}] the menu names it THE PLANET`, /THE PLANET/.test((await p.locator('#menu-world-label').textContent()) ?? ''));
-    await openPlanet(p);
+    // NO JUMP (owner, 2026-11-04: "There is a jump of the planet ... they have to be in identical
+    // position"). The first frame after the tap continues the menu's last one: same pose, zoom and
+    // light, and the frame has only begun to close in.
+    type Pose = { ready: boolean; q: number[]; zoom: number; light: number; frame: { x: number; y: number; width: number; height: number } } | null;
+    const pose = (): Promise<Pose> => p.evaluate(() => {
+      const s = (window as unknown as { __severgrow: { planet: () => Pose } }).__severgrow.planet();
+      return s && { ready: s.ready, q: s.q, zoom: s.zoom, light: s.light, frame: s.frame };
+    });
+    await p.waitForFunction(() => !!(window as unknown as { __severgrow: { planet: () => { ready: boolean } | null } }).__severgrow.planet()?.ready, undefined, { timeout: 8000 }).catch(() => undefined);
+    const lastMenu = await pose();
+    if (lastMenu?.ready) {
+      await p.locator('#menu-world').click();
+      const firstWindow = (await pose())!;
+      const dot = Math.abs(lastMenu.q.reduce((sum, x, i) => sum + x * firstWindow.q[i]!, 0));
+      check(`[${tag}] no jump: the window's first frame is the menu's last`,
+        dot > .9995 && Math.abs(firstWindow.zoom / lastMenu.zoom - 1) < .02 && Math.abs(firstWindow.light - lastMenu.light) < .06 &&
+        Math.abs(firstWindow.frame.x - lastMenu.frame.x) < 24 && Math.abs(firstWindow.frame.y - lastMenu.frame.y) < 24,
+        `turn ${dot.toFixed(5)}, zoom ${lastMenu.zoom.toFixed(3)}->${firstWindow.zoom.toFixed(3)}, light ${lastMenu.light.toFixed(2)}->${firstWindow.light.toFixed(2)}, frame y ${lastMenu.frame.y.toFixed(1)}->${firstWindow.frame.y.toFixed(1)}`);
+      await p.waitForFunction(() => {
+        const s = (window as unknown as { __severgrow: { planet: () => { ready: boolean; fallback: boolean } | null } }).__severgrow.planet();
+        return !!s && (s.ready || s.fallback);
+      });
+    } else await openPlanet(p);
     const first = (await planet(p))!;
     if (!first.ready) {
       check(`[${tag}] no WebGL here: the window shows the readable fallback`, first.fallback && await p.locator('.planet-fallback').isVisible());
@@ -111,8 +133,20 @@ try {
     check(`[${tag}] a 5,762-tile planet, opening at a tappable tile size`, s.cells === 5762 && s.tilePx >= 40 && s.tilePx <= 48, `${s.tilePx.toFixed(1)}px`);
     const grid = (await p.locator('#online-world-grid').boundingBox())!;
     const canvas = (await p.locator('.planet-canvas').boundingBox())!;
-    check(`[${tag}] the planet fills the Territory window exactly`,
-      Math.abs(grid.x - canvas.x) < 1 && Math.abs(grid.y - canvas.y) < 1 && Math.abs(grid.width - canvas.width) < 1 && Math.abs(grid.height - canvas.height) < 1);
+    // ONE SHEET, CROPPED (owner, 2026-11-04: the menu and the window must be identical, no jump): the
+    // canvas covers the screen and never moves; the planet's frame and its crop are the panel exactly.
+    const sheet = await p.evaluate(() => {
+      const s = (window as unknown as { __severgrow: { planet: () => { frame: { x: number; y: number; width: number; height: number } } } }).__severgrow.planet();
+      return { frame: s.frame, clip: (document.querySelector('.planet-canvas') as HTMLElement).style.clipPath };
+    });
+    // CSS shortens inset() like margin: 3 values mean top, left/right, bottom.
+    const box = (sheet.clip.replace(/round.*$/, '').match(/-?[\d.]+px/g) ?? []).map(parseFloat);
+    const insets = box.length === 4 ? box : box.length === 3 ? [box[0]!, box[1]!, box[2]!, box[1]!] : box.length === 2 ? [box[0]!, box[1]!, box[0]!, box[1]!] : [box[0]!, box[0]!, box[0]!, box[0]!];
+    check(`[${tag}] the planet is framed and cropped to the Territory window exactly`,
+      Math.abs(sheet.frame.x - grid.x) < 1 && Math.abs(sheet.frame.y - grid.y) < 1 && Math.abs(sheet.frame.width - grid.width) < 1 && Math.abs(sheet.frame.height - grid.height) < 1 &&
+      insets.length >= 4 && Math.abs(insets[0]! - grid.y) < 1 && Math.abs(insets[3]! - grid.x) < 1 &&
+      Math.abs(canvas.width - width!) < 1 && Math.abs(canvas.height - height!) < 1,
+      `${JSON.stringify(sheet.frame)} vs ${JSON.stringify(grid)}; ${sheet.clip}`);
     check(`[${tag}] the flat map is hidden underneath, the MENU key is on top`,
       await p.locator('.world-map-svg').evaluate((el) => getComputedStyle(el).visibility === 'hidden') &&
       await p.locator('#online-world-menu').isVisible());
@@ -130,7 +164,7 @@ try {
     await p.screenshot({ path: `${out}/planet-selected-${tag}.png` });
     // The rival's disputed tile is selectable too.
     const rivalAt = await screenOf(p, '4,0');
-    if (rivalAt && rivalAt.x > canvas.x + 30 && rivalAt.x < canvas.x + canvas.width - 30) {
+    if (rivalAt && rivalAt.x > grid.x + 30 && rivalAt.x < grid.x + grid.width - 30) {
       await p.mouse.click(rivalAt.x, rivalAt.y);
       await p.waitForTimeout(150);
       check(`[${tag}] a rival's disputed tile selects`, (await planet(p))!.selected === '4,0');
@@ -139,7 +173,7 @@ try {
     // A drag turns the planet and never selects.
     const before = (await planet(p))!;
     const ground0 = (await screenOf(p, '0,0'))!;
-    const cx = canvas.x + canvas.width / 2, cy = canvas.y + canvas.height / 2;
+    const cx = grid.x + grid.width / 2, cy = grid.y + grid.height / 2;
     await p.mouse.move(cx - 60, cy);
     await p.mouse.down();
     for (let i = 1; i <= 10; i++) { await p.mouse.move(cx - 60 + i * 12, cy + i * 4); await p.waitForTimeout(16); }
@@ -166,7 +200,7 @@ try {
     await p.mouse.move(cx, cy);
     if (ios) {
       // Mobile WebKit has no wheel: zoom out with a real two-finger pinch (trusted touch events).
-      await p.touchscreen.tap(canvas.x + 20, canvas.y + canvas.height - 20);
+      await p.touchscreen.tap(grid.x + 20, grid.y + grid.height - 20);
       const touch = (type: string, points: { x: number; y: number; id: number }[]) =>
         webkitTouch!.session.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((t) => ({ ...t, x: Math.round(t.x), y: Math.round(t.y) })) });
       await touch('touchStart', [{ x: cx - 130, y: cy, id: 1 }]); await p.waitForTimeout(16);
@@ -243,7 +277,7 @@ try {
     await openPlanet(p);
     if ((await planet(p))!.ready) {
       await settled(p);
-      const box = (await p.locator('.planet-canvas').boundingBox())!;
+      const box = (await p.locator('#online-world-grid').boundingBox())!;
       const x = box.x + box.width / 2, y = box.y + box.height / 2;
       await p.touchscreen.tap(box.x + 20, box.y + box.height - 20);
       const touch = (type: string, points: { x: number; y: number; id: number }[]) =>
@@ -270,7 +304,7 @@ try {
     if (s.ready) {
       await settled(p);
       check('[reduced motion] opens straight on my land, no fly-in', !(await planet(p))!.flying && (await planet(p))!.tilePx >= 40);
-      const box = (await p.locator('.planet-canvas').boundingBox())!;
+      const box = (await p.locator('#online-world-grid').boundingBox())!;
       await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       for (let i = 0; i < 10; i++) await p.mouse.wheel(0, 500);
       await p.waitForTimeout(300);
