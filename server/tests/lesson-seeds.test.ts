@@ -4,8 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { apply, viewFor } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
-import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
-import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
+import { botSeed } from '../../src/bots/levels.js';
+import { CURRENT_BOT_VERSION, chooseBotAction } from '../../src/bots/versions.js';
 import { FINAL_LESSON, finalLessonLegacyOpening, finalLessonOpening } from '../../web/src/lessons/final.js';
 import { LESSONS, lessonOpening } from '../../web/src/lessons/lessons.js';
 import { BETA_PAYOUT_MULTIPLIER, LESSON_SEED_REWARD } from '../src/seeds/config.js';
@@ -23,7 +23,7 @@ const genuineWin = (): Action[] => {
     while (state.phase !== 'GAME_OVER' && actions.length < 400) {
       const actor = state.actor;
       const botLevel = actor === 0 ? 9 : FINAL_LESSON.botLevel;
-      const action = chooseLevelAction(viewFor(state, actor), botLevel,
+      const action = chooseBotAction(viewFor(state, actor), botLevel,
         botSeed(state.seed ^ (actor === 0 ? salt : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
       actions.push(action);
       state = apply(state, action);
@@ -53,7 +53,7 @@ describe('the final lesson pays 100 Seeds once', () => {
       const actions: Action[] = [];
       while (state.phase !== 'GAME_OVER' && actions.length < 400) {
         const actor = state.actor, botLevel = actor === 0 ? 9 : FINAL_LESSON.botLevel;
-        const action = chooseLevelAction(viewFor(state, actor), botLevel,
+        const action = chooseBotAction(viewFor(state, actor), botLevel,
           botSeed(state.seed ^ (actor === 0 ? salt : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
         actions.push(action);
         state = apply(state, action);

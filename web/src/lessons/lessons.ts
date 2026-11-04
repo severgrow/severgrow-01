@@ -254,7 +254,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     goals: [],
     newActions: [],
     // The campaign level's own bot (4); `web/tests/lesson-9-free.test.ts` pins the two together.
-    opponent: { bot: 4, keepsPlaying: true },
+    opponent: { bot: 4 },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'PLAY A FULL GAME', icon: '↦' },
   },
   {

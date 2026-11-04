@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { campaignDeal, campaignOpening, CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { apply, viewFor } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
-import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
-import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
+import { botSeed } from '../../src/bots/levels.js';
+import { CURRENT_BOT_VERSION, chooseBotAction } from '../../src/bots/versions.js';
 import { verifyCampaignProof, verifyOfflineMatch } from '../src/seeds/verify.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
 import { BETA_PAYOUT_MULTIPLIER, campaignSeedReward } from '../src/seeds/config.js';
@@ -17,7 +17,7 @@ const genuineWin = (level = CAMPAIGN_LEVELS[0]!): Action[] => {
   while (state.phase !== 'GAME_OVER' && actions.length < 300) {
     const actor = state.actor;
     const botLevel = actor === 0 ? 9 : level.botLevel;
-    const action = chooseLevelAction(viewFor(state, actor), botLevel,
+    const action = chooseBotAction(viewFor(state, actor), botLevel,
       botSeed(state.seed ^ (actor === 0 ? 0x9e3779b9 : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
     actions.push(action);
     state = apply(state, action);
@@ -72,7 +72,7 @@ describe('level 33 (chapter IV, the owner\'s level) pays its 20 Seeds', () => {
       while (state.phase !== 'GAME_OVER' && actions.length < 400) {
         const actor = state.actor;
         const botLevel = actor === 0 ? 9 : thirtyThree.botLevel;
-        const action = chooseLevelAction(viewFor(state, actor), botLevel,
+        const action = chooseBotAction(viewFor(state, actor), botLevel,
           botSeed(state.seed ^ (actor === 0 ? salt : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
         actions.push(action);
         state = apply(state, action);
@@ -124,7 +124,7 @@ describe('random campaign deals from level 11 (owner, 2026-11-01)', () => {
       while (state.phase !== 'GAME_OVER' && actions.length < 400) {
         const actor = state.actor;
         const botLevel = actor === 0 ? 9 : eleven.botLevel;
-        const action = chooseLevelAction(viewFor(state, actor), botLevel,
+        const action = chooseBotAction(viewFor(state, actor), botLevel,
           botSeed(state.seed ^ (actor === 0 ? salt : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
         actions.push(action);
         state = apply(state, action);
@@ -189,6 +189,13 @@ describe('random campaign deals from level 11 (owner, 2026-11-01)', () => {
 });
 
 describe('the server announces random deals under the word the page looks for', () => {
+  it('SERVER_FEATURES lists every bot version it verifies, so a page knows when to send those proofs', async () => {
+    const { SERVER_FEATURES } = await import('../src/fetch-app.js');
+    const { BOT_VERSIONS } = await import('../../src/bots/versions.js');
+    for (const version of Object.keys(BOT_VERSIONS)) expect(SERVER_FEATURES).toContain(version);
+    expect(SERVER_FEATURES).toContain(CURRENT_BOT_VERSION);
+  });
+
   it('SERVER_FEATURES spells RANDOM_DEALS_FEATURE exactly', async () => {
     const { SERVER_FEATURES } = await import('../src/fetch-app.js');
     const { RANDOM_DEALS_FEATURE } = await import('../../src/campaign/index.js');

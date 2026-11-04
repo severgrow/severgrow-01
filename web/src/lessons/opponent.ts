@@ -19,8 +19,8 @@
 //     its own side, so every turn visibly answers yours;
 //   * `blooms`: where the lesson has taught Bloom (level 5 on), a turn holding one is a turn of two
 //     moves, the grow AND a Bloom, on open ground only (never your tiles, never a key hex).
-// Level 9's real bot did nothing on 39% of its turns (the campaign ladder's deliberate "lazy" stop);
-// with `keepsPlaying` such a turn becomes a modest move. See `lessonOpponentAction`.
+// Level 9's real bot did nothing on 39% of its turns: that is fixed for every level in the bots
+// themselves (src/bots/keeps-growing.ts, bots-v0.11).
 import { apply, coordKey, hexDistance, homeCoord, isStrangled, legalActions, neighbors, parseKey, scores, viewFor } from '../../../src/engine/index.js';
 import type { Action, Card, Event, State } from '../../../src/engine/index.js';
 import { botSeed } from '../../../src/bots/levels.js';
@@ -46,7 +46,7 @@ export type OpponentScript = {
 };
 
 /** Who plays against you in a lesson: a script, or a real bot level (levels 9 and 10). */
-export type LessonOpponent = { script: OpponentScript } | { bot: Level; keepsPlaying?: boolean };
+export type LessonOpponent = { script: OpponentScript } | { bot: Level };
 
 const OPP = 1 as const;
 const YOU = 0 as const;
@@ -130,7 +130,6 @@ export const scriptedOpponentAction = (s: State, script: OpponentScript = {}): A
   return legal[0]!;
 };
 
-const BOARD_EVENTS = new Set(['Sprout', 'Strengthen', 'Overgrow', 'FruitCard', 'Bloom', 'MegaBomb']);
 /**
  * Its events this turn: everything since YOUR last throw (a turn at the end of the deck has no draw,
  * so the draw cannot mark where a turn starts).
@@ -141,8 +140,6 @@ const thisTurn = (s: State): readonly Event[] => {
   while (i > 0 && !(h[i - 1]!.t === 'Discard' && 'player' in h[i - 1]! && (h[i - 1] as { player: number }).player === YOU)) i--;
   return h.slice(i);
 };
-/** Has it changed the board this turn? */
-const movedThisTurn = (s: State): boolean => thisTurn(s).some((e) => BOARD_EVENTS.has(e.t) && 'player' in e && e.player === OPP);
 /** Has it played a Bloom this turn? (One Bloom a turn: a second move, not a flood.) */
 const bloomedThisTurn = (s: State): boolean => thisTurn(s).some((e) => e.t === 'Bloom' && e.player === OPP);
 
@@ -169,43 +166,14 @@ const gentleBloom = (s: State, legal: readonly Action[], script: OpponentScript)
 };
 
 /**
- * THE MOST MODEST REAL MOVE: strengthen its own weakest tile, at the back if it can, with its lowest
- * card that can (a move you see, worth no extra point), else the gentle script's grow. Never a move that surrounds your
- * home. Measured on level 9 (120 games each against bot levels 2, 3 and 5 standing in for you): a
- * full move instead of the lazy stop cut your wins from 55 to 24 (level 3); this keeps them level.
- */
-const modestMove = (s: State): Action | null => {
-  const legal = legalActions(viewFor(s, OPP));
-  const hand = s.hands[OPP];
-  const rank = (a: Extract<Action, { t: 'Sprout' }>) => hand.find((c) => c.id === a.card)?.rank ?? 99;
-  const front = (a: Extract<Action, { t: 'Sprout' }>) => neighbors(a.coord, s.config.boardRadius).some((n) => s.board[coordKey(n)]?.owner === YOU) ? 1 : 0;
-  const strengthen = legal.filter((a): a is Extract<Action, { t: 'Sprout' }> => a.t === 'Sprout' && s.board[coordKey(a.coord)]?.owner === OPP)
-    .filter((a) => safe(s, a))
-    // A tile at the back first: one beside your land would only get harder for you to take.
-    .sort((a, b) => front(a) - front(b) || (s.board[coordKey(a.coord)]!.strength - s.board[coordKey(b.coord)]!.strength) || rank(a) - rank(b) || coordKey(a.coord).localeCompare(coordKey(b.coord)))[0];
-  if (strengthen) return strengthen;
-  const grow = scriptedOpponentAction(s, {});
-  return grow && grow.t !== 'EndAct' ? grow : null;
-};
-
-/**
- * THE LESSON'S OPPONENT, one move. A script plays its script; a real bot plays its level. With
- * `keepsPlaying` (level 9) the bot plays its level exactly, except a turn it would end having done
- * nothing (the ladder's deliberate "lazy" stop, 39% of its turns): there it makes a modest move.
- * Level 9 pays no Seeds, so nothing replays it; level 10's Seeds proof is replayed against the real
- * level bot, so level 10 never sets it.
+ * THE LESSON'S OPPONENT, one move. A script plays its script; a real bot plays its level.  The bot is the
+ * game's current version (bots-v0.11: a turn never ends without its grow), the very one a level 10
+ * Seeds proof is replayed against.
  */
 export const lessonOpponentAction = (lesson: { opponent: LessonOpponent }, s: State): Action => {
   const o = lesson.opponent;
   if ('script' in o) return scriptedOpponentAction(s, o.script) ?? legalActions(viewFor(s, OPP))[0]!;
   const seed = botSeed(s.seed, o.bot, s.turnNumber, s.history?.length ?? 0);
-  if (o.keepsPlaying) {
-    const a = botFor(CURRENT_BOT_VERSION)!(viewFor(s, OPP), o.bot, seed);
-    // Where its level would end a turn it has not moved in, it makes the most modest real move
-    // instead (see `modestMove`): you always see it play, and the level stays as hard as it was.
-    if (a.t !== 'EndAct' || movedThisTurn(s)) return a;
-    return modestMove(s) ?? a;
-  }
   return botFor(CURRENT_BOT_VERSION)!(viewFor(s, OPP), o.bot, seed);
 };
 

@@ -1,5 +1,5 @@
 import type { Action } from '../../../src/engine/index.js';
-import { CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
+import { BOT_VERSIONS, CURRENT_BOT_VERSION, PREVIOUS_BOT_VERSION } from '../../../src/bots/versions.js';
 import { DuelError } from '../../../server/src/client.js';
 import type { DuelClient, KeyValue } from '../../../server/src/client.js';
 import type { RewardResult } from '../../../server/src/seeds/types.js';
@@ -217,11 +217,28 @@ export const flushSeedProofs = (
      * entry withhold every first clear queued behind it (owner report, 2026-10-25: level 33).
      */
     let transient = 0;
+    // A NEWER BOT WAITS FOR A SERVER THAT KNOWS IT (bots-v0.11, 2026-11-04). A server verifies a
+    // replay by replaying the bot of the proof's version; one not yet redeployed would refuse a proof
+    // against a newer bot with a final 400, and the Seeds would be gone. So such a proof is sent only
+    // once the server lists that version in its health `features`; until then it stays queued.
+    let features: Promise<readonly string[]> | null = null;
+    const serverKnows = async (version: string): Promise<boolean> => {
+      if (version === PREVIOUS_BOT_VERSION || !Object.hasOwn(BOT_VERSIONS, version)) return true;
+      features ??= (async () => {
+        try {
+          const ask = client.serverFeatures();
+          const timeout = new Promise<readonly string[]>((resolve) => setTimeout(() => resolve([]), Math.min(timeoutMs, 5_000)));
+          return await Promise.race([ask, timeout]);
+        } catch { return []; }
+      })();
+      return (await features).includes(version);
+    };
     for (;;) {
       const next = read(storage).find((proof) => !attempted.has(JSON.stringify(proof)));
       if (!next) break;
       const sent = JSON.stringify(next);
       attempted.add(sent);
+      if (!(await serverKnows(next.botVersion))) continue;
       const key = proofKey(next);
       try {
         const reward = await submitWithDeadline(client, token, next, timeoutMs);

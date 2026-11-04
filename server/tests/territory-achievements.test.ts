@@ -25,8 +25,8 @@ import type { PlayerRecord, Storage } from '../src/storage/types.js';
 import { campaignOpening, CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { apply, viewFor, DEFAULT_CONFIG } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
-import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
-import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
+import { botSeed } from '../../src/bots/levels.js';
+import { CURRENT_BOT_VERSION, chooseBotAction } from '../../src/bots/versions.js';
 
 const START = Date.UTC(2026, 9, 30, 12);
 const player = (id: string): PlayerRecord => ({ id, kind: 'guest', displayName: id, createdAt: START, upgradedAt: null });
@@ -259,7 +259,7 @@ const genuineWin = (level = CAMPAIGN_LEVELS[0]!): Action[] => {
   while (state.phase !== 'GAME_OVER' && actions.length < 300) {
     const actor = state.actor;
     const botLevel = actor === 0 ? 9 : level.botLevel;
-    const action = chooseLevelAction(viewFor(state, actor), botLevel,
+    const action = chooseBotAction(viewFor(state, actor), botLevel,
       botSeed(state.seed ^ (actor === 0 ? 0x9e3779b9 : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
     actions.push(action);
     state = apply(state, action);

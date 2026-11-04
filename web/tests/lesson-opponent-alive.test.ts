@@ -5,11 +5,12 @@
 //
 // Measured before the change (casual player, 200 games a level): levels 2-8 grew exactly one tile
 // every turn and never more; level 9's real bot (level 4) did NOTHING on 39% of its turns, a
-// deliberate "laziness" dial tuned for the campaign ladder.
+// deliberate "laziness" dial tuned for the campaign ladder. Owner, later the same day: "Remove the
+// skipping growth in all levels really": that fix lives in the bots (tests/bots/keeps-growing.test.ts).
 import { describe, expect, it } from 'vitest';
 import { apply, coordKey, legalActions, mulberry32, neighbors, scores, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
-import { LEVEL_CONFIGS } from '../../src/bots/levels.js';
+import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { LESSONS, lessonFor, lessonLegal, lessonOpening, suggestMove } from '../src/lessons/lessons.js';
 import type { Lesson } from '../src/lessons/lessons.js';
 import { lessonOpponentAction } from '../src/lessons/opponent.js';
@@ -65,16 +66,10 @@ describe('the opponent always takes its turn', () => {
     expect(turns).toBeGreaterThan(200);
   });
 
-  it('level 9 keeps its own bot, only without the lazy turns; the shared bot levels are untouched', () => {
-    const l9 = lessonFor(9)!;
-    expect(l9.opponent).toEqual({ bot: 4, keepsPlaying: true });
-    // The campaign ladder and every Seeds proof (level 10, Campaign, Training) replay these.
-    expect(LEVEL_CONFIGS[4].skipGrowth).toBe(0.33);
-    expect(LEVEL_CONFIGS[1].skipGrowth).toBe(0.57);
-  });
-
-  it('level 10 is untouched: the real level-1 bot its Seeds proof is replayed against', () => {
+  it('levels 9 and 10 play the real bot of the current version (bots-v0.11: never skips its grow)', () => {
+    expect(lessonFor(9)!.opponent).toEqual({ bot: 4 });
     expect(lessonFor(10)!.opponent).toEqual({ bot: 1 });
+    expect(CURRENT_BOT_VERSION).toBe('bots-v0.11');
   });
 
   it('levels 1-3 keep exactly the opponent they had', () => {

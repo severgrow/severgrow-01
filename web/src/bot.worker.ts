@@ -2,7 +2,7 @@
 // game's review (src/bots/review.ts) runs here too: it replays the whole game, so it is too long
 // for the main thread.
 import type { Action, Player, State, View } from '../../src/engine/index.js';
-import { chooseLevelAction } from '../../src/bots/levels.js';
+import { chooseBotAction } from '../../src/bots/versions.js';
 import type { Level } from '../../src/bots/levels.js';
 import { findTurningPoint } from '../../src/bots/review.js';
 
@@ -16,6 +16,6 @@ self.onmessage = (e: MessageEvent<Ask | Review>) => {
     post({ id: e.data.id, point: findTurningPoint(start, log, me, { end }) });
     return;
   }
-  const action: Action = chooseLevelAction(e.data.view, e.data.level, e.data.seed);
+  const action: Action = chooseBotAction(e.data.view, e.data.level, e.data.seed);
   post({ id: e.data.id, action });
 };

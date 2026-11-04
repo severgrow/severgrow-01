@@ -3442,9 +3442,9 @@ let quickShow: Beats | null = null;
 const askFor = (st: State) => {
   const taught = lessonActive();
   if (taught) {
-    // A script, or a bot that keeps playing (level 9): the lesson's own opponent, here and in the
-    // tests alike. Level 10 asks the real bot below, the one its Seeds proof is replayed against.
-    if ('script' in taught.opponent || taught.opponent.keepsPlaying) {
+    // A script: the lesson's own opponent, here and in the tests alike (lessonOpponentAction).
+    // Levels 9 and 10 ask the real bot below, the one a level 10 Seeds proof is replayed against.
+    if ('script' in taught.opponent) {
       return Promise.resolve(lessonOpponentAction(taught, st));
     } else {
       const lvl = taught.opponent.bot;

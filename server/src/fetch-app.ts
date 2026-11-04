@@ -6,14 +6,17 @@ import { DEFAULT_SERVER_CONFIG } from './config.js';
 import { corsHeadersForRequest } from './cors.js';
 import { ApiError } from './errors.js';
 import type { MatchService } from './service.js';
+import { BOT_VERSIONS } from '../../src/bots/versions.js';
 
 /**
  * What this server can do that an older one could not; a page checks before relying on it.
  * `campaign-random-deals` (owner, 2026-11-01) is the campaign's `RANDOM_DEALS_FEATURE` — spelled out
  * here because the online core never imports the campaign module (tests/campaign/isolation.test.ts);
  * server/tests/seeds-verify.test.ts pins the two spellings together.
+ * Every bot version it can verify is listed too (2026-11-04, bots-v0.11): a page keeps a proof against
+ * a newer bot queued until the server it talks to names that version (web/src/online/seed-rewards.ts).
  */
-export const SERVER_FEATURES: readonly string[] = Object.freeze(['campaign-random-deals']);
+export const SERVER_FEATURES: readonly string[] = Object.freeze(['campaign-random-deals', ...Object.keys(BOT_VERSIONS)]);
 
 export type FetchAppDeps = {
   service: MatchService;

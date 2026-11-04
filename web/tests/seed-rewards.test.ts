@@ -388,3 +388,37 @@ describe('a random-deal win waiting to be paid (owner, 2026-11-01)', () => {
     expect(pendingSeedProofCount(store)).toBe(1);
   });
 });
+
+describe('a proof against a newer bot waits for a server that knows it (bots-v0.11, 2026-11-04)', () => {
+  const v11 = (levelId: string) => ({ kind: 'campaign' as const, levelId, actions: [], botVersion: 'bots-v0.11' });
+  const clientWith = (features: string[] | Error, submit: ReturnType<typeof vi.fn>) =>
+    ({ submitSeedProof: submit, serverFeatures: vi.fn(async () => { if (features instanceof Error) throw features; return features; }) }) as unknown as DuelClient;
+
+  it('a server that does not list the version is never sent the proof: it stays queued, nothing is lost', async () => {
+    const store = storage();
+    queueSeedProof(store, v11('c1-1'));
+    queueSeedProof(store, { ...v11('c1-2'), botVersion: 'bots-v0.10' });
+    const submit = vi.fn(async () => reward(10));
+    await flushSeedProofs(store, clientWith(['campaign-random-deals'], submit), 'acct');
+    expect(submit.mock.calls.map((c) => (c as unknown[])[1])).toEqual([{ levelId: 'c1-2' }]);
+    expect(pending(store).map((p) => p.levelId)).toEqual(['c1-1']);
+  });
+
+  it('a server that cannot say what it knows is treated the same: kept for later', async () => {
+    const store = storage();
+    queueSeedProof(store, v11('c1-1'));
+    const submit = vi.fn(async () => reward(10));
+    await flushSeedProofs(store, clientWith(new Error('offline'), submit), 'acct');
+    expect(submit).not.toHaveBeenCalled();
+    expect(pending(store)).toHaveLength(1);
+  });
+
+  it('once the server lists the version, the kept proof is sent and paid', async () => {
+    const store = storage();
+    queueSeedProof(store, v11('c1-1'));
+    const submit = vi.fn(async () => reward(10));
+    await flushSeedProofs(store, clientWith(['campaign-random-deals', 'bots-v0.10', 'bots-v0.11'], submit), 'acct');
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(pending(store)).toEqual([]);
+  });
+});

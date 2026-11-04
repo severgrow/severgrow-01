@@ -1,7 +1,7 @@
 // Asks the bot for a move in a Web Worker, so the page stays responsive while it
 // thinks. Falls back to the main thread if workers are not available or fail.
 import type { Action, Player, State, View } from '../../../src/engine/index.js';
-import { chooseLevelAction } from '../../../src/bots/levels.js';
+import { chooseBotAction } from '../../../src/bots/versions.js';
 import type { Level } from '../../../src/bots/levels.js';
 import type { TurningPoint } from '../../../src/bots/review.js';
 
@@ -19,7 +19,7 @@ const fallBack = () => {
   worker = null;
   for (const [id, job] of jobs) {
     jobs.delete(id);
-    setTimeout(() => job.resolve(chooseLevelAction(job.view, job.level, job.seed)), 0);
+    setTimeout(() => job.resolve(chooseBotAction(job.view, job.level, job.seed)), 0);
   }
   for (const [id, resolve] of reviews) {
     reviews.delete(id);
@@ -54,7 +54,7 @@ export const askBot = (view: View, level: Level, seed: number): Promise<Action> 
   new Promise((resolve) => {
     const w = getWorker();
     if (!w) {
-      setTimeout(() => resolve(chooseLevelAction(view, level, seed)), 0);
+      setTimeout(() => resolve(chooseBotAction(view, level, seed)), 0);
       return;
     }
     const id = nextId++;

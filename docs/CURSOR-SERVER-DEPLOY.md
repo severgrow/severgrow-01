@@ -13,6 +13,7 @@ but **not deployed**. Until the `duel` Edge Function is redeployed, players see 
 | "I should be able to grow anywhere" on THE PLANET | Only tiles next to the known map; far tiles read "OUT OF REACH FOR NOW" | Any free planet hexagon (`growAnywhere: true` in `GET /v1/world`) |
 | Selling a tile pays 50 Seeds | Pays 100 | Pays 50 (`saleReturn: 50` in `GET /v1/world`) |
 | Level 10 is a "real first game, big board" | Only confirms (and pays 100 Seeds for) the old small-map opening | Confirms the new full-board game too, and still the old one |
+| "Remove the skipping growth in all levels" (bots-v0.11) | Knows only bot `bots-v0.10`: the page HOLDS every Seeds proof won against the new bots (Campaign, Training, level 10) until the server lists `bots-v0.11` | Verifies both `bots-v0.10` and `bots-v0.11`, lists both in `GET /v1/health` `features`; held proofs are then paid on the player's next menu visit |
 
 **Deploy the server BEFORE the owner promotes the new level 10.** Until then, a level 10 win from the
 new page cannot be confirmed, and its 100 Seeds are not paid.
@@ -59,6 +60,8 @@ curl -sS 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel/v1/health?d
 #    expect "ok" and db.ok
 curl -sS 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel/v1/world' | grep -o '"growAnywhere":true\|"saleReturn":50'
 #    expect both strings printed
+curl -sS 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel/v1/health' | grep -o '"bots-v0.11"'
+#    expect "bots-v0.11" printed (the page sends held Seeds proofs only once it sees this)
 BASE_URL=https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel npm run server:smoke
 ```
 

@@ -1,5 +1,19 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-04 (later) — No bot skips its grow (bots-v0.11)
+
+Owner: "Remove the skipping growth in all levels really". The gentler bot levels ended turns
+ungrown on purpose (`skipGrowth`: 57% of steps at level 1, 33% at level 4). bots-v0.11
+(`src/bots/keeps-growing.ts`): a turn never ends without its grow while one is legal; where the level
+would have skipped, it makes the most modest grow (strengthen its weakest tile at the back with its
+lowest card, else spread one tile near home). Everything else is the level's own move. A full best
+move instead would have made the gentle levels far harder (lesson 9, bot 3 standing in: 55 -> 24
+wins of 120); the modest grow keeps them close (55 -> 45).
+
+The server verifies Seeds proofs by replaying the bot by VERSION, so v0.10 stays accepted, the server
+lists its versions in `features`, and the page holds a v0.11 proof until its server lists v0.11
+(no Seeds lost before the server deploy). Level 9's lesson-only `keepsPlaying` was folded into this.
+
 ## 2026-11-04 — The lesson opponent always takes its turn
 
 Owner: beta testers said "levels 2-9 feel broken because the ai opp is not doing much - make sure it

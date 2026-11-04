@@ -7,7 +7,8 @@
 import { describe, expect, it } from 'vitest';
 import { apply, coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
-import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
+import { botSeed } from '../../src/bots/levels.js';
+import { chooseBotAction } from '../../src/bots/versions.js';
 import { CAMPAIGN_LEVELS, campaignLevelById, campaignOpening } from '../../src/campaign/index.js';
 
 const L1 = campaignLevelById('c1-01')!;
@@ -35,7 +36,7 @@ const play = (level = L1, withholdCheck = true) => {
       if (withholdCheck) expect(growthOnTheirGround(s), `level 1 turn ${s.turnNumber}`).toHaveLength(0);
     }
     const seatLevel = s.actor === 1 ? level.botLevel : 9;
-    const action = chooseLevelAction(
+    const action = chooseBotAction(
       viewFor(s, s.actor),
       seatLevel as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
       botSeed(s.seed, seatLevel, s.turnNumber, s.history?.length ?? 0),
