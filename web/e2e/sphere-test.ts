@@ -159,7 +159,16 @@ try {
 
     // Zoom out to space: the stars slide slowly, and only while space is visible.
     await p.mouse.move(cx, cy);
-    for (let i = 0; i < 10; i++) { await p.mouse.wheel(0, 500); await p.waitForTimeout(40); }
+    if (ios) {
+      // Mobile WebKit has no wheel: zoom out with a real two-finger pinch (trusted touch events).
+      await p.touchscreen.tap(canvas.x + 20, canvas.y + canvas.height - 20);
+      const touch = (type: string, points: { x: number; y: number; id: number }[]) =>
+        webkitTouch!.session.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((t) => ({ ...t, x: Math.round(t.x), y: Math.round(t.y) })) });
+      await touch('touchStart', [{ x: cx - 130, y: cy, id: 1 }]); await p.waitForTimeout(16);
+      await touch('touchStart', [{ x: cx - 130, y: cy, id: 1 }, { x: cx + 130, y: cy, id: 2 }]);
+      for (let i = 1; i <= 10; i++) { const d = 260 - i * 24; await touch('touchMove', [{ x: cx - d / 2, y: cy, id: 1 }, { x: cx + d / 2, y: cy, id: 2 }]); await p.waitForTimeout(16); }
+      await touch('touchEnd', [{ x: cx - 10, y: cy, id: 1 }]); await p.waitForTimeout(16); await touch('touchEnd', [{ x: cx + 10, y: cy, id: 2 }]);
+    } else for (let i = 0; i < 10; i++) { await p.mouse.wheel(0, 500); await p.waitForTimeout(40); }
     await settled(p).catch(() => undefined);
     await p.waitForTimeout(300);
     s = (await planet(p))!;
