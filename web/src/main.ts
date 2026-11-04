@@ -278,6 +278,7 @@ import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-ico
 import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { installStaleBuildReload } from './logic/stale-build.js';
+import { mountPlanetLockup } from './player/planet-lockup.js';
 
 // First thing: a page left open across a deploy reloads onto the new build instead of half-breaking.
 installStaleBuildReload();
@@ -705,7 +706,8 @@ function drawTerrarium() {
 }
 
 function drawLogo() {
-  if (branding) { branding.drawLogo(); return; }
+  // THE PLANET's menu: the kanji alone, locked to the wordmark's width (player/planet-lockup.ts).
+  if (branding) { branding.drawLogo(FEATURES.planet); if (FEATURES.planet) mountPlanetLockup(); return; }
   drawTerrarium();
   const c = resolveColors(theme());
   $('logo').innerHTML = `<svg viewBox="0 0 120 84" width="132" height="92" aria-hidden="true">

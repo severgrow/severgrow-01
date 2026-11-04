@@ -8,6 +8,7 @@
 import type { Planet, PlanetInput, PlanetMode } from '../sphere/planet.js';
 import { PLANET } from '../../../src/strings.js';
 import { worldNeighbours } from '../../../server/src/world.js';
+import { lockupBox } from '../player/planet-lockup.js';
 
 const CSS = `
 .world-grid.planet-on > .world-map-svg { visibility: hidden !important; pointer-events: none !important; }
@@ -87,7 +88,7 @@ export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | 
   }
   let module: typeof import('../sphere/planet.js');
   try { module = await import('../sphere/planet.js'); } catch { return null; }
-  const planet = module.mountPlanet(grid, { onTile, label: PLANET.controls, unavailable: PLANET.unavailable, mode, panel: () => grid.getBoundingClientRect() });
+  const planet = module.mountPlanet(grid, { onTile, label: PLANET.controls, unavailable: PLANET.unavailable, mode, panel: () => grid.getBoundingClientRect(), enclose: lockupBox });
   grid.classList.add('planet-on');
   const screen = grid.closest('.online-world');
   screen?.classList.add('planet-screen');

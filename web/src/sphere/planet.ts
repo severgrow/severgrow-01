@@ -50,7 +50,19 @@ export type PlanetHooks = {
   mode?: PlanetMode;
   /** The Territory window's panel, in viewport px: the planet's frame while in the window. */
   panel?: () => DOMRect | null;
+  /**
+   * Behind the menu: the box the planet should enclose (the logo and its wordmark, owner 2026-11-04:
+   * "have the globe around it ... The logo grouped perfectly centered in the sphere"). Null: the
+   * whole screen, as before.
+   */
+  enclose?: () => DOMRect | null;
 };
+/**
+ * WHERE THE MENU'S PLANET WAS (owner, 2026-11-04: "the animation of rotating the sphere goes back to
+ * where it was ... so it's continuous rather than starting again every time main menu is open").
+ * Module memory: it outlives a planet freed for a game and remounted after it.
+ */
+let menuMemory: Quat | null = null;
 export type PlanetMode = 'menu' | 'world';
 export type Planet = ReturnType<typeof mountPlanet>;
 
@@ -88,7 +100,18 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
    *  (the panel may still be settling its layout when the flight starts). */
   let flight: { from: Quat; to: Quat; zoomFrom: number; zoomTo: number; elapsed: number; ms: number; ease: (t: number) => number; t: number; aimPx?: number } | null = null;
   /** The frame and the light have their own tween: a touch may stop the camera, never snap the window. */
-  let frameTween: { from: Frame; lightFrom: number; lightTo: number; elapsed: number; ms: number } | null = null;
+  let frameTween: { from: Frame; cropFrom: Frame; lightFrom: number; lightTo: number; elapsed: number; ms: number } | null = null;
+  /** The visible part of the canvas: the whole screen behind the menu, the panel in the window. */
+  let cropNow: Frame = { x: 0, y: 0, width: 1, height: 1 };
+  const cropTarget = (): Frame => {
+    if (mode !== 'world') return full();
+    const panel = hooks.panel?.();
+    if (!panel || !(panel.width > 0) || !(panel.height > 0)) return full();
+    return { x: panel.left - view.left, y: panel.top - view.top, width: panel.width, height: panel.height };
+  };
+  const mix = (a: Frame, b: Frame, k: number): Frame => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k,
+    width: a.width + (b.width - a.width) * k, height: a.height + (b.height - a.height) * k });
+  const differs = (a: Frame, b: Frame) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y) + Math.abs(a.width - b.width) + Math.abs(a.height - b.height) > .5;
   let drift: [number, number] = [0, 0], introduced = false, posed = false, mode: PlanetMode = hooks.mode ?? 'world';
   let frameNow: Frame = { x: 0, y: 0, width: 1, height: 1 }, light = mode === 'menu' ? MENU_LIGHT : 1;
   let shownClip = '', shownLight = '';
@@ -98,7 +121,14 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const motion = () => interfaceMotionAllowed();
   /** The frame the current mode asks for: the whole screen behind the menu, the panel in the window. */
   const frameTarget = (): Frame => {
-    if (mode !== 'world') return full();
+    if (mode !== 'world') {
+      // Behind the menu: centred on the logo group, sized so the globe's disc encloses it.
+      const box = hooks.enclose?.();
+      if (!box || !(box.width > 0) || !(box.height > 0)) return full();
+      const radius = Math.min(Math.hypot(box.width, box.height) / 2 * 1.12, Math.min(view.width, view.height) * .49);
+      const side = (2 * radius) / (.82 * MENU_ZOOM);
+      return { x: box.left - view.left + box.width / 2 - side / 2, y: box.top - view.top + box.height / 2 - side / 2, width: side, height: side };
+    }
     const panel = hooks.panel?.();
     if (!panel || !(panel.width > 0) || !(panel.height > 0)) return full();
     return { x: panel.left - view.left, y: panel.top - view.top, width: panel.width, height: panel.height };
@@ -134,11 +164,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const flyTo = (to: Quat, toZoom: number, ms = FLY_MS, ease = easeOut, aimPx?: number) => {
     speed = 0;
     const lightTo = mode === 'menu' ? MENU_LIGHT : 1;
-    if (!motion()) { q = to; zoom = targetZoom = toZoom; flight = null; frameTween = null; frameNow = frameTarget(); light = lightTo; ask(); return; }
+    if (!motion()) { q = to; zoom = targetZoom = toZoom; flight = null; frameTween = null; frameNow = frameTarget(); cropNow = cropTarget(); light = lightTo; ask(); return; }
     flight = { from: q, to, zoomFrom: zoom, zoomTo: toZoom, elapsed: 0, ms, ease, t: 0, ...(aimPx ? { aimPx } : {}) };
-    const goal = frameTarget();
-    if (lightTo !== light || Math.abs(goal.x - frameNow.x) + Math.abs(goal.y - frameNow.y) + Math.abs(goal.width - frameNow.width) + Math.abs(goal.height - frameNow.height) > .5) {
-      frameTween = { from: { ...frameNow }, lightFrom: light, lightTo, elapsed: 0, ms };
+    if (lightTo !== light || differs(frameTarget(), frameNow) || differs(cropTarget(), cropNow)) {
+      frameTween = { from: { ...frameNow }, cropFrom: { ...cropNow }, lightFrom: light, lightTo, elapsed: 0, ms };
     }
     lastFrame = 0;
     ask();
@@ -168,17 +197,19 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       // whole flight: the flat map's own fade, on the planet.
       frameTween.elapsed += step;
       const t = Math.min(1, frameTween.elapsed / frameTween.ms), kf = easeOut(Math.min(1, t / .6)), kl = easeInOut(t);
-      const from = frameTween.from;
-      frameNow = { x: from.x + (target.x - from.x) * kf, y: from.y + (target.y - from.y) * kf,
-        width: from.width + (target.width - from.width) * kf, height: from.height + (target.height - from.height) * kf };
+      // The planet's own frame glides with the camera; the crop (the window closing in, or opening
+      // back to the whole screen) leads it, like an iris.
+      frameNow = mix(frameTween.from, target, kl);
+      cropNow = mix(frameTween.cropFrom, cropTarget(), kf);
       light = frameTween.lightFrom + (frameTween.lightTo - frameTween.lightFrom) * kl;
-      if (t === 1) { frameTween = null; frameNow = target; }
-    } else { frameTween = null; frameNow = target; light = mode === 'menu' ? MENU_LIGHT : 1; }
+      if (t === 1) { frameTween = null; frameNow = target; cropNow = cropTarget(); }
+    } else { frameTween = null; frameNow = target; cropNow = cropTarget(); light = mode === 'menu' ? MENU_LIGHT : 1; }
     // Behind the menu the planet turns slowly by itself, about its own up axis on screen.
     if (mode === 'menu' && !flight && motion()) {
       const s = Math.sin((MENU_SPIN_RAD_PER_MS * dt) / 2);
       q = multiply([0, s, 0, Math.cos((MENU_SPIN_RAD_PER_MS * dt) / 2)], q);
     }
+    if (mode === 'menu' && !flight && posed) menuMemory = q;
     if (speed > 0 && !pointers.size) {
       const angle = speed * dt, s = Math.sin(angle / 2);
       q = multiply([axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(angle / 2)], q);
@@ -204,9 +235,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
 
   /** The crop (the window's own rounded frame) and the light, written only when they change. */
   const paintFrame = () => {
-    const whole = frameNow.x <= .5 && frameNow.y <= .5 && frameNow.width >= view.width - .5 && frameNow.height >= view.height - .5;
-    const round = whole ? 0 : FRAME_RADIUS;
-    const clip = whole ? 'none' : `inset(${frameNow.y.toFixed(1)}px ${(view.width - frameNow.x - frameNow.width).toFixed(1)}px ${(view.height - frameNow.y - frameNow.height).toFixed(1)}px ${frameNow.x.toFixed(1)}px round ${round.toFixed(1)}px)`;
+    const c = cropNow;
+    const whole = c.x <= .5 && c.y <= .5 && c.width >= view.width - .5 && c.height >= view.height - .5;
+    const clip = whole ? 'none' : `inset(${c.y.toFixed(1)}px ${(view.width - c.x - c.width).toFixed(1)}px ${(view.height - c.y - c.height).toFixed(1)}px ${c.x.toFixed(1)}px round ${FRAME_RADIUS}px)`;
     if (clip !== shownClip) { shownClip = clip; canvas.style.clipPath = clip; canvas.style.setProperty('-webkit-clip-path', clip); }
     const lit = light.toFixed(3);
     if (lit !== shownLight) { shownLight = lit; canvas.style.opacity = lit; }
@@ -220,6 +251,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     renderer.resize(view.width, view.height);
     if (!flight && !frameTween) {
       frameNow = frameTarget();
+      cropNow = cropTarget();
       if (mode === 'menu') zoom = targetZoom = posed ? zoom : MENU_ZOOM;
       else if (keep) zoom = targetZoom = clampZoom(zoomFor(keep));
     }
@@ -236,18 +268,18 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const intro = () => {
     introduced = true;
     if (mode === 'menu') {
-      if (!posed) { q = menuPose(); zoom = targetZoom = MENU_ZOOM; frameNow = full(); light = MENU_LIGHT; posed = true; }
+      if (!posed) { q = menuMemory ?? menuPose(); zoom = targetZoom = MENU_ZOOM; frameNow = frameTarget(); cropNow = cropTarget(); light = MENU_LIGHT; posed = true; }
       ask();
       return;
     }
     const target = homeQuat(sphere, map, input?.home ?? '0,0');
     const open = clampZoom(zoomFor(OPEN_TILE_PX));
-    if (!motion()) { q = target; zoom = targetZoom = open; frameNow = frameTarget(); light = 1; posed = true; ask(); return; }
+    if (!motion()) { q = target; zoom = targetZoom = open; frameNow = frameTarget(); cropNow = cropTarget(); light = 1; posed = true; ask(); return; }
     // FROM WHEREVER IT IS, down to your biggest land (owner, 2026-11-04). Opened from the menu the
     // planet is already on screen, turned however far its slow spin took it: the flight starts from
     // that exact pose, size and frame, so the first frame is the menu's last. Opened elsewhere (the
     // hub), it starts from the menu's pose in the window.
-    if (!posed) { q = menuPose(); zoom = targetZoom = MENU_ZOOM; frameNow = frameTarget(); light = MENU_LIGHT; posed = true; }
+    if (!posed) { q = menuMemory ?? menuPose(); zoom = targetZoom = MENU_ZOOM; frameNow = frameTarget(); cropNow = cropTarget(); light = MENU_LIGHT; posed = true; }
     flyTo(target, open, INTRO_MS, easeInOut, OPEN_TILE_PX);
   };
   const fail = (text: string) => { fallback.textContent = text; fallback.hidden = false; canvas.hidden = true; };
@@ -394,9 +426,11 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       speed = 0;
       pointers.clear();
       if (!renderer || !input) { introduced = false; return; }
-      if (next === 'world') { introduced = false; intro(); return; }
-      if (!motion()) { q = menuPose(); zoom = targetZoom = MENU_ZOOM; frameTween = null; frameNow = full(); light = MENU_LIGHT; paintFrame(); ask(); return; }
-      flyTo(menuPose(), MENU_ZOOM, OUT_MS, easeInOut);
+      if (next === 'world') { if (posed) menuMemory = q; introduced = false; intro(); return; }
+      // Back to the menu: to exactly where the menu's planet was, so its slow turn carries on.
+      const back = menuMemory ?? menuPose();
+      if (!motion()) { q = back; zoom = targetZoom = MENU_ZOOM; frameTween = null; frameNow = frameTarget(); cropNow = cropTarget(); light = MENU_LIGHT; paintFrame(); ask(); return; }
+      flyTo(back, MENU_ZOOM, OUT_MS, easeInOut);
     },
     /** Bring flat tile `id` (e.g. the player's own land) to the middle at a comfortable size. */
     home(id: string | null) {
@@ -417,7 +451,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       zoom, tilePx: tilePx(), q: [...q], selected: selected === null ? null : tileForCell(map, selected),
       frames: renderer?.frames ?? 0, bytes: renderer?.bytes ?? 0, pendingFrame: !!raf || !!flight || !!frameTween,
       flying: !!flight || !!frameTween, spinning: speed > 0, mode, spaceVisible: spaceVisible(), fallback: !fallback.hidden,
-      light, frame: { ...frameNow },
+      light, frame: { ...frameNow }, crop: { ...cropNow },
+      /** The globe's disc on screen (CSS px): centre and radius. */
+      disc: { x: view.left + frameNow.x + frameNow.width / 2, y: view.top + frameNow.y + frameNow.height / 2, r: discRadius(frameNow.width, frameNow.height, zoom) },
       /** Where a flat tile's centre is on screen right now (CSS px), or null when it faces away. */
       screenOf: (id: string) => {
         const index = map.cellOf.get(id);

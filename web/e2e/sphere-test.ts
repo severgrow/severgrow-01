@@ -80,6 +80,24 @@ try {
     await p.waitForFunction(() => !!(window as unknown as { __severgrow: { planet: () => unknown } }).__severgrow.planet(), undefined, { timeout: 8000 }).catch(() => undefined);
     const behind = await planet(p) as (Snapshot & { mode?: string }) | null;
     check(`${path}: the planet is the menu's backdrop`, !!behind && behind.mode === 'menu' && (behind.ready || behind.fallback), JSON.stringify(behind)?.slice(0, 80));
+    // THE LOCKUP (owner, 2026-11-04): the kanji alone, FUTASAKU exactly as wide under it, the globe
+    // centred on the pair and enclosing it.
+    const lock = await p.evaluate(() => {
+      const logo = document.getElementById('logo')!.getBoundingClientRect();
+      const title = document.querySelector('#menu .title')!;
+      const range = document.createRange(); range.selectNodeContents(title.firstChild!);
+      const ink = range.getBoundingClientRect(), spacing = parseFloat(getComputedStyle(title).letterSpacing) || 0;
+      const s = (window as unknown as { __severgrow: { planet: () => { disc: { x: number; y: number; r: number } } | null } }).__severgrow.planet();
+      return { logo: [logo.left, logo.right, logo.top, logo.bottom], title: [ink.left, ink.right - spacing, ink.top, ink.bottom], disc: s?.disc ?? null,
+        tree: !!document.querySelector('#logo image[href*="futasaku-white"], #logo image[href*="emblem"]') };
+    });
+    const [ll, lr, lt] = lock.logo as [number, number, number, number], [tl, tr, , tb] = lock.title as [number, number, number, number];
+    check(`${path}: the logo is the kanji alone, as wide as FUTASAKU under it`, !lock.tree && Math.abs(ll - tl) < 1.5 && Math.abs(lr - tr) < 1.5,
+      `kanji ${ll.toFixed(1)}-${lr.toFixed(1)}, wordmark ${tl.toFixed(1)}-${tr.toFixed(1)}`);
+    const cx = (Math.min(ll, tl) + Math.max(lr, tr)) / 2, cy = (lt + tb) / 2;
+    check(`${path}: the globe is centred on the logo group and encloses it`, !!lock.disc &&
+      Math.hypot(lock.disc.x - cx, lock.disc.y - cy) < 3 && lock.disc.r > Math.hypot(lr - ll, tb - lt) / 2,
+      lock.disc ? `centre ${lock.disc.x.toFixed(1)},${lock.disc.y.toFixed(1)} vs ${cx.toFixed(1)},${cy.toFixed(1)}, r ${lock.disc.r.toFixed(0)}` : 'no disc');
     check(`${path}: the menu stays on top and tappable`, await p.locator('#menu-play').isVisible() &&
       await p.locator('.planet-canvas').evaluate((el) => getComputedStyle(el).pointerEvents === 'none'));
     await p.close();
@@ -262,6 +280,13 @@ try {
     await p.waitForFunction(() => !(window as unknown as { __severgrow: { planet: () => { flying: boolean } | null } }).__severgrow.planet()?.flying, undefined, { timeout: 10000 }).catch(() => undefined);
     check(`[${tag}] ...and comes to rest whole behind the menu`, (await planet(p) as (Snapshot & { mode?: string }) | null)?.mode === 'menu' && !(await planet(p))!.flying);
     check(`[${tag}] one planet only, reused (no second canvas)`, (await p.locator('.planet-canvas').count()) === 1);
+    // CONTINUOUS (owner, 2026-11-04): back on the menu the planet is where the menu left it (plus the
+    // second or so of slow turn since), never reset to a fixed starting pose.
+    if (lastMenu?.ready) {
+      const resumed = (await pose())!;
+      const along = Math.abs(lastMenu.q.reduce((sum, x, i) => sum + x * resumed.q[i]!, 0));
+      check(`[${tag}] back on the menu the planet carries on from where it was`, along > .99, `${along.toFixed(5)}`);
+    }
     if (width === 390 && !ios) {
       // Five more visits leave nothing behind.
       for (let i = 0; i < 5; i++) {

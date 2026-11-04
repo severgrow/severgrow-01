@@ -196,10 +196,24 @@ function whiteLogo(id: string, accessible: boolean, wordmark = false): SVGSVGEle
   return svg;
 }
 
-export function drawLogo() {
+export function drawLogo(kanji = false) {
   const container = document.getElementById('logo');
   if (!container) return;
-  container.replaceChildren(whiteLogo('futasaku-menu-white', false));
+  container.replaceChildren(kanji ? kanjiMark('futasaku-menu-kanji') : whiteLogo('futasaku-menu-white', false));
+}
+
+/**
+ * THE KANJI ALONE, cropped to its ink (owner, 2026-11-04: "change logo to kanji with no tree"): the
+ * treeless 双サク of the HUD badge, in the same cream, with its transparent margins cut away so the
+ * mark's box IS the mark's width (the wordmark below is sized to exactly that).
+ */
+function kanjiMark(id: string): SVGSVGElement {
+  const svg = whiteLogo(id, false, true);
+  // The ink of futasaku-wordmark-silhouette.webp (2200x715) spans x 79-2151, y 57-695.
+  svg.setAttribute('viewBox', '79 57 2072 638');
+  svg.setAttribute('width', '2072');
+  svg.setAttribute('height', '638');
+  return svg;
 }
 
 /**
