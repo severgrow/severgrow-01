@@ -1,5 +1,29 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-04 — The lesson opponent always takes its turn
+
+Owner: beta testers said "levels 2-9 feel broken because the ai opp is not doing much - make sure it
+makes more actions especially from lesson 4 onwards ... Don't change much but improve that in a very
+smart way not breaking anything".
+
+Measured first (200 casual games a level): levels 2-8 grew exactly one tile every turn, never more;
+level 9's real bot (level 4) did NOTHING on 39% of its turns (the campaign ladder's deliberate "lazy"
+stop, `skipGrowth`).
+
+- Levels 4-8 (`contests`): the scripted opponent's grow heads for an open hex beside YOUR tiles, so
+  every turn visibly answers yours. Random players win slightly more often than before (its tiles
+  are within reach).
+- Levels 5-8 (`blooms`, Bloom is taught at 5): after its grow it also plays a Bloom it holds, on open
+  ground only, never on a key hex, never surrounding your home, and never one that would put it level
+  with you or ahead (without that rule, following the light LOST levels 5 and 7).
+- Level 9 (`keepsPlaying`): the bot plays its level exactly, but a turn it would end having done
+  nothing becomes a modest move (strengthen its weakest tile at the back, else a gentle grow).
+  Removing the lazy stop outright made it far harder (bot level 3 standing in for you: 55 -> 24 wins
+  of 120); the modest move keeps it close (55 -> 45; bot 2: 36 -> 31; bot 5: 111 -> 101).
+- NOT changed: levels 1-3, level 10 and every shared bot level. Level 10's Seeds proof, Campaign and
+  Training are replayed by the server against the shared bots, so changing them would break rewards.
+  Level 9 pays no Seeds and sends no proof.
+
 ## 2026-11-04 — 0.75, "the planet standard": one space, metal keys, the board as a small planet
 
 Owner-approved polish pass (live game only: `html.v075` written by the build for CHANNEL=futa05,

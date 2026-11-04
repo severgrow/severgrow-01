@@ -92,7 +92,9 @@ describe('lesson 9 is a full game on the small map', () => {
     expect(L9.position, 'no scripted opening').toBeUndefined();
     expect(L9.goals, 'nothing is forced').toEqual([]);
     expect(L9.locked, 'every legal tap is the player’s').toBe(false);
-    expect(L9.opponent).toEqual({ bot: LEVEL.botLevel });
+    // The campaign level's own bot, which keeps playing: no ladder "lazy" turns in a lesson (owner,
+    // 2026-11-04: testers felt the opponent was broken when it did not take its turn).
+    expect(L9.opponent).toEqual({ bot: LEVEL.botLevel, keepsPlaying: true });
 
     const s = lessonOpening(L9);
     expect(s.config.boardRadius).toBe(SMALL_BOARD_RADIUS);

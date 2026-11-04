@@ -124,7 +124,7 @@ import type { Beat, Lesson } from './lessons/lessons.js';
 import { FINAL_LESSON } from './lessons/final.js';
 import { PLANET_INTRO, SEEDS_INTRO } from './online/seed-icon.js';
 import { mountPlanetIntro, type PlanetIntro } from './player/planet-intro.js';
-import { scriptedOpponentAction } from './lessons/opponent.js';
+import { lessonOpponentAction } from './lessons/opponent.js';
 import { tapAnswer } from './lessons/answer.js';
 import { litTarget, litTargetAndQuiet, tapOf } from './lessons/lesson-view.js';
 import { LESSON_BREATH_ID } from './player/lesson-breath.js';
@@ -3442,9 +3442,10 @@ let quickShow: Beats | null = null;
 const askFor = (st: State) => {
   const taught = lessonActive();
   if (taught) {
-    if ('script' in taught.opponent) {
-      const action = scriptedOpponentAction(st, taught.opponent.script);
-      if (action) return Promise.resolve(action);
+    // A script, or a bot that keeps playing (level 9): the lesson's own opponent, here and in the
+    // tests alike. Level 10 asks the real bot below, the one its Seeds proof is replayed against.
+    if ('script' in taught.opponent || taught.opponent.keepsPlaying) {
+      return Promise.resolve(lessonOpponentAction(taught, st));
     } else {
       const lvl = taught.opponent.bot;
       return askBot(viewFor(st, BOT), lvl, botSeed(st.seed, lvl, st.turnNumber, st.history?.length ?? 0));

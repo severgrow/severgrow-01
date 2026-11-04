@@ -11,14 +11,13 @@ import {
   apply, coordKey, hexDistance, homeCoord, isStrangled, legalActions, neighbors, parseKey, viewFor,
 } from '../../../src/engine/index.js';
 import type { Action, Card, Coord, Event, State } from '../../../src/engine/index.js';
-import type { Level } from '../../../src/bots/levels.js';
 import { LESSON as W } from '../../../src/strings.js';
 import { authoredState } from './authored.js';
 import { FINAL_LESSON, finalLessonOpening } from './final.js';
 import { campaignLevelByNumber } from '../../../src/campaign/levels.js';
 import { campaignOpening } from '../../../src/campaign/play.js';
 import type { PositionSpec } from './authored.js';
-import type { OpponentScript } from './opponent.js';
+import type { LessonOpponent } from './opponent.js';
 import type { ActionKind, LessonTier, PowerKind } from './mastery.js';
 
 const YOU = 0 as const;
@@ -61,7 +60,7 @@ export type Lesson = {
    */
   deal?: () => State;
   /** The scripted opponent, or a real bot level (levels 9 and 10 are normal games). */
-  opponent: { script: OpponentScript } | { bot: Level };
+  opponent: LessonOpponent;
   /** Levels 1-3: only the lit thing (and its quiet alternatives) answers a tap. */
   locked: boolean;
   /** The ideas this lesson is for, in order. */
@@ -172,7 +171,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[3, 5], [1, 7], [1, 5], [2, 6], [1, 4], [0, 6], [3, 6], [2, 4], [0, 7], [0, 3]],
       discard: [[3, 1]],
     },
-    opponent: { script: {} },
+    opponent: { script: { contests: true } },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'CUT THEIR ROOT', icon: '✂' },
   },
   {
@@ -188,7 +187,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[0, 4], [1, 4], [3, 5], [0, 6], [1, 5], [2, 4], [3, 6], [0, 7], [1, 7], [2, 7], [3, 8], [2, 8]],
       discard: [[3, 1]],
     },
-    opponent: { script: {} },
+    opponent: { script: { contests: true, blooms: true } },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLOOM THREE AT ONCE', icon: '✿' },
   },
   {
@@ -206,7 +205,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     },
     // It grows like any player, onto a side of its own home when that is all it has; the
     // surround then takes that tile back (owner, 2026-10-22: a level that never moves feels broken).
-    opponent: { script: {} },
+    opponent: { script: { contests: true, blooms: true } },
     finish: { title: W.youWin, line: W.wonByKo, learned: 'SURROUND THEIR HOME', icon: '◎' },
   },
   {
@@ -222,7 +221,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[0, 4], [1, 5], [3, 5], [0, 6], [1, 6], [2, 4], [3, 7], [0, 8], [2, 7], [1, 7], [3, 8]],
       discard: [[3, 1]],
     },
-    opponent: { script: {} },
+    opponent: { script: { contests: true, blooms: true } },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BOMB ONE TILE', icon: '●' },
   },
   {
@@ -241,7 +240,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[0, 4], [1, 5], [3, 5], [0, 6], [1, 6], [2, 4], [3, 7], [0, 8], [2, 7], [1, 7]],
       discard: [[3, 1]],
     },
-    opponent: { script: {} },
+    opponent: { script: { contests: true, blooms: true } },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLAST A HOLE', icon: '✹' },
   },
   {
@@ -255,7 +254,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     goals: [],
     newActions: [],
     // The campaign level's own bot (4); `web/tests/lesson-9-free.test.ts` pins the two together.
-    opponent: { bot: 4 },
+    opponent: { bot: 4, keepsPlaying: true },
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'PLAY A FULL GAME', icon: '↦' },
   },
   {

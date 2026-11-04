@@ -6,8 +6,6 @@ import {
   apply, coordKey, createCards, homeCoord, isStrangled, legalActions, mulberry32, neighbors, viewFor,
 } from '../../src/engine/index.js';
 import type { Action, Event, State } from '../../src/engine/index.js';
-import { botSeed } from '../../src/bots/levels.js';
-import { botFor, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { SMALL_BOARD_RADIUS } from '../../src/campaign/small-board.js';
 import { LESSON } from '../../src/strings.js';
 import { FINAL_LESSON, finalLessonLegacyOpening, finalLessonOpening } from '../src/lessons/final.js';
@@ -22,16 +20,12 @@ import {
 } from '../src/lessons/mastery.js';
 import { createIdleWatch } from '../src/lessons/idle.js';
 import { lessonVoiceFor } from '../src/lessons/lesson-voice.js';
-import { scriptedOpponentAction } from '../src/lessons/opponent.js';
+import { lessonOpponentAction, scriptedOpponentAction } from '../src/lessons/opponent.js';
 import { bloomProblem, tapAnswer } from '../src/lessons/answer.js';
 import type { Tap } from '../src/lessons/answer.js';
 
-const bot = botFor(CURRENT_BOT_VERSION)!;
-
-const opponentMove = (lesson: Lesson, s: State): Action =>
-  'script' in lesson.opponent
-    ? scriptedOpponentAction(s, lesson.opponent.script)!
-    : bot(viewFor(s, 1), lesson.opponent.bot, botSeed(s.seed, lesson.opponent.bot, s.turnNumber, s.history?.length ?? 0));
+/** The lesson's own opponent: the very function the game asks (a script, or a real bot level). */
+const opponentMove = (lesson: Lesson, s: State): Action => lessonOpponentAction(lesson, s);
 
 const myTurns = (s: State) => (s.history ?? []).filter((e) => e.t === 'Discard' && e.player === 0).length;
 
