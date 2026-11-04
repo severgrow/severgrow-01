@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WORLD_CELLS, WORLD_CELL_IDS, WORLD_LIMIT, WORLD_REACH, hexDistance, legacyWorldCell, parseWorldCell, seenCellIds, seenWorld, worldAround, worldNeighbours } from '../src/world.js';
+import { PLANET_GROWTH, WORLD_CELLS, WORLD_CELL_IDS, WORLD_LIMIT, WORLD_REACH, hexDistance, isPlanetCell, legacyWorldCell, parseWorldCell, seenCellIds, seenWorld, worldAround, worldNeighbours } from '../src/world.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
 import { SEED_ECONOMY, BETA_PAYOUT_MULTIPLIER, campaignLevelOfSourceKey, campaignSeedReward } from '../src/seeds/config.js';
 
@@ -118,13 +118,34 @@ describe('Seed purchases', () => {
     expect(await store.claim('a', '6,-4', 'request-0002', 2)).toMatchObject({ ok: true, cellId: '6,-4' });
     expect(store.ledger.filter((x) => x.delta < 0)).toHaveLength(2);
   });
-  it('land nobody can see yet cannot be grown, nor anything outside the world', async () => {
+  // OWNER CHANGED THE RULE (2026-11-04): "Allow players to grow a tile anywhere in the planet". This
+  // test used to pin "land nobody can see yet cannot be grown" ('20,0' refused). Now any tile of the
+  // planet can be grown, seen or not, as far as the far side; ids that are not planet tiles (nonsense,
+  // off the planet, the gaps a pentagon leaves in the flat lattice) still cannot.
+  it('any tile of the planet can be grown, seen or not; nothing off the planet can', async () => {
     const store = new MemoryWorldEconomyStore();
-    for (let i = 1; i <= 4; i++) await grant(store, 'a', `campaign:${i}`);
-    expect(await store.claim('a', '20,0', 'request-0003', 1)).toMatchObject({ ok: false, code: 'INVALID_CELL' });
+    for (let i = 1; i <= 6; i++) await grant(store, 'a', `campaign:${i}`);
+    expect(await store.claim('a', '20,0', 'request-0003', 1)).toMatchObject({ ok: true, cellId: '20,0' });
+    // past the old flat world's 48-ring edge, still on the planet
+    expect(isPlanetCell('51,-5')).toBe(true);
+    expect(await store.claim('a', '51,-5', 'request-0008', 1)).toMatchObject({ ok: true, cellId: '51,-5' });
     expect(await store.claim('a', 'nope', 'request-0004', 1)).toMatchObject({ ok: false, code: 'INVALID_CELL' });
-    expect(await store.claim('a', `${WORLD_LIMIT + 1},0`, 'request-0005', 1)).toMatchObject({ ok: false, code: 'INVALID_CELL' });
-    expect(store.ledger.filter((x) => x.delta < 0)).toHaveLength(0);
+    expect(await store.claim('a', '999,0', 'request-0005', 1)).toMatchObject({ ok: false, code: 'INVALID_CELL' });
+    // inside 48 rings but not a planet tile, and nobody can see it
+    expect(isPlanetCell('-48,1')).toBe(false);
+    expect(await store.claim('a', '-48,1', 'request-0009', 1)).toMatchObject({ ok: false, code: 'INVALID_CELL' });
+    expect(store.ledger.filter((x) => x.delta < 0)).toHaveLength(2);
+  });
+  it('the planet uses its own adjacency: beside means beside on the planet', () => {
+    expect(PLANET_GROWTH).toBe(true);
+    for (const id of ['0,0', '7,-3', '51,-5']) {
+      for (const other of worldNeighbours(id)) {
+        expect(isPlanetCell(other)).toBe(true);
+        expect(worldNeighbours(other)).toContain(id);
+      }
+    }
+    // inside the world everyone already plays on, planet and flat neighbours are the same six
+    expect(worldNeighbours('0,0').sort()).toEqual(['1,0', '1,-1', '0,-1', '-1,0', '-1,1', '0,1'].sort());
   });
   it('a tile at the coast uncovers the land around it, and the next tile can go there', async () => {
     const store = new MemoryWorldEconomyStore();

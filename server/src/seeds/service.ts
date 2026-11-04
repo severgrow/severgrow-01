@@ -8,7 +8,7 @@ import { ApiError } from '../errors.js';
 import { newId, newInviteCode, newSeed } from '../ids.js';
 import type { MatchListRow, MatchRecord, MoveRecord, PlayerRecord, Storage } from '../storage/types.js';
 import type { PublicPlayerProfile } from '../protocol.js';
-import { WORLD_VERSION, seenWorld } from '../world.js';
+import { PLANET_GROWTH, WORLD_VERSION, seenWorld } from '../world.js';
 import { colourById, colourChangeAvailableAt, colourCooldownMs, colourIdFor, isColourId, resolveTileColours } from '../../../src/tile-colours.js';
 import { SEED_ECONOMY, WORLD_CHALLENGE_LIST_WINDOW_MS } from './config.js';
 import type {
@@ -70,6 +70,8 @@ export class WorldEconomyService {
     return {
       // The SEEN map: the v2 coast plus two rings around every tile (server/src/world.ts).
       version: WORLD_VERSION, revision: snapshot.revision, rankings: territoryStandings(snapshot.claims), cells: seenWorld(snapshot.claims.map((c) => c.cellId)),
+      // The planet's growth rule, announced so the page offers far-away tiles only to a server that takes them.
+      growAnywhere: PLANET_GROWTH,
       claims: snapshot.claims.map((claim) => ({
         cellId: claim.cellId, ownerId: claim.ownerId, ownerName: claim.ownerName,
         // Only a level NUMBER crosses the wire: no id, no email, no progress detail. `null` when the

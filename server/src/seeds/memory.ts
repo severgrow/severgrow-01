@@ -31,7 +31,7 @@ import type {
   WorldSnapshot,
 } from './types.js';
 import { emptyWallet } from './types.js';
-import { parseWorldCell, seenCellIds, worldNeighbours } from '../world.js';
+import { canGrowOn, parseWorldCell, worldNeighbours } from '../world.js';
 import type { Storage } from '../storage/types.js';
 import { stakedCellFor } from './stake.js';
 
@@ -171,7 +171,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
       ({ ok: false, code, revision: this.revision, wallet: { ...wallet } });
     // Anywhere on the SEEN map (owner, 2026-10-27: no longer next to your own tiles); land nobody can
     // see yet is not for sale. The seen map is a pure function of the claims (server/src/world.ts).
-    if (!parseWorldCell(cellId) || !seenCellIds(this.claims.keys()).has(cellId)) return fail('INVALID_CELL');
+    if (!canGrowOn(cellId, this.claims.keys())) return fail('INVALID_CELL');
     if (this.claims.has(cellId)) return fail('OCCUPIED');
     if (wallet.balance < SEED_ECONOMY.tileCost) return fail('NO_FUNDS');
     wallet.balance -= SEED_ECONOMY.tileCost;

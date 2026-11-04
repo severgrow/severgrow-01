@@ -22,10 +22,14 @@ it('does not connect diagonal cells, handles empty, isolated and equal counts',(
  expect(territoryStandings([...held('z','0,0'),...held('a','3,3')]).map(r=>r.ownerId)).toEqual(['a','z']);
 });
 
+// The holdings sit inside the 15 rings around 0,0 where the PLANET's neighbours are exactly the flat
+// ones (owner, 2026-11-04: the ground is a planet; `worldNeighbours` is the planet's adjacency). They
+// used to be single rows reaching 20-22 rings out, past a pentagon, where the planet rightly no
+// longer joins a flat row end to end. Same brief, same numbers: 40 connected + 20 apart vs 45 connected.
 it('ranks the brief’s 45 connected tiles above 60 total with only 40 connected',()=>{
- const a=[...held('a',...Array.from({length:40},(_,i)=>`${i-20},0`)),
-  ...held('a',...Array.from({length:20},(_,i)=>`${(i%10)*3-15},${i<10?5:-5}`))];
- const b=held('b',...Array.from({length:45},(_,i)=>`${i-22},15`));
+ const a=[...held('a',...Array.from({length:40},(_,i)=>`${(i%20)-10},${i<20?0:1}`)),
+  ...held('a',...Array.from({length:20},(_,i)=>`${(i%10)*2-9},${i<10?4:-4}`))];
+ const b=held('b',...Array.from({length:45},(_,i)=>`${i%15},${-6-Math.floor(i/15)}`));
  expect(territoryStandings([...a,...b])).toEqual([
   {ownerId:'b',connectedTiles:45,totalTiles:45,rank:1},
   {ownerId:'a',connectedTiles:40,totalTiles:60,rank:2},

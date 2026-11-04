@@ -260,6 +260,12 @@ export type WorldMapPayload = {
      */
     disputes?: WorldDispute[];
     rankings?: TerritoryStanding[];
+    /**
+     * THE PLANET (owner, 2026-11-04): true when this server accepts a new tile anywhere on the
+     * planet, seen or not. OPTIONAL because a page may talk to a server deployed before it; the page
+     * then keeps the seen-map rule.
+     */
+    growAnywhere?: boolean;
   };
 };
 export type WorldMapResponse = { ok: true } & WorldMapPayload;

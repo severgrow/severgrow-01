@@ -5,7 +5,7 @@
 // Territory (world-view.ts) still owns the data, the rules, the selection bar, the sheets and every
 // request. This bridge only turns its state into the planet's input and the planet's taps back into
 // Territory's own `select`. The heavy geometry and WebGL load lazily, the first time the window opens.
-import type { Planet, PlanetInput } from '../sphere/planet.js';
+import type { Planet, PlanetInput, PlanetMode } from '../sphere/planet.js';
 import { PLANET } from '../../../src/strings.js';
 
 const CSS = `
@@ -18,6 +18,14 @@ const CSS = `
   border-radius: inherit; touch-action: none; cursor: grab; outline: 0; background: #07090a;
 }
 .world-grid > .planet-canvas:active { cursor: grabbing; }
+/* BEHIND THE MENU the planet is the backdrop (owner, 2026-11-04): whole, dim, untouchable. The
+   menu's living backdrop already stretches this grid over the whole screen. */
+#online-world-screen[data-living-territory="menu"] .world-grid > .planet-canvas {
+  visibility: visible; opacity: .46; pointer-events: none; background: transparent;
+}
+.world-grid > .planet-canvas { transition: opacity 700ms cubic-bezier(.22, 1, .36, 1); }
+html.reduce-motion .world-grid > .planet-canvas { transition: none; }
+@media (prefers-reduced-motion: reduce) { .world-grid > .planet-canvas { transition: none; } }
 .world-grid > .planet-canvas:focus-visible { outline: 2px solid #e8ddc5; outline-offset: -3px; }
 .world-grid > .planet-fallback {
   position: absolute; inset: 0; z-index: 0; margin: 0; display: flex; align-items: center; justify-content: center;
@@ -51,11 +59,12 @@ export const planetSnapshot = () => current?.snapshot() ?? null;
 export type WorldPlanet = {
   update: (input: PlanetInput) => void;
   home: (id: string | null) => void;
+  setMode: (mode: PlanetMode) => void;
   dispose: () => void;
 };
 
 /** Mount the planet into the Territory grid. Resolves to null when it could not load. */
-export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | null) => void): Promise<WorldPlanet | null> => {
+export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | null) => void, mode: PlanetMode): Promise<WorldPlanet | null> => {
   if (!document.getElementById('world-planet-css')) {
     const style = document.createElement('style');
     style.id = 'world-planet-css';
@@ -64,7 +73,7 @@ export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | 
   }
   let module: typeof import('../sphere/planet.js');
   try { module = await import('../sphere/planet.js'); } catch { return null; }
-  const planet = module.mountPlanet(grid, { onTile, label: PLANET.controls, unavailable: PLANET.unavailable });
+  const planet = module.mountPlanet(grid, { onTile, label: PLANET.controls, unavailable: PLANET.unavailable, mode });
   grid.classList.add('planet-on');
   const screen = grid.closest('.online-world');
   screen?.classList.add('planet-screen');
@@ -72,6 +81,7 @@ export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | 
   return {
     update: (input) => planet.update(input),
     home: (id) => planet.home(id),
+    setMode: (next) => planet.setMode(next),
     dispose: () => {
       planet.dispose();
       grid.classList.remove('planet-on');

@@ -33,6 +33,13 @@ export type GroundInput = {
   /** Cells under an open challenge. */
   disputes?: Iterable<string>;
   me: string | null;
+  /**
+   * The server takes a new tile anywhere on the planet (owner, 2026-11-04). Then the whole planet is
+   * plain growable ground in its own colour, and only the ring of tiles around each placed tile is
+   * lit as known land ("the tiles around get highlighted only when a tile is placed"). The server's
+   * seen map and the fog rings belong to the flat map and are ignored.
+   */
+  growAnywhere?: boolean;
 };
 
 export type Ground = {
@@ -66,13 +73,21 @@ export const groundOf = (sphere: Sphere, map: LatticeMap, input: GroundInput): G
     colour[index * 3] = rgb[0]!; colour[index * 3 + 1] = rgb[1]!; colour[index * 3 + 2] = rgb[2]!;
   };
   for (let i = 0; i < count; i++) paint(i, sphere.cells[i]!.pentagon ? KIND.pentagon : KIND.void, sphere.cells[i]!.pentagon ? GROUND_RGB.pentagon : GROUND_RGB.void);
-  for (const id of input.fog ?? []) {
-    const index = map.cellOf.get(id);
-    if (index !== undefined) paint(index, KIND.fog, GROUND_RGB.fog);
-  }
-  for (const cell of input.cells) {
-    const index = map.cellOf.get(cell.id);
-    if (index !== undefined) paint(index, KIND.land, GROUND_RGB.land);
+  if (input.growAnywhere) {
+    for (const claim of input.claims) {
+      const index = map.cellOf.get(claim.cellId);
+      if (index === undefined) continue;
+      for (const nb of sphere.cells[index]!.neighbours) if (!sphere.cells[nb]!.pentagon) paint(nb, KIND.land, GROUND_RGB.land);
+    }
+  } else {
+    for (const id of input.fog ?? []) {
+      const index = map.cellOf.get(id);
+      if (index !== undefined) paint(index, KIND.fog, GROUND_RGB.fog);
+    }
+    for (const cell of input.cells) {
+      const index = map.cellOf.get(cell.id);
+      if (index !== undefined) paint(index, KIND.land, GROUND_RGB.land);
+    }
   }
   for (const claim of input.claims) {
     const index = map.cellOf.get(claim.cellId);

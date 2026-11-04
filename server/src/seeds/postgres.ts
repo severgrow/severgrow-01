@@ -1,7 +1,7 @@
 import { connectedCount } from '../territory-ranking.js';
 import type { PgClient, PgPool } from '../storage/postgres.js';
 import { newId } from '../ids.js';
-import { parseWorldCell, seenCellIds, worldNeighbours } from '../world.js';
+import { canGrowOn, parseWorldCell, worldNeighbours } from '../world.js';
 import {
   SEED_ECONOMY,
   WORLD_CHALLENGE_OPEN_LIMIT,
@@ -408,11 +408,12 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
       const revision = number(meta.rows[0]?.revision);
       const fail = (code: 'NO_FUNDS' | 'OCCUPIED' | 'NOT_ADJACENT' | 'INVALID_CELL'): ClaimResult =>
         ({ ok: false, code, revision, wallet });
-      // Anywhere on the SEEN map (owner, 2026-10-27: no longer next to your own tiles); land nobody
-      // can see yet is not for sale. Read under the world lock above, so the seen map cannot move.
+      // Anywhere on the PLANET (owner, 2026-11-04: "Allow players to grow a tile anywhere in the
+      // planet"; before that, anywhere on the seen map). `canGrowOn` owns the rule. Read under the
+      // world lock above, so the claims it reads cannot move.
       if (!parseWorldCell(cellId)) return fail('INVALID_CELL');
       const all = await client.query('select cell_id from world_claims');
-      if (!seenCellIds(all.rows.map((r) => String(r.cell_id))).has(cellId)) return fail('INVALID_CELL');
+      if (!canGrowOn(cellId, all.rows.map((r) => String(r.cell_id)))) return fail('INVALID_CELL');
       if (all.rows.some((r) => String(r.cell_id) === cellId)) return fail('OCCUPIED');
       if (wallet.balance < SEED_ECONOMY.tileCost) return fail('NO_FUNDS');
       await client.query(

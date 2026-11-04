@@ -1,5 +1,6 @@
 /** Frozen shared world geometry. IDs are axial coordinates; expansion only ADDS IDs. */
 import { colourFor } from '../../src/tile-colours.js';
+import { buildSphere, latticeMap, neighbourIds, type LatticeMap, type Sphere } from '../../src/planet/geometry.js';
 
 export type WorldCell = { id: string; q: number; r: number };
 
@@ -71,19 +72,42 @@ export const WORLD_LIMIT = 48;
 const DIRECTIONS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]] as const;
 export const hexDistance = (q: number, r: number): number => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
 
-/** `q,r` → the cell, when it names land in the world underneath; null otherwise. */
+// ---- THE PLANET (owner, 2026-11-04: "Allow players to grow a tile anywhere in the planet") ----------
+//
+// The game's ground is a planet (`src/planet/geometry.ts`, shared with the page). Its flat lattice
+// walk gives every one of its 5,750 hexagons a `q,r` id in this file's own format — every id of the
+// world everyone already plays on is unchanged — so the planet adds tiles, never renames one. Two
+// rules follow from it: any planet tile can be grown, seen or not (`canGrowOn`), and "beside" means
+// beside on the planet (`worldNeighbours`). The geometry is built once, on first use (~0.2 s).
+/** The server accepts a new tile anywhere on the planet; announced to the page as `growAnywhere`. */
+export const PLANET_GROWTH = true;
+let planet: { sphere: Sphere; map: LatticeMap } | null = null;
+const planetOf = () => {
+  if (!planet) { const sphere = buildSphere(); planet = { sphere, map: latticeMap(sphere) }; }
+  return planet;
+};
+/** True when `id` names a tile of the planet (pentagons have no id). */
+export const isPlanetCell = (id: string): boolean => planetOf().map.cellOf.has(id);
+
+/** `q,r` → the cell, when it names land in the world underneath or a tile of the planet; null otherwise. */
 export const parseWorldCell = (id: string): WorldCell | null => {
   const m = /^(-?\d{1,3}),(-?\d{1,3})$/.exec(id);
   if (!m) return null;
   const q = Number(m[1]), r = Number(m[2]);
-  if (`${q},${r}` !== id || hexDistance(q, r) > WORLD_LIMIT) return null;
+  if (`${q},${r}` !== id) return null;
+  if (hexDistance(q, r) > WORLD_LIMIT && !isPlanetCell(id)) return null;
   return { id, q, r };
 };
 export const worldCell = (id: string): WorldCell | null => parseWorldCell(id);
-/** The neighbours of a cell, in the world underneath (seen or not). */
+/**
+ * The neighbours of a cell. On the planet these are the planet's own neighbours: inside the world
+ * everyone already plays on they are exactly the six flat ones; past a pentagon the flat arithmetic
+ * would name the wrong tile. Off the planet (legacy flat ids), the flat six.
+ */
 export const worldNeighbours = (id: string): string[] => {
   const cell = parseWorldCell(id);
   if (!cell) return [];
+  if (PLANET_GROWTH && isPlanetCell(id)) { const { sphere, map } = planetOf(); return neighbourIds(sphere, map, id); }
   return DIRECTIONS
     .map(([dq, dr]) => `${cell.q + dq},${cell.r + dr}`)
     .filter((key) => parseWorldCell(key) !== null);
@@ -109,6 +133,13 @@ export const seenCellIds = (claimIds: Iterable<string>): Set<string> => {
   for (const id of claimIds) for (const key of worldAround(id)) seen.add(key);
   return seen;
 };
+
+/**
+ * Can a new tile go on `cellId`? Anywhere on the planet (`PLANET_GROWTH`); otherwise, as before, only
+ * on the seen map. Whether it is free and affordable is the store's question, not this one.
+ */
+export const canGrowOn = (cellId: string, claimIds: Iterable<string>): boolean =>
+  parseWorldCell(cellId) !== null && ((PLANET_GROWTH && isPlanetCell(cellId)) || seenCellIds(claimIds).has(cellId));
 
 /** The seen map, top row first, left to right (a stable order for the wire and for drawing). */
 export const seenWorld = (claimIds: Iterable<string>): WorldCell[] =>

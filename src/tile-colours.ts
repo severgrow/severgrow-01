@@ -31,6 +31,7 @@
  */
 
 /** A tile colour. `css` is the face; `light`/`dark` are the gradient stops the map already uses. */
+import { buildSphere, latticeMap, neighbourIds, type LatticeMap, type Sphere } from './planet/geometry.js';
 export type TileColour = {
   readonly id: number;
   readonly name: string;
@@ -163,13 +164,19 @@ export const colourFor = (playerId: string, chosen?: number | null): string =>
 const DIRECTIONS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]] as const;
 
 /**
- * The six cells sharing a hex side with `q,r`, as ids. `server/src/world.ts` owns the same six
- * directions for the map itself; `tests/tile-colours.test.ts` holds the two lists together, because
- * `src/` may not import from `server/`.
+ * The cells sharing a hex side with `q,r`, as ids. On THE PLANET (owner, 2026-11-04) these are the
+ * planet's own neighbours (`src/planet/geometry.ts`, shared with the server): identical to the six
+ * flat ones inside the world everyone already plays on, and right past a pentagon, where flat
+ * arithmetic names a tile elsewhere. Off the planet, the flat six. `server/src/world.ts`
+ * (`worldNeighbours`) answers the same question for the map itself; `tests/tile-colours.test.ts`
+ * holds the two lists together, because `src/` may not import from `server/`.
  */
+let planet: { sphere: Sphere; map: LatticeMap } | null = null;
 export const neighbourCellIds = (cellId: string): string[] => {
   const m = /^(-?\d{1,3}),(-?\d{1,3})$/.exec(cellId);
   if (!m) return [];
+  if (!planet) { const sphere = buildSphere(); planet = { sphere, map: latticeMap(sphere) }; }
+  if (planet.map.cellOf.has(cellId)) return neighbourIds(planet.sphere, planet.map, cellId);
   const q = Number(m[1]), r = Number(m[2]);
   return DIRECTIONS.map(([dq, dr]) => `${q + dq},${r + dr}`);
 };

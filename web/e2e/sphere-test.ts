@@ -1,13 +1,14 @@
 // THE PLANET on /test/ (owner, 2026-11-04): the Territory window shows its ground as a planet in
 // space. Proves, in a real browser against the built product:
-//   - only /test/ has it; the live routes keep the flat Territory and its name;
+//   - the whole futa05 game has it (owner, 2026-11-04: "Yes, planet goes live"), on every route;
+//   - behind the main menu the planet is the backdrop, whole and dim, at the opening flight's start;
 //   - it sits inside the Territory window, wearing its header, MENU key and tile bar;
 //   - real tiles: a tap on a tile selects it through Territory's own selection bar;
 //   - a pentagon or empty space never selects; a drag turns the planet and never selects;
 //   - wheel/pinch zoom, a tap on tiles too small to hit flies in instead of guessing;
 //   - space: the slow star slide runs only while space is visible, and nothing renders at rest;
 //   - reduced motion: no fly-in, no slide; no WebGL: a readable fallback;
-//   - closing the window frees the planet (GPU buffers released, no hook left).
+//   - Back puts the menu up at once and the planet flies out behind it; starting a game frees it.
 // Chromium here, WebKit (iPhone engine) through sphere-test-ios.ts.
 import { mkdirSync } from 'node:fs';
 import { chromium, webkit, type Page } from 'playwright-core';
@@ -35,7 +36,7 @@ const world = { version: WORLD_VERSION, revision: 1, cost: 100, challengeStake: 
   disputes: [{ cellId: '4,0', challengerId: ME, defenderId: 'rival', accepted: false }] };
 
 const seed = (page: Page, reduce = false) => page.addInitScript(`window.__name=(f)=>f;
-for (const prefix of ['futa05-test:', 'futa05:']) {
+for (const prefix of ['futa05-test:', 'futa05:', 'futa05-3:']) {
   localStorage.setItem(prefix + 'severgrow.settings.v1', ${JSON.stringify(JSON.stringify({ sound: false, music: false, coach: false, reduceMotion: reduce }))});
   localStorage.setItem(prefix + 'severgrow.duel.identity.v1', ${JSON.stringify(JSON.stringify({ token: 'local-planet-token', playerId: ME, displayName: 'Cedar', kind: 'guest' }))});
   localStorage.setItem(prefix + 'futasaku.world.last.v1', ${JSON.stringify(JSON.stringify(world))});
@@ -68,15 +69,19 @@ const check = (name: string, ok: boolean, note = '') => {
 };
 
 try {
-  // ---- the live routes keep the flat Territory ----------------------------------------------
+  // ---- every route: THE PLANET, with the planet behind the menu --------------------------------
   for (const path of ['/', '/2/', '/3/']) {
     const p = await browser.newPage();
     await seed(p);
     await p.goto(fixture.origin + path);
     await ready(p);
     const label = await p.locator('#menu-world-label').textContent();
-    check(`${path}: the menu still says Territory`, !/PLANET/i.test(label ?? ''), label ?? '');
-    check(`${path}: no planet hook and no canvas`, (await planet(p)) === null && (await p.locator('.planet-canvas').count()) === 0);
+    check(`${path}: the menu names it THE PLANET`, /THE PLANET/.test(label ?? ''), label ?? '');
+    await p.waitForFunction(() => !!(window as unknown as { __severgrow: { planet: () => unknown } }).__severgrow.planet(), undefined, { timeout: 8000 }).catch(() => undefined);
+    const behind = await planet(p) as (Snapshot & { mode?: string }) | null;
+    check(`${path}: the planet is the menu's backdrop`, !!behind && behind.mode === 'menu' && (behind.ready || behind.fallback), JSON.stringify(behind)?.slice(0, 80));
+    check(`${path}: the menu stays on top and tappable`, await p.locator('#menu-play').isVisible() &&
+      await p.locator('.planet-canvas').evaluate((el) => getComputedStyle(el).pointerEvents === 'none'));
     await p.close();
   }
 
@@ -202,20 +207,28 @@ try {
     check(`[${tag}] no page scroll or overflow`, await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && scrollY === 0));
     check(`[${tag}] no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '));
 
-    // Leaving frees the planet.
+    // Back: the menu is up at once, and the planet flies out behind it to the menu's pose.
     await p.keyboard.press('Escape');
     await p.locator('#online-world-back').click();
-    await p.waitForFunction(() => !(window as unknown as { __severgrow: { planet: () => unknown } }).__severgrow.planet(), undefined, { timeout: 3000 }).catch(() => undefined);
-    check(`[${tag}] closing the window frees the planet`, (await planet(p)) === null && (await p.locator('.planet-canvas').count()) === 0,
-      `hook ${JSON.stringify(await planet(p))?.slice(0, 40)}, canvases ${await p.locator('.planet-canvas').count()}, screen ${await p.locator('#online-world-screen').isVisible()}`);
+    await p.waitForTimeout(60);
+    const back = await planet(p) as (Snapshot & { mode?: string }) | null;
+    check(`[${tag}] Back shows the menu at once`, await p.locator('#menu').isVisible());
+    check(`[${tag}] ...while the planet flies out behind it`, back?.mode === 'menu' && back.flying, JSON.stringify(back)?.slice(0, 90));
+    await p.waitForFunction(() => !(window as unknown as { __severgrow: { planet: () => { flying: boolean } | null } }).__severgrow.planet()?.flying, undefined, { timeout: 4000 }).catch(() => undefined);
+    check(`[${tag}] ...and comes to rest whole behind the menu`, (await planet(p) as (Snapshot & { mode?: string }) | null)?.mode === 'menu' && !(await planet(p))!.flying);
+    check(`[${tag}] one planet only, reused (no second canvas)`, (await p.locator('.planet-canvas').count()) === 1);
     if (width === 390 && !ios) {
       // Five more visits leave nothing behind.
       for (let i = 0; i < 5; i++) {
         await openPlanet(p); await settled(p);
         await p.locator('#online-world-back').click();
-        await p.waitForFunction(() => !(window as unknown as { __severgrow: { planet: () => unknown } }).__severgrow.planet(), undefined, { timeout: 3000 }).catch(() => undefined);
+        await p.waitForTimeout(150);
       }
-      check(`[${tag}] five more visits leave no canvas behind`, (await p.locator('.planet-canvas').count()) === 0, `${await p.locator('.planet-canvas').count()} canvases, hook ${(await planet(p)) !== null}`);
+      check(`[${tag}] five more visits still leave exactly one canvas`, (await p.locator('.planet-canvas').count()) === 1);
+      // Starting a game frees it.
+      await p.locator('#menu-play').click();
+      await p.waitForTimeout(600);
+      check(`[${tag}] leaving the menu for PLAY frees the planet`, (await planet(p)) === null && (await p.locator('.planet-canvas').count()) === 0);
     }
     await context.close();
   }

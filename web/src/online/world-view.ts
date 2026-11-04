@@ -1,7 +1,7 @@
 import type { DuelClient } from '../../../server/src/client.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
-import { worldNeighbours } from '../../../server/src/world.js';
+import { isPlanetCell, worldNeighbours } from '../../../server/src/world.js';
 import {
   HELD_DARK,
   HELD_LIGHT,
@@ -961,6 +961,8 @@ export class WorldView {
     }
     // The menu's deliberate anchor is a real camera choice. Updates must not recenter it.
     if (usableView(this.box)) this.touched = true;
+    // THE PLANET BEHIND THE MENU (owner, 2026-11-04).
+    this.openPlanet('menu');
   }
 
   /** Frame the CURRENT window from scratch (the menu's whole screen or the Territory's panel),
@@ -1191,7 +1193,7 @@ export class WorldView {
     if (this.svg) this.applyView();
     this.settleWarp(true);
     this.notice(this.svg ? '' : ONLINE.worldLoading);
-    this.openPlanet();
+    this.openPlanet('world');
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
     if (!this.world) {
@@ -1236,8 +1238,10 @@ export class WorldView {
       rememberCamera(browserStorage(), this.world.version, this.box, true);
   }
   close(instant = false) {
-    this.planet?.dispose();
-    this.planet = null;
+    // THE PLANET STAYS FOR THE MENU (owner, 2026-11-04): Back flies it out behind the menu. Only an
+    // instant close (a match starting, the menu going away) frees its graphics.
+    if (instant || !FEATURES.planet) { this.planet?.dispose(); this.planet = null; }
+    else this.planet?.setMode('menu');
     this.stopGlide();
     this.saveCamera();
     this.active = false;
@@ -2241,16 +2245,22 @@ export class WorldView {
     this.markSelection();
   }
   /** THE PLANET: on /test/ the window's ground is a planet; its taps are this map's taps. */
-  private openPlanet() {
-    if (!FEATURES.planet || this.planet || this.planetLoading) return;
+  private planetMode: 'menu' | 'world' = 'menu';
+  private openPlanet(mode: 'menu' | 'world') {
+    this.planetMode = mode;
+    if (!FEATURES.planet) return;
+    if (this.planet) { this.planet.setMode(mode); this.pushPlanet(); return; }
+    if (this.planetLoading) return;
     const grid = document.getElementById('online-world-grid');
     if (!grid) return;
     this.planetLoading = true;
-    void mountWorldPlanet(grid, (id) => (id ? this.select(id) : this.deselect())).then((planet) => {
+    void mountWorldPlanet(grid, (id) => (id ? this.select(id) : this.deselect()), mode).then((planet) => {
       this.planetLoading = false;
       if (!planet) return;
-      if (!this.active) { planet.dispose(); return; }
+      // Neither the window nor the menu wants it any more (a match started while it loaded).
+      if (!this.active && !this.menuPreview) { planet.dispose(); return; }
       this.planet = planet;
+      planet.setMode(this.planetMode);
       this.pushPlanet();
     });
   }
@@ -2263,7 +2273,17 @@ export class WorldView {
       fog: this.fogCells ? [...this.fogCells.keys()] : [],
       disputes: this.disputes.map((dispute) => dispute.cellId),
       home: homeTile(world.claims, me),
+      growAnywhere: world.growAnywhere === true,
     });
+  }
+  /**
+   * GROW ANYWHERE ON THE PLANET (owner, 2026-11-04): any free planet tile, seen or not, once the
+   * server says it takes them (`growAnywhere`). An older server keeps the seen-map rule.
+   */
+  private planetGrowable(cellId: string): boolean {
+    const world = this.world;
+    if (!this.planet || !world?.growAnywhere || !this.wallet || this.wallet.balance < world.cost) return false;
+    return isPlanetCell(cellId) && !world.claims.some((claim) => claim.cellId === cellId);
   }
   private markSelection() {
     this.pushPlanet();
@@ -2334,7 +2354,8 @@ export class WorldView {
         // opens that, and duplicating it here would be one more key for nothing.
         if (!mine) actions.push({ kind: 'profile', label: ONLINE.worldSeeProfile, run: () => undefined, playerId: tile.ownerId });
       } else {
-        const available = !!this.svg?.querySelector(`.world-hex[data-cell-id="${cellId}"]`)?.classList.contains('available');
+        const available = !!this.svg?.querySelector(`.world-hex[data-cell-id="${cellId}"]`)?.classList.contains('available') ||
+          this.planetGrowable(cellId);
         // OWNER WORDING (2026-10-16): "when placing a tile dont say 'claim hex' say grow a tile
         // everywhere". The verb is GROW and the noun is TILE throughout this screen - it also matches
         // the game's own Grow action, so the world map and the board speak the same language.

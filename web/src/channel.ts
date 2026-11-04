@@ -44,10 +44,13 @@ export const FEATURES = Object.freeze({
   blitz: CHANNEL === 'futa05' && IS_TEST_ROUTE,
   firstExperience: CHANNEL === 'futa05' && IS_TEST_ROUTE,
   /**
-   * THE PLANET (owner, 2026-11-04): on the staging copy only, the Territory window shows its ground
-   * as a planet in space and is called THE PLANET. Live keeps the flat Territory map.
+   * THE PLANET (owner, 2026-11-04): the Territory window shows its ground as a planet in space,
+   * called THE PLANET, and the planet is the main menu's backdrop. First on the staging copy; then
+   * "When you promote, should THE PLANET go live for everyone?" — "Yes, planet goes live". So it is
+   * the whole futa05 game (it reaches futasaku.com with the next promote); the locked futa04 line
+   * keeps its flat Territory.
    */
-  planet: CHANNEL === 'futa05' && IS_TEST_ROUTE,
+  planet: CHANNEL === 'futa05',
 });
 const isPreviewHost = typeof location !== 'undefined' && (
   location.hostname.endsWith('.chatgpt.site') ||

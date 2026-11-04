@@ -93,6 +93,9 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
   // player asked to leave twice, and the second press must not leave them on a hidden screen.
   if(leaving&&leavingFinish){const finish=leavingFinish;leavingFinish=null;finish();return;}
   if(mode!=='world'){done();return;}
+  // THE PLANET goes back to the menu at once (owner, 2026-11-04: "instantly takes player to menu but
+  // still shows the animation smoothly"): its own flight out plays behind the menu's buttons.
+  if(gridOf()?.classList.contains('planet-on')){done();return;}
   const map=mapOf();
   // Read BEFORE the beats are cancelled: cancelling the arrival would snap the map back to its CSS
   // rest (full light) and the fade would start from a brightness the player never saw.

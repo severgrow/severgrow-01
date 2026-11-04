@@ -25,6 +25,11 @@ const OPEN_TILE_PX = 44;
 const TAP_TILE_PX = 30;
 const MAX_TILE_PX = 84;
 const MIN_ZOOM = .92;
+/** Behind the main menu the whole planet floats a little smaller, halo and all (owner, 2026-11-04:
+ *  "Make the live territory in background of main menu be the planet ... the starting position of
+ *  when you open the planet"). */
+const MENU_ZOOM = .78;
+const OUT_MS = 900;
 const FLY_MS = 620;
 const INTRO_MS = 1150;
 const DRIFT_PX_PER_MS = .006;
@@ -35,7 +40,10 @@ export type PlanetHooks = {
   onTile: (id: string | null) => void;
   label: string;
   unavailable: string;
+  /** Where the planet starts: behind the menu (dim, whole) or in the Territory window. */
+  mode?: PlanetMode;
 };
+export type PlanetMode = 'menu' | 'world';
 export type Planet = ReturnType<typeof mountPlanet>;
 
 const easeInOut = (t: number) => (t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
@@ -61,15 +69,17 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   let selected: number | null = null, pulseUntil = 0;
   let q: Quat = [0, 0, 0, 1], zoom = 1, targetZoom = 1;
   let speed = 0, axis: V3 = [0, 1, 0], lastMove = 0, lastBall: V3 = [0, 0, 1];
-  let flight: { from: Quat; to: Quat; zoomFrom: number; zoomTo: number; at: number; ms: number; ease: (t: number) => number } | null = null;
-  let drift: [number, number] = [0, 0], introduced = false;
+  /** `elapsed` advances by each painted frame's (capped) time, never by the wall clock: a busy main
+   *  thread (the window opening, data arriving) pauses the flight instead of skipping most of it. */
+  let flight: { from: Quat; to: Quat; zoomFrom: number; zoomTo: number; elapsed: number; ms: number; ease: (t: number) => number } | null = null;
+  let drift: [number, number] = [0, 0], introduced = false, mode: PlanetMode = hooks.mode ?? 'world';
   const pointers = new Map<number, { x: number; y: number }>();
   let start: { x: number; y: number } | null = null, dragged = false, multi = false, pinch = 0, lastTap = 0;
 
   const motion = () => interfaceMotionAllowed();
   const tilePx = (z = zoom) => discRadius(rect.width, rect.height, z) * TILE_AT_ZOOM_1(sphere.frequency);
   const zoomFor = (px: number) => px / Math.max(1e-6, tilePx(1));
-  const clampZoom = (z: number) => Math.min(zoomFor(MAX_TILE_PX), Math.max(MIN_ZOOM, z));
+  const clampZoom = (z: number) => Math.min(zoomFor(MAX_TILE_PX), Math.max(mode === 'menu' ? MENU_ZOOM : MIN_ZOOM, z));
   const spaceVisible = () => discRadius(rect.width, rect.height, zoom) < Math.hypot(rect.width, rect.height) / 2;
   const ask = () => { if (!raf && !disposed && !lost && !document.hidden) raf = requestAnimationFrame(frame); };
   const stop = () => { speed = 0; flight = null; targetZoom = zoom; };
@@ -94,7 +104,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const flyTo = (to: Quat, toZoom: number, ms = FLY_MS, ease = easeOut) => {
     speed = 0;
     if (!motion()) { q = to; zoom = targetZoom = toZoom; flight = null; ask(); return; }
-    flight = { from: q, to, zoomFrom: zoom, zoomTo: toZoom, at: performance.now(), ms, ease };
+    flight = { from: q, to, zoomFrom: zoom, zoomTo: toZoom, elapsed: 0, ms, ease };
+    lastFrame = 0;
     ask();
   };
 
@@ -105,7 +116,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     lastFrame = now;
     if (!motion()) { speed = 0; if (flight) { q = flight.to; zoom = targetZoom = flight.zoomTo; flight = null; } zoom = targetZoom; pulseUntil = 0; }
     if (flight) {
-      const t = Math.min(1, (now - flight.at) / flight.ms), k = flight.ease(t);
+      // Up to 120 ms per frame counts: a slow phone still lands on time, a real stall pauses.
+      flight.elapsed += Math.min(120, gap);
+      const t = Math.min(1, flight.elapsed / flight.ms), k = flight.ease(t);
       q = slerp(flight.from, flight.to, k);
       zoom = targetZoom = flight.zoomFrom * Math.pow(flight.zoomTo / flight.zoomFrom, k);
       if (t === 1) flight = null;
@@ -139,21 +152,33 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     rect = stage.getBoundingClientRect();
     if (!renderer || !rect.width || !rect.height) return;
     renderer.resize(rect.width, rect.height);
-    zoom = targetZoom = clampZoom(keep ? zoomFor(keep) : zoom);
-    // A flight under way (the opening, say) still lands at the tile size it was aiming for.
-    if (flight && aim) { flight.zoomFrom = clampZoom(zoomFor(aim[0])); flight.zoomTo = clampZoom(zoomFor(aim[1])); }
+    // A flight is exempt from the window's zoom floor: it may start from the menu's smaller planet.
+    const same = keep ? zoomFor(keep) : zoom;
+    zoom = targetZoom = mode === 'menu' && !flight ? MENU_ZOOM : flight ? same : clampZoom(same);
+    // A flight under way (the opening, say) still lands at the tile size it was aiming for. Out to
+    // the menu, it lands on the menu's own whole-planet size for the new (full-screen) box.
+    if (flight && aim) {
+      flight.zoomFrom = zoomFor(aim[0]);
+      flight.zoomTo = mode === 'menu' ? MENU_ZOOM : clampZoom(zoomFor(aim[1]));
+    }
     if (!introduced && input) intro();
     ask();
   };
+  /** The menu's pose, which is also where the opening flight begins: the whole planet, a quarter
+   *  turn away from your land. */
+  const menuPose = (): Quat => {
+    const tilt = Math.sin(.55), roll: Quat = [tilt * .6, tilt * .8, 0, Math.cos(.55)];
+    return multiply(roll, homeQuat(sphere, map, input?.home ?? '0,0'));
+  };
   const intro = () => {
     introduced = true;
+    if (mode === 'menu') { q = menuPose(); zoom = targetZoom = MENU_ZOOM; ask(); return; }
     const target = homeQuat(sphere, map, input?.home ?? '0,0');
     const open = clampZoom(zoomFor(OPEN_TILE_PX));
     if (!motion()) { q = target; zoom = targetZoom = open; ask(); return; }
-    // From space: the whole planet, a quarter turn away, then down to your land.
-    const tilt = Math.sin(.55), roll: Quat = [tilt * .6, tilt * .8, 0, Math.cos(.55)];
-    q = multiply(roll, target);
-    zoom = targetZoom = MIN_ZOOM;
+    // From space down to your land. Opened from the menu, the planet is ALREADY at the menu pose,
+    // so this flight simply continues what was behind the buttons.
+    if (!flight) { q = menuPose(); zoom = targetZoom = MENU_ZOOM; }
     flyTo(target, open, INTRO_MS, easeInOut);
   };
   const fail = (text: string) => { fallback.textContent = text; fallback.hidden = false; canvas.hidden = true; };
@@ -171,7 +196,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
 
   // ---- input ------------------------------------------------------------------------------------
   canvas.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || lost || !renderer) return;
+    if (e.button !== 0 || lost || !renderer || mode === 'menu') return;
     e.preventDefault();
     canvas.focus({ preventScroll: true });
     stop(); lastFrame = 0;
@@ -235,7 +260,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (index === null) { hooks.onTile(null); return; }
     // Tiles too small to hit reliably: the tap brings you closer instead of guessing.
     if (tilePx() < TAP_TILE_PX) { flyToCell(index, clampZoom(zoomFor(OPEN_TILE_PX))); return; }
-    const id = ground && ground.kind[index]! >= KIND.land && ground.kind[index]! <= KIND.mine ? tileForCell(map, index) : null;
+    // Known land and owned tiles are always tiles; with grow-anywhere every hexagon of the planet is.
+    const tile = ground && ((ground.kind[index]! >= KIND.land && ground.kind[index]! <= KIND.mine) || (input?.growAnywhere && ground.kind[index]! !== KIND.pentagon));
+    const id = tile ? tileForCell(map, index) : null;
     hooks.onTile(id);
   };
   canvas.addEventListener('keydown', (e) => {
@@ -268,7 +295,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       input = next;
       const fog = [...(next.fog ?? [])];
       const disputes = [...(next.disputes ?? [])];
-      const sig = `${next.me}|${next.cells.length}|${next.claims.map((c) => `${c.cellId}:${c.ownerId}:${c.colour}`).join(',')}|${fog.length}|${disputes.join(',')}`;
+      const sig = `${next.me}|${next.growAnywhere ? 1 : 0}|${next.cells.length}|${next.claims.map((c) => `${c.cellId}:${c.ownerId}:${c.colour}`).join(',')}|${fog.length}|${disputes.join(',')}`;
       const index = next.selected ? map.cellOf.get(next.selected) ?? null : null;
       if (sig !== signature) {
         signature = sig;
@@ -282,6 +309,21 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       if (index !== null && motion()) pulseUntil = performance.now() + 420;
       if (!introduced && rect.width && rect.height && renderer) intro();
       ask();
+    },
+    /**
+     * Behind the menu, or in the Territory window. Into the window: the opening flight from the
+     * menu pose down to your land. Back to the menu: the same flight in reverse, out to the whole
+     * planet, playing behind the menu that is already there.
+     */
+    setMode(next: PlanetMode) {
+      if (next === mode) return;
+      mode = next;
+      speed = 0;
+      pointers.clear();
+      if (!renderer || !input) { introduced = false; return; }
+      if (next === 'world') { introduced = false; intro(); return; }
+      if (!motion()) { q = menuPose(); zoom = targetZoom = MENU_ZOOM; ask(); return; }
+      flyTo(menuPose(), MENU_ZOOM, OUT_MS, easeInOut);
     },
     /** Bring flat tile `id` (e.g. the player's own land) to the middle at a comfortable size. */
     home(id: string | null) {
@@ -301,7 +343,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       cells: sphere.cells.length,
       zoom, tilePx: tilePx(), q: [...q], selected: selected === null ? null : tileForCell(map, selected),
       frames: renderer?.frames ?? 0, bytes: renderer?.bytes ?? 0, pendingFrame: !!raf || !!flight,
-      flying: !!flight, spinning: speed > 0, spaceVisible: spaceVisible(), fallback: !fallback.hidden,
+      flying: !!flight, spinning: speed > 0, mode, spaceVisible: spaceVisible(), fallback: !fallback.hidden,
       /** Where a flat tile's centre is on screen right now (CSS px), or null when it faces away. */
       screenOf: (id: string) => {
         const index = map.cellOf.get(id);

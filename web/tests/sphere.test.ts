@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildSphere, pickCell, latticeMap, homeQuat, dot, cross, sub, scale, unit, PLANET_FREQUENCY, type Sphere, type V3,
+  buildSphere, pickCell, latticeMap, homeQuat, neighbourIds, dot, cross, sub, scale, unit, PLANET_FREQUENCY, type Sphere, type V3,
 } from '../src/sphere/geometry.js';
 import { arcQuat, rotate, multiply, slerp, type Quat } from '../src/sphere/rotation.js';
 import { WORLD_CELLS, worldAround, hexDistance } from '../../server/src/world.js';
@@ -141,6 +141,22 @@ describe('the flat Territory map lies on the planet tile for tile', () => {
       }
     }
   });
+  // GROW ANYWHERE ON THE PLANET (owner, 2026-11-04). The walk reaches every hexagon, so every tile
+  // the player can see and tap has an id the server understands.
+  it('gives every hexagon on the planet its own id, and no pentagon one', () => {
+    const hexes = sphere.cells.filter((c) => !c.pentagon);
+    expect(map.flatOf.size).toBe(hexes.length);
+    expect(new Set(map.flatOf.values()).size).toBe(hexes.length);
+    for (const c of sphere.cells.filter((cell) => cell.pentagon)) expect(map.flatOf.has(c.index)).toBe(false);
+  });
+  it('neighbourIds is the planet\'s own adjacency: symmetric, and the flat one inside the disc', () => {
+    for (const [id] of map.cellOf) for (const other of neighbourIds(sphere, map, id)) expect(neighbourIds(sphere, map, other)).toContain(id);
+    for (const [id] of map.cellOf) {
+      const [q, r] = id.split(',').map(Number);
+      if (hexDistance(q!, r!) >= map.radius) continue;
+      expect(neighbourIds(sphere, map, id).sort()).toEqual(worldAround(id, 1).filter((x) => x !== id).sort());
+    }
+  });
   it('holds the whole current world with its two rings of reach', () => {
     for (const cell of WORLD_CELLS) {
       for (const id of worldAround(cell.id, 2)) expect(map.cellOf.has(id)).toBe(true);
@@ -228,5 +244,22 @@ describe('the planet shows the real Territory', () => {
     expect(tileForCell(map, at('5,-3'))).toBe('5,-3');
     for (const c of sphere.cells.filter((cell) => cell.pentagon)) expect(tileForCell(map, c.index)).toBeNull();
     expect(cellForTile(map, '99,99')).toBeNull();
+  });
+});
+
+describe('grow anywhere: plain planet, a lit ring only around placed tiles', () => {
+  const map = latticeMap(sphere);
+  const at = (id: string) => map.cellOf.get(id)!;
+  const ground = groundOf(sphere, map, {
+    cells: WORLD_CELLS, fog: ['11,0'], me: 'me', growAnywhere: true,
+    claims: [{ cellId: '0,0', ownerId: 'me', colour: 'hsl(150 30% 50%)' }, { cellId: '30,-10', ownerId: 'r', colour: '#cc8844' }],
+  });
+  it('lights only the tiles beside a placed tile; the old coast and fog are plain ground', () => {
+    for (const id of ['1,0', '0,1', '-1,0']) expect(ground.kind[at(id)]).toBe(KIND.land);
+    for (const id of neighbourIds(sphere, map, '30,-10')) expect(ground.kind[at(id)]).toBe(KIND.land);
+    expect(ground.kind[at('-5,0')]).toBe(KIND.void);
+    expect(ground.kind[at('11,0')]).toBe(KIND.void);
+    expect(ground.kind[at('30,-10')]).toBe(KIND.owned);
+    expect([...ground.kind].filter((k) => k === KIND.pentagon)).toHaveLength(12);
   });
 });

@@ -25,22 +25,27 @@ describe('release channel policy', () => {
     expect(new Set(prefixes).size).toBe(4);
     for(const a of prefixes)for(const b of prefixes)if(a!==b)expect(a.startsWith(b)).toBe(false);
   });
-  it('new experience and THE PLANET are exclusive to /test/, with their own untouched save namespace', () => {
+  it('the new experience is exclusive to /test/, with its own untouched save namespace', () => {
     for (const path of ['/', '/2/', '/3/', '/test2/', '/2/test/']) {
-      const p=boot('futa05',path).policy;
-      expect(p.FEATURES.firstExperience).toBe(false);
-      expect(p.FEATURES.planet).toBe(false);
+      expect(boot('futa05',path).policy.FEATURES.firstExperience).toBe(false);
     }
     const {policy,Storage}=boot('futa05','/test/');
     expect(policy.FEATURES.firstExperience).toBe(true);
-    expect(policy.FEATURES.planet).toBe(true);
     expect(policy.STORAGE_PREFIX).toBe('futa05-test:');
     const store=new Storage();store.data.set('futa05:save','real progress');
     expect(store.getItem('save')).toBeNull();store.setItem('save','experiment');
     expect(store.data.get('futa05:save')).toBe('real progress');
     for(const channel of ['futa04','futa-test','test','live']){
       expect(boot(channel,'/test/').policy.FEATURES.firstExperience).toBe(false);
-      expect(boot(channel,'/test/').policy.FEATURES.planet).toBe(false);
+    }
+  });
+  // OWNER CHANGED THE RULE (2026-11-04): THE PLANET was /test/-only; asked "When you promote, should
+  // THE PLANET go live for everyone?", the owner answered "Yes, planet goes live". So it is the whole
+  // futa05 game on every route, and still never the locked futa04 line or the other channels.
+  it('THE PLANET is the whole futa05 game, and nothing else', () => {
+    for (const path of ['/', '/2/', '/3/', '/test/', '/test2/']) expect(boot('futa05',path).policy.FEATURES.planet).toBe(true);
+    for (const channel of ['futa04','futa-test','test','live']) {
+      for (const path of ['/', '/test/']) expect(boot(channel,path).policy.FEATURES.planet).toBe(false);
     }
   });
   it.each(['live', 'test', 'futa04', 'futa-test', 'futa05'])('%s isolates local and session storage', (channel) => {
