@@ -43,7 +43,11 @@ export const FEATURES = Object.freeze({
    */
   blitz: CHANNEL === 'futa05' && IS_TEST_ROUTE,
   firstExperience: CHANNEL === 'futa05' && IS_TEST_ROUTE,
-  sphereTest: CHANNEL === 'futa05' && IS_TEST_ROUTE,
+  /**
+   * THE PLANET (owner, 2026-11-04): on the staging copy only, the Territory window shows its ground
+   * as a planet in space and is called THE PLANET. Live keeps the flat Territory map.
+   */
+  planet: CHANNEL === 'futa05' && IS_TEST_ROUTE,
 });
 const isPreviewHost = typeof location !== 'undefined' && (
   location.hostname.endsWith('.chatgpt.site') ||

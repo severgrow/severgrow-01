@@ -1,5 +1,15 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-04 — THE PLANET replaces the flat map on /test/
+
+Owner: *"geometry of hexes is wrong ... replace and call it THE PLANET instead of TERRITORY ... Full
+Territory actions"*. The sphere test's lopsided hexes came from projecting a flat grid and using
+circumcentre corners (median side ratio 1.124, worst 1.634); an evenly relaxed frequency-24 mesh with
+centroid corners gives 1.054 / 1.175. The flat Territory map is laid on the planet tile for tile, so
+Territory's own selection and actions drive it unchanged. The twelve pentagons are black,
+uninhabitable ground. Only `/test/` (`FEATURES.planet`); live keeps the flat map. Details:
+[PLANET.md](PLANET.md).
+
 ## 2026-11-03 — The projection stays one shared map; the release does nothing
 
 Owner: *"evaluate a cleaner implementation before committing to the current solution … a

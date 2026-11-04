@@ -25,22 +25,22 @@ describe('release channel policy', () => {
     expect(new Set(prefixes).size).toBe(4);
     for(const a of prefixes)for(const b of prefixes)if(a!==b)expect(a.startsWith(b)).toBe(false);
   });
-  it('new experience and sphere are exclusive to /test/, with their own untouched save namespace', () => {
+  it('new experience and THE PLANET are exclusive to /test/, with their own untouched save namespace', () => {
     for (const path of ['/', '/2/', '/3/', '/test2/', '/2/test/']) {
       const p=boot('futa05',path).policy;
       expect(p.FEATURES.firstExperience).toBe(false);
-      expect(p.FEATURES.sphereTest).toBe(false);
+      expect(p.FEATURES.planet).toBe(false);
     }
     const {policy,Storage}=boot('futa05','/test/');
     expect(policy.FEATURES.firstExperience).toBe(true);
-    expect(policy.FEATURES.sphereTest).toBe(true);
+    expect(policy.FEATURES.planet).toBe(true);
     expect(policy.STORAGE_PREFIX).toBe('futa05-test:');
     const store=new Storage();store.data.set('futa05:save','real progress');
     expect(store.getItem('save')).toBeNull();store.setItem('save','experiment');
     expect(store.data.get('futa05:save')).toBe('real progress');
     for(const channel of ['futa04','futa-test','test','live']){
       expect(boot(channel,'/test/').policy.FEATURES.firstExperience).toBe(false);
-      expect(boot(channel,'/test/').policy.FEATURES.sphereTest).toBe(false);
+      expect(boot(channel,'/test/').policy.FEATURES.planet).toBe(false);
     }
   });
   it.each(['live', 'test', 'futa04', 'futa-test', 'futa05'])('%s isolates local and session storage', (channel) => {

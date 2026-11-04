@@ -2,7 +2,6 @@
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 // EXPERIMENTAL Blitz (/test/ only): presentation + wiring; its rules live in logic/blitz.ts.
 import type { BlitzPractice } from './blitz/practice.js';
-import type { mountSphereTest } from './sphere/entry.js';
 import { showLiveStrike } from './ui/live-strike.js';
 import { readAppViewport } from './ui/app-viewport.js';
 import { mountMatchChat } from './online/chat/view.js';
@@ -33,6 +32,7 @@ import type { DisplayEvent } from './player/display-readout.js';
 import { createTheirsDim, replayedByOpponent } from './player/replay-display.js';
 import { outcomeCue } from './player/outcome-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
+import { planetSnapshot } from './online/world-planet.js';
 import { gameHighlights } from './logic/highlights.js';
 import { harvestFigure, harvestSvg } from './logic/harvest.js';
 import type { HarvestFigure } from './logic/harvest.js';
@@ -255,7 +255,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { SOUND_REMOVED, Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PILES, REPLAY, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL, TUTORIAL_REPLAY } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PLANET, PILES, REPLAY, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL, TUTORIAL_REPLAY } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -863,6 +863,11 @@ function layoutMenu(canContinue: boolean) {
   // writes the label.
   $('menu-world-label').textContent = MENU.world;
   $('menu-world').setAttribute('aria-label', MENU.world);
+  // THE PLANET (/test/ only): the same entry under its staging name, written into the same node.
+  if (FEATURES.planet) {
+    $('menu-world-label').textContent = PLANET.title;
+    $('menu-world').setAttribute('aria-label', PLANET.menu);
+  }
   // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
   // only when the build has an online endpoint to read the map from.
   $('menu-world').hidden = !(FEATURES.campaign && online);
@@ -1972,8 +1977,6 @@ async function mountPlayerEnhancements() {
     loads.push(import('./player/fonts.js').then((f) => f.applyFont('new')));
   }
 
-  // Only /test/ gets the cheap Sphere Test entry; its renderer stays lazy until a tap.
-  if(FEATURES.sphereTest) loads.push(import('./sphere/entry.js').then(m=>{sphereTest=m.mountSphereTest();}));
 
   // EXPERIMENTAL Blitz. The channel guard keeps its module out of the futa04 product build
   // entirely; the module's own FEATURES.blitz gate (channel + the /test/ route) keeps it off the
@@ -3551,7 +3554,6 @@ let campaignLevel: CampaignLevel | null = null;
  * the test hook. Every other way a match starts clears both.
  */
 let blitz: BlitzPractice | null = null;
-let sphereTest: ReturnType<typeof mountSphereTest> = null;
 let blitzMatch = false;
 let blitzMap: number | null = null;
 /**
@@ -10688,7 +10690,8 @@ let appReady = false;
     return !!p;
   },
   settings: () => ({ ...settings }),
-  sphere: () => sphereTest?.snapshot() ?? null,
+  /** THE PLANET (/test/ only): null when the Territory shows the flat map. */
+  planet: () => planetSnapshot(),
   /** The campaign place the page is on, as the menu's LEVEL <n> reads it (tests/screenshots). */
   campaignLevel: () => currentLevel(campaignProgress).number,
   /**

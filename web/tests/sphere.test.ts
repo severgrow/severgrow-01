@@ -4,6 +4,7 @@ import {
 } from '../src/sphere/geometry.js';
 import { arcQuat, rotate, multiply, slerp, type Quat } from '../src/sphere/rotation.js';
 import { WORLD_CELLS, worldAround, hexDistance } from '../../server/src/world.js';
+import { groundOf, KIND, cellForTile, tileForCell } from '../src/sphere/ground.js';
 
 // THE PLANET (owner, 2026-11-04: "geometry of hexes is wrong, analyse why and fix. If we need 12
 // pentagons to make geometric right, that's fine, but hexes should all look the same").
@@ -186,5 +187,46 @@ describe('picking and rotation', () => {
     expect(Math.hypot(...q)).toBeCloseTo(1, 10);
     const home = arcQuat([0, 1, 0], [0, 0, 1]);
     expect(rotate(slerp([0, 0, 0, 1], home, .5), [0, 1, 0])[2]).toBeGreaterThan(0);
+  });
+});
+
+describe('the planet shows the real Territory', () => {
+  const map = latticeMap(sphere);
+  const claims = [
+    { cellId: '0,0', ownerId: 'me', colour: 'hsl(150 30% 50%)' },
+    { cellId: '1,0', ownerId: 'me', colour: 'hsl(150 30% 50%)' },
+    { cellId: '2,0', ownerId: 'rival', colour: '#cc8844' },
+  ];
+  const ground = groundOf(sphere, map, {
+    cells: WORLD_CELLS, claims, fog: ['20,20', '11,0'], disputes: ['2,0'], me: 'me',
+  });
+  const at = (id: string) => map.cellOf.get(id)!;
+  it('tells mine, a rival\'s, free, undiscovered, unreached and pentagon ground apart', () => {
+    expect(ground.kind[at('0,0')]).toBe(KIND.mine);
+    expect(ground.kind[at('2,0')]).toBe(KIND.owned);
+    expect(ground.kind[at('-3,0')]).toBe(KIND.land);
+    expect(ground.kind[at('11,0')]).toBe(KIND.fog);
+    expect(ground.kind[at('14,0')]).toBe(KIND.void);
+    expect([...ground.kind].filter((k) => k === KIND.pentagon)).toHaveLength(12);
+    // Every known world tile is on the planet and free unless claimed.
+    expect([...ground.kind].filter((k) => k >= KIND.land && k <= KIND.mine)).toHaveLength(WORLD_CELLS.length);
+  });
+  it('wears each owner\'s own colour and marks the disputed tile', () => {
+    const rgb = (id: string) => [...ground.colour.slice(at(id) * 3, at(id) * 3 + 3)];
+    expect(rgb('2,0')[0]).toBeCloseTo(0xcc / 255, 5);
+    expect(rgb('0,0')).toEqual(rgb('1,0'));
+    expect(ground.disputed[at('2,0')]).toBe(1);
+    expect(ground.disputed[at('1,0')]).toBe(0);
+  });
+  it('draws a border only where the ground changes', () => {
+    const edgeTo = (from: string, to: string) => sphere.cells[at(from)]!.neighbours.indexOf(at(to));
+    expect(ground.border[at('0,0')]! & (1 << edgeTo('0,0', '1,0'))).toBe(0);
+    expect(ground.border[at('1,0')]! & (1 << edgeTo('1,0', '2,0'))).not.toBe(0);
+    expect(ground.border[at('-3,0')]! & (1 << edgeTo('-3,0', '-4,0'))).toBe(0);
+  });
+  it('maps planet taps back to flat tile ids, never for a pentagon', () => {
+    expect(tileForCell(map, at('5,-3'))).toBe('5,-3');
+    for (const c of sphere.cells.filter((cell) => cell.pentagon)) expect(tileForCell(map, c.index)).toBeNull();
+    expect(cellForTile(map, '99,99')).toBeNull();
   });
 });

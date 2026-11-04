@@ -2,7 +2,8 @@
 
 import { DuelClient, DuelError, browserStorage } from '../../../server/src/client.js';
 import type { MatchListEntry, MatchSummary, MatchViewPayload, ReplayPayload, WorldMapPayload } from '../../../server/src/protocol.js';
-import { ONLINE, REPLAY } from '../../../src/strings.js';
+import { ONLINE, PLANET, REPLAY } from '../../../src/strings.js';
+import { FEATURES } from '../channel.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
 import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
@@ -421,12 +422,14 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     $('online-join-open').textContent = ONLINE.join;
     const worldBtn = document.getElementById('online-world') as HTMLButtonElement | null;
-    if (worldBtn) worldBtn.textContent = ONLINE.worldMap;
+    // THE PLANET (/test/ only): the same screen under its new name (owner, 2026-11-04).
+    const worldName = FEATURES.planet ? PLANET.title : ONLINE.worldTitle;
+    if (worldBtn) worldBtn.textContent = FEATURES.planet ? PLANET.menu : ONLINE.worldMap;
     // The Territory's heading AND its spoken name come from the one string (owner, 2026-10-16:
     // the shared screen is called Territory). It opens from two places - the menu and the hub - and
     // both must name the same screen.
-    $('online-world-title').textContent = ONLINE.worldTitle;
-    $('online-world-screen').setAttribute('aria-label', ONLINE.worldTitle);
+    $('online-world-title').textContent = worldName;
+    $('online-world-screen').setAttribute('aria-label', worldName);
     // The Your-matches label carries a COUNT, so `paintMatchesDisclosure` owns its text. Writing
     // the count-less string here would wipe the number every time another screen calls fillCopy.
     $('online-matches-empty').textContent = ONLINE.emptyMatches;

@@ -15,7 +15,10 @@
 // read-outs while keeping the "TERRITORY" label exactly where it is.
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet, WorldChallengesPayload } from '../../../server/src/seeds/types.js';
-import { MENU, ONLINE } from '../../../src/strings.js';
+import { MENU, ONLINE, PLANET } from '../../../src/strings.js';
+import { FEATURES } from '../channel.js';
+/** The menu entry's spoken name: THE PLANET on the staging copy, Territory everywhere else. */
+const worldName = () => (FEATURES.planet ? PLANET.menu : MENU.world);
 import { EASE, MOTION } from '../logic/motion.js';
 import { formatRemaining } from './clock.js';
 import { groupDigits } from '../logic/format.js';
@@ -195,9 +198,9 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
       button.setAttribute('aria-label', counts
         // The screen-reader line reuses the Territory screen's own words for both counts. It stays
         // the same while the countdown ticks: a spoken name that changes every minute would chatter.
-        ? `${MENU.world}. ${seedBalanceLabel(counts.seeds)}. ${ONLINE.worldHeld(counts.tiles, counts.cells)}${
+        ? `${worldName()}. ${seedBalanceLabel(counts.seeds)}. ${ONLINE.worldHeld(counts.tiles, counts.cells)}${
           counts.waiting ? `. ${CHALLENGE.actionsWaiting(counts.waiting)}` : ''}`
-        : MENU.world);
+        : worldName());
       if (!counts) {
         seeds.hidden = true;
         tiles.hidden = true;

@@ -51,6 +51,8 @@ import { storedDisplayName } from './identity.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { lastChosenCamera, rememberCamera } from './world-camera.js';
+import { homeTile, mountWorldPlanet, type WorldPlanet } from './world-planet.js';
+import { FEATURES } from '../channel.js';
 import { menuTerritoryAnchor } from './living-camera.js';
 import {
   GLOBE_RIM,
@@ -620,6 +622,9 @@ export class WorldView {
    * always share their corners — live during a drag, not on release.
    */
   private fogCellList: { id: string; q: number; r: number }[] = [];
+  /** THE PLANET (/test/ only, see world-planet.ts): mounted while the window is open. */
+  private planet: WorldPlanet | null = null;
+  private planetLoading = false;
   /**
    * WHERE EACH CELL WAS LAST DRAWN (its bent centre, written by `drawnHex`). A live pass only
    * redraws ground near the view, so a cell further out keeps the shape the pose of its last draw
@@ -1186,6 +1191,7 @@ export class WorldView {
     if (this.svg) this.applyView();
     this.settleWarp(true);
     this.notice(this.svg ? '' : ONLINE.worldLoading);
+    this.openPlanet();
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
     if (!this.world) {
@@ -1230,6 +1236,8 @@ export class WorldView {
       rememberCamera(browserStorage(), this.world.version, this.box, true);
   }
   close(instant = false) {
+    this.planet?.dispose();
+    this.planet = null;
     this.stopGlide();
     this.saveCamera();
     this.active = false;
@@ -1888,6 +1896,7 @@ export class WorldView {
     // before the player sees a frame, and make sure a newly built SVG still wears the crop.
     this.settleWarp(true);
     this.applyCrop();
+    this.pushPlanet();
   }
   /**
    * The smallest view the window allows: the largest rect with the WINDOW's own aspect that fits
@@ -2231,7 +2240,33 @@ export class WorldView {
     this.sellArmed = null;
     this.markSelection();
   }
+  /** THE PLANET: on /test/ the window's ground is a planet; its taps are this map's taps. */
+  private openPlanet() {
+    if (!FEATURES.planet || this.planet || this.planetLoading) return;
+    const grid = document.getElementById('online-world-grid');
+    if (!grid) return;
+    this.planetLoading = true;
+    void mountWorldPlanet(grid, (id) => (id ? this.select(id) : this.deselect())).then((planet) => {
+      this.planetLoading = false;
+      if (!planet) return;
+      if (!this.active) { planet.dispose(); return; }
+      this.planet = planet;
+      this.pushPlanet();
+    });
+  }
+  private pushPlanet() {
+    const world = this.world;
+    if (!this.planet || !world) return;
+    const me = this.identity?.playerId ?? null;
+    this.planet.update({
+      cells: world.cells, claims: world.claims, me, selected: this.selected,
+      fog: this.fogCells ? [...this.fogCells.keys()] : [],
+      disputes: this.disputes.map((dispute) => dispute.cellId),
+      home: homeTile(world.claims, me),
+    });
+  }
   private markSelection() {
+    this.pushPlanet();
     const cellId = this.selected;
     const owner = cellId ? this.world?.claims.find((claim) => claim.cellId === cellId)?.ownerId : undefined;
     for (const path of this.svg?.querySelectorAll('.world-hex') ?? []) {
@@ -2534,6 +2569,7 @@ export class WorldView {
   }
   private flyToOwner(ownerId: string) {
     if (!this.world) return;
+    if (this.planet) { this.planet.home(homeTile(this.world.claims, ownerId)); return; }
     const centre = ownCentre(this.world.cells, this.world.claims, ownerId);
     if (centre && this.box) {
       // The visible panel is a crop of the shared canvas: land belongs under its focus, not
