@@ -30,9 +30,10 @@ and commit it with your work. Owner approval for everything below to go LIVE is 
 
 ## Next steps (do them in order; tick them off here)
 
-- [ ] `npm run check` green, futa04 build + `check-channel-assets` green, lesson suites
-      (`futa04-lesson-9-free`, `lessons-3`, `futa04-critical`) green.
-- [ ] Commit, push to `futa0.5-online` (fast-forward) and `claude/focused-fermat-kq2zyf`.
+- [x] `npm run check` green (4031 passed), futa04 build + `check-channel-assets` green, lesson
+      suites (`futa04-lesson-9-free`, `lessons-3`, `futa04-critical`, tutorial-lock/-intel) green
+      on commit 4774095b (branch `claude/focused-fermat-kq2zyf`, NOT yet on `futa0.5-online`).
+- [ ] Push 4774095b (or a reworded squash of it) to `futa0.5-online` (fast-forward) and `claude/focused-fermat-kq2zyf`.
 - [ ] Wait for CI on that commit (all jobs incl. WebKit) and its /test publish.
 - [ ] `npm run promote -- <that sha>`, then republish: dispatch workflow `futasaku04-preview.yml` on
       `futa0.5-online` with input `promote: ''`. Confirm in the publish run's build log that
