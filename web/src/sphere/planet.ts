@@ -116,8 +116,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     lastFrame = now;
     if (!motion()) { speed = 0; if (flight) { q = flight.to; zoom = targetZoom = flight.zoomTo; flight = null; } zoom = targetZoom; pulseUntil = 0; }
     if (flight) {
-      // Up to 120 ms per frame counts: a slow phone still lands on time, a real stall pauses.
-      flight.elapsed += Math.min(120, gap);
+      // Up to 250 ms per frame counts: a slow device still lands about on time, a real stall pauses.
+      flight.elapsed += Math.min(250, gap);
       const t = Math.min(1, flight.elapsed / flight.ms), k = flight.ease(t);
       q = slerp(flight.from, flight.to, k);
       zoom = targetZoom = flight.zoomFrom * Math.pow(flight.zoomTo / flight.zoomFrom, k);

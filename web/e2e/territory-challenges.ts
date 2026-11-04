@@ -270,7 +270,10 @@ const ringData = (page: Page, challengeId: string) => page.evaluate((id) => {
 }, challengeId);
 
 try {
-  const { server, url: BASE } = await serveStaticDist(DIST);
+  const { server, url: SITE } = await serveStaticDist(DIST);
+  // This suite proves the flat map's own challenge layers (rings, swords, notches). The futa05 build
+  // shows THE PLANET over them (owner, 2026-11-04), so it asks for the flat map explicitly.
+  const BASE = `${SITE}${SITE.includes('?') ? '&' : '?'}flat-territory`;
   const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 
   for (const size of [{ w: 320, h: 568 }, { w: 360, h: 640 }, { w: 390, h: 844 }] as const) {

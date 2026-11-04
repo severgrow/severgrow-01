@@ -18,7 +18,7 @@ The planet is the main menu's backdrop: whole, dim (46%), untouchable, at the ex
 flight starts from. Opening THE PLANET continues that flight down to your land while the frame
 shrinks to the window; Back puts the menu up at once and the planet flies out behind it (0.9 s). One
 canvas serves both and is freed when the menu goes away (a game starts). Flights advance by painted
-frame time (at most 120 ms a frame), so a busy main thread pauses them instead of skipping them.
+frame time (at most 250 ms a frame), so a busy main thread pauses them instead of skipping them.
 
 ## Why the first sphere's hexes looked wrong, and the cure
 

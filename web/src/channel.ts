@@ -13,6 +13,12 @@ export const IS_FUTA04 = CHANNEL === 'futa04' || CHANNEL === 'futa-test' || CHAN
  * the two apart — the path can, and does. Only the first path segment counts.
  */
 export const IS_TEST_ROUTE = typeof location !== 'undefined' && /^\/test(\/|$)/.test(location.pathname);
+/**
+ * TEST-ONLY: `?flat-territory` keeps the flat Territory map on a planet build, so the browser suites
+ * written for the flat map's own layers (challenge rings, swords, frontier notches) keep proving the
+ * logic underneath THE PLANET. No player link carries it.
+ */
+const FLAT_TERRITORY = typeof location !== 'undefined' && /[?&]flat-territory(?:[=&]|$)/.test(location.search ?? '');
 const modern = IS_TEST || IS_FUTA04;
 export const FEATURES = Object.freeze({
   typography: modern,
@@ -50,7 +56,7 @@ export const FEATURES = Object.freeze({
    * the whole futa05 game (it reaches futasaku.com with the next promote); the locked futa04 line
    * keeps its flat Territory.
    */
-  planet: CHANNEL === 'futa05',
+  planet: CHANNEL === 'futa05' && !FLAT_TERRITORY,
 });
 const isPreviewHost = typeof location !== 'undefined' && (
   location.hostname.endsWith('.chatgpt.site') ||

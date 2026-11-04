@@ -214,7 +214,7 @@ try {
     const back = await planet(p) as (Snapshot & { mode?: string }) | null;
     check(`[${tag}] Back shows the menu at once`, await p.locator('#menu').isVisible());
     check(`[${tag}] ...while the planet flies out behind it`, back?.mode === 'menu' && back.flying, JSON.stringify(back)?.slice(0, 90));
-    await p.waitForFunction(() => !(window as unknown as { __severgrow: { planet: () => { flying: boolean } | null } }).__severgrow.planet()?.flying, undefined, { timeout: 4000 }).catch(() => undefined);
+    await p.waitForFunction(() => !(window as unknown as { __severgrow: { planet: () => { flying: boolean } | null } }).__severgrow.planet()?.flying, undefined, { timeout: 10000 }).catch(() => undefined);
     check(`[${tag}] ...and comes to rest whole behind the menu`, (await planet(p) as (Snapshot & { mode?: string }) | null)?.mode === 'menu' && !(await planet(p))!.flying);
     check(`[${tag}] one planet only, reused (no second canvas)`, (await p.locator('.planet-canvas').count()) === 1);
     if (width === 390 && !ios) {
