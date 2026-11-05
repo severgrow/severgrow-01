@@ -29,7 +29,7 @@ write('forest',svg(forest,gradient('canopy','#566344','#263c2d')));
 // MAGIC FIELDS: silver reed beds, sparse quiet mineral paths, dark indigo soil.
 let magic='<path fill="#343341" d="M0 0h240v240H0z"/>';
 for(let j=0;j<8;j++){
- const y=j*30; const d=`M-20 ${y+3}Q40 ${y-18} 100 ${y+1}T220 ${y+1}T340 ${y+1}`;
+ const y=j*30; const d=`M-20 ${y+1}Q40 ${y-18} 100 ${y+1}T220 ${y+1}T340 ${y+1}`;
  for(const dy of [-240,0,240])magic+=`<path d="${d}" transform="translate(0 ${dy})" fill="none" stroke="#77798a" stroke-width=".7" opacity=".25"/>`;
 }
 for(let i=0;i<75;i++){

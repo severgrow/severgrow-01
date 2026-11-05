@@ -1,6 +1,20 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 
+it('enchanted field paths repeat with the same height and tangent at the atlas seam', () => {
+  const svg=readFileSync(new URL('../src/assets/worlds/magic-fields.svg',import.meta.url),'utf8');
+  const paths=[...svg.matchAll(/<path d="([^"]+)"[^>]*stroke="#77798a"/g)];
+  expect(paths).toHaveLength(24);
+  for(const path of paths){
+    // Q followed by two reflected T curves: a full period is two equal horizontal spans.
+    // Matching all endpoint heights makes the third curve a translated copy of the first.
+    const v=path[1]!.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    expect(v[1]).toBe(v[5]);expect(v[5]).toBe(v[7]);expect(v[7]).toBe(v[9]);
+    expect(v[4]!-v[0]!).toBe(v[6]!-v[4]!);
+    expect(v[6]!-v[4]!).toBe(v[8]!-v[6]!);
+  }
+});
+
 it('basalt plate junctions line up on both repeated atlas boundaries', () => {
   const svg=readFileSync(new URL('../src/assets/worlds/volcanic.svg',import.meta.url),'utf8');
   const points:[number,number][]=[];
