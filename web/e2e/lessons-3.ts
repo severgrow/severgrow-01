@@ -97,7 +97,7 @@ const waitRitual = async (p: Page, level: number) => {
 };
 
 /** From the menu: PLAY → the next level (the only way in). */
-const openNextLevel = async (p: Page) => {
+const openNextLevel = async (p: Page, settleMs = 300) => {
   await p.waitForSelector('#menu-play:not([hidden])', { timeout: 20000 });
   await dismissInstall(p);
   await p.evaluate(() => (document.getElementById('menu-play') as HTMLButtonElement).click());
@@ -119,7 +119,7 @@ const openNextLevel = async (p: Page) => {
     const l = (window as any).__severgrow?.lesson?.();
     return !l || (!l.stage && l.handSettled);
   }, undefined, { timeout: 15000 });
-  await p.waitForTimeout(300);
+  if (settleMs) await p.waitForTimeout(settleMs);
 };
 
 /**
@@ -1356,11 +1356,25 @@ try {
       const tag = `${w}x${h}`;
       const { page, errors } = await newPage(w, h);
       await page.goto(URL3, { waitUntil: 'networkidle' });
-      await openNextLevel(page);
+      await openNextLevel(page, 0);
       const copy: string[] = [];
       try {
         // 1. The opening explanation: one caption, no border/outline/shadow, no buttons, taps through.
         await page.waitForSelector('#lesson-plate:not([hidden]) .lesson-copy', { timeout: 10000 });
+        // Exercise the reading floor BEFORE screenshots/layout QA consume real wall time.
+        // Two software-rendered captures here used to let the 3s floor expire before its test.
+        const floor = await page.evaluate(home => {
+          const hooks=(window as any).__severgrow,before=hooks.lesson();
+          const target=document.querySelector(`#board .hex-cell[data-key="${home}"]`)!;
+          const age=performance.now()-before.explainAt;
+          target.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'mouse',button:0}));
+          target.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerType:'mouse',button:0}));
+          const after=hooks.lesson();
+          return {age,held:before.beat?.id===after.beat?.id,ack:after.floorAcks>before.floorAcks};
+        },SMALL_HOMES[0]!);
+        check(floor.age>=0&&floor.age<READ_FLOOR_MS&&floor.held&&floor.ack,
+          `${tag}: inside the reading floor a tap on the lit home is refused and acknowledged (${Math.round(floor.age)}ms)`);
+        await page.waitForTimeout(300);
         const g = await geometry(page);
         checkCockpit(g, tag, true);
         check(g.plateCopy === LESSON.yourHomeLine, `${tag}: the home explanation is the new sentence`);
@@ -1386,17 +1400,11 @@ try {
         const b1 = (await hook<any>(page, 'lesson')).beat;
         check(!!b1 && b1.id === '1:intro:tree', `${tag}: the first beat is the home explanation (${b1?.id})`);
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-box-${w}x${h}.png` });
-        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-box-${w}x${h}.png` });
 
         // 2. Tapping the highlighted thing advances; the win condition is a sentence, not a label.
         // The lit home is not a move, so a tap on it is a dismissal: inside the 3 s reading floor it
         // is refused and acknowledged (owner, 2026-10-21), and once the floor has passed it advances.
         const p1 = (await litPoints(page, b1.lit))[0]!;
-        const acks0 = (await hook<any>(page, 'lesson')).floorAcks ?? 0;
-        await tap(page, p1);
-        const held = await hook<any>(page, 'lesson');
-        check(held.beat?.id === b1.id && (held.floorAcks ?? 0) > acks0,
-          `${tag}: inside the reading floor a tap on the lit home is refused and acknowledged (${held.beat?.id})`);
         await waitReadFloor(page);
         await tap(page, p1);
         const b2 = (await hook<any>(page, 'lesson')).beat;

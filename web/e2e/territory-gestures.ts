@@ -178,6 +178,12 @@ try {
     await page.waitForTimeout(holdMs);
     await touch('touchEnd', []);
   };
+  // Queue one real native gesture. Host round-trips while a zoom paints can otherwise stretch
+  // the intended quick pair past the product's unchanged double-tap window on software graphics.
+  const doubleTap = async (x: number,y: number) => {
+    await Promise.all([touch('touchStart',[{x,y}]),touch('touchEnd',[]),
+      touch('touchStart',[{x,y}]),touch('touchEnd',[])]);
+  };
 
   const cx = rect.x + rect.width / 2;
   const cy = rect.y + rect.height / 2;
@@ -258,15 +264,11 @@ try {
   // ---- 6. double tap zooms IN, second double tap zooms OUT -------------------------------------
   // Two QUICK taps on the map are one double tap and toggle the zoom.
   const atDouble = await box();
-  await tap(cx, cy);
-  await page.waitForTimeout(90);
-  await tap(cx, cy);
+  await doubleTap(cx, cy);
   await page.waitForTimeout(450);
   const zoomedIn = await box();
   check('a quick double tap zooms IN', zoomedIn !== null && atDouble !== null && (zoomedIn[2] ?? 0) < (atDouble[2] ?? 0) * 0.75, `view width ${atDouble?.[2]!.toFixed(2)} -> ${zoomedIn?.[2]!.toFixed(2)}`);
-  await tap(cx, cy);
-  await page.waitForTimeout(90);
-  await tap(cx, cy);
+  await doubleTap(cx, cy);
   await page.waitForTimeout(450);
   const zoomedOut = await box();
   check('a second double tap zooms back OUT', zoomedOut !== null && zoomedIn !== null && (zoomedOut[2] ?? 0) > (zoomedIn[2] ?? 0) * 1.2, `view width ${zoomedIn?.[2]!.toFixed(2)} -> ${zoomedOut?.[2]!.toFixed(2)}`);
@@ -285,7 +287,14 @@ try {
   check('dragging the map never scrolls the page sideways', scroll.sw <= scroll.iw + 1 && scroll.sx === 0, JSON.stringify(scroll));
 
   // ---- 8b. a second tap at a NORMAL pace still releases the same tile (and never zooms) --------
-  const tileBox = await page.evaluate(`(() => { const el = document.querySelector('[data-cell-id]'); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`) as { x: number; y: number } | null;
+  const tileBox = await page.evaluate(() => {
+    for(const el of document.querySelectorAll<SVGElement>('[data-cell-id]:not(.selected)')){
+      const r=el.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
+      if(r.width>0&&document.elementFromPoint(x,y)?.closest('[data-cell-id]')===el)return {x,y};
+    }
+    return null;
+  });
+  check('a real visible tile is available for the release gesture',tileBox!==null);
   if (tileBox) {
     const atTile = await box();
     await tap(tileBox.x, tileBox.y);

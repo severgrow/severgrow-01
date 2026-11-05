@@ -64,7 +64,13 @@ const settled = (p: Page) => p.waitForFunction(() => {
   const key = `${s.q.map((v) => v.toFixed(6)).join(',')}|${s.zoom.toFixed(6)}`, now = performance.now();
   if (!w.__settle || w.__settle.key !== key) { w.__settle = { key, since: now }; return false; }
   return now - w.__settle.since >= 250;
-}, undefined, { polling: 50, timeout: 15_000 });
+}, undefined, { polling: 50, timeout: 15_000 }).catch(async error => {
+  console.error('Planet settle diagnostic',await planet(p),{
+    menu:await p.locator('#menu').isVisible(),world:await p.locator('#online-world-screen').isVisible(),
+  });
+  await p.screenshot({path:`${out}/settle-failure.png`}).catch(()=>undefined);
+  throw error;
+});
 const openPlanet = async (p: Page) => {
   await p.locator('#menu-world').click();
   await p.waitForFunction(() => {
@@ -323,7 +329,8 @@ try {
       for (let i = 0; i < 12; i++) { await p.mouse.wheel(0, -600); await p.waitForTimeout(30); }
       await settled(p).catch(() => undefined);
       const closest = (await planet(p))!.tilePx;
-      await p.mouse.click(cx, cy); await p.waitForTimeout(60); await p.mouse.click(cx, cy);
+      // One native gesture: separate host round-trips can turn 60ms into >320ms on software GL.
+      await p.mouse.dblclick(cx, cy, { delay: 60 });
       await settled(p).catch(() => undefined);
       const after = (await planet(p))!.tilePx;
       check(`[${tag}] fully zoomed in, a double tap zooms back out`, closest > 70 && after < closest * .8, `${closest.toFixed(0)}px -> ${after.toFixed(0)}px tiles`);
@@ -374,8 +381,8 @@ try {
       check(`[${tag}] five more visits still leave exactly one canvas`, (await p.locator('.planet-canvas').count()) === 1);
       // Starting a game frees it.
       await p.locator('#menu-play').click();
-      await p.waitForTimeout(600);
-      check(`[${tag}] leaving the menu for PLAY frees the planet`, (await planet(p)) === null && (await p.locator('.planet-canvas').count()) === 0);
+      await p.waitForTimeout(1800); // 1500ms requested fade plus completion headroom
+      check(`[${tag}] leaving the menu for PLAY frees the planet after its 1500ms fade`, (await planet(p)) === null && (await p.locator('.planet-canvas').count()) === 0);
     }
     await context.close();
   }
