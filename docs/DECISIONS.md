@@ -1,5 +1,28 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-05 (night) — Sound narrowed: a small fixed palette, one sound at a time
+
+Owner, after hearing /test: "The sounds sound too real, Velcro sound is out ... Zip out too ...
+Wine glass tap on each round sound too much like glass. We need to narrow down all to nice click and
+taps ... Synth stabs completely out for now ... It's okay if the sounds are a bit repetitive ...
+never play 2 at once, add some effect on turn glass to sound better"; "don't rotate - group - and
+certain type of buttons should always make a similar sound ... not variety". Asked: a new sound cuts
+the old; keep the coins at the end and the short, quiet metal and glass taps; turn glass warm and
+soft; the planet's keys the same as the menu's.
+
+- web/src/ui/recorded.ts is now a FIXED PALETTE: ~25 takes, one per group, no rotation, no pitch
+  wobble (a Bloom's cards and the Seeds count still step up: a count, not variety). Every take is
+  short (<= ~0.5 s) except the turn ring. Velcro, zip, gritty, shaky, long metal, slides, chalk and
+  the stabs are never played (the stab files stay in audio/stabs/, unused, not fetched).
+- One sound at a time: a new sound fades the ringing one in 8 ms; two in the same instant (30 ms)
+  keep the more important (moment > move > key), so a Bloom card wins over its own tile landing.
+- Turn: only YOUR turn rings: glass_ring_01, two semitones lower, quieter, through a 2.2 kHz low-pass
+  and a short soft room (0.7 s decaying-noise impulse). Their turn is silent.
+- Every key (menu, submenus, sheets, the planet's buttons, PLAY, Back) is ui_press_04 on the finger;
+  the lift is silent. Cards and tiles play their own pick.
+- Silent now: rich-tile chime, cascades, rustle, sparks, thud, rumble, grind, the old turn tone.
+- Only the palette's files are fetched (was all 270).
+
 ## 2026-11-05 (later) — Synth stabs on top of Cut, Bloom, Bomb and Blast
 
 Owner (futasaku-sfx-2): 96 stabs in 8 packs (web/public/audio/stabs/), rules in ui/sfx-map.json

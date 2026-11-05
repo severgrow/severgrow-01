@@ -104,10 +104,12 @@ try {
   // recorded press (was the synthesized quiet tick), the lift the recorded release.
   assert.equal(cues.at(-1)?.layer, 'recorded', `pointerdown plays the recorded press (${cues.at(-1)?.cue}, ${cues.at(-1)?.layer})`);
   assert.equal(cues.at(-1)?.cue, 'press', 'pointerdown is the press');
+  const beforeLift = (await log(page)).length;
   await page.mouse.up();
   await page.waitForTimeout(40);
   cues = await log(page);
-  assert.equal(cues.at(-1)?.layer, 'recorded', `release plays the recorded release (${cues.at(-1)?.cue}, ${cues.at(-1)?.layer})`);
+  // OWNER CHANGED THE RULE (2026-11-05, narrowed palette): one click per key; the lift is silent.
+  assert.equal(cues.length, beforeLift, `the lift is silent (${cues.at(-1)?.cue})`);
   await waitBank(page);
 
   const first = await bank(page);
@@ -222,7 +224,7 @@ try {
   assert.deepEqual(await counters(off), { buffers: 0, sources: 0, starts: 0 }, 'Sound off starts nothing');
   await off.close();
 
-  console.log('Sound bank checks passed: 167 buffers baked once, 0 during play, recorded press / release / landing, Sound off silent, hidden suspended, 30 cues at 4x CPU with no long task');
+  console.log('Sound bank checks passed: 167 buffers baked once, 0 during play, recorded key click / silent lift / landing, Sound off silent, hidden suspended, 30 cues at 4x CPU with no long task');
 } finally {
   await browser.close();
   await server.close();

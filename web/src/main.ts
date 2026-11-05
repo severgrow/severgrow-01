@@ -9813,10 +9813,9 @@ bind('csa-start', () => {
 // gets a quiet tick, the lift gets the click, and a drag (a paint, not a tap) gets neither.
 const BUTTON_SELECTOR = '.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile, .world-challenge-chip, .world-challenge-primary, .world-challenge-secondary, .world-claim-button';
 let soundPress: { el: Element; x: number; y: number; id: number; cancelled: boolean } | null = null;
-/** The big keys: one firm clack (the owner's ui.primary) instead of press + release. */
-const PRIMARY_KEY = '.btn.primary.big, .world-challenge-primary, #online-first-ok';
-/** Back / cancel keys: the dull click (ui.back) on the lift. */
-const BACK_KEY = '[id$="-back"], [id$="-cancel"], .btn.back, [data-sfx="back"]';
+/** A key: any button-like surface, the planet's and every sheet's included, but not a card or a tile. */
+const anyKey = (el: Element): boolean => !!el.closest(BUTTON_SELECTOR)
+  || (!!el.closest('button, [role="button"]') && !el.closest('.hand-slot, .card, #board, .board, svg'));
 const pressableAt = (target: EventTarget | null): Element | null => {
   const el = target instanceof Element ? target.closest(PRESS_SELECTOR) : null;
   return el && !shouldSkipPress(el as unknown as Parameters<typeof shouldSkipPress>[0]) ? el : null;
@@ -9830,11 +9829,11 @@ document.addEventListener(
     // THE KEY'S TWO HALVES (the owner's recordings): press on the finger, release on the lift. A big
     // key (PLAY, Find match, Create) is one firm clack on the finger instead; a Back key answers on
     // its lift with the dull click. Cards and hexes answer with their own action's sound.
+    // Every key is one click (owner, 2026-11-05: one sound per kind of button, the planet's keys and
+    // sheets included). Cards and board tiles answer with their own pick instead.
     if (settings.sound) {
-      const key = el.closest(BUTTON_SELECTOR);
-      if (key && key.matches(PRIMARY_KEY)) sound.primary();
-      else if (key && !key.matches(BACK_KEY)) sound.press();
-      else if (!key) sound.tick();
+      if (anyKey(el)) sound.press();
+      else sound.tick();
     }
     soundPress = { el, x: e.clientX, y: e.clientY, id: e.pointerId, cancelled: false };
     const b = el.closest(BUTTON_SELECTOR);
@@ -9860,12 +9859,8 @@ document.addEventListener(
     if (!p || p.cancelled || p.id !== e.pointerId) return;
     // Lift is the click layer; only button-like surfaces get it. Cards and hexes already click
     // with their action, so they are not clicked twice.
-    const key = p.el.closest(BUTTON_SELECTOR);
-    if (!key || key.matches(PRIMARY_KEY)) return;
-    if (settings.sound) {
-      if (key.matches(BACK_KEY)) sound.back();
-      else sound.click();
-    }
+    // The lift is silent with the recordings (one click per key); the bare engine still clicks.
+    if (anyKey(p.el) && settings.sound) sound.click();
   },
   { capture: true, passive: true },
 );
