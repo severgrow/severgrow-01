@@ -82,7 +82,12 @@ const openPlanet = async (p: Page) => {
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
-  if (!ok) failed++;
+  if (!ok) {
+    failed++;
+    // Keep the exact failed contract visible even where Actions raw logs require sign-in.
+    const detail=`${name}${note ? ` (${note})` : ''}`.replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A');
+    console.error(`::error title=Planet browser assertion::${detail}`);
+  }
 };
 
 try {
