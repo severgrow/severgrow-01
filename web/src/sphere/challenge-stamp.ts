@@ -13,12 +13,13 @@ export function stampCoordinates(centre: V3, corners: readonly V3[],north:V3=[0,
 /** Two simple stamped blades/guards/handles. Analytic coverage, no textures or per-cell DOM. */
 export const CHALLENGE_STAMP_GLSL = `
 float stampBlade(vec2 p) {
-  float blade = max(abs(p.x)-.052, max(-.51-p.y, p.y-.17));
-  float tip = max(abs(p.x)*.95 - (p.y+.66)*.35, max(-.66-p.y,p.y+.49));
+  // One continuous blade: a straight taper to the point, never wider than the shaft.
+  float halfWidth = .052 * clamp((p.y+.66)/.17,0.0,1.0);
+  float blade = max(abs(p.x)-halfWidth, max(-.66-p.y,p.y-.17));
   float guard = max(abs(p.x)-.19, abs(p.y-.2)-.038);
   float grip = max(abs(p.x)-.038, abs(p.y-.35)-.13);
   float pommel = length(p-vec2(0.0,.49))-.058;
-  return min(min(min(blade,tip),min(guard,grip)),pommel);
+  return min(min(blade,min(guard,grip)),pommel);
 }
 float crossedSwords(vec2 p) {
   p.y = -p.y; // tips face geographic north; handles sit below them

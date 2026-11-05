@@ -9,20 +9,22 @@ V075-WORLDS.md; those old preview images are historical, not active assets.
    and build generator. Classic FUTASAKU art is restored. Retired saved ids safely fall back to it.
    Only the pure owner/environment cosmetic model remains, with no runtime import or extra loading.
 2. Menu, suggested PLAY/LEVEL, campaign and difficulty keys share one matte material. Suggestions
-   add a slight amber halo, without a different fill, outline or weight. Per-key backdrop blur removed.
+   add a slight amber halo, without a different fill, outline or weight. Menu, footer and difficulty
+   labels also share their size and tracking; the narrower Planet-label override is removed. Per-key
+   backdrop blur removed.
 3. Planet chat is Global chat from its initial accessible markup onward. One bounded, identity-scoped
    memory page warms during menu/Planet preparation, paints while hidden and is reused immediately
    when opened. In-flight reads are shared; late account responses are ignored. Closed chat has no
    polling timer. Visible polling/backoff, sending and moderation retain the existing backend.
 4. Active Planet submenu keys sit inward with the quiet backlight, replacing the bottom stripe.
 5. The actual online screen owns the corner logo, even when an asynchronous brand flag is stale.
-6. Planet trackball rotation and inertia remain free. After release, screen roll settles upright
-   over 220–480ms without changing the viewed centre or zoom. Zoom settles about its surface anchor
-   so the ground stays under the pointer/fingers. A new gesture interrupts it. Reduced
-   motion settles directly. Near a pole, heading is held to avoid a singular flip. Swords use the
-   matching geographic tangent basis, with blade tips northward. The existing slow star timer is
-   cancelled on interaction, freeze, hide and disposal; a cancelled touch cannot start a busy loop
-   while another finger remains down. Geometry and topology are unchanged.
+6. Planet drags now keep geographic north upright during input. Longitude wraps; latitude gently
+   resists near the poles. Drag, pinch and wheel end exactly at the last input pose/zoom: no inertia,
+   roll correction or recenter after release. This supersedes the earlier free-rotation/settle choice
+   after player testing found its movement distracting. Zoom keeps its surface anchor where possible;
+   at the pole limit, a stable upright view takes priority. Swords use the same geographic tangent
+   basis, now with clean tapered tips and no widened shoulders. The existing star timer is cancelled
+   on interaction, freeze, hide and disposal. Geometry and topology are unchanged.
 7. Difficulty/current-level controls share the same key vocabulary, retaining their current sizes,
    keyboard focus and disabled states.
 8. Board shadow and turn glow share a joined closed silhouette. Subpixel endpoints are welded using
@@ -31,6 +33,11 @@ V075-WORLDS.md; those old preview images are historical, not active assets.
 9. First `/test/` startup waits for the app, fonts and first real Planet paint, then fades in once
    over one second. A 3.5s fail-open prevents indefinite black. Deep-linked games skip the Planet
    requirement; reduced motion skips the fade. Navigation and PWA resumes do not replay it.
+
+10. Opening a linked duel from Planet challenges uses one 700ms dark doorway (350ms out/in),
+    preparing the duel at its opaque midpoint. The existing grain stays above it. Duplicate requests
+    share one launch; Escape/navigation/background cancel safely before entry. Reduced motion enters
+    immediately. No board transform, new renderer, permanent loop or backend change.
 
 The performance pass also fixed an LED reel race: a queued update could start a transition after
 the page was hidden. Pending/running reels now settle on hide; foreground display timings are unchanged.
@@ -57,7 +64,7 @@ This is local verification, not a claim of direct hosted-device testing. Browser
 Chromium and software graphics, not a physical phone. WebKit coverage belongs to the existing CI
 jobs; physical iOS Safari/PWA verification is not available in this environment.
 
-### Completed local checks
+### Initial batch local checks (49dc1d6d)
 
 - `npm ci` passed. TypeScript passed for engine/server, web (including browser suites) and admin.
 - Full unit run: 403 files / 4,060 tests passed; three unchanged simulation cases timed out at the
@@ -67,7 +74,7 @@ jobs; physical iOS Safari/PWA verification is not available in this environment.
 - New browser contract passed 320×568, 390×844, 844×390 and 1440×900: matching matte materials,
   coherent app/font/planet reveal, warmed messages present synchronously at opening, no closed-chat
   polling, reading-position recovery after a late hidden response, one visible logo, recessed keys,
-  centre-preserving upright drag settle, unchanged tap orientation and one closed duel perimeter.
+  north-up drags with exact release/scroll endpoints, unchanged tap orientation and one closed duel perimeter.
 - First reveal also passed reduced motion, delayed-font fail-open (one announcement) and module
   failure fail-open. The final four-viewport run also passed real pointer presses, ivory primary ink, touch
   cancellation, rendered duel outlines and the hidden-page LED regression.
@@ -90,6 +97,23 @@ Some software-browser runs missed transient cockpit/cut states or the Planet's s
 frame-scheduling bounds. Assertions and timing limits were retained. Failure diagnostics were added;
 final reruns passed. The new upright/zoom interaction and subpixel perimeter failures were actual
 implementation issues found during this pass and fixed before delivery. No PINNED motion values changed.
+
+### Follow-up after player testing
+
+- Replaced post-release roll settling with north-up input and exact drag/scroll endpoints; sharpened
+  sword tips, added the 700ms challenge doorway and finished menu-label typography consistency.
+- All TypeScript projects and futa04/futa05 production builds/asset isolation passed.
+- 29 focused orientation, stamp, lobby-exit and pinned/shared-motion tests passed.
+- The complete `planet-matte` browser contract passed all four viewports again, including actual
+  label typography, fast drag release and wheel endpoints, reduced motion and bounded startup recovery.
+  Its seven doorway scenarios passed: single launch, Escape, navigation, preview ownership,
+  background, reduced motion and failed-opening cleanup. The opaque page background stays untouched;
+  the existing film grain's higher layer covers the doorway without duplication.
+- Earlier software-browser runs hit startup's existing 3.5s fail-open. The full final contract above
+  passed without changing that bound. An initial broad Planet run missed one narrow-phone anchor
+  measurement; its focused rerun measured 0.3px (under the unchanged 6px limit), and proved upright
+  dragging plus an exact release pose. That rerun counted one late paint in its idle sampling window.
+  Timing assertions and frame/anchor limits remain unchanged; full browser CI is still a release gate.
 
 ### Performance findings
 

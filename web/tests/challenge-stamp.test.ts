@@ -3,7 +3,7 @@ import { buildSphere } from '../src/sphere/geometry.js';
 import { stampCoordinates } from '../src/sphere/challenge-stamp.js';
 
 describe('challenged-cell stamp coordinates do not alter the sphere', () => {
-  it('aligns sword tips with the same geographic north used by the settled camera', () => {
+  it('aligns sword tips with the same geographic north used by the north-up camera', () => {
     const points=stampCoordinates([0,0,1],[[.1,0,.99],[0,.1,.99]], [1,0,0]);
     expect(points[0]![1]).toBeGreaterThan(.99);
     expect(Math.abs(points[0]![0])).toBeLessThan(1e-8);

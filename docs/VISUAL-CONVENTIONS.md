@@ -290,12 +290,16 @@ Treat WebGL fallback, cleanup and device limitations as part of the experience. 
   material. The pure owner/environment identity model remains dormant for future work; never revive
   rejected assets or let a saved cosmetic id change ownership or gameplay.
 - Menu suggestions, difficulty keys and ordinary menu actions share one matte material in
-  `polish-075.css`. Suggestions add only a restrained amber shadow, never a different fill or weight.
+  `polish-075.css`. Suggestions add only a restrained amber shadow, never a different fill or weight. Full menu,
+  footer and difficulty labels share the same 1rem size, regular weight and .14em tracking.
 - An active Planet key sits inward; no amber indicator stripe. Keep the existing focus outline.
 - Global chat warms one identity-scoped, bounded in-memory page before opening; never poll while
   closed or flash an empty transcript before a warmed page. Backend compatibility ids stay unchanged.
-- Planet rotation remains free. After release/inertia, only screen roll settles upright; never
-  recenter the viewed point. A new gesture interrupts immediately, reduced motion settles directly.
+- Planet dragging stays geographically north-up during input, with soft pole limits and wrapped
+  longitude. No inertia, roll correction, zoom easing or recentering may move it after release.
+  Keep wheel/pinch anchored where possible without violating that orientation.
+- Planet challenge → duel uses one finite 700ms dark veil, with the existing grain above it. Prepare
+  the board at the opaque midpoint; no overlapping screens. Reduced motion bypasses the doorway.
 - The board shadow and turn glow follow one closed perimeter. Keep the indicator crisp and feather
   only its underlay with faint painted strokes; never blur tile art, digits or an animated board container.
 - `/test/` first startup waits for app, fonts and a real planet paint, then reveals once. Keep a

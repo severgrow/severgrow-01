@@ -6,18 +6,18 @@
 // This module only draws and steers. Territory (world-view.ts) keeps every rule, request, selection
 // bar, sheet and window: a tap here hands it a flat tile id, exactly as a tap on the flat map did.
 //
-// MOTION: drag turns the planet under the finger, a flick keeps turning and slows, pinch/wheel zoom,
+// MOTION: north-up dragging and anchored pinch/wheel zoom stop at the input endpoint,
 // a tap selects, a tap on tiles too small to hit flies in. Opening flies in from space to your land.
 // The stars slide slowly while any space is on screen (owner: "deep space subtle + space with slow
 // slide"); that is the only loop, it runs at ~30 fps, and it stops when the planet fills the window,
 // the page is hidden, or reduced motion is on.
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
 import { markPlanetPainted } from '../player/startup.js';
-import { uprightTarget } from './upright.js';
+import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT } from './upright.js';
 import { menuDiscRadius } from '../player/planet-lockup.js';
 import { claimSpace, DRIFT_PX_PER_MS, DRIFT_Y_SHARE, freeSpace, spaceDrift } from './space.js';
 import { buildSphere, homeQuat, latticeMap, pickCell, unit, type Sphere, type V3 } from './geometry.js';
-import { arcQuat, inverse, multiply, rotate, slerp, trackball, type Quat } from './rotation.js';
+import { arcQuat, inverse, multiply, rotate, slerp, type Quat } from './rotation.js';
 import { groundOf, KIND, tileForCell, type Ground, type GroundInput } from './ground.js';
 import { PlanetRenderer, EYE, discRadius, projection, type Frame } from './renderer.js';
 
@@ -104,10 +104,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   let ground: Ground | null = null, input: PlanetInput | null = null, signature = '';
   let selected: number | null = null, pulseUntil = 0;
   let q: Quat = [0, 0, 0, 1], zoom = 1, targetZoom = 1;
-  let wantsUpright=false;
-  let rollAnchor:V3|null=null;
-  let rollSettle:{from:Quat;to:Quat;elapsed:number;ms:number}|null=null;
-  let speed = 0, axis: V3 = [0, 1, 0], lastMove = 0, lastBall: V3 = [0, 0, 1];
+  let lastPointer={x:0,y:0};
   /** `elapsed` advances by each painted frame's (capped) time, never by the wall clock: a busy main
    *  thread (the window opening, data arriving) pauses the flight instead of skipping most of it. */
   /** `aimPx`: the tile size a flight into the window lands on, re-read against the panel every frame
@@ -153,12 +150,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const spaceVisible = () => discRadius(frameNow.width, frameNow.height, zoom) < Math.hypot(frameNow.width, frameNow.height) / 2;
   const cancelDrift=()=>{clearTimeout(driftTimer);driftTimer=0;};
   const ask = () => { cancelDrift();if (!raf && !disposed && !frozen && !lost && !document.hidden) raf = requestAnimationFrame(frame); };
-  const stop = () => { cancelDrift();speed = 0; flight = null; targetZoom = zoom; rollSettle=null;wantsUpright=false;rollAnchor=null; };
+  const stop = () => { cancelDrift();flight = null; targetZoom = zoom; };
   const centre = () => ({ x: view.left + frameNow.x + frameNow.width / 2, y: view.top + frameNow.y + frameNow.height / 2 });
-  const ball = (p: { x: number; y: number }) => {
-    const c = centre();
-    return trackball(p.x - c.x, p.y - c.y, discRadius(frameNow.width, frameNow.height, zoom));
-  };
   const spread = () => { const [a, b] = [...pointers.values()]; return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0; };
   const kinOf = (index: number | null) => {
     const owner = index === null || !ground ? null : ground.owner[index];
@@ -190,9 +183,14 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const keepAnchor = () => {
     if (!anchor) return;
     const now = surfaceAt(anchor.x, anchor.y);
-    if (!now) { anchor = null; rollAnchor=null; return; }
+    if (!now) { anchor = null; return; }
     const from = rotate(q, anchor.at), to = rotate(q, now);
-    if (Math.hypot(from[0] - to[0], from[1] - to[1], from[2] - to[2]) > 1e-6) q = multiply(arcQuat(unit(from), unit(to)), q);
+    if (Math.hypot(from[0] - to[0], from[1] - to[1], from[2] - to[2]) > 1e-6) {
+      const candidate=multiply(arcQuat(unit(from),unit(to)),q);
+      const locked=uprightTarget(candidate,north,unit(to)),up=rotate(locked,north);
+      // At the pole limit favour a stable north-up view; zoom itself must remain available.
+      if(Math.abs(up[0])<1e-6&&up[1]>=Math.cos(NORTH_PITCH_LIMIT)-1e-6)q=locked;
+    }
   };
   /** Where planet cell `index` sits on screen (CSS px), or null when it faces away. */
   const screenOfCell = (index: number) => {
@@ -207,9 +205,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     flyTo(towards, toZoom, ms, ease);
   };
   const flyTo = (to: Quat, toZoom: number, ms = FLY_MS, ease = easeOut, aimPx?: number) => {
-    speed = 0;
-    rollSettle=null;wantsUpright=false;rollAnchor=null;
-    if(mode==='world')to=uprightTarget(to,north);
+    if(mode==='world')to=northUpDrag(to,north,0,0,1);
     const lightTo = mode === 'menu' ? MENU_LIGHT : 1;
     if (!motion()) { q = to; zoom = targetZoom = toZoom; flight = null; frameTween = null; frameNow = frameTarget(); cropNow = cropTarget(); light = lightTo; ask(); return; }
     flight = { from: q, to, zoomFrom: zoom, zoomTo: toZoom, elapsed: 0, ms, ease, t: 0, ...(aimPx ? { aimPx } : {}) };
@@ -225,7 +221,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (disposed || frozen || lost || document.hidden || !renderer) return;
     const gap = Math.max(1, now - (lastFrame || now - 16)), dt = Math.min(48, gap);
     lastFrame = now;
-    if (!motion()) { speed = 0; if (flight) { q = flight.to; zoom = targetZoom = flight.zoomTo; flight = null; } zoom = targetZoom; pulseUntil = 0; }
+    if (!motion()) { if (flight) { q = flight.to; zoom = targetZoom = flight.zoomTo; flight = null; } zoom = targetZoom; pulseUntil = 0; }
     // Up to 250 ms per frame counts: a slow device still lands about on time, a real stall pauses.
     const step = Math.min(250, gap);
     if (flight) {
@@ -257,31 +253,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       q = multiply([0, s, 0, Math.cos((MENU_SPIN_RAD_PER_MS * dt) / 2)], q);
     }
     if (mode === 'menu' && !flight && posed) menuMemory = q;
-    if (speed > 0 && !pointers.size) {
-      const angle = speed * dt, s = Math.sin(angle / 2);
-      q = multiply([axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(angle / 2)], q);
-      speed *= Math.exp(-dt / 260);
-      if (speed < .00002) speed = 0;
-    }
     if (Math.abs(targetZoom - zoom) > zoom * .0005) zoom += (targetZoom - zoom) * (1 - Math.exp(-dt / 70));
     else zoom = targetZoom;
     if (anchor && !flight) { keepAnchor(); if (zoom === targetZoom) anchor = null; }
-    // Free trackball and inertia finish first. Then remove roll about the viewing axis only:
-    // no recentering, zoom adjustment, pole clamp or fight with the finger.
-    if(wantsUpright&&mode==='world'&&!pointers.size&&!flight&&!speed&&!anchor&&zoom===targetZoom){
-      if(!rollSettle){
-        const to=uprightTarget(q,north,rollAnchor?unit(rotate(q,rollAnchor)):undefined);
-        const angle=2*Math.acos(Math.min(1,Math.abs(q.reduce((s,v,i)=>s+v*to[i]!,0))));
-        if(angle<.0001){wantsUpright=false;rollAnchor=null;}
-        else rollSettle={from:q,to,elapsed:0,ms:220+angle/Math.PI*260};
-      }
-      if(rollSettle){
-        rollSettle.elapsed+=step;
-        const t=motion()?Math.min(1,rollSettle.elapsed/rollSettle.ms):1;
-        q=slerp(rollSettle.from,rollSettle.to,easeInOut(t));
-        if(t===1){rollSettle=null;wantsUpright=false;rollAnchor=null;}
-      }
-    }
     const drifting = motion() && (spaceVisible() || mode === 'menu');
     // THE STARS RUSH during a flight (fastest mid-way) and settle as it lands; at rest, the slow slide.
     const rush = flight ? 1 + 16 * Math.sin(Math.PI * flight.t) : 1;
@@ -300,7 +274,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     renderer.render(q, zoom, pulse, offset, frameNow);
     if(input&&ground)markPlanetPainted();
     spaceDrift.x = offset[0]; spaceDrift.y = offset[1];
-    const busy = !!flight || !!frameTween || (wantsUpright && !pointers.size) || !!rollSettle || (speed > 0 && !pointers.size) || zoom !== targetZoom || pulseUntil > now;
+    const busy = !!flight || !!frameTween || zoom !== targetZoom || pulseUntil > now;
     if (busy) ask();
     // The slow slide: about 30 frames a second, only while there is space to see.
     else if (drifting) driftTimer=window.setTimeout(()=>{driftTimer=0;if(mode==='menu'||spaceVisible())ask();},18);
@@ -351,7 +325,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       ask();
       return;
     }
-    const target = uprightTarget(homeQuat(sphere, map, input?.home ?? '0,0'),north);
+    const target = northUpDrag(homeQuat(sphere, map, input?.home ?? '0,0'),north,0,0,1);
     const open = clampZoom(zoomFor(OPEN_TILE_PX));
     if (!motion()) { q = target; zoom = targetZoom = open; frameNow = frameTarget(); cropNow = cropTarget(); light = 1; posed = true; ask(); return; }
     // FROM WHEREVER IT IS, down to your biggest land (owner, 2026-11-04). Opened from the menu the
@@ -382,7 +356,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     stop(); lastFrame = 0; anchor = null;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { canvas.setPointerCapture(e.pointerId); } catch { /* a cancelled touch */ }
-    if (pointers.size === 1) { start = { x: e.clientX, y: e.clientY }; dragged = false; multi = false; lastBall = ball(start); lastMove = performance.now(); }
+    if (pointers.size === 1) { start = { x: e.clientX, y: e.clientY }; dragged = false; multi = false; lastPointer={x:e.clientX,y:e.clientY}; }
     else { multi = true; dragged = true; pinch = spread(); }
   }, { signal });
   canvas.addEventListener('pointermove', (e) => {
@@ -396,49 +370,39 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
         const [a, b] = [...pointers.values()] as [{ x: number; y: number }, { x: number; y: number }];
         const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, at = surfaceAt(mid.x, mid.y);
         zoom = targetZoom = clampZoom(zoom * d / pinch);
-        if (at) { anchor = { ...mid, at }; keepAnchor(); rollAnchor=at; anchor = null; }
+        if (at) { anchor = { ...mid, at }; keepAnchor(); anchor = null; }
         ask();
       }
       pinch = d;
       return;
     }
     if (!dragged && start && Math.hypot(p.x - start.x, p.y - start.y) < 6) return;
-    dragged = true;rollAnchor=null;
-    const at = performance.now(), next = ball(p), step = arcQuat(lastBall, next);
-    const angle = 2 * Math.acos(Math.min(1, Math.abs(step[3])));
-    q = multiply(step, q);
-    axis = unit([step[0], step[1], step[2]]);
-    speed = Math.min(.004, angle / Math.max(8, at - lastMove));
-    lastMove = at; lastBall = next;
+    dragged = true;
+    q=northUpDrag(q,north,p.x-lastPointer.x,p.y-lastPointer.y,discRadius(frameNow.width,frameNow.height,zoom));
+    lastPointer=p;
     ask();
   }, { signal });
   const release = (e: PointerEvent) => {
     if (!pointers.has(e.pointerId)) return;
     const tap = pointers.size === 1 && !dragged && !multi && e.type === 'pointerup';
     pointers.delete(e.pointerId);
-    if (tap) { speed = 0; tapAt(e.clientX, e.clientY); }
-    if (pointers.size === 1) { lastBall = ball([...pointers.values()][0]!); lastMove = performance.now(); speed = 0; }
-    if (!pointers.size) {
-      // A flick carries on; a drag that paused before letting go stops where it is.
-      if (e.type !== 'pointerup' || !motion() || performance.now() - lastMove > 70 || speed < .0006) speed = 0;
-      start = null;
-      wantsUpright=dragged||multi;
-      if (speed||wantsUpright) ask();
-    }
+    if (tap) tapAt(e.clientX, e.clientY);
+    if(pointers.size===1)lastPointer={...pointers.values().next().value!};
+    if(!pointers.size)start=null;
+
   };
   canvas.addEventListener('pointerup', release, { signal });
   canvas.addEventListener('pointercancel', release, { signal });
-  canvas.addEventListener('lostpointercapture', (e) => { if (pointers.has(e.pointerId)) { pointers.delete(e.pointerId); speed = 0; start = null;wantsUpright=!pointers.size&&(dragged||multi);ask(); } }, { signal });
+  canvas.addEventListener('lostpointercapture',e=>{pointers.delete(e.pointerId);if(pointers.size===1)lastPointer={...pointers.values().next().value!};if(!pointers.size)start=null;}, {signal});
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    speed = 0; flight = null;
+    flight = null;
     if (mode === 'menu') return;
-    rollSettle=null;wantsUpright=true;
     const pixels = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? frameNow.height : 1);
-    targetZoom = clampZoom(targetZoom * Math.exp(-pixels * .0018));
-    const at = surfaceAt(e.clientX, e.clientY);rollAnchor=at;
+    const at = surfaceAt(e.clientX,e.clientY);
+    zoom=targetZoom=clampZoom(zoom*Math.exp(-pixels*.0018));
     anchor = at ? { x: e.clientX, y: e.clientY, at } : null;
-    if (!motion()) { zoom = targetZoom; keepAnchor(); anchor = null; }
+    keepAnchor();anchor=null;
     ask();
   }, { signal, passive: false });
   const tapAt = (x: number, y: number) => {
@@ -472,15 +436,14 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   };
   canvas.addEventListener('keydown', (e) => {
     if (mode === 'menu') return;
-    const axes: Record<string, V3> = { ArrowLeft: [0, -1, 0], ArrowRight: [0, 1, 0], ArrowUp: [-1, 0, 0], ArrowDown: [1, 0, 0] };
-    if (axes[e.key]) {
-      e.preventDefault(); stop();
-      const a = axes[e.key]!, s = Math.sin(.6 / (zoom * 4) + .01);
-      q = multiply([a[0] * s, a[1] * s, a[2] * s, Math.sqrt(1 - s * s)], q);
-      ask();
+    const arrows:Record<string,readonly[number,number]>={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+    if(arrows[e.key]){
+      e.preventDefault();stop();
+      const [x,y]=arrows[e.key]!,step=(.3/zoom+.02)/Math.SQRT1_2;
+      q=northUpDrag(q,north,x*step,y*step,1);ask();
     } else if (['+', '=', '-'].includes(e.key)) {
       e.preventDefault(); stop();
-      targetZoom = clampZoom(zoom * (e.key === '-' ? 1 / 1.25 : 1.25));
+      zoom=targetZoom=clampZoom(zoom*(e.key==='-'?1/1.25:1.25));
       ask();
     } else if (e.key === 'Enter') {
       e.preventDefault();
@@ -490,7 +453,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   }, { signal });
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; stop(); cancelAnimationFrame(raf); raf = 0; }, { signal });
   canvas.addEventListener('webglcontextrestored', () => { renderer?.dispose(); initialise(); }, { signal });
-  document.addEventListener('visibilitychange', () => { stop(); cancelAnimationFrame(raf); raf = 0; if (!document.hidden) { lastFrame = 0; wantsUpright = mode === 'world'; ask(); } }, { signal });
+  document.addEventListener('visibilitychange', () => { stop(); cancelAnimationFrame(raf); raf = 0; if (!document.hidden) { lastFrame = 0; ask(); } }, { signal });
   // The screen's size moves the canvas; the panel's size moves only the frame (read every frame).
   window.addEventListener('resize', resize, { signal, passive: true });
   const observer = new ResizeObserver(() => { if (!flight && !frameTween) resize(); else ask(); });
@@ -530,9 +493,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     setMode(next: PlanetMode) {
       if (frozen) { frozen = false; lastFrame = 0; ask(); }
       if (next === mode) return;
-      rollSettle=null;wantsUpright=false;rollAnchor=null;
       mode = next;
-      speed = 0;
       pointers.clear();
       if (!renderer || !input) { introduced = false; return; }
       if (next === 'world') { if (posed) menuMemory = q; introduced = false; intro(); return; }
@@ -588,7 +549,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       cells: sphere.cells.length,
       zoom, tilePx: tilePx(), q: [...q], selected: selected === null ? null : tileForCell(map, selected),
       frames: renderer?.frames ?? 0, bytes: renderer?.bytes ?? 0, pendingFrame: !!raf || !!flight || !!frameTween,
-      flying: !!flight || !!frameTween || !!rollSettle || wantsUpright, spinning: speed > 0, mode, spaceVisible: spaceVisible(), fallback: !fallback.hidden,
+      flying: !!flight || !!frameTween, spinning: false, mode, spaceVisible: spaceVisible(), fallback: !fallback.hidden,
       north:[...rotate(q,north)],
       light, frame: { ...frameNow }, crop: { ...cropNow },
       /** The globe's disc on screen (CSS px): centre and radius. */

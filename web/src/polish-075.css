@@ -40,6 +40,14 @@ html.v075 :is(.btn.primary, #levels .difficulty-tile.on, .campaign-tile[data-sta
 html.v075 :is(#menu,#play-menu,#levels,#campaign,#online-hub,#online-waiting,#online-join) .btn {
   color: var(--control-ivory, #f5edda) !important; font-weight: 500;
 }
+/* Full menu keys share their engraved label too, including the legacy utility footer. */
+html.v075 :is(#menu .menu-buttons,#menu .menu-footer,#play-menu .menu-buttons) button.btn:not(.link),
+html.v075 #levels .level-grid button.difficulty-tile:not(.link) {
+  font-size: 1rem !important;
+  font-weight: var(--w-ui-regular,400) !important;
+  letter-spacing: .14em !important;
+}
+html.v075 #menu .menu-territory-label { font-size: inherit !important; letter-spacing: inherit !important; }
 html.v075 :is(#menu,#play-menu) .btn.suggest::before,
 html.v075 :is(#menu,#play-menu) .btn.suggest::after { content: none !important; }
 html.v075 :is(#menu,#play-menu) .btn.suggest,

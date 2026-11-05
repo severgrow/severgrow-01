@@ -42,7 +42,7 @@ for (const prefix of ['futa05-test:', 'futa05:', 'futa05-3:']) {
   localStorage.setItem(prefix + 'futasaku.world.last.v1', ${JSON.stringify(JSON.stringify(world))});
 }`);
 type Snapshot = { ready: boolean; cells: number; zoom: number; tilePx: number; q: number[]; selected: string | null; frames: number;
-  bytes: number; pendingFrame: boolean; flying: boolean; spinning: boolean; spaceVisible: boolean; fallback: boolean };
+  north:number[]; bytes: number; pendingFrame: boolean; flying: boolean; spinning: boolean; spaceVisible: boolean; fallback: boolean };
 const planet = (p: Page): Promise<Snapshot | null> => p.evaluate(() => {
   const s = (window as unknown as { __severgrow: { planet: () => (Snapshot & { screenOf?: unknown }) | null } }).__severgrow.planet();
   return s ? { ...s, screenOf: undefined } : null;
@@ -248,13 +248,15 @@ try {
     await p.mouse.move(cx - 60, cy);
     await p.mouse.down();
     for (let i = 1; i <= 10; i++) { await p.mouse.move(cx - 60 + i * 12, cy + i * 4); await p.waitForTimeout(16); }
-    await p.waitForTimeout(140);
+    const releasePose=(await planet(p))!;
+    check(`[${tag}] geographic north remains upright during dragging`,Math.abs(releasePose.north[0]!)<1e-6&&releasePose.north[1]!>0);
     await p.mouse.up();
     await settled(p);
     s = (await planet(p))!;
+    check(`[${tag}] release keeps the exact final drag pose`,s.q.every((v,i)=>Math.abs(v-releasePose.q[i]!)<1e-8));
     check(`[${tag}] a drag turns the planet`, JSON.stringify(s.q) !== JSON.stringify(before.q));
     check(`[${tag}] a drag never changes the selection`, s.selected === before.selected);
-    // The finger moved 120px right; the tile under it went with it (a flick may carry it further).
+    // The finger moved 120px right; the ground follows during the gesture.
     const moved = (await screenOf(p, '0,0'))!;
     check(`[${tag}] the ground follows the finger`, moved.x - ground0.x > 60, `${(moved.x - ground0.x).toFixed(0)}px`);
 
@@ -284,7 +286,8 @@ try {
         await p.mouse.move(at0.x, at0.y);
         for (let i = 0; i < 3; i++) { await p.mouse.wheel(0, 120); await p.waitForTimeout(30); }
         await settled(p).catch(() => undefined);
-        const at1 = await screenOf(p, target), z1 = (await planet(p))!.zoom;
+        const at1 = await screenOf(p, target), wheelPose=(await planet(p))!,z1=wheelPose.zoom;
+        if(!at1||Math.hypot(at1.x-at0.x,at1.y-at0.y)>=6)console.error('Wheel pose',JSON.stringify({tag,target,north0:s0.north,north1:wheelPose.north,at0,at1}));
         check(`[${tag}] the wheel zooms towards the pointer`, !!at1 && z1 < s0.zoom * .95 && Math.hypot(at1.x - at0.x, at1.y - at0.y) < 6,
           at1 ? `moved ${Math.hypot(at1.x - at0.x, at1.y - at0.y).toFixed(1)}px, zoom ${s0.zoom.toFixed(2)} -> ${z1.toFixed(2)}` : 'tile gone');
       }

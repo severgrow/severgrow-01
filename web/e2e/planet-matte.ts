@@ -4,7 +4,7 @@ import {mkdirSync} from 'node:fs';
 import {chromium} from 'playwright-core';
 import {productFixture} from './helpers/product-fixture.js';
 import {WORLD_VERSION,seenWorld} from '../../server/src/world.js';
-import {inverse,rotate,type Quat} from '../src/sphere/rotation.js';
+import {type Quat} from '../src/sphere/rotation.js';
 
 const shots=process.env.SHOTS??'/tmp/planet-matte';mkdirSync(shots,{recursive:true});
 const fixture=await productFixture({offlineApiPort:65530});
@@ -12,7 +12,7 @@ const browser=await chromium.launch({...(process.env.PW_CHROMIUM?{executablePath
 const playerId='11111111-1111-4111-8111-111111111111';
 const claims=['0,0','1,0','0,1','-1,1','1,-1'].map(cellId=>({cellId,ownerId:playerId,ownerName:'Cedar',ownerLevel:3,ownerTag:'',colour:'hsl(150 32% 52%)',claimedAt:1}));
 const world={version:WORLD_VERSION,revision:1,cost:100,challengeStake:0,cells:seenWorld(claims.map(c=>c.cellId)),claims,disputes:[{cellId:'0,0',challengerId:'rival',defenderId:playerId,accepted:false}]};
-const material=(el:Element)=>{const s=getComputedStyle(el);return [s.background,s.borderTopColor,s.borderTopWidth,s.borderRadius,s.color,s.fontWeight,s.backdropFilter];};
+const material=(el:Element)=>{const s=getComputedStyle(el);return [s.background,s.borderTopColor,s.borderTopWidth,s.borderRadius,s.color,s.fontWeight,s.backdropFilter,s.fontSize,s.letterSpacing,s.fontFamily];};
 const settled=async(p:import('playwright-core').Page)=>p.waitForFunction(()=>{
  const s=(window as any).__severgrow.planet();return !!s&&!s.flying&&!s.spinning;
 },undefined,{timeout:15000}).catch(async error=>{
@@ -32,11 +32,18 @@ try{
   await p.goto(fixture.origin+'/test/');
   await p.waitForFunction(()=>(window as any).__startup.length>0);
   const boot=await p.evaluate(()=>(window as any).__startup[0]);
+  if(!boot.ready||!boot.frames){
+   console.error('Boot diagnostic',JSON.stringify({boot,errors}));
+   await p.waitForTimeout(3000);
+   console.error('Boot after fail-open',await p.evaluate(()=>{const h=(window as any).__severgrow,s=h?.planet?.();return {ready:h?.ready?.(),frames:s?.frames,mode:s?.mode,hidden:document.hidden};}),errors);
+  }
   assert(boot.ready&&boot.frames>0&&boot.fonts==='loaded',JSON.stringify(boot));
   assert.deepEqual(boot.animations,[1000],'one coherent one-second first reveal');
   await p.waitForTimeout(1050);
   const keys=await p.evaluate(fn=>['menu-play','menu-world','menu-settings'].map(id=>(0,eval)(`(${fn})`)(document.getElementById(id))),material.toString());
   assert.deepEqual(keys[0],keys[1],'PLAY has the same material as THE PLANET');assert.deepEqual(keys[1],keys[2],'Settings shares the same key');
+  const labels=await p.evaluate(()=>['menu-play-label','menu-world-label','menu-settings'].map(id=>{const s=getComputedStyle(document.getElementById(id)!);return [s.fontFamily,s.fontSize,s.fontWeight,s.letterSpacing];}));
+  assert.deepEqual(labels[0],labels[1],'PLAY and THE PLANET share the same label typography');assert.deepEqual(labels[1],labels[2],'Settings uses that same label typography');
   const pressedShadows=[];
   for(const id of ['menu-play','menu-settings']){
    const key=p.locator('#'+id),box=(await key.boundingBox())!;
@@ -93,17 +100,26 @@ try{
   }
   await p.locator('#online-world-menu').click(); // fold the keys before touching the ground
   const grid=(await p.locator('#online-world-grid').boundingBox())!,cx=grid.x+grid.width/2,cy=grid.y+grid.height/2;
-  await p.mouse.move(cx-35,cy+20);await p.mouse.down();await p.mouse.move(cx+50,cy-50,{steps:8});await p.waitForTimeout(130);
+  await p.mouse.move(cx-35,cy+20);await p.mouse.down();await p.mouse.move(cx+50,cy-50,{steps:8});
   const before=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
   await p.mouse.up();await settled(p);
   const after=await p.evaluate(()=>(window as any).__severgrow.planet());
-  const a=rotate(inverse(before),[0,0,1]),b=rotate(inverse(after.q),[0,0,1]);
-  assert(Math.hypot(...a.map((v,i)=>v-b[i]!))<.0001,'upright settle does not recenter the view');
+  assert(before.every((v,i)=>Math.abs(v-after.q[i])<.000001),'release preserves the exact final drag pose');
+  await p.waitForTimeout(650);
+  const held=await p.evaluate(()=>(window as any).__severgrow.planet());
+  assert(before.every((v,i)=>Math.abs(v-held.q[i])<.000001),'no post-release correction or drift');
   if(Math.hypot(after.north[0],after.north[1])>.15){assert(Math.abs(after.north[0])<.0001&&after.north[1]>0,'north rests upright');}
   await p.screenshot({path:`${shots}/planet-${width}.png`});
   await p.mouse.click(cx,cy);await p.waitForTimeout(250);
   const tapped=await p.evaluate(()=>(window as any).__severgrow.planet().q) as number[];
   assert(tapped.every((v,i)=>Math.abs(v-after.q[i])<.00001),'a central tile tap does not roll the camera');
+  const zoomBeforeWheel=await p.evaluate(()=>(window as any).__severgrow.planet().zoom);
+  await p.mouse.move(cx,cy);await p.mouse.wheel(0,120);
+  await p.waitForFunction(z=>Math.abs((window as any).__severgrow.planet().zoom-z)>1e-5,zoomBeforeWheel);
+  const wheeled=await p.evaluate(()=>(window as any).__severgrow.planet());
+  await p.waitForTimeout(650);
+  const wheelEnd=await p.evaluate(()=>(window as any).__severgrow.planet());
+  assert(wheeled.q.every((v:number,i:number)=>Math.abs(v-wheelEnd.q[i])<.000001)&&wheeled.zoom===wheelEnd.zoom,'scroll ends at its input position without a corrective tail');
   if(width===390){
    await p.waitForTimeout(600);
    await p.evaluate(({cx,cy})=>{
@@ -152,7 +168,7 @@ try{
 
 
   }
-  assert.equal(errors.length,0,errors.join('\n'));console.log(`PASS ${width}×${height}: coherent boot, matte keys, warm chat, one logo, pressed panes, upright camera`);
+  assert.equal(errors.length,0,errors.join('\n'));console.log(`PASS ${width}×${height}: coherent boot, matte keys, warm chat, one logo, pressed panes, north-up camera with exact release`);
   await p.close();
  }
  const reduced=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
@@ -175,3 +191,5 @@ try{
  assert.equal(await unavailable.evaluate(()=>getComputedStyle(document.body).visibility),'visible','failed modules cannot leave an indefinite black screen');
  await unavailable.close();console.log('PASS bounded startup fail-open');
 }finally{await browser.close();await fixture.close();}
+
+await import("./challenge-handoff.js");
