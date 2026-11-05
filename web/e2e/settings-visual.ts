@@ -29,6 +29,10 @@ try {
     await page.addInitScript(() => { try { localStorage.setItem('futa05:futasaku.auth.google-on.v1', '1'); } catch { /* storage blocked */ } });
     await seedSeen(page); await seedSettings(page, { largeText, sound: false, music: false });
     await page.goto('http://127.0.0.1:4258/');
+    // Loading the HTML does not mean asynchronous game/account modules have mounted. This suite
+    // measures the real, tall Settings sheet, rather than racing an unbound menu control.
+    await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true);
+    await page.waitForSelector('#acct-settings', { state: 'attached' });
     await page.locator('#menu-settings').click();
     await page.waitForTimeout(450);
     // Font/layout work can set data-scroll late on a busy runner. Check the settled cue,
@@ -39,6 +43,14 @@ try {
       const opacity=fade?Number(getComputedStyle(fade).opacity):0;
       const more=panel.scrollHeight-panel.clientHeight-panel.scrollTop>2;
       return more?panel.dataset.scroll==='1'&&opacity>.5:panel.dataset.scroll==='0'&&opacity<.1;
+    }).catch(async error => {
+      const state=await page.evaluate(()=>{
+        const panel=document.getElementById('sheet-settings')!,fade=panel.querySelector('.sheet-fade');
+        return {hidden:panel.hidden,scrollHeight:panel.scrollHeight,clientHeight:panel.clientHeight,
+          scrollTop:panel.scrollTop,scrollState:panel.dataset.scroll,fade:fade?getComputedStyle(fade).opacity:null};
+      });
+      console.error(`FAIL Settings ${width}x${height}${largeText?' Large text':''} scroll readiness: ${JSON.stringify(state)}`);
+      throw error;
     });
     const geometry = await page.evaluate(() => {
       const panel = document.getElementById('sheet-settings')!;

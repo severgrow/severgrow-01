@@ -32,6 +32,7 @@ simulator. Production Supabase/database integration is not configured here. No s
 | Channels/panels | Passed `/`, `/2/`, `/3/`, `/test/` preference isolation; pane scroll memory, focus/draft retention and interrupted close/reopen |
 | Builds/assets | futa04, futa-test and futa05 passed; deterministic SVG generation and baked source/output hashes verified |
 | Planet | Final full rerun passed: four viewports, exact selection, wheel/pinch/double tap, repeated visits, one canvas, menu continuity, 1500ms PLAY cleanup, reduced motion and no-WebGL fallback |
+| Settings | Six local sizes passed, including Large Text and landscape. The remote extra suite timed out once; its precondition now waits for mounted game/account controls and retains all visual assertions, with public failure-state diagnostics |
 
 The first material gallery stalled while SVG atlases were rasterised; the baked version passed.
 The first lesson reading-floor probe took screenshots before its timed tap. It now measures the
@@ -47,6 +48,9 @@ the local logs; the results above distinguish corrected harness/configuration ru
 The Planet suite also hit one intermittent repeated-entry settle timeout before its final complete
 pass. The strict 15s criterion remains; failure snapshots/visibility diagnostics are now captured.
 WebKit/Safari verification is left to the repository's existing CI jobs; it was not run locally.
+The initial pushed commit `f2d22d98` subsequently passed the complete main GitHub CI workflow,
+including the WebKit jobs. Final publication status belongs to the delivery report rather than
+this pre-publication snapshot.
 
 ## Performance findings
 
