@@ -22,8 +22,10 @@ const settled=async(p:import('playwright-core').Page)=>p.waitForFunction(()=>{
 try{
  for(const [width,height] of [[320,568],[390,844],[844,390],[1440,900]]){
   const p=await browser.newPage({viewport:{width:width!,height:height!},hasTouch:width!<900});
-  const errors:string[]=[];p.on('pageerror',e=>errors.push(e.message));let reads=0,longHistory=false;
-  await p.route('**/v1/world',route=>route.fulfill({status:200,headers:{'content-type':'application/json','access-control-allow-origin':'*'},body:JSON.stringify(world)}));
+  const errors:string[]=[];p.on('pageerror',e=>errors.push(e.message));let reads=0,longHistory=false;const colourRequests:string[]=[];p.on('request',r=>{if(r.url().includes('/colour'))colourRequests.push(r.url());});
+  await p.route('**/v1/world/colour*',r=>r.fulfill({headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({colour:{colourId:0,colour:'hsl(150 32% 52%)',name:'Forest',chosen:true,canChange:true,changeAvailableAt:null,remainingMs:0}})}));
+  await p.route('**/v1/world/challenges*',r=>r.fulfill({headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({ok:true,serverNow:Date.now(),outgoing:[],incoming:[{id:'matte-challenge',cellId:'0,0',challengerId:'rival',defenderId:playerId,challengerName:'Maple',defenderName:'Cedar',fromMe:false,status:'pending',stake:0,stakeCellId:'1,0',createdAt:Date.now(),expiresAt:Date.now()+86400000,respondedAt:null,matchId:null,matchFinished:false,matchWinnerId:null,matchWaitingForMe:false,winnerId:null,resolvedAt:null,remainingMs:86400000,serverNow:Date.now()}]})}));
+  await p.route('**/v1/world',route=>route.fulfill({status:200,headers:{'content-type':'application/json','access-control-allow-origin':'*'},body:JSON.stringify({ok:true,world})}));
   await p.route('**/v1/territory/chat',async route=>{
    reads++;await new Promise(r=>setTimeout(r,600));
    await route.fulfill({status:200,headers:{'content-type':'application/json','access-control-allow-origin':'*'},body:JSON.stringify({messages:longHistory?Array.from({length:30},(_,i)=>({id:'message-'+i,sequence:i,text:'A quiet message '+i+' / '+reads,name:'Maple',tag:'MAPLE',mine:false,createdAt:1,requestId:String(i)})):[{id:'message-1',sequence:1,text:'A quiet world, already here.',name:'Maple',tag:'MAPLE',mine:false,createdAt:1,requestId:'1'}]})});
@@ -42,6 +44,9 @@ try{
   await p.waitForTimeout(1050);
   const keys=await p.evaluate(fn=>['menu-play','menu-world','menu-settings'].map(id=>(0,eval)(`(${fn})`)(document.getElementById(id))),material.toString());
   assert.deepEqual(keys[0],keys[1],'PLAY has the same material as THE PLANET');assert.deepEqual(keys[1],keys[2],'Settings shares the same key');
+  assert(String(keys[0]![6]).includes('blur('),'matte menu keys restore the shared backdrop blur');
+  const halos=await p.evaluate(()=>['menu-play','menu-world'].map(id=>getComputedStyle(document.getElementById(id)!).boxShadow));
+  assert.notEqual(halos[0],halos[1],'PLAY uses the existing quiet recommendation glow');
   const labels=await p.evaluate(()=>['menu-play-label','menu-world-label','menu-settings'].map(id=>{const s=getComputedStyle(document.getElementById(id)!);return [s.fontFamily,s.fontSize,s.fontWeight,s.letterSpacing];}));
   assert.deepEqual(labels[0],labels[1],'PLAY and THE PLANET share the same label typography');assert.deepEqual(labels[1],labels[2],'Settings uses that same label typography');
   const pressedShadows=[];
@@ -75,6 +80,11 @@ try{
   assert.equal(await p.locator('#world-style-picker').count(),0,'the rejected materials are absent');
   const pressed=await p.locator('#world-key-colour').evaluate(el=>({after:getComputedStyle(el,'::after').content,shadow:getComputedStyle(el).boxShadow}));
   assert(['none','normal'].includes(pressed.after));assert(pressed.shadow.includes('inset'),'open pane pushes the key inward');
+  const selected=p.locator('.world-colour-swatch.current');await selected.waitFor({state:'visible'}).catch(async e=>{console.error('Colour fixture',colourRequests,await p.locator('#world-colour-grid').evaluate(el=>({count:el.children.length,current:el.querySelector('.current')?.getAttribute('data-colour-id')})));throw e;});
+  const selectedFinish=await selected.evaluate(el=>({shadow:getComputedStyle(el).boxShadow,pressed:el.getAttribute('aria-pressed')}));
+  assert.equal(selectedFinish.pressed,'true');assert(selectedFinish.shadow.includes('inset'));
+  assert(!selectedFinish.shadow.includes('242, 200, 121'),'selected colour uses pressed depth rather than the legacy amber frame');
+  await p.screenshot({path:`${shots}/colours-${width}.png`});
   await p.locator('#world-panel-close').click();
   await p.waitForSelector('#world-chat-list .world-chat-line',{state:'attached'});
   const warm=reads;assert(warm>0,'chat fetched before its first opening');
@@ -83,6 +93,12 @@ try{
    return {text:document.getElementById('world-chat-list')!.textContent,heading:document.getElementById('world-chat-heading')!.textContent};
   });
   assert(chat.text?.includes('A quiet world, already here.'));assert.equal(chat.heading,'Global chat');
+  const compactSurface=async(selector:string)=>p.locator(selector).first().evaluate(el=>{const s=getComputedStyle(el);return [s.background,s.borderTopColor,s.borderTopWidth,s.borderRadius,s.color,s.backdropFilter];});
+  const expected=[keys[0]![0],keys[0]![1],keys[0]![2],keys[0]![3],keys[0]![4],keys[0]![6]];
+  assert.deepEqual(await compactSurface('#world-chat-send'),expected,'chat SEND uses the menu matte/glass family');
+  await p.locator('#world-chat-list .world-chat-line').first().click();
+  assert.deepEqual(await compactSurface('.world-chat-line.picked .world-chat-mod button'),expected,'moderation actions use the same material');
+  await p.locator('#world-chat-list .world-chat-line').first().click();
   await p.screenshot({path:`${shots}/chat-${width}.png`});
   await p.waitForTimeout(750);await p.locator('#world-chat-back').click();
   const closedReads=reads;await p.waitForTimeout(4200);assert.equal(reads,closedReads,'closed chat has no polling timer');
@@ -98,6 +114,17 @@ try{
    assert(Math.abs(await p.locator('#world-chat-list').evaluate(el=>el.scrollTop)-reading)<1,'a response arriving while closed preserves older reading position');
    await p.locator('#world-chat-back').click();
   }
+  if(!(await p.locator('#world-key-challenges').isVisible()))await p.locator('#online-world-menu').click();
+  await p.locator('#world-key-challenges').click();
+  await p.locator('.world-challenge-chip[data-challenge-id="matte-challenge"]').click();
+  await p.waitForFunction(()=>document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-card')?.getAttribute('data-ix-state')==='open');
+  const lead='.world-challenge-sheet:not([hidden]) .world-challenge-primary',secondary='.world-challenge-sheet:not([hidden]) .world-challenge-secondary';
+  assert.deepEqual(await compactSurface(lead),expected,'real challenge action uses the menu matte/glass family');
+  assert.deepEqual(await compactSurface(secondary),expected,'secondary challenge action shares the same key material');
+  assert((await p.locator(lead).boundingBox())!.height>=44,'challenge keeps its mobile target');
+  await p.screenshot({path:`${shots}/challenge-${width}.png`});
+  await p.keyboard.press('Escape');await p.locator('.world-challenge-sheet:not([hidden])').waitFor({state:'hidden'});
+  await p.locator('#world-panel-close').click();
   await p.locator('#online-world-menu').click(); // fold the keys before touching the ground
   const grid=(await p.locator('#online-world-grid').boundingBox())!,cx=grid.x+grid.width/2,cy=grid.y+grid.height/2;
   await p.mouse.move(cx-35,cy+20);await p.mouse.down();await p.mouse.move(cx+50,cy-50,{steps:8});
@@ -193,3 +220,5 @@ try{
 }finally{await browser.close();await fixture.close();}
 
 await import("./challenge-handoff.js");
+
+await import('./play-world-fade.js');

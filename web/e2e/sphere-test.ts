@@ -408,8 +408,8 @@ try {
       check(`[${tag}] five more visits still leave exactly one canvas`, (await p.locator('.planet-canvas').count()) === 1);
       // Starting a game frees it.
       await p.locator('#menu-play').click();
-      await p.waitForTimeout(1800); // 1500ms requested fade plus completion headroom
-      check(`[${tag}] leaving the menu for PLAY frees the planet after its 1500ms fade`, (await planet(p)) === null && (await p.locator('.planet-canvas').count()) === 0);
+      await p.waitForTimeout(1800); // 650ms requested fade plus completion headroom
+      check(`[${tag}] leaving the menu for PLAY frees the planet after its 650ms fade`, (await planet(p)) === null && (await p.locator('.planet-canvas').count()) === 0);
     }
     await context.close();
   }

@@ -311,3 +311,14 @@ Treat WebGL fallback, cleanup and device limitations as part of the experience. 
 - Reuse the existing atmosphere/grain. Mote loops fade outside the view; new material details are
   static. Measure performance, batch geometry reads before animation writes, and do not scan or
   measure a hidden/unchanged presentation just to restart an effect.
+
+## Matte action refinement — 5 November 2026
+
+- Shared matte menu/dialog/chat keys use the existing dark-glass backdrop blur. Reuse that pair;
+  do not add decorative blur wrappers. PLAY keeps its static, visible amber recommendation after
+  lesson graduation; the LEVEL key retains its progress-based guidance. No new progress rules.
+- Challenge/invitation actions and Global chat Send/report/block use the shared matte finish,
+  ivory type and native press. The selected colour sits inward rather than wearing an amber frame.
+- PLAY's background leaves in 650ms. Returning reveals the world over 650ms after its real first
+  paint; menu controls are immediate. Retained planets interrupt at their current opacity, new
+  navigation cancels stale completion, reduced motion is instant, and readiness has a bounded fallback.

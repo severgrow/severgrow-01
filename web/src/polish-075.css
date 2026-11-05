@@ -5,7 +5,7 @@
 
    The live game only: every rule is scoped to html.v075, which the build writes into the page for
    CHANNEL=futa05 (web/vite.config.ts), so it is on the very first paint and the locked 0.4 line never
-   sees it. CSS only: no images, no extra blur layers, no idle animation.
+   sees it. CSS only: no new imagery or idle animation. Shared button blur is owner-restored.
    ================================================================================================ */
 
 /* ---- H. ONE GLASS -----------------------------------------------------------------------------
@@ -27,15 +27,17 @@ html.v075 {
   --matte-key-line: color-mix(in srgb, var(--fu-cream, #e8ddc5) 22%, transparent);
   --matte-key-shadow: inset 0 1px 0 #ffffff10, inset 0 -1px 0 #0005, 0 1px 2px #0004;
 }
-html.v075 :is(.btn:not(.link), .difficulty-tile, .campaign-tile, :where(.world-key.world-key-text.armed)) {
+html.v075 :is(.btn:not(.link), .difficulty-tile, .campaign-tile, .world-invitation-card button,
+  .world-chat-send, .world-chat-mod button, :where(.world-key.world-key-text.armed)) {
   --press-drop: 1px; --press-depth: 1;
   background: var(--matte-key) !important;
   border: 1px solid var(--matte-key-line) !important;
   box-shadow: var(--matte-key-shadow) !important;
-  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  -webkit-backdrop-filter: var(--dark-glass-blur) !important; backdrop-filter: var(--dark-glass-blur) !important;
 }
 /* Cream-filled legacy primaries used dark ink. Their new matte surface needs the same ivory. */
 html.v075 :is(.btn.primary, #levels .difficulty-tile.on, .campaign-tile[data-state='current'],
+  .world-invitation-card button, .world-chat-send, .world-chat-mod button,
   .world-key.world-key-text.armed) { color: var(--control-ivory, #f5edda) !important; }
 html.v075 :is(#menu,#play-menu,#levels,#campaign,#online-hub,#online-waiting,#online-join) .btn {
   color: var(--control-ivory, #f5edda) !important; font-weight: 500;
@@ -52,14 +54,27 @@ html.v075 :is(#menu,#play-menu) .btn.suggest::before,
 html.v075 :is(#menu,#play-menu) .btn.suggest::after { content: none !important; }
 html.v075 :is(#menu,#play-menu) .btn.suggest,
 html.v075 .campaign-tile[data-state='current'] {
-  box-shadow: var(--matte-key-shadow), 0 0 15px color-mix(in srgb, var(--turn-rim-ink,#f5d8a4) 12%, transparent) !important;
+  box-shadow: var(--matte-key-shadow), 0 0 15px color-mix(in srgb, var(--turn-rim-ink,#f5d8a4) 24%, transparent) !important;
 }
 html.v075 :is(#menu,#play-menu) .btn[data-pressed='true'],
-html.v075 :is(.btn:not(.link), .difficulty-tile, .campaign-tile)[data-pressed='true'],
+html.v075 :is(.btn:not(.link), .difficulty-tile, .campaign-tile, .world-invitation-card button,
+  .world-chat-send, .world-chat-mod button)[data-pressed='true'],
 html.v075 #levels .difficulty-tile.on {
   box-shadow: inset 0 2px 4px #0008, inset 0 0 0 1px #0003 !important;
 }
 html.v075 .campaign-tile[data-state='current'] * { color: inherit; }
+/* Compact actions keep their scale, with the same material and quiet ivory engraving. */
+html.v075 :is(.world-invitation-card button,.world-chat-send,.world-chat-mod button) {
+  font-weight: var(--w-ui-regular,400); border-radius: 10px; filter: none;
+}
+html.v075 .world-colour-swatch.current {
+  background: var(--dark-glass); box-shadow: inset 0 2px 4px #0008, inset 0 0 0 1px #0003;
+}
+html.v075 :is(.world-challenge-meta,.world-challenge-notice) {
+  font-size: var(--instrument-label-size); letter-spacing: var(--instrument-tracking);
+  color: var(--instrument-muted);
+}
+
 
 /* ---- C. STEADY NUMBERS ------------------------------------------------------------------------
    Scores and counters use fixed-width digits everywhere in play, so a 9 becoming a 10 never nudges

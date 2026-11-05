@@ -622,7 +622,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (menuPass) await menuPass.catch(() => undefined);
     if (menuEl?.hidden === false && worldEl.dataset.livingTerritory === 'menu') await refreshMenu();
   });
-  living = menuEl ? mountLivingTerritory({menu: menuEl, screen: worldEl,
+  living = menuEl ? mountLivingTerritory({menu: menuEl, screen: worldEl, planet: FEATURES.planet,
     preview: () => worldView?.preview(worldSource.peek(), identity.peek(), !worldSource.isFresh()),
     stop: () => worldView?.close(true),
     freeze: (on) => worldView?.freezeMenuPreview(on),

@@ -1,3 +1,5 @@
+// Modern menu update, 2026-11-05: PLAY keeps its quiet amber invitation after graduation;
+// the LEVEL key retains the progress-based guidance described below. No new timer or state.
 // THE CAMPAIGN'S SUGGESTION — a slight cream halo around PLAY and LEVEL <n> (owner, 2026-11-02).
 //
 // Owner's words: "make slight glow cream around the play and level 1 so its suggestive". This
@@ -67,7 +69,8 @@ export const installMenuSuggestion = (doc: Document = document): MenuSuggestionU
   return {
     paint(progress, account) {
       const on = campaignSuggested(progress, account);
-      play?.classList.toggle('suggest', on);
+      // Modern PLAY remains the quiet primary invitation; only lesson guidance graduates.
+      play?.classList.toggle('suggest', on || !!doc.documentElement?.classList.contains('v075'));
       level?.classList.toggle('suggest', on);
     },
   };

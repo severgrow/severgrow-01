@@ -1223,7 +1223,9 @@ export class WorldView {
       this.achievements = restoreAchievements(browserStorage(), identity?.playerId ?? null);
       this.paintPanel();
       if (!changedIdentity) this.paintWallet();
-      if (identity) void this.loadColour(identity);
+      // ensureIdentity may return a fresh wrapper for the same credentials. Use the retained
+      // actor object so loadColour's stale-account guard accepts this still-current response.
+      if (this.identity) void this.loadColour(this.identity);
       // The initial refresh already reads private metadata for a known actor. Fetch it once.
       if (changedIdentity) void this.refresh(true);
     }).catch(() => {

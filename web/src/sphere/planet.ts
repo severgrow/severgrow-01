@@ -92,6 +92,11 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   fallback.className = 'planet-fallback';
   fallback.hidden = true;
   stage.append(canvas, fallback);
+  let announcedPaint=false;
+  const announcePaint=()=>{
+    markPlanetPainted();
+    if(!announcedPaint){announcedPaint=true;canvas.dataset.planetReady='true';canvas.dispatchEvent(new Event('futasaku:planet-ready',{bubbles:true}));}
+  };
 
   const abort = new AbortController(), signal = abort.signal;
   let renderer: PlanetRenderer | null = null, lost = false, disposed = false, frozen = false;
@@ -272,7 +277,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     paintFrame();
     const offset: [number, number] = [drift[0] + turn[0] * 40, drift[1] + turn[1] * 40];
     renderer.render(q, zoom, pulse, offset, frameNow);
-    if(input&&ground)markPlanetPainted();
+    if(input&&ground)announcePaint();
     spaceDrift.x = offset[0]; spaceDrift.y = offset[1];
     const busy = !!flight || !!frameTween || zoom !== targetZoom || pulseUntil > now;
     if (busy) ask();
@@ -335,7 +340,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (!posed) { q = menuMemory ?? menuPose(); zoom = targetZoom = MENU_ZOOM; frameNow = frameTarget(); cropNow = cropTarget(); light = MENU_LIGHT; posed = true; }
     flyTo(target, open, INTRO_MS, easeInOut, OPEN_TILE_PX);
   };
-  const fail = (text: string) => { fallback.textContent = text; fallback.hidden = false; canvas.hidden = true;markPlanetPainted(); };
+  const fail = (text: string) => { fallback.textContent = text; fallback.hidden = false; canvas.hidden = true;announcePaint(); };
   const initialise = () => {
     try {
       renderer = new PlanetRenderer(canvas, sphere,north);
