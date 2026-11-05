@@ -21,3 +21,8 @@ Local verification: all TypeScript projects pass; focused replay/copy/profile/fo
 The complete offline replay browser suite passes, with the repaired picture inspected at phone size.
 The phone visual contract proves actual star translation and exactly one visible gameplay sky canvas.
 Full four-viewport checks and release CI remain required before publication.
+
+A browser check reproduced a panel stranded in closing state. Exit surfaces now have one bounded
+cleanup fallback, cancelled on completion, reopen or navigation. Normal motion tokens are unchanged.
+Unit tests verify single completion and timer cleanup; the browser deliberately pauses a close
+animation and requires the actual sheet to become hidden. No repeating timer or frame loop is added.

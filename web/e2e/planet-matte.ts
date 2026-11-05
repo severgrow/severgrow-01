@@ -123,7 +123,16 @@ try{
   assert.deepEqual(await compactSurface(secondary),expected,'secondary challenge action shares the same key material');
   assert((await p.locator(lead).boundingBox())!.height>=44,'challenge keeps its mobile target');
   await p.screenshot({path:`${shots}/challenge-${width}.png`});
+  // Force the actual compositor failure: a close animation whose finished promise never resolves.
+  await p.evaluate(()=>{
+   const original=Element.prototype.animate;(window as any).__animateBeforeClose=original;
+   Element.prototype.animate=function(frames,options){
+    const a=original.call(this,frames,options);
+    if(this.classList.contains('world-challenge-sheet'))a.pause();return a;
+   };
+  });
   await p.keyboard.press('Escape');await p.locator('.world-challenge-sheet:not([hidden])').waitFor({state:'hidden'});
+  await p.evaluate(()=>{Element.prototype.animate=(window as any).__animateBeforeClose;});
   await p.locator('#world-panel-close').click();
   await p.locator('#online-world-menu').click(); // fold the keys before touching the ground
   const grid=(await p.locator('#online-world-grid').boundingBox())!,cx=grid.x+grid.width/2,cy=grid.y+grid.height/2;

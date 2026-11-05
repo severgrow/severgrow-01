@@ -21,7 +21,7 @@ import { REPLAY_PACING } from '../src/replay/timeline.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
-  '/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+  chromium.executablePath();
 const SHOTS = process.env.SHOTS?.trim() || new URL('../../docs/screens/replay/', import.meta.url).pathname;
 
 let failed = 0;
