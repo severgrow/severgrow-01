@@ -288,13 +288,20 @@ try {
       const s0 = (await planet(p))!;
       const target = s0.selected ?? '1,0', at0 = await screenOf(p, target);
       if (at0 && Math.hypot(at0.x - cx, at0.y - cy) > 40) {
+        await p.evaluate(id=>{
+          const w=window as any;w.__wheelProbe=[];const stop=new AbortController();w.__wheelProbeStop=stop;
+          const record=(phase:string,e:WheelEvent)=>{const s=w.__severgrow.planet();w.__wheelProbe.push({phase,x:e.clientX,y:e.clientY,q:s.q,zoom:s.zoom,north:s.north,frame:s.frame,point:s.screenOf(id)});};
+          window.addEventListener('wheel',e=>record('before',e),{capture:true,signal:stop.signal});
+          document.querySelector('.planet-canvas')!.addEventListener('wheel',e=>record('after',e as WheelEvent),{signal:stop.signal});
+        },target);
         await p.mouse.move(at0.x, at0.y);
         for (let i = 0; i < 3; i++) { await p.mouse.wheel(0, 120); await p.waitForTimeout(30); }
         await settled(p).catch(() => undefined);
         const at1 = await screenOf(p, target), wheelPose=(await planet(p))!,z1=wheelPose.zoom;
-        if(!at1||Math.hypot(at1.x-at0.x,at1.y-at0.y)>=6)console.error('Wheel pose',JSON.stringify({tag,target,north0:s0.north,north1:wheelPose.north,at0,at1}));
+        const trace=await p.evaluate(()=>{const w=window as any;w.__wheelProbeStop.abort();return w.__wheelProbe;});
+        const diagnostic=!at1||Math.hypot(at1.x-at0.x,at1.y-at0.y)>=6?JSON.stringify({tag,target,north0:s0.north,north1:wheelPose.north,q0:s0.q,q1:wheelPose.q,frame0:(s0 as any).frame,frame1:(wheelPose as any).frame,at0,at1,trace}):'';
         check(`[${tag}] the wheel zooms towards the pointer`, !!at1 && z1 < s0.zoom * .95 && Math.hypot(at1.x - at0.x, at1.y - at0.y) < 6,
-          at1 ? `moved ${Math.hypot(at1.x - at0.x, at1.y - at0.y).toFixed(1)}px, zoom ${s0.zoom.toFixed(2)} -> ${z1.toFixed(2)}` : 'tile gone');
+          at1 ? `moved ${Math.hypot(at1.x - at0.x, at1.y - at0.y).toFixed(1)}px, zoom ${s0.zoom.toFixed(2)} -> ${z1.toFixed(2)} ${diagnostic}` : `tile gone ${diagnostic}`);
       }
     }
     // Zoom out to space: the stars slide slowly, and only while space is visible.
