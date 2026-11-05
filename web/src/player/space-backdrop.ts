@@ -10,7 +10,7 @@ import { spacePath } from './space-path.js';
 // redrawing the shader every frame behind an idle game, even at 10 frames a second, multiplied the
 // main thread's idle work ~45x on the 4x-CPU phone probe and stuttered a move (p95 33 -> 208 ms). So
 // the shader draws each star layer ONCE, onto a canvas a little larger than the screen, and the
-// compositor slides the cached sky (one combined layer in game, two parallax layers in menus at the
+// compositor slides the cached sky (one near layer in game, two parallax layers in menus at the
 // menu pace). Every SLIDE_MS the layers are redrawn exactly one slide further on and the slide restarts,
 // so nothing jumps. Between redraws: no frames asked for, no main-thread work.
 //
@@ -96,6 +96,9 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
     inGame = !!game && !game.hidden; near.hidden = inGame;
     root.style.backgroundImage = '';
     for (const [canvas, share, which] of [[far, FAR, 'far'], [near, 1, 'near']] as const) {
+      // A single velocity needs a single field. Baking two parallax speeds into one cache
+      // would jump the distant stars at each renewal. Keep the menu's near field in game.
+      if (inGame && which === 'far') continue;
       const driftShare = inGame ? 1 : share;
       const cw = w + mx * driftShare, ch = h + my * driftShare;
       const source = renderer.layer(which, cw, ch, [base.x, base.y]);
@@ -104,7 +107,7 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
       target.style.width = `${cw}px`; target.style.height = `${ch}px`; target.style.top = `${-my * driftShare}px`;
       const ctx = target.getContext('2d');
       if (!ctx) continue;
-      if (!inGame || which === 'far') ctx.clearRect(0, 0, target.width, target.height);
+      if (!inGame || which === 'near') ctx.clearRect(0, 0, target.width, target.height);
       ctx.drawImage(source, 0, 0);
     }
     redraws++;

@@ -6,7 +6,7 @@
 - The turn emitter uses one thin amber core and a tiny static halo, leaving tile art/digits crisp.
 - Connected ownership edges use a welded perimeter, a dark recessed seam and a faint reflected
   edge instead of cream/red outlines. Ownership, homes and all legal targets retain their meaning.
-- In-game stars reuse a single cached composite layer with compositor drift, pausing during moves
+- In-game stars reuse a single cached near-star field with compositor drift, pausing during moves
   and hidden tabs. Menu parallax stays intact. No per-frame shader or JavaScript render loop.
 - Challenge offer: name's ground, one winner-takes-the-opponent-tile sentence and the response
   deadline. No free/price claim or repeated stake paragraph. Underlying challenge rules are unchanged.
@@ -26,3 +26,7 @@ A browser check reproduced a panel stranded in closing state. Exit surfaces now 
 cleanup fallback, cancelled on completion, reopen or navigation. Normal motion tokens are unchanged.
 Unit tests verify single completion and timer cleanup; the browser deliberately pauses a close
 animation and requires the actual sheet to become hidden. No repeating timer or frame loop is added.
+
+In-game sky uses the existing near field only, so a single composite velocity renews seamlessly
+at the 20-second cache boundary. Two different parallax velocities cannot be baked into one moving
+image without distant stars jumping on renewal. Menu parallax is preserved.
