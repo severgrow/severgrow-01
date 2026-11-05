@@ -53,7 +53,7 @@ jobs:
       - name: Run the regression suite
         run: |
           set -o pipefail
-          node --import tsx web/e2e/${{ matrix.suite }}.ts 2>&1 | tee regression.log
+          node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts 2>&1 | tee regression.log
       - name: Annotate failed checks
         if: failure()
         run: |

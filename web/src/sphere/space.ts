@@ -33,7 +33,10 @@ float stars(vec2 p, float cell, float density){
   vec2 at = vec2(hash(c + 7.1), hash(c + 3.7)) * .7 + .15;
   float d = length((f - at) * cell);
   float size = mix(.55, 1.35, hash(c + 1.9)) * uScale;
-  return smoothstep(size, 0.0, d) * mix(.35, 1.0, (h - density) / (1.0 - density));
+  // A small in-focus core and a very faint soft skirt, varied by depth. No post-process blur.
+  float core = 1.0 - smoothstep(0.0, size, d);
+  float soft = exp(-d*d / (size*size*1.4)) * .11;
+  return (core * .74 + soft) * mix(.22, .92, (h - density) / (1.0 - density));
 }
 void main(){
   vec2 p = gl_FragCoord.xy;

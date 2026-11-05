@@ -105,7 +105,7 @@ const fakeDocument = () => {
     'profile-visitor', 'profile-level', 'profile-colour-hex',
   ];
   const byId: Record<string, FakeNode> = {};
-  for (const id of ids) byId[id] = node({ textContent: '—' });
+  for (const id of ids) byId[id] = node({ textContent: '-' });
   // The brand already has a child, so installProfileUI never reaches the real SVG builder.
   byId['profile-brand'] = node({ firstChild: {} });
   const close = node();
@@ -164,7 +164,7 @@ describe('one sheet, two modes: the mode is a single attribute', () => {
     expect(env.sheet.dataset.mode).toBe('visitor');
     expect(env.byId['profile-play-title']!.textContent).toBe(PROFILE.theirGames);
     // Nothing writes a caption: the stub keeps whatever the markup shipped, which is ''.
-    expect(env.byId['profile-visitor']!.textContent).toBe('—');
+    expect(env.byId['profile-visitor']!.textContent).toBe('-');
   });
 
   it('visitor mode renders the public facts: name & tag, level, tiles, colour and online record', () => {
@@ -271,7 +271,7 @@ describe('the wire becomes panel facts in one pure place', () => {
     })!.colour).toBeNull();
   });
 
-  it('null in, null out — the panel then shows its em-dash state', () => {
+  it('null in, null out - the panel then shows its em-dash state', () => {
     expect(visitorFacts(null)).toBeNull();
     expect(visitorFacts(undefined)).toBeNull();
   });

@@ -1,5 +1,8 @@
 // first: the release channel (the test copy keeps its own storage)
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
+import { deferEntryButton } from './ui/deferred-entry.js';
+import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
+import { mountStartupReveal } from './player/startup.js';
 // EXPERIMENTAL Blitz (/test/ only): presentation + wiring; its rules live in logic/blitz.ts.
 import type { BlitzPractice } from './blitz/practice.js';
 import { showLiveStrike } from './ui/live-strike.js';
@@ -540,9 +543,15 @@ const board = defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHan
   : DESIGN_MODE ? new DesignView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
+const publishTurnRim = mountTurnRim(document.body);
+function syncTurnRim() {
+  if ($('game').hidden) publishTurnRim(null, HUMAN);
+  else if (!isOnlineDuel()) publishTurnRim(session?.state ?? null, HUMAN);
+  // Online updates reuse the driver's emitted/HUD snapshot below. No extra legal-move or
+  // perspective work just to paint a turn light; replay frames never overwrite confirmed state.
+}
 const announceTurn = (player: Player, label?: string) => {
   const o = bannerOpts(settings);
-  document.body.dataset.turn = player === HUMAN ? 'you' : 'opponent';
   pill.show(player, o, label);
   const tone = turnTone(player, o);
   if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
@@ -796,6 +805,7 @@ function openPlayMenu() {
   shownScreen = 'menu';
   route = 'play';
   syncBrandMark();
+  window.dispatchEvent(new CustomEvent('futasaku:screen', { detail: 'play-menu' }));
 }
 /**
  * One leader per screen (owner direction, 2026-10-15): the ONE action that carries the cream fill,
@@ -3075,6 +3085,7 @@ function campaignDealProof(level: CampaignLevel, state: State): { dealSeed?: num
 }
 
 function afterPlay(p: Played, by: Player, advice: Advice | null) {
+  syncTurnRim();
   const taught = by === HUMAN ? lessonActive() : null;
   if (taught) {
     // Level 6 teaches Surround with ordinary Grow placements until the final one; count those as
@@ -3415,8 +3426,11 @@ function paintOnlineHudFromSession() {
   }
   void import('./online/index.js').then(({ duelUiFromSnapshot, renderDuelHud }) => {
     duelHudPaint = (s) => {
+      if (getOnlineSession()?.driver !== s.driver) return;
       const hud = document.getElementById('duel-hud');
-      const ui = duelUiFromSnapshot(s.driver.snapshot(), s.canUndo, s.isRevealing);
+      const snap = s.driver.snapshot();
+      publishTurnRim($('game').hidden ? null : confirmedTurn(snap), snap.seat);
+      const ui = duelUiFromSnapshot(snap, s.canUndo, s.isRevealing);
       renderDuelHud(hud, ui);
       // The same two words the offline bar reads (You : Opponent) — one source, src/strings.ts.
       const you = document.getElementById('score-you-label');
@@ -5156,6 +5170,7 @@ function refreshOnlineTurnReplay(): void {
 }
 
 function render() {
+  syncTurnRim();
   const t0 = performance.now();
   applyLayout();
   // A new layout (or a game screen not drawn yet): place the cockpit once it can be measured.
@@ -7787,9 +7802,12 @@ function renderHand(v: View, advice: Advice | null) {
     const settleMs = MOTION.consequence * timeScale();
     const stagger = (MOTION.ack / 2) * timeScale();
     const centre = (n - 1) / 2;
-    [...hand.querySelectorAll<HTMLElement>('[data-card]')].forEach((b, i) => {
+    const settlingCards = [...hand.querySelectorAll<HTMLElement>('[data-card]')];
+    // All final positions before any animation writes: one layout, rather than a flush per card.
+    const settlingRects = settlingCards.map(b => b.getBoundingClientRect());
+    settlingCards.forEach((b, i) => {
       const was = before.get(Number(b.dataset.card));
-      const now = b.getBoundingClientRect();
+      const now = settlingRects[i]!;
       const dx = was === undefined ? 0 : was.left - now.left;
       const dy = was === undefined ? 0 : was.top - now.top;
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
@@ -9733,6 +9751,8 @@ bind('play-back', () => {
   layoutMenu(syncMenuResume());
   showScreen('menu');
 });
+// Keep a tap made while the optional online module is still mounting; replay it once ready.
+const onlineEntryIntent = deferEntryButton($<HTMLButtonElement>('menu-online'));
 // The hub takes over the whole screen; the submenu must not stay behind it.
 $('menu-online').addEventListener('click', () => closePlayMenu());
 
@@ -10773,6 +10793,7 @@ let appReady = false;
       myTurn: os.myTurn,
       /** The SERVER's actor/seat (never the gate): the test that both phones disagree. */
       serverActor: snap.view.actor,
+      serverTurnPlayer: snap.view.turnPlayer,
       serverTurn: snap.status !== 'active' || snap.view.phase === 'GAME_OVER'
         ? 'closed'
         : snap.view.actor === snap.seat
@@ -10894,6 +10915,7 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test' && params.get('
   for (const id of ['menu', 'levels', 'campaign', 'game']) $(id).hidden = true;
   void import('./lab.js').then((m) => m.showLab(params.get('detail') === 'low' ? 'low' : 'normal', settings.reduceMotion));
 } else if (session) showScreen('game'); // an immediate menu tap may start play while optional UI mounts
+else if (route === 'play') { /* Keep an early PLAY choice while optional UI finishes mounting. */ }
 else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
   const chapterRaw = Number(params.get('chapter'));
   const chapter = Number.isInteger(chapterRaw) && chapterRaw >= 1 && chapterRaw <= TUTORIAL_CHAPTER_COUNT
@@ -10996,9 +11018,10 @@ void import('./online/lobby-ui.js').then(async (m) => {
         matchId,
         initial: player,
         channel: matchChannel,
-        onChange: () => {
+        onChange: (confirmedSnapshot) => {
           const os = getOnlineSession();
-          if (!os) return;
+          if (!os || os.driver !== driver) return;
+          publishTurnRim($('game').hidden ? null : confirmedTurn(confirmedSnapshot), confirmedSnapshot.seat);
           activeMatchChat?.update();
           // Both ends of the replay, read BEFORE the display state is rebuilt: the cockpit's
           // read-out for the enemy's turn needs them, exactly as the offline game does. `pending`
@@ -11174,6 +11197,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
     },
   });
   onlineLobbyCtl = lobby;
+  onlineEntryIntent.ready();
   void lobby.handleBootHash();
   // Live duels (test channel; docs/LIVE.md): its own module, mounted with three ways back.
   void import('./online/live/flag.js').then((f) => { if (f.liveDuelsEnabled()) void import('./online/live/mount.js').then((live) => live.mountLive({
@@ -11224,5 +11248,6 @@ void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => un
 // right on their next visit, without having to win another game first. Silent and fire-and-forget;
 // a device with nothing queued makes no request at all.
 void settleQueuedSeedsOnBoot();
+mountStartupReveal();
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

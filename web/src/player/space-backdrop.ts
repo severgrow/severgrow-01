@@ -1,3 +1,4 @@
+import { spacePath } from './space-path.js';
 // THE SPACE BACKDROP (0.75 polish pass, owner 2026-11-04: "ONE SHARED SPACE BACKGROUND ... behind
 // the Play submenu ... and behind the board in game").
 //
@@ -9,8 +10,8 @@
 // redrawing the shader every frame behind an idle game, even at 10 frames a second, multiplied the
 // main thread's idle work ~45x on the 4x-CPU phone probe and stuttered a move (p95 33 -> 208 ms). So
 // the shader draws each star layer ONCE, onto a canvas a little larger than the screen, and the
-// compositor slides the two layers (far slower than near: the same parallax, the same speed as the
-// menu). Every SLIDE_MS the layers are redrawn exactly one slide further on and the slide restarts,
+// compositor slides the cached sky (one near layer in game, two parallax layers in menus at the
+// menu pace). Every SLIDE_MS the layers are redrawn exactly one slide further on and the slide restarts,
 // so nothing jumps. Between redraws: no frames asked for, no main-thread work.
 //
 // The sky's own colour is the page background beneath (html.space-backdrop), and the film grain is the
@@ -85,52 +86,28 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
   const now = () => {
     if (!anims.length || !started) return base;
     const t = Math.min(1, ((anims[0]?.currentTime as number | null) ?? 0) / SLIDE_MS);
-    return { x: base.x + mx * t, y: base.y + my * t };
+    const p = spacePath(t);
+    return { x: base.x + mx * p.x, y: base.y + my * p.y };
   };
-  /**
-   * IN GAME THE STARS STAND STILL, on ONE layer (measured: the two sliding layers, even paused, cost a
-   * move ~6 fps on the 4x-CPU phone probe; one still layer costs nothing measurable). The stars keep
-   * the offset they had, so the menu's sky carries straight into the game without a cut.
-   */
   const game = document.getElementById('game');
-  const still = () => !!game && !game.hidden;
-  let paintedStill = false, stillUrl = '';
-  /** Draw both layers at `base`: on one still canvas in game, else each on its own sliding canvas. */
+  let inGame = false;
   const paint = () => {
     const w = innerWidth, h = innerHeight;
-    paintedStill = still();
-    root.classList.toggle('in-game', paintedStill);
-    far.hidden = paintedStill;
-    near.hidden = paintedStill;
-    if (paintedStill) {
-      // Painted as the backdrop's own background image, not a canvas: a canvas is a layer the
-      // compositor blends every frame of a move; a background image is part of the page's paint.
-      const flat = document.createElement('canvas'), ctx = flat.getContext('2d');
-      for (const which of ['far', 'near'] as const) {
-        const source = renderer.layer(which, w, h, [base.x, base.y]);
-        if (which === 'far') { flat.width = source.width; flat.height = source.height; }
-        ctx?.drawImage(source, 0, 0);
-      }
-      const painted = ++redraws;
-      flat.toBlob((blob) => {
-        if (!blob || painted !== redraws || !paintedStill) return;
-        if (stillUrl) URL.revokeObjectURL(stillUrl);
-        stillUrl = URL.createObjectURL(blob);
-        root.style.backgroundImage = `url("${stillUrl}")`;
-        root.classList.add('lit');
-        document.documentElement.classList.add('space-lit');
-      });
-      return;
-    }
+    inGame = !!game && !game.hidden; near.hidden = inGame;
     root.style.backgroundImage = '';
     for (const [canvas, share, which] of [[far, FAR, 'far'], [near, 1, 'near']] as const) {
-      const cw = w + mx * share, ch = h + my * share;
+      // A single velocity needs a single field. Baking two parallax speeds into one cache
+      // would jump the distant stars at each renewal. Keep the menu's near field in game.
+      if (inGame && which === 'far') continue;
+      const driftShare = inGame ? 1 : share;
+      const cw = w + mx * driftShare, ch = h + my * driftShare;
       const source = renderer.layer(which, cw, ch, [base.x, base.y]);
-      if (canvas.width !== source.width || canvas.height !== source.height) { canvas.width = source.width; canvas.height = source.height; }
-      canvas.style.width = `${cw}px`; canvas.style.height = `${ch}px`; canvas.style.top = `${-my * share}px`;
-      const ctx = canvas.getContext('2d');
+      const target = inGame ? far : canvas;
+      if (target.width !== source.width || target.height !== source.height) { target.width = source.width; target.height = source.height; }
+      target.style.width = `${cw}px`; target.style.height = `${ch}px`; target.style.top = `${-my * driftShare}px`;
+      const ctx = target.getContext('2d');
       if (!ctx) continue;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!inGame || which === 'near') ctx.clearRect(0, 0, target.width, target.height);
       ctx.drawImage(source, 0, 0);
     }
     redraws++;
@@ -146,9 +123,9 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
   const slideOnce = () => {
     for (const a of anims) a.cancel();
     anims = [];
-    if (!interfaceMotionAllowed() || paintedStill) { started = 0; return; }
+    if (!interfaceMotionAllowed()) { started = 0; return; }
     anims = [[far, FAR], [near, 1]].map(([canvas, share]) => (canvas as HTMLCanvasElement).animate(
-      [{ translate: '0 0' }, { translate: `${-mx * (share as number)}px ${my * (share as number)}px` }],
+      [0,.25,.5,.75,1].map(t => { const p = spacePath(t); return { offset: t, translate: `${-mx * (inGame ? 1 : share as number) * p.x}px ${my * (inGame ? 1 : share as number) * p.y}px` }; }),
       { duration: SLIDE_MS, easing: 'linear', fill: 'forwards' }));
     started = performance.now();
     if (held) for (const a of anims) a.pause();
@@ -160,6 +137,7 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
   };
   let size = '';
   const wake = () => {
+    root.classList.toggle('in-game', !!game && !game.hidden);
     const visible = seen();
     root.hidden = !visible;
     if (!visible || document.hidden || renderer.lost) {
@@ -169,7 +147,7 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
       return;
     }
     const key = `${innerWidth}x${innerHeight}x${devicePixelRatio}`;
-    if (key !== size || !redraws || still() !== paintedStill) { halt(); size = key; paint(); slideOnce(); return; }
+    if (key !== size || !redraws || inGame !== (!!game && !game.hidden)) { halt(); size = key; paint(); slideOnce(); return; }
     if (!anims.length) slideOnce();
     else for (const a of anims) { if (held) a.pause(); else if (a.playState === 'paused') a.play(); }
   };
@@ -179,7 +157,13 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
   onSpaceClaim(() => { halt(); wake(); });
   onSpaceFree(() => { halt(); base = { x: spaceDrift.x, y: spaceDrift.y }; size = ''; wake(); });
 
-  onHold = wake;
+  onHold = () => {
+    // Pause compositor motion during moves without re-reading layout.
+    if (document.hidden) return;
+    for (const animation of anims) {
+      if (held) animation.pause(); else if (animation.playState === 'paused') animation.play();
+    }
+  };
   wake();
   const watch = new MutationObserver(wake);
   for (const el of screens) watch.observe(el, { attributes: true, attributeFilter: ['hidden'] });

@@ -1581,7 +1581,7 @@ export const mountGlassSurface = (onClose: () => void) => {
       else groups.set(key, { card, count: 1 });
     }
     const sorted = [...groups.values()].sort((a, b) => (a.card.suit ?? 4) - (b.card.suit ?? 4) || a.card.rank - b.card.rank);
-    return sorted.map(({ card, count }) => `<span class="intel-card-wrap" title="${card.suit === null ? 'Bomb' : `Suit ${card.suit + 1}, ${card.rank}`}${count > 1 ? ` — seen ${count} times` : ''}"><span class="intel-card card ${suitClass(card)}">${cardFace(card)}</span>${count > 1 ? `<span class="intel-card-count">${count}</span>` : ''}</span>`).join('');
+    return sorted.map(({ card, count }) => `<span class="intel-card-wrap" title="${card.suit === null ? 'Bomb' : `Suit ${card.suit + 1}, ${card.rank}`}${count > 1 ? ` - seen ${count} times` : ''}"><span class="intel-card card ${suitClass(card)}">${cardFace(card)}</span>${count > 1 ? `<span class="intel-card-count">${count}</span>` : ''}</span>`).join('');
   };
 
   /** WHICH surface this is, then the match's clock. Tips reads THIS match; Rules is the reference. */

@@ -42,7 +42,7 @@ for (const prefix of ['futa05-test:', 'futa05:', 'futa05-3:']) {
   localStorage.setItem(prefix + 'futasaku.world.last.v1', ${JSON.stringify(JSON.stringify(world))});
 }`);
 type Snapshot = { ready: boolean; cells: number; zoom: number; tilePx: number; q: number[]; selected: string | null; frames: number;
-  bytes: number; pendingFrame: boolean; flying: boolean; spinning: boolean; spaceVisible: boolean; fallback: boolean };
+  north:number[]; bytes: number; pendingFrame: boolean; flying: boolean; spinning: boolean; spaceVisible: boolean; fallback: boolean };
 const planet = (p: Page): Promise<Snapshot | null> => p.evaluate(() => {
   const s = (window as unknown as { __severgrow: { planet: () => (Snapshot & { screenOf?: unknown }) | null } }).__severgrow.planet();
   return s ? { ...s, screenOf: undefined } : null;
@@ -64,7 +64,13 @@ const settled = (p: Page) => p.waitForFunction(() => {
   const key = `${s.q.map((v) => v.toFixed(6)).join(',')}|${s.zoom.toFixed(6)}`, now = performance.now();
   if (!w.__settle || w.__settle.key !== key) { w.__settle = { key, since: now }; return false; }
   return now - w.__settle.since >= 250;
-}, undefined, { polling: 50, timeout: 15_000 });
+}, undefined, { polling: 50, timeout: 15_000 }).catch(async error => {
+  console.error('Planet settle diagnostic',await planet(p),{
+    menu:await p.locator('#menu').isVisible(),world:await p.locator('#online-world-screen').isVisible(),
+  });
+  await p.screenshot({path:`${out}/settle-failure.png`}).catch(()=>undefined);
+  throw error;
+});
 const openPlanet = async (p: Page) => {
   await p.locator('#menu-world').click();
   await p.waitForFunction(() => {
@@ -76,7 +82,12 @@ const openPlanet = async (p: Page) => {
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
-  if (!ok) failed++;
+  if (!ok) {
+    failed++;
+    // Keep the exact failed contract visible even where Actions raw logs require sign-in.
+    const detail=`${name}${note ? ` (${note})` : ''}`.replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A');
+    console.error(`::error title=Planet browser assertion::${detail}`);
+  }
 };
 
 try {
@@ -235,6 +246,18 @@ try {
       check(`[${tag}] a tile tapped under the tile bar turns up clear of it`, !!at && at.y < grid.y + grid.height * .72 && Math.abs(now.zoom - z) < z * .01,
         at ? `${now.selected} now at ${((at.y - grid.y) / grid.height * 100).toFixed(0)}% of the window` : 'nothing selected');
     }
+    // A delayed connection/pentagon message must never resize the camera's viewport.
+    const noticeLayout=await p.evaluate(()=>{
+      const grid=document.getElementById('online-world-grid')!,notice=document.getElementById('online-world-notice')!;
+      const before=grid.getBoundingClientRect().toJSON(),text=notice.textContent;
+      notice.textContent='Connection paused. Your land is safe. '.repeat(5);
+      const during=grid.getBoundingClientRect().toJSON();notice.textContent=text;
+      const after=grid.getBoundingClientRect().toJSON();
+      return {before,during,after};
+    });
+    check(`[${tag}] status messages never move or resize the map window`,
+      ['x','y','width','height'].every(k=>Math.abs(noticeLayout.before[k]-noticeLayout.during[k])<.5&&Math.abs(noticeLayout.before[k]-noticeLayout.after[k])<.5),JSON.stringify(noticeLayout));
+
     // A drag turns the planet and never selects.
     const before = (await planet(p))!;
     const ground0 = (await screenOf(p, '0,0'))!;
@@ -242,13 +265,15 @@ try {
     await p.mouse.move(cx - 60, cy);
     await p.mouse.down();
     for (let i = 1; i <= 10; i++) { await p.mouse.move(cx - 60 + i * 12, cy + i * 4); await p.waitForTimeout(16); }
-    await p.waitForTimeout(140);
+    const releasePose=(await planet(p))!;
+    check(`[${tag}] geographic north remains upright during dragging`,Math.abs(releasePose.north[0]!)<1e-6&&releasePose.north[1]!>0);
     await p.mouse.up();
     await settled(p);
     s = (await planet(p))!;
+    check(`[${tag}] release keeps the exact final drag pose`,s.q.every((v,i)=>Math.abs(v-releasePose.q[i]!)<1e-8));
     check(`[${tag}] a drag turns the planet`, JSON.stringify(s.q) !== JSON.stringify(before.q));
     check(`[${tag}] a drag never changes the selection`, s.selected === before.selected);
-    // The finger moved 120px right; the tile under it went with it (a flick may carry it further).
+    // The finger moved 120px right; the ground follows during the gesture.
     const moved = (await screenOf(p, '0,0'))!;
     check(`[${tag}] the ground follows the finger`, moved.x - ground0.x > 60, `${(moved.x - ground0.x).toFixed(0)}px`);
 
@@ -275,12 +300,20 @@ try {
       const s0 = (await planet(p))!;
       const target = s0.selected ?? '1,0', at0 = await screenOf(p, target);
       if (at0 && Math.hypot(at0.x - cx, at0.y - cy) > 40) {
+        await p.evaluate(id=>{
+          const w=window as any;w.__wheelProbe=[];const stop=new AbortController();w.__wheelProbeStop=stop;
+          const record=(phase:string,e:WheelEvent)=>{const s=w.__severgrow.planet();w.__wheelProbe.push({phase,x:e.clientX,y:e.clientY,q:s.q,zoom:s.zoom,north:s.north,frame:s.frame,point:s.screenOf(id)});};
+          window.addEventListener('wheel',e=>record('before',e),{capture:true,signal:stop.signal});
+          document.querySelector('.planet-canvas')!.addEventListener('wheel',e=>record('after',e as WheelEvent),{signal:stop.signal});
+        },target);
         await p.mouse.move(at0.x, at0.y);
         for (let i = 0; i < 3; i++) { await p.mouse.wheel(0, 120); await p.waitForTimeout(30); }
         await settled(p).catch(() => undefined);
-        const at1 = await screenOf(p, target), z1 = (await planet(p))!.zoom;
+        const at1 = await screenOf(p, target), wheelPose=(await planet(p))!,z1=wheelPose.zoom;
+        const trace=await p.evaluate(()=>{const w=window as any;w.__wheelProbeStop.abort();return w.__wheelProbe;});
+        const diagnostic=!at1||Math.hypot(at1.x-at0.x,at1.y-at0.y)>=6?JSON.stringify({tag,target,north0:s0.north,north1:wheelPose.north,q0:s0.q,q1:wheelPose.q,frame0:(s0 as any).frame,frame1:(wheelPose as any).frame,at0,at1,trace}):'';
         check(`[${tag}] the wheel zooms towards the pointer`, !!at1 && z1 < s0.zoom * .95 && Math.hypot(at1.x - at0.x, at1.y - at0.y) < 6,
-          at1 ? `moved ${Math.hypot(at1.x - at0.x, at1.y - at0.y).toFixed(1)}px, zoom ${s0.zoom.toFixed(2)} -> ${z1.toFixed(2)}` : 'tile gone');
+          at1 ? `moved ${Math.hypot(at1.x - at0.x, at1.y - at0.y).toFixed(1)}px, zoom ${s0.zoom.toFixed(2)} -> ${z1.toFixed(2)} ${diagnostic}` : `tile gone ${diagnostic}`);
       }
     }
     // Zoom out to space: the stars slide slowly, and only while space is visible.
@@ -323,7 +356,8 @@ try {
       for (let i = 0; i < 12; i++) { await p.mouse.wheel(0, -600); await p.waitForTimeout(30); }
       await settled(p).catch(() => undefined);
       const closest = (await planet(p))!.tilePx;
-      await p.mouse.click(cx, cy); await p.waitForTimeout(60); await p.mouse.click(cx, cy);
+      // One native gesture: separate host round-trips can turn 60ms into >320ms on software GL.
+      await p.mouse.dblclick(cx, cy, { delay: 60 });
       await settled(p).catch(() => undefined);
       const after = (await planet(p))!.tilePx;
       check(`[${tag}] fully zoomed in, a double tap zooms back out`, closest > 70 && after < closest * .8, `${closest.toFixed(0)}px -> ${after.toFixed(0)}px tiles`);
@@ -374,8 +408,8 @@ try {
       check(`[${tag}] five more visits still leave exactly one canvas`, (await p.locator('.planet-canvas').count()) === 1);
       // Starting a game frees it.
       await p.locator('#menu-play').click();
-      await p.waitForTimeout(600);
-      check(`[${tag}] leaving the menu for PLAY frees the planet`, (await planet(p)) === null && (await p.locator('.planet-canvas').count()) === 0);
+      await p.waitForTimeout(1800); // 650ms requested fade plus completion headroom
+      check(`[${tag}] leaving the menu for PLAY frees the planet after its 650ms fade`, (await planet(p)) === null && (await p.locator('.planet-canvas').count()) === 0);
     }
     await context.close();
   }

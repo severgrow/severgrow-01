@@ -29,6 +29,25 @@ const CSS = `
   visibility: visible; pointer-events: none; background: transparent;
 }
 .world-grid > .planet-canvas:focus-visible { outline: 2px solid #e8ddc5; outline-offset: -3px; }
+/* Status changes must never change the camera's viewport. On phones the old flex footer
+   could grow by several lines during a gesture. Share the map's grid cell instead, leaving
+   the existing menu key and bottom selection bar clear. Desktop already has a shared stage. */
+@media not all and (min-width: 960px) and (min-height: 560px) and (min-aspect-ratio: 5/4) {
+  .online-world.planet-screen:not([data-living-territory="menu"]) .online-inner {
+    display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: auto auto minmax(0,1fr);
+  }
+  .online-world.planet-screen:not([data-living-territory="menu"]) .online-inner > * { grid-column: 1; }
+  .online-world.planet-screen:not([data-living-territory="menu"]) .online-head { grid-row: 1; }
+  .online-world.planet-screen:not([data-living-territory="menu"]) #online-world-wallet { grid-row: 2; }
+  .online-world.planet-screen:not([data-living-territory="menu"]) .world-grid { grid-row: 3; align-self: stretch; height: auto; }
+  .online-world.planet-screen:not([data-living-territory="menu"]) #online-world-notice {
+    grid-row: 3; align-self: start; justify-self: start; z-index: 5; box-sizing: border-box;
+    width: fit-content; max-width: calc(var(--world-w) - 100px); min-height: 0; max-height: 6em;
+    margin: 12px 0 0 calc((100% - var(--world-w)) / 2 + 12px); padding: 7px 10px; border-radius: 10px; overflow: hidden;
+    background: rgba(10,13,11,.5); text-align: left; pointer-events: none;
+  }
+  .online-world.planet-screen:not([data-living-territory="menu"]) #online-world-notice:empty { display: none; }
+}
 /* A TILE WAS JUST GROWN (planet.ts \`grown\`): two rings leave it and fade. Ends by itself. */
 .world-grid > .planet-grown {
   position: fixed; z-index: 1; pointer-events: none; border-radius: 50%;
@@ -89,6 +108,7 @@ export type WorldPlanet = {
   update: (input: PlanetInput) => void;
   home: (id: string | null) => void;
   setMode: (mode: PlanetMode) => void;
+  freeze: (on: boolean) => void;
   grown: (id: string) => void;
   dispose: () => void;
 };
@@ -112,6 +132,7 @@ export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | 
     update: (input) => planet.update(input),
     home: (id) => planet.home(id),
     setMode: (next) => planet.setMode(next),
+    freeze: (on: boolean) => planet.freeze(on),
     grown: (id) => planet.grown(id),
     dispose: () => {
       planet.dispose();

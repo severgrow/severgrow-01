@@ -29,7 +29,7 @@ const progress = (completed: string[]) => ({ ...freshProgress(), completed });
 const C1 = ['c1-01', 'c1-02', 'c1-03', 'c1-04', 'c1-05', 'c1-06', 'c1-07', 'c1-08', 'c1-09', 'c1-10'];
 
 /** Just enough DOM for the installer: two ids, one class each. */
-const fakeDoc = () => {
+const fakeDoc = (modern=false) => {
   const key = () => {
     const classes = new Set<string>();
     return {
@@ -41,7 +41,7 @@ const fakeDoc = () => {
   };
   const play = key();
   const level = key();
-  const doc = { getElementById: (id: string) => (id === 'menu-play' ? play : id === 'menu-campaign' ? level : null) };
+  const doc = { documentElement:{classList:{contains:(name:string)=>modern&&name==='v075'}},getElementById: (id: string) => (id === 'menu-play' ? play : id === 'menu-campaign' ? level : null) };
   return { doc: doc as unknown as Document, play, level };
 };
 
@@ -90,6 +90,12 @@ describe('the paint is one class on the two keys, in the menu’s own pass', () 
     ui.paint(progress(C1));
     expect([...play.classes]).toEqual([]);
     expect([...level.classes]).toEqual([]);
+  });
+
+  it('keeps modern PLAY warmly recommended after the lessons while level guidance still graduates',()=>{
+    const {doc,play,level}=fakeDoc(true);const ui=installMenuSuggestion(doc);
+    ui.paint(progress(C1),[10]);
+    expect([...play.classes]).toEqual(['suggest']);expect([...level.classes]).toEqual([]);
   });
 
   it('a failed or not-yet-answered account read leaves the device rule exactly as it is', () => {

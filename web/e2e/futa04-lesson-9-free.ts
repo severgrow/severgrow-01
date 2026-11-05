@@ -27,7 +27,10 @@ const SHOT_DIR = '/tmp/lesson9-free';
 
 let failed = 0;
 const check = (name: string, ok: boolean, note = ''): void => {
-  if (!ok) failed++;
+  if (!ok) {
+    failed++;
+    console.error(`::error title=Lesson 9 check::${`${name}: ${note}`.replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A')}`);
+  }
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
 
@@ -291,6 +294,14 @@ const main = async (): Promise<void> => {
         // Their turn: the display must carry the one steady WAIT status line, not go silent while
         // the bot's own play facts animate. Checked on EVERY opponent turn, not only after a throw.
         await recordWaitCue();
+        // Once WAIT has been seen, recordWaitCue returns immediately. Do not burn the entire
+        // 400-move budget polling the same opponent turn between its animation/pump tasks.
+        // Await the authoritative turn change, with a bounded failure if the bot actually stalls.
+        await page.waitForFunction(() => {
+          const s = (window as unknown as {__severgrow:{state:()=>State|null}}).__severgrow.state();
+          return !!s && (s.actor === 0 || s.phase === 'GAME_OVER');
+        }, undefined, {timeout:20_000});
+        await idle(page);
         continue;
       }
       // A real pointer tap on the lit thing counts as a real move; the test hook only makes the

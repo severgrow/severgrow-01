@@ -82,17 +82,17 @@ describe('the defender is told to answer, never to pay', () => {
 });
 
 describe('the challenger names the tile, never a Seed price', () => {
-  it('says the challenge is free and what happens on a loss', () => {
+  it('names the ground and states the winner takes the opponent tile', () => {
     const line = CHALLENGE.sendLine('RYK', 'your tile 3,-10');
     expect(line).toContain('RYK');
-    expect(line).toMatch(/free/i);
-    expect(line).toContain('your tile 3,-10');
-    expect(line).toMatch(/lose/i);
+    expect(line).not.toMatch(/free|—/i);
+    expect(line).toContain("RYK's ground");
+    expect(line).toMatch(/winner/i);
     expect(line).toMatch(/take/i);
   });
 
   it('names the stake in the meta line instead of an amount', () => {
-    expect(CHALLENGE.sendMeta('your tile 3,-10')).toContain('YOUR TILE 3,-10 AT STAKE');
+    expect(CHALLENGE.sendMeta('your tile 3,-10')).toBe('24 H TO ANSWER');
     expect(CHALLENGE.sendMeta('your tile 3,-10')).toContain('24 H TO ANSWER');
     expect(CHALLENGE.sent('your tile 3,-10')).toContain('your tile 3,-10');
     // No sentence anywhere implies that challenging is paid in Seeds.
@@ -104,7 +104,7 @@ describe('the challenger names the tile, never a Seed price', () => {
   });
 
   it('uses the owner’s word: the tile is AT STAKE', () => {
-    for (const text of [CHALLENGE.sendLine('RYK', 'your tile 3,-10'), CHALLENGE.sendMeta('your tile 3,-10'), CHALLENGE.defendMeta]) {
+    for (const text of [CHALLENGE.stakeLabel('your nearest tile'), CHALLENGE.defendMeta]) {
       expect(text, text).toMatch(/stake/i);
     }
   });

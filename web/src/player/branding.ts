@@ -77,6 +77,8 @@ html.futa04-branding #hud-brand {
 /* ONE mark per screen. The layer stays off until main.ts says which surface owns the screen: the
    main menu keeps the big logo, the finish plate carries its own cap, the online header its own. */
 html.futa04-branding:not(.brand-mark) #hud-brand { display: none; }
+/* Header ownership follows the actual screen, even before an asynchronous route sync runs. */
+html.futa04-branding:has(:is(#online-world-screen,#online-hub,#online-waiting,#online-join):not([hidden]):not([aria-hidden="true"])) #hud-brand { display:none !important; }
 /* The install invitation (z 13) is a modal whose 20px blur is meant to be the only thing in focus.
    The badge is painted above every veil at z 74, so it must stand down while the invitation is
    open — otherwise the corner mark floats, sharp, over the darkened dialog. The :has selector makes

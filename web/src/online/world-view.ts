@@ -642,6 +642,7 @@ export class WorldView {
   private keysOpen = false;
   /** The one window, and which key's page it shows; null when shut. */
   private pane: Pane | null = null;
+  private paneScroll: Record<Pane, number> = { ranking: 0, challenges: 0, achievements: 0, colour: 0 };
   /** Territory chat (web/src/online/territory-chat.ts): opens from its key in the row. */
   private readonly chat: TerritoryChat;
   /** The grow and sell keys ask once more before they act; this is the tile that was asked about. */
@@ -921,7 +922,7 @@ export class WorldView {
     }
   }
 
-  /** The same surface at rest: no private reads, poll, chat subscription or new renderer. */
+  /** The same renderer at rest. No polling/subscription; chat may warm one authenticated page. */
   preview(world: World | null, identity: Identity | null, fromMemory = false) {
     if (this.active) this.close(true);
     // Back on the menu the same element is simply the full-bleed backdrop again: the crop is a
@@ -934,6 +935,7 @@ export class WorldView {
     const firstOwner = !this.visited && !this.previewRemembered && owner !== this.previewOwner;
     this.identity = identity;
     this.previewOwner = owner;
+    this.chat.prefetch();
     if (changedWorld || firstOwner || !this.previewCameraRead) {
       this.previewCameraRead = true;
       // ONLY A GESTURE IS A CAMERA (owner, 2026-11-02: the anchor "works once and then stops").
@@ -1215,12 +1217,15 @@ export class WorldView {
       if (!this.active) return;
       const changedIdentity = this.identity?.playerId !== identity?.playerId || this.identity?.token !== identity?.token;
       if (changedIdentity) this.identity = identity;
+      this.chat.prefetch();
       // Paint the last good list from this device at once, then replace it with the fresh read. A
       // guest has no key at all, and never inherits another account's remembered list.
       this.achievements = restoreAchievements(browserStorage(), identity?.playerId ?? null);
       this.paintPanel();
       if (!changedIdentity) this.paintWallet();
-      if (identity) void this.loadColour(identity);
+      // ensureIdentity may return a fresh wrapper for the same credentials. Use the retained
+      // actor object so loadColour's stale-account guard accepts this still-current response.
+      if (this.identity) void this.loadColour(this.identity);
       // The initial refresh already reads private metadata for a known actor. Fetch it once.
       if (changedIdentity) void this.refresh(true);
     }).catch(() => {
@@ -1238,6 +1243,8 @@ export class WorldView {
     if (this.active && this.manualCamera && this.world && this.box)
       rememberCamera(browserStorage(), this.world.version, this.box, true);
   }
+  freezeMenuPreview(on: boolean) { if (this.menuPreview) this.planet?.freeze(on); }
+
   close(instant = false) {
     // THE PLANET STAYS FOR THE MENU (owner, 2026-11-04): Back flies it out behind the menu. Only an
     // instant close (a match starting, the menu going away) frees its graphics.
@@ -2673,6 +2680,8 @@ export class WorldView {
     const panel = document.getElementById('online-world-panel');
     const was = this.pane;
     if (pane === was) return;
+    const body = panel?.querySelector<HTMLElement>('.world-panel-body');
+    if (was && body) this.paneScroll[was] = body.scrollTop;
     if (pane) this.chat.setOpen(false);
     this.pane = pane;
     this.paneSignature = '';
@@ -2685,6 +2694,7 @@ export class WorldView {
       else enterSurface(panel.querySelector<HTMLElement>('.world-panel-body'), { travel: 2 });
     }
     this.paintPanel();
+    if (pane && body) body.scrollTop = this.paneScroll[pane];
     this.paintSelection();
     if (!focus) return;
     if (pane) document.getElementById('world-panel-close')?.focus({ preventScroll: true });
@@ -3153,7 +3163,7 @@ export class WorldView {
     else card.style.removeProperty('--territory');
     const big = document.createElement('strong');
     big.className = 'world-standing-place';
-    big.textContent = at ? ONLINE.worldPlace(at.rank, at.players) : '—';
+    big.textContent = at ? ONLINE.worldPlace(at.rank, at.players) : '-';
     const tiles = document.createElement('span');
     tiles.className = 'world-standing-tiles';
     tiles.textContent = ONLINE.worldConnectedTiles(at?.tiles ?? 0);

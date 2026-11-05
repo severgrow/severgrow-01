@@ -94,7 +94,7 @@ describe('lobby buckets and sort', () => {
     expect(trimmed.filter((e) => lobbyBucket(e) === 'finished')).toHaveLength(10);
     expect(trimmed.slice(0, 2).map((e) => e.matchId)).toEqual(['y1', 'y2']); // actual moves now lead unseen replay history (owner's quiet-polish brief)
     expect(yourTurnCount(trimmed)).toBe(2);
-    expect(pageTitleForLobby(2)).toBe('(2) FUTASAKU — your turn');
+    expect(pageTitleForLobby(2)).toBe('(2) FUTASAKU - your turn');
     expect(pageTitleForLobby(0)).toBe('FUTASAKU');
   });
 

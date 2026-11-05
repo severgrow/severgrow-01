@@ -21,12 +21,15 @@ import { REPLAY_PACING } from '../src/replay/timeline.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
-  '/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+  chromium.executablePath();
 const SHOTS = process.env.SHOTS?.trim() || new URL('../../docs/screens/replay/', import.meta.url).pathname;
 
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
-  if (!ok) failed++;
+  if (!ok) {
+    failed++;
+    console.error(`::error title=Replay check::${`${name}: ${note}`.replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A')}`);
+  }
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
 const waitVisible = async (page: Page, sel: string, ms = 25_000) => {
@@ -160,6 +163,9 @@ try {
 
   await page.locator('#go-replay').click();
   await waitVisible(page, '#replay', 20_000);
+  const edge = page.locator('#replay .planet-turn-line');
+  if(await edge.count())check('decorative replay edge cannot cover the art with a black fill',
+    await edge.evaluate(el=>getComputedStyle(el).fill==='none'));
   const now = await replayNow(page);
   check('the practice replay mounts with a real clock', !!now && now.total > 0, JSON.stringify({ total: now?.total }));
   // The owner's faster, move-aware curve (2026-10-30): the reported total is the new length and
@@ -281,9 +287,14 @@ try {
         // is then its attribute size times the screen scale. (getBoundingClientRect is no use here:
         // it reports the whole atlas inside the window, clipped or not.)
         const cs = getComputedStyle(n);
-        const own = cs.width === 'auto' && cs.height === 'auto';
-        const k = n.parentNode?.getScreenCTM?.()?.a ?? 1;
-        const size = own ? Math.max(n.width.animVal.value, n.height.animVal.value) * k : Infinity;
+        // Chromium may return 'auto' or the resolved pixel size for SVG geometry properties.
+        // Both must agree with the window's own dimensions; a stretched 100% window must fail.
+        const w=Number(n.getAttribute('width')), h=Number(n.getAttribute('height'));
+        const cssW=cs.width==='auto'?w:parseFloat(cs.width), cssH=cs.height==='auto'?h:parseFloat(cs.height);
+        const own=w>0 && h>0 && Math.abs(cssW-w)<.1 && Math.abs(cssH-h)<.1;
+        const m=n.parentNode?.getScreenCTM?.();
+        const k=m?Math.hypot(m.a,m.b):1;
+        const size = own ? Math.max(w,h) * k : Infinity;
         return { size, clipped: cs.overflow !== 'visible' };
       });
     return { hex, stones: measure('.seed-stone-art'), frames: measure('.gold-frame-art') };

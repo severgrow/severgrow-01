@@ -107,7 +107,8 @@ export const ONLINE = Object.freeze({
   worldColourCurrent: 'Current colour',
   worldColourUnavailable: 'Colours are not available on this server yet.',
   /** Territory chat (owner, 2026-10-28): one shared channel, newest 30 messages. */
-  worldChat: 'Territory chat',
+  worldChat: 'Global chat',
+  worldChatLoading: 'Connecting…',
   worldChatPlaceholder: 'Say something',
   worldChatSend: 'Send',
   worldChatEmpty: 'No messages yet. Say hello.',
@@ -175,7 +176,7 @@ export const ONLINE = Object.freeze({
   matchedNotice: 'Opponent found.',
   computerVs: 'vs the computer',
   /** Timeout grace (owner rule: one grace per player per match). */
-  graceYourWarning: 'Time ran out — one more chance',
+  graceYourWarning: 'Time ran out - one more chance',
   graceYouUsed: 'Grace used',
   graceOpponentUsed: 'Opponent used their grace',
   graceWarningSr: 'Time ran out. One more chance.',
@@ -255,7 +256,7 @@ export const ONLINE = Object.freeze({
   linkCodeHelp: linkCodeHelpText(),
   linkCodeMake: 'Make a link code',
   linkCodeRedeem: 'Enter a link code',
-  linkCodeDone: (code: string) => `Code ${code} — enter it on the other browser.`,
+  linkCodeDone: (code: string) => `Code ${code} - enter it on the other browser.`,
   openDuelSoon: 'Duel screen opens in the next update.',
   errBadOrExpired: 'That code is wrong or has expired.',
   errCodeFormat: inviteCodeFormatHint(),
@@ -423,7 +424,7 @@ export const RESULT = Object.freeze({
   /** Appended when the raw scores were level and tile strength decided it. */
   decidedByStrength: ' Scores were level; higher total tile strength decided it.',
   /** Appended when scores and tile strength both matched — a true draw. */
-  trueDraw: ' Scores and tile strengths matched — a true draw.',
+  trueDraw: ' Scores and tile strengths matched - a true draw.',
   /** Online-only endings, still from the reader's point of view. */
   timeoutWon: `${OPP.The} ran out of time.`,
   timeoutLost: 'You ran out of time.',
@@ -647,7 +648,7 @@ export const BLOOM = Object.freeze({
   buttonKeep: (n: number, kept: number) => `Bloom ${n} tiles, keep the ${kept === 1 ? 'other' : `other ${kept}`}`,
   /** How to play (HTML) */
   howto:
-    ' On your Grow turn you may also <b>bloom</b> (optional add-on): 3 to 6 cards that go together — the same number, in any suits (a set), or numbers in a row in one suit (a run). They grow that many tiles in any shape, as long as one touches your tiles. Each tile keeps its card\'s number.',
+    ' On your Grow turn you may also <b>bloom</b> (optional add-on): 3 to 6 cards that go together - the same number, in any suits (a set), or numbers in a row in one suit (a run). They grow that many tiles in any shape, as long as one touches your tiles. Each tile keeps its card\'s number.',
   /** the general hint */
   hint: 'Bloom on Grow: a set or a run of 3 to 6 cards.',
   /** why a held group cannot bloom right now */
@@ -705,7 +706,7 @@ export const FRUIT = Object.freeze({
 export const BLAST = Object.freeze({
   Name: 'Blast',
   name: 'blast',
-  howto: ' Two Bombs can <b>Blast</b> together: clear an enemy tile and its six neighbours (homes are safe). Blast is an extra play, like Bloom — it does not use your Grow.',
+  howto: ' Two Bombs can <b>Blast</b> together: clear an enemy tile and its six neighbours (homes are safe). Blast is an extra play, like Bloom - it does not use your Grow.',
   suggest: (hex: string, n: number) => `Blast at ${hex}, clearing ${n} tiles`,
   youDid: (hex: string) => `You blasted at ${hex}`,
   oppDid: (hex: string) => `${OPP.The} blasted at ${hex}`,
@@ -1070,8 +1071,8 @@ export const TUTORIAL = Object.freeze({
   }),
   bloomHow: Object.freeze({
     title: 'What can bloom?',
-    set: 'A set: same number, any suits — three to six cards.',
-    run: 'A run: numbers in a row, one suit — three to six cards.',
+    set: 'A set: same number, any suits - three to six cards.',
+    run: 'A run: numbers in a row, one suit - three to six cards.',
     badSuit: 'Not a run: two suits mixed.',
     badGap: 'Not a run: a gap in the numbers.',
   }),
@@ -1089,16 +1090,16 @@ export const TUTORIAL = Object.freeze({
 export const INSTALL = Object.freeze({
   title: 'Grow FUTASAKU on your home screen',
   why: Object.freeze([
-    'Opens full-screen — straight in, no browser bars',
+    'Opens full-screen - straight in, no browser bars',
     'Works offline, even with no signal',
-    'One tap from your home screen — no typing the address',
+    'One tap from your home screen - no typing the address',
   ] as const),
   install: 'Add to home screen',
   done: 'Got it',
   notNow: 'Not now',
   never: "Don't show again",
   iosSteps: Object.freeze([
-    'Tap the Share button — the square with the arrow pointing up.',
+    'Tap the Share button - the square with the arrow pointing up.',
     // iOS 26 asks whether to "Open as Web App"; off, the game opens inside Safari with its bars.
     'Choose Add to Home Screen, keep Open as Web App on, then tap Add.',
   ] as const),
@@ -1113,7 +1114,7 @@ export const INSTALL = Object.freeze({
   desktop: Object.freeze({
     title: 'Open FUTASAKU in its own window',
     why: Object.freeze([
-      'Its own window — no tabs, no browser bars',
+      'Its own window - no tabs, no browser bars',
       'Works offline, even with no connection',
       'Start it from your dock, taskbar or Start menu',
     ] as const),
@@ -1215,11 +1216,11 @@ export const FEEDBACK = Object.freeze({
   title: 'Report a problem',
   prompt: 'What happened? What did you expect?',
   placeholder: 'e.g. After my Bloom the board froze and I could not throw.',
-  attached: 'We also send your app version, phone type, screen size and where you are in the game (turn and step) — never your cards or your name.',
+  attached: 'We also send your app version, phone type, screen size and where you are in the game (turn and step) - never your cards or your name.',
   send: 'Send',
   cancel: 'Cancel',
   sending: 'Sending…',
-  sent: 'Thanks — sent.',
+  sent: 'Thanks - sent.',
   queued: 'Saved. It will send when you are back online.',
   failed: 'Could not send. Please try again in a minute.',
   empty: 'Please write a few words first.',
@@ -1238,7 +1239,7 @@ export const FEEDBACK = Object.freeze({
 /** The one-page tester guide (futasaku.com/#beta). Each section: a heading and a few lines. */
 export const BETA_GUIDE = Object.freeze({
   title: 'Welcome, tester',
-  intro: 'Thank you for helping test FUTASAKU. This page has everything you need — it takes two minutes.',
+  intro: 'Thank you for helping test FUTASAKU. This page has everything you need - it takes two minutes.',
   sections: Object.freeze([
     Object.freeze({
       heading: 'Put it on your home screen',
@@ -1251,7 +1252,7 @@ export const BETA_GUIDE = Object.freeze({
     Object.freeze({
       heading: 'Learn the game',
       lines: Object.freeze([
-        'Play the Tutorial from the main menu once — it is short and shows every move.',
+        'Play the Tutorial from the main menu once - it is short and shows every move.',
         'Then try a game against the computer before playing a person.',
       ]),
     }),
@@ -1260,14 +1261,14 @@ export const BETA_GUIDE = Object.freeze({
       lines: Object.freeze([
         'Main menu → Play online → invite a friend and send them the code or link.',
         'Each turn can take up to 24 hours. There are no notifications yet, so tell your opponent when you have moved, or agree a time to play together.',
-        'When you both have the match open, you can try Real time: 60 seconds a turn. Careful — in Real time, running out of time or leaving loses the match.',
+        'When you both have the match open, you can try Real time: 60 seconds a turn. Careful - in Real time, running out of time or leaving loses the match.',
       ]),
     }),
     Object.freeze({
       heading: 'Tell us what you find',
       lines: Object.freeze([
         'Anything odd, confusing, slow or broken: open the menu (☰) and tap Report a problem.',
-        'Say what you did and what happened. Screenshots help too — send them to whoever invited you.',
+        'Say what you did and what happened. Screenshots help too - send them to whoever invited you.',
         'Crashes are reported automatically, without your cards or your name.',
       ]),
     }),
@@ -1431,7 +1432,7 @@ export const PROFILE = Object.freeze({
   connectedTiles: 'CONNECTED TILES',
   matchesWon: 'Matches won',
   /** An em dash is a FACT: this value is not known. It is never a made-up 0. */
-  unknown: '—',
+  unknown: '-',
   /** Player stats (owner, 2026-11-01): two rows of three, the offline record above the online one. */
   playTitle: 'Your games',
   /** VISITOR MODE (owner, 2026-11-01: "allow to look up other peoples profile on territory"). The

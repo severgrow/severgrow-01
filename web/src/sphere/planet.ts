@@ -6,16 +6,18 @@
 // This module only draws and steers. Territory (world-view.ts) keeps every rule, request, selection
 // bar, sheet and window: a tap here hands it a flat tile id, exactly as a tap on the flat map did.
 //
-// MOTION: drag turns the planet under the finger, a flick keeps turning and slows, pinch/wheel zoom,
+// MOTION: north-up dragging and anchored pinch/wheel zoom stop at the input endpoint,
 // a tap selects, a tap on tiles too small to hit flies in. Opening flies in from space to your land.
 // The stars slide slowly while any space is on screen (owner: "deep space subtle + space with slow
 // slide"); that is the only loop, it runs at ~30 fps, and it stops when the planet fills the window,
 // the page is hidden, or reduced motion is on.
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
+import { markPlanetPainted } from '../player/startup.js';
+import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT } from './upright.js';
 import { menuDiscRadius } from '../player/planet-lockup.js';
 import { claimSpace, DRIFT_PX_PER_MS, DRIFT_Y_SHARE, freeSpace, spaceDrift } from './space.js';
 import { buildSphere, homeQuat, latticeMap, pickCell, unit, type Sphere, type V3 } from './geometry.js';
-import { arcQuat, inverse, multiply, rotate, slerp, trackball, type Quat } from './rotation.js';
+import { arcQuat, inverse, multiply, rotate, slerp, type Quat } from './rotation.js';
 import { groundOf, KIND, tileForCell, type Ground, type GroundInput } from './ground.js';
 import { PlanetRenderer, EYE, discRadius, projection, type Frame } from './renderer.js';
 
@@ -80,6 +82,7 @@ const easeOut = (t: number) => 1 - (1 - t) ** 3;
 export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const sphere: Sphere = buildSphere();
   const map = latticeMap(sphere);
+  const north=unit(rotate(inverse(homeQuat(sphere,map,'0,0')),[0,1,0]));
   const canvas = document.createElement('canvas');
   canvas.className = 'planet-canvas';
   canvas.tabIndex = 0;
@@ -89,10 +92,15 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   fallback.className = 'planet-fallback';
   fallback.hidden = true;
   stage.append(canvas, fallback);
+  let announcedPaint=false;
+  const announcePaint=()=>{
+    markPlanetPainted();
+    if(!announcedPaint){announcedPaint=true;canvas.dataset.planetReady='true';canvas.dispatchEvent(new Event('futasaku:planet-ready',{bubbles:true}));}
+  };
 
   const abort = new AbortController(), signal = abort.signal;
-  let renderer: PlanetRenderer | null = null, lost = false, disposed = false;
-  let raf = 0, lastFrame = 0;
+  let renderer: PlanetRenderer | null = null, lost = false, disposed = false, frozen = false;
+  let raf = 0, lastFrame = 0, driftTimer=0;
   // THE CANVAS IS ONE FIXED SHEET OVER THE WHOLE SCREEN, behind the menu and in the window alike; only
   // the FRAME the planet is drawn into moves (see `projection`). `view` is the canvas in viewport px.
   let view = { left: 0, top: 0, width: 1, height: 1 };
@@ -101,7 +109,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   let ground: Ground | null = null, input: PlanetInput | null = null, signature = '';
   let selected: number | null = null, pulseUntil = 0;
   let q: Quat = [0, 0, 0, 1], zoom = 1, targetZoom = 1;
-  let speed = 0, axis: V3 = [0, 1, 0], lastMove = 0, lastBall: V3 = [0, 0, 1];
+  let lastPointer={x:0,y:0};
   /** `elapsed` advances by each painted frame's (capped) time, never by the wall clock: a busy main
    *  thread (the window opening, data arriving) pauses the flight instead of skipping most of it. */
   /** `aimPx`: the tile size a flight into the window lands on, re-read against the panel every frame
@@ -145,13 +153,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const zoomFor = (px: number, f: Frame = frameTarget()) => px / Math.max(1e-6, tilePx(1, f));
   const clampZoom = (z: number) => Math.min(zoomFor(MAX_TILE_PX), Math.max(mode === 'menu' ? MENU_ZOOM : MIN_ZOOM, z));
   const spaceVisible = () => discRadius(frameNow.width, frameNow.height, zoom) < Math.hypot(frameNow.width, frameNow.height) / 2;
-  const ask = () => { if (!raf && !disposed && !lost && !document.hidden) raf = requestAnimationFrame(frame); };
-  const stop = () => { speed = 0; flight = null; targetZoom = zoom; };
+  const cancelDrift=()=>{clearTimeout(driftTimer);driftTimer=0;};
+  const ask = () => { cancelDrift();if (!raf && !disposed && !frozen && !lost && !document.hidden) raf = requestAnimationFrame(frame); };
+  const stop = () => { cancelDrift();flight = null; targetZoom = zoom; };
   const centre = () => ({ x: view.left + frameNow.x + frameNow.width / 2, y: view.top + frameNow.y + frameNow.height / 2 });
-  const ball = (p: { x: number; y: number }) => {
-    const c = centre();
-    return trackball(p.x - c.x, p.y - c.y, discRadius(frameNow.width, frameNow.height, zoom));
-  };
   const spread = () => { const [a, b] = [...pointers.values()]; return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0; };
   const kinOf = (index: number | null) => {
     const owner = index === null || !ground ? null : ground.owner[index];
@@ -185,7 +190,12 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     const now = surfaceAt(anchor.x, anchor.y);
     if (!now) { anchor = null; return; }
     const from = rotate(q, anchor.at), to = rotate(q, now);
-    if (Math.hypot(from[0] - to[0], from[1] - to[1], from[2] - to[2]) > 1e-6) q = multiply(arcQuat(unit(from), unit(to)), q);
+    if (Math.hypot(from[0] - to[0], from[1] - to[1], from[2] - to[2]) > 1e-6) {
+      const candidate=multiply(arcQuat(unit(from),unit(to)),q);
+      const locked=uprightTarget(candidate,north,unit(to)),up=rotate(locked,north);
+      // At the pole limit favour a stable north-up view; zoom itself must remain available.
+      if(Math.abs(up[0])<1e-6&&up[1]>=Math.cos(NORTH_PITCH_LIMIT)-1e-6)q=locked;
+    }
   };
   /** Where planet cell `index` sits on screen (CSS px), or null when it faces away. */
   const screenOfCell = (index: number) => {
@@ -200,7 +210,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     flyTo(towards, toZoom, ms, ease);
   };
   const flyTo = (to: Quat, toZoom: number, ms = FLY_MS, ease = easeOut, aimPx?: number) => {
-    speed = 0;
+    if(mode==='world')to=northUpDrag(to,north,0,0,1);
     const lightTo = mode === 'menu' ? MENU_LIGHT : 1;
     if (!motion()) { q = to; zoom = targetZoom = toZoom; flight = null; frameTween = null; frameNow = frameTarget(); cropNow = cropTarget(); light = lightTo; ask(); return; }
     flight = { from: q, to, zoomFrom: zoom, zoomTo: toZoom, elapsed: 0, ms, ease, t: 0, ...(aimPx ? { aimPx } : {}) };
@@ -213,10 +223,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
 
   function frame(now: number) {
     raf = 0;
-    if (disposed || lost || document.hidden || !renderer) return;
+    if (disposed || frozen || lost || document.hidden || !renderer) return;
     const gap = Math.max(1, now - (lastFrame || now - 16)), dt = Math.min(48, gap);
     lastFrame = now;
-    if (!motion()) { speed = 0; if (flight) { q = flight.to; zoom = targetZoom = flight.zoomTo; flight = null; } zoom = targetZoom; pulseUntil = 0; }
+    if (!motion()) { if (flight) { q = flight.to; zoom = targetZoom = flight.zoomTo; flight = null; } zoom = targetZoom; pulseUntil = 0; }
     // Up to 250 ms per frame counts: a slow device still lands about on time, a real stall pauses.
     const step = Math.min(250, gap);
     if (flight) {
@@ -248,12 +258,6 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       q = multiply([0, s, 0, Math.cos((MENU_SPIN_RAD_PER_MS * dt) / 2)], q);
     }
     if (mode === 'menu' && !flight && posed) menuMemory = q;
-    if (speed > 0 && !pointers.size) {
-      const angle = speed * dt, s = Math.sin(angle / 2);
-      q = multiply([axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(angle / 2)], q);
-      speed *= Math.exp(-dt / 260);
-      if (speed < .00002) speed = 0;
-    }
     if (Math.abs(targetZoom - zoom) > zoom * .0005) zoom += (targetZoom - zoom) * (1 - Math.exp(-dt / 70));
     else zoom = targetZoom;
     if (anchor && !flight) { keepAnchor(); if (zoom === targetZoom) anchor = null; }
@@ -273,11 +277,12 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     paintFrame();
     const offset: [number, number] = [drift[0] + turn[0] * 40, drift[1] + turn[1] * 40];
     renderer.render(q, zoom, pulse, offset, frameNow);
+    if(input&&ground)announcePaint();
     spaceDrift.x = offset[0]; spaceDrift.y = offset[1];
-    const busy = !!flight || !!frameTween || (speed > 0 && !pointers.size) || zoom !== targetZoom || pulseUntil > now;
+    const busy = !!flight || !!frameTween || zoom !== targetZoom || pulseUntil > now;
     if (busy) ask();
     // The slow slide: about 30 frames a second, only while there is space to see.
-    else if (drifting) window.setTimeout(ask, 18);
+    else if (drifting) driftTimer=window.setTimeout(()=>{driftTimer=0;if(mode==='menu'||spaceVisible())ask();},18);
   }
 
   /** The crop (the window's own rounded frame) and the light, written only when they change. */
@@ -325,7 +330,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       ask();
       return;
     }
-    const target = homeQuat(sphere, map, input?.home ?? '0,0');
+    const target = northUpDrag(homeQuat(sphere, map, input?.home ?? '0,0'),north,0,0,1);
     const open = clampZoom(zoomFor(OPEN_TILE_PX));
     if (!motion()) { q = target; zoom = targetZoom = open; frameNow = frameTarget(); cropNow = cropTarget(); light = 1; posed = true; ask(); return; }
     // FROM WHEREVER IT IS, down to your biggest land (owner, 2026-11-04). Opened from the menu the
@@ -335,10 +340,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (!posed) { q = menuMemory ?? menuPose(); zoom = targetZoom = MENU_ZOOM; frameNow = frameTarget(); cropNow = cropTarget(); light = MENU_LIGHT; posed = true; }
     flyTo(target, open, INTRO_MS, easeInOut, OPEN_TILE_PX);
   };
-  const fail = (text: string) => { fallback.textContent = text; fallback.hidden = false; canvas.hidden = true; };
+  const fail = (text: string) => { fallback.textContent = text; fallback.hidden = false; canvas.hidden = true;announcePaint(); };
   const initialise = () => {
     try {
-      renderer = new PlanetRenderer(canvas, sphere);
+      renderer = new PlanetRenderer(canvas, sphere,north);
       lost = false; fallback.hidden = true; canvas.hidden = false;
       if (ground) renderer.setGround(ground, selected, kinOf(selected));
       resize();
@@ -356,7 +361,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     stop(); lastFrame = 0; anchor = null;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { canvas.setPointerCapture(e.pointerId); } catch { /* a cancelled touch */ }
-    if (pointers.size === 1) { start = { x: e.clientX, y: e.clientY }; dragged = false; multi = false; lastBall = ball(start); lastMove = performance.now(); }
+    if (pointers.size === 1) { start = { x: e.clientX, y: e.clientY }; dragged = false; multi = false; lastPointer={x:e.clientX,y:e.clientY}; }
     else { multi = true; dragged = true; pinch = spread(); }
   }, { signal });
   canvas.addEventListener('pointermove', (e) => {
@@ -378,39 +383,31 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     }
     if (!dragged && start && Math.hypot(p.x - start.x, p.y - start.y) < 6) return;
     dragged = true;
-    const at = performance.now(), next = ball(p), step = arcQuat(lastBall, next);
-    const angle = 2 * Math.acos(Math.min(1, Math.abs(step[3])));
-    q = multiply(step, q);
-    axis = unit([step[0], step[1], step[2]]);
-    speed = Math.min(.004, angle / Math.max(8, at - lastMove));
-    lastMove = at; lastBall = next;
+    q=northUpDrag(q,north,p.x-lastPointer.x,p.y-lastPointer.y,discRadius(frameNow.width,frameNow.height,zoom));
+    lastPointer=p;
     ask();
   }, { signal });
   const release = (e: PointerEvent) => {
     if (!pointers.has(e.pointerId)) return;
     const tap = pointers.size === 1 && !dragged && !multi && e.type === 'pointerup';
     pointers.delete(e.pointerId);
-    if (tap) { speed = 0; tapAt(e.clientX, e.clientY); }
-    if (pointers.size === 1) { lastBall = ball([...pointers.values()][0]!); lastMove = performance.now(); speed = 0; }
-    if (!pointers.size) {
-      // A flick carries on; a drag that paused before letting go stops where it is.
-      if (e.type !== 'pointerup' || !motion() || performance.now() - lastMove > 70 || speed < .0006) speed = 0;
-      start = null;
-      if (speed) ask();
-    }
+    if (tap) tapAt(e.clientX, e.clientY);
+    if(pointers.size===1)lastPointer={...pointers.values().next().value!};
+    if(!pointers.size)start=null;
+
   };
   canvas.addEventListener('pointerup', release, { signal });
   canvas.addEventListener('pointercancel', release, { signal });
-  canvas.addEventListener('lostpointercapture', (e) => { if (pointers.has(e.pointerId)) { pointers.delete(e.pointerId); speed = 0; start = null; } }, { signal });
+  canvas.addEventListener('lostpointercapture',e=>{pointers.delete(e.pointerId);if(pointers.size===1)lastPointer={...pointers.values().next().value!};if(!pointers.size)start=null;}, {signal});
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    speed = 0; flight = null;
+    flight = null;
     if (mode === 'menu') return;
     const pixels = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? frameNow.height : 1);
-    targetZoom = clampZoom(targetZoom * Math.exp(-pixels * .0018));
-    const at = surfaceAt(e.clientX, e.clientY);
+    const at = surfaceAt(e.clientX,e.clientY);
+    zoom=targetZoom=clampZoom(zoom*Math.exp(-pixels*.0018));
     anchor = at ? { x: e.clientX, y: e.clientY, at } : null;
-    if (!motion()) { zoom = targetZoom; keepAnchor(); anchor = null; }
+    keepAnchor();anchor=null;
     ask();
   }, { signal, passive: false });
   const tapAt = (x: number, y: number) => {
@@ -444,15 +441,14 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   };
   canvas.addEventListener('keydown', (e) => {
     if (mode === 'menu') return;
-    const axes: Record<string, V3> = { ArrowLeft: [0, -1, 0], ArrowRight: [0, 1, 0], ArrowUp: [-1, 0, 0], ArrowDown: [1, 0, 0] };
-    if (axes[e.key]) {
-      e.preventDefault(); stop();
-      const a = axes[e.key]!, s = Math.sin(.6 / (zoom * 4) + .01);
-      q = multiply([a[0] * s, a[1] * s, a[2] * s, Math.sqrt(1 - s * s)], q);
-      ask();
+    const arrows:Record<string,readonly[number,number]>={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+    if(arrows[e.key]){
+      e.preventDefault();stop();
+      const [x,y]=arrows[e.key]!,step=(.3/zoom+.02)/Math.SQRT1_2;
+      q=northUpDrag(q,north,x*step,y*step,1);ask();
     } else if (['+', '=', '-'].includes(e.key)) {
       e.preventDefault(); stop();
-      targetZoom = clampZoom(zoom * (e.key === '-' ? 1 / 1.25 : 1.25));
+      zoom=targetZoom=clampZoom(zoom*(e.key==='-'?1/1.25:1.25));
       ask();
     } else if (e.key === 'Enter') {
       e.preventDefault();
@@ -500,9 +496,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
      * planet, playing behind the menu that is already there.
      */
     setMode(next: PlanetMode) {
+      if (frozen) { frozen = false; lastFrame = 0; ask(); }
       if (next === mode) return;
       mode = next;
-      speed = 0;
       pointers.clear();
       if (!renderer || !input) { introduced = false; return; }
       if (next === 'world') { if (posed) menuMemory = q; introduced = false; intro(); return; }
@@ -510,6 +506,13 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       const back = menuMemory ?? menuPose();
       if (!motion()) { q = back; zoom = targetZoom = MENU_ZOOM; frameTween = null; frameNow = frameTarget(); cropNow = cropTarget(); light = MENU_LIGHT; paintFrame(); ask(); return; }
       flyTo(back, MENU_ZOOM, OUT_MS, easeInOut);
+    },
+    /** Retain the last painted planet during PLAY's compositor fade; hand the sky over once. */
+    freeze(on: boolean) {
+      if (frozen === on) return;
+      frozen = on; lastFrame = 0;
+      if (on) { cancelDrift();cancelAnimationFrame(raf); raf = 0; if (spaceDrift.owner === 'planet') freeSpace(); }
+      else ask();
     },
     /** Bring flat tile `id` (e.g. the player's own land) to the middle at a comfortable size. */
     /**
@@ -540,10 +543,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     dispose() {
       if (disposed) return;
       disposed = true;
-      abort.abort(); observer.disconnect(); cancelAnimationFrame(raf); raf = 0;
+      abort.abort(); observer.disconnect(); cancelDrift();cancelAnimationFrame(raf); raf = 0;
       if (renderer) renderer.dispose(true);
       // The sky goes back to the space backdrop, which carries on from the planet's last stars.
-      freeSpace();
+      if (spaceDrift.owner === 'planet') freeSpace();
       canvas.remove(); fallback.remove();
     },
     snapshot: () => ({
@@ -551,7 +554,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       cells: sphere.cells.length,
       zoom, tilePx: tilePx(), q: [...q], selected: selected === null ? null : tileForCell(map, selected),
       frames: renderer?.frames ?? 0, bytes: renderer?.bytes ?? 0, pendingFrame: !!raf || !!flight || !!frameTween,
-      flying: !!flight || !!frameTween, spinning: speed > 0, mode, spaceVisible: spaceVisible(), fallback: !fallback.hidden,
+      flying: !!flight || !!frameTween, spinning: false, mode, spaceVisible: spaceVisible(), fallback: !fallback.hidden,
+      north:[...rotate(q,north)],
       light, frame: { ...frameNow }, crop: { ...cropNow },
       /** The globe's disc on screen (CSS px): centre and radius. */
       disc: { x: view.left + frameNow.x + frameNow.width / 2, y: view.top + frameNow.y + frameNow.height / 2, r: discRadius(frameNow.width, frameNow.height, zoom) },

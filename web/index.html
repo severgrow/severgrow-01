@@ -2,6 +2,19 @@
 <html lang="en" data-theme="ink">
   <head>
     <meta charset="utf-8" />
+    <style>html[data-startup="waiting"] {background:#050708} html[data-startup="waiting"] body {opacity:0;visibility:hidden}</style>
+    <script>
+      // The test menu and its world arrive as one object. A bounded fail-open also works when
+      // the main module cannot load; no spinner, network wait or repeat entrance on navigation.
+      if (document.documentElement.classList.contains('v075') && /\/test(?:\/|$)/.test(location.pathname)) {
+        document.documentElement.dataset.startup = 'waiting';
+        var startupFallback = setTimeout(function () {
+          delete document.documentElement.dataset.startup;
+          window.dispatchEvent(new Event('futasaku:startup-visible'));
+        }, 3500);
+        window.addEventListener('futasaku:startup-visible', function () { clearTimeout(startupFallback); }, { once:true });
+      }
+    </script>
     <script>
       // A page cached from an earlier deploy can name script and style files the newest deploy
       // removed (Pages caches the page for up to 10 minutes): the game then shows as bare text.
@@ -149,10 +162,10 @@
              the flat-menu extras) stay in place, hidden, so that order holds for whatever is on
              screen. -->
         <div class="menu-buttons">
-          <!-- PLAY (product channels only) opens the submenu below, and carries the ONE cream fill
+          <!-- PLAY (product channels only) opens the submenu below, using the shared matte key
                on this screen. Revealed by main.ts, so no other channel ever shows it. Its three
                entries (LEVEL n / Play online / Practice match) are MOVED into #play-actions at boot,
-               in the order PLAY_MENU_ENTRIES lists them. Its slight cream halo is a suggestion for a
+               in the order PLAY_MENU_ENTRIES lists them. Its slight amber halo is a suggestion for a
                new player (owner, 2026-11-02), painted as a class from campaign progress. -->
           <button id="menu-play" class="btn primary big" type="button" aria-label="Play" hidden>
             <span id="menu-play-label">Play</span>
@@ -376,9 +389,9 @@
           <!-- THE TILE BAR: a tapped tile's owner and its one action (GROW, SELL or CHALLENGE), floating
                at the foot of the map. Tapping a tile never opens the menu. -->
           <div id="online-world-selection" class="world-selection" aria-live="polite" hidden></div>
-          <!-- TERRITORY CHAT: one shared channel for everyone here (web/src/online/territory-chat.ts).
+          <!-- GLOBAL CHAT: one shared channel for everyone here (web/src/online/territory-chat.ts).
                It opens under the key row on the same dark glass as the other windows. -->
-          <section id="online-world-chat-panel" class="world-chat" aria-label="Territory chat" hidden>
+          <section id="online-world-chat-panel" class="world-chat" aria-label="Global chat" hidden>
             <header class="world-panel-head world-chat-head">
               <span class="world-panel-spacer" aria-hidden="true"></span>
               <h3 id="world-chat-heading" class="world-panel-title"></h3>
@@ -848,7 +861,7 @@
           <div class="sp-row sp-row-name">
             <dt id="profile-name-label">Name &amp; tag</dt>
             <dd class="sp-name-line">
-              <span id="profile-name">—</span>
+              <span id="profile-name">-</span>
               <!-- The visitor's level, in the Territory tile bar's own wording ("LEVEL 22"). Hidden
                    outside visitor mode, so the own profile's name line is unchanged. -->
               <span id="profile-level" class="sp-level" hidden></span>
@@ -865,10 +878,10 @@
           <!-- The Seeds label is filled by web/src/accounts/profile.ts from the economy's own word
                (web/src/online/seed-icon.ts): this page must stay free of that word, the same rule the
                rest of the markup follows (web/tests/seed-words.test.ts is about the removed mode). -->
-          <div class="sp-row sp-row-seeds"><dt id="profile-seeds-label"></dt><dd id="profile-seeds">—</dd></div>
-          <div class="sp-row sp-row-connected"><dt id="profile-connected-label">CONNECTED TILES</dt><dd id="profile-connected">—</dd></div>
-          <div class="sp-row sp-row-tiles"><dt id="profile-tiles-label">Tiles</dt><dd id="profile-tiles">—</dd></div>
-          <div class="sp-row sp-row-wins"><dt id="profile-wins-label">Matches won</dt><dd id="profile-wins">—</dd></div>
+          <div class="sp-row sp-row-seeds"><dt id="profile-seeds-label"></dt><dd id="profile-seeds">-</dd></div>
+          <div class="sp-row sp-row-connected"><dt id="profile-connected-label">CONNECTED TILES</dt><dd id="profile-connected">-</dd></div>
+          <div class="sp-row sp-row-tiles"><dt id="profile-tiles-label">Tiles</dt><dd id="profile-tiles">-</dd></div>
+          <div class="sp-row sp-row-wins"><dt id="profile-wins-label">Matches won</dt><dd id="profile-wins">-</dd></div>
         </dl>
         <!-- Your games (owner, 2026-11-01): two rows of the same three tiles — the offline record on
              top, the online one below — filled by web/src/accounts/profile.ts from

@@ -177,7 +177,7 @@ export const yourTurnCount = (entries: readonly MatchListEntry[]): number =>
   entries.filter((e) => lobbyBucket(e) === 'your_turn').length;
 
 export const pageTitleForLobby = (yourTurns: number, base = ONLINE.pageTitleBase): string =>
-  yourTurns > 0 ? `(${yourTurns}) ${base} — your turn` : base;
+  yourTurns > 0 ? `(${yourTurns}) ${base} - your turn` : base;
 
 export const friendlyJoinError = (code: string): string => {
   switch (code) {

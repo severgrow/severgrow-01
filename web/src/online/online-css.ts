@@ -1222,13 +1222,13 @@ html.reduce-motion .world-achievement.just-claimed { animation: none; }
     color: #fff1cf; box-shadow: 0 0 9px var(--light-bloom, rgba(196, 150, 88, .22)), 0 2px 8px #0007;
   }
 }
-/* the lit key: its page is open (a lamp under the icon, like a hardware toggle that is ON) */
-.world-key.on { color: #fff6dc; box-shadow: 0 0 12px var(--light-bloom, rgba(196, 150, 88, .32)), 0 2px 8px #0007; }
-.world-key::after {
-  content: ''; position: absolute; z-index: 1; left: 50%; bottom: 5px; width: 10px; height: 2px; translate: -50% 0;
-  border-radius: 1px; background: #f2c879; box-shadow: 0 0 6px #f2c879; opacity: 0; transition: opacity var(--ix-press) ease;
+/* The open page pushes its key into the housing. The quiet backlight remains. */
+.world-key.on {
+  color: #fff6dc; background: #0c0e0d; transform: translateY(1px);
+  box-shadow: inset 0 2px 4px #000b, 0 0 10px var(--light-bloom, rgba(196,150,88,.23)), 0 1px 3px #0006;
 }
-.world-key.on::after { opacity: 1; }
+.world-key.on::before { opacity: .72; }
+.world-key::after { content: none; }
 .world-grid > .world-corner:focus, .world-key:focus { outline: none; }
 .world-grid > .world-corner:focus-visible, .world-key:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 .world-grid > .world-menu-key { top: 10px; right: 10px; left: auto; bottom: auto; }

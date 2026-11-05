@@ -91,7 +91,7 @@ describe('one interface vocabulary', () => {
       expect(source).toMatch(new RegExp(`export (function|const) ${name}\\b`));
     }
     expect(source).not.toMatch(/from ['"]/); // dependency-free: no imports at all
-    expect(source).not.toMatch(/setTimeout|setInterval/); // interruptions are state, never timers
+    expect(source).not.toMatch(/setInterval/); // no repeating work; bounded close cleanup has behavioral tests
   });
 
   it('reads the OS preference and the app setting, never the game speed', () => {

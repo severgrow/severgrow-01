@@ -83,6 +83,10 @@ export type SurfaceOptions = {
 
 type SurfaceState = 'opening' | 'open' | 'closing' | 'closed';
 const running = new WeakMap<HTMLElement, Animation>();
+const closingTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+const clearClosingTimer = (el: HTMLElement) => {
+ const timer=closingTimers.get(el);if(timer!==undefined)clearTimeout(timer);closingTimers.delete(el);
+};
 const stateOf = new WeakMap<HTMLElement, SurfaceState>();
 
 /**
@@ -118,6 +122,7 @@ const isElement = (el: HTMLElement | null | undefined): el is HTMLElement => !!e
  */
 export function enterSurface(el: HTMLElement | null | undefined, options: SurfaceOptions = {}): Animation | null {
   if (!isElement(el)) return null;
+  clearClosingTimer(el);
   const previous = running.get(el);
   if (previous) {
     try {
@@ -173,6 +178,7 @@ export function enterSurface(el: HTMLElement | null | undefined, options: Surfac
  */
 export function exitSurface(el: HTMLElement | null | undefined, options: SurfaceOptions = {}): Animation | null {
   if (!isElement(el)) return null;
+  clearClosingTimer(el);
   const previous = running.get(el);
   if (previous) {
     try {
@@ -205,16 +211,15 @@ export function exitSurface(el: HTMLElement | null | undefined, options: Surface
   running.set(el, a);
   stateOf.set(el, 'closing');
   el.dataset.ixState = 'closing';
-  a.finished
-    .then(() => {
-      if (running.get(el) !== a) return;
-      running.delete(el);
-      a.cancel();
-      el.removeAttribute('inert');
-      el.classList.remove('ix-closing');
-      finish();
-    })
-    .catch(() => undefined);
+  const complete = () => {
+    if (running.get(el) !== a) return;
+    clearClosingTimer(el);running.delete(el);a.cancel();
+    el.removeAttribute('inert');el.classList.remove('ix-closing');finish();
+  };
+  // Some compositors can strand Animation.finished after interruption or suspension.
+  // Bound the exit without changing its normal beat or allowing stale closes after reopening.
+  closingTimers.set(el,setTimeout(complete,duration+250));
+  a.finished.then(complete).catch(() => undefined);
   return a;
 }
 
@@ -224,6 +229,7 @@ export function exitSurface(el: HTMLElement | null | undefined, options: Surface
  */
 export function resetSurface(el: HTMLElement | null | undefined): void {
   if (!isElement(el)) return;
+  clearClosingTimer(el);
   const a = running.get(el);
   if (a) {
     try {

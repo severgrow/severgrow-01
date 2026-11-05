@@ -20,6 +20,7 @@ import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
 import { enterSurface, exitSurface, resetSurface, INTERFACE_MOTION } from '../ui/interface-motion.js';
 import { leaveLobbyForMatch } from './lobby-exit.js';
+import { mountChallengeHandoff } from './challenge-handoff.js';
 import { WorldView } from './world-view.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { mountWorldSource } from './living-world-source.js';
@@ -318,6 +319,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     brandMark = null;
   }
   const screens: Record<'hub' | 'waiting' | 'join' | 'world', HTMLElement> = { hub, waiting: waitingEl, join: joinEl, world: worldEl };
+  const challengeHandoff=mountChallengeHandoff(worldEl);
   const notice = (id: string, text: string) => {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
@@ -620,15 +622,20 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (menuPass) await menuPass.catch(() => undefined);
     if (menuEl?.hidden === false && worldEl.dataset.livingTerritory === 'menu') await refreshMenu();
   });
-  living = menuEl ? mountLivingTerritory({menu: menuEl, screen: worldEl,
+  living = menuEl ? mountLivingTerritory({menu: menuEl, screen: worldEl, planet: FEATURES.planet,
     preview: () => worldView?.preview(worldSource.peek(), identity.peek(), !worldSource.isFresh()),
     stop: () => worldView?.close(true),
+    freeze: (on) => worldView?.freezeMenuPreview(on),
     // The menu's last painted frame, handed to the shared map before the panel takes the CSS box.
     anchor: (box, rect) => worldView?.setMenuFrame(box, rect),
   }) : null;
   worldSource.subscribe(() => living?.update());
   const syncMenuWorld = (visible: boolean) => living?.menu(visible);
-  window.addEventListener('futasaku:screen', event => syncMenuWorld((event as CustomEvent<string>).detail === 'menu'));
+  window.addEventListener('futasaku:screen', event => {
+    const name = (event as CustomEvent<string>).detail;
+    if (name === 'play-menu') living?.play();
+    else syncMenuWorld(name === 'menu');
+  });
   window.addEventListener('pageshow', event => { if(event.persisted) { living?.settle(); if(menuEl?.hidden === false) void refreshMenu(); } });
   worldView.setCue((name) => hooks.cue?.(name));
   // A rival's tile offers SEE PROFILE; the accounts module owns the sheet and the token, and hears
@@ -916,6 +923,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   };
 
   const openMatch = async (matchId: string) => {
+    const fromWorld=!worldEl.hidden&&worldEl.getAttribute('aria-hidden')!=='true';
     const id = await ensureIdentity();
     if (!id) return;
     try {
@@ -934,7 +942,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         }
       }
       // Returning to a match from the list is never a live join: no lottery, the chip carries it.
-      launchDuel(id.token, res.player, false);
+      if(fromWorld)await challengeHandoff.run(()=>launchDuel(id.token,res.player,false));
+      else launchDuel(id.token,res.player,false);
     } catch (error) {
       notice('online-hub-notice', errorMessage(error));
     }

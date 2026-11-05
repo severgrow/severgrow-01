@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 // PHONE HEAT PROBE (owner, 2026-10-29: "phones are getting hot and battery goes down quickly
 // while playing"). A phone-sized Chromium (390×844, DPR 3, touch) playing a REAL offline game, and
 // the measurements that say what the device has to sustain:
@@ -30,6 +31,7 @@ const CPU = Math.max(1, Number(process.env.CPU ?? 4));
 const IDLE_MS = Math.max(1500, Number(process.env.IDLE_MS ?? 3000));
 const SEED = process.env.SEED ?? '219682080';
 const DIST = process.env.DIST ?? '';
+const GAME_PATH = process.env.GAME_PATH ?? '/';
 
 type Idle = {
   appRafPerS: number; recalcCountPerS: number; recalcMsPerS: number; layoutCountPerS: number;
@@ -39,7 +41,7 @@ type Idle = {
 type Turn = { frames: number; fps: number; median: number; p95: number; worst: number; over33: number; kind: string };
 type Anim = { running: number; infinite: number; compositor: number; paint: number; paintProps: Record<string, number>; samples: string[]; list: string[] };
 type Layers = { filter: number; backdrop: number; willChange: number; biggestShadow: number; blur: number };
-type Hidden = { animations: number; appRafPerS: number; recalcMsPerS: number; taskMsPerS: number };
+type Hidden = { active: string[]; animations: number; appRafPerS: number; recalcMsPerS: number; taskMsPerS: number };
 type G = { idle: Idle; turn: Turn; anim: Anim; layers: Layers; hidden: Hidden };
 
 const stats = (xs: number[]) => {
@@ -99,7 +101,7 @@ const PAINT = [
 const COMPOSITOR = ['transform', 'opacity', 'translate', 'rotate', 'scale'];
 
 const startGame = async (page: Page, base: string) => {
-  await page.goto(`${base}/?seed=${SEED}`);
+  await page.goto(`${base}${GAME_PATH}?seed=${SEED}`);
   await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 90_000 });
   // The Who-starts ritual covers the board for ~1.6 s; measured play starts after it.
   await page
@@ -281,7 +283,11 @@ const measureHidden = async (page: Page, cdp: any, ms = 2000): Promise<Hidden> =
   await page.waitForTimeout(250);
   const before = await metrics(cdp);
   await page.evaluate('(() => { const p = window.__probe; p.appRaf = 0; p.long = 0; p.on = true; })()');
-  const animations = await page.evaluate<number>('(() => document.getAnimations().filter((a) => a.playState === "running").length)()');
+  const active=await page.evaluate(()=>document.getAnimations().filter(a=>a.playState==='running').map(a=>{
+    const effect=a.effect as KeyframeEffect|null,target=effect?.target as Element|null;
+    return `${target?.id||target?.getAttribute('class')||'?'}:${a.id}:${effect?.getTiming().iterations}`;
+  }));
+  const animations=active.length;
   await page.waitForTimeout(ms);
   const after = await metrics(cdp);
   const appRaf = await page.evaluate<number>('(() => { const p = window.__probe; p.on = false; return p.appRaf; })()');
@@ -293,7 +299,7 @@ const measureHidden = async (page: Page, cdp: any, ms = 2000): Promise<Hidden> =
   const s = ms / 1000;
   const d = (k: string) => (after[k] ?? 0) - (before[k] ?? 0);
   return {
-    animations,
+    active,animations,
     appRafPerS: appRaf / s,
     recalcMsPerS: (d('RecalcStyleDuration') * 1000) / s,
     taskMsPerS: (d('TaskDuration') * 1000) / s,
@@ -315,6 +321,7 @@ try {
   for (let run = 0; run < RUNS; run++) {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
     const page = await context.newPage();
+    await page.bringToFront();
     await seedSettings(page, { sound: false, music: false, coach: false, speed: 'normal', reduceMotion: false, eyeCandy: true });
     // tsx names inner arrow functions with its own `__name` helper; the page needs it when
     // Playwright serialises an instrumented function into it.
@@ -329,7 +336,12 @@ try {
     const idle = await measureIdle(page, cdp, bcdp, IDLE_MS);
     const anim = await measureAnimations(page);
     const layers = await measureLayers(page);
+    if(process.env.PERF_DETAILS==='1'){await cdp.send('Profiler.enable');await cdp.send('Profiler.start');}
     const turn = await measureTurn(page);
+    if(process.env.PERF_DETAILS==='1'){
+      const profile=await cdp.send('Profiler.stop');writeFileSync(`/tmp/v075-classic-draw-${run+1}.cpuprofile`,JSON.stringify(profile.profile));
+      console.log('RENDER_COSTS',await page.evaluate(()=>(window as any).__severgrow.renderCosts().slice(-15)));
+    }
     const hidden = await measureHidden(page, cdp);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     const g: G = { idle, turn, anim, layers, hidden };

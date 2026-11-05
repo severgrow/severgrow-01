@@ -206,6 +206,13 @@ const open = async (identity: typeof a) => {
   return page;
 };
 const input = (p: Page) => p.locator('.match-chat-form input');
+const checkTurnRim = async (page: Page, label: string) => {
+  const state = await page.evaluate(() => {
+    const online = (window as any).__severgrow.online();
+    return { rim: document.body.dataset.turn, expected: online.serverTurnPlayer === online.seat ? 'you' : 'opponent' };
+  });
+  check(label, state.rim === state.expected);
+};
 /** The lobby's "Your matches" list is a closed disclosure by default; open it before a row tap. */
 const openMatchRow = async (page: Page, id: string) => {
   const row = page.locator(`#online-matches li[data-match-id="${id}"]`);
@@ -228,6 +235,8 @@ try {
     receiver = match.state.actor === 0 ? pa : pb;
   const senderIdentity = match.state.actor === 0 ? b : a,
     receiverIdentity = match.state.actor === 0 ? a : b;
+  await checkTurnRim(pa, 'seat A rim follows authoritative turn ownership');
+  await checkTurnRim(pb, 'seat B rim follows authoritative turn ownership');
   await sender.locator('#match-chat-toggle').click();
   await input(sender).waitFor({ state: 'visible' });
   await sender.waitForFunction(
@@ -242,11 +251,18 @@ try {
   check('IME Escape preserves the open match chat',await input(sender).isVisible());
   await sender.evaluate(()=>document.documentElement.classList.remove('reduce-motion'));
   const phraseKey=sender.locator('.match-chat-phrase-toggle');
+  // Observe on the click's own turn of the event loop. A 150ms effect can finish before a
+  // cross-process getAnimations() query returns on a busy software-rendered CI machine.
+  await phraseKey.evaluate(e=>e.addEventListener('click',()=>{
+    e.setAttribute('data-test-finite-nod',String(e.querySelector('svg')!.getAnimations().some(a=>a.effect?.getTiming().iterations===1)));
+  },{once:true}));
   const phraseBox=(await phraseKey.boundingBox())!;
   await sender.mouse.move(phraseBox.x+phraseBox.width/2,phraseBox.y+phraseBox.height/2);await sender.mouse.down();await sender.waitForTimeout(180);
-  check('chat keys use one native press depth without stacked compression',await phraseKey.evaluate(e=>{const s=getComputedStyle(e);return s.transform==='none'&&Math.abs(Number(s.scale)-.97)<.002;}));
+  const keyPress=await phraseKey.evaluate(e=>{const s=getComputedStyle(e);return {transform:s.transform,scale:s.scale,translate:s.translate,pressed:e.getAttribute('data-pressed'),style:e.getAttribute('style'),reduce:document.documentElement.classList.contains('reduce-motion'),hit:document.elementFromPoint(e.getBoundingClientRect().x+e.getBoundingClientRect().width/2,e.getBoundingClientRect().y+e.getBoundingClientRect().height/2)?.outerHTML.slice(0,180)};});
+  if(!(keyPress.transform==='none'&&Math.abs(Number(keyPress.scale)-.97)<.002))console.error('Chat press diagnostic',keyPress);
+  check('chat keys use one native press depth without stacked compression',keyPress.transform==='none'&&Math.abs(Number(keyPress.scale)-.97)<.002);
   await sender.mouse.up();
-  check('the phrase glyph gives a finite playful nod',await phraseKey.locator('svg').evaluate(e=>e.getAnimations().some(a=>a.effect?.getTiming().iterations===1)));
+  check('the phrase glyph gives a finite playful nod',await phraseKey.getAttribute('data-test-finite-nod')==='true');
   await sender.waitForTimeout(200);
   check('the phrase glyph rests without retained animations',await phraseKey.locator('svg').evaluate(e=>e.getAnimations().length===0));
   await sender.keyboard.press('Escape');
@@ -729,6 +745,8 @@ try {
     .getByText('Keep this draft', { exact: true })
     .waitFor();
   check('a message sent on the newly started own turn is delivered', true);
+  await checkTurnRim(sender, 'turn handoff updates the sender rim without a queued announcement');
+  await checkTurnRim(receiver, 'turn handoff updates the opponent rim independently of replay');
   // Reconnect the real production channel protocol path and restore missed persisted data.
   for (const ws of [...wires.keys()])
     ws.close({ code: 1001, reason: 'local reconnect test' });
@@ -766,6 +784,7 @@ try {
     [390, 844],
     [844, 390],
     [1024, 768],
+    [1280, 720],
     [1280, 800],
     [1440, 900],
     [1920, 1080],
@@ -809,10 +828,12 @@ try {
           document.documentElement.dataset.layout !== 'side' ||
           (docked &&
             Math.abs((p.left + p.right - box.left - box.right) / 2) < 1 &&
-            Math.abs(context.top - p.bottom - 8) < 1 &&
+            Math.abs(box.top - p.bottom - 8) < 1 &&
             p.width <= box.width + 1),
         reading:
-          p.height >= (docked ? 240 : Math.min(500, innerHeight - 80)) &&
+          // The reading panel fills the space above the entire cockpit. Short desktops retain
+          // a usable 180px panel instead of falling back across the board.
+          p.height >= (docked ? 180 : Math.min(500, innerHeight - 80)) &&
           parseFloat(
             getComputedStyle(document.querySelector('.match-chat-text')!)
               .fontSize,

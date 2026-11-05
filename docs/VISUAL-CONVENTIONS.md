@@ -281,3 +281,46 @@ The spherical prototype reuses the real palette, typography, grain and shared mi
 only Back, the planet and the existing-colour home key. No toolbar, floating labels, glossy bloom,
 idle render loop or backend feature. Reduced motion stays static; raster detail returns at rest.
 Treat WebGL fallback, cleanup and device limitations as part of the experience. See `SPHERE-TEST.md`.
+
+## v0.75 refinement
+
+- v0.75 remains the reference. Turn lights follow confirmed turn ownership, independently of
+  queued presentation. Amber is `LIGHT_TONES.amber.core`, not a near-white replacement.
+- The four experimental worlds were rejected and removed. Classic FUTASAKU art is the only active
+  material. The pure owner/environment identity model remains dormant for future work; never revive
+  rejected assets or let a saved cosmetic id change ownership or gameplay.
+- Menu suggestions, difficulty keys and ordinary menu actions share one matte material in
+  `polish-075.css`. Suggestions add only a restrained amber shadow, never a different fill or weight. Full menu,
+  footer and difficulty labels share the same 1rem size, regular weight and .14em tracking.
+- An active Planet key sits inward; no amber indicator stripe. Keep the existing focus outline.
+- Global chat warms one identity-scoped, bounded in-memory page before opening; never poll while
+  closed or flash an empty transcript before a warmed page. Backend compatibility ids stay unchanged.
+- Planet dragging stays geographically north-up during input, with soft pole limits and wrapped
+  longitude. No inertia, roll correction, zoom easing or recentering may move it after release.
+  Keep wheel/pinch anchored where possible without violating that orientation.
+- Planet status readouts float in the existing stage; changing their text must never resize
+  the map or move the camera. Keep the menu and selection controls clear and pointer events through.
+- Planet challenge → duel uses one finite 700ms dark veil, with the existing grain above it. Prepare
+  the board at the opaque midpoint; no overlapping screens. Reduced motion bypasses the doorway.
+- The board shadow and turn glow follow one closed perimeter. Keep the indicator crisp and feather
+  only its underlay with faint painted strokes; never blur tile art, digits or an animated board container.
+- `/test/` first startup waits for app, fonts and a real planet paint, then reveals once. Keep a
+  bounded fail-open, direct-game links and reduced motion; never replay it on navigation or resume.
+- A window keeps its own reading position; switching windows must not steal another page's offset
+  or discard a chat draft. Retain the shared glass, native press and interruptible surface motion.
+- Reuse the existing atmosphere/grain. Mote loops fade outside the view; new material details are
+  static. Measure performance, batch geometry reads before animation writes, and do not scan or
+  measure a hidden/unchanged presentation just to restart an effect.
+
+## Matte action refinement — 5 November 2026
+
+- Shared matte menu/dialog/chat keys use the existing dark-glass backdrop blur. Reuse that pair;
+  do not add decorative blur wrappers. PLAY keeps its static, visible amber recommendation after
+  lesson graduation; the LEVEL key retains its progress-based guidance. No new progress rules.
+- Challenge/invitation actions and Global chat Send/report/block use the shared matte finish,
+  ivory type and native press. The selected colour sits inward rather than wearing an amber frame.
+- PLAY's background leaves in 650ms. Returning reveals the world over 650ms after its real first
+  paint; menu controls are immediate. Retained planets interrupt at their current opacity, new
+  navigation cancels stale completion, reduced motion is instant, and readiness has a bounded fallback.
+
+Player-facing punctuation: use a plain hyphen, never an em dash. Preserve text supplied by players.

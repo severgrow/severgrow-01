@@ -1,3 +1,5 @@
+import { CHALLENGE_STAMP_GLSL, stampCoordinates } from './challenge-stamp.js';
+import type { V3 } from './geometry.js';
 // THE PLANET IN SPACE. Two passes, no textures, no post-processing, no dependency:
 //   1. SPACE: one full-screen triangle draws the sky, a slowly sliding star field (two parallax
 //      layers, procedural), the atmosphere halo around the planet and a still film grain;
@@ -39,10 +41,11 @@ export const projection = (view: { width: number; height: number }, frame: Frame
 // The SPACE pass is shared with the space backdrop (space.ts): one shader for the whole game.
 
 const GROUND_VERTEX = `
-attribute vec4 aPosition; attribute vec4 aLook;
+attribute vec4 aPosition; attribute vec4 aLook; attribute vec2 aStamp;
 uniform vec4 uRotation; uniform float uAspect; uniform float uFocal; uniform vec2 uShift;
-varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed; varying vec3 vLocal;
+varying vec2 vStamp; varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed; varying vec3 vLocal;
 void main(){
+  vStamp = aStamp;
   vec3 q = aPosition.xyz;
   vLocal = q;
   vec3 t = 2.0 * cross(uRotation.xyz, q);
@@ -55,8 +58,8 @@ void main(){
 const groundFragment = (derivatives: boolean) => `
 ${derivatives ? '#extension GL_OES_standard_derivatives : enable' : ''}
 precision highp float;
-varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed; varying vec3 vLocal;
-uniform float uPulse; uniform float uPixel; uniform float uDpr;
+varying vec2 vStamp; varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed; varying vec3 vLocal;
+uniform float uPulse; uniform float uPixel;
 float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 // Value noise fixed to the planet (not the screen), so the grain turns with the ground.
 float hash3(vec3 p){ p = fract(p * .3183099 + .1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -65,6 +68,7 @@ float noise3(vec3 x){
   return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x), mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x), mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z);
 }
+${CHALLENGE_STAMP_GLSL}
 void main(){
   float f = floor(vFlags + .5);
   float kind = mod(f, 8.0);
@@ -108,7 +112,14 @@ ${derivatives ? `  vec2 grad = vec2(dFdx(e), dFdy(e));
   // when the slab stands between it and the sun. Soft, short, and only where it is true.
   c *= 1.0 - below * .42 * smoothstep(.5, 1.0, e) * max(0.0, toSun);` : `  c *= 1.0 - rise * lip * .05;`}
   c *= 1.0 - .07 * smoothstep(.9, 1.0, e);
-  if (disputed > .5) c *= .82 + .18 * step(.5, fract((gl_FragCoord.x + gl_FragCoord.y) / (7.0 * uDpr)));
+  if (disputed > .5) {
+    float ink = crossedSwords(vStamp);
+    float aa = ${derivatives ? 'max(fwidth(ink), .008)' : 'max(uPixel * .6, .008)'};
+    float coverage = 1.0 - smoothstep(-aa,aa,ink);
+    // Ink darkens a light holding; a soft metal catch keeps the same insignia legible on basalt.
+    vec3 stamp = dot(c,vec3(.3,.59,.11)) > .3 ? vec3(.10,.11,.10) : vec3(.63,.59,.49);
+    c = mix(c, stamp, coverage * .73);
+  }
   if (kin > .5 && selected < .5) c = mix(c, vec3(.95, .92, .82), .07);
   float lit = .13 + .95 * day;
   vec3 colour = c * lit;
@@ -152,6 +163,7 @@ export class PlanetRenderer {
   private buffers: WebGLBuffer[] = [];
   private triangle: WebGLBuffer;
   private positions: WebGLBuffer;
+  private stamps: WebGLBuffer;
   private looks: WebGLBuffer;
   private look: Uint8Array<ArrayBuffer>;
   private vertexCount: number;
@@ -166,13 +178,13 @@ export class PlanetRenderer {
   private cssWidth = 1;
   private cssHeight = 1;
   private derivatives: boolean;
-  constructor(readonly canvas: HTMLCanvasElement, readonly sphere: Sphere) {
+  constructor(readonly canvas: HTMLCanvasElement, readonly sphere: Sphere,north:V3=[0,1,0]) {
     const gl = canvas.getContext('webgl', { alpha: false, antialias: true, depth: false, powerPreference: 'low-power', preserveDrawingBuffer: false });
     if (!gl) throw Error('WebGL unavailable');
     this.gl = gl;
     this.derivatives = !!gl.getExtension('OES_standard_derivatives');
     this.ground = this.program(GROUND_VERTEX, groundFragment(this.derivatives));
-    for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel', 'uDpr']) this.u[name] = gl.getUniformLocation(this.ground, name);
+    for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel']) this.u[name] = gl.getUniformLocation(this.ground, name);
     this.triangle = this.buffer(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]));
     this.space = spacePass(gl, (v, f) => this.program(v, f), this.triangle);
     // Fans: centre, corner i, corner i+1 for every side of every tile. A cell's `w` packs its seed
@@ -184,21 +196,26 @@ export class PlanetRenderer {
     for (const c of cells) { this.start[c.index] = vertices; this.span[c.index] = c.corners.length * 3; vertices += c.corners.length * 3; }
     this.vertexCount = vertices;
     const position = new Float32Array(vertices * 4);
+    const stamps = new Int8Array(vertices * 2);
+    let so = 0;
     let o = 0;
     for (const c of cells) {
+      const uv = stampCoordinates(c.centre, c.corners.map(i => sphere.corners[i]!),north);
       const seed = Math.floor((Math.sin(c.index * 12.9898) * 43758.5453 % 1 + 1) % 1 * 4095);
       for (let i = 0; i < c.corners.length; i++) {
         const a = sphere.corners[c.corners[i]!]!, b = sphere.corners[c.corners[(i + 1) % c.corners.length]!]!;
+        for (const p of [[0,0],uv[i]!,uv[(i+1)%uv.length]!]) { stamps[so++] = Math.round(p[0]! * 127); stamps[so++] = Math.round(p[1]! * 127); }
         position.set([c.centre[0], c.centre[1], c.centre[2], seed], o); o += 4;
         position.set([a[0], a[1], a[2], seed + .999], o); o += 4;
         position.set([b[0], b[1], b[2], seed + .999], o); o += 4;
       }
     }
     this.positions = this.buffer(gl.ARRAY_BUFFER, position);
+    this.stamps = this.buffer(gl.ARRAY_BUFFER, stamps);
     this.look = new Uint8Array(vertices * 4);
     this.flags = new Uint8Array(cells.length);
     this.looks = this.buffer(gl.ARRAY_BUFFER, this.look, gl.DYNAMIC_DRAW);
-    this.bytes = position.byteLength + this.look.byteLength + 24;
+    this.bytes = position.byteLength + stamps.byteLength + this.look.byteLength + 24;
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
@@ -280,10 +297,12 @@ export class PlanetRenderer {
     gl.uniform1f(this.u.uFocal!, at.f);
     gl.uniform2f(this.u.uShift!, at.ox, at.oy);
     gl.uniform1f(this.u.uPulse!, pulse);
-    gl.uniform1f(this.u.uDpr!, this.pixel);
     // Without derivatives, one pixel of the side ramp is estimated from the tile's size on screen.
     gl.uniform1f(this.u.uPixel!, 1 / Math.max(4, at.radius * this.pixel * (Math.PI / 5) / this.sphere.frequency));
-    const position = gl.getAttribLocation(this.ground, 'aPosition'), look = gl.getAttribLocation(this.ground, 'aLook');
+    const position = gl.getAttribLocation(this.ground, 'aPosition'), look = gl.getAttribLocation(this.ground, 'aLook'), stamp = gl.getAttribLocation(this.ground, 'aStamp');
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.stamps);
+    gl.enableVertexAttribArray(stamp);
+    gl.vertexAttribPointer(stamp, 2, gl.BYTE, true, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positions);
     gl.enableVertexAttribArray(position);
     gl.vertexAttribPointer(position, 4, gl.FLOAT, false, 0, 0);
@@ -293,6 +312,7 @@ export class PlanetRenderer {
     gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
     gl.disableVertexAttribArray(position);
     gl.disableVertexAttribArray(look);
+    gl.disableVertexAttribArray(stamp);
   }
   dispose(release = false) {
     if (this.disposed) return;
