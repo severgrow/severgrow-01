@@ -26,7 +26,10 @@ const SHOTS = process.env.SHOTS?.trim() || new URL('../../docs/screens/replay/',
 
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
-  if (!ok) failed++;
+  if (!ok) {
+    failed++;
+    console.error(`::error title=Replay check::${`${name}: ${note}`.replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A')}`);
+  }
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
 const waitVisible = async (page: Page, sel: string, ms = 25_000) => {
