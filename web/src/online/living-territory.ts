@@ -104,9 +104,9 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
   // Read BEFORE the beats are cancelled: cancelling the arrival would snap the map back to its CSS
   // rest (full light) and the fade would start from a brightness the player never saw.
   const from=map?Number(getComputedStyle(map).opacity):MENU_MAP_OPACITY;
-  leaving=true;
   const turn=generation;
   clearBeats();
+  leaving=true;
   screen.classList.add('living-leaving');
   const finish=()=>{
    leavingFinish=null;
