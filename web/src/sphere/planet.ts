@@ -12,6 +12,7 @@
 // slide"); that is the only loop, it runs at ~30 fps, and it stops when the planet fills the window,
 // the page is hidden, or reduced motion is on.
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
+import { settleWorldMaterial } from '../worlds/motion.js';
 import { menuDiscRadius } from '../player/planet-lockup.js';
 import { claimSpace, DRIFT_PX_PER_MS, DRIFT_Y_SHARE, freeSpace, spaceDrift } from './space.js';
 import { buildSphere, homeQuat, latticeMap, pickCell, unit, type Sphere, type V3 } from './geometry.js';
@@ -465,7 +466,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   document.addEventListener('visibilitychange', () => { stop(); cancelAnimationFrame(raf); raf = 0; if (!document.hidden) { lastFrame = 0; ask(); } }, { signal });
   // The screen's size moves the canvas; the panel's size moves only the frame (read every frame).
   window.addEventListener('resize', resize, { signal, passive: true });
-  window.addEventListener('futasaku:world-style', () => ask(), { signal });
+  window.addEventListener('futasaku:world-style', () => {
+    ask();settleWorldMaterial(canvas,motion());
+  }, { signal });
   const observer = new ResizeObserver(() => { if (!flight && !frameTween) resize(); else ask(); });
   observer.observe(stage);
 

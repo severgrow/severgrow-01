@@ -43,6 +43,20 @@ try{
    await p.screenshot({path:`${out}/planet-${width}-${id}.png`});
    await p.locator('#online-world-menu').click(); await p.locator('#world-key-colour').click();
   }
+  if(width===320){
+   const settle=await p.evaluate(()=>{
+    document.documentElement.classList.remove('reduce-motion');
+    for(const id of ['ocean','forest'])document.querySelector<HTMLButtonElement>(`[data-world-style="${id}"]`)!.click();
+    return document.querySelector('.planet-canvas')!.getAnimations().filter(a=>a.id==='world-material-settle').map(a=>a.effect!.getTiming().duration);
+   });
+   assert('rapid skin changes replace one 150ms surface beat',settle.length===1&&settle[0]===150);
+   const still=await p.evaluate(()=>{
+    document.documentElement.classList.add('reduce-motion');
+    document.querySelector<HTMLButtonElement>('[data-world-style="volcanic"]')!.click();
+    return document.querySelector('.planet-canvas')!.getAnimations().filter(a=>a.id==='world-material-settle').length;
+   });
+   assert('reduced motion cancels the material beat immediately',still===0);
+  }
   await p.locator('#online-world-back').click();
   await p.locator('#menu-play').click(); await p.locator('#menu-campaign').click();
   if(await p.locator('#sheet-campaign-start:not([hidden])').count())await p.locator('#csa-resume').click();

@@ -1,6 +1,8 @@
 import { WORLD_ART } from '../worlds/art.js';
 import { WORLDS, duelWorlds, type DuelWorlds, type WorldId } from '../worlds/worlds.js';
 import { selectedWorld } from '../worlds/preference.js';
+import { settleWorldMaterial } from '../worlds/motion.js';
+import { interfaceMotionAllowed } from './interface-motion.js';
 // The fast default board: small cropped sprites for both territories and homes, with
 // the existing V3 empty ground, rocks, gold frames and physical number stones.
 // It keeps BoardView's hitboxes, overlays and game interactions unchanged.
@@ -260,5 +262,9 @@ export class DefaultArtBoardView extends BoardView {
 export function bindWorldAppearance(board: BoardView): void {
   if (!(board instanceof DefaultArtBoardView)) return;
   board.setLocalWorld(selectedWorld());
-  window.addEventListener('futasaku:world-style', () => board.setLocalWorld(selectedWorld()));
+  window.addEventListener('futasaku:world-style', () => {
+    board.setLocalWorld(selectedWorld());
+    const svg=document.getElementById('board');
+    if(svg)settleWorldMaterial(svg,interfaceMotionAllowed());
+  });
 }
