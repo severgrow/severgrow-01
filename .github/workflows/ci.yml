@@ -71,7 +71,7 @@ jobs:
             sphere-test*|planet-matte) CHANNEL=futa05 VITE_FIND_OPPONENT=1 VITE_DUEL_API_URL=http://127.0.0.1:65530/functions/v1/duel \
                 VITE_SUPABASE_URL=http://127.0.0.1:65530 VITE_SUPABASE_ANON_KEY=local npm run web:build ;;
           esac
-      - run: node --import tsx web/e2e/${{ matrix.suite }}.ts
+      - run: node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts
 
       - name: Keep living Territory visual evidence
         if: always() && (startsWith(matrix.suite, 'living-territory') || matrix.suite == 'territory-final-polish' || startsWith(matrix.suite, 'sphere-test') || matrix.suite == 'planet-matte')
