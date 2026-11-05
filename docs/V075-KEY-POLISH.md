@@ -25,13 +25,20 @@ Planet controls, swords, joined board silhouette and 700ms challenge-to-duel doo
 ## Verification
 
 - All three TypeScript projects pass.
-- 44 targeted tests pass: PLAY transitions, suggestion rules and shared/pinned motion.
+- 74 targeted tests pass: PLAY transitions, suggestion rules, shared/pinned motion, startup,
+  living-world source, colour handoff and channel policy.
 - futa04 production build and asset isolation pass (106 files).
 - Actual browser PLAY checks pass: immediate controls, 650ms exit/return, first-paint readiness,
   interrupted return, disposed canvas, PWA resume and reduced motion.
-- Extended `planet-matte` covers real challenge actions, selected colours, chat actions, shared blur
-  and amber recommendation, in addition to its existing four viewport and camera contracts.
-  Its final result and release CI must be checked before publication.
+- Extended `planet-matte` passes all four viewports (320×568, 390×844, 844×390 and 1440×900),
+  including real challenge actions, selected colours, chat actions, shared blur, amber recommendation,
+  existing camera contracts, reduced motion, startup recovery and seven challenge-doorway scenarios.
+- An initial local software-rendered desktop startup missed its first-paint bound; the complete
+  rerun passed without changing that bound. The unchanged 0.4 CI motion suite also missed a brief
+  card/pile overlap. Its observer now records actual pile-face mutations alongside the original
+  animation-frame samples, retaining every timing and hand-over assertion, with failure diagnostics.
+  The complete local 0.4 motion suite then passed Draw/Throw, Bloom, cuts, reduced motion and Bomb.
+  Full CI must still pass before publication.
 
 Real iOS hardware verification is unavailable here; CI WebKit is engine coverage, not a device claim.
 Local screenshots are in `/tmp/planet-matte/`. No performance claim is made from software-rendered

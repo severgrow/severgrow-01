@@ -98,12 +98,18 @@ try {
     const face = () => document.getElementById('discard-top')?.dataset.faceKey ?? null;
     // `flying` proves the hand-over happens while the card is still aloft (before its fade ends).
     const flying = () => !!document.querySelector('.flyer');
-    const tick = () => { if (!running) return; log.push({ t: Math.round(performance.now() - t0), face: face(), flying: flying() }); requestAnimationFrame(tick); };
+    const sample = () => { if (running) log.push({ t: Math.round(performance.now() - t0), face: face(), flying: flying() }); };
+    const tick = () => { if (!running) return; sample(); requestAnimationFrame(tick); };
+    // A slow runner can skip every animation frame during the short landing/fade overlap.
+    // Observe the actual face hand-over as well; keep the flight timing and assertions unchanged.
+    const handover = new MutationObserver(sample);
+    handover.observe(document.getElementById('discard')!, {subtree:true,childList:true,attributes:true,attributeFilter:['data-face-key']});
     requestAnimationFrame(tick);
     document.querySelector<HTMLElement>(`#hand [data-card="${action.card}"]`)?.click();
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     (document.getElementById('discard') as HTMLElement).click();
     await new Promise<void>((r) => setTimeout(r, 1600));
+    handover.disconnect();
     running = false;
     log.push({ t: Math.round(performance.now() - t0), face: face(), flying: flying() });
     return { log, previousId, cardId: action.card };
@@ -122,7 +128,8 @@ try {
   // The hand-over still happens ON ARRIVAL: the frame the new top appears is a frame where the
   // flyer is still in the air (it fades over the identical new top). A later hand-over would let
   // the old top show through; an earlier one would show the new card before it landed.
-  assert(sampled.log[firstThrown]!.flying === true, 'the pile turns over while the card is still aloft (before its fade ends)');
+  assert(sampled.log[firstThrown]!.flying === true,
+    `the pile turns over while the card is still aloft (before its fade ends): ${JSON.stringify(sampled.log.slice(Math.max(0,firstThrown-2),firstThrown+3))}`);
   assert(previousId === null || !faces.at(-1)!.startsWith(`${previousId}:`),
     `the settled top is not the previous card (${faces.at(-1)} vs ${previousId})`);
   // And the count agrees with what is shown.
