@@ -45,8 +45,8 @@ export const CHALLENGE = Object.freeze({
    * The challenger's offer: what it costs (nothing) and what is at risk (their own tile). The tile
    * is the auto-chosen nearest one; the tap that opens this sheet also marks it on the map.
    */
-  sendLine: (name: string, tile: string) =>
-    `${name} holds this ground. Challenge for free — ${tile} is at stake: lose and they take it.`,
+  sendLine: (name: string, _tile: string) =>
+    `${name}'s ground. Challenge - the winner takes the opponent's tile.`,
   sendKey: 'CHALLENGE',
   /** The tile bar's key on contested ground: it opens that challenge's own sheet. */
   viewKey: 'VIEW CHALLENGE',
@@ -55,7 +55,7 @@ export const CHALLENGE = Object.freeze({
    * the contested ground. Answering costs nothing; only the duel decides it.
    */
   defendLine: (name: string, left: string) =>
-    `${name} challenged your tile. Answer within ${left} to keep it — lose the duel and they take it.`,
+    `${name} challenged your tile. Answer within ${left} to keep it - lose the duel and they take it.`,
   /**
    * The defender's meta line: the owner's report was about being shown a price. Uppercase because
    * the sheet's meta line is set in caps, and deliberately number-free.
@@ -65,7 +65,7 @@ export const CHALLENGE = Object.freeze({
   declineKey: 'DECLINE',
   /** Declining is the one irreversible key: the first press only arms it. */
   declineConfirm: 'TAP AGAIN TO DECLINE',
-  waitLine: (name: string) => `You challenged ${name}. They have 24 h to answer — your tile is at stake.`,
+  waitLine: (name: string) => `You challenged ${name}. They have 24 h to answer - your tile is at stake.`,
   duelLine: 'Win the duel, take the ground. Lose it, they take your tile.',
   openDuelKey: 'OPEN DUEL',
   /**
@@ -94,7 +94,7 @@ export const CHALLENGE = Object.freeze({
    */
   deadlineLine: (name: string) => `The deadline passed. ${name} takes this ground.`,
   /** The challenger's offer's meta line: the stake, then the answer window. Never a Seed amount. */
-  sendMeta: (tile: string) => `${tile.toUpperCase()} AT STAKE · 24 H TO ANSWER`,
+  sendMeta: (_tile: string) => '24 H TO ANSWER',
   /** The same meta for a challenge that already exists (waiting, contested, settling). */
   stakeMeta: (tile: string) => `${tile.toUpperCase()} AT STAKE`,
   /** The map ring's spoken name, so a screen reader is told which tile is at risk. */

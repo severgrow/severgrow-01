@@ -121,19 +121,19 @@ describe('two records: offline on top, online below, the same three tiles', () =
   });
 });
 
-describe('an unknown value is an em dash — never a made-up 0', () => {
+describe('an unknown value is an em dash - never a made-up 0', () => {
   it('uses the em dash for a missing name or count', () => {
-    expect(PROFILE.unknown).toBe('—');
+    expect(PROFILE.unknown).toBe('-');
     const rows = profileRows(facts({ name: null, seeds: null, tiles: null, matchesWon: null }));
-    expect(rows.map((r) => r.value)).toEqual(['—', '—', '—', '—', '—']);
-    expect(profileRows(facts({ name: '   ' }))[0]!.value).toBe('—');
+    expect(rows.map((r) => r.value)).toEqual(['-', '-', '-', '-', '-']);
+    expect(profileRows(facts({ name: '   ' }))[0]!.value).toBe('-');
   });
 
   it('rejects values that cannot be a count (NaN, negative, Infinity) instead of printing them', () => {
     const rows = profileRows(facts({ seeds: Number.NaN, tiles: -2, matchesWon: Number.POSITIVE_INFINITY }));
-    expect(rows[1]!.value).toBe('—');
-    expect(rows[2]!.value).toBe('—');
-    expect(rows[3]!.value).toBe('—');
+    expect(rows[1]!.value).toBe('-');
+    expect(rows[2]!.value).toBe('-');
+    expect(rows[3]!.value).toBe('-');
   });
 
   it('shows a REAL zero as 0: an empty wallet is a fact, not an unknown', () => {

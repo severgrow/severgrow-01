@@ -6,7 +6,7 @@
 // Four digits and under are left alone: in a small box "1240" reads faster than "1 240". Pure, and
 // shared by the profile and the menu so the same balance looks the same in both.
 export const groupDigits = (n: number): string => {
-  if (!Number.isFinite(n)) return '—';
+  if (!Number.isFinite(n)) return '-';
   const value = Math.trunc(n);
   const digits = String(Math.abs(value));
   if (digits.length <= 4) return String(value);

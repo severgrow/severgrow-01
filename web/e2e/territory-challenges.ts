@@ -625,8 +625,8 @@ try {
     // coordinate, and the words that say what losing costs.
     check(`[${tag}] the send sheet names the holder and the tile at stake, and never a price`,
       sendSheet.line.includes('RYK') &&
-      /free/i.test(sendSheet.line) &&
-      /at stake/i.test(sendSheet.line) &&
+      !/free/i.test(sendSheet.line) &&
+      /winner takes the opponent's tile/i.test(sendSheet.line) &&
       !/50\b|Seeds?/i.test(sendSheet.line) &&
       !/-?\d+\s*,\s*-?\d+/.test(sendSheet.line),
       sendSheet.line);

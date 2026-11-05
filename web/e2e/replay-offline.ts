@@ -160,6 +160,9 @@ try {
 
   await page.locator('#go-replay').click();
   await waitVisible(page, '#replay', 20_000);
+  const edge = page.locator('#replay .planet-turn-line');
+  if(await edge.count())check('decorative replay edge cannot cover the art with a black fill',
+    await edge.evaluate(el=>getComputedStyle(el).fill==='none'));
   const now = await replayNow(page);
   check('the practice replay mounts with a real clock', !!now && now.total > 0, JSON.stringify({ total: now?.total }));
   // The owner's faster, move-aware curve (2026-10-30): the reported total is the new length and

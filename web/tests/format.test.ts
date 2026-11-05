@@ -34,8 +34,8 @@ describe('grouping a count', () => {
   });
 
   it('never prints NaN or Infinity', () => {
-    expect(groupDigits(Number.NaN)).toBe('—');
-    expect(groupDigits(Number.POSITIVE_INFINITY)).toBe('—');
+    expect(groupDigits(Number.NaN)).toBe('-');
+    expect(groupDigits(Number.POSITIVE_INFINITY)).toBe('-');
   });
 });
 

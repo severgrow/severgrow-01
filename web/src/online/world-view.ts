@@ -3163,7 +3163,7 @@ export class WorldView {
     else card.style.removeProperty('--territory');
     const big = document.createElement('strong');
     big.className = 'world-standing-place';
-    big.textContent = at ? ONLINE.worldPlace(at.rank, at.players) : '—';
+    big.textContent = at ? ONLINE.worldPlace(at.rank, at.players) : '-';
     const tiles = document.createElement('span');
     tiles.className = 'world-standing-tiles';
     tiles.textContent = ONLINE.worldConnectedTiles(at?.tiles ?? 0);

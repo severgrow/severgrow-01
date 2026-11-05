@@ -147,3 +147,16 @@ html.v075 #spores i:nth-child(3n + 2) { --dust-size: 7px; --dust-ink: .105; }
   100% { opacity: 0; transform: translate(12px,-130vh); }
 }
 @media(prefers-reduced-motion:reduce) { html.v075 #spores { display:none; } }
+
+/* A recessed territory edge, using the existing continuous connected perimeter.
+   Ownership stays in the material and home art, with no cream/red graphic contour. */
+html.v075.futa04-information #board .l-territory-contour .territory-contour:is(.p0,.p1) {
+  stroke: rgba(0,0,0,.48); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 .65px .45px rgba(240,233,220,.12));
+}
+/* A fine warm emitter inside a soft halo. One static edge filter, never the tiles or digits. */
+html.v075 #board .planet-turn-line {
+  stroke-width: .7; opacity: .78;
+  filter: drop-shadow(0 0 1.1px var(--turn-rim-ink));
+}
+html.v075 body[data-turn='you'] #board .planet-turn-glow { opacity: .22; }

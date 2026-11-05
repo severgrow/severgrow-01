@@ -164,6 +164,14 @@ try{
    await p.waitForFunction(()=>{const h=(window as any).__severgrow;return h?.ready?.()&&h.state()?.actor===0&&!h.busy();},undefined,{timeout:90000});
    await p.waitForFunction(()=>{const ritual=document.getElementById('starter-lottery');return !ritual||ritual.hidden||!ritual.getClientRects().length;},undefined,{timeout:30000});
    await p.waitForTimeout(500);
+   await p.waitForFunction(()=>(window as any).__severgrow.space()?.sliding===true);
+   const sky=p.locator('#space-backdrop > canvas').first();
+   const before=await sky.evaluate(e=>getComputedStyle(e).translate);
+   await p.waitForFunction(before=>{
+    const sky=document.querySelector('#space-backdrop > canvas');
+    return sky && (window as any).__severgrow.space()?.sliding && getComputedStyle(sky).translate!==before;
+   },before,{timeout:10000});
+   assert.equal(await p.locator('#space-backdrop > canvas:visible').count(),1,'gameplay composites one cached star layer');
    const rim=await p.locator('#board .planet-turn-line').getAttribute('d');
    await p.screenshot({path:`${shots}/duel-${width}.png`});
    console.log('Board contour',JSON.stringify({starts:(rim?.match(/M/g)||[]).length,closed:(rim?.match(/Z/g)||[]).length}));
@@ -222,3 +230,5 @@ try{
 await import("./challenge-handoff.js");
 
 await import('./play-world-fade.js');
+// Replay uses its own SVG id, so live-only board CSS must never hide its artwork.
+await import('./replay-offline.js');

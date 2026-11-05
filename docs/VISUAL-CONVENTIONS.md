@@ -322,3 +322,5 @@ Treat WebGL fallback, cleanup and device limitations as part of the experience. 
 - PLAY's background leaves in 650ms. Returning reveals the world over 650ms after its real first
   paint; menu controls are immediate. Retained planets interrupt at their current opacity, new
   navigation cancels stale completion, reduced motion is instant, and readiness has a bounded fallback.
+
+Player-facing punctuation: use a plain hyphen, never an em dash. Preserve text supplied by players.

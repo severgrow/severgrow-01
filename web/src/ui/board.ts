@@ -456,10 +456,10 @@ export class BoardView {
     // on that moving ancestor, and no softening of tile art or digits (VISUAL-CONVENTIONS.md).
     el('path',{d:rim,transform:'translate(0 6)',class:'planet-shadow-far',stroke:'#000','stroke-opacity':.04,'stroke-width':4,'stroke-linejoin':'round'},shadow);
     el('path',{d:rim,transform:'translate(0 2)',class:'planet-shadow-near',stroke:'#000','stroke-opacity':.08,'stroke-width':2,'stroke-linejoin':'round'},shadow);
-    const glow=el('g',{class:'planet-turn-glow','stroke-linejoin':'round'},shadow);
+    const glow=el('g',{class:'planet-turn-glow',fill:'none','stroke-linejoin':'round'},shadow);
     for(const [width,opacity] of [[8,.12],[5,.35],[3,.5]])el('path',{d:rim,'stroke-width':width!,'opacity':opacity!},glow);
     const turn = el('g', { class: 'planet-turn-rim' }, skin);
-    el('path', { d: rim, class: 'planet-turn-line' }, turn);
+    el('path', { d: rim, fill: 'none', class: 'planet-turn-line' }, turn);
   }
 
   // ---- drawing steps a skinned board (ui/skin/) can replace; these defaults are the board's own look ----
@@ -590,13 +590,14 @@ export class BoardView {
       try { joined = connectedKeys(board, this.config, owner); }
       catch { continue; }
       const segments: string[] = [];
+      const boundary: (readonly [readonly [number,number],readonly [number,number]])[] = [];
       const fresh: { path:string; distance:number }[] = [];
       const seen = new Set<string>();
       const hadContour = this.previousContourEdges[owner].size > 0;
       const home = parseKey(this.rootKey(owner));
       for (const key of joined) {
         const centre = centerOf(key);
-        const corners = cornerPts(key, S - 1.5);
+        const corners = cornerPts(key, S);
         const neighbors = allNeighbors(parseKey(key)).map(coordKey);
         for (let i = 0; i < 6; i++) {
           const a = corners[i]!, b = corners[(i + 1) % 6]!;
@@ -608,6 +609,7 @@ export class BoardView {
               (p.x - centre.x) * mx + (p.y - centre.y) * my ? candidate : best;
           });
           if (!joined.has(across)) {
+            boundary.push([a,b]);
             const edge = `${key}:${i}`;
             const path = `M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`;
             seen.add(edge);
@@ -616,7 +618,7 @@ export class BoardView {
           }
         }
       }
-      if (segments.length) el('path', { d: segments.join(''), class: `territory-contour p${owner}`, fill: 'none' }, layer);
+      if (segments.length) el('path', { d: outlinePath(boundary,Math.max(.15,getPixelGrid()*1.5)), class: `territory-contour p${owner}`, fill: 'none' }, layer);
       const nearest = Math.min(...fresh.map(edge=>edge.distance));
       // A Bloom wave: 45ms outward from the new edge, capped so the last vein draws on inside
       // one "moment" (600ms) with its tile.
