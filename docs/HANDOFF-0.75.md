@@ -12,7 +12,11 @@ and commit it with your work. Owner approval for everything below to go LIVE is 
 - The egg fix (planet canvas sized in px). It was blocked from going live for hours: see "Traps".
 - Level 10 on the big board; the Planet lesson window after it.
 
-## In flight
+## Also LIVE since 2026-11-05 08:34 UTC (build e657a8ac, ROOT_SHA confirmed)
+
+Everything under "In flight" below shipped. The pass is DONE; only the Cursor server deploy remains.
+
+## In flight (now shipped)
 
 1. **Lesson opponent** (commit 16221fd1, on /test): from level 4 its grow heads for your land; from
    level 5 it also Blooms when that keeps you ahead. Tests: `web/tests/lesson-opponent-alive.test.ts`.
@@ -33,9 +37,9 @@ and commit it with your work. Owner approval for everything below to go LIVE is 
 - [x] `npm run check` green (4031 passed), futa04 build + `check-channel-assets` green, lesson
       suites (`futa04-lesson-9-free`, `lessons-3`, `futa04-critical`, tutorial-lock/-intel) green
       on commit 4774095b (branch `claude/focused-fermat-kq2zyf`, NOT yet on `futa0.5-online`).
-- [ ] Push 4774095b (or a reworded squash of it) to `futa0.5-online` (fast-forward) and `claude/focused-fermat-kq2zyf`.
-- [ ] Wait for CI on that commit (all jobs incl. WebKit) and its /test publish.
-- [ ] `npm run promote -- <that sha>`, then republish: dispatch workflow `futasaku04-preview.yml` on
+- [x] Push 4774095b (or a reworded squash of it) to `futa0.5-online` (fast-forward) and `claude/focused-fermat-kq2zyf`.
+- [x] Wait for CI on that commit (all jobs incl. WebKit) and its /test publish.
+- [x] `npm run promote -- <that sha>`, then republish: dispatch workflow `futasaku04-preview.yml` on
       `futa0.5-online` with input `promote: ''`. Confirm in the publish run's build log that
       `ROOT_SHA` is the sha.
 - [ ] Tell the owner in plain English. Remind: the Cursor server deploy is still needed for level 10
