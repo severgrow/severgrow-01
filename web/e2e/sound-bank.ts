@@ -1,7 +1,7 @@
 // The pre-rendered sound bank, in a real browser.
 //
 // Proves the allocation contract (createBuffer exactly once per unique voice at unlock, zero while
-// playing), the three interaction layers (pointerdown -> tick, lift -> click, settle -> thud), that
+// playing), the recorded key halves (pointerdown -> press, lift -> release) and landing, that
 // Sound off allocates and starts nothing, that a hidden document suspends the AudioContext, and that
 // 30 cues at 4x CPU throttle produce no long task. It does not (and cannot) prove it sounds good:
 // that needs ears.
@@ -100,11 +100,14 @@ try {
   await page.mouse.down();
   await page.waitForTimeout(40);
   let cues = await log(page);
-  assert.equal(cues.at(-1)?.layer, 'tick', `pointerdown plays the quiet tick (${cues.at(-1)?.cue})`);
+  // OWNER CHANGED THE RULE (2026-11-05, the owner's recordings): finger-down on a key plays the
+  // recorded press (was the synthesized quiet tick), the lift the recorded release.
+  assert.equal(cues.at(-1)?.layer, 'recorded', `pointerdown plays the recorded press (${cues.at(-1)?.cue}, ${cues.at(-1)?.layer})`);
+  assert.equal(cues.at(-1)?.cue, 'press', 'pointerdown is the press');
   await page.mouse.up();
   await page.waitForTimeout(40);
   cues = await log(page);
-  assert.equal(cues.at(-1)?.layer, 'click', `release plays the click (${cues.at(-1)?.cue})`);
+  assert.equal(cues.at(-1)?.layer, 'recorded', `release plays the recorded release (${cues.at(-1)?.cue}, ${cues.at(-1)?.layer})`);
   await waitBank(page);
 
   const first = await bank(page);
@@ -121,7 +124,9 @@ try {
   // Close Settings, start a game, draw.
   // The Settings button's click is wired after the first async mount, so a click fired the moment
   // the menu appears can land too early (the same race settings-shots.ts retries).
-  let opened = false;
+  // The first gesture above was a full tap on Settings, so the sheet may already be open; a second
+  // forced click would land on the sheet's own rows (the Tutorial row sits under the menu key).
+  let opened = await page.locator('#sheet-settings:not([hidden])').count() > 0;
   for (let i = 0; i < 20 && !opened; i++) {
     await page.click('#menu-settings', { force: true }).catch(() => undefined);
     opened = await page.waitForSelector('#sheet-settings:not([hidden])', { timeout: 700 }).then(() => true).catch(() => false);
@@ -162,8 +167,7 @@ try {
   await page.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 30_000 });
   await page.waitForTimeout(400);
   cues = await log(page);
-  assert(cues.some((c) => c.cue === 'place'), 'the landing plays the place tick');
-  assert(cues.some((c) => c.cue === 'thud'), 'the settle layers the soft thud');
+  assert(cues.some((c) => c.cue === 'place' && c.layer === 'recorded'), 'the landing plays a recorded tile take');
   assert(cues.some((c) => c.cue === 'draw'), 'the draw cue is unchanged');
   const afterPlay = await counters(page);
   assert.equal(afterPlay.buffers, beforePlay.buffers, `no createBuffer while playing (${afterPlay.buffers})`);
@@ -218,7 +222,7 @@ try {
   assert.deepEqual(await counters(off), { buffers: 0, sources: 0, starts: 0 }, 'Sound off starts nothing');
   await off.close();
 
-  console.log('Sound bank checks passed: 167 buffers baked once, 0 during play, pointerdown tick / lift click / settle thud, Sound off silent, hidden suspended, 30 cues at 4x CPU with no long task');
+  console.log('Sound bank checks passed: 167 buffers baked once, 0 during play, recorded press / release / landing, Sound off silent, hidden suspended, 30 cues at 4x CPU with no long task');
 } finally {
   await browser.close();
   await server.close();

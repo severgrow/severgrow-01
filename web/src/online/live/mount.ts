@@ -8,6 +8,7 @@ import type { Player } from '../../../../src/engine/index.js';
 import { LIVE } from '../../../../src/strings.js';
 import { browserStorage } from '../../../../server/src/client.js';
 import { SOUND_REMOVED, Sound } from '../../ui/sound.js';
+import { RecordedFx } from '../../ui/recorded.js';
 import { duelApiUrl, duelRegion, onlineBuildEnabled } from '../config.js';
 import { getOnlineSession } from '../duel-runtime.js';
 import { IDENTITY_STORAGE_KEY } from '../identity.js';
@@ -84,7 +85,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   const returns = createReturnStore(browserStorage());
   const announce = createAnnouncer();
   const note = createGlassNote();
-  const sound = new Sound(SOUND_REMOVED); // sound is removed for now (owner, 2026-10-27)
+  const sound = new Sound(SOUND_REMOVED, new RecordedFx()); // the owner's recorded takes (2026-11-05)
   let offset = 0; // server clock minus local clock
   const toLocal = (serverMs: number) => serverMs - offset;
   const settings = () => page().settings?.();
@@ -125,8 +126,8 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     onShown: () => {
       confirm?.hide();
       syncSound();
-      sound.chime(0);
-      sound.chime(0.16);
+      // A challenge arrives: the owner's "someone moved" droplet (sound.chime when the takes are not in yet).
+      sound.notify();
       haptic(10);
     },
   });
@@ -269,8 +270,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     for (let i = 0; i < 40 && currentMatchId() !== matchId; i++) await new Promise((r) => setTimeout(r, 100));
     await refresh();
     syncSound();
-    sound.chime(0);
-    sound.bloom();
+    sound.matchFound();
     haptic(18);
     const me = status?.mySeat ?? 0;
     const keys = [homeKey(me), homeKey(me === 0 ? 1 : 0)].filter((k): k is string => !!k);
@@ -360,7 +360,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
         const mine = s.actor === s.mySeat;
         if (left <= 5 && left > 0 && mine) {
           syncSound();
-          sound.tick();
+          sound.timerTick();
         }
         if (left <= 10 && left > 0 && left % 2 === 0) announce(LIVE.timeLeftSr(left));
         if (left === 0 && mine) announce(LIVE.timesUp);

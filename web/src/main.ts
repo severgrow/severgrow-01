@@ -256,6 +256,7 @@ import { getPixelGrid, setPixelGrid } from './ui/geom.js';
 import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
 import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './logic/orient.js';
 import { SOUND_REMOVED, Sound, vibrate } from './ui/sound.js';
+import { RecordedFx } from './ui/recorded.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
 import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PLANET, PILES, REPLAY, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL, TUTORIAL_REPLAY } from '../../src/strings.js';
@@ -535,8 +536,15 @@ window.addEventListener('unhandledrejection', (e) =>
   animLog('window:unhandledrejection', { reason: String((e as PromiseRejectionEvent).reason).slice(0, 300) }),
 );
 
-// Sound is removed for now (owner, 2026-10-27): the one switch is SOUND_REMOVED in ui/sound.ts.
-const sound = new Sound(SOUND_REMOVED);
+// Sound returns with the owner's own recordings (2026-11-05, web/public/audio/sfx/, ui/recorded.ts).
+const recorded = new RecordedFx();
+const sound = new Sound(SOUND_REMOVED, recorded);
+// The key takes decode while the menu is idle, so even the first tap plays a recording.
+if (typeof window !== 'undefined') {
+  const idle = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  const warm = () => { if (settings.sound) recorded.warm(); };
+  if (idle) idle(warm, { timeout: 2500 }); else setTimeout(warm, 1200);
+}
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
 const boardSvg = $('board') as unknown as SVGSVGElement;
 const board = defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)
@@ -554,7 +562,7 @@ const announceTurn = (player: Player, label?: string) => {
   const o = bannerOpts(settings);
   pill.show(player, o, label);
   const tone = turnTone(player, o);
-  if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
+  if (tone && settings.sound) sound.turnFor(player === HUMAN);
 };
 const { flash, cutFlash, flinch, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, throwBoomerang, flyBack, oppDraw, oppThrow, particles } = createEffects(board, () => timeScale(), () => motion());
 
@@ -2269,6 +2277,8 @@ async function startGame(
   blitzStart: { config: CampaignLevel['config']; map: number } | null = null,
 ) {
   let generation = ++startGameGeneration;
+  // The deal (the owner's card shuffle): a new match, a rematch, a restart.
+  if (settings.sound) sound.shuffle();
   // The first lesson board on a cold first visit waits (briefly, capped) for its own art. Repeat
   // visits, the side menu and every non-lesson game skip this entirely.
   if (campaign) {
@@ -4351,7 +4361,7 @@ async function playStep(step: Step, my: number) {
             : m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }];
           anim(to, frames, { duration: (IS_FUTA04 ? PINNED.humanDraw : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
         }
-        sound.draw();
+        sound.draw(step.from !== 'deck');
         await wait((IS_FUTA04 ? PINNED.humanDraw : 240) * f, my);
       } else {
         // The opponent's draw: a card back leaves the Draw pile and settles on their seat. The
@@ -4419,8 +4429,8 @@ async function playStep(step: Step, my: number) {
           }
           const str = t.strength ?? 1;
           const maxRank = session?.state.config.maxRank ?? 9;
-          if (st.heavy) sound.placeTop(str, maxRank, 0);
-          else sound.place(str, maxRank, 0);
+          if (st.heavy) sound.placeTop(str, maxRank, 0, by === HUMAN);
+          else sound.place(str, maxRank, 0, by === HUMAN);
           if (session?.state.terrain[t.key] === 'rich') sound.chime(0.08);
           const hp = hapticFor(st.heavy ? 'placeTop' : 'place', settings);
           if (hp && by === HUMAN) vibrate(true, hp as number | number[]);
@@ -4482,8 +4492,8 @@ async function playStep(step: Step, my: number) {
         if (!bloom) {
           const str = t.strength ?? 1;
           const maxRank = session?.state.config.maxRank ?? 9;
-          if (st.heavy) sound.placeTop(str, maxRank, delay / 1000);
-          else sound.place(str, maxRank, delay / 1000);
+          if (st.heavy) sound.placeTop(str, maxRank, delay / 1000, by === HUMAN);
+          else sound.place(str, maxRank, delay / 1000, by === HUMAN);
         }
         if (session?.state.terrain[t.key] === 'rich') sound.chime(delay / 1000 + 0.08);
       });
@@ -8865,7 +8875,7 @@ function onCardTap(id: number) {
       }
       const longer = bloomKindsWith([...group, id]).find((k) => kindCards(k.kind).length === group.length + 1);
       if (longer) {
-        sound.click();
+        sound.cardSelect();
         beginBloomKind(longer.kind, group[0] ?? id);
         smartCockpit?.hint('BLOOM');
         render();
@@ -8874,7 +8884,7 @@ function onCardTap(id: number) {
       if (inBloomCard) {
         clearPaint();
         bloomPick = [id];
-        sound.click();
+        sound.cardSelect();
         hintBloomPick();
         render();
         return;
@@ -8894,7 +8904,7 @@ function onCardTap(id: number) {
       // A card that does not bloom with the ones held starts a fresh pick of its own.
       bloomPick = fits.length ? next : [id];
       const exact = fits.length && next.length >= 3 ? fits.find((k) => kindCards(k.kind).length === next.length) : undefined;
-      sound.click();
+      sound.cardSelect();
       clearPaint();
       inspectKey = null;
       if (exact) {
@@ -8916,7 +8926,7 @@ function onCardTap(id: number) {
   // The product Throw step is NOT in this path: a second tap on the picked card deselects, and a
   // card tap never throws (owner, 2026-10-25). Throws are the swipe, the pile drop, or a pile tap.
   if (FEATURES.tapAgain && session.pending && tapAgainPlays(session.pending, id, IS_FUTA04)) return humanPlay(session.pending);
-  sound.click();
+  sound.cardSelect();
   pickFruit(id);
   inspectKey = null;
   // a Fruit card with nothing to do says why, in one line
@@ -9530,7 +9540,7 @@ function onHexTap(key: string) {
     pinCard(inspectKey === key && cardPinned ? null : key);
     return;
   }
-  sound.click();
+  sound.hexSelect();
   // An opponent tile the picked card cannot take (or any opponent tile with nothing picked)
   // opens its tile card, which offers "Use Fruit card". The picked card stays picked.
   if (session.view.phase === 'ACT' && hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard') {
@@ -9561,7 +9571,7 @@ function onInspect(key: string | null) {
 /** Futa04 idle touch response. Never select a tile or change the session. */
 function boinkTile(key: string) {
   if (!session?.view.board[key]) return;
-  sound.click();
+  sound.hexSelect();
   if (document.documentElement.classList.contains('reduce-motion') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const tile = session.view.board[key]?.root
     ? board.homeEls.find(home=>home.dataset.key === key) : board.tile(key);
@@ -9602,7 +9612,7 @@ function useFruitOn(key: string) {
   if (!session) return;
   const offer = fruitOffer(session.view, session.legal, key);
   if (!offer) return;
-  sound.click();
+  sound.cardSelect();
   session.cancel();
   pickFruit(offer.action.card);
   session.tapHex(key);
@@ -9803,6 +9813,10 @@ bind('csa-start', () => {
 // gets a quiet tick, the lift gets the click, and a drag (a paint, not a tap) gets neither.
 const BUTTON_SELECTOR = '.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile, .world-challenge-chip, .world-challenge-primary, .world-challenge-secondary, .world-claim-button';
 let soundPress: { el: Element; x: number; y: number; id: number; cancelled: boolean } | null = null;
+/** The big keys: one firm clack (the owner's ui.primary) instead of press + release. */
+const PRIMARY_KEY = '.btn.primary.big, .world-challenge-primary, #online-first-ok';
+/** Back / cancel keys: the dull click (ui.back) on the lift. */
+const BACK_KEY = '[id$="-back"], [id$="-cancel"], .btn.back, [data-sfx="back"]';
 const pressableAt = (target: EventTarget | null): Element | null => {
   const el = target instanceof Element ? target.closest(PRESS_SELECTOR) : null;
   return el && !shouldSkipPress(el as unknown as Parameters<typeof shouldSkipPress>[0]) ? el : null;
@@ -9813,7 +9827,15 @@ document.addEventListener(
     const el = pressableAt(e.target);
     if (!el) return;
     sound.unlock();
-    if (settings.sound) sound.tick();
+    // THE KEY'S TWO HALVES (the owner's recordings): press on the finger, release on the lift. A big
+    // key (PLAY, Find match, Create) is one firm clack on the finger instead; a Back key answers on
+    // its lift with the dull click. Cards and hexes answer with their own action's sound.
+    if (settings.sound) {
+      const key = el.closest(BUTTON_SELECTOR);
+      if (key && key.matches(PRIMARY_KEY)) sound.primary();
+      else if (key && !key.matches(BACK_KEY)) sound.press();
+      else if (!key) sound.tick();
+    }
     soundPress = { el, x: e.clientX, y: e.clientY, id: e.pointerId, cancelled: false };
     const b = el.closest(BUTTON_SELECTOR);
     if (!b || (b as HTMLButtonElement).disabled) return;
@@ -9838,8 +9860,12 @@ document.addEventListener(
     if (!p || p.cancelled || p.id !== e.pointerId) return;
     // Lift is the click layer; only button-like surfaces get it. Cards and hexes already click
     // with their action, so they are not clicked twice.
-    if (!p.el.closest(BUTTON_SELECTOR)) return;
-    if (settings.sound) sound.click();
+    const key = p.el.closest(BUTTON_SELECTOR);
+    if (!key || key.matches(PRIMARY_KEY)) return;
+    if (settings.sound) {
+      if (key.matches(BACK_KEY)) sound.back();
+      else sound.click();
+    }
   },
   { capture: true, passive: true },
 );
@@ -10510,12 +10536,14 @@ bind('test-sound', () => {
   sound.unlock();
   const was = sound.enabled;
   sound.enabled = true;
-  sound.click();
-  sound.chime(0.15);
-  setTimeout(() => sound.snap(), 600);
-  setTimeout(() => sound.fanfare(true), 1300);
-  setTimeout(() => (sound.enabled = was), 2400);
-  $('test-note').textContent = "You should hear a click, a chime, a snap and a short tune. Nothing? Check your phone's silent switch and volume.";
+  // A short tour of the recordings: a key, a tile landing, a Bloom, the win.
+  sound.press();
+  setTimeout(() => sound.click(), 90);
+  setTimeout(() => sound.place(5, 9, 0, true), 450);
+  setTimeout(() => sound.bloom(), 900);
+  setTimeout(() => sound.win(), 1500);
+  setTimeout(() => (sound.enabled = was), 3200);
+  $('test-note').textContent = "You should hear a key, a tile landing, a Bloom and the win. Nothing? Check your phone's silent switch and volume.";
 });
 bind('test-vibration', () => {
   vibrate(true, [60, 60, 120]);
@@ -10533,6 +10561,8 @@ for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]'
     settings = { ...settings, [k]: input.checked };
     saveSettings();
     if (k === 'sound') sound.enabled = settings.sound;
+    // Every switch flicks (the owner's ui.toggle_on / ui.toggle_off), sound itself only when turned on.
+    if (settings.sound) { sound.unlock(); sound.toggle(input.checked); }
     if (k === 'music') {
       sound.unlock();
       sound.setMusic(settings.music);

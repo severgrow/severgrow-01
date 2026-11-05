@@ -660,13 +660,15 @@
              this body by player/thumb.ts. -->
         <h3 data-copy="lookHeading" data-only="classic"></h3>
         <div class="row" data-only="classic"><span data-copy="colours"></span><div class="seg" role="radiogroup" aria-label="Colours" id="palette-seg"></div></div>
-        <!-- SOUND IS REMOVED FOR NOW (owner, 2026-10-27). Its controls stay in the markup, never shown,
-             so bringing sound back is web/src/ui/sound.ts's SOUND_REMOVED and this one wrapper. -->
-        <div id="sound-removed" hidden>
+        <!-- SOUND IS BACK (owner, 2026-11-05: the owner's own recordings). Music has no bed yet, so its
+             controls stay in the markup but are never shown. -->
+        <div id="sound-settings">
         <h3 data-copy="soundHeading"></h3>
         <label class="row"><span data-copy="sound"></span><input type="checkbox" data-setting="sound" /></label>
+        <div id="music-removed" hidden>
         <label class="row" data-only="classic"><span data-copy="music"></span><input type="checkbox" data-setting="music" /></label>
-        </div><!-- /sound-removed -->
+        </div><!-- /music-removed -->
+        </div><!-- /sound-settings -->
         <label class="row" id="vibration-row"><span id="vibration-label"></span><input type="checkbox" data-setting="vibration" /></label>
         <h3 data-copy="motionHeading"></h3>
         <label class="row"><span data-copy="reduceMotion"></span><input type="checkbox" data-setting="reduceMotion" /></label>
@@ -692,11 +694,13 @@
             <label class="row"><span data-copy="eyeCandy"></span><input type="checkbox" data-setting="eyeCandy" /></label>
             <div class="row"><span data-copy="speed"></span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
             <div class="row"><span data-copy="effects"></span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
-            <div id="sound-removed-volume" hidden>
+            <div id="sound-volume">
             <label class="row slider"><span data-copy="sfxVolume"></span><input type="range" min="0" max="100" step="5" data-volume="sfxVolume" aria-label="Effects volume" /></label>
+            <div id="music-volume-removed" hidden>
             <label class="row slider"><span data-copy="musicVolume"></span><input type="range" min="0" max="100" step="5" data-volume="musicVolume" aria-label="Music volume" /></label>
+            </div><!-- /music-volume-removed -->
             <button id="test-sound" class="btn ghost small" type="button" data-copy="testSound"></button>
-            </div><!-- /sound-removed-volume -->
+            </div><!-- /sound-volume -->
             <div class="test-row">
               <button id="test-vibration" class="btn ghost small" type="button" data-copy="testVibration"></button>
             </div>

@@ -21,23 +21,27 @@ export type FeedbackEvent =
 
 export const FEEDBACK_EVENTS: readonly FeedbackEvent[] = ['press', 'place', 'placeTop', 'undo', 'draw', 'throw', 'cutSmall', 'cutMedium', 'cutBig', 'cutHuge', 'cutMe', 'cascade', 'finalTurns', 'win', 'lose'];
 
-/** Vibration patterns (ms: buzz, pause, buzz...). Each one is different; none is long. */
+/**
+ * Vibration patterns (ms: buzz, pause, buzz...). Each one is different; none is long. LIGHT AND RARE
+ * (owner, 2026-11-05, with the recorded sounds): every pulse at most 24 ms, every pattern under a
+ * quarter second, and only your tile landing, a Cut and the win/lose buzz by default (see `RARE`).
+ */
 export const HAPTICS: Readonly<Record<FeedbackEvent, number | readonly number[]>> = Object.freeze({
-  press: 6,
-  place: 10,
-  placeTop: 18,
-  undo: [8, 40, 8],
-  draw: 5,
-  throw: 12,
-  cutSmall: 20,
-  cutMedium: [24, 40, 16],
-  cutBig: [32, 50, 24, 50, 16],
-  cutHuge: [45, 60, 30, 60, 20, 60, 12],
-  cutMe: [14, 80, 10],
-  cascade: 7,
-  finalTurns: [10, 120, 10],
-  win: [30, 60, 30, 60, 140],
-  lose: 70,
+  press: 5,
+  place: 8,
+  placeTop: 12,
+  undo: [6, 40, 6],
+  draw: 4,
+  throw: 9,
+  cutSmall: 11,
+  cutMedium: [14, 40, 9],
+  cutBig: [18, 50, 12, 50, 8],
+  cutHuge: [24, 60, 14, 60, 10, 50, 6],
+  cutMe: [8, 80, 6],
+  cascade: 3,
+  finalTurns: [7, 120, 7],
+  win: [14, 60, 14, 60, 22],
+  lose: 22,
 });
 
 /** The longest pattern allowed, in total ms (nothing buzzes on and on). */
@@ -45,13 +49,13 @@ export const HAPTIC_MAX_MS = 400;
 
 export type FeedbackSettings = { vibration: boolean; sound: boolean; effects: 'low' | 'normal' | 'high' };
 
-/** Small moments (press, draw) buzz only with Effects High; the rest whenever Vibration is on. */
-const SUBTLE: ReadonlySet<FeedbackEvent> = new Set(['press', 'draw']);
+/** The moments that buzz whenever Vibration is on; every other one only with Effects High. */
+const RARE: ReadonlySet<FeedbackEvent> = new Set(['place', 'placeTop', 'cutSmall', 'cutMedium', 'cutBig', 'cutHuge', 'cutMe', 'win', 'lose']);
 
 /** The vibration for a moment, or null when the settings say no. */
 export const hapticFor = (e: FeedbackEvent, s: FeedbackSettings): number | readonly number[] | null => {
   if (!s.vibration) return null;
-  if (SUBTLE.has(e) && s.effects !== 'high') return null;
+  if (!RARE.has(e) && s.effects !== 'high') return null;
   return HAPTICS[e];
 };
 

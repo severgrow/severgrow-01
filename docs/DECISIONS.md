@@ -1,5 +1,27 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-05 — Sound returns: the owner's own recordings
+
+Owner: "download the file, upload to repo ... let's do some sound work - 10/10 tactile responsive fun
+and excellent". Asked: /test first, ON by default, "you pick" for the moments the map leaves open,
+vibration "light and rare".
+
+- 174 takes (web/public/audio/sfx/, 2.0 MB) and the owner's map (web/src/ui/sfx-map.json) are played
+  by web/src/ui/recorded.ts through the engine's existing cues (ui/sound.ts): one take per moment,
+  never the same twice in a row, the map's volume and pitch wobble, max 4 copies of a set, semitone
+  steps for the Seeds count and a Bloom's cards. MP3's silent lead-in is skipped per take.
+- Loading: the 13 key takes (~40 KB) decode while the menu is idle (an offline context, no sound), so
+  even the FIRST tap is a recording; everything else loads after that tap, once, shared by the game
+  and the live-duel screen. Until a take is decoded its cue falls back to the old synthesized click.
+- Keys: press on the finger, release on the lift; big keys (PLAY, Find match) one clack; Back keys the
+  dull click. Cards and hexes play their own pick sounds (no generic tick on top).
+- My picks for the gaps: Cut = velcro (+ metal / heavy wood / gritty + big metal as it grows), being
+  cut = metal_big quiet, Bomb = heavy wood drop, Blast = big metal + gritty, Strengthen = wood click,
+  Surround finish = glass ring + coins, final turns = glass ring a fifth lower.
+- Haptics: only your tile landing, a Cut and win/lose buzz by default (pulses <= 24 ms, patterns
+  < 250 ms); the rest only with Effects High.
+- Settings: Sound switch, Effects volume and Test sound are shown again; music stays hidden.
+
 ## 2026-11-04 (later) — No bot skips its grow (bots-v0.11)
 
 Owner: "Remove the skipping growth in all levels really". The gentler bot levels ended turns

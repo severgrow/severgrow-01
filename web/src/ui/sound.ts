@@ -13,6 +13,7 @@ import { LIMITER, busGains } from '../logic/audio.js';
 import type { Mix } from '../logic/audio.js';
 import type { Effects } from '../logic/settings.js';
 import { BANK_BASE, PRIME_KEY, SoundBank, cueSpec, sampleKey } from './sound-bank.js';
+import type { PlayOpts, RecordedFx } from './recorded.js';
 import type { BankStats, SampleDesc, Wave } from './sound-bank.js';
 
 export type SoundCueLog = { cue: string; layer: string; variant: number; rate: number; gain: number; voices: number; at: number };
@@ -33,8 +34,12 @@ const MOTION_ONLY: ReadonlySet<string> = new Set(['rustle', 'sparks', 'chime']);
 /** The three interaction layers, quietest first. Weight only ever moves within the top layer. */
 const LAYER_GAIN: Readonly<Record<string, number>> = Object.freeze({ tick: 0.55, click: 1, body: 1, thud: 1.45 });
 
-/** Owner, 2026-10-27: "for now, remove the sound completely from the game". Flip to bring it back. */
-export const SOUND_REMOVED = true;
+/**
+ * Owner, 2026-10-27: "for now, remove the sound completely from the game". Owner, 2026-11-05: sound
+ * returns with the owner's own recordings ("let's do some sound work - 10/10 tactile responsive fun
+ * and excellent"), ON by default (asked), on /test first.
+ */
+export const SOUND_REMOVED = false;
 
 export class Sound {
   private ctx: AudioContext | null = null;
@@ -49,8 +54,12 @@ export class Sound {
    * so forcing it off is the whole switch: nothing plays and no AudioContext is ever built.
    */
   private wanted = true;
-  /** The page passes SOUND_REMOVED; a bare engine (its own tests) plays as it always has. */
-  constructor(private readonly removed = false) {}
+  /**
+   * The page passes SOUND_REMOVED and the recorded takes (ui/recorded.ts). With takes, every cue
+   * plays the owner's recording for its moment; the synthesized bank only covers the first instants
+   * while the takes decode. A bare engine (its own tests) plays the synthesized bank as it always has.
+   */
+  constructor(private readonly removed = false, private readonly rec: RecordedFx | null = null) {}
   get enabled(): boolean {
     return !this.removed && this.wanted;
   }
@@ -94,7 +103,8 @@ export class Sound {
     if (!AC) return;
     this.ctx = new AC();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.38;
+    // The recordings are level-matched by hand (quiet / medium / loud); the synth bank was not.
+    this.master.gain.value = this.rec ? 0.9 : 0.38;
     // the limiter on the master: stacked effects never clip
     const lim = this.ctx.createDynamicsCompressor();
     lim.threshold.value = LIMITER.threshold;
@@ -108,6 +118,7 @@ export class Sound {
     this.sfx.connect(this.master);
     this.musicBus.connect(this.master);
     this.setMix(this.mix);
+    this.rec?.attach(this.ctx, this.sfx);
     // ONE buffer now (the click the first tap needs); the rest in idle slices.
     this.bank = new SoundBank(this.ctx);
     this.bank.prime();
@@ -176,6 +187,7 @@ export class Sound {
 
   /** Restart the variation counters so a replay sounds exactly like the first play. */
   reset() {
+    this.rec?.reset();
     this.voices = 0;
     this.counters = {};
     this.lastVariant = {};
@@ -329,43 +341,145 @@ export class Sound {
     this.hidden = !!document.hidden;
   }
 
+  /**
+   * THE RECORDED PATH. `cue` is the engine's own cue name (it carries the Effects / Reduce motion
+   * rules); `fn` plays the owner's takes. True when the moment is handled: played, or silenced by a
+   * setting. False only while the takes are still loading, so the synthesized cue covers it.
+   */
+  private rp(cue: string, fn: (r: RecordedFx) => boolean): boolean {
+    if (!this.rec) return false;
+    if (!this.allowed(cue)) return true;
+    const ctx = this.ctx;
+    if (!ctx || !fn(this.rec)) return false;
+    this.cueLog.push({ cue, layer: 'recorded', variant: 0, rate: 1, gain: 1, voices: 1, at: ctx.currentTime });
+    if (this.cueLog.length > 200) this.cueLog.splice(0, this.cueLog.length - 200);
+    return true;
+  }
+  /** One moment of the owner's map (`ui.press`, `hex.claim`...). */
+  private ev(cue: string, event: string, opts: PlayOpts = {}): boolean {
+    return this.rp(cue, (r) => r.play(event, opts));
+  }
+  /** One take of a set, for the moments the map leaves open (the owner's "you pick"). */
+  private set(cue: string, set: string, volume: number, jitter: number, opts: PlayOpts = {}): boolean {
+    return this.rp(cue, (r) => r.playSet(set, volume, jitter, opts));
+  }
+
   // ------------------------------- cues -------------------------------
 
   /** press / click: a dry 40–70ms click; two variations. */
   press() {
+    if (this.ev('press', 'ui.press')) return;
     this.play('press');
   }
 
+  /** The lift of a key (with `press`, the full click-clack). */
   click() {
+    if (this.ev('press', 'ui.release')) return;
     this.play('press');
+  }
+
+  /** PLAY / Find match / a big confirm: one firm clack instead of press + release. */
+  primary() {
+    if (this.ev('press', 'ui.primary')) return;
+    this.play('press');
+  }
+
+  /** Back / cancel / a tap that does nothing. */
+  back() {
+    if (this.ev('press', 'ui.back')) return;
+    this.play('press');
+  }
+
+  /** A sheet or panel closes (the owner's favourite tape take, 04). */
+  close() {
+    if (this.ev('press', 'ui.close', { take: 4 })) return;
+    this.play('press');
+  }
+
+  /** A switch turned on or off. */
+  toggle(on: boolean) {
+    if (this.ev('press', on ? 'ui.toggle_on' : 'ui.toggle_off')) return;
+    this.play('press');
+  }
+
+  /** A card in your hand picked or lifted: heard most, so kept quiet. */
+  cardSelect() {
+    if (this.ev('tick', 'card.select')) return;
+    this.play('press');
+  }
+
+  /** A hex picked. */
+  hexSelect() {
+    if (this.ev('tick', 'hex.select')) return;
+    this.play('press');
+  }
+
+  /** The deal: match start, rematch, restart. */
+  shuffle() {
+    this.ev('draw', 'card.shuffle');
+  }
+
+  /** The last seconds of a live turn, once a second. */
+  timerTick() {
+    if (this.ev('tick', 'timer.tick')) return;
+    this.tick();
+  }
+
+  /** An opponent was found / a duel starts (then the deal). */
+  matchFound() {
+    if (this.ev('chime', 'match.found')) { this.rp('draw', (r) => r.play('card.shuffle', { delay: 0.35 })); return; }
+    this.chime(0);
+    this.bloom();
+  }
+
+  /** Something arrived while you waited (a challenge, an opponent's move). */
+  notify() {
+    if (this.ev('chime', 'notify.move')) return;
+    this.chime(0);
+    this.chime(0.16);
+  }
+
+  /** Disconnected, or a move failed to send. */
+  onlineError() {
+    if (this.ev('snap', 'online.error')) return;
+    this.snap();
   }
 
   /** Soft selection tick (quieter than a click): a hex, a card, a seat. */
   tick() {
+    // With the recordings a finger-down on a card or a hex is answered by its own action
+    // (cardSelect / hexSelect), so the generic tick stays silent instead of doubling it.
+    if (this.rec) return;
     this.play('tick');
   }
 
   /** draw: a soft double-tick, like a card leaving a shoe; three envelopes. */
-  draw() {
+  draw(fromDiscard = false) {
+    // The owner favours card_flick takes 01-02 for the deck.
+    if (this.ev('draw', fromDiscard ? 'card.draw_discard' : 'card.draw_deck', fromDiscard ? {} : { take: 1 + (this.voices++ % 2) })) return;
     this.play('draw');
   }
 
   /** throw: a light flick, then a small tap as it lands in the pile; three envelopes. */
   throw() {
+    if (this.ev('throw', 'card.discard')) return;
     this.play('throw');
   }
 
   /** grow / place: a woody tick that lands; higher rank is slightly lower and heavier; three envelopes.
    *  The settle layer adds a soft thud underneath, never over, the tick. */
-  place(strength = 1, maxRank = 9, delay = 0) {
-    const { rate, gain } = rankWeight(strength, maxRank);
+  place(strength = 1, maxRank = 9, delay = 0, mine = true) {
+    const { rate, gain, k } = rankWeight(strength, maxRank);
+    // A higher rank lands a little lower and heavier. Theirs: the bot's low set, a duel's own set.
+    if (this.ev('place', mine ? 'hex.claim' : 'hex.claim_opp', { delay, semis: -3 * k, gain: 1 + 0.15 * k, set: mine ? 0 : 1 })) return;
     this.play('place', { delay, rate, gain });
     this.play('thud', { delay: delay + 0.02, rate: rate * 0.95, gain: 0.28 + 0.12 * (gain - 1) });
   }
 
   /** A top-rank land: the place tick plus one extra soft knock. */
-  placeTop(strength = 1, maxRank = 9, delay = 0) {
-    const { rate, gain } = rankWeight(strength, maxRank);
+  placeTop(strength = 1, maxRank = 9, delay = 0, mine = true) {
+    const { rate, gain, k } = rankWeight(strength, maxRank);
+    if (this.ev('placeTop', mine ? 'hex.claim' : 'hex.claim_opp', { delay, semis: -3 * k - 1, gain: 1.12 + 0.15 * k, set: mine ? 0 : 1 })) return;
     this.play('placeTop', { delay, rate, gain });
     this.play('thud', { delay: delay + 0.02, rate: rate * 0.95, gain: 0.34 + 0.12 * (gain - 1) });
   }
@@ -373,6 +487,11 @@ export class Sound {
   /** The paint flourish: one soft wood tick per pitch (kept for painted hexes). */
   grow(pitches: readonly number[] = [], stepMs = 0) {
     const n = Math.max(1, pitches.length);
+    // Several tiles at once land 80 ms apart (the handover), each a different take.
+    if (this.rec) {
+      for (let i = 0; i < n; i++) this.ev('place', 'hex.claim', { delay: (i * (stepMs || 80)) / 1000 });
+      if (this.rec.ready) return;
+    }
     for (let i = 0; i < n; i++) {
       const pitch = pitches[i] ?? 1.6;
       this.play('place', { delay: (i * stepMs) / 1000, rate: pitch / 2, gain: 0.8 });
@@ -381,17 +500,22 @@ export class Sound {
 
   /** strengthen: the place tick an octave up, shorter, twice. */
   strengthen() {
+    // Not in the map (owner: "you pick"): a firm wood click, the tile made stronger in place.
+    if (this.set('strengthen', 'wood_click', 0.75, 0.02)) return;
     this.play('strengthen');
   }
 
   /** bloom: three tiny ticks, 40ms apart, rising a little. Not a fanfare. */
   bloom() {
+    if (this.ev('bloom', 'meld.complete')) return;
     const { idx } = this.pick('bloom', 2);
     for (let i = 0; i < 3; i++) this.play('bloom', { delay: i * 0.04, rate: 1 + i * 0.06, variant: idx });
   }
 
   /** One bloom tick for a sequential tile reveal (index steps the pitch). */
   bloomTile(index = 0) {
+    // Each card of a Bloom stacks two semitones higher than the last (the handover's +2).
+    if (this.ev('bloom', 'meld.add_card', { semis: 2 * Math.max(0, index) })) return;
     const { idx } = this.pick('bloom', 2);
     const i = ((index % 3) + 3) % 3;
     this.play('bloom', { rate: 1 + i * 0.06, variant: idx });
@@ -401,6 +525,11 @@ export class Sound {
    *  last one is a touch firmer and rounder, so the count has a landing. Never a fanfare: at its
    *  loudest it is quieter than a place. */
   seedTick(step = 0, last = false) {
+    // Seeds counting up: coins first, then one glass tick per step, a semitone higher each (max 12).
+    if (this.rec) {
+      if (step === 0) this.ev('tick', 'seeds.payout', { set: 0 });
+      if (this.ev('tick', 'seeds.payout', { set: 1, semis: Math.min(12, Math.max(0, step)), gain: last ? 1.1 : 0.8, delay: step === 0 ? 0.12 : 0 })) return;
+    }
     const rate = (1.15 * (1 + Math.min(Math.max(step, 0), 6) * 0.07)) / 2.4;
     this.play('tick', { rate, gain: last ? 1.25 : 0.8 });
   }
@@ -410,22 +539,29 @@ export class Sound {
    *  the same pre-rendered `place` voice at a rising rate, so the bank contract (one buffer per
    *  voice, nothing allocated while playing) is untouched. */
   cascadePop(step = 0) {
+    // The chain of a cut: one small stone click per ring falling, a whole tone higher each.
+    if (this.set('place', 'rock_click', 0.55, 0.02, { semis: 2 * Math.max(0, step) })) return;
     this.play('place', { rate: 1.35 * 2 ** ((Math.max(0, step) * 2) / 12), gain: 0.5 });
   }
 
   /** fruit: a short hollow pop. */
   fruit() {
+    // The Bomb (owner: "you pick"): one heavy wood drop.
+    if (this.set('fruit', 'wood_drop_heavy', 0.85, 0.03)) return;
     this.play('fruit');
   }
 
   /** mega bomb: one low muted thud plus a dry noise puff. No explosion. */
   megaBomb() {
+    // The Blast (owner: "you pick"): the big metal hit over a short gritty crumble.
+    if (this.set('megaBomb', 'metal_big', 0.7, 0.02, { take: 1 })) { this.set('megaBomb', 'gritty', 0.45, 0, { take: 1, delay: 0.05 }); return; }
     this.play('megaBomb');
   }
 
   /** undo: the place tick reversed: a small falling pair. */
   undo(_pitches?: readonly number[]) {
     void _pitches;
+    if (this.set('undo', 'ui_flick_back', 0.6, 0.02)) return;
     this.play('undo');
   }
 
@@ -437,8 +573,20 @@ export class Sound {
     this.play('turn');
   }
 
+  /** Whose turn starts: a glass ring for yours, a soft glass tap for theirs. */
+  turnFor(mine: boolean) {
+    if (this.ev('turn', mine ? 'turn.yours' : 'turn.opponent')) return;
+    this.play('turn');
+  }
+
+  /** You end your turn. */
+  turnEnd() {
+    this.ev('turn', 'turn.end');
+  }
+
   /** snap / illegal: a dull short buzz, quieter than a place. */
   snap(pitch = 1) {
+    if (this.ev('snap', 'meld.invalid')) return;
     this.play('snap', { rate: Math.min(1.5, Math.max(0.8, pitch)) });
   }
 
@@ -448,36 +596,48 @@ export class Sound {
 
   /** cutSmall: one crisp snip. */
   cutSmall() {
+    // A cut (owner: "you pick"): you tear their tiles away (the take set), bigger cuts add weight.
+    if (this.ev('cutSmall', 'hex.steal')) return;
     this.play('cutSmall');
   }
 
   /** cutMedium (the Severe band, 3-4 tiles): a snip, a soft tick, and a quieter thud than Big's. */
   cutMedium() {
+    if (this.ev('cutMedium', 'hex.steal')) { this.set('cutMedium', 'metal_dull', 0.45, 0.02, { delay: 0.06 }); return; }
     this.play('cutMedium');
   }
 
   /** cutBig: two snips and a low settle. This should feel rewarding. */
   cutBig() {
+    if (this.ev('cutBig', 'hex.steal')) { this.set('cutBig', 'wood_drop_heavy', 0.75, 0.02, { delay: 0.07 }); return; }
     this.play('cutBig');
   }
 
   /** cutHuge: three snips stepping down, then one heavier knock. */
   cutHuge() {
+    if (this.ev('cutHuge', 'hex.steal')) {
+      this.set('cutHuge', 'gritty', 0.55, 0, { take: 1, delay: 0.05 });
+      this.set('cutHuge', 'metal_big', 0.6, 0.02, { take: 3, delay: 0.12 });
+      return;
+    }
     this.play('cutHuge');
   }
 
   /** cutMe: the same family, duller and lower, so losing tiles feels different from cutting. */
   cutMe() {
+    if (this.ev('cutMe', 'hex.lost')) return;
     this.play('cutMe');
   }
 
   /** rustle: a barely-there noise tick for small flourishes. Easy to miss. */
   rustle() {
+    if (this.set('rustle', 'glass_tap_soft', 0.3, 0.03)) return;
     this.play('rustle');
   }
 
   /** sparks: a tile replaced, barely there. */
   sparks() {
+    if (this.set('sparks', 'glass_tap_soft', 0.25, 0.04)) return;
     this.play('sparks');
   }
 
@@ -485,35 +645,44 @@ export class Sound {
    *  little, exactly like a heavier rank on `place`; the master limiter still owns the ceiling. */
   thud(weight = 1) {
     const w = Math.min(1, Math.max(0, weight));
+    if (this.set('thud', 'wood_drop_heavy', 0.5 + 0.3 * w, 0.02, { semis: -2 * w })) return;
     this.play('thud', { rate: 1 - 0.28 * w, gain: 0.75 + 0.45 * w });
   }
 
   /** rumble: the volcano, short and dry. */
   rumble() {
+    if (this.set('rumble', 'rock_rub', 0.45, 0.05)) return;
     this.play('rumble');
   }
 
   /** grind: my tree grinds and withers, dry and low. */
   grind() {
+    if (this.set('grind', 'rock_rub', 0.6, 0.03, { semis: -3 })) return;
     this.play('grind');
   }
 
   /** sigh: the Strangle finish, smothered, short and dry. */
   sigh() {
+    // The Surround (KO) finish (owner: "you pick"): the glass ring and the coins, the win's own sound.
+    if (this.ev('sigh', 'match.win', { set: 0 })) { this.ev('sigh', 'match.win', { set: 1, delay: 0.1 }); return; }
     this.play('sigh');
   }
 
   /** sad: loss colour, short and dry (no sad melody). */
   sad() {
+    if (this.set('sad', 'metal_dull', 0.45, 0.02, { semis: -2 })) return;
     this.play('sad');
   }
 
   /** chime / fanfare / win: three quiet rising ticks and a soft final knock. Celebratory, not musical. */
   chime(delay = 0) {
+    if (this.set('chime', 'glass_tap', 0.5, 0.02, { delay })) return;
     this.play('chime', { delay });
   }
 
+  /** Win: the glass ring and the coins together (the handover's match.win). */
   win() {
+    if (this.ev('win', 'match.win', { set: 0 })) { this.ev('win', 'match.win', { set: 1, delay: 0.06 }); return; }
     this.play('win');
   }
 
@@ -524,11 +693,15 @@ export class Sound {
 
   /** lose: two falling ticks. No sad melody. */
   lose() {
+    // The owner's long dramatic take, 02.
+    if (this.ev('lose', 'match.lose', { take: 2 })) return;
     this.play('lose');
   }
 
   /** finalTurns: one low double-tick. */
   finalTurns() {
+    // The last turns begin: the glass ring, a fifth lower and quiet, so it reads as a warning.
+    if (this.set('finalTurns', 'glass_ring', 0.45, 0, { semis: -5 })) return;
     this.play('finalTurns');
   }
 }
