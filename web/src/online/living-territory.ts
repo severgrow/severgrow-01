@@ -1,7 +1,8 @@
+import { mountPlayBackdrop } from '../player/play-backdrop.js';
 import { INTERFACE_MOTION, enterSurface, exitSurface, interfaceMotionAllowed, resetSurface } from '../ui/interface-motion.js';
 import { LIVING_TERRITORY_CSS, MENU_MAP_OPACITY } from './living-territory-css.js';
 
-type Hooks = { menu: HTMLElement; screen: HTMLElement; preview: () => void; stop: () => void;
+type Hooks = { menu: HTMLElement; screen: HTMLElement; preview: () => void; stop: () => void; freeze?: (on: boolean) => void;
  /** Hands the menu's last painted map (viewBox + measured box) to the shared WorldView before the
   * panel owns the CSS, so opening keeps the menu's exact pixels (see `anchoredView`). */
  anchor?: (box: readonly number[], rect: { left: number; top: number; width: number; height: number }) => void };
@@ -36,7 +37,10 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
   * menu stayed hidden (a stuck screen). */
  let leavingFinish:(()=>void)|null=null;
  const stop=(beat:Animation|null):null=>{if(beat)try{beat.cancel();}catch{/* already gone */}return null;};
- const clearBeats=()=>{settleBeat=stop(settleBeat);lightBeat=stop(lightBeat);leaving=false;leavingFinish=null;};
+ const playFade = mountPlayBackdrop(screen, () => {
+  set('off'); screen.hidden=true; hooks.stop();
+ });
+ const clearBeats=()=>{playFade.cancel();settleBeat=stop(settleBeat);lightBeat=stop(lightBeat);leaving=false;leavingFinish=null;};
  /**
   * UNDER REDUCE MOTION NOTHING MAY ANIMATE — including CSS transitions. The map carries an opacity
   * `transition` in `living-territory-css.ts`; flipping `data-living-territory` re-applies that rule
@@ -75,7 +79,7 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
  // PLAY and future menu doorways may hide the main menu without changing the board screen.
  // Observe only that one attribute; never paint a backdrop over an unrelated destination.
  new MutationObserver(()=>{
-  if(menu.hidden&&mode==='menu'){set('off');screen.hidden=true;hooks.stop();}
+  if(menu.hidden&&mode==='menu'&&!playFade.active()){set('off');screen.hidden=true;hooks.stop();}
  }).observe(menu,{attributes:true,attributeFilter:['hidden']});
  /**
   * THE RETURN JOURNEY (owner, 2026-11-02: "going back to main menu from territory too"). The panel
@@ -133,6 +137,9 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
   out.finished.then(finish,()=>{if(leaving&&turn===generation)finish();});
  };
  return {
+  play(){
+   if(mode==='menu'){hooks.freeze?.(true);playFade.start(interfaceMotionAllowed());}
+  },
   menu(visible:boolean){
    menuView=null;
    if(!visible){
@@ -143,6 +150,7 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
     }
     return;
    }
+   hooks.freeze?.(false);
    const returning=mode==='world';
    // `leave()` owns the exit beat: it dims the map, then `finish()` re-frames the panel at the dim
    // value and hands the light back. Reaching here normally means that beat has completed (the menu
@@ -240,10 +248,13 @@ export const mountLivingTerritory=(hooks:Hooks)=>{
    leave(done,interfaceMotionAllowed()?{duration:INTERFACE_MOTION.colourOut,easing:INTERFACE_MOTION.easeClose}:null);
   },
   hide(){clearBeats();screen.classList.remove('living-leaving');menuView=null;set('off');screen.hidden=true;resetSurface(menu);hooks.stop();},
-  update(){if(mode==='menu')hooks.preview();},
+  update(){if(mode==='menu'&&!playFade.active())hooks.preview();},
   /** Restore the settled presentation on tab/PWA resume; no animation may hide the current screen. */
   settle(){
-   clearBeats();screen.classList.remove('living-leaving');menuView=null;
+   const interruptedPlay=playFade.active()&&menu.hidden;
+   clearBeats();
+   screen.classList.remove('living-leaving');menuView=null;
+   if(interruptedPlay){set('off');screen.hidden=true;hooks.stop();return;}
    if(mode==='world'){generation++;menu.hidden=true;resetSurface(menu);resetSurface(screen);screen.hidden=false;screen.inert=false;}
    else if(mode==='menu'){menu.hidden=false;resetSurface(menu);enterSurface(menu,{duration:0});screen.hidden=true;screen.inert=true;}
   },

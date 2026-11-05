@@ -281,3 +281,16 @@ The spherical prototype reuses the real palette, typography, grain and shared mi
 only Back, the planet and the existing-colour home key. No toolbar, floating labels, glossy bloom,
 idle render loop or backend feature. Reduced motion stays static; raster detail returns at rest.
 Treat WebGL fallback, cleanup and device limitations as part of the experience. See `SPHERE-TEST.md`.
+
+## v0.75 refinement and experimental worlds
+
+- v0.75 remains the reference. Turn lights follow confirmed turn ownership, independently of
+  queued presentation. Amber is `LIGHT_TONES.amber.core`, not a near-white replacement.
+- World cosmetics live in `web/src/worlds/`: stable ids, independent screen-owner materials,
+  world-coordinate continuity, and a lower-detail Planet recipe. Identity colours and gameplay
+  state remain separate. Experimental choices and saved preferences apply only on `/test/`.
+- A window keeps its own reading position; switching windows must not steal another page's offset
+  or discard a chat draft. Retain the shared glass, native press and interruptible surface motion.
+- Reuse the existing atmosphere/grain. Mote loops fade outside the view; new material details are
+  static. Measure performance, batch geometry reads before animation writes, and do not scan or
+  measure a hidden/unchanged presentation just to restart an effect.

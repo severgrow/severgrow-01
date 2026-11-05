@@ -1,3 +1,4 @@
+import { paintWorldPicker } from '../worlds/picker.js';
 import type { DuelClient } from '../../../server/src/client.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
@@ -642,6 +643,7 @@ export class WorldView {
   private keysOpen = false;
   /** The one window, and which key's page it shows; null when shut. */
   private pane: Pane | null = null;
+  private paneScroll: Record<Pane, number> = { ranking: 0, challenges: 0, achievements: 0, colour: 0 };
   /** Territory chat (web/src/online/territory-chat.ts): opens from its key in the row. */
   private readonly chat: TerritoryChat;
   /** The grow and sell keys ask once more before they act; this is the tile that was asked about. */
@@ -1238,6 +1240,8 @@ export class WorldView {
     if (this.active && this.manualCamera && this.world && this.box)
       rememberCamera(browserStorage(), this.world.version, this.box, true);
   }
+  freezeMenuPreview(on: boolean) { if (this.menuPreview) this.planet?.freeze(on); }
+
   close(instant = false) {
     // THE PLANET STAYS FOR THE MENU (owner, 2026-11-04): Back flies it out behind the menu. Only an
     // instant close (a match starting, the menu going away) frees its graphics.
@@ -2673,6 +2677,8 @@ export class WorldView {
     const panel = document.getElementById('online-world-panel');
     const was = this.pane;
     if (pane === was) return;
+    const body = panel?.querySelector<HTMLElement>('.world-panel-body');
+    if (was && body) this.paneScroll[was] = body.scrollTop;
     if (pane) this.chat.setOpen(false);
     this.pane = pane;
     this.paneSignature = '';
@@ -2685,6 +2691,7 @@ export class WorldView {
       else enterSurface(panel.querySelector<HTMLElement>('.world-panel-body'), { travel: 2 });
     }
     this.paintPanel();
+    if (pane && body) body.scrollTop = this.paneScroll[pane];
     this.paintSelection();
     if (!focus) return;
     if (pane) document.getElementById('world-panel-close')?.focus({ preventScroll: true });
@@ -2866,6 +2873,7 @@ export class WorldView {
     const label = document.getElementById('world-colour-label');
     const note = document.getElementById('world-colour-note');
     if (!grid) return;
+    paintWorldPicker(grid);
     if (label) label.textContent = ONLINE.worldColourLabel;
     // NO COUNTDOWN LINE (owner, 2026-10-30: "remove color change 1 per 24h - let it be changed
     // anytime for now"). The note is the saving state while a save is in flight and the plain hint

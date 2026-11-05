@@ -623,12 +623,17 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   living = menuEl ? mountLivingTerritory({menu: menuEl, screen: worldEl,
     preview: () => worldView?.preview(worldSource.peek(), identity.peek(), !worldSource.isFresh()),
     stop: () => worldView?.close(true),
+    freeze: (on) => worldView?.freezeMenuPreview(on),
     // The menu's last painted frame, handed to the shared map before the panel takes the CSS box.
     anchor: (box, rect) => worldView?.setMenuFrame(box, rect),
   }) : null;
   worldSource.subscribe(() => living?.update());
   const syncMenuWorld = (visible: boolean) => living?.menu(visible);
-  window.addEventListener('futasaku:screen', event => syncMenuWorld((event as CustomEvent<string>).detail === 'menu'));
+  window.addEventListener('futasaku:screen', event => {
+    const name = (event as CustomEvent<string>).detail;
+    if (name === 'play-menu') living?.play();
+    else syncMenuWorld(name === 'menu');
+  });
   window.addEventListener('pageshow', event => { if(event.persisted) { living?.settle(); if(menuEl?.hidden === false) void refreshMenu(); } });
   worldView.setCue((name) => hooks.cue?.(name));
   // A rival's tile offers SEE PROFILE; the accounts module owns the sheet and the token, and hears

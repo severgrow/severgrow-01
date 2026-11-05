@@ -89,6 +89,7 @@ export type WorldPlanet = {
   update: (input: PlanetInput) => void;
   home: (id: string | null) => void;
   setMode: (mode: PlanetMode) => void;
+  freeze: (on: boolean) => void;
   grown: (id: string) => void;
   dispose: () => void;
 };
@@ -112,6 +113,7 @@ export const mountWorldPlanet = async (grid: HTMLElement, onTile: (id: string | 
     update: (input) => planet.update(input),
     home: (id) => planet.home(id),
     setMode: (next) => planet.setMode(next),
+    freeze: (on: boolean) => planet.freeze(on),
     grown: (id) => planet.grown(id),
     dispose: () => {
       planet.dispose();

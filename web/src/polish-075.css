@@ -82,11 +82,11 @@ html.v075 #board .planet-shadow-far { fill: rgba(0, 0, 0, .22); }
 html.v075 #board .planet-shadow-near { fill: rgba(0, 0, 0, .34); }
 
 /* ---- B. TURN RIM -------------------------------------------------------------------------------
-   The board's own edge carries a thin atmosphere: cream on the player's turn, dim on the opponent's.
-   Opacity only (compositor), one beat, never a loop. */
-html.v075 #board .planet-turn-glow { fill: none; stroke: #e8ddc5; stroke-width: 6; stroke-linejoin: round; opacity: .13; }
-html.v075 #board .planet-turn-line { fill: none; stroke: #f2e8cf; stroke-width: 1.1; stroke-linejoin: round; opacity: .85; }
-html.v075 #board .planet-turn-rim { opacity: .22; transition: opacity var(--dur-consequence) var(--ease-standard); }
+   The board's own edge carries a thin atmosphere: amber on the player's turn, dim on the opponent's.
+   Immediate state paint, independent of queued announcements; never a loop. */
+html.v075 #board .planet-turn-glow { fill: none; stroke: var(--turn-rim-ink); stroke-width: 6; stroke-linejoin: round; opacity: .13; }
+html.v075 #board .planet-turn-line { fill: none; stroke: var(--turn-rim-ink); stroke-width: 1.1; stroke-linejoin: round; opacity: .85; }
+html.v075 #board .planet-turn-rim { opacity: .22; }
 html.v075 body[data-turn='you'] #board .planet-turn-rim { opacity: 1; }
 
 /* ---- A. SEAMLESS MENU -> GAME ------------------------------------------------------------------
@@ -113,3 +113,38 @@ html.v075.reduce-motion #game #board-wrap { transition: none; }
   html.v075 #game:not([hidden]) #board-wrap { animation: none; }
   html.v075 #game #board-wrap { transition: none; }
 }
+
+/* Desktop only: lower the whole instrument together; keep short landscape layouts untouched. */
+@media (min-width: 1000px) and (min-height: 650px) {
+  html.v075.futa04-branding[data-layout='side'] .dock {
+    translate: var(--side-dock-shift, 0px) clamp(16px, 3vh, 32px);
+  }
+}
+#world-style-picker { margin-top: 20px; }
+#world-style-picker > .world-pane-label { margin-bottom: 12px; }
+#world-style-picker .world-colour-name { line-height: 1.4; min-height: 2.8em; white-space: normal; }
+/* The default is a quiet reset row; the four worlds form one balanced row beneath it. */
+#world-style-picker [data-world-style='futasaku'] {
+  grid-column: 1 / -1; grid-template-columns: 28px 1fr; grid-template-rows: 1fr;
+  align-items: center; gap: 10px; padding: 8px; min-height: 44px;
+}
+#world-style-picker [data-world-style='futasaku'] .world-colour-chip { height: 24px; }
+#world-style-picker [data-world-style='futasaku'] .world-colour-name { min-height: 0; text-align: left; }
+/* Existing seven motes: varied depth, a small lateral drift and invisible loop boundaries.
+   Their cached compositor layers stay; no extra particles, filters or render loop. */
+html.v075 #spores i {
+  --dust-size: 5px; --dust-ink: .075;
+  width: var(--dust-size); height: var(--dust-size); margin: -2.5px 0 0 -2.5px;
+  animation-name: v075-dust;
+}
+html.v075 #spores i:nth-child(3n + 1) { --dust-size: 3px; --dust-ink: .045; }
+html.v075 #spores i:nth-child(3n + 2) { --dust-size: 7px; --dust-ink: .105; }
+@keyframes v075-dust {
+  0% { opacity: 0; transform: translate(0,0); }
+  15% { opacity: var(--dust-ink); transform: translate(3px,-19.5vh); }
+  40% { opacity: var(--dust-ink); transform: translate(10px,-52vh); }
+  65% { opacity: var(--dust-ink); transform: translate(-5px,-84.5vh); }
+  85% { opacity: var(--dust-ink); transform: translate(2px,-110.5vh); }
+  100% { opacity: 0; transform: translate(12px,-130vh); }
+}
+@media(prefers-reduced-motion:reduce) { html.v075 #spores { display:none; } }

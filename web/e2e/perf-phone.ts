@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 // PHONE HEAT PROBE (owner, 2026-10-29: "phones are getting hot and battery goes down quickly
 // while playing"). A phone-sized Chromium (390×844, DPR 3, touch) playing a REAL offline game, and
 // the measurements that say what the device has to sustain:
@@ -22,7 +23,7 @@
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { servePreview, serveStaticDist } from './helpers/preview-port.js';
-import { seedSettings } from './helpers/settings-seed.js';
+import { seedSettings, SETTINGS_PREFIXES } from './helpers/settings-seed.js';
 
 const CHROME = process.env.PW_CHROMIUM ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const RUNS = Math.max(1, Number(process.env.RUNS ?? 3));
@@ -30,6 +31,8 @@ const CPU = Math.max(1, Number(process.env.CPU ?? 4));
 const IDLE_MS = Math.max(1500, Number(process.env.IDLE_MS ?? 3000));
 const SEED = process.env.SEED ?? '219682080';
 const DIST = process.env.DIST ?? '';
+const GAME_PATH = process.env.GAME_PATH ?? '/';
+const WORLD_SKIN = process.env.WORLD_SKIN ?? 'futasaku';
 
 type Idle = {
   appRafPerS: number; recalcCountPerS: number; recalcMsPerS: number; layoutCountPerS: number;
@@ -99,7 +102,7 @@ const PAINT = [
 const COMPOSITOR = ['transform', 'opacity', 'translate', 'rotate', 'scale'];
 
 const startGame = async (page: Page, base: string) => {
-  await page.goto(`${base}/?seed=${SEED}`);
+  await page.goto(`${base}${GAME_PATH}?seed=${SEED}`);
   await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 90_000 });
   // The Who-starts ritual covers the board for ~1.6 s; measured play starts after it.
   await page
@@ -315,7 +318,9 @@ try {
   for (let run = 0; run < RUNS; run++) {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
     const page = await context.newPage();
+    await page.bringToFront();
     await seedSettings(page, { sound: false, music: false, coach: false, speed: 'normal', reduceMotion: false, eyeCandy: true });
+    await page.addInitScript(({prefixes,world})=>{for(const prefix of prefixes)localStorage.setItem(prefix+'severgrow.world-style.v1',JSON.stringify(world));},{prefixes:SETTINGS_PREFIXES,world:WORLD_SKIN});
     // tsx names inner arrow functions with its own `__name` helper; the page needs it when
     // Playwright serialises an instrumented function into it.
     await page.addInitScript('window.__name = window.__name || ((fn) => fn);');
@@ -329,7 +334,12 @@ try {
     const idle = await measureIdle(page, cdp, bcdp, IDLE_MS);
     const anim = await measureAnimations(page);
     const layers = await measureLayers(page);
+    if(process.env.PERF_DETAILS==='1'){await cdp.send('Profiler.enable');await cdp.send('Profiler.start');}
     const turn = await measureTurn(page);
+    if(process.env.PERF_DETAILS==='1'){
+      const profile=await cdp.send('Profiler.stop');writeFileSync(`/tmp/v075-${WORLD_SKIN}-draw-${run+1}.cpuprofile`,JSON.stringify(profile.profile));
+      console.log('RENDER_COSTS',await page.evaluate(()=>(window as any).__severgrow.renderCosts().slice(-15)));
+    }
     const hidden = await measureHidden(page, cdp);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     const g: G = { idle, turn, anim, layers, hidden };

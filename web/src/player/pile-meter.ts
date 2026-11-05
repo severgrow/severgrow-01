@@ -1,6 +1,18 @@
 /** Two tiny mechanical drums. Counts still come from the current View; keeping each
  * window mounted prevents unrelated board renders from restarting a turn. */
+const running = new WeakMap<HTMLElement, Animation>();
+const observed = new WeakSet<Document>();
+const observeVisibility = () => {
+  const doc = document;
+  if (observed.has(doc)) return;
+  observed.add(doc);
+  doc.addEventListener('visibilitychange', () => {
+    if (doc.hidden) for (const window of doc.querySelectorAll<HTMLElement>('.pile-meter-window')) running.get(window)?.finish();
+  });
+};
+
 export function renderPileMeter(host: HTMLElement, count: number) {
+  observeVisibility();
   const next = String(Math.max(0, Math.min(99, count))).padStart(2, '0');
   const face = (digit: string) => {
     const el = document.createElement('span');
@@ -23,11 +35,12 @@ export function renderPileMeter(host: HTMLElement, count: number) {
   const previous = host.dataset.value ?? next;
   host.dataset.value = next;
   const decreasing = count < Number(previous);
-  const still = matchMedia('(prefers-reduced-motion: reduce)').matches ||
+  const still = document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches ||
     document.documentElement.classList.contains('reduce-motion');
   [...host.querySelectorAll<HTMLElement>('.pile-meter-window')].forEach((window, index) => {
     if (previous[index] === next[index]) return;
-    window.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+    running.get(window)?.cancel();
+    running.delete(window);
     window.replaceChildren();
     if (still || Math.abs(count - Number(previous)) > 2) { window.append(face(next[index]!)); return; }
     const drum = document.createElement('span');
@@ -35,17 +48,22 @@ export function renderPileMeter(host: HTMLElement, count: number) {
     if (decreasing) drum.append(face(next[index]!), face(previous[index]!));
     else drum.append(face(previous[index]!), face(next[index]!));
     window.append(drum);
-    const travel = window.getBoundingClientRect().height;
-    const start = decreasing ? -travel : 0, end = decreasing ? 0 : -travel;
+    // Two equal faces: percentage travel stays exact through zoom/parent transforms, and
+    // needs no synchronous layout read after replacing the drum's children.
+    const start = decreasing ? -50 : 0, end = decreasing ? 0 : -50;
     const delay = index === 0 ? 95 : 0; // the carry catches the tens wheel a beat later
     const animation = drum.animate([
-      { transform: `translateY(${start}px)`, offset: 0 },
-      { transform: `translateY(${start + (end - start) * .83}px)`, offset: .73 },
-      { transform: `translateY(${end + (decreasing ? 1 : -1) * .65}px)`, offset: .93 },
-      { transform: `translateY(${end}px)`, offset: 1 },
+      { transform: `translateY(${start}%)`, offset: 0 },
+      { transform: `translateY(${start + (end - start) * .83}%)`, offset: .73 },
+      { transform: `translateY(calc(${end}% ${decreasing ? '+' : '-'} .65px))`, offset: .93 },
+      { transform: `translateY(${end}%)`, offset: 1 },
     ], { duration: index === 0 ? 720 : 620, delay, easing: 'cubic-bezier(.23,.55,.35,1)', fill: 'forwards' });
+    running.set(window, animation);
     void animation.finished.then(() => {
-      if (host.dataset.value === next) window.replaceChildren(face(next[index]!));
+      if (running.get(window) !== animation) return;
+      running.delete(window);
+      window.replaceChildren(face(next[index]!));
+      animation.cancel();
     }).catch(() => {});
   });
 }

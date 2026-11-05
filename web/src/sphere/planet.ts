@@ -91,7 +91,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   stage.append(canvas, fallback);
 
   const abort = new AbortController(), signal = abort.signal;
-  let renderer: PlanetRenderer | null = null, lost = false, disposed = false;
+  let renderer: PlanetRenderer | null = null, lost = false, disposed = false, frozen = false;
   let raf = 0, lastFrame = 0;
   // THE CANVAS IS ONE FIXED SHEET OVER THE WHOLE SCREEN, behind the menu and in the window alike; only
   // the FRAME the planet is drawn into moves (see `projection`). `view` is the canvas in viewport px.
@@ -145,7 +145,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const zoomFor = (px: number, f: Frame = frameTarget()) => px / Math.max(1e-6, tilePx(1, f));
   const clampZoom = (z: number) => Math.min(zoomFor(MAX_TILE_PX), Math.max(mode === 'menu' ? MENU_ZOOM : MIN_ZOOM, z));
   const spaceVisible = () => discRadius(frameNow.width, frameNow.height, zoom) < Math.hypot(frameNow.width, frameNow.height) / 2;
-  const ask = () => { if (!raf && !disposed && !lost && !document.hidden) raf = requestAnimationFrame(frame); };
+  const ask = () => { if (!raf && !disposed && !frozen && !lost && !document.hidden) raf = requestAnimationFrame(frame); };
   const stop = () => { speed = 0; flight = null; targetZoom = zoom; };
   const centre = () => ({ x: view.left + frameNow.x + frameNow.width / 2, y: view.top + frameNow.y + frameNow.height / 2 });
   const ball = (p: { x: number; y: number }) => {
@@ -213,7 +213,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
 
   function frame(now: number) {
     raf = 0;
-    if (disposed || lost || document.hidden || !renderer) return;
+    if (disposed || frozen || lost || document.hidden || !renderer) return;
     const gap = Math.max(1, now - (lastFrame || now - 16)), dt = Math.min(48, gap);
     lastFrame = now;
     if (!motion()) { speed = 0; if (flight) { q = flight.to; zoom = targetZoom = flight.zoomTo; flight = null; } zoom = targetZoom; pulseUntil = 0; }
@@ -465,6 +465,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   document.addEventListener('visibilitychange', () => { stop(); cancelAnimationFrame(raf); raf = 0; if (!document.hidden) { lastFrame = 0; ask(); } }, { signal });
   // The screen's size moves the canvas; the panel's size moves only the frame (read every frame).
   window.addEventListener('resize', resize, { signal, passive: true });
+  window.addEventListener('futasaku:world-style', () => ask(), { signal });
   const observer = new ResizeObserver(() => { if (!flight && !frameTween) resize(); else ask(); });
   observer.observe(stage);
 
@@ -500,6 +501,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
      * planet, playing behind the menu that is already there.
      */
     setMode(next: PlanetMode) {
+      if (frozen) { frozen = false; lastFrame = 0; ask(); }
       if (next === mode) return;
       mode = next;
       speed = 0;
@@ -510,6 +512,13 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       const back = menuMemory ?? menuPose();
       if (!motion()) { q = back; zoom = targetZoom = MENU_ZOOM; frameTween = null; frameNow = frameTarget(); cropNow = cropTarget(); light = MENU_LIGHT; paintFrame(); ask(); return; }
       flyTo(back, MENU_ZOOM, OUT_MS, easeInOut);
+    },
+    /** Retain the last painted planet during PLAY's compositor fade; hand the sky over once. */
+    freeze(on: boolean) {
+      if (frozen === on) return;
+      frozen = on; lastFrame = 0;
+      if (on) { cancelAnimationFrame(raf); raf = 0; if (spaceDrift.owner === 'planet') freeSpace(); }
+      else ask();
     },
     /** Bring flat tile `id` (e.g. the player's own land) to the middle at a comfortable size. */
     /**
@@ -543,7 +552,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       abort.abort(); observer.disconnect(); cancelAnimationFrame(raf); raf = 0;
       if (renderer) renderer.dispose(true);
       // The sky goes back to the space backdrop, which carries on from the planet's last stars.
-      freeSpace();
+      if (spaceDrift.owner === 'planet') freeSpace();
       canvas.remove(); fallback.remove();
     },
     snapshot: () => ({

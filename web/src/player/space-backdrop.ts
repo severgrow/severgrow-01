@@ -1,3 +1,4 @@
+import { spacePath } from './space-path.js';
 // THE SPACE BACKDROP (0.75 polish pass, owner 2026-11-04: "ONE SHARED SPACE BACKGROUND ... behind
 // the Play submenu ... and behind the board in game").
 //
@@ -85,7 +86,8 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
   const now = () => {
     if (!anims.length || !started) return base;
     const t = Math.min(1, ((anims[0]?.currentTime as number | null) ?? 0) / SLIDE_MS);
-    return { x: base.x + mx * t, y: base.y + my * t };
+    const p = spacePath(t);
+    return { x: base.x + mx * p.x, y: base.y + my * p.y };
   };
   /**
    * IN GAME THE STARS STAND STILL, on ONE layer (measured: the two sliding layers, even paused, cost a
@@ -148,7 +150,7 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
     anims = [];
     if (!interfaceMotionAllowed() || paintedStill) { started = 0; return; }
     anims = [[far, FAR], [near, 1]].map(([canvas, share]) => (canvas as HTMLCanvasElement).animate(
-      [{ translate: '0 0' }, { translate: `${-mx * (share as number)}px ${my * (share as number)}px` }],
+      [0,.25,.5,.75,1].map(t => { const p = spacePath(t); return { offset: t, translate: `${-mx * (share as number) * p.x}px ${my * (share as number) * p.y}px` }; }),
       { duration: SLIDE_MS, easing: 'linear', fill: 'forwards' }));
     started = performance.now();
     if (held) for (const a of anims) a.pause();
@@ -179,7 +181,14 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
   onSpaceClaim(() => { halt(); wake(); });
   onSpaceFree(() => { halt(); base = { x: spaceDrift.x, y: spaceDrift.y }; size = ''; wake(); });
 
-  onHold = wake;
+  onHold = () => {
+    // Gameplay already uses one still image. A move cannot change its size or visibility;
+    // re-reading the viewport here forced layout in the middle of every animation.
+    if (paintedStill || document.hidden) return;
+    for (const animation of anims) {
+      if (held) animation.pause(); else if (animation.playState === 'paused') animation.play();
+    }
+  };
   wake();
   const watch = new MutationObserver(wake);
   for (const el of screens) watch.observe(el, { attributes: true, attributeFilter: ['hidden'] });

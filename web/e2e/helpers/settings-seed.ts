@@ -27,6 +27,7 @@ export const SETTINGS_PREFIXES = [
   'main2:',
   'futa04:',
   'futa05:',
+  'futa05-test:',
   'futa05-3:',
   'test:',
   'futa-test:',

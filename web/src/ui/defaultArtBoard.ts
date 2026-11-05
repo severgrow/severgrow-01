@@ -1,3 +1,6 @@
+import { WORLD_ART } from '../worlds/art.js';
+import { WORLDS, duelWorlds, type DuelWorlds, type WorldId } from '../worlds/worlds.js';
+import { selectedWorld } from '../worlds/preference.js';
 // The fast default board: small cropped sprites for both territories and homes, with
 // the existing V3 empty ground, rocks, gold frames and physical number stones.
 // It keeps BoardView's hitboxes, overlays and game interactions unchanged.
@@ -68,6 +71,15 @@ const noteArtFailure = (url: string): void => {
 // The small home and tile images start downloading while the menu is visible.
 // Once decoded, every repeat of a variant shares the browser's image cache.
 const artDecodes: Promise<unknown>[] = [];
+const requestedWorldArt = new Set<string>();
+/** Lazy worlds use the same failure rule as default art: a missing image is never left to WebKit. */
+const warmWorldArt = (url: string) => {
+  if (typeof Image === 'undefined' || requestedWorldArt.has(url)) return;
+  requestedWorldArt.add(url);
+  const image = new Image(); image.decoding = 'async';
+  image.addEventListener('error', () => noteArtFailure(url)); image.src = url;
+  void image.decode().catch(() => undefined);
+};
 if (typeof Image !== 'undefined') {
   for (const url of [...DEFAULT_ART_SPRITES, groundUrl, ...rockUrls]) {
     const img = new Image();
@@ -96,6 +108,42 @@ const artAngle = () => {
 const f = (n: number) => n.toFixed(2);
 
 export class DefaultArtBoardView extends BoardView {
+  private appearance: DuelWorlds = duelWorlds('futasaku');
+  private setupArgs: Parameters<BoardView['setup']> | null = null;
+  private get worlds(): DuelWorlds { return this.appearance; }
+  setLocalWorld(id: WorldId) {
+    this.setWorldAppearance(duelWorlds(id, this.worlds.owners[1]));
+  }
+  /** Cosmetic seam for future opponent metadata/campaign worlds; screen seats stay independent. */
+  setWorldAppearance(appearance: DuelWorlds) {
+    this.appearance = appearance;
+    if (!this.setupArgs) return;
+    const last = this.lastRender;
+    super.setup(...this.setupArgs);
+    if (last) this.render(...last);
+  }
+  override setup(...args: Parameters<BoardView['setup']>) {
+    this.setupArgs = args;
+    super.setup(...args);
+  }
+  /** One periodic atlas per used material, sampled in global board coordinates: no tile stickers. */
+  private worldMaterial(id: WorldId, opponent = false): string {
+    const art = WORLD_ART[id];
+    if (!art) return opponent ? WORLDS[id].shade : WORLDS[id].base;
+    warmWorldArt(art.ground);
+    if (artUnavailable(art.ground)) return opponent ? WORLDS[id].shade : WORLDS[id].base;
+    const name = `world-${id}${opponent ? '-opponent' : ''}`;
+    const defs = this.svg.querySelector('defs')!;
+    if (!defs.querySelector(`#${this.id(name)}`)) {
+      const pattern = el('pattern', { id: this.id(name), width: 240, height: 240, patternUnits: 'userSpaceOnUse' }, defs);
+      el('rect', { width: 240, height: 240, fill: WORLDS[id].base }, pattern);
+      el('image', { href: art.ground, width: 240, height: 240 }, pattern);
+      // Luminance stays a second ownership cue when both players choose the same world.
+      if (opponent) el('rect', { width: 240, height: 240, fill: '#07090a', opacity: .18, class: 'world-opponent-shade' }, pattern);
+    }
+    return this.url(name);
+  }
+
   protected override usesWorldLayer() { return false; }
 
   private artCell(parent: SVGGElement, index: number) {
@@ -120,6 +168,12 @@ export class DefaultArtBoardView extends BoardView {
   }
 
   protected override drawCell(g: SVGGElement, key: string, terrain: Terrain) {
+    const environment = this.worlds.environment;
+    if (environment !== 'futasaku') {
+      // The environment is a dark field; owned terrain receives the full material below.
+      el('path', { d: hexPath(key, S, 'flat'), fill: this.worldMaterial(environment), opacity: .36 }, g);
+      if (terrain !== 'rock') return;
+    }
     const defs = this.svg.querySelector('defs')!;
     const id = this.id('default-ground');
     // A failed ground picture is dropped: the cell keeps the flat look and no placeholder is drawn.
@@ -150,6 +204,20 @@ export class DefaultArtBoardView extends BoardView {
     const home = drawLandmark(this.layers.homes, player === 0 ? 'tree' : 'volcano', key,
       centerOf(key), getOrient(), materialsOf(this.paletteId).colors, this.look);
     home.querySelector('.lm-body')?.remove();
+    const world = this.worlds.owners[player];
+    const worldArt = WORLD_ART[world];
+    if (worldArt) {
+      // Global material underneath; the home alone uses a top-down landmark in local coordinates.
+      const at = centerOf(key);
+      const ground = el('path', { d: hexPath(key, S, 'flat'), transform: `translate(${-at.x},${-at.y})`, fill: this.worldMaterial(world, player === 1) }, home);
+      home.insertBefore(ground, home.firstChild);
+      warmWorldArt(worldArt.home);
+      if (!artUnavailable(worldArt.home)) el('image', { href: worldArt.home, x: -28, y: -28, width: 56, height: 56,
+        class: 'world-home-art', 'data-world': world }, home);
+      const ring = home.querySelector('.lm-ring');
+      if (ring) home.appendChild(ring);
+      return home;
+    }
     const index = player === 0 ? 18 : 19;
     const clipped = el('g', { class: 'default-home-art', 'clip-path': this.artClip(key, true) }, home);
     el('path', { d: hexPath('0,0', S, 'flat'), fill: player === 0 ? '#315321' : '#302c2c' }, clipped);
@@ -166,6 +234,16 @@ export class DefaultArtBoardView extends BoardView {
     const group = el('g', { class: `tile ${owner === 0 ? 'you' : 'bot'}${tile.root ? ' root' : ''} default-art-tile`, 'data-key': key }, parent);
     // The separate garden/fortress home art fills its hex on the home layer.
     if (tile.root) return group;
+    const world = this.worlds.owners[owner];
+    if (world !== 'futasaku') {
+      el('path', { d: hexPath(key, S, 'flat'), fill: this.worldMaterial(world, owner === 1),
+        class: 'world-terrain', 'data-world': world }, group);
+      // Ownership remains a separate, non-material signal, including mixed online skins.
+      el('path', { d: hexPath(key, S - .8, 'flat'), fill: 'none', stroke: owner === 0 ? '#b9c9ad' : '#ca9f8a',
+        'stroke-opacity': .32, 'stroke-width': .7 }, group);
+      drawSeedStone(group, key, x, y, tile.strength, owner);
+      return group;
+    }
     const variant = Math.floor(hash(`${key}:default-tile`) * 9);
     const index = owner * 9 + variant;
     // Both territories use identical geometry and a single painted layer.
@@ -176,4 +254,11 @@ export class DefaultArtBoardView extends BoardView {
     drawSeedStone(group, key, x, y, tile.strength, owner);
     return group;
   }
+}
+
+/** Mounted once for the game board. Replay instances have no window subscriptions. */
+export function bindWorldAppearance(board: BoardView): void {
+  if (!(board instanceof DefaultArtBoardView)) return;
+  board.setLocalWorld(selectedWorld());
+  window.addEventListener('futasaku:world-style', () => board.setLocalWorld(selectedWorld()));
 }

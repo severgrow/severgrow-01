@@ -687,8 +687,7 @@ export const mountMatchChat = (o: {
     const area = box?.getBoundingClientRect();
     const key = toggle.getBoundingClientRect();
     const cockpitTop =
-      o.host.querySelector('#smart-context')?.getBoundingClientRect().top ??
-      key.top;
+      area?.top ?? key.top;
     const desktopTop = Math.max(
       48,
       o.header.getBoundingClientRect().bottom + 4,
@@ -707,7 +706,7 @@ export const mountMatchChat = (o: {
       area &&
       area.width >= 280 &&
       horizontalRoom >= 260 &&
-      cockpitTop - desktopTop - 8 >= 240;
+      cockpitTop - desktopTop - 8 >= 180;
     root.dataset.desktopDocked = String(Boolean(docked));
     if (docked && area) {
       const center = area.left + area.width / 2;
