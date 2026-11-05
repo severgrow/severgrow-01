@@ -4405,7 +4405,7 @@ async function playStep(step: Step, my: number) {
           queue.placeGrowTile(by, t);
           revealProgress++; // a tile really landed: the reveal watchdog must not treat this as a stall
           renderRevealTile();
-          if (bloom) sound.bloomTile(i);
+          if (bloom) sound.bloomTile(i, step.tiles.length, by === HUMAN);
           const d = hexDistance(home, parseKey(t.key));
           if (d < anchorDist) { anchorDist = d; anchor = t.key; }
           const tileEl = board.tile(t.key);
@@ -4436,7 +4436,7 @@ async function playStep(step: Step, my: number) {
           if (hp && by === HUMAN) vibrate(true, hp as number | number[]);
           // Motion pass (2026-10-15): the next tile starts while this one is ~60% landed, so a
           // Bloom reads as one wave of distinct pops instead of a slow count (3 tiles: 1.27s → ~0.9s).
-          await wait(i + 1 < step.tiles.length ? GROW_OVERLAP * MOTION.move * f : MOTION.move * f, my);
+          await wait(i + 1 < step.tiles.length ? (bloom ? PINNED.bloomGap : GROW_OVERLAP) * MOTION.move * f : MOTION.move * f, my);
         }
         if (bloom && anchor && m > 0 && !b.fadeOnly) flash(anchor, f, false);
         if (b.float && by === HUMAN) floatText(`+${step.tiles.length}`, step.tiles[Math.floor(step.tiles.length / 2)]!.key, 'good', f);
@@ -4498,7 +4498,7 @@ async function playStep(step: Step, my: number) {
         if (session?.state.terrain[t.key] === 'rich') sound.chime(delay / 1000 + 0.08);
       });
       if (bloom && anchor && m > 0 && !b.fadeOnly) flash(anchor, f, false);
-      if (bloom) sound.bloom();
+      if (bloom) sound.bloom(step.tiles.length, by === HUMAN, stagger / Math.max(f, 0.01));
       if (settings.eyeCandy && by === HUMAN && m > 0 && b.particles > 0) {
         const homeKeys = sporesHome(step.tiles.map((t) => t.key), board.rootKey(HUMAN));
         if (homeKeys.length) setTimeout(() => stream(homeKeys.map((s) => s.from), board.rootKey(HUMAN), f, Math.min(6, homeKeys.length + 2)), last + 380 * f);
@@ -4538,7 +4538,7 @@ async function playStep(step: Step, my: number) {
       const hold = Math.max(BLAST_MIN_MS, Math.min(840, lastRing * 36 + MOTION.move * 1.15)) * f;
       if (IS_FUTA04 && !mine) showLiveStrike(board.fx, step, hold, m === 0);
       else flash(step.target, f, false, { dark: true, ms: MOTION.quick * 1.25 * f, radius: Math.min(4.4, lastRing + 1.15) });
-      if (settings.sound) sound.megaBomb();
+      if (settings.sound) sound.megaBomb(mine);
       if (mine) vibrate(settings.vibration, 22);
       // Blast: lowkey but heavy — the board thuds like something solid landed.
       if (m > 0 && step.destroyed.length >= 1) {
@@ -4641,7 +4641,7 @@ async function playStep(step: Step, my: number) {
       // the burst: spores puff out, a soft thud
       if (b.particles > 0) sparks(step.target, mine ? 'you' : 'bot', 0, f, Math.max(6, Math.round(b.particles / (mine ? 2 : 3))));
       if (!IS_FUTA04 || mine) flash(step.target, f, false);
-      if (settings.sound) sound.fruit();
+      if (settings.sound) sound.fruit(mine);
       {
         const hp = hapticFor('throw', settings);
         if (hp && mine) vibrate(true, hp as number | number[]);

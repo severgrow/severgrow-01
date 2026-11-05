@@ -589,5 +589,192 @@
    "pitchJitter": 0,
    "when": "Optional, very quiet while a bot thinks; skip if it nags"
   }
+ },
+ "stabs": {
+  "folder": "audio/stabs/",
+  "playerPacks": [
+   "p2",
+   "p4",
+   "p8",
+   "p5",
+   "p7"
+  ],
+  "opponentPacks": [
+   "p1",
+   "p3",
+   "p6",
+   "p5",
+   "p7"
+  ],
+  "packs": {
+   "p1": {
+    "side": "opponent",
+    "grow": [
+     "stab_p1_grow_1.mp3",
+     "stab_p1_grow_2.mp3",
+     "stab_p1_grow_3.mp3",
+     "stab_p1_grow_4.mp3",
+     "stab_p1_grow_5.mp3"
+    ],
+    "run": [
+     "stab_p1_run_1.mp3",
+     "stab_p1_run_2.mp3",
+     "stab_p1_run_3.mp3",
+     "stab_p1_run_4.mp3",
+     "stab_p1_run_5.mp3"
+    ],
+    "bomb": "stab_p1_bomb.mp3",
+    "blast": "stab_p1_blast.mp3",
+    "recordedGap": 1.36
+   },
+   "p2": {
+    "side": "player",
+    "grow": [
+     "stab_p2_grow_1.mp3",
+     "stab_p2_grow_2.mp3",
+     "stab_p2_grow_3.mp3",
+     "stab_p2_grow_4.mp3",
+     "stab_p2_grow_5.mp3"
+    ],
+    "run": [
+     "stab_p2_run_1.mp3",
+     "stab_p2_run_2.mp3",
+     "stab_p2_run_3.mp3",
+     "stab_p2_run_4.mp3",
+     "stab_p2_run_5.mp3"
+    ],
+    "bomb": "stab_p2_bomb.mp3",
+    "blast": "stab_p2_blast.mp3",
+    "recordedGap": 1.29
+   },
+   "p3": {
+    "side": "opponent",
+    "grow": [
+     "stab_p3_grow_1.mp3",
+     "stab_p3_grow_2.mp3",
+     "stab_p3_grow_3.mp3",
+     "stab_p3_grow_4.mp3",
+     "stab_p3_grow_5.mp3"
+    ],
+    "run": [
+     "stab_p3_run_1.mp3",
+     "stab_p3_run_2.mp3",
+     "stab_p3_run_3.mp3",
+     "stab_p3_run_4.mp3",
+     "stab_p3_run_5.mp3"
+    ],
+    "bomb": "stab_p3_bomb.mp3",
+    "blast": "stab_p3_blast.mp3",
+    "recordedGap": 1.36
+   },
+   "p4": {
+    "side": "player",
+    "grow": [
+     "stab_p4_grow_1.mp3",
+     "stab_p4_grow_2.mp3",
+     "stab_p4_grow_3.mp3",
+     "stab_p4_grow_4.mp3",
+     "stab_p4_grow_5.mp3"
+    ],
+    "run": [
+     "stab_p4_run_1.mp3",
+     "stab_p4_run_2.mp3",
+     "stab_p4_run_3.mp3",
+     "stab_p4_run_4.mp3",
+     "stab_p4_run_5.mp3"
+    ],
+    "bomb": "stab_p4_bomb.mp3",
+    "blast": "stab_p4_blast.mp3",
+    "recordedGap": 1.29
+   },
+   "p5": {
+    "side": "player or opponent",
+    "grow": [
+     "stab_p5_grow_1.mp3",
+     "stab_p5_grow_2.mp3",
+     "stab_p5_grow_3.mp3",
+     "stab_p5_grow_4.mp3",
+     "stab_p5_grow_5.mp3"
+    ],
+    "run": [
+     "stab_p5_run_1.mp3",
+     "stab_p5_run_2.mp3",
+     "stab_p5_run_3.mp3",
+     "stab_p5_run_4.mp3",
+     "stab_p5_run_5.mp3"
+    ],
+    "bomb": "stab_p5_bomb.mp3",
+    "blast": "stab_p5_blast.mp3",
+    "recordedGap": 1.36
+   },
+   "p6": {
+    "side": "opponent",
+    "grow": [
+     "stab_p6_grow_1.mp3",
+     "stab_p6_grow_2.mp3",
+     "stab_p6_grow_3.mp3",
+     "stab_p6_grow_4.mp3",
+     "stab_p6_grow_5.mp3"
+    ],
+    "run": [
+     "stab_p6_run_1.mp3",
+     "stab_p6_run_2.mp3",
+     "stab_p6_run_3.mp3",
+     "stab_p6_run_4.mp3",
+     "stab_p6_run_5.mp3"
+    ],
+    "bomb": "stab_p6_bomb.mp3",
+    "blast": "stab_p6_blast.mp3",
+    "recordedGap": 1.36
+   },
+   "p7": {
+    "side": "player or opponent",
+    "grow": [
+     "stab_p7_grow_1.mp3",
+     "stab_p7_grow_2.mp3",
+     "stab_p7_grow_3.mp3",
+     "stab_p7_grow_4.mp3",
+     "stab_p7_grow_5.mp3"
+    ],
+    "run": [
+     "stab_p7_run_1.mp3",
+     "stab_p7_run_2.mp3",
+     "stab_p7_run_3.mp3",
+     "stab_p7_run_4.mp3",
+     "stab_p7_run_5.mp3"
+    ],
+    "bomb": "stab_p7_bomb.mp3",
+    "blast": "stab_p7_blast.mp3",
+    "recordedGap": 1.36
+   },
+   "p8": {
+    "side": "player",
+    "grow": [
+     "stab_p8_grow_1.mp3",
+     "stab_p8_grow_2.mp3",
+     "stab_p8_grow_3.mp3",
+     "stab_p8_grow_4.mp3",
+     "stab_p8_grow_5.mp3"
+    ],
+    "run": [
+     "stab_p8_run_1.mp3",
+     "stab_p8_run_2.mp3",
+     "stab_p8_run_3.mp3",
+     "stab_p8_run_4.mp3",
+     "stab_p8_run_5.mp3"
+    ],
+    "bomb": "stab_p8_bomb.mp3",
+    "blast": "stab_p8_blast.mp3",
+    "recordedGap": 1.36
+   }
+  },
+  "rules": {
+   "pickPack": "Every action picks a random pack from that side's list (not the same as that side used last time, and not the pack the other side is ringing right now). All notes of one action come from that one pack.",
+   "growCut": "One random grow note (1-5) from the pack, layered with a random velcro at 0.5 volume.",
+   "bloom": "Up to 4 cards: run notes 1,2,3,4. 5+ cards: 1,2,3,4,1,2. Space notes 1.36 s apart (as recorded) or match the bloom animation. The LAST note plays the grow file with the same number instead (full tail). Start with zip_05 or zip_06 at 0.5 volume.",
+   "bomb": "Pack bomb + one of wood_block_drop_01 / wood_drop_heavy_* at 0.6 volume.",
+   "blast": "Pack blast + one of metal_big_02 / metal_big_04 / gritty_02 at 0.6 volume.",
+   "volume": "Stabs at 0.8 game volume \u2014 already level-matched so they sit with the sound effects, not over them."
+  }
  }
 }

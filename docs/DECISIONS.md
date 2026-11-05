@@ -1,5 +1,19 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-05 (later) — Synth stabs on top of Cut, Bloom, Bomb and Blast
+
+Owner (futasaku-sfx-2): 96 stabs in 8 packs (web/public/audio/stabs/), rules in ui/sfx-map.json
+`stabs`. Asked and answered: Bloom notes follow the tiles as they land; keep the current sounds and
+ADD the stab on top; stabs at 0.6 (a bit under); every cut, both sides.
+
+- Packs: the player draws from p2/p4/p8 + shared p5/p7, the opponent from p1/p3/p6 + p5/p7; an action
+  takes one pack, never the one its side used last nor one the other side is ringing.
+- Cut (every size, yours) = a grow note of your pack; being cut = a grow note of theirs. Bloom = one
+  pack, run notes 1,2,3,4 (5+ cards wrap), the LAST note the grow file of that number (full tail).
+  Bomb / Blast = the pack's bomb / blast. Max 4 copies of one stab file. Stabs load after all effects.
+- Bloom pace (owner: "you can slow down a bit blooming animation"): a Bloom's tiles land 0.8 of a
+  move apart (PINNED.bloomGap, ~211 ms; was 0.5, ~132 ms), so each stab note has its own tile.
+
 ## 2026-11-05 — Sound returns: the owner's own recordings
 
 Owner: "download the file, upload to repo ... let's do some sound work - 10/10 tactile responsive fun

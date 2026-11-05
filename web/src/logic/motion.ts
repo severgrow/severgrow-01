@@ -51,6 +51,8 @@ export const PINNED = Object.freeze({
   growHold: 120,
   /** A multi-tile grow starts the next tile when the previous one is this far through its pop. */
   growOverlap: 0.5,
+  /** A Bloom lands its tiles this many moves apart (owner, 2026-11-05: a bit slower, room for the stabs). */
+  bloomGap: 0.8,
 });
 
 /** The derived durations, plus the legacy aliases that existing code already reads. */

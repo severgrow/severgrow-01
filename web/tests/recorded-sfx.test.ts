@@ -5,7 +5,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { RecordedFx, SET_CAP, SFX_EVENTS, SFX_SETS, clearSharedTakes, onsetOf, semitones } from '../src/ui/recorded.js';
+import { OPPONENT_PACKS, PLAYER_PACKS, RecordedFx, SET_CAP, SFX_EVENTS, SFX_SETS, STAB_PACKS, STAB_VOLUME, bloomNote, clearSharedTakes, onsetOf, semitones } from '../src/ui/recorded.js';
 import { SOUND_REMOVED, Sound } from '../src/ui/sound.js';
 
 const root = (p: string) => fileURLToPath(new URL(p, import.meta.url));
@@ -61,7 +61,7 @@ const loaded = async () => {
   const fx = new RecordedFx(async (url) => new TextEncoder().encode(url.slice(url.lastIndexOf('/') + 1)).buffer as ArrayBuffer, () => 'x/');
   const ctx = new Ctx();
   fx.attach(ctx as unknown as AudioContext, new Node_() as unknown as AudioNode);
-  for (let i = 0; i < 50 && fx.ready < fx.files.length; i++) await new Promise((r) => setTimeout(r, 0));
+  for (let i = 0; i < 2000 && fx.ready < fx.files.length; i++) await new Promise((r) => setTimeout(r, 0));
   return { fx, ctx };
 };
 const setOf = (file: string) => file.replace(/_\d+\.mp3$/, '');
@@ -88,7 +88,9 @@ describe('the owner\'s takes are all there, and all used', () => {
   it('the quiet key takes load first, so the next tap already has its click', async () => {
     const { fx } = await loaded();
     expect(fx.files.slice(0, 4).map(setOf)).toEqual(['ui_press', 'ui_press', 'ui_press', 'ui_press']);
-    expect(fx.ready).toBe(174);
+    expect(fx.ready).toBe(174 + 96);
+    // the stabs load last: a key never waits behind a synth stab
+    expect(fx.files.slice(-96).every((f) => f.startsWith('stab_'))).toBe(true);
   });
 });
 
@@ -138,7 +140,7 @@ describe('the game\'s moments play the owner\'s sounds', () => {
     s.unlock();
     delete (globalThis as unknown as { window?: unknown }).window;
     // the engine attaches its own context: decode again into it
-    for (let i = 0; i < 50 && fx.ready < fx.files.length; i++) await new Promise((r) => setTimeout(r, 0));
+    for (let i = 0; i < 2000 && fx.ready < fx.files.length; i++) await new Promise((r) => setTimeout(r, 0));
     voices.length = 0;
     return { s, ctx };
   };
@@ -243,5 +245,114 @@ describe('Settings', () => {
     }
     for (const m of ['data-setting="music"', 'data-volume="musicVolume"']) expect(hiddenBlock(m), m).toBe(true);
     expect(html).not.toContain('id="sound-removed"');
+  });
+});
+
+describe('the stabs (owner, 2026-11-05: stacked on top of Cut, Bloom, Bomb and Blast)', () => {
+  const STABS = root('../public/audio/stabs/');
+  const packOf = (file: string) => file.split('_')[1]!;
+  const engine = async () => {
+    const { fx, ctx } = await loaded();
+    const s = new Sound(false, fx);
+    (globalThis as unknown as { window: unknown }).window = { AudioContext: class { constructor() { return ctx; } } };
+    s.unlock();
+    delete (globalThis as unknown as { window?: unknown }).window;
+    for (let i = 0; i < 2000 && fx.ready < fx.files.length; i++) await new Promise((r) => setTimeout(r, 0));
+    voices.length = 0;
+    return { s, fx, ctx };
+  };
+  const stabs = () => voices.filter((v) => v.file.startsWith('stab_'));
+
+  it('all 96 stab files are in the repo and in the map: 8 packs of 5 grow, 5 run, a bomb and a blast', () => {
+    const files = readdirSync(STABS).filter((f) => f.endsWith('.mp3'));
+    expect(files.length).toBe(96);
+    expect(Object.keys(STAB_PACKS).length).toBe(8);
+    for (const p of Object.values(STAB_PACKS)) {
+      expect(p.grow).toHaveLength(5);
+      expect(p.run).toHaveLength(5);
+      for (const f of [...p.grow, ...p.run, p.bomb, p.blast]) expect(existsSync(STABS + f), f).toBe(true);
+    }
+    expect(PLAYER_PACKS).toEqual(['p2', 'p4', 'p8', 'p5', 'p7']);
+    expect(OPPONENT_PACKS).toEqual(['p1', 'p3', 'p6', 'p5', 'p7']);
+  });
+
+  it('your cut rings one of YOUR packs on top of the cut sound; theirs rings one of THEIRS', async () => {
+    const { s } = await engine();
+    for (const cut of [(x: Sound) => x.cutSmall(), (x: Sound) => x.cutMedium(), (x: Sound) => x.cutBig(), (x: Sound) => x.cutHuge()]) {
+      voices.length = 0;
+      cut(s);
+      const st = stabs();
+      expect(st).toHaveLength(1);
+      expect(PLAYER_PACKS).toContain(packOf(st[0]!.file));
+      expect(st[0]!.file).toMatch(/_grow_[1-5]\.mp3$/);
+      expect(voices.some((v) => setOf(v.file) === 'velcro')).toBe(true);
+    }
+    voices.length = 0;
+    s.cutMe();
+    expect(OPPONENT_PACKS).toContain(packOf(stabs()[0]!.file));
+    expect(voices.some((v) => setOf(v.file) === 'metal_big')).toBe(true);
+  });
+
+  it('a side never takes the pack it used last, nor the one the other side is ringing', async () => {
+    const { fx } = await loaded();
+    let last = '';
+    for (let i = 0; i < 40; i++) {
+      const p = fx.pickPack(true);
+      expect(p).not.toBe(last);
+      expect(PLAYER_PACKS).toContain(p);
+      last = p;
+    }
+    // the opponent rings a shared pack: the player cannot take it while it rings
+    const { fx: fx2 } = await loaded();
+    let theirs = '';
+    for (let i = 0; i < 20 && !['p5', 'p7'].includes(theirs); i++) { voices.length = 0; fx2.stabHit('bomb', false); theirs = packOf(voices.at(-1)!.file); }
+    expect(['p5', 'p7']).toContain(theirs);
+    for (let i = 0; i < 20; i++) expect(fx2.pickPack(true)).not.toBe(theirs);
+  });
+
+  it('a Bloom is one pack: run notes 1,2,3,4 then 1,2..., and the LAST note is the grow file (full tail)', async () => {
+    expect([0, 1, 2, 3, 4, 5].map(bloomNote)).toEqual([1, 2, 3, 4, 1, 2]);
+    const { s } = await engine();
+    for (let i = 0; i < 6; i++) s.bloomTile(i, 6, true);
+    const st = stabs();
+    expect(st).toHaveLength(6);
+    expect(new Set(st.map((v) => packOf(v.file))).size).toBe(1);
+    expect(st.map((v) => v.file.replace(/^stab_p\d_/, ''))).toEqual(['run_1.mp3', 'run_2.mp3', 'run_3.mp3', 'run_4.mp3', 'run_1.mp3', 'grow_2.mp3']);
+    // the recorded Bloom sound still plays under the notes (this fake clock never advances, so the
+    // 4-copy cap holds six simultaneous wood_stack takes to four; in play they are 211 ms apart)
+    expect(voices.filter((v) => setOf(v.file) === 'wood_stack')).toHaveLength(SET_CAP);
+  });
+
+  it('a small Bloom of three: run 1, run 2, then grow 3', async () => {
+    const { s } = await engine();
+    for (let i = 0; i < 3; i++) s.bloomTile(i, 3, false);
+    expect(stabs().map((v) => v.file.replace(/^stab_p\d_/, ''))).toEqual(['run_1.mp3', 'run_2.mp3', 'grow_3.mp3']);
+    expect(OPPONENT_PACKS).toContain(packOf(stabs()[0]!.file));
+  });
+
+  it('the Bomb and the Blast ring their pack\'s stab on top of their recorded sound', async () => {
+    const { s } = await engine();
+    s.fruit(true);
+    expect(stabs().at(-1)!.file).toMatch(/^stab_p\d_bomb\.mp3$/);
+    expect(voices.some((v) => setOf(v.file) === 'wood_drop_heavy')).toBe(true);
+    voices.length = 0;
+    s.megaBomb(false);
+    expect(stabs().at(-1)!.file).toMatch(/^stab_p\d_blast\.mp3$/);
+    expect(OPPONENT_PACKS).toContain(packOf(stabs().at(-1)!.file));
+    expect(voices.some((v) => setOf(v.file) === 'metal_big')).toBe(true);
+  });
+
+  it('stabs sit a bit under the recordings (the owner\'s 0.6)', async () => {
+    expect(STAB_VOLUME).toBe(0.6);
+    const { s } = await engine();
+    s.fruit(true);
+    expect(stabs()[0]!.peak).toBeCloseTo(0.6, 5);
+  });
+
+  it('muted or Effects-dropped: no stab', async () => {
+    const { s } = await engine();
+    s.enabled = false;
+    s.cutBig(); s.fruit(); s.megaBomb(); s.bloomTile(0, 3);
+    expect(stabs()).toHaveLength(0);
   });
 });

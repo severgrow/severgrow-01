@@ -54,6 +54,10 @@ describe('motion tokens', () => {
       ripple: 56,
       growHold: 120,
       growOverlap: 0.5,
+      // OWNER CHANGED THE VALUE (2026-11-05, with the Bloom stabs: "you can slow down a bit blooming
+      // animation"): a Bloom's tiles land 0.8 of a move apart (was growOverlap's 0.5), so each stab
+      // note sounds with its own tile. Other multi-tile reveals keep 0.5.
+      bloomGap: 0.8,
     });
   });
 

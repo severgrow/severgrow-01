@@ -14,6 +14,19 @@
 import MAP from './sfx-map.json';
 
 export type SfxEvent = { sounds: string[]; volume: number; pitchJitter: number; when: string };
+export type StabPack = { side: string; grow: string[]; run: string[]; bomb: string; blast: string; recordedGap: number };
+/**
+ * THE STABS (owner, 2026-11-05, futasaku-sfx-2): short synth stabs stacked on top of the recorded
+ * Cut, Bloom, Bomb and Blast. 8 packs; the player draws from its own packs, the opponent from its
+ * own, two packs are shared. An action takes one pack for all its notes, never the pack its side used
+ * last nor one the other side is ringing. Owner's mix: a bit under the recordings (0.6).
+ */
+export const STAB_PACKS: Readonly<Record<string, StabPack>> = MAP.stabs.packs as Record<string, StabPack>;
+export const PLAYER_PACKS: readonly string[] = MAP.stabs.playerPacks;
+export const OPPONENT_PACKS: readonly string[] = MAP.stabs.opponentPacks;
+export const STAB_VOLUME = 0.6;
+/** A Bloom's notes: up to 4 cards 1,2,3,4; then the run wraps (5+ cards: 1,2,3,4,1,2...). */
+export const bloomNote = (i: number): number => (Math.max(0, i) % 4) + 1;
 export const SFX_SETS: Readonly<Record<string, readonly string[]>> = MAP.sets;
 export const SFX_EVENTS: Readonly<Record<string, SfxEvent>> = MAP.events as Record<string, SfxEvent>;
 /** Where the takes are served, relative to the page (works at the root and at /test/). */
@@ -84,7 +97,13 @@ export class RecordedFx {
   ) {
     const sets = Object.keys(SFX_SETS);
     const ordered = [...FIRST.filter((s) => sets.includes(s)), ...sets.filter((s) => !FIRST.includes(s))];
-    this.files = ordered.flatMap((s) => SFX_SETS[s] ?? []);
+    const stabs = Object.values(STAB_PACKS).flatMap((p) => [...p.grow, ...p.run, p.bomb, p.blast]);
+    this.files = [...ordered.flatMap((s) => SFX_SETS[s] ?? []), ...stabs];
+  }
+
+  /** A take's address: the stabs sit beside the effects (audio/stabs/ next to audio/sfx/). */
+  private url(file: string): string {
+    return this.base() + (file.startsWith('stab_') ? '../stabs/' : '') + file;
   }
 
   /** Called by the engine once its context exists (after the first tap). Starts loading. */
@@ -93,7 +112,7 @@ export class RecordedFx {
     this.out = out;
     // Whatever is decoded already (the warmed key takes) is playable on this very tap.
     for (const file of this.files) {
-      const ready = done.get(this.base() + file);
+      const ready = done.get(this.url(file));
       if (ready) this.buffers.set(file, ready);
     }
     if (this.loading) return;
@@ -134,7 +153,7 @@ export class RecordedFx {
       for (let file = queue.shift(); file; file = queue.shift()) {
         const ctx = this.ctx;
         if (!ctx) return;
-        const key = this.base() + file;
+        const key = this.url(file);
         let job = shared.get(key);
         if (!job) {
           job = remember(key, this.fetchBytes(key)
@@ -175,11 +194,19 @@ export class RecordedFx {
     const ctx = this.ctx, out = this.out;
     if (!ctx || !out) return false;
     const file = this.pick(set, opts.take);
-    const loaded = file ? this.buffers.get(file) : undefined;
-    if (!loaded) return false;
+    return file ? this.playFile(file, set, volume, jitter, opts) !== null : false;
+  }
+
+  /** One decoded file through one source and one gain. Returns when it stops ringing, or null. */
+  private playFile(file: string, capKey: string, volume: number, jitter: number, opts: PlayOpts = {}): number | null {
+    const ctx = this.ctx, out = this.out;
+    if (!ctx || !out) return null;
+    const loaded = this.buffers.get(file);
+    if (!loaded) return null;
+    const set = capKey;
     const now = ctx.currentTime;
     const live = (this.live.get(set) ?? []).filter((end) => end > now);
-    if (live.length >= SET_CAP) { this.live.set(set, live); return false; }
+    if (live.length >= SET_CAP) { this.live.set(set, live); return null; }
     const rate = Math.max(0.25, Math.min(4, semitones(opts.semis ?? 0) * wobble(this.counter * 7 + 3, jitter)));
     const t0 = now + Math.max(0, opts.delay ?? 0);
     const dur = (loaded.buffer.duration - loaded.offset) / rate;
@@ -197,13 +224,66 @@ export class RecordedFx {
     src.stop(t0 + dur + 0.01);
     live.push(t0 + dur);
     this.live.set(set, live);
+    return t0 + dur;
+  }
+
+  private readonly lastPack = new Map<boolean, string>();
+  private readonly ringing = new Map<string, number>();
+  private readonly bloomPack = new Map<boolean, string>();
+
+  /** The pack for a new action of one side (see STAB_PACKS). */
+  pickPack(mine: boolean): string {
+    const list = mine ? PLAYER_PACKS : OPPONENT_PACKS;
+    const now = this.ctx?.currentTime ?? 0;
+    const busy = (p: string) => (this.ringing.get(p) ?? 0) > now;
+    const last = this.lastPack.get(mine);
+    let pool = list.filter((p) => p !== last && !busy(p));
+    if (!pool.length) pool = list.filter((p) => p !== last);
+    const n = ++this.counter;
+    const pack = pool[Math.floor(((n * 0.5698402910) % 1) * pool.length)] ?? list[0]!;
+    this.lastPack.set(mine, pack);
+    return pack;
+  }
+
+  private ring(pack: string, file: string, opts: PlayOpts): boolean {
+    const end = this.playFile(file, file, STAB_VOLUME * (opts.gain ?? 1), 0, opts); // max 4 copies of one stab
+    if (end === null) return false;
+    this.ringing.set(pack, Math.max(this.ringing.get(pack) ?? 0, end));
     return true;
+  }
+
+  /** A grow that cuts their territory: one grow note (1-5) of a fresh pack. */
+  stabCut(mine: boolean, opts: PlayOpts = {}): boolean {
+    const pack = STAB_PACKS[this.pickPack(mine)]!;
+    const note = Math.floor(((++this.counter * 0.7548776662) % 1) * pack.grow.length);
+    return this.ring(this.lastPack.get(mine)!, pack.grow[note]!, opts);
+  }
+
+  /** The Bomb's or the Blast's stab, from a fresh pack. */
+  stabHit(kind: 'bomb' | 'blast', mine: boolean, opts: PlayOpts = {}): boolean {
+    const name = this.pickPack(mine);
+    return this.ring(name, STAB_PACKS[name]![kind], opts);
+  }
+
+  /**
+   * One note of a Bloom, as its tile lands: run notes 1,2,3,4 (wrapping for 5+ cards) from ONE pack
+   * for the whole Bloom; the LAST note plays the grow file of the same number, which has the full tail.
+   */
+  stabBloom(index: number, total: number, mine: boolean, opts: PlayOpts = {}): boolean {
+    if (index === 0 || !this.bloomPack.has(mine)) this.bloomPack.set(mine, this.pickPack(mine));
+    const name = this.bloomPack.get(mine)!;
+    const pack = STAB_PACKS[name]!;
+    const note = bloomNote(index);
+    const last = index >= total - 1;
+    return this.ring(name, (last ? pack.grow : pack.run)[note - 1]!, opts);
   }
 
   /** Restart the take counters, so a replay sounds exactly like the first play. */
   reset(): void {
     this.counter = 0;
     this.last.clear();
+    this.lastPack.clear();
+    this.bloomPack.clear();
   }
 }
 

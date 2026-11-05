@@ -359,6 +359,10 @@ export class Sound {
   private ev(cue: string, event: string, opts: PlayOpts = {}): boolean {
     return this.rp(cue, (r) => r.play(event, opts));
   }
+  /** A stab on top (owner, 2026-11-05: stacked over the recordings, never instead of them). */
+  private stab(cue: string, fn: (r: RecordedFx) => boolean): void {
+    if (this.rec && this.allowed(cue)) fn(this.rec);
+  }
   /** One take of a set, for the moments the map leaves open (the owner's "you pick"). */
   private set(cue: string, set: string, volume: number, jitter: number, opts: PlayOpts = {}): boolean {
     return this.rp(cue, (r) => r.playSet(set, volume, jitter, opts));
@@ -506,14 +510,18 @@ export class Sound {
   }
 
   /** bloom: three tiny ticks, 40ms apart, rising a little. Not a fanfare. */
-  bloom() {
+  bloom(total = 0, mine = true, stepMs = 0) {
+    // The path that lands a Bloom's tiles all at once rings its stab notes here, a step apart.
+    for (let i = 0; i < total; i++) this.stab('bloom', (r) => r.stabBloom(i, total, mine, { delay: (i * stepMs) / 1000 }));
     if (this.ev('bloom', 'meld.complete')) return;
     const { idx } = this.pick('bloom', 2);
     for (let i = 0; i < 3; i++) this.play('bloom', { delay: i * 0.04, rate: 1 + i * 0.06, variant: idx });
   }
 
   /** One bloom tick for a sequential tile reveal (index steps the pitch). */
-  bloomTile(index = 0) {
+  bloomTile(index = 0, total = 0, mine = true) {
+    // The stab note of this card, as its tile lands (one pack for the whole Bloom).
+    if (total > 0) this.stab('bloom', (r) => r.stabBloom(index, total, mine));
     // Each card of a Bloom stacks two semitones higher than the last (the handover's +2).
     if (this.ev('bloom', 'meld.add_card', { semis: 2 * Math.max(0, index) })) return;
     const { idx } = this.pick('bloom', 2);
@@ -545,14 +553,16 @@ export class Sound {
   }
 
   /** fruit: a short hollow pop. */
-  fruit() {
+  fruit(mine = true) {
+    this.stab('fruit', (r) => r.stabHit('bomb', mine));
     // The Bomb (owner: "you pick"): one heavy wood drop.
     if (this.set('fruit', 'wood_drop_heavy', 0.85, 0.03)) return;
     this.play('fruit');
   }
 
   /** mega bomb: one low muted thud plus a dry noise puff. No explosion. */
-  megaBomb() {
+  megaBomb(mine = true) {
+    this.stab('megaBomb', (r) => r.stabHit('blast', mine));
     // The Blast (owner: "you pick"): the big metal hit over a short gritty crumble.
     if (this.set('megaBomb', 'metal_big', 0.7, 0.02, { take: 1 })) { this.set('megaBomb', 'gritty', 0.45, 0, { take: 1, delay: 0.05 }); return; }
     this.play('megaBomb');
@@ -596,6 +606,7 @@ export class Sound {
 
   /** cutSmall: one crisp snip. */
   cutSmall() {
+    this.stab('cutSmall', (r) => r.stabCut(true));
     // A cut (owner: "you pick"): you tear their tiles away (the take set), bigger cuts add weight.
     if (this.ev('cutSmall', 'hex.steal')) return;
     this.play('cutSmall');
@@ -603,18 +614,21 @@ export class Sound {
 
   /** cutMedium (the Severe band, 3-4 tiles): a snip, a soft tick, and a quieter thud than Big's. */
   cutMedium() {
+    this.stab('cutMedium', (r) => r.stabCut(true));
     if (this.ev('cutMedium', 'hex.steal')) { this.set('cutMedium', 'metal_dull', 0.45, 0.02, { delay: 0.06 }); return; }
     this.play('cutMedium');
   }
 
   /** cutBig: two snips and a low settle. This should feel rewarding. */
   cutBig() {
+    this.stab('cutBig', (r) => r.stabCut(true));
     if (this.ev('cutBig', 'hex.steal')) { this.set('cutBig', 'wood_drop_heavy', 0.75, 0.02, { delay: 0.07 }); return; }
     this.play('cutBig');
   }
 
   /** cutHuge: three snips stepping down, then one heavier knock. */
   cutHuge() {
+    this.stab('cutHuge', (r) => r.stabCut(true));
     if (this.ev('cutHuge', 'hex.steal')) {
       this.set('cutHuge', 'gritty', 0.55, 0, { take: 1, delay: 0.05 });
       this.set('cutHuge', 'metal_big', 0.6, 0.02, { take: 3, delay: 0.12 });
@@ -625,6 +639,8 @@ export class Sound {
 
   /** cutMe: the same family, duller and lower, so losing tiles feels different from cutting. */
   cutMe() {
+    // They cut your territory: the stab comes from their packs.
+    this.stab('cutMe', (r) => r.stabCut(false));
     if (this.ev('cutMe', 'hex.lost')) return;
     this.play('cutMe');
   }

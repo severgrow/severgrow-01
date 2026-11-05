@@ -32,3 +32,16 @@ the game picks one at random each time (never the same twice in a row).
 6. No music and no synth stabs yet — the plan leaves room for them on `match.found`, `match.win` and `meld.complete`.
 
 If taps feel slightly late on iPhone Safari, re-export the soft UI sounds as `.m4a` (AAC) from the WAV masters — some Safari versions keep the tiny MP3 start gap.
+
+## Synth stabs (cutting enemy territory, blooms, bombs, blasts)
+- `stabs/*.mp3` — 8 packs × 12 files. Put them in the repo at `audio/stabs/`.
+  Per pack: `stab_pN_grow_1..5`, `stab_pN_run_1..5` (bloom notes), `stab_pN_bomb`, `stab_pN_blast`.
+- Light reverb, fades and levels are already baked in; they sit at sound-effect level.
+- Player packs: p2, p4, p8 + shared p5, p7. Opponent packs: p1, p3, p6 + shared p5, p7.
+- Every action picks a random pack from its side's list (not the one that side used last, and not one already ringing). All notes of one action come from that pack.
+- `stab.grow_cut` (a single grow that cuts enemy territory): one random grow note 1–5 + random `velcro` at 0.5.
+- `stab.bloom`: run notes 1,2,3,4 (5+ cards: 1,2,3,4,1,2), about 1.3 s apart as recorded (or matched to the bloom animation).
+  The LAST note uses the grow file with the same number, because it has the full tail. Starts with `zip_05`/`zip_06` at 0.5.
+- `stab.bomb`: pack bomb + `wood_block_drop_01` or a `wood_drop_heavy_*` at 0.6.
+- `stab.blast`: pack blast + `metal_big_02`, `metal_big_04` or `gritty_02` at 0.6.
+- Full rules are also in `sfx-map.json` under `stabs`.
