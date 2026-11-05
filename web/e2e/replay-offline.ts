@@ -287,9 +287,14 @@ try {
         // is then its attribute size times the screen scale. (getBoundingClientRect is no use here:
         // it reports the whole atlas inside the window, clipped or not.)
         const cs = getComputedStyle(n);
-        const own = cs.width === 'auto' && cs.height === 'auto';
-        const k = n.parentNode?.getScreenCTM?.()?.a ?? 1;
-        const size = own ? Math.max(n.width.animVal.value, n.height.animVal.value) * k : Infinity;
+        // Chromium may return 'auto' or the resolved pixel size for SVG geometry properties.
+        // Both must agree with the window's own dimensions; a stretched 100% window must fail.
+        const w=Number(n.getAttribute('width')), h=Number(n.getAttribute('height'));
+        const cssW=cs.width==='auto'?w:parseFloat(cs.width), cssH=cs.height==='auto'?h:parseFloat(cs.height);
+        const own=w>0 && h>0 && Math.abs(cssW-w)<.1 && Math.abs(cssH-h)<.1;
+        const m=n.parentNode?.getScreenCTM?.();
+        const k=m?Math.hypot(m.a,m.b):1;
+        const size = own ? Math.max(w,h) * k : Infinity;
         return { size, clipped: cs.overflow !== 'visible' };
       });
     return { hex, stones: measure('.seed-stone-art'), frames: measure('.gold-frame-art') };

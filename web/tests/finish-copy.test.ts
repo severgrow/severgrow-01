@@ -49,7 +49,7 @@ describe('finish copy: reasons are full sentences, from the reader seat', () => 
   it('calls a level-score, level-strength finish a true draw', () => {
     const r = res(null, 'deck_exhaustion', { scores: [8, 8], strengths: [24, 24] });
     expect(resultReason(r, 0)).toBe(
-      'The cards ran out. The higher score wins. Scores and tile strengths matched \u2014 a true draw.',
+      'The cards ran out. The higher score wins. Scores and tile strengths matched - a true draw.',
     );
     expect(resultReason(res(null, 'double_strangle'), 0)).toBe('Both homes were surrounded at once.');
   });
