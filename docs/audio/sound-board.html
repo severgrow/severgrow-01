@@ -1,0 +1,164 @@
+<meta charset="utf-8">
+<title>Futasaku Sound Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow instrument panel — rows of sound sets, each with a strip of numbered pads, like a sampler */
+:root{
+  --bg:#E8E5DE; --panel:#F3F1EB; --ink:#18191A; --muted:#6E6B64; --line:rgba(24,25,26,.16);
+  --key-top:#FBFAF7; --key-bot:#E2DED5; --key-edge:rgba(24,25,26,.28); --led:#E8661C; --led-glow:rgba(232,102,28,.35);
+  --sans:"Instrument Sans",ui-sans-serif,system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1011; --panel:#16181A; --ink:#ECE4D2; --muted:#8C887E; --line:rgba(236,228,210,.14);
+  --key-top:#2A2D30; --key-bot:#1A1C1E; --key-edge:rgba(236,228,210,.32); --led:#FF8A3D; --led-glow:rgba(255,138,61,.45); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1011; --panel:#16181A; --ink:#ECE4D2; --muted:#8C887E; --line:rgba(236,228,210,.14);
+  --key-top:#2A2D30; --key-bot:#1A1C1E; --key-edge:rgba(236,228,210,.32); --led:#FF8A3D; --led-glow:rgba(255,138,61,.45); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px}
+.wrap{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+h1{font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0;text-wrap:balance}
+.meta{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.02em}
+.bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.tabs{display:flex;gap:6px}
+.lbl{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.key{appearance:none;font:inherit;color:var(--ink);cursor:pointer;border:1px solid var(--key-edge);border-radius:8px;
+  background:linear-gradient(var(--key-top),var(--key-bot));box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 1px 0 rgba(0,0,0,.25);
+  transition:transform .06s,box-shadow .06s}
+.key:active,.key.hit{transform:translateY(1px);box-shadow:inset 0 1px 3px rgba(0,0,0,.35)}
+.key:focus-visible{outline:2px solid var(--led);outline-offset:2px}
+.tab{font-size:13px;font-weight:500;padding:7px 12px}
+.tab[aria-pressed="true"]{border-color:var(--ink)}
+.ctl{display:flex;align-items:center;gap:8px}
+input[type=range]{width:110px;accent-color:var(--led)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--mono);font-size:11px;padding:5px 9px;border-radius:999px}
+.chip[aria-pressed="true"]{border-color:var(--ink)}
+section h2{font-size:12px;font-family:var(--mono);font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:8px 0 6px}
+.set{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 18px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}
+.info{min-width:0;display:flex;flex-direction:column;gap:3px}
+.name{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.name b{font-weight:600;font-size:15px}
+.id{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.use{font-size:14px}
+.src{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.tier{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.tier i{display:inline-block;width:14px;height:5px;border-radius:2px;border:1px solid var(--key-edge)}
+.tier[data-t=soft] i{background:linear-gradient(90deg,var(--ink) 33%,transparent 0)}
+.tier[data-t=mid] i{background:linear-gradient(90deg,var(--ink) 66%,transparent 0)}
+.tier[data-t=big] i{background:var(--ink)}
+.pads{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:360px}
+.pad{position:relative;width:38px;height:38px;font-family:var(--mono);font-size:12px;display:grid;place-items:center}
+.pad::after{content:"";position:absolute;top:5px;right:5px;width:4px;height:4px;border-radius:50%;background:var(--line)}
+.pad.on::after{background:var(--led);box-shadow:0 0 6px var(--led-glow)}
+.rnd{height:38px;padding:0 12px;font-size:12px;font-family:var(--mono)}
+.tablewrap{overflow-x:auto;border-top:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;min-width:620px}
+td,th{text-align:left;vertical-align:top;padding:10px 8px;border-bottom:1px solid var(--line);font-size:14px}
+th{font-family:var(--mono);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+td.ev{font-family:var(--mono);font-size:13px;white-space:nowrap}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px}
+.tag{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:5px;padding:1px 6px;margin:0 4px 4px 0;display:inline-block}
+.play{width:34px;height:30px;font-size:12px}
+.note{color:var(--muted);font-size:13px;max-width:62ch}
+@media (max-width:620px){.set{grid-template-columns:1fr}.pads{justify-content:flex-start;max-width:none}}
+@media (prefers-reduced-motion:reduce){.key{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Futasaku Sound Board</h1>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="tabs" role="group" aria-label="View">
+      <button class="key tab" id="t-sounds" aria-pressed="true">Sounds</button>
+      <button class="key tab" id="t-plan" aria-pressed="false">Game plan</button>
+    </div>
+  </header>
+
+  <div class="bar">
+    <label class="ctl" for="vol"><span class="lbl">Volume</span><input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+    <label class="ctl" for="jit"><input id="jit" type="checkbox" checked><span class="lbl">Game pitch wobble</span></label>
+    <div class="chips" id="chips" role="group" aria-label="Filter by area"></div>
+  </div>
+
+  <main id="v-sounds"></main>
+  <main id="v-plan" hidden>
+    <p class="note">What the game plays for each moment. ▶ plays it the way the game will: random take, small pitch wobble, game volume, and the sequences (payout ticks, meld steps, several tiles landing).</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>Game moment</th><th>Plays</th><th>Vol</th><th>When</th></tr></thead>
+      <tbody id="plan"></tbody>
+    </table></div>
+  </main>
+</div>
+
+<script>
+const SETS=[{"area": "Menus & buttons", "id": "ui_press", "label": "Button press (click)", "tier": "soft", "src": "0:03\u20130:12", "use": "Every menu key: press down", "files": [{"f": "ui_press_01", "d": 0.23}, {"f": "ui_press_02", "d": 0.45}, {"f": "ui_press_03", "d": 0.375}, {"f": "ui_press_04", "d": 0.15}]}, {"area": "Menus & buttons", "id": "ui_release", "label": "Button release (clack)", "tier": "soft", "src": "0:06\u20130:12", "use": "Every menu key: release", "files": [{"f": "ui_release_01", "d": 0.45}, {"f": "ui_release_02", "d": 0.45}, {"f": "ui_release_03", "d": 0.44}]}, {"area": "Menus & buttons", "id": "ui_clack", "label": "Big click-clack", "tier": "mid", "src": "0:48\u20130:57", "use": "Big primary buttons: PLAY, Find match, Confirm", "files": [{"f": "ui_clack_01", "d": 1.4}, {"f": "ui_clack_02", "d": 0.58}, {"f": "ui_clack_03", "d": 0.495}, {"f": "ui_clack_04", "d": 0.385}]}, {"area": "Menus & buttons", "id": "ui_dull_click", "label": "Dull click", "tier": "mid", "src": "0:00\u20130:02", "use": "Back / cancel, \"nothing happens\" taps", "files": [{"f": "ui_dull_click_01", "d": 0.555}, {"f": "ui_dull_click_02", "d": 0.655}]}, {"area": "Menus & buttons", "id": "ui_tape_close", "label": "Tape measure roll-back", "tier": "mid", "src": "0:42\u20130:46", "use": "Close panel / leave screen (last take = favourite)", "files": [{"f": "ui_tape_close_01", "d": 0.595}, {"f": "ui_tape_close_02", "d": 0.81}, {"f": "ui_tape_close_03", "d": 0.795}, {"f": "ui_tape_close_04", "d": 0.38}]}, {"area": "Menus & buttons", "id": "ui_flick", "label": "Short flick switch", "tier": "soft", "src": "0:13\u20130:20", "use": "Toggle ON (settings, sound, filters)", "files": [{"f": "ui_flick_01", "d": 0.145}, {"f": "ui_flick_02", "d": 0.12}, {"f": "ui_flick_03", "d": 0.335}]}, {"area": "Menus & buttons", "id": "ui_flick_back", "label": "Flick switch return", "tier": "soft", "src": "0:14\u20130:17", "use": "Toggle OFF", "files": [{"f": "ui_flick_back_01", "d": 0.325}, {"f": "ui_flick_back_02", "d": 0.45}]}, {"area": "Menus & buttons", "id": "wood_click", "label": "Wooden click", "tier": "mid", "src": "4:41\u20134:49", "use": "Done / confirmed (loading then confirmed)", "files": [{"f": "wood_click_01", "d": 0.75}, {"f": "wood_click_02", "d": 0.57}, {"f": "wood_click_03", "d": 1.285}, {"f": "wood_click_04", "d": 0.45}]}, {"area": "Menus & buttons", "id": "ui_key", "label": "Mechanical key", "tier": "soft", "src": "0:21\u20130:40", "use": "Selecting / lifting a card in your hand, hex hover, scroll ticks", "files": [{"f": "ui_key_01", "d": 0.12}, {"f": "ui_key_02", "d": 0.13}, {"f": "ui_key_03", "d": 0.195}, {"f": "ui_key_04", "d": 0.26}, {"f": "ui_key_05", "d": 0.245}, {"f": "ui_key_06", "d": 0.165}, {"f": "ui_key_07", "d": 0.205}, {"f": "ui_key_08", "d": 0.2}, {"f": "ui_key_09", "d": 0.24}, {"f": "ui_key_10", "d": 0.27}, {"f": "ui_key_11", "d": 0.215}, {"f": "ui_key_12", "d": 0.33}, {"f": "ui_key_13", "d": 0.215}, {"f": "ui_key_14", "d": 0.225}, {"f": "ui_key_15", "d": 0.265}, {"f": "ui_key_16", "d": 0.34}, {"f": "ui_key_17", "d": 0.34}, {"f": "ui_key_18", "d": 0.305}, {"f": "ui_key_19", "d": 0.225}, {"f": "ui_key_20", "d": 0.22}]}, {"area": "Cards & melds", "id": "card_shuffle", "label": "Shuffle flick ting", "tier": "mid", "src": "1:08\u20131:11", "use": "Deck shuffle at match start / rematch", "files": [{"f": "card_shuffle_01", "d": 1.994}]}, {"area": "Cards & melds", "id": "card_flick", "label": "Floaty card flick", "tier": "soft", "src": "1:41\u20131:52", "use": "Drawing a card from the deck (01\u201302 = your favourites)", "files": [{"f": "card_flick_01", "d": 0.185}, {"f": "card_flick_02", "d": 0.45}, {"f": "card_flick_03", "d": 0.45}, {"f": "card_flick_04", "d": 0.385}, {"f": "card_flick_05", "d": 0.4}]}, {"area": "Cards & melds", "id": "card_fan_cards", "label": "Fan close (card-like)", "tier": "mid", "src": "1:04\u20131:06", "use": "Draw from discard pile", "files": [{"f": "card_fan_cards_01", "d": 0.24}, {"f": "card_fan_cards_02", "d": 0.49}]}, {"area": "Cards & melds", "id": "card_fan", "label": "Quick fan close", "tier": "mid", "src": "0:59\u20131:01", "use": "Hand auto-sort / hand closes", "files": [{"f": "card_fan_01", "d": 0.285}, {"f": "card_fan_02", "d": 0.405}]}, {"area": "Cards & melds", "id": "wood_drop", "label": "Drop on wood (light)", "tier": "mid", "src": "1:12\u20131:28", "use": "Discard: throwing your last card", "files": [{"f": "wood_drop_01", "d": 0.525}, {"f": "wood_drop_02", "d": 1.4}, {"f": "wood_drop_03", "d": 1.26}, {"f": "wood_drop_04", "d": 0.305}, {"f": "wood_drop_05", "d": 0.49}]}, {"area": "Cards & melds", "id": "wood_stack", "label": "Jenga block stack", "tier": "soft", "src": "4:17\u20134:33", "use": "Cards joining a meld one by one / challenge chip on the table", "files": [{"f": "wood_stack_01", "d": 0.205}, {"f": "wood_stack_02", "d": 0.155}, {"f": "wood_stack_03", "d": 0.2}, {"f": "wood_stack_04", "d": 0.235}, {"f": "wood_stack_05", "d": 0.13}, {"f": "wood_stack_06", "d": 0.215}, {"f": "wood_stack_07", "d": 0.155}, {"f": "wood_stack_08", "d": 0.305}, {"f": "wood_stack_09", "d": 0.16}, {"f": "wood_stack_10", "d": 0.145}, {"f": "wood_stack_11", "d": 0.16}]}, {"area": "Cards & melds", "id": "wood_block_drop", "label": "Two blocks drop", "tier": "big", "src": "4:38", "use": "Meld complete (big one) / match found", "files": [{"f": "wood_block_drop_01", "d": 0.25}]}, {"area": "Cards & melds", "id": "wood_drop_heavy", "label": "Drop on wood (intense)", "tier": "big", "src": "1:31\u20131:40", "use": "Meld slammed down / opponent melds", "files": [{"f": "wood_drop_heavy_01", "d": 0.915}, {"f": "wood_drop_heavy_02", "d": 0.535}, {"f": "wood_drop_heavy_03", "d": 0.335}, {"f": "wood_drop_heavy_04", "d": 0.365}, {"f": "wood_drop_heavy_05", "d": 0.645}]}, {"area": "Cards & melds", "id": "metal_dull", "label": "Dull metal", "tier": "mid", "src": "2:07\u20132:14", "use": "Illegal tile / invalid meld", "files": [{"f": "metal_dull_01", "d": 0.52}, {"f": "metal_dull_02", "d": 0.645}, {"f": "metal_dull_03", "d": 0.495}]}, {"area": "Board & hexes", "id": "tile_land", "label": "Rock on rock", "tier": "mid", "src": "3:37\u20133:44", "use": "YOUR tile lands (rotate the 3 when tiles grow one by one)", "files": [{"f": "tile_land_01", "d": 0.369}, {"f": "tile_land_02", "d": 0.719}, {"f": "tile_land_03", "d": 0.469}]}, {"area": "Board & hexes", "id": "tile_land_opp", "label": "Rock, lower", "tier": "soft", "src": "3:47\u20133:58", "use": "OPPONENT tile lands", "files": [{"f": "tile_land_opp_01", "d": 0.195}, {"f": "tile_land_opp_02", "d": 0.12}, {"f": "tile_land_opp_03", "d": 0.12}, {"f": "tile_land_opp_04", "d": 0.13}, {"f": "tile_land_opp_05", "d": 0.12}, {"f": "tile_land_opp_06", "d": 0.12}, {"f": "tile_land_opp_07", "d": 0.12}, {"f": "tile_land_opp_08", "d": 0.12}, {"f": "tile_land_opp_09", "d": 0.12}, {"f": "tile_land_opp_10", "d": 0.145}, {"f": "tile_land_opp_11", "d": 0.16}, {"f": "tile_land_opp_12", "d": 0.14}]}, {"area": "Board & hexes", "id": "tile_land_opp_low", "label": "Rock, lowest", "tier": "soft", "src": "4:01\u20134:16", "use": "Opponent tile lands (softer variants, bot turns)", "files": [{"f": "tile_land_opp_low_01", "d": 0.12}, {"f": "tile_land_opp_low_02", "d": 0.12}, {"f": "tile_land_opp_low_03", "d": 0.12}, {"f": "tile_land_opp_low_04", "d": 0.125}, {"f": "tile_land_opp_low_05", "d": 0.12}, {"f": "tile_land_opp_low_06", "d": 0.17}, {"f": "tile_land_opp_low_07", "d": 0.21}, {"f": "tile_land_opp_low_08", "d": 0.12}, {"f": "tile_land_opp_low_09", "d": 0.14}, {"f": "tile_land_opp_low_10", "d": 0.13}, {"f": "tile_land_opp_low_11", "d": 0.14}, {"f": "tile_land_opp_low_12", "d": 0.13}, {"f": "tile_land_opp_low_13", "d": 0.13}, {"f": "tile_land_opp_low_14", "d": 0.265}]}, {"area": "Board & hexes", "id": "zip", "label": "Zip", "tier": "mid", "src": "2:36\u20132:54", "use": "Network grows: mycelium spreading to connected hexes", "files": [{"f": "zip_01", "d": 0.139}, {"f": "zip_02", "d": 0.65}, {"f": "zip_03", "d": 0.214}, {"f": "zip_04", "d": 0.519}, {"f": "zip_05", "d": 2.169}, {"f": "zip_06", "d": 2.159}]}, {"area": "Board & hexes", "id": "gritty", "label": "Gritty / sticky", "tier": "mid", "src": "3:11\u20133:20", "use": "Long one: big bloom across many tiles; short: territory zoom", "files": [{"f": "gritty_01", "d": 1.309}, {"f": "gritty_02", "d": 4.109}]}, {"area": "Board & hexes", "id": "velcro", "label": "Velcro tear", "tier": "mid", "src": "3:22\u20133:30", "use": "You steal / take over a hex", "files": [{"f": "velcro_01", "d": 2.169}, {"f": "velcro_02", "d": 1.554}]}, {"area": "Board & hexes", "id": "chalk", "label": "Chalk stroke", "tier": "mid", "src": "4:35\u20134:41", "use": "Connection line drawn between hexes / map path", "files": [{"f": "chalk_01", "d": 1.119}, {"f": "chalk_02", "d": 0.6}, {"f": "chalk_03", "d": 0.754}]}, {"area": "Board & hexes", "id": "metal_big", "label": "Big dramatic metal", "tier": "big", "src": "2:27\u20132:33", "use": "Hex stolen from you / you lose the match", "files": [{"f": "metal_big_01", "d": 1.61}, {"f": "metal_big_02", "d": 1.415}, {"f": "metal_big_03", "d": 1.42}, {"f": "metal_big_04", "d": 1.61}]}, {"area": "Board & hexes", "id": "metal_error", "label": "Weird metal drop", "tier": "mid", "src": "2:20\u20132:25", "use": "Error: action failed, connection lost", "files": [{"f": "metal_error_01", "d": 1.61}, {"f": "metal_error_02", "d": 1.605}, {"f": "metal_error_03", "d": 1.605}]}, {"area": "Seeds & Territory", "id": "coins", "label": "Coins dropping", "tier": "big", "src": "5:27\u20135:34", "use": "Seeds payout after a win", "files": [{"f": "coins_01", "d": 0.6}, {"f": "coins_02", "d": 0.635}, {"f": "coins_03", "d": 0.585}, {"f": "coins_04", "d": 0.435}]}, {"area": "Seeds & Territory", "id": "glass_tap", "label": "Dull glass tap", "tier": "soft", "src": "5:44\u20135:58", "use": "Seeds counter ticking up (pitch rises per tick)", "files": [{"f": "glass_tap_01", "d": 0.14}, {"f": "glass_tap_02", "d": 0.15}, {"f": "glass_tap_03", "d": 0.13}, {"f": "glass_tap_04", "d": 0.345}, {"f": "glass_tap_05", "d": 0.45}, {"f": "glass_tap_06", "d": 0.295}, {"f": "glass_tap_07", "d": 0.45}, {"f": "glass_tap_08", "d": 0.375}]}, {"area": "Seeds & Territory", "id": "rock_click", "label": "Rock on rock, single", "tier": "soft", "src": "4:56\u20135:08", "use": "Sprout planted on the world map / bot level picked", "files": [{"f": "rock_click_01", "d": 0.26}, {"f": "rock_click_02", "d": 0.23}, {"f": "rock_click_03", "d": 0.165}, {"f": "rock_click_04", "d": 0.24}, {"f": "rock_click_05", "d": 0.395}, {"f": "rock_click_06", "d": 0.26}, {"f": "rock_click_07", "d": 0.265}, {"f": "rock_click_08", "d": 0.225}]}, {"area": "Seeds & Territory", "id": "rock_rub", "label": "Rock rubbing", "tier": "mid", "src": "4:50\u20135:18", "use": "Spinning the Territory globe (drag)", "files": [{"f": "rock_rub_01", "d": 0.554}, {"f": "rock_rub_02", "d": 0.499}, {"f": "rock_rub_03", "d": 0.789}, {"f": "rock_rub_04", "d": 2.034}, {"f": "rock_rub_05", "d": 0.489}]}, {"area": "Seeds & Territory", "id": "water_drop", "label": "Water droplet", "tier": "mid", "src": "5:23", "use": "Async: \"your opponent moved\" notification", "files": [{"f": "water_drop_01", "d": 0.865}]}, {"area": "Turns & match", "id": "glass_ring", "label": "Wine glass tap", "tier": "big", "src": "5:35\u20135:43", "use": "Your turn starts", "files": [{"f": "glass_ring_01", "d": 1.6}, {"f": "glass_ring_02", "d": 1.765}, {"f": "glass_ring_03", "d": 3.01}]}, {"area": "Turns & match", "id": "glass_tap_soft", "label": "Dull glass tap, softer", "tier": "soft", "src": "6:02\u20136:17", "use": "Opponent's turn / timer ticks (last 10 s)", "files": [{"f": "glass_tap_soft_01", "d": 0.12}, {"f": "glass_tap_soft_02", "d": 0.12}, {"f": "glass_tap_soft_03", "d": 0.12}, {"f": "glass_tap_soft_04", "d": 0.14}, {"f": "glass_tap_soft_05", "d": 0.15}, {"f": "glass_tap_soft_06", "d": 0.12}, {"f": "glass_tap_soft_07", "d": 0.135}, {"f": "glass_tap_soft_08", "d": 0.12}, {"f": "glass_tap_soft_09", "d": 0.285}, {"f": "glass_tap_soft_10", "d": 0.12}]}, {"area": "Turns & match", "id": "close_slide", "label": "Drop / close", "tier": "mid", "src": "1:54\u20132:04", "use": "End turn (hand slides shut)", "files": [{"f": "close_slide_01", "d": 1.0}, {"f": "close_slide_02", "d": 0.929}, {"f": "close_slide_03", "d": 1.584}]}, {"area": "Turns & match", "id": "shaky", "label": "Shaky rumble", "tier": "mid", "src": "2:58\u20133:05", "use": "Opponent is thinking (bot / live) \u2014 low and quiet", "files": [{"f": "shaky_01", "d": 1.784}, {"f": "shaky_02", "d": 1.894}]}];
+const EVENTS=[{"area": "Menus & buttons", "ev": "ui.press", "sets": ["ui_press"], "vol": 0.8, "jit": 0.03, "note": "Finger down on any menu key"}, {"area": "Menus & buttons", "ev": "ui.release", "sets": ["ui_release"], "vol": 0.6, "jit": 0.03, "note": "Finger up; together with press = the full click-clack"}, {"area": "Menus & buttons", "ev": "ui.primary", "sets": ["ui_clack"], "vol": 0.9, "jit": 0.02, "note": "PLAY, Find match, big confirm keys (instead of press/release)"}, {"area": "Menus & buttons", "ev": "ui.back", "sets": ["ui_dull_click"], "vol": 0.7, "jit": 0.03, "note": "Back, cancel, tapping something that does nothing"}, {"area": "Menus & buttons", "ev": "ui.close", "sets": ["ui_tape_close"], "vol": 0.7, "jit": 0.02, "note": "Panel / sheet closes. Prefer variant 04 (your favourite)"}, {"area": "Menus & buttons", "ev": "ui.toggle_on", "sets": ["ui_flick"], "vol": 0.8, "jit": 0.02, "note": "Any switch turned on"}, {"area": "Menus & buttons", "ev": "ui.toggle_off", "sets": ["ui_flick_back"], "vol": 0.8, "jit": 0.02, "note": "Any switch turned off"}, {"area": "Menus & buttons", "ev": "ui.done", "sets": ["wood_click"], "vol": 0.8, "jit": 0.02, "note": "Saved / confirmed / loaded"}, {"area": "Cards & melds", "ev": "card.shuffle", "sets": ["card_shuffle"], "vol": 0.8, "jit": 0.02, "note": "Match start, rematch, campaign restart"}, {"area": "Cards & melds", "ev": "card.draw_deck", "sets": ["card_flick"], "vol": 0.8, "jit": 0.04, "note": "Draw from deck (favour 01\u201302)"}, {"area": "Cards & melds", "ev": "card.draw_discard", "sets": ["card_fan_cards"], "vol": 0.8, "jit": 0.03, "note": "Take the top discard"}, {"area": "Cards & melds", "ev": "card.select", "sets": ["ui_key"], "vol": 0.55, "jit": 0.04, "note": "Tap / lift a card in your hand. Heard most \u2014 kept quiet"}, {"area": "Cards & melds", "ev": "card.sort", "sets": ["card_fan"], "vol": 0.7, "jit": 0.02, "note": "Auto-sort or hand closes"}, {"area": "Cards & melds", "ev": "card.discard", "sets": ["wood_drop"], "vol": 0.8, "jit": 0.03, "note": "Throw your last card (ends your turn online)"}, {"area": "Cards & melds", "ev": "meld.add_card", "sets": ["wood_stack"], "vol": 0.7, "jit": 0, "note": "Each card joining a meld; pitch steps up +1 semitone per card"}, {"area": "Cards & melds", "ev": "meld.complete", "sets": ["wood_block_drop"], "vol": 0.9, "jit": 0.02, "note": "Valid meld locks in"}, {"area": "Cards & melds", "ev": "meld.opponent", "sets": ["wood_drop_heavy"], "vol": 0.75, "jit": 0.03, "note": "Opponent lays a meld"}, {"area": "Cards & melds", "ev": "meld.invalid", "sets": ["metal_dull"], "vol": 0.7, "jit": 0.02, "note": "Illegal meld / tile you cannot claim"}, {"area": "Board & hexes", "ev": "hex.claim", "sets": ["tile_land"], "vol": 0.8, "jit": 0.03, "note": "Your hexes land. Several at once: 80 ms apart, rotate the 3"}, {"area": "Board & hexes", "ev": "hex.claim_opp", "sets": ["tile_land_opp", "tile_land_opp_low"], "vol": 0.75, "jit": 0.03, "note": "Opponent hexes land (low set for bot turns)"}, {"area": "Board & hexes", "ev": "hex.select", "sets": ["rock_click"], "vol": 0.45, "jit": 0.05, "note": "Hover / pick a hex"}, {"area": "Board & hexes", "ev": "network.grow", "sets": ["zip"], "vol": 0.6, "jit": 0.03, "note": "Mycelium spreads: 01\u201304 short growth, 05\u201306 big spreads"}, {"area": "Board & hexes", "ev": "network.bloom", "sets": ["gritty"], "vol": 0.7, "jit": 0, "note": "Big chain across many tiles (use 02, the long one)"}, {"area": "Board & hexes", "ev": "hex.steal", "sets": ["velcro"], "vol": 0.75, "jit": 0.03, "note": "You take an opponent hex"}, {"area": "Board & hexes", "ev": "hex.lost", "sets": ["metal_big"], "vol": 0.5, "jit": 0.03, "note": "Opponent takes yours (quieter than match loss)"}, {"area": "Board & hexes", "ev": "connection.line", "sets": ["chalk"], "vol": 0.55, "jit": 0.03, "note": "Connection drawn between hexes / map path"}, {"area": "Seeds & Territory", "ev": "seeds.payout", "sets": ["coins", "glass_tap"], "vol": 0.85, "jit": 0, "note": "Coins, then a glass tick per counter step, pitch rising"}, {"area": "Seeds & Territory", "ev": "seeds.spend", "sets": ["coins"], "vol": 0.6, "jit": 0, "note": "Pay for a tile: one coin drop pitched down 2 semitones"}, {"area": "Seeds & Territory", "ev": "map.sprout", "sets": ["rock_click", "water_drop"], "vol": 0.8, "jit": 0.02, "note": "Plant your sprout: rock click + droplet 60 ms later"}, {"area": "Seeds & Territory", "ev": "map.spin", "sets": ["rock_rub"], "vol": 0.45, "jit": 0.06, "note": "Globe drag: one rub per flick, louder for faster spins"}, {"area": "Seeds & Territory", "ev": "map.zoom", "sets": ["gritty"], "vol": 0.4, "jit": 0.03, "note": "Zoom in/out (use 01, the short one)"}, {"area": "Seeds & Territory", "ev": "bot.level", "sets": ["rock_click"], "vol": 0.7, "jit": 0, "note": "Pick bot level 1\u20139: +1 semitone per level"}, {"area": "Turns & match", "ev": "turn.yours", "sets": ["glass_ring"], "vol": 0.7, "jit": 0.01, "note": "Your turn starts"}, {"area": "Turns & match", "ev": "turn.opponent", "sets": ["glass_tap_soft"], "vol": 0.55, "jit": 0.02, "note": "Opponent's turn starts"}, {"area": "Turns & match", "ev": "turn.end", "sets": ["close_slide"], "vol": 0.55, "jit": 0.02, "note": "You end your turn"}, {"area": "Turns & match", "ev": "timer.tick", "sets": ["glass_tap_soft"], "vol": 0.4, "jit": 0, "note": "Last 10 seconds, once per second"}, {"area": "Turns & match", "ev": "notify.move", "sets": ["water_drop"], "vol": 0.8, "jit": 0, "note": "Async: opponent moved while you were away"}, {"area": "Turns & match", "ev": "match.found", "sets": ["wood_block_drop"], "vol": 0.9, "jit": 0, "note": "Opponent found / duel starts (then shuffle)"}, {"area": "Turns & match", "ev": "match.win", "sets": ["glass_ring", "coins"], "vol": 0.9, "jit": 0, "note": "Glass ring + coins together (synth stab later)"}, {"area": "Turns & match", "ev": "match.lose", "sets": ["metal_big"], "vol": 0.85, "jit": 0, "note": "Use 02, the long dramatic one"}, {"area": "Turns & match", "ev": "online.error", "sets": ["metal_error"], "vol": 0.7, "jit": 0, "note": "Disconnected / failed to send move"}, {"area": "Turns & match", "ev": "bot.thinking", "sets": ["shaky"], "vol": 0.25, "jit": 0, "note": "Optional, very quiet while a bot thinks; skip if it nags"}];
+const $=s=>document.querySelector(s);
+let ctx, master; const cache={}; const lastPick={};
+function audio(){ if(!ctx){ctx=new (window.AudioContext||window.webkitAudioContext)(); master=ctx.createGain(); master.connect(ctx.destination);}
+  master.gain.value=+$('#vol').value; if(ctx.state==='suspended')ctx.resume(); return ctx;}
+function load(f){ if(!cache[f]) cache[f]=fetch('sfx/'+f+'.mp3').then(r=>r.arrayBuffer()).then(b=>new Promise((ok,no)=>audio().decodeAudioData(b,ok,no))); return cache[f];}
+async function play(f,{vol=1,rate=1,at=0}={}){ const a=audio(); const buf=await load(f); const s=a.createBufferSource(); s.buffer=buf; s.playbackRate.value=rate;
+  const g=a.createGain(); g.gain.value=vol; s.connect(g).connect(master); s.start(a.currentTime+at); flash(f,at,buf.duration/rate);}
+function flash(f,at,d){ const el=document.querySelector(`[data-f="${f}"]`); if(!el)return; setTimeout(()=>{el.classList.add('on'); setTimeout(()=>el.classList.remove('on'),Math.max(120,d*1000));},at*1000);}
+const setById=Object.fromEntries(SETS.map(s=>[s.id,s]));
+function pick(id,fixed){ const fs=setById[id].files.map(x=>x.f); if(fixed!=null) return fs[Math.min(fixed,fs.length-1)];
+  let i; do{i=Math.floor(Math.random()*fs.length)}while(fs.length>1&&i===lastPick[id]); lastPick[id]=i; return fs[i];}
+const wob=j=>$('#jit').checked&&j?1+(Math.random()*2-1)*j:1;
+const st=n=>Math.pow(2,n/12);
+document.querySelector('#meta').textContent=`${SETS.reduce((n,s)=>n+s.files.length,0)} sounds · ${SETS.length} sets · cut from one 6:17 take`;
+
+// sounds view
+const areas=[...new Set(SETS.map(s=>s.area))]; let area='All';
+const chips=$('#chips');
+['All',...areas].forEach(a=>{const b=document.createElement('button'); b.className='key chip'; b.id='c-'+a.replace(/\W+/g,''); b.textContent=a; b.setAttribute('aria-pressed',a==='All');
+  b.onclick=()=>{area=a; chips.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c===b)); render();}; chips.appendChild(b);});
+const tierName={soft:'quiet · heard a lot',mid:'medium',big:'loud · rare moments'};
+function render(){ const v=$('#v-sounds'); v.innerHTML='';
+  (area==='All'?areas:[area]).forEach(a=>{ const sec=document.createElement('section'); sec.innerHTML=`<h2>${a}</h2>`;
+    SETS.filter(s=>s.area===a).forEach(s=>{ const row=document.createElement('div'); row.className='set';
+      row.innerHTML=`<div class="info"><div class="name"><b>${s.label}</b><span class="id">${s.id}</span><span class="tier" data-t="${s.tier}"><i></i>${tierName[s.tier]}</span></div>
+        <div class="use">${s.use}</div><div class="src">from ${s.src} · ${s.files.length} take${s.files.length>1?'s':''}</div></div><div class="pads"></div>`;
+      const pads=row.querySelector('.pads');
+      if(s.files.length>1){const r=document.createElement('button'); r.className='key rnd'; r.textContent='Random'; r.setAttribute('aria-label',`Play a random ${s.label}`);
+        r.onclick=()=>play(pick(s.id),{rate:wob(.03)}); pads.appendChild(r);}
+      s.files.forEach((f,i)=>{const p=document.createElement('button'); p.className='key pad'; p.dataset.f=f.f; p.textContent=String(i+1).padStart(2,'0');
+        p.title=`${f.f} · ${f.d.toFixed(2)} s`; p.setAttribute('aria-label',`${s.label} take ${i+1}, ${f.d.toFixed(2)} seconds`); p.onclick=()=>play(f.f); pads.appendChild(p);});
+      sec.appendChild(row);}); v.appendChild(sec);});}
+render();
+
+// game plan view
+const SPECIAL={
+  'seeds.payout':e=>{play(pick('coins'),{vol:e.vol}); for(let i=0;i<8;i++) play(pick('glass_tap',i%3),{vol:e.vol*.7,rate:st(i),at:.35+i*.085});},
+  'seeds.spend':e=>play(pick('coins',3),{vol:e.vol,rate:st(-2)}),
+  'meld.add_card':e=>{for(let i=0;i<3;i++) play(pick('wood_stack'),{vol:e.vol,rate:st(i*2),at:i*.16}); play(pick('wood_block_drop'),{vol:.9,at:.55});},
+  'hex.claim':e=>{for(let i=0;i<3;i++) play(pick('tile_land',i),{vol:e.vol,rate:wob(.03),at:i*.08});},
+  'hex.claim_opp':e=>{for(let i=0;i<3;i++) play(pick('tile_land_opp'),{vol:e.vol,rate:wob(.03),at:i*.08});},
+  'map.sprout':e=>{play(pick('rock_click'),{vol:e.vol}); play(pick('water_drop'),{vol:e.vol*.8,at:.06});},
+  'bot.level':e=>{for(let i=0;i<9;i++) play(pick('rock_click',0),{vol:e.vol,rate:st(i),at:i*.18});},
+  'timer.tick':e=>{for(let i=0;i<4;i++) play(pick('glass_tap_soft'),{vol:e.vol,at:i*.5});},
+  'match.win':e=>{play(pick('glass_ring',2),{vol:e.vol}); play(pick('coins'),{vol:e.vol*.8,at:.15});},
+  'match.lose':e=>play(pick('metal_big',1),{vol:e.vol}),
+  'network.bloom':e=>play(pick('gritty',1),{vol:e.vol}),
+  'map.zoom':e=>play(pick('gritty',0),{vol:e.vol,rate:wob(.03)}),
+  'ui.close':e=>play(pick('ui_tape_close',3),{vol:e.vol}),
+};
+function fire(e){ if(SPECIAL[e.ev]) return SPECIAL[e.ev](e); play(pick(e.sets[Math.floor(Math.random()*e.sets.length)]),{vol:e.vol,rate:wob(e.jit)});}
+let lastArea=''; const tb=$('#plan');
+EVENTS.forEach((e,i)=>{ if(e.area!==lastArea){lastArea=e.area; const h=document.createElement('tr'); h.innerHTML=`<th colspan="5">${e.area}</th>`; tb.appendChild(h);}
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td><button class="key play" id="ev-${i}" aria-label="Play ${e.ev}">▶</button></td><td class="ev">${e.ev}</td><td>${e.sets.map(s=>`<span class="tag">${s}</span>`).join('')}</td><td class="num">${Math.round(e.vol*100)}</td><td class="note">${e.note}</td>`;
+  tr.querySelector('button').onclick=()=>fire(e); tb.appendChild(tr);});
+
+// tabs
+function view(p){ $('#v-sounds').hidden=p; $('#v-plan').hidden=!p; $('#t-sounds').setAttribute('aria-pressed',!p); $('#t-plan').setAttribute('aria-pressed',p); chips.hidden=p;}
+$('#t-sounds').onclick=()=>view(false); $('#t-plan').onclick=()=>view(true);
+$('#vol').oninput=()=>{ if(master) master.gain.value=+$('#vol').value; };
+</script>
