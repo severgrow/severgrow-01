@@ -1,5 +1,9 @@
 # v0.75 instruments and material worlds
 
+> Archived experiment. The owner rejected the four worlds on 5 November 2026.
+> Their assets, selector and renderers have been removed; this record describes the earlier experiment, not the current product.
+> See [current refinement](V075-MATTE-PLANET.md).
+
 ## Baseline and release hold
 
 Base: `e657a8ace4ad25d8a204ae152be7138d85097c12`, including Claude's lesson opponents and

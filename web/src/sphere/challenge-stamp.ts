@@ -1,7 +1,8 @@
 import type { V3 } from './geometry.js';
 /** Stable tangent-plane coordinates, including near the poles. Two signed bytes per vertex. */
-export function stampCoordinates(centre: V3, corners: readonly V3[]): [number, number][] {
-  const up: V3 = Math.abs(centre[1]) < .9 ? [0, 1, 0] : [1, 0, 0];
+export function stampCoordinates(centre: V3, corners: readonly V3[],north:V3=[0,1,0]): [number, number][] {
+  const aligned=Math.abs(north[0]*centre[0]+north[1]*centre[1]+north[2]*centre[2]);
+  const up: V3 = aligned < .99 ? north : Math.abs(centre[0])<.9?[1,0,0]:[0,0,1];
   const x: [number,number,number] = [up[1]*centre[2]-up[2]*centre[1], up[2]*centre[0]-up[0]*centre[2], up[0]*centre[1]-up[1]*centre[0]];
   const length = Math.hypot(...x); for (let i=0;i<3;i++) x[i] = x[i]! / length;
   const y: V3 = [centre[1]*x[2]-centre[2]*x[1], centre[2]*x[0]-centre[0]*x[2], centre[0]*x[1]-centre[1]*x[0]];
@@ -20,6 +21,7 @@ float stampBlade(vec2 p) {
   return min(min(min(blade,tip),min(guard,grip)),pommel);
 }
 float crossedSwords(vec2 p) {
+  p.y = -p.y; // tips face geographic north; handles sit below them
   vec2 a = vec2(p.x+p.y,p.y-p.x)*.707107;
   vec2 b = vec2(p.x-p.y,p.y+p.x)*.707107;
   return min(stampBlade(a),stampBlade(b));

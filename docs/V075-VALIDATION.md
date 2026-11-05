@@ -1,5 +1,9 @@
 # v0.75 refinement — local verification
 
+> Archived experiment. The owner rejected the four worlds on 5 November 2026.
+> Their assets, selector and renderers have been removed; this record describes the earlier experiment, not the current product.
+> See [current refinement](V075-MATTE-PLANET.md).
+
 This is a local review record, not a release announcement. Base: `e657a8ac`.
 The owner initially reconfirmed the hold, then relayed Claude's 08:34 GMT deployment confirmation
 and cleared it. Publishing to `/test/` is authorised after checks; production promotion is not.

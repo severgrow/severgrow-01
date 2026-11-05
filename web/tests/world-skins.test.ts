@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { WORLD_IDS, WORLDS, duelWorlds, parseWorldId, worldPreference } from '../src/worlds/worlds.js';
 
 describe('cosmetic worlds are independent of ownership and rules', () => {
-  it('has a stable default, four distinct materials, and safe unknown-version fallback', () => {
-    expect(WORLD_IDS).toEqual(['futasaku', 'ocean', 'forest', 'magic-fields', 'volcanic']);
+  // Owner rejected the four experimental materials. Their stored ids must become classic safely.
+  it('keeps the independent-owner seam but retires every experimental world', () => {
+    expect(WORLD_IDS).toEqual(['futasaku']);
+    for(const id of ['ocean','forest','magic-fields','volcanic'])expect(parseWorldId(id)).toBe('futasaku');
     expect(parseWorldId('future-world')).toBe('futasaku');
     expect(parseWorldId(null)).toBe('futasaku');
-    expect(new Set(WORLD_IDS.map(id => WORLDS[id].base)).size).toBe(5);
+    expect(Object.keys(WORLDS)).toEqual(['futasaku']);
   });
   it('supports every mixed pairing without changing the remote or shared settings', () => {
     for (const a of WORLD_IDS) for (const b of WORLD_IDS) {
@@ -21,8 +23,8 @@ describe('cosmetic worlds are independent of ownership and rules', () => {
     const store = { get: (k: string) => data.get(k) ?? null, set: (k: string, v: string) => { data.set(k, v); } };
     const pref = worldPreference(store);
     expect(pref.get()).toBe('futasaku');
-    pref.set('forest');
-    expect(worldPreference(store).get()).toBe('forest');
+    data.set('severgrow.world-style.v1',JSON.stringify('forest'));
+    expect(worldPreference(store).get()).toBe('futasaku');
     pref.set('futasaku');
     expect(worldPreference(store).get()).toBe('futasaku');
     expect([...data.keys()]).toEqual(['severgrow.world-style.v1']);
@@ -30,7 +32,7 @@ describe('cosmetic worlds are independent of ownership and rules', () => {
   it('stays usable with blocked or corrupt storage', () => {
     const pref = worldPreference({ get: () => { throw Error('blocked'); }, set: () => { throw Error('blocked'); } });
     expect(pref.get()).toBe('futasaku');
-    pref.set('ocean'); expect(pref.get()).toBe('ocean');
+    pref.set('futasaku'); expect(pref.get()).toBe('futasaku');
     expect(worldPreference({ get: () => '{oops', set: () => {} }).get()).toBe('futasaku');
   });
 });

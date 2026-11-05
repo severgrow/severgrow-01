@@ -282,13 +282,24 @@ only Back, the planet and the existing-colour home key. No toolbar, floating lab
 idle render loop or backend feature. Reduced motion stays static; raster detail returns at rest.
 Treat WebGL fallback, cleanup and device limitations as part of the experience. See `SPHERE-TEST.md`.
 
-## v0.75 refinement and experimental worlds
+## v0.75 refinement
 
 - v0.75 remains the reference. Turn lights follow confirmed turn ownership, independently of
   queued presentation. Amber is `LIGHT_TONES.amber.core`, not a near-white replacement.
-- World cosmetics live in `web/src/worlds/`: stable ids, independent screen-owner materials,
-  world-coordinate continuity, and a lower-detail Planet recipe. Identity colours and gameplay
-  state remain separate. Experimental choices and saved preferences apply only on `/test/`.
+- The four experimental worlds were rejected and removed. Classic FUTASAKU art is the only active
+  material. The pure owner/environment identity model remains dormant for future work; never revive
+  rejected assets or let a saved cosmetic id change ownership or gameplay.
+- Menu suggestions, difficulty keys and ordinary menu actions share one matte material in
+  `polish-075.css`. Suggestions add only a restrained amber shadow, never a different fill or weight.
+- An active Planet key sits inward; no amber indicator stripe. Keep the existing focus outline.
+- Global chat warms one identity-scoped, bounded in-memory page before opening; never poll while
+  closed or flash an empty transcript before a warmed page. Backend compatibility ids stay unchanged.
+- Planet rotation remains free. After release/inertia, only screen roll settles upright; never
+  recenter the viewed point. A new gesture interrupts immediately, reduced motion settles directly.
+- The board shadow and turn glow follow one closed perimeter. Keep the indicator crisp and feather
+  only its underlay with faint painted strokes; never blur tile art, digits or an animated board container.
+- `/test/` first startup waits for app, fonts and a real planet paint, then reveals once. Keep a
+  bounded fail-open, direct-game links and reduced motion; never replay it on navigation or resume.
 - A window keeps its own reading position; switching windows must not steal another page's offset
   or discard a chat draft. Retain the shared glass, native press and interruptible surface motion.
 - Reuse the existing atmosphere/grain. Mote loops fade outside the view; new material details are

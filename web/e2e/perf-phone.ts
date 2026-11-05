@@ -23,7 +23,7 @@ import { writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { servePreview, serveStaticDist } from './helpers/preview-port.js';
-import { seedSettings, SETTINGS_PREFIXES } from './helpers/settings-seed.js';
+import { seedSettings } from './helpers/settings-seed.js';
 
 const CHROME = process.env.PW_CHROMIUM ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const RUNS = Math.max(1, Number(process.env.RUNS ?? 3));
@@ -32,7 +32,6 @@ const IDLE_MS = Math.max(1500, Number(process.env.IDLE_MS ?? 3000));
 const SEED = process.env.SEED ?? '219682080';
 const DIST = process.env.DIST ?? '';
 const GAME_PATH = process.env.GAME_PATH ?? '/';
-const WORLD_SKIN = process.env.WORLD_SKIN ?? 'futasaku';
 
 type Idle = {
   appRafPerS: number; recalcCountPerS: number; recalcMsPerS: number; layoutCountPerS: number;
@@ -42,7 +41,7 @@ type Idle = {
 type Turn = { frames: number; fps: number; median: number; p95: number; worst: number; over33: number; kind: string };
 type Anim = { running: number; infinite: number; compositor: number; paint: number; paintProps: Record<string, number>; samples: string[]; list: string[] };
 type Layers = { filter: number; backdrop: number; willChange: number; biggestShadow: number; blur: number };
-type Hidden = { animations: number; appRafPerS: number; recalcMsPerS: number; taskMsPerS: number };
+type Hidden = { active: string[]; animations: number; appRafPerS: number; recalcMsPerS: number; taskMsPerS: number };
 type G = { idle: Idle; turn: Turn; anim: Anim; layers: Layers; hidden: Hidden };
 
 const stats = (xs: number[]) => {
@@ -284,7 +283,11 @@ const measureHidden = async (page: Page, cdp: any, ms = 2000): Promise<Hidden> =
   await page.waitForTimeout(250);
   const before = await metrics(cdp);
   await page.evaluate('(() => { const p = window.__probe; p.appRaf = 0; p.long = 0; p.on = true; })()');
-  const animations = await page.evaluate<number>('(() => document.getAnimations().filter((a) => a.playState === "running").length)()');
+  const active=await page.evaluate(()=>document.getAnimations().filter(a=>a.playState==='running').map(a=>{
+    const effect=a.effect as KeyframeEffect|null,target=effect?.target as Element|null;
+    return `${target?.id||target?.getAttribute('class')||'?'}:${a.id}:${effect?.getTiming().iterations}`;
+  }));
+  const animations=active.length;
   await page.waitForTimeout(ms);
   const after = await metrics(cdp);
   const appRaf = await page.evaluate<number>('(() => { const p = window.__probe; p.on = false; return p.appRaf; })()');
@@ -296,7 +299,7 @@ const measureHidden = async (page: Page, cdp: any, ms = 2000): Promise<Hidden> =
   const s = ms / 1000;
   const d = (k: string) => (after[k] ?? 0) - (before[k] ?? 0);
   return {
-    animations,
+    active,animations,
     appRafPerS: appRaf / s,
     recalcMsPerS: (d('RecalcStyleDuration') * 1000) / s,
     taskMsPerS: (d('TaskDuration') * 1000) / s,
@@ -320,7 +323,6 @@ try {
     const page = await context.newPage();
     await page.bringToFront();
     await seedSettings(page, { sound: false, music: false, coach: false, speed: 'normal', reduceMotion: false, eyeCandy: true });
-    await page.addInitScript(({prefixes,world})=>{for(const prefix of prefixes)localStorage.setItem(prefix+'severgrow.world-style.v1',JSON.stringify(world));},{prefixes:SETTINGS_PREFIXES,world:WORLD_SKIN});
     // tsx names inner arrow functions with its own `__name` helper; the page needs it when
     // Playwright serialises an instrumented function into it.
     await page.addInitScript('window.__name = window.__name || ((fn) => fn);');
@@ -337,7 +339,7 @@ try {
     if(process.env.PERF_DETAILS==='1'){await cdp.send('Profiler.enable');await cdp.send('Profiler.start');}
     const turn = await measureTurn(page);
     if(process.env.PERF_DETAILS==='1'){
-      const profile=await cdp.send('Profiler.stop');writeFileSync(`/tmp/v075-${WORLD_SKIN}-draw-${run+1}.cpuprofile`,JSON.stringify(profile.profile));
+      const profile=await cdp.send('Profiler.stop');writeFileSync(`/tmp/v075-classic-draw-${run+1}.cpuprofile`,JSON.stringify(profile.profile));
       console.log('RENDER_COSTS',await page.evaluate(()=>(window as any).__severgrow.renderCosts().slice(-15)));
     }
     const hidden = await measureHidden(page, cdp);

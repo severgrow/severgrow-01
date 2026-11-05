@@ -107,7 +107,8 @@ export const ONLINE = Object.freeze({
   worldColourCurrent: 'Current colour',
   worldColourUnavailable: 'Colours are not available on this server yet.',
   /** Territory chat (owner, 2026-10-28): one shared channel, newest 30 messages. */
-  worldChat: 'Territory chat',
+  worldChat: 'Global chat',
+  worldChatLoading: 'Connecting…',
   worldChatPlaceholder: 'Say something',
   worldChatSend: 'Send',
   worldChatEmpty: 'No messages yet. Say hello.',

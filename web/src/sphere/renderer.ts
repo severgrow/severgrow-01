@@ -1,7 +1,5 @@
 import { CHALLENGE_STAMP_GLSL, stampCoordinates } from './challenge-stamp.js';
-import { selectedWorld } from '../worlds/preference.js';
-import { WORLDS } from '../worlds/worlds.js';
-import { PLANET_WORLD_MATERIAL, WORLD_RGB } from '../worlds/planet-material.js';
+import type { V3 } from './geometry.js';
 // THE PLANET IN SPACE. Two passes, no textures, no post-processing, no dependency:
 //   1. SPACE: one full-screen triangle draws the sky, a slowly sliding star field (two parallax
 //      layers, procedural), the atmosphere halo around the planet and a still film grain;
@@ -61,7 +59,7 @@ const groundFragment = (derivatives: boolean) => `
 ${derivatives ? '#extension GL_OES_standard_derivatives : enable' : ''}
 precision highp float;
 varying vec2 vStamp; varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed; varying vec3 vLocal;
-uniform float uPulse; uniform float uPixel; uniform float uWorld; uniform vec3 uWorldPigment;
+uniform float uPulse; uniform float uPixel;
 float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 // Value noise fixed to the planet (not the screen), so the grain turns with the ground.
 float hash3(vec3 p){ p = fract(p * .3183099 + .1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -103,7 +101,6 @@ void main(){
   // Grain: two octaves, about three and ten blobs across a tile, a few percent either way.
   float grain = noise3(vLocal * 95.0) * .62 + noise3(vLocal * 330.0) * .38;
   c *= mix(.955, 1.045, grain) * (1.0 - .035 * landish * (1.0 - grain));
-${PLANET_WORLD_MATERIAL}
   // The chamfer: only the last eighth of the way to the side. Owned slabs stand a little proud,
   // free land barely, the unknown is flat. A soft, very slight occlusion where it meets the grout.
   float rise = owned > .5 ? 1.0 : landish > .5 ? .5 : .15;
@@ -181,13 +178,13 @@ export class PlanetRenderer {
   private cssWidth = 1;
   private cssHeight = 1;
   private derivatives: boolean;
-  constructor(readonly canvas: HTMLCanvasElement, readonly sphere: Sphere) {
+  constructor(readonly canvas: HTMLCanvasElement, readonly sphere: Sphere,north:V3=[0,1,0]) {
     const gl = canvas.getContext('webgl', { alpha: false, antialias: true, depth: false, powerPreference: 'low-power', preserveDrawingBuffer: false });
     if (!gl) throw Error('WebGL unavailable');
     this.gl = gl;
     this.derivatives = !!gl.getExtension('OES_standard_derivatives');
     this.ground = this.program(GROUND_VERTEX, groundFragment(this.derivatives));
-    for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel', 'uWorld', 'uWorldPigment']) this.u[name] = gl.getUniformLocation(this.ground, name);
+    for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel']) this.u[name] = gl.getUniformLocation(this.ground, name);
     this.triangle = this.buffer(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]));
     this.space = spacePass(gl, (v, f) => this.program(v, f), this.triangle);
     // Fans: centre, corner i, corner i+1 for every side of every tile. A cell's `w` packs its seed
@@ -203,7 +200,7 @@ export class PlanetRenderer {
     let so = 0;
     let o = 0;
     for (const c of cells) {
-      const uv = stampCoordinates(c.centre, c.corners.map(i => sphere.corners[i]!));
+      const uv = stampCoordinates(c.centre, c.corners.map(i => sphere.corners[i]!),north);
       const seed = Math.floor((Math.sin(c.index * 12.9898) * 43758.5453 % 1 + 1) % 1 * 4095);
       for (let i = 0; i < c.corners.length; i++) {
         const a = sphere.corners[c.corners[i]!]!, b = sphere.corners[c.corners[(i + 1) % c.corners.length]!]!;
@@ -300,9 +297,6 @@ export class PlanetRenderer {
     gl.uniform1f(this.u.uFocal!, at.f);
     gl.uniform2f(this.u.uShift!, at.ox, at.oy);
     gl.uniform1f(this.u.uPulse!, pulse);
-    const world = selectedWorld();
-    gl.uniform1f(this.u.uWorld!, WORLDS[world].code);
-    gl.uniform3fv(this.u.uWorldPigment!, WORLD_RGB[world]);
     // Without derivatives, one pixel of the side ramp is estimated from the tile's size on screen.
     gl.uniform1f(this.u.uPixel!, 1 / Math.max(4, at.radius * this.pixel * (Math.PI / 5) / this.sphere.frequency));
     const position = gl.getAttribLocation(this.ground, 'aPosition'), look = gl.getAttribLocation(this.ground, 'aLook'), stamp = gl.getAttribLocation(this.ground, 'aStamp');

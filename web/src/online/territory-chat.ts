@@ -1,12 +1,13 @@
 import { enterSurface, exitSurface } from '../ui/interface-motion.js';
-// TERRITORY CHAT, the page's side (owner, 2026-10-28): one shared channel for everyone in Territory,
+// GLOBAL CHAT (backend compatibility id: territoryChat): one shared channel on the Planet,
 // the newest 30 messages (server/src/chat/territory.ts keeps no more). It opens from the chat key in
 // the row of keys under MENU and closes from its own close key, on the same dark glass. While open
-// it asks for the channel every few seconds; shut, it asks for nothing. Tapping someone else's message
+// it polls every few seconds. A single early GET warms a bounded page; shut, it never polls. Tapping someone else's message
 // offers the two moderation keys duel chat already has: Block (two taps) and Report.
 import type { DuelClient } from '../../../server/src/client.js';
 import type { TerritoryMessage } from '../../../server/src/chat/territory.js';
 import { ONLINE } from '../../../src/strings.js';
+import { createChatFeed } from './global-chat-feed.js';
 
 /** How often an open chat asks for news. */
 export const TERRITORY_CHAT_POLL_MS = 4_000;
@@ -20,11 +21,21 @@ export class TerritoryChat {
   private generation = 0;
   private failures = 0;
   private signature = '';
-  private request: AbortController | null = null;
+  private actor:string|null=null;
+  private openedOnce=false;
+  /** null follows newest; a number preserves an older reading position across hidden refreshes. */
+  private readingTop:number|null=null;
+  private warmToken:string|null=null;
+  private warmAfter=0;
+  private readonly feed=createChatFeed<TerritoryMessage>(
+    (token,signal)=>this.client.territoryChat(token,signal),()=>{
+      this.paint();
+      if(this.status?.textContent===ONLINE.worldChatLoading)this.say('');
+    });
   /** The message whose moderation keys are showing, and whether its Block is armed. */
   private picked: string | null = null;
   private blockArmed = false;
-  private messages: TerritoryMessage[] = [];
+  private messages: readonly TerritoryMessage[] = [];
   private readonly panel = document.getElementById('online-world-chat-panel') as HTMLElement | null;
   private readonly key = document.getElementById('online-world-chat') as HTMLButtonElement | null;
   private readonly list = document.getElementById('world-chat-list') as HTMLOListElement | null;
@@ -38,9 +49,11 @@ export class TerritoryChat {
     /** Told when the chat opens, so the menu window can shut (one window at a time). */
     private readonly onOpen: () => void = () => undefined,
   ) {
+    this.panel?.setAttribute('aria-label',ONLINE.worldChat);
     document.addEventListener('visibilitychange', () => {
       if (!this.open) return;
       this.cancelPoll();
+      if(document.hidden)this.feed.abort();
       if (!document.hidden) void this.poll();
     });
     window.addEventListener('online', () => { if (this.open) { this.cancelPoll(); void this.poll(); } });
@@ -84,10 +97,11 @@ export class TerritoryChat {
 
   setOpen(open: boolean) {
     if (open === this.open) return;
+    if(!open&&this.list)this.readingTop=this.list.scrollHeight-this.list.scrollTop-this.list.clientHeight<24?null:this.list.scrollTop;
     this.open = open;
     if (this.panel) {
       const panel = this.panel;
-      if (open) { panel.hidden = false; enterSurface(panel, { travel: 4, scale: .996 }); }
+      if (open) { panel.hidden = false; this.paint(!this.openedOnce);if(this.list)this.list.scrollTop=this.readingTop??this.list.scrollHeight;this.openedOnce=true; enterSurface(panel, { travel: 4, scale: .996 }); }
       else exitSurface(panel, { onDone: () => { panel.hidden = true; } });
     }
     this.key?.setAttribute('aria-expanded', String(open));
@@ -99,14 +113,13 @@ export class TerritoryChat {
     if (!open) { (this.key && !this.key.closest('[inert]') ? this.key : document.getElementById('online-world-menu'))?.focus({ preventScroll: true }); return; }
     this.onOpen();
     document.getElementById('world-chat-back')?.focus({ preventScroll: true });
-    this.say('');
+    this.say(this.feed.snapshot(this.token()).loaded?'':ONLINE.worldChatLoading);
     this.paint();
     void this.poll();
   }
 
   private cancelPoll() {
     this.generation++;
-    this.request?.abort(); this.request = null;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
@@ -114,14 +127,11 @@ export class TerritoryChat {
   private async poll() {
     if (!this.open || document.hidden || this.busy) return;
     const generation = this.generation;
-    const request = new AbortController();
-    this.request = request;
     const token = this.token();
     if (token) {
       try {
-        const page = await this.client.territoryChat(token, request.signal);
+        await this.feed.read(token,TERRITORY_CHAT_POLL_MS);
         if (generation !== this.generation) return;
-        this.messages = page.messages;
         this.failures = 0;
         this.paint();
         if (this.status?.textContent === ONLINE.worldChatOffline) this.say('');
@@ -145,13 +155,16 @@ export class TerritoryChat {
     if (send) send.disabled = true;
     this.cancelPoll();
     try {
-      this.messages = (await this.client.territoryChatSend(token, pending.text, pending.id)).messages;
+      const page=await this.client.territoryChatSend(token,pending.text,pending.id);
+      if(this.token()!==token)return;
+      if(this.token()===token)this.feed.replace(token,page.messages);
       if (this.input?.value.trim() === pending.text) this.input.value = '';
       this.pending = null;
       if (send) send.textContent = ONLINE.worldChatSend;
       this.say('');
       this.paint(true);
     } catch (error) {
+      if(this.token()!==token)return;
       if (send) send.textContent = ONLINE.worldChatRetry;
       this.say((error as { code?: string }).code === 'RATE_LIMITED' ? ONLINE.worldChatSlow : ONLINE.worldChatFailed);
     } finally {
@@ -166,12 +179,14 @@ export class TerritoryChat {
     if (!token || this.moderating) return;
     this.moderating=true;this.paint();
     try {
-      this.messages = (await this.client.territoryChatBlock(token, id)).messages;
+      const page=await this.client.territoryChatBlock(token,id);
+      if(this.token()!==token)return;
+      if(this.token()===token)this.feed.replace(token,page.messages);
       this.picked = null;
       this.blockArmed = false;
       this.paint();
     } catch {
-      this.say(ONLINE.worldChatFailed);
+      if(this.token()===token)this.say(ONLINE.worldChatFailed);
     } finally { this.moderating=false;this.paint(); }
   }
 
@@ -181,21 +196,37 @@ export class TerritoryChat {
     this.moderating=true;this.paint();
     try {
       await this.client.territoryChatReport(token, id, 'abuse');
+      if(this.token()!==token)return;
       this.picked = null;
       this.say(ONLINE.worldChatReported);
       this.paint();
     } catch {
-      this.say(ONLINE.worldChatFailed);
+      if(this.token()===token)this.say(ONLINE.worldChatFailed);
     } finally { this.moderating=false;this.paint(); }
   }
 
   private say(text: string) { if (this.status) this.status.textContent = text; }
 
+  /** Called while Planet/menu is already visible: one warm page, never a hidden polling loop. */
+  prefetch():void {
+    this.paint();
+    const token=this.token(),now=Date.now();
+    if(!token||(this.warmToken===token&&now<this.warmAfter))return;
+    this.warmToken=token;this.warmAfter=now+30_000;
+    void this.feed.read(token).catch(()=>{/* Opening retains the normal recoverable status. */});
+  }
+
   /** Newest at the bottom; the list stays at the bottom unless the reader has scrolled up. */
   private paint(forceBottom = false) {
     const list = this.list;
     if (!list) return;
-    const signature = JSON.stringify([this.messages, this.picked, this.blockArmed, this.moderating]);
+    const token=this.token();
+    if(token!==this.actor){
+      this.actor=token;this.readingTop=null;this.pending=null;this.picked=null;this.blockArmed=false;this.openedOnce=false;this.warmToken=null;this.warmAfter=0;
+      if(this.input)this.input.value='';
+    }
+    const page=this.feed.snapshot(token);this.messages=page.messages;
+    const signature = JSON.stringify([this.messages, page.loaded, this.picked, this.blockArmed, this.moderating]);
     if (signature === this.signature && !forceBottom) return;
     this.signature = signature;
     const focused = document.activeElement as HTMLElement | null;
@@ -203,7 +234,7 @@ export class TerritoryChat {
     const focusedAction = focused?.dataset.action;
     const previousTop = list.scrollTop;
     const atBottom = forceBottom || list.scrollHeight - list.scrollTop - list.clientHeight < 24;
-    if (this.empty) this.empty.hidden = this.messages.length > 0;
+    if (this.empty) this.empty.hidden = !page.loaded || this.messages.length > 0;
     list.replaceChildren(...this.messages.map((m) => {
       const item = document.createElement('li');
       item.className = `world-chat-line${m.mine ? ' mine' : ''}${this.picked === m.id ? ' picked' : ''}`;
@@ -245,8 +276,10 @@ export class TerritoryChat {
       }
       return item;
     }));
-    if (atBottom) list.scrollTop = list.scrollHeight;
-    else list.scrollTop = previousTop;
+    if(this.open){
+      if (atBottom) list.scrollTop = list.scrollHeight;
+      else list.scrollTop = previousTop;
+    }
     if (focusedId) {
       const row = [...list.children].find(e => (e as HTMLElement).dataset.messageId === focusedId) as HTMLElement | undefined;
       (focusedAction ? row?.querySelector<HTMLElement>(`[data-action="${focusedAction}"]`) : row)?.focus({ preventScroll: true });

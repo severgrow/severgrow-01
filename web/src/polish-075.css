@@ -20,53 +20,38 @@ html.v075 :is(.sheet, #sheet-menu, #gameover .go-card, #play-menu .levels-inner,
   border-radius: 15px !important;
 }
 
-/* ---- 2. NO CREAM-FILLED BUTTONS ---------------------------------------------------------------
-   Every cream-FILLED key becomes a cream OUTLINE on dark glass. The lead key keeps its lead by a full
-   cream line where its neighbours have a faint one. Tabs, switches and sliders are not buttons and are
-   left as they were (the selected difficulty, the checkbox, the toggled tools). */
-html.v075 :is(.btn.primary, .menu-buttons .btn.primary, .gameover .go-buttons .btn.primary,
-  #gameover .go-buttons .btn.primary, #levels .level-grid .difficulty-tile.primary,
-  .campaign-tile[data-state='current'], .world-key.world-key-text.armed) {
-  background: var(--dark-glass) !important;
-  border: 1px solid var(--fu-cream, #e8ddc5) !important;
-  color: var(--fu-cream, #e8ddc5) !important;
+/* One matte key material. Recommendation is a quiet amber halo, never a different fill,
+   outline or weight. Semantic primary classes still describe actions to the application. */
+html.v075 {
+  --matte-key: linear-gradient(180deg, #ffffff06, transparent 48%, #00000016) var(--dark-glass);
+  --matte-key-line: color-mix(in srgb, var(--fu-cream, #e8ddc5) 22%, transparent);
+  --matte-key-shadow: inset 0 1px 0 #ffffff10, inset 0 -1px 0 #0005, 0 1px 2px #0004;
+}
+html.v075 :is(.btn:not(.link), .difficulty-tile, .campaign-tile, :where(.world-key.world-key-text.armed)) {
+  --press-drop: 1px; --press-depth: 1;
+  background: var(--matte-key) !important;
+  border: 1px solid var(--matte-key-line) !important;
+  box-shadow: var(--matte-key-shadow) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+/* Cream-filled legacy primaries used dark ink. Their new matte surface needs the same ivory. */
+html.v075 :is(.btn.primary, #levels .difficulty-tile.on, .campaign-tile[data-state='current'],
+  .world-key.world-key-text.armed) { color: var(--control-ivory, #f5edda) !important; }
+html.v075 :is(#menu,#play-menu,#levels,#campaign,#online-hub,#online-waiting,#online-join) .btn {
+  color: var(--control-ivory, #f5edda) !important; font-weight: 500;
+}
+html.v075 :is(#menu,#play-menu) .btn.suggest::before,
+html.v075 :is(#menu,#play-menu) .btn.suggest::after { content: none !important; }
+html.v075 :is(#menu,#play-menu) .btn.suggest,
+html.v075 .campaign-tile[data-state='current'] {
+  box-shadow: var(--matte-key-shadow), 0 0 15px color-mix(in srgb, var(--turn-rim-ink,#f5d8a4) 12%, transparent) !important;
+}
+html.v075 :is(#menu,#play-menu) .btn[data-pressed='true'],
+html.v075 :is(.btn:not(.link), .difficulty-tile, .campaign-tile)[data-pressed='true'],
+html.v075 #levels .difficulty-tile.on {
+  box-shadow: inset 0 2px 4px #0008, inset 0 0 0 1px #0003 !important;
 }
 html.v075 .campaign-tile[data-state='current'] * { color: inherit; }
-
-/* ---- 3. METAL KEYS ----------------------------------------------------------------------------
-   The menu's and the submenus' keys are lowkey machined metal: a fine highlight along the top edge,
-   a very faint brushed grain, a hairline edge; pressed, the key sinks one pixel into its housing with
-   an inner shadow (the one press, web/src/logic/press.ts: a pure 1px drop, no shrink). Quiet, not
-   shiny. The 50px key, its focus ring and Reduce motion (no travel) are unchanged. */
-html.v075 :is(#menu, #play-menu, #levels, #campaign, #online-hub, #online-waiting, #online-join) .menu-buttons .btn {
-  --press-drop: 1px;
-  --press-depth: 1;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, .052) 0%, rgba(255, 255, 255, .012) 42%, rgba(0, 0, 0, .1) 100%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, .016) 0 1px, transparent 1px 3px),
-    var(--dark-glass) !important;
-  border: 1px solid color-mix(in srgb, var(--fu-cream, #e8ddc5) 24%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .13),
-    inset 0 -1px 0 rgba(0, 0, 0, .42),
-    0 1px 1px rgba(0, 0, 0, .38) !important;
-}
-/* EVERY MENU KEY IS THE SAME KEY (owner, 2026-11-04: "All buttons should be the same in menu and sub
-   menu tho no more highlight diff style for play or level1"): the lead key has no outline of its own
-   and no halo; it leads by its place at the top of the column. */
-html.v075 :is(#menu, #play-menu, #levels, #campaign, #online-hub, #online-waiting, #online-join) .menu-buttons .btn.primary {
-  border-color: color-mix(in srgb, var(--fu-cream, #e8ddc5) 24%, transparent) !important;
-}
-html.v075 :is(#menu, #play-menu) .menu-buttons > .btn.suggest::after,
-html.v075 :is(#menu, #play-menu) .menu-buttons > .btn.suggest::before { content: none !important; box-shadow: none !important; }
-html.v075 :is(#menu, #play-menu) .menu-buttons > .btn.suggest { box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .13),
-    inset 0 -1px 0 rgba(0, 0, 0, .42),
-    0 1px 1px rgba(0, 0, 0, .38) !important; }
-/* Pressed: the housing's shadow falls inside the key and its top light goes out. */
-html.v075 :is(#menu, #play-menu, #levels, #campaign, #online-hub, #online-waiting, #online-join) .menu-buttons .btn[data-pressed='true'] {
-  box-shadow: inset 0 2px 3px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(0, 0, 0, .18) !important;
-}
 
 /* ---- C. STEADY NUMBERS ------------------------------------------------------------------------
    Scores and counters use fixed-width digits everywhere in play, so a 9 becoming a 10 never nudges
@@ -84,10 +69,11 @@ html.v075 #board .planet-shadow-near { fill: rgba(0, 0, 0, .34); }
 /* ---- B. TURN RIM -------------------------------------------------------------------------------
    The board's own edge carries a thin atmosphere: amber on the player's turn, dim on the opponent's.
    Immediate state paint, independent of queued announcements; never a loop. */
-html.v075 #board .planet-turn-glow { fill: none; stroke: var(--turn-rim-ink); stroke-width: 6; stroke-linejoin: round; opacity: .13; }
+html.v075 #board .planet-turn-glow { fill: none; stroke: var(--turn-rim-ink); stroke-width: 6; stroke-linejoin: round; opacity: .0286; }
 html.v075 #board .planet-turn-line { fill: none; stroke: var(--turn-rim-ink); stroke-width: 1.1; stroke-linejoin: round; opacity: .85; }
 html.v075 #board .planet-turn-rim { opacity: .22; }
 html.v075 body[data-turn='you'] #board .planet-turn-rim { opacity: 1; }
+html.v075 body[data-turn='you'] #board .planet-turn-glow { opacity: .13; }
 
 /* ---- A. SEAMLESS MENU -> GAME ------------------------------------------------------------------
    The stars carry on (one shared offset, web/src/sphere/space.ts); the board rises into the place the
@@ -120,16 +106,6 @@ html.v075.reduce-motion #game #board-wrap { transition: none; }
     translate: var(--side-dock-shift, 0px) clamp(16px, 3vh, 32px);
   }
 }
-#world-style-picker { margin-top: 20px; }
-#world-style-picker > .world-pane-label { margin-bottom: 12px; }
-#world-style-picker .world-colour-name { line-height: 1.4; min-height: 2.8em; white-space: normal; }
-/* The default is a quiet reset row; the four worlds form one balanced row beneath it. */
-#world-style-picker [data-world-style='futasaku'] {
-  grid-column: 1 / -1; grid-template-columns: 28px 1fr; grid-template-rows: 1fr;
-  align-items: center; gap: 10px; padding: 8px; min-height: 44px;
-}
-#world-style-picker [data-world-style='futasaku'] .world-colour-chip { height: 24px; }
-#world-style-picker [data-world-style='futasaku'] .world-colour-name { min-height: 0; text-align: left; }
 /* Existing seven motes: varied depth, a small lateral drift and invisible loop boundaries.
    Their cached compositor layers stay; no extra particles, filters or render loop. */
 html.v075 #spores i {

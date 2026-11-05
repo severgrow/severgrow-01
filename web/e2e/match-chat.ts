@@ -258,7 +258,9 @@ try {
   },{once:true}));
   const phraseBox=(await phraseKey.boundingBox())!;
   await sender.mouse.move(phraseBox.x+phraseBox.width/2,phraseBox.y+phraseBox.height/2);await sender.mouse.down();await sender.waitForTimeout(180);
-  check('chat keys use one native press depth without stacked compression',await phraseKey.evaluate(e=>{const s=getComputedStyle(e);return s.transform==='none'&&Math.abs(Number(s.scale)-.97)<.002;}));
+  const keyPress=await phraseKey.evaluate(e=>{const s=getComputedStyle(e);return {transform:s.transform,scale:s.scale,translate:s.translate,pressed:e.getAttribute('data-pressed'),style:e.getAttribute('style'),reduce:document.documentElement.classList.contains('reduce-motion'),hit:document.elementFromPoint(e.getBoundingClientRect().x+e.getBoundingClientRect().width/2,e.getBoundingClientRect().y+e.getBoundingClientRect().height/2)?.outerHTML.slice(0,180)};});
+  if(!(keyPress.transform==='none'&&Math.abs(Number(keyPress.scale)-.97)<.002))console.error('Chat press diagnostic',keyPress);
+  check('chat keys use one native press depth without stacked compression',keyPress.transform==='none'&&Math.abs(Number(keyPress.scale)-.97)<.002);
   await sender.mouse.up();
   check('the phrase glyph gives a finite playful nod',await phraseKey.getAttribute('data-test-finite-nod')==='true');
   await sender.waitForTimeout(200);

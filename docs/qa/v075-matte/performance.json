@@ -1,0 +1,725 @@
+{
+  "reference": "60ca54e4eff8af0f473bafda8685908ec2302373",
+  "candidate": "final v075-matte-planet validation tree (hidden_fix_candidate includes LED cancellation fix)",
+  "environment": {
+    "browser": "system Chromium, Linux software graphics",
+    "viewport": [
+      390,
+      844
+    ],
+    "dpr": 3,
+    "cpu_slowdown": 4,
+    "seed": "219682080",
+    "physical_phone": false
+  },
+  "groups": {
+    "initial_reference": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 2.918333333333319,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 0.8706666666666677,
+          "taskMsPerS": 15.314666666666662,
+          "longTaskMs": 0,
+          "drawFramesPerS": 181.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 14.427000000000001
+        },
+        "turn": {
+          "frames": 17,
+          "fps": 26.153846153846153,
+          "median": 16.69999999999891,
+          "p95": 349.89999999999964,
+          "worst": 349.89999999999964,
+          "over33": 1,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 44.4215,
+          "taskMsPerS": 121.22499999999991
+        }
+      },
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 9.650333333333354,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 1.3283333333333387,
+          "taskMsPerS": 25.706999999999997,
+          "longTaskMs": 0,
+          "drawFramesPerS": 169.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 11.536
+        },
+        "turn": {
+          "frames": 7,
+          "fps": 11.350737797956889,
+          "median": 16.799999999999272,
+          "p95": 483.3999999999978,
+          "worst": 483.3999999999978,
+          "over33": 1,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 28.61249999999993,
+          "taskMsPerS": 93.02750000000026
+        }
+      },
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 5.468333333333334,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 1.4399999999999968,
+          "taskMsPerS": 22.622666666666756,
+          "longTaskMs": 0,
+          "drawFramesPerS": 178.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 16.017333333333347
+        },
+        "turn": {
+          "frames": 14,
+          "fps": 21.002100210020934,
+          "median": 16.700000000000728,
+          "p95": 349.90000000000146,
+          "worst": 349.90000000000146,
+          "over33": 2,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 33.65449999999992,
+          "taskMsPerS": 94.70350000000005
+        }
+      }
+    ],
+    "initial_candidate": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 7.643999999999984,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 2.984666666666673,
+          "taskMsPerS": 29.62800000000006,
+          "longTaskMs": 0,
+          "drawFramesPerS": 180.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 17.6890000000001
+        },
+        "turn": {
+          "frames": 12,
+          "fps": 16,
+          "median": 33.29999999999927,
+          "p95": 416.7000000000007,
+          "worst": 416.7000000000007,
+          "over33": 3,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 42.34400000000005,
+          "taskMsPerS": 100.97149999999999
+        }
+      },
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 5.839999999999994,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 1.293999999999999,
+          "taskMsPerS": 28.904666666666582,
+          "longTaskMs": 0,
+          "drawFramesPerS": 174.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 25.759999999999987
+        },
+        "turn": {
+          "frames": 1,
+          "fps": 1.0344470880314465,
+          "median": 966.7000000000007,
+          "p95": 966.7000000000007,
+          "worst": 966.7000000000007,
+          "over33": 1,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 111.429,
+          "taskMsPerS": 297.145
+        }
+      },
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 30.772666666666556,
+          "layoutCountPerS": 0.3333333333333333,
+          "layoutMsPerS": 0.298000000000002,
+          "scriptMsPerS": 9.685000000000166,
+          "taskMsPerS": 115.41466666666622,
+          "longTaskMs": 0,
+          "drawFramesPerS": 167.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 16.124999999999947
+        },
+        "turn": {
+          "frames": 2,
+          "fps": 2.1819768710451704,
+          "median": 883.1999999999971,
+          "p95": 883.1999999999971,
+          "worst": 883.1999999999971,
+          "over33": 2,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 2,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 55.10549999999981,
+          "taskMsPerS": 132.51599999999897
+        }
+      }
+    ],
+    "hidden_fix_candidate": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 7.310333333333308,
+          "layoutCountPerS": 0.3333333333333333,
+          "layoutMsPerS": 0.17033333333333253,
+          "scriptMsPerS": 0.8926666666666527,
+          "taskMsPerS": 25.933333333333582,
+          "longTaskMs": 105,
+          "drawFramesPerS": 169.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 30.00733333333334
+        },
+        "turn": {
+          "frames": 16,
+          "fps": 18.823529411764707,
+          "median": 33.29999999999927,
+          "p95": 400,
+          "worst": 400,
+          "over33": 5,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "active": [],
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 18.292500000000047,
+          "taskMsPerS": 59.158999999999295
+        }
+      },
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 6.258000000000023,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 0.63166666666666,
+          "taskMsPerS": 29.097000000000005,
+          "longTaskMs": 0,
+          "drawFramesPerS": 180.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 14.397999999999962
+        },
+        "turn": {
+          "frames": 3,
+          "fps": 1.0112927692566998,
+          "median": 983.3000000000029,
+          "p95": 1433.199999999997,
+          "worst": 1433.199999999997,
+          "over33": 3,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "active": [],
+          "animations": 0,
+          "appRafPerS": 0,
+          "recalcMsPerS": 20.088000000000108,
+          "taskMsPerS": 84.07549999999998
+        }
+      },
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 11.006666666666646,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 2.4606666666666666,
+          "taskMsPerS": 31.971999999999962,
+          "longTaskMs": 0,
+          "drawFramesPerS": 23.333333333333332,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 6.9966666666666635
+        },
+        "turn": {
+          "frames": 2,
+          "fps": 0.8450942280064232,
+          "median": 2266.699999999997,
+          "p95": 2266.699999999997,
+          "worst": 2266.699999999997,
+          "over33": 2,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "active": [],
+          "animations": 0,
+          "appRafPerS": 0,
+          "recalcMsPerS": 1.2965000000000337,
+          "taskMsPerS": 29.522000000000048
+        }
+      }
+    ],
+    "interleaved-6-current": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 15.570666666666696,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 2.565999999999994,
+          "taskMsPerS": 99.40133333333279,
+          "longTaskMs": 0,
+          "drawFramesPerS": 119.33333333333333,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 22.00833333333343
+        },
+        "turn": {
+          "frames": 6,
+          "fps": 5.902026362384385,
+          "median": 66.70000000000437,
+          "p95": 766.6000000000058,
+          "worst": 766.6000000000058,
+          "over33": 4,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "active": [
+            "led-reel-old::1",
+            "smart-led-cells::1"
+          ],
+          "animations": 2,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 48.25100000000005,
+          "taskMsPerS": 142.78350000000017
+        }
+      }
+    ],
+    "interleaved-5-reference": [
+      {
+        "idle": {
+          "appRafPerS": 1,
+          "recalcCountPerS": 1,
+          "recalcMsPerS": 730.0453333333334,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 196.83566666666627,
+          "taskMsPerS": 1938.47,
+          "longTaskMs": 5724,
+          "drawFramesPerS": 16.333333333333332,
+          "beginMainPerS": 4,
+          "rasterMsPerS": 176.54066666666645
+        },
+        "turn": {
+          "frames": 8,
+          "fps": 0.8276261612629577,
+          "median": 116.70000000001164,
+          "p95": 6549.800000000003,
+          "worst": 6549.800000000003,
+          "over33": 4,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "active": [],
+          "animations": 0,
+          "appRafPerS": 27.5,
+          "recalcMsPerS": 128.9655000000005,
+          "taskMsPerS": 1972.618500000003
+        }
+      }
+    ],
+    "interleaved-4-reference": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 8.781999999999995,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 0.17900000000000324,
+          "taskMsPerS": 22.01566666666658,
+          "longTaskMs": 0,
+          "drawFramesPerS": 173.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 24.910000000000014
+        },
+        "turn": {
+          "frames": 11,
+          "fps": 3.815205327413983,
+          "median": 16.700000000000728,
+          "p95": 2583.2000000000007,
+          "worst": 2583.2000000000007,
+          "over33": 2,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "active": [],
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 87.12050000000016,
+          "taskMsPerS": 328.306
+        }
+      }
+    ],
+    "interleaved-3-current": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 35.739000000000004,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 1.8519999999999832,
+          "taskMsPerS": 73.83899999999998,
+          "longTaskMs": 0,
+          "drawFramesPerS": 123.33333333333333,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 24.21366666666673
+        },
+        "turn": {
+          "frames": 7,
+          "fps": 7.501071581654515,
+          "median": 33.400000000001455,
+          "p95": 699.9000000000015,
+          "worst": 699.9000000000015,
+          "over33": 4,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "active": [],
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 37.91050000000007,
+          "taskMsPerS": 118.64100000000022
+        }
+      }
+    ],
+    "interleaved-2-current": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 23.579000000000093,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 5.790000000000036,
+          "taskMsPerS": 104.84500000000037,
+          "longTaskMs": 0,
+          "drawFramesPerS": 172.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 21.46766666666677
+        },
+        "turn": {
+          "frames": 6,
+          "fps": 4.737091425864511,
+          "median": 66.70000000000073,
+          "p95": 900.0999999999985,
+          "worst": 900.0999999999985,
+          "over33": 5,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "active": [
+            "led-reel-old::1",
+            "smart-led-cells::1"
+          ],
+          "animations": 2,
+          "appRafPerS": 0,
+          "recalcMsPerS": 30.850000000000044,
+          "taskMsPerS": 123.7130000000004
+        }
+      }
+    ],
+    "interleaved-1-reference": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.3333333333333333,
+          "recalcMsPerS": 4.8263333333333405,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 0.8349999999999932,
+          "taskMsPerS": 15.725333333333444,
+          "longTaskMs": 0,
+          "drawFramesPerS": 167.33333333333334,
+          "beginMainPerS": 1,
+          "rasterMsPerS": 30.456000000000262
+        },
+        "turn": {
+          "frames": 1,
+          "fps": 0.9374707040404981,
+          "median": 1066.7000000000007,
+          "p95": 1066.7000000000007,
+          "worst": 1066.7000000000007,
+          "over33": 1,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": []
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "active": [],
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 189.40350000000007,
+          "taskMsPerS": 974.7485000000005
+        }
+      }
+    ]
+  }
+}

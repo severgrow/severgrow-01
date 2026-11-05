@@ -2,6 +2,7 @@
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
+import { mountStartupReveal } from './player/startup.js';
 // EXPERIMENTAL Blitz (/test/ only): presentation + wiring; its rules live in logic/blitz.ts.
 import type { BlitzPractice } from './blitz/practice.js';
 import { showLiveStrike } from './ui/live-strike.js';
@@ -540,7 +541,6 @@ const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | n
 const boardSvg = $('board') as unknown as SVGSVGElement;
 const board = defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)
   : DESIGN_MODE ? new DesignView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
-defaultArt?.bindWorldAppearance(board);
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const publishTurnRim = mountTurnRim(document.body);
@@ -11248,5 +11248,6 @@ void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => un
 // right on their next visit, without having to win another game first. Silent and fire-and-forget;
 // a device with nothing queued makes no request at all.
 void settleQueuedSeedsOnBoot();
+mountStartupReveal();
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

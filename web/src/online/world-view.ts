@@ -1,4 +1,3 @@
-import { paintWorldPicker } from '../worlds/picker.js';
 import type { DuelClient } from '../../../server/src/client.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
@@ -923,7 +922,7 @@ export class WorldView {
     }
   }
 
-  /** The same surface at rest: no private reads, poll, chat subscription or new renderer. */
+  /** The same renderer at rest. No polling/subscription; chat may warm one authenticated page. */
   preview(world: World | null, identity: Identity | null, fromMemory = false) {
     if (this.active) this.close(true);
     // Back on the menu the same element is simply the full-bleed backdrop again: the crop is a
@@ -936,6 +935,7 @@ export class WorldView {
     const firstOwner = !this.visited && !this.previewRemembered && owner !== this.previewOwner;
     this.identity = identity;
     this.previewOwner = owner;
+    this.chat.prefetch();
     if (changedWorld || firstOwner || !this.previewCameraRead) {
       this.previewCameraRead = true;
       // ONLY A GESTURE IS A CAMERA (owner, 2026-11-02: the anchor "works once and then stops").
@@ -1217,6 +1217,7 @@ export class WorldView {
       if (!this.active) return;
       const changedIdentity = this.identity?.playerId !== identity?.playerId || this.identity?.token !== identity?.token;
       if (changedIdentity) this.identity = identity;
+      this.chat.prefetch();
       // Paint the last good list from this device at once, then replace it with the fresh read. A
       // guest has no key at all, and never inherits another account's remembered list.
       this.achievements = restoreAchievements(browserStorage(), identity?.playerId ?? null);
@@ -2873,7 +2874,6 @@ export class WorldView {
     const label = document.getElementById('world-colour-label');
     const note = document.getElementById('world-colour-note');
     if (!grid) return;
-    paintWorldPicker(grid);
     if (label) label.textContent = ONLINE.worldColourLabel;
     // NO COUNTDOWN LINE (owner, 2026-10-30: "remove color change 1 per 24h - let it be changed
     // anytime for now"). The note is the saving state while a save is in flight and the plain hint

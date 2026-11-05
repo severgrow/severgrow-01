@@ -739,6 +739,10 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
    */
   let lastReduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
   let reel: Animation[] = [];
+  const settleReel=()=>{
+    for(const animation of reel)animation.cancel();reel=[];
+    windowEl.querySelector('.led-reel-old')?.remove();
+  };
   const close = () => { selector.hidden = true; context.setAttribute('aria-expanded','false'); };
   const closeBloom = () => { bloomSelector.hidden = true; bloomButton.setAttribute('aria-expanded','false'); };
   let bloomSources: HTMLButtonElement[] = [];
@@ -804,11 +808,10 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif && frame.flash === lastFlash) return;
     const previous = lastText;
     const animated = !still;
-    const scoreTick = animated && mode === 'score' && lastMode === 'score' && previous.length === value.length;
-    const animateReel = previous && animated && !scoreTick;
-    for (const running of reel) running.cancel(); reel = [];
+    const scoreTick = animated && !document.hidden && mode === 'score' && lastMode === 'score' && previous.length === value.length;
+    const animateReel = previous && animated && !document.hidden && !scoreTick;
+    settleReel();
     window.clearInterval(motifTimer);
-    windowEl.querySelector('.led-reel-old')?.remove();
     let old: HTMLCanvasElement | null = null;
     if (animateReel || scoreTick) {
       old = document.createElement('canvas'); old.className = 'led-reel-old';
@@ -905,6 +908,9 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
         cells.classList.add('scrolling');
       }
       if (old && old.isConnected) {
+        // The frame may have queued before visibility/reduced motion changed. Paint the final
+        // glyphs above, then leave no new reel animation running in a hidden page.
+        if(document.hidden||reduced){old.remove();return;}
         if (scoreTick) {
           const tick = old.animate([{translate:'0 0',opacity:1},{translate:'0 2px',opacity:0}],{duration:180,easing:'ease-out'});
           reel = [tick]; tick.onfinish = () => old?.remove();
@@ -931,7 +937,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     applyVisibilityGate();
     window.clearInterval(motifTimer);
     motifTimer = 0;
-    if (document.hidden) return;
+    if (document.hidden) {settleReel();return;}
     if (motifPaint) {
       motifPaint();
       motifTimer = window.setInterval(motifPaint, 88);

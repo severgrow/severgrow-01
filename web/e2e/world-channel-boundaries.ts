@@ -13,8 +13,8 @@ try{
   if(await p.locator('#sheet-campaign-start:not([hidden])').count())await p.locator('#csa-resume').click();
   await p.waitForFunction(()=>{const l=(window as any).__severgrow.lesson?.();return !!(window as any).__severgrow.state?.()&&(!l||!l.stage&&l.handSettled);});
   const material=await p.locator('#board .world-home-art').count();
-  assert.equal(material,path==='/test/'?1:0,`${path}: correct experimental preference boundary`);
-  console.log(`PASS ${path}: ${path==='/test/'?'selected Ocean world is applied':'saved experimental world is ignored'}`);
+  assert.equal(material,0,`${path}: correct experimental preference boundary`);
+  console.log(`PASS ${path}: retired experimental world is ignored`);
   await p.close();
  }
 }finally{await browser.close();await fixture.close();}

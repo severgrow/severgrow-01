@@ -3,6 +3,7 @@
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
 import { FEATURES, IS_FUTA04 } from '../channel.js';
+import { outlinePath } from './outline.js';
 import { allNeighbors, boardCoords, connectedKeys, coordKey, hexDistance, homeCoord, parseKey } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
@@ -10,7 +11,7 @@ import type { Spot } from '../logic/weakspots.js';
 import { looseEdges, networkEdges, veinLook } from '../logic/network.js';
 import type { ThemeStyle } from '../logic/themes.js';
 import type { MaterialLook } from '../logic/materials.js';
-import { FULL_LOOK, S, boardBulge, centerOf, cornerPts, el, hash, hexPath, noiseTile, setBoardBulge, star } from './geom.js';
+import { FULL_LOOK, S, boardBulge, centerOf, cornerPts, el, getPixelGrid, hash, hexPath, noiseTile, setBoardBulge, star } from './geom.js';
 import { drawMaterial, materialDefs } from './materials.js';
 import { WorldLayer } from './worldlayer.js';
 import { boardUnits } from '../logic/layout.js';
@@ -434,16 +435,12 @@ export class BoardView {
     el('path', { d: cells, fill: this.url('planet-rim'), class: 'planet-limb' }, skin);
     // A PIECE OF PLANET IN SPACE (owner, 2026-11-04: "The board should feel like real piece of planet
     // flying but lowkey"): the board's own silhouette, twice, offset below it at low alpha: a soft
-    // shadow with no filter, drawn once under every tile.
+    // shadow drawn once beneath the entire board silhouette.
     const shadow = el('g', { class: 'l-planet-shadow', 'aria-hidden': 'true', 'pointer-events': 'none' });
     this.svg.insertBefore(shadow, this.layers.base);
-    let wide = '';
-    for (const key of this.keys) wide += hexPath(key, S * 1.06, 'flat');
-    el('path', { d: wide, transform: 'translate(0 14)', class: 'planet-shadow-far' }, shadow);
-    el('path', { d: cells, transform: 'translate(0 6)', class: 'planet-shadow-near' }, shadow);
     // The outline: every cell side with no neighbour across it, as drawn (bent corners).
     const set = new Set(this.keys);
-    let rim = '';
+    const edges: (readonly [readonly [number,number],readonly [number,number]])[] = [];
     for (const key of this.keys) {
       const c = centerOf(key), pts = cornerPts(key, S);
       for (let i = 0; i < 6; i++) {
@@ -451,11 +448,17 @@ export class BoardView {
         const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
         const out = hexAtPoint(mx + (mx - c.x) * 0.9, my + (my - c.y) * 0.9, set, 1);
         if (out) continue;
-        rim += `M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`;
+        edges.push([a,b]);
       }
     }
+    const rim=outlinePath(edges,Math.max(.15,getPixelGrid()*1.5));
+    // Painted feathering stays cheap when the board's parent rises/scales. No filter re-raster
+    // on that moving ancestor, and no softening of tile art or digits (VISUAL-CONVENTIONS.md).
+    el('path',{d:rim,transform:'translate(0 6)',class:'planet-shadow-far',stroke:'#000','stroke-opacity':.04,'stroke-width':4,'stroke-linejoin':'round'},shadow);
+    el('path',{d:rim,transform:'translate(0 2)',class:'planet-shadow-near',stroke:'#000','stroke-opacity':.08,'stroke-width':2,'stroke-linejoin':'round'},shadow);
+    const glow=el('g',{class:'planet-turn-glow','stroke-linejoin':'round'},shadow);
+    for(const [width,opacity] of [[8,.12],[5,.35],[3,.5]])el('path',{d:rim,'stroke-width':width!,'opacity':opacity!},glow);
     const turn = el('g', { class: 'planet-turn-rim' }, skin);
-    el('path', { d: rim, class: 'planet-turn-glow' }, turn);
     el('path', { d: rim, class: 'planet-turn-line' }, turn);
   }
 
