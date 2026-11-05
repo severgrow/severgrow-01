@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, EFFECTS, parseSettings, speedFactor } from '../src/logic/settings.js';
+import { DEFAULT_SETTINGS, EFFECTS, parseSettings, saveableSettings, speedFactor } from '../src/logic/settings.js';
 
 describe('settings (saved in the browser)', () => {
   it('has every setting from the brief, with sensible defaults', () => {
     expect(DEFAULT_SETTINGS).toEqual({
       level: 7,
-      sound: true,
+      // OWNER CHANGED THE RULE (2026-11-05): "make sound disabled by default" (was on).
+      sound: false,
       music: false,
       vibration: true,
       reduceMotion: false,
@@ -106,4 +107,16 @@ describe('UI overhaul Part 3: "Eye candy" can be switched off and is remembered'
     expect(parseSettings(JSON.stringify({ eyeCandy: false })).eyeCandy).toBe(false);
     expect(parseSettings(JSON.stringify({ eyeCandy: 'no' })).eyeCandy).toBe(true);
   });
+
+  it('sound is off until the player turns it on (an old saved "on" was only the old default)', () => {
+    expect(DEFAULT_SETTINGS.sound).toBe(false);
+    // saved before 2026-11-05, when on was the default: not a choice, so it stays off
+    expect(parseSettings(JSON.stringify({ sound: true })).sound).toBe(false);
+    // a choice made since (the menu's sound key or Settings) is kept, both ways
+    expect(parseSettings(JSON.stringify({ sound: true, soundOn: true })).sound).toBe(true);
+    expect(parseSettings(JSON.stringify({ soundOn: false })).sound).toBe(false);
+    expect(parseSettings(JSON.stringify({ soundOn: true }), false, true).sound).toBe(true);
+    expect(saveableSettings({ ...DEFAULT_SETTINGS, sound: true })).toMatchObject({ sound: true, soundOn: true });
+  });
 });
+

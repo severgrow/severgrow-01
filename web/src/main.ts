@@ -211,7 +211,8 @@ import { effectBudget, idleTarget, moveTier, pitchLadder, tierBanner } from './l
 import type { Budget, Tier } from './logic/juice.js';
 import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
-import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
+import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, saveableSettings, speedFactor } from './logic/settings.js';
+import { mountMenuSoundKey } from './player/menu-sound-key.js';
 import { LAB_CATEGORIES, LAB_PRESETS, withLabPreset } from './logic/lab-presets.js';
 import type { LabCategory, LabPreset } from './logic/lab-presets.js';
 import { GLOW_SETTINGS } from './logic/topglow.js';
@@ -336,7 +337,7 @@ let cardPinned = false;
 /** v0.5: first-time tips for Fruit and Strengthen, remembered in the browser. */
 let tipsSeen = parseTips(store.get(TIPS_KEY));
 let tipOpen: FirstTip | null = null;
-const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(settings));
+const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(saveableSettings(settings)));
 const LAB_BASE_KEY = 'severgrow.lab.base.v1';
 const LAB_ACTIVE_KEY = 'severgrow.lab.active.v1';
 const savedLabBase = store.get(LAB_BASE_KEY);
@@ -354,7 +355,7 @@ if (IS_FUTA04 && labBaseline) {
   labBaseline = null;
   store.remove(LAB_BASE_KEY);
   store.remove(LAB_ACTIVE_KEY);
-  store.set(SETTINGS_KEY, JSON.stringify(settings));
+  store.set(SETTINGS_KEY, JSON.stringify(saveableSettings(settings)));
 }
 let labActiveId = labBaseline ? store.get(LAB_ACTIVE_KEY) : null;
 let labCategory: LabCategory = LAB_PRESETS.find((preset) => preset.id === labActiveId)?.category ?? 'surface';
@@ -1632,7 +1633,7 @@ function syncSettingsForm() {
 function applyLab(preset: LabPreset) {
   if (!labBaseline) {
     labBaseline = { ...settings };
-    store.set(LAB_BASE_KEY, JSON.stringify(labBaseline));
+    store.set(LAB_BASE_KEY, JSON.stringify(saveableSettings(labBaseline)));
   }
   settings = { ...withLabPreset(labBaseline, preset), level: settings.level };
   labActiveId = preset.id;
@@ -10555,7 +10556,7 @@ for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]'
     const k = input.dataset.setting as keyof Settings;
     settings = { ...settings, [k]: input.checked };
     saveSettings();
-    if (k === 'sound') sound.enabled = settings.sound;
+    if (k === 'sound') { sound.enabled = settings.sound; menuSoundKey.refresh(); }
     // Every switch flicks (the owner's ui.toggle_on / ui.toggle_off), sound itself only when turned on.
     if (settings.sound) { sound.unlock(); sound.toggle(input.checked); }
     if (k === 'music') {
@@ -10921,6 +10922,23 @@ if (!IS_FUTA04) onPhotosReady(() => {
   if (!busy()) render();
 });
 sound.enabled = settings.sound;
+/**
+ * THE ONE SOUND SWITCH (owner, 2026-11-05: sound off by default, a quiet key in the menu's corner).
+ * The menu key and Settings' switch both come here: save the choice, sync the form, and when sound
+ * turns on, answer with the key click so the player hears it work.
+ */
+function setSound(on: boolean) {
+  settings = { ...settings, sound: on };
+  saveSettings();
+  sound.enabled = on;
+  syncSettingsForm();
+  if (on) {
+    sound.unlock();
+    recorded.warm();
+    sound.press();
+  }
+}
+const menuSoundKey = mountMenuSoundKey({ isOn: () => settings.sound, setSound });
 sound.setEffects(settings.effects);
 sound.setMix(settings);
 sound.musicOn = settings.music;

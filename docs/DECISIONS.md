@@ -22,6 +22,11 @@ soft; the planet's keys the same as the menu's.
   the lift is silent. Cards and tiles play their own pick.
 - Silent now: rich-tile chime, cascades, rustle, sparks, thud, rumble, grind, the old turn tone.
 - Only the palette's files are fetched (was all 270).
+- SOUND OFF BY DEFAULT (owner: "make sound disabled by default but on main menu in corner make a low
+  opacity cream icon with the sound showing that its disabled"). The choice is saved as `soundOn`; an
+  old saved `sound: true` was only the old default and is not read. The menu's top-left corner (the
+  fullscreen key's mirror) holds a 44 px cream speaker at 0.3 opacity, crossed out while off; one tap
+  turns sound on (0.55, plain speaker). With sound off no take is fetched at all.
 
 ## 2026-11-05 (later) — Synth stabs on top of Cut, Bloom, Bomb and Blast
 

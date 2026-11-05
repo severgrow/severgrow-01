@@ -66,7 +66,7 @@ const seeded = (sound: boolean) => async (page: Page) => {
   await page.addInitScript((settings) => {
     localStorage.clear();
     localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify(settings));
-  }, { sound, music: false, coach: false, autoSkip: false, reduceMotion: false, speed: 'normal', vibration: false } as const);
+  }, { sound, soundOn: sound, music: false, coach: false, autoSkip: false, reduceMotion: false, speed: 'normal', vibration: false } as const);
 };
 
 const counters = (page: Page): Promise<Counters> => page.evaluate(() => ({ ...(window as unknown as { __sb: Counters }).__sb }));
@@ -196,7 +196,8 @@ try {
   const beforeStress = await counters(page);
   await page.evaluate(async () => {
     for (let i = 0; i < 30; i++) {
-      (window as any).__severgrow.soundCue('click');
+      // the key click (the lift is silent with the recordings, owner 2026-11-05)
+      (window as any).__severgrow.soundCue('press');
       await new Promise((r) => setTimeout(r, 70));
     }
   });

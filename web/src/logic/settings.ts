@@ -55,7 +55,8 @@ export type Settings = {
 
 export const DEFAULT_SETTINGS: Settings = {
   level: 7,
-  sound: true,
+  // Off until the player turns it on (owner, 2026-11-05: "make sound disabled by default").
+  sound: false,
   music: false,
   vibration: true,
   reduceMotion: false,
@@ -119,14 +120,20 @@ export const parseSettings = (raw: string | null, systemReduce = false, essentia
   // the old device-based "Confirm drawn moves" setting: On carries over as Always
   if (s.confirmDraw === true) out.confirmPolicy = 'always';
   if (CONFIRM_MODES.includes(s.confirmPolicy as ConfirmMode)) out.confirmPolicy = s.confirmPolicy as ConfirmMode;
-  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip', 'bloomHints'] as const) {
+  for (const k of ['music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip', 'bloomHints'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }
+  // SOUND IS A CHOICE (owner, 2026-11-05: off by default). A saved `sound` from before was only the
+  // old default (on), never a choice, so it is not read; the choice is saved as `soundOn`.
+  if (typeof s.soundOn === 'boolean') out.sound = s.soundOn;
   for (const k of ['sfxVolume', 'musicVolume'] as const) {
     if (typeof s[k] === 'number' && Number.isFinite(s[k])) out[k] = Math.round(Math.min(100, Math.max(0, s[k] as number)));
   }
   return out;
 };
+
+/** What is saved: the settings, with the sound choice under its own name (see parseSettings). */
+export const saveableSettings = (s: Settings): Settings & { soundOn: boolean } => ({ ...s, soundOn: s.sound });
 
 /** How long animations take relative to normal (0 = skip them). */
 export const speedFactor = (s: Speed): number => ({ slow: 1.6, normal: 1, fast: 0.5, skip: 0 })[s];
