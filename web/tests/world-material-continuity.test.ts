@@ -18,3 +18,16 @@ it('basalt plate junctions line up on both repeated atlas boundaries', () => {
     a.forEach((point,i)=>expect(point).toBeCloseTo(b[i]!,1));
   }
 });
+
+it('ships lossless baked atlases made from the current authoring recipes', async () => {
+  const { createHash } = await import('node:crypto');
+  const base=new URL('../src/assets/worlds/',import.meta.url);
+  const manifest=JSON.parse(readFileSync(new URL('materials.json',base),'utf8')) as {recipe:string;files:Record<string,{svg:string;webp:string}>};
+  expect(manifest.recipe).toBe('768px-lossless-webp-v1');
+  expect(Object.keys(manifest.files)).toEqual(['ocean','forest','magic-fields','volcanic']);
+  for(const [name,hashes] of Object.entries(manifest.files)) for(const ext of ['svg','webp'] as const){
+    const data=readFileSync(new URL(`${name}.${ext}`,base));
+    expect(createHash('sha256').update(data).digest('hex')).toBe(hashes[ext]);
+    if(ext==='webp')expect(data.subarray(8,12).toString()).toBe('WEBP');
+  }
+});

@@ -1,0 +1,21 @@
+{
+  "recipe": "768px-lossless-webp-v1",
+  "files": {
+    "ocean": {
+      "svg": "4d03f52581816bbae49b8c4e3f4537b1ae95a25a50c3f312eed0f6994cf6431b",
+      "webp": "399bf2b2a67ef574d1e2d56031f6827fa3518c5bdfcd025e79b31f63df9c233e"
+    },
+    "forest": {
+      "svg": "1aafa8bd96b22d8dff9ed6fe2ece646f460cf3f0e63af0dad05195a61f41bed3",
+      "webp": "9902c56132a9c8a81168050d8aaadfe5b3e53a11b99eb1a71de3023e4183d577"
+    },
+    "magic-fields": {
+      "svg": "4a518a6a6286de05c9773c6b6e3a4aab64e2c25b82bde26172f116aa0503a2df",
+      "webp": "65191e2c3717769dc3f13b32d1309d29b7764ad164d4221dcb7b43b5d6c901b0"
+    },
+    "volcanic": {
+      "svg": "4a8521157e423473e50d20811a6a1015894c33554bb520a2e211349265f2e40d",
+      "webp": "1b676ac97b9f5522d325c41d201eeb625e79e20dc56f1a7949745b2798ca3f9f"
+    }
+  }
+}

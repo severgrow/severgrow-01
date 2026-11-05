@@ -59,8 +59,14 @@ future integrations, not implemented features or hidden backend dependencies.
 - Magic Fields: indigo soil, silver reed beds/mineral paths, a restrained crystal formation.
 - Volcanic: cooled irregular basalt plates, rare residual heat, a crater home.
 
-`scripts/build-world-materials.mjs` deterministically generates small periodic SVG atlases and
+`scripts/build-world-materials.mjs` deterministically generates periodic SVG source atlases and
 landmarks. `node scripts/build-world-materials.mjs` must produce no diff unless the recipe changed.
+The board loads baked 768px lossless WebP terrain, avoiding repeated SVG-pattern rasterisation.
+Regenerate these after changing a recipe with
+`PW_CHROMIUM=/usr/bin/chromium node scripts/build-world-materials.mjs --raster` (Chromium and
+ffmpeg are authoring tools only, not application dependencies). `materials.json` pins source and
+output hashes; tests reject stale bakes. The four atlases total 288,556 bytes; only the chosen one
+loads (23–178KB each). Homes remain small vector assets.
 Board patterns use global board coordinates, including underneath homes: an atlas never restarts
 at a hex boundary. Existing rocks, gold frames, physical number stones and gameplay overlays remain
 separate. Only chosen full-detail terrain downloads; selector landmarks are tiny inline assets.

@@ -55,3 +55,35 @@ home('ocean','<ellipse cy="2" rx="22" ry="18" fill="#0b2932"/><path d="M-21 0C-2
 home('forest','<ellipse cy="7" rx="22" ry="15" fill="#18271d"/><path d="M-17 15Q0 22 18 13" fill="none" stroke="#91845e" stroke-opacity=".6"/><circle r="21" fill="url(#c)"/>'+Array.from({length:7},(_,i)=>{const a=i/7*Math.PI*2;return `<circle cx="${n(Math.cos(a)*11)}" cy="${n(Math.sin(a)*10-2)}" r="9" fill="url(#c)" stroke="#73855c" stroke-opacity=".25" stroke-width=".6"/>`;}).join('')+'<circle cx="-2" cy="-4" r="10" fill="url(#c)"/><path d="M-9-8q6-7 13-3" fill="none" stroke="#aeb98a" stroke-opacity=".6" stroke-width="1"/>',gradient('c','#7f8c60','#304932'));
 home('magic-fields','<ellipse cy="5" rx="21" ry="16" fill="#242735"/><ellipse rx="19" ry="15" fill="none" stroke="#8d8b9f" stroke-opacity=".45"/>'+Array.from({length:6},(_,i)=>`<path transform="rotate(${i*60})" d="M0-21L6-7 0 3-6-7Z" fill="url(#crystal)" stroke="#bbb7c5" stroke-opacity=".45" stroke-width=".5"/>`).join('')+'<path d="M0-9L7 0 0 8-7 0Z" fill="#b1c4b7"/><path d="M0-9V8" stroke="#e1dfd6" stroke-width=".6"/>', '<linearGradient id="crystal" x2="1" y2="1"><stop stop-color="#b8b0c3"/><stop offset=".48" stop-color="#666879"/><stop offset="1" stop-color="#37394a"/></linearGradient>');
 home('volcanic','<path d="M-23 4L-18-13-5-23 12-19 23-3 18 15 1 22-17 17Z" fill="#28272a" stroke="#756b61" stroke-opacity=".5"/><path d="M-17 3L-12-10-2-16 11-11 16 1 9 13-4 15Z" fill="url(#basalt)"/><ellipse rx="10" ry="8" fill="#191c1e"/><path d="M-8 0Q-3-9 5-5L9 0" stroke="#a26a41" stroke-width="1.5" fill="none"/><path d="M-6 1L1-3 6 2 0 5Z" fill="#6d422b"/><path d="M-1-2L3 0-1 2Z" fill="#ba8750"/>',gradient('basalt','#6d6258','#302d2e'));
+
+// Optional offline baking: one lossless texture per material, never live SVG rasterisation per
+// painted hex. Homes stay tiny vectors. Uses the project's existing browser tooling, no new deps.
+if (process.argv.includes('--raster')) {
+  const { chromium } = await import('playwright-core');
+  const { readFileSync, unlinkSync } = await import('node:fs');
+  const { execFileSync } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const { createHash } = await import('node:crypto');
+  const hashes = {};
+  const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox', '--disable-gpu'] });
+  try {
+    const page = await browser.newPage();
+    for (const name of ['ocean', 'forest', 'magic-fields', 'volcanic']) {
+      const source = readFileSync(new URL(name + '.svg', dir), 'utf8');
+      const data = await page.evaluate(async svg => {
+        const image = new Image();
+        image.src = 'data:image/svg+xml;base64,' + btoa(svg);
+        await image.decode();
+        const canvas = document.createElement('canvas'); canvas.width = canvas.height = 768;
+        canvas.getContext('2d').drawImage(image, 0, 0, 768, 768);
+        return canvas.toDataURL('image/png').split(',')[1];
+      }, source);
+      const png = new URL(name + '.png', dir), webp = new URL(name + '.webp', dir);
+      writeFileSync(png, Buffer.from(data, 'base64'));
+      execFileSync(process.env.FFMPEG ?? 'ffmpeg', ['-hide_banner','-loglevel','error','-y','-i',fileURLToPath(png),'-c:v','libwebp','-lossless','1','-compression_level','6','-pix_fmt','bgra',fileURLToPath(webp)]);
+      unlinkSync(png);
+      hashes[name] = { svg: createHash('sha256').update(source).digest('hex'), webp: createHash('sha256').update(readFileSync(webp)).digest('hex') };
+    }
+    writeFileSync(new URL('materials.json', dir), JSON.stringify({ recipe: '768px-lossless-webp-v1', files: hashes }, null, 2) + '\n');
+  } finally { await browser.close(); }
+}
