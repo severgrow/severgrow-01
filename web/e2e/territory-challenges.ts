@@ -125,7 +125,10 @@ const challenges: { incoming: WorldChallengeWire[]; outgoing: WorldChallengeWire
 
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
-  if (!ok) failed++;
+  if (!ok) {
+    failed++;
+    console.error(`::error title=Challenge check::${`${name}: ${note}`.replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A')}`);
+  }
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
 const n2 = (value: number) => Number(value.toFixed(2));
@@ -640,7 +643,9 @@ try {
     // Owner, 2026-11-02: "territory and profile windows dont match really - we should never use
     // frame contour like in territory challenge, it should be more like the profile window - but
     // BOTH (and any other similar) should be using our classic dark glass window style ... challenge
-    // and not now buttons should have a frame neither".
+    // and not now buttons should have a frame neither". The WINDOW remains frameless. On
+    // 2026-11-05 the owner changed the ACTIONS to match the ordinary matte menu buttons instead
+    // of the old yellow filled lead / transparent secondary; assert that shared material below.
     // The card's material is compared against the ONE family definition (helpers/glass-material.ts,
     // taken from --dark-glass / --dark-glass-blur and the "NO FRAME AROUND THE GLASS" rule), and the
     // same object is what the profile suite asserts. A drawn border or outline is a failure here —
@@ -661,6 +666,9 @@ try {
           outline: `${cs.outlineStyle} ${cs.outlineWidth} ${cs.outlineColor}`,
           fill: cs.backgroundColor,
           color: cs.color,
+          radius: cs.borderRadius,
+          blur: cs.backdropFilter,
+          borderColor: cs.borderTopColor,
           opacity: cs.opacity,
           height: +r.height.toFixed(1),
           reach: (el.textContent ?? '').trim().length > 0,
@@ -677,18 +685,19 @@ try {
         focusRing: focusRead.outline,
         primary: read(primary),
         secondary: read(secondary),
+        menu: read(document.getElementById('menu-world')!),
       };
     });
     check(`[${tag}] the opening focus ring still reads on the lead key`,
       !keyMaterial.focused || /^solid 2px rgb\(240, 233, 220\)$/.test(keyMaterial.focusRing),
       keyMaterial.focusRing);
-    check(`[${tag}] neither action key draws a ring`,
-      [keyMaterial.primary, keyMaterial.secondary].every((k) => k.borders.every((w) => w === '0px') && /^none 0px/.test(k.outline)),
+    check(`[${tag}] action keys use the ordinary matte key edge, with no extra outline`,
+      [keyMaterial.primary, keyMaterial.secondary].every((k) => JSON.stringify(k.borders) === JSON.stringify(keyMaterial.menu.borders) &&
+        k.borderColor === keyMaterial.menu.borderColor && /^none 0px/.test(k.outline)),
       `${JSON.stringify(keyMaterial.primary.borders)}/${keyMaterial.primary.outline} · ${JSON.stringify(keyMaterial.secondary.borders)}/${keyMaterial.secondary.outline}`);
-    // Without a ring the pair must still read as a pair: one filled lead key and one quiet second,
-    // each a 44px target. A transparent lead or a filled second is the failure this bites on.
-    check(`[${tag}] the lead key is filled and the quiet key is not, both 44px`,
-      keyMaterial.primary.fill !== 'rgba(0, 0, 0, 0)' && keyMaterial.secondary.fill === 'rgba(0, 0, 0, 0)' &&
+    check(`[${tag}] both actions share the menu matte/glass and ivory material, both 44px`,
+      [keyMaterial.primary,keyMaterial.secondary].every(k=>k.fill===keyMaterial.menu.fill && k.color===keyMaterial.menu.color &&
+        k.radius===keyMaterial.menu.radius && k.blur===keyMaterial.menu.blur) &&
       keyMaterial.primary.height >= 43.5 && keyMaterial.secondary.height >= 43.5,
       `${keyMaterial.primary.fill} / ${keyMaterial.secondary.fill}, ${n2(keyMaterial.primary.height)}/${n2(keyMaterial.secondary.height)}px`);
     // The quiet key is quieter ON PURPOSE (the family's .75), and its label is still readable.

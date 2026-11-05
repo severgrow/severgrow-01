@@ -39,6 +39,15 @@ Planet controls, swords, joined board silhouette and 700ms challenge-to-duel doo
   animation-frame samples, retaining every timing and hand-over assertion, with failure diagnostics.
   The complete local 0.4 motion suite then passed Draw/Throw, Bloom, cuts, reduced motion and Bomb.
   Full CI must still pass before publication.
+- The challenge suite's old yellow-primary/transparent-secondary assertions were superseded by the
+  owner's new matte-button direction: both actions now must match the ordinary menu material,
+  border, blur, radius and ivory ink. Frameless window, focus, 44px targets, secondary quietness and
+  all challenge/settlement checks remain. The full suite passes phones, landscape and reduced motion.
+- Level 9's test loop now awaits the actual opponent-turn completion instead of exhausting its
+  400-move counter while repeatedly polling the same turn. Its bounded wait still fails a stalled
+  bot; all original lesson, cue, completion and progress assertions remain. The complete suite passes.
+- The normal root route also passes at 390×844 and 1440×900: blur, amber PLAY, 650ms exit/return,
+  no experimental Sphere Test entry and no browser errors.
 
 Real iOS hardware verification is unavailable here; CI WebKit is engine coverage, not a device claim.
 Local screenshots are in `/tmp/planet-matte/`. No performance claim is made from software-rendered
