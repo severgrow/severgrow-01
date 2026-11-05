@@ -7,7 +7,9 @@ no-skipped-growth bot changes. Engine rules, bot versions, online protocol, acco
 Seeds, planet topology and the approved projections are untouched.
 
 Worktree: `/workspace/futasaku-v075-worlds`; branch: `feature/v075-four-worlds`.
-**No push or promotion until the owner relays Claude's confirmation that his release is live.**
+The owner initially reconfirmed the release hold on 5 November, then relayed Claude's confirmation
+that `e657a8ac` deployed at 08:34 GMT and Codex may push. Both remote refs match that baseline.
+**The hold is cleared; publication still requires green checks. New worlds remain `/test/` only.**
 This document is a local handoff, not evidence of deployment. No unattended check-in is scheduled.
 
 ## Interaction changes
@@ -65,7 +67,7 @@ The board loads baked 768px lossless WebP terrain, avoiding repeated SVG-pattern
 Regenerate these after changing a recipe with
 `PW_CHROMIUM=/usr/bin/chromium node scripts/build-world-materials.mjs --raster` (Chromium and
 ffmpeg are authoring tools only, not application dependencies). `materials.json` pins source and
-output hashes; tests reject stale bakes. The four atlases total 288,556 bytes; only the chosen one
+output hashes; tests reject stale bakes. The four atlases total 288,718 bytes; only the chosen one
 loads (23–178KB each). Homes remain small vector assets.
 Board patterns use global board coordinates, including underneath homes: an atlas never restarts
 at a hex boundary. Existing rocks, gold frames, physical number stones and gameplay overlays remain
@@ -75,6 +77,9 @@ New terrain follows the default-art failed-image fallback rather than showing br
 The Planet uses low-detail world-fixed shader recipes sharing the material pigments and the
 existing grain field. No texture atlas, material rebuild, per-tile render loop or new dependency.
 Only `KIND.mine` receives the local cosmetic material; ownership hue and boundaries stay independent.
+Cosmetic changes apply immediately, with one 150ms opacity-settling beat on each renderer's surface,
+using the existing interface token. Rapid changes replace it; reduced motion skips it. No tile
+movement, delayed input, retained fill effect or extra rendering loop.
 The stamp adds two signed bytes per vertex to the existing geometry buffers; measure this alongside
 frame time rather than treating an extra attribute as free.
 
@@ -87,26 +92,37 @@ frame time rather than treating an extra attribute as free.
 
 Do not implement a second settings store, Realtime connection, particle system or grain layer.
 
-## Verification checkpoint
+### Captured previews
 
-Completed locally so far:
+These are real production renderers with deterministic test data, not concept art:
+[Ocean](screens/v075-worlds/ocean.png), [Forest](screens/v075-worlds/forest.png),
+[Magic Fields](screens/v075-worlds/magic-fields.png), [Volcanic](screens/v075-worlds/volcanic.png),
+[Planet](screens/v075-worlds/planet-ocean.png), [selector](screens/v075-worlds/selector.png),
+[desktop chat](screens/v075-worlds/desktop-chat.png).
+Each board gallery shows a deliberately different opposing skin; the real game currently falls
+back to classic for unassigned opponents. The Planet screenshots use a cached, offline world;
+their connection-error footer is fixture state, not a production connectivity claim.
 
-- Dependency install and baseline futa05 build.
-- Baseline Chromium captures: 320-class phone work follows; original captures at 390×844,
-  844×390, 1280×720 and 1440×900 are in `/tmp/v075-baseline/`.
-- Focused tests: 32 passed, plus three deferred-entry tests passed.
-- futa04 build and asset isolation passed (112 files at that checkpoint).
-- PLAY browser checks passed: early tap, immediate controls, 1500ms effect, no rendering during
-  the retained-frame fade, interrupted same-canvas return, cleanup, reduced motion and PWA resume.
-- First full check: 399 test files passed; one simulation-heavy test timed out while browser
-  workloads shared the machine (4043 passed, one expected failure, 66 optional skips).
-  Its isolated rerun passed all three tests in 7.08 seconds without changing its 60-second timeout.
+## Verification
 
-Still validating: final full check with no concurrent browser load, all four viewport/pair captures,
-final chat/lesson/Planet regressions and comparative performance. Do not infer completion from this
-checkpoint. WebKit is not installed; physical iOS Safari/PWA hardware has not been tested.
+[Full local validation and measured limits](V075-VALIDATION.md) records the initial failures,
+corrected harness/configuration runs, isolated timeout reruns and final browser results.
 
-## Integration after the release hold is lifted
+- All 226 world checks pass across four sizes and all 25 owner pairings.
+- Match chat: 93 checks; Living Territory: 231 checks. Critical flow, cockpit, pile layout,
+  information/tutorial intel, Territory challenges/gestures, PLAY fade and panel/channel checks pass.
+- Levels 1–10 and the robustness groups passed; the final reading-floor group passed after moving
+  the timed input before expensive captures. The three-second minimum and normal gameplay remain.
+- The complete Planet rerun passes, including repeated entry, exact picking, full-map zoom,
+  native double gesture, one-canvas cleanup, reduced motion and fallback.
+- Typechecks and futa04/futa-test/futa05 builds/assets pass. The full unit run passed 4,054 tests
+  and timed out on three unchanged simulation cases; all 29 tests in the isolated rerun pass
+  within their original budgets. No timeout was increased or test skipped to obtain a pass.
+- The manual cold-Draw frame budget remains red on both the reference and current software runner.
+  No sustained-60fps or performance-improvement claim is made. Physical iOS/WebKit is unavailable
+  locally; the normal release CI supplies the WebKit checks.
+
+## Integration
 
 Read `AGENTS.md`, `docs/RELEASE-FLOW.md` and `docs/HANDOFF-0.75.md` first. Inspect the latest remote
 release line and concurrent changes before integrating. Main integration surfaces are `main.ts`,

@@ -1,7 +1,8 @@
 # v0.75 refinement and four worlds — work queue
 
-Status: active local work; **all remote pushes and promotions held** pending the owner's confirmation
-that Claude's `e657a8ac` release is live. No scheduled background job exists in this environment.
+Status: active local verification. The owner relayed Claude's confirmation that `e657a8ac` deployed
+at 08:34 GMT on 5 November and cleared the push hold. Publication still requires green checks;
+new worlds are `/test/` only. No scheduled release job exists in this environment.
 The windows below are planning estimates, not unattended automation or delivery guarantees.
 
 ## Protected baseline and ownership
@@ -52,20 +53,21 @@ or time budget ends; never publish an incomplete or unverified feature to meet t
 
 ## Acceptance checklist
 
-- [ ] v0.75 before captures, architecture audit and performance baseline recorded.
-- [ ] Warm established amber token; border follows actual turn state without reveal/animation lag.
-- [ ] Sparse depth-aware atmosphere, no popping, no extra game-frame loop or expensive animated blur.
-- [ ] Desktop hand/cockpit lower; optional chat directly above, same bounds; mobile preserved.
-- [ ] PLAY controls immediate; planet alone fades ~1.5s; reversal/re-entry/reduced motion correct.
-- [ ] Crossed-swords stamp reads at real tile scale, including tiny planet views.
-- [ ] Four complete world identities, homes and adjacency-safe terrain; default retained.
-- [ ] Shared board/planet definitions; deterministic materials; local selection persists correctly.
-- [ ] Cosmetic selection never sends ownership/economy/account-preference mutations to the server.
-- [ ] Planet chat/colours/achievements feel tactile; interrupted opens/closes and focus stay correct.
-- [ ] Actual mobile/desktop screenshots reviewed and improved; digits/ownership/specials remain clear.
-- [ ] Applicable automated checks and builds pass without weakening tests.
-- [ ] Measured resource/loading/frame-time comparison; no leaked timers, listeners or GPU resources.
-- [ ] Focused commits, final handoff, remaining limitations and exact preview/deployment status recorded.
+- [x] v0.75 before captures, architecture audit and performance baseline recorded.
+- [x] Warm established amber token; border follows actual turn state without reveal/animation lag.
+- [x] Sparse depth-aware atmosphere, no popping, no extra game-frame loop or expensive animated blur.
+- [x] Desktop hand/cockpit lower; optional chat directly above, same bounds; mobile preserved.
+- [x] PLAY controls immediate; planet alone fades ~1.5s; reversal/re-entry/reduced motion correct.
+- [x] Crossed-swords stamp reads at real tile scale, including tiny planet views.
+- [x] Four complete world identities, homes and adjacency-safe terrain; default retained.
+- [x] Shared board/planet definitions; deterministic materials; local selection persists correctly.
+- [x] Cosmetic selection never sends ownership/economy/account-preference mutations to the server.
+- [x] Planet chat/colours/achievements feel tactile; interrupted opens/closes and focus stay correct.
+- [x] Actual mobile/desktop screenshots reviewed and improved; digits/ownership/specials remain clear.
+- [x] Functional automated checks/builds verified without weaker assertions; timing reruns and the
+  unresolved manual cold-Draw budget are disclosed in `V075-VALIDATION.md`.
+- [x] Measured resource/loading/frame-time comparison; no leaked timers, listeners or GPU resources.
+- [x] Focused commits, final handoff, remaining limitations and exact preview/deployment status recorded.
 
 ## Confirmed appearance scope
 
@@ -93,3 +95,11 @@ migration or campaign skin rotation now, and never present a guessed opponent pr
   timers or renderer. Reduced motion exits immediately. Returning cancels stale completion.
 - Six focused unit tests passed; full TypeScript check passed. Browser verification in progress.
 - Release hold unchanged. No push, promotion, server deployment or future check-in scheduled.
+
+## Final local handoff — 5 November
+
+Implementation is complete on the isolated branch. Final local results and initial failures are
+recorded in [V075-VALIDATION.md](V075-VALIDATION.md); reviewed screenshots and integration details
+are in [V075-WORLDS.md](V075-WORLDS.md). The owner cleared Claude's release hold after confirming
+its 08:34 GMT deployment. The next action is the normal gated `/test/` publication, with no
+production promotion. No server code or migration is part of this pass.
