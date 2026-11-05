@@ -246,6 +246,18 @@ try {
       check(`[${tag}] a tile tapped under the tile bar turns up clear of it`, !!at && at.y < grid.y + grid.height * .72 && Math.abs(now.zoom - z) < z * .01,
         at ? `${now.selected} now at ${((at.y - grid.y) / grid.height * 100).toFixed(0)}% of the window` : 'nothing selected');
     }
+    // A delayed connection/pentagon message must never resize the camera's viewport.
+    const noticeLayout=await p.evaluate(()=>{
+      const grid=document.getElementById('online-world-grid')!,notice=document.getElementById('online-world-notice')!;
+      const before=grid.getBoundingClientRect().toJSON(),text=notice.textContent;
+      notice.textContent='Connection paused. Your land is safe. '.repeat(5);
+      const during=grid.getBoundingClientRect().toJSON();notice.textContent=text;
+      const after=grid.getBoundingClientRect().toJSON();
+      return {before,during,after};
+    });
+    check(`[${tag}] status messages never move or resize the map window`,
+      ['x','y','width','height'].every(k=>Math.abs(noticeLayout.before[k]-noticeLayout.during[k])<.5&&Math.abs(noticeLayout.before[k]-noticeLayout.after[k])<.5),JSON.stringify(noticeLayout));
+
     // A drag turns the planet and never selects.
     const before = (await planet(p))!;
     const ground0 = (await screenOf(p, '0,0'))!;

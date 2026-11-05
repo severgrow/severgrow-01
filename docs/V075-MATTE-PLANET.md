@@ -109,6 +109,17 @@ implementation issues found during this pass and fixed before delivery. No PINNE
   Its seven doorway scenarios passed: single launch, Escape, navigation, preview ownership,
   background, reduced motion and failed-opening cleanup. The opaque page background stays untouched;
   the existing film grain's higher layer covers the doorway without duplication.
+- The zoom trace exposed a genuine layout race: a late mobile status message changed the panel
+  height from 454px to 403px before the wheel event. Phone readouts now share the map's grid cell,
+  clear of the menu and selection controls, so empty/long messages cannot resize the camera viewport.
+  A real-browser regression changes the message length and checks the panel's exact bounds. It
+  failed before the fix (403px → 290.5px → 403px) and passed after it (454px throughout). The
+  complete targeted 320px Planet suite then passed, including anchoring and menu continuity.
+- Fresh full local check: 404 files / 4,065 tests passed; unchanged Level 10 and seeded Bloom
+  simulations timed out. Rerunning those files alone passed all 93 lessons and six Bloom cases;
+  one Bloom simulation still exceeded 60s. Both complete GitHub unit/build gates on 1cc712f1 and
+  0217294a passed. Three additional diagnostic-helper tests prove errors retain nonzero exit codes.
+  No simulation, assertion, timeout or PINNED value was relaxed.
 - Earlier software-browser runs hit startup's existing 3.5s fail-open. The full final contract above
   passed without changing that bound. An initial broad Planet run missed one narrow-phone anchor
   measurement; its focused rerun measured 0.3px (under the unchanged 6px limit), and proved upright

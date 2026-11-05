@@ -298,6 +298,8 @@ Treat WebGL fallback, cleanup and device limitations as part of the experience. 
 - Planet dragging stays geographically north-up during input, with soft pole limits and wrapped
   longitude. No inertia, roll correction, zoom easing or recentering may move it after release.
   Keep wheel/pinch anchored where possible without violating that orientation.
+- Planet status readouts float in the existing stage; changing their text must never resize
+  the map or move the camera. Keep the menu and selection controls clear and pointer events through.
 - Planet challenge → duel uses one finite 700ms dark veil, with the existing grain above it. Prepare
   the board at the opaque midpoint; no overlapping screens. Reduced motion bypasses the doorway.
 - The board shadow and turn glow follow one closed perimeter. Keep the indicator crisp and feather
