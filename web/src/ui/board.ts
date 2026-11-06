@@ -151,6 +151,11 @@ export class BoardView {
   private glowScale = 1;
   private glowKeys: Set<string> | null = null;
   protected tileEls = new Map<string, SVGGElement>();
+  private tileSignatures = new Map<string,string>();
+  private contourSignature = '';
+  private glowSignature = '';
+  private richSignature = '';
+  private warmTimer: ReturnType<typeof setTimeout> | undefined;
   protected veinEls: { a: string; b: string; owner: Player; el: SVGElement }[] = [];
   protected shownVeins = new Set<string>(); // veins on screen last time, to draw new ones on
   private pressTimer: ReturnType<typeof setTimeout> | undefined;
@@ -281,6 +286,10 @@ export class BoardView {
 
   /** Builds the static parts (terrain) for a game and theme. */
   setup(config: RulesConfig, terrain: Record<string, Terrain>, style: ThemeStyle, look: MaterialLook = FULL_LOOK, paletteId: ThemeId = 'soil') {
+    this.world?.dispose();clearTimeout(this.warmTimer);
+    this.tileEls.clear();this.tileSignatures.clear();
+    this.contourSignature=this.glowSignature=this.richSignature='';this.glowKeys=null;
+    this.lastRender=null;
     this.paletteId = paletteId;
     this.config = config;
     this.style = style;
@@ -358,8 +367,9 @@ export class BoardView {
       // UX pass: the tiles fade in with their landscape, never the plain look first
       svg.classList.add('warming');
       const warm = () => svg.classList.remove('warming');
-      setTimeout(warm, 1500);
+      this.warmTimer=setTimeout(warm, 1500);
       this.world.onFirst = () => {
+        clearTimeout(this.warmTimer);
         if (this.lastRender) this.render(...this.lastRender);
         warm();
       };
@@ -559,11 +569,8 @@ export class BoardView {
       this.world.sync(paint, this.paletteId, this.look.textures ? 'normal' : 'low');
     }
     veins.replaceChildren();
-    tiles.replaceChildren();
     over.replaceChildren();
     scars.replaceChildren();
-    rich.replaceChildren();
-    this.tileEls.clear();
     this.veinEls = [];
 
     this.drawScars(board, o, scars);
@@ -571,17 +578,35 @@ export class BoardView {
     this.drawVeins(board, o, veins);
 
     const maxRank = this.config.maxRank;
+    let cursor=tiles.firstElementChild;
     for (const key of this.keys) {
       const t = board[key];
-      if (!t) continue;
-      this.tileEls.set(key, this.drawTile(tiles, key, t, maxRank));
+      if (!t) {
+        const old=this.tileEls.get(key);
+        if(old===cursor)cursor=cursor.nextElementSibling;
+        old?.remove();this.tileEls.delete(key);this.tileSignatures.delete(key);continue;
+      }
+      const signature=`${t.owner}:${t.strength}:${!!t.root}:${!!this.world?.ready}`;
+      let node=this.tileEls.get(key);
+      if(!node || this.tileSignatures.get(key)!==signature){
+        const next=this.drawTile(tiles,key,t,maxRank);
+        if(node){if(node===cursor)cursor=node.nextElementSibling;node.replaceWith(next);}
+        node=next;this.tileEls.set(key,node);this.tileSignatures.set(key,signature);
+      }
+      if(node===cursor)cursor=cursor.nextElementSibling;
+      else tiles.insertBefore(node,cursor);
     }
     this.drawGlows(board);
     if (IS_FUTA04) {
-      this.drawTerritoryContour(board);
-      for (const key of this.richKeys) {
-        const { x, y } = centerOf(key);
-        drawGoldFrame(rich, key, x, y, !!board[key]);
+      const contour=this.keys.map(key=>board[key]?.owner??'-').join('');
+      if(contour!==this.contourSignature){this.contourSignature=contour;this.drawTerritoryContour(board);}
+      const gold=[...this.richKeys].map(key=>Number(!!board[key])).join('');
+      if(gold!==this.richSignature || !rich.childElementCount){
+        this.richSignature=gold;rich.replaceChildren();
+        for (const key of this.richKeys) {
+          const { x, y } = centerOf(key);
+          drawGoldFrame(rich, key, x, y, !!board[key]);
+        }
       }
     }
     this.renderOverlays(board, o);
@@ -891,6 +916,11 @@ export class BoardView {
 
   /** The slight glow on top-rank tiles: a faint pre-rendered halo, above the tiles, under everything else. */
   protected drawGlows(board: Record<string, Tile | null>) {
+    const signature=JSON.stringify([this.glowOpts,this.glowScale,this.keys.map(key=>{
+      const t=board[key];return t&&!t.root?`${t.owner}:${t.strength}`:'';
+    })]);
+    if(signature===this.glowSignature)return;
+    this.glowSignature=signature;
     const layer = this.layers.glow;
     layer.replaceChildren();
     const now = new Set<string>();

@@ -55,8 +55,8 @@ describe('the beta line is a quiet version line between the wordmark and the ent
     // commit that bumps FEEDBACK.betaVersion.
     // 0.7 -> 0.75 with the owner's "planet standard" polish pass (2026-11-04); 0.75 -> 0.8 with the
     // animation, consistency and charcoal pass (owner, 2026-11-06: "Beta 0.8").
-    expect(FEEDBACK.betaVersion).toBe('0.8');
-    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('0.8');
+    expect(FEEDBACK.betaVersion).toBe('0.81');
+    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('0.81');
     // Owner (2026-10-31): one quiet line, not a sentence — "BETA 0.7 · FEEDBACK".
     expect(FEEDBACK.betaLink).toBe('Feedback');
     expect(lineSource).toContain('FEEDBACK.betaLink');

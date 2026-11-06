@@ -199,6 +199,7 @@ import {
 } from './logic/tutorial-gate.js';
 import type { TutorialGate } from './logic/tutorial-gate.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
+import {setData,setStyle} from './ui/dom-update.js';
 import type { GlassSurface, IntelGuide, IntelTabId } from './player/glass-surface.js';
 import { intelTips, nearestRule, ruleCards } from './logic/intel-guide.js';
 import { cancelStarterRitual, isStarterRitualPlaying, playStarterRitual } from './player/starter-ritual.js';
@@ -1958,7 +1959,7 @@ async function mountPlayerEnhancements() {
   const loads: Promise<unknown>[] = [];
   // Card art: start decode before fonts/thumb/camera finish so the crossfade can land early.
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
-    void import('./player/cards.js').then((m) => m.preloadCardArt());
+    void import('./player/cards.js').then((m) => m.mountCards());
   }
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
     placeTeachingPanel = (await import('./player/overlay-placement.js')).placeTeachingPanel;
@@ -5133,14 +5134,14 @@ function updateFuta04MoveActive() {
   document.documentElement.classList.toggle('futa04-move-active', active);
   // Free-play bulb nudge stops the moment a real move starts.
   if (active) clearFreePlayBulbNudge();
-  document.documentElement.dataset.futa04Bloom = String(!!session?.sel.kind?.startsWith('bloom-'));
+  setData(document.documentElement,'futa04Bloom',String(!!session?.sel.kind?.startsWith('bloom-')));
   const grew = !!session && myTurn() && !!grewThisTurn();
   const bloomReady = !!session && myTurn() && session.view.phase === 'ACT'
     && session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
-  document.documentElement.dataset.futa04Grew = String(grew);
-  document.documentElement.dataset.futa04BloomReady = String(bloomReady);
-  document.documentElement.dataset.futa04Waiting = String(myTurn() && !busy() && !watching);
-  document.documentElement.dataset.futa04Turn = String(session?.state.turnNumber ?? '');
+  setData(document.documentElement,'futa04Grew',String(grew));
+  setData(document.documentElement,'futa04BloomReady',String(bloomReady));
+  setData(document.documentElement,'futa04Waiting',String(myTurn() && !busy() && !watching));
+  setData(document.documentElement,'futa04Turn',String(session?.state.turnNumber ?? ''));
 }
 
 // ---------- idle hint ----------
@@ -5266,7 +5267,7 @@ function render() {
   armIdle();
   const v = session.view;
   const advice = myTurn() && !busy() ? currentAdvice() : null;
-  document.documentElement.style.setProperty('--anim', String(timeScale()));
+  setStyle(document.documentElement,'--anim',String(timeScale()));
   renderHud();
   const combo = drawCombo();
   if (!combo && (draw.shape.length || draw.desk.phase === 'live' || draw.msg)) draw = { ...DRAW0 };
@@ -5288,7 +5289,7 @@ function render() {
   if (FEATURES.smartCamera && camera) {
     // what I am working on: the map (a card picked, painting, the opponent's turn) or the cards
     const mapFocus = !myTurn() || busy() || draw.shape.length > 0 || !!draw.ptr || session.sel.card !== null || session.sel.hex !== null;
-    document.documentElement.dataset.focus = mapFocus ? 'map' : 'cards';
+    setData(document.documentElement,'focus',mapFocus?'map':'cards');
     feedCamera(v);
   }
   if (FEATURES.phoneLayout && thumbLayout) checkOverlap(v);
@@ -6737,7 +6738,7 @@ function oppSeat(): HTMLElement | null {
 function applyLayout() {
   const { w, h } = readAppViewport();
   if (document.documentElement.classList.contains('home-screen-app'))
-    document.documentElement.style.setProperty('--futasaku-app-height', `${h}px`);
+    setStyle(document.documentElement,'--futasaku-app-height',`${h}px`);
   const radius = session?.state.config.boardRadius ?? 3;
   // the Lab (test copy): a board of any shape fits by the box around its tiles
   const shapeCfg = session?.state.config;
@@ -7094,6 +7095,10 @@ function renderBoard(v: View, advice: Advice | null) {
  * of the board as it is actually drawn (the board is centred inside a taller area).
  */
 function placeCorners() {
+  // Product controls live in the cockpit, not the legacy .corner geometry. Measuring the
+  // whole SVG here forced style/layout between the board writes and the hand writes on every
+  // move (confirmed by the 0.81 CPU profile). Its --b-* values have no product consumers.
+  if(IS_FUTA04)return;
   const wrap = $('board-wrap');
   const svg = board.svg;
   const vb = svg.viewBox.baseVal;

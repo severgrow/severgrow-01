@@ -845,6 +845,8 @@ export const HELP = Object.freeze({
  *  sentences, labels are short capitals, the rest is one plain sentence each. Every tip names
  *  only what is public: the board, my own hand and the Throw pile. */
 export const INTEL = Object.freeze({
+  record: 'Match record',
+  comparison: 'YOU · OPPONENT',
   lead: (by: number): string => `You lead by ${by}`,
   behind: (by: number): string => `They lead by ${by}`,
   level: 'All square',
@@ -1226,7 +1228,7 @@ export const FEEDBACK = Object.freeze({
   empty: 'Please write a few words first.',
   guideLink: 'Tester guide',
   close: 'Close',
-  betaVersion: '0.8',
+  betaVersion: '0.81',
   /**
    * The beta line on the main menu, between the wordmark and the buttons: ONE quiet instrument
    * label — the version, then the way to say something (owner, 2026-10-31: minimal; the four-line

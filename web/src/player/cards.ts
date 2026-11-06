@@ -8,6 +8,8 @@ import bombArt from '../assets/cards/bomb.webp?url';
 import backArt from '../assets/cards/back.webp?url';
 
 export const CARD_ART_URLS = [mossArt, ashArt, dewArt, emberArt, bombArt, backArt];
+const ART_KINDS=['s0','s1','s2','s3','fruit','back'] as const;
+const READY_FACES=ART_KINDS.slice(0,5).map(kind=>`.futa04-cards.futa04-card-art-${kind}-ready .card.${kind}`).join(',');
 
 let cardArtReady: Promise<void> | null = null;
 
@@ -22,11 +24,12 @@ export function preloadCardArt(): Promise<void> {
     const image = new Image();
     image.decoding = 'async';
     image.src = url;
-    await image.decode();
-  })).then(() => {
-    document.documentElement.classList.add('futa04-card-art-ready');
-  }).catch(() => {
-    // A failed art request leaves readable cards and the current game fully playable.
+    try {await image.decode();return true;}catch{return false;}
+  })).then(ready => {
+    // Enable only decoded faces. A missing suit keeps its readable number and symbol.
+    const classes=ART_KINDS.filter((_,index)=>ready[index]).map(kind=>`futa04-card-art-${kind}-ready`);
+    if(ready.every(Boolean))classes.push('futa04-card-art-ready');
+    if(classes.length)document.documentElement.classList.add(...classes);
   });
   return cardArtReady;
 }
@@ -96,18 +99,17 @@ export const CARDS_CSS = `
 .futa04-cards .card.s2 .futa04-card-art { background-image:url('${dewArt}'); }
 .futa04-cards .card.s3 .futa04-card-art { background-image:url('${emberArt}'); }
 .futa04-cards .card.fruit .futa04-card-art { background-image:url('${bombArt}'); background-size:cover; background-position:center; }
-.futa04-cards.futa04-card-art-ready .card .futa04-card-art { opacity:1; }
-.futa04-cards.futa04-card-art-ready .card :is(.c-num,.c-suit) { opacity:0; }
+:is(${READY_FACES}) .futa04-card-art { opacity:1; }
+:is(${READY_FACES}) :is(.c-num,.c-suit) { opacity:0; }
 @media (prefers-reduced-motion:reduce) {
   .futa04-cards .card .futa04-card-art,
   .futa04-cards .card :is(.c-num,.c-suit) { transition:none; }
 }
 .futa04-cards.reduce-motion .card .futa04-card-art,
 .futa04-cards.reduce-motion .card :is(.c-num,.c-suit) { transition:none; }
-.futa04-cards.futa04-card-art-ready .card::after { display:none; }
-.futa04-cards.futa04-card-art-ready .card:has(>.futa04-card-art) { border-color:transparent; }
-.futa04-cards.futa04-card-art-ready .card:has(>.futa04-card-art).playable,
-.futa04-cards.futa04-card-art-ready .card:has(>.futa04-card-art).lifted { border-color:var(--c-accent); }
+:is(${READY_FACES})::after { display:none; }
+:is(${READY_FACES}):has(>.futa04-card-art) { border-color:transparent; }
+:is(${READY_FACES}):has(>.futa04-card-art):is(.playable,.lifted) { border-color:var(--c-accent); }
 .futa04-cards .futa04-mini-card .futa04-card-art { display:none; }
 /* The separately supplied tree-logo back is the only face-down artwork. */
 .futa04-cards .card.back,
@@ -127,6 +129,7 @@ export const CARDS_CSS = `
 /** Translate only presentation, including dynamic hints, captions and accessible names.
  * Never touch data attributes, ids, input values, settings, actions or persisted saves. */
 export function mountCards() {
+  if(document.getElementById('futa04-cards-style'))return;
   document.documentElement.classList.add('futa04-cards');
   const style = document.createElement('style');
   style.id = 'futa04-cards-style'; style.textContent = CARDS_CSS; document.head.append(style);
@@ -135,7 +138,7 @@ export function mountCards() {
   const attributes = ['aria-label', 'aria-description', 'title', 'alt'];
   // The board's SVG contains no Fruit wording. Its tiles are rebuilt during
   // play, so walking that entire subtree for text translation wastes work.
-  const excluded = (node: Node) => (node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement)?.closest('script, style, textarea, input, [contenteditable], #board');
+  const excluded = (node: Node) => (node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement)?.closest('script, style, textarea, input, [contenteditable], #board, .match-chat, #online-hub, [data-message-id], #profile-name, [data-player-text]');
   const translate = (node: Node) => {
     if (excluded(node)) return;
     if (node.nodeType === Node.TEXT_NODE) {

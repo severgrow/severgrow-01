@@ -13,6 +13,7 @@ import { allNeighbors, coordKey, homeCoord, newGame, viewFor } from '../../src/e
 import type { State } from '../../src/engine/index.js';
 import { matchObservation } from '../src/logic/match-intel.js';
 import { positionSave } from './position.js';
+import {checkVisual} from './helpers/visual-baseline.js';
 
 const served = await servePreview(4193, { logLevel: 'silent' });
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
@@ -98,8 +99,7 @@ try {
       };
     });
     check(tips.scope === 'THIS MATCH', `${width}: Tips says which surface it is (${tips.scope})`);
-    check(tips.stats.length === 5, `${width}: five-fact readout`);
-    check(tips.stats.find((s) => s.key === 'land')?.value === `${mine}–${theirs}`, `${width}: LAND reads the board (${mine}–${theirs})`);
+    check(tips.stats.length === 0, `${width}: Tips starts with the decision, without repeating Now's readouts`);
     check(tips.tips.length >= 1 && tips.tips.length <= 3, `${width}: one to three ranked tips (${tips.tips.length})`);
     check(tips.tips[0]!.primary, `${width}: the first tip is the primary line`);
     check(tips.tips.every((t, i) => t.rank === i), `${width}: ranks are 0..n in order`);
@@ -111,7 +111,7 @@ try {
     check(!tips.bodyOverflow && !tips.pageOverflow && tips.outside === 0, `${width}: nothing scrolls or bleeds sideways (${JSON.stringify({ body: tips.bodyOverflow, page: tips.pageOverflow, outside: tips.outside })})`);
     check(tips.box.left >= 0 && tips.box.right <= width + 1 && tips.box.top >= 0 && tips.box.bottom <= height + 1, `${width}: the glass fits the viewport`);
     check(tips.animation === 'none' && tips.running === 0, `${width}: reduce motion leaves the panel static`);
-    await page.screenshot({ path: `${dir}/tips-${width}x${height}.png` });
+    await checkVisual(page,`tips-${width}x${height}`,await page.screenshot({ path: `${dir}/tips-${width}x${height}.png` }));
 
     // A tip opens the rule it rests on — the link is behind the verdict word, never a label.
     await page.locator('#futasaku-glass .intel-tip').first().click();
@@ -119,9 +119,10 @@ try {
       `${width}: a tip hands over to the reference, clearly marked as rules`);
     check(await page.locator('#futasaku-glass .intel-rule[aria-expanded="true"]').count() === 1,
       `${width}: the tip opens exactly one lesson card`);
+    check(await page.evaluate(()=>document.activeElement?.matches('.intel-rule[aria-expanded="true"]')),`${width}: the tip hands keyboard focus to its rule`);
     check(await page.locator('#futasaku-glass .intel-rule').count() === 10, `${width}: the reference keeps all ten lessons`);
     check(await page.locator('#futasaku-glass .intel-tip').count() === 0, `${width}: Rules shows no tips — the tabs stay distinct`);
-    await page.screenshot({ path: `${dir}/rules-${width}x${height}.png` });
+    await checkVisual(page,`rules-${width}x${height}`,await page.screenshot({ path: `${dir}/rules-${width}x${height}.png` }));
 
     await tab(page, 'now');
     const now = await page.evaluate(() => ({
@@ -133,7 +134,20 @@ try {
     check(now.scope === 'THE MATCH' && now.stats === 5 && !!now.lead, `${width}: Now keeps the match header and readout`);
     check(!!now.observation && !/LESSON|seed/i.test(now.observation ?? ''), `${width}: Now carries one strategic observation`);
     check(now.observation === matchObservation(view), `${width}: the observation follows the engine's read`);
-    await page.screenshot({ path: `${dir}/now-${width}x${height}.png` });
+    const facts=await page.locator('#futasaku-glass .intel-stat:visible').evaluateAll(nodes=>nodes.map(n=>({key:n.getAttribute('data-key'),value:n.querySelector('.intel-stat-v')?.textContent})));
+    check(facts.length===3,`${width}: three immediately useful facts, with record details folded`);
+    check(facts.find(s=>s.key==='land')?.value===`${mine}–${theirs}`,`${width}: LAND agrees with the engine`);
+    await page.locator('#futasaku-glass .intel-record > summary').click();
+    check(await page.locator('#futasaku-glass .intel-stat:visible').count()===5,`${width}: cuts and unseen Bomb count remain available in Match record`);
+    await page.locator('#futasaku-glass .intel-record > summary').click();
+    await page.locator('#futasaku-glass [data-intel-tab="now"]').focus();
+    await page.keyboard.press('ArrowRight');
+    check(await page.locator('#futasaku-glass [data-intel-tab="tips"]').getAttribute('aria-selected')==='true',`${width}: arrow keys select the next tab`);
+    await page.keyboard.press('End');
+    check(await page.locator('#futasaku-glass [data-intel-tab="rules"]').getAttribute('aria-selected')==='true',`${width}: End selects Rules`);
+    await page.keyboard.press('Home');
+    check(await page.locator('#futasaku-glass [data-intel-tab="now"]').getAttribute('aria-selected')==='true',`${width}: Home returns to Now`);
+    await checkVisual(page,`now-${width}x${height}`,await page.screenshot({ path: `${dir}/now-${width}x${height}.png` }));
 
     check(errors.length === 0, `${width}: no browser errors (${errors.join(' | ')})`);
     await page.close();
@@ -155,7 +169,7 @@ try {
     text: document.querySelector('#futasaku-glass .intel-tips')?.textContent ?? document.querySelector('#futasaku-glass .intel-quiet')?.textContent ?? '',
     stats: document.querySelectorAll('#futasaku-glass .intel-stat').length,
   }));
-  check(quiet.tips >= 1 && quiet.text.trim().length > 20 && quiet.stats === 5, 'quiet board: the tab still reads as intel, never blank');
+  check(quiet.tips >= 1 && quiet.text.trim().length > 20 && quiet.stats === 0, 'quiet board: useful strategic context without duplicated metrics');
   await quietPage.screenshot({ path: `${dir}/quiet-390x844.png` });
   await quietPage.close();
 

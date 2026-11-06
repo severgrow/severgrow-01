@@ -48,7 +48,7 @@ const cardLabel = (card: Card | undefined): string => {
 };
 
 /** Public-safe history beats (no hidden deck draws). */
-export const publicIntelMoves = (view: View, history: readonly Event[], me = 0): IntelMove[] => {
+export const publicIntelMoves = (view: View, history: readonly Event[], me = view.player): IntelMove[] => {
   const byId = new Map(createCards(view.config).map((card) => [card.id, card]));
   const out: IntelMove[] = [];
   for (const event of history) {
@@ -134,13 +134,14 @@ export const matchIntel = (view: View, history: readonly Event[], opening: reado
     else if (event.t === 'Sever') cuts[1 - event.player as 0 | 1] += event.coords.length; // the event names the victim; the cut is credited to the other seat
   }
   const discarded = publicDiscardHistory(view, history, opening);
+  const relative=(pair:[number,number]):[number,number]=>view.player===0?pair:[pair[1],pair[0]];
   return {
     discarded,
     score: [view.score, view.opponentScore],
-    territory,
-    blooms,
-    cuts,
-    bombs,
+    territory:relative(territory),
+    blooms:relative(blooms),
+    cuts:relative(cuts),
+    bombs:relative(bombs),
     turn: Math.ceil(view.turnNumber / 2),
     observation: matchObservation(view),
     moves: publicIntelMoves(view, history),
