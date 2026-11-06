@@ -109,6 +109,15 @@ export type BlitzClockHooks = {
   tick: (second: 1 | 2 | 3) => void;
 };
 
+/** One clock per page: practice Blitz and the online Blitz duel share it (never two #blitz-clock). */
+let shared: BlitzClock | null = null;
+export const blitzClockIn = (host: HTMLElement, hooks: BlitzClockHooks): BlitzClock => {
+  if (shared && document.getElementById('blitz-clock')?.parentElement === host) return shared;
+  shared?.destroy();
+  shared = mountBlitzClock(host, hooks);
+  return shared;
+};
+
 export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): BlitzClock => {
   if (!document.getElementById('blitz-clock-style')) {
     const style = document.createElement('style');

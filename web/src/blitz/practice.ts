@@ -13,7 +13,7 @@ import type { State } from '../../../src/engine/index.js';
 import { FEATURES } from '../channel.js';
 import { BLITZ_TURN_MS, blitzDeadlineAt, blitzRemainingMs, blitzTempo, blitzTimeoutState, pickBlitzMap, readBlitzState, recordBlitzOutcome } from '../logic/blitz.js';
 import type { BlitzOutcome, BlitzStore, BlitzTempo } from '../logic/blitz.js';
-import { mountBlitzClock } from './timer.js';
+import { blitzClockIn } from './timer.js';
 
 /** What main.ts hands the feature. All page state stays in main; this module never reads it directly. */
 export type BlitzHooks = {
@@ -77,12 +77,12 @@ const SELECTED_KEY = 'severgrow.difficulty';
 export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
   if (!FEATURES.blitz) return null;
 
-  let clock: ReturnType<typeof mountBlitzClock> | null = null;
+  let clock: ReturnType<typeof blitzClockIn> | null = null;
   const theClock = () => {
     if (clock) return clock;
     const host = hooks.clockHost();
     if (!host) return null;
-    clock = mountBlitzClock(host, { reduceMotion: hooks.reduceMotion, tick: () => hooks.tick() });
+    clock = blitzClockIn(host, { reduceMotion: hooks.reduceMotion, tick: () => hooks.tick() });
     return clock;
   };
   /** My clock: armed when my turn is playable, stopped the moment it passes. */
@@ -146,8 +146,9 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
       if (deadline !== null) disarmMine(false);
       spent = false;
       theirDeadline = null;
+      // Only stand the clock down if THIS mode had it up (an online Blitz duel shares the clock).
+      if (side !== null) c?.off();
       side = null;
-      c?.off();
       return;
     }
     const state = hooks.state()!;
@@ -196,6 +197,17 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
     // match"). It sits in the same grid as EASY / MEDIUM / HARD, so it wears that family's shape but
     // its own name — the mode is the feature, not a difficulty rung.
     button.textContent = 'BLITZ';
+    // The online duels' bolt beside the word, as tall as its letters (owner, 2026-11-06: "BLITZ X - but
+    // x is the lightning"). The same path as the Blitz duel key (online/live/ui.ts).
+    const bolt = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    bolt.setAttribute('viewBox', '5 2.5 13.4 19');
+    bolt.setAttribute('aria-hidden', 'true');
+    bolt.setAttribute('class', 'blitz-bolt');
+    bolt.style.cssText = 'height:.74em;width:auto;margin-left:.32em;vertical-align:-.02em;fill:currentColor;overflow:visible';
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M13.4 2.5 5 13.6h6.1l-1.3 7.9 8.6-11.3h-6.2z');
+    bolt.append(path);
+    button.append(bolt);
     button.setAttribute('aria-label', 'Blitz: 21 seconds a turn against the computer at level 9.');
     button.addEventListener('click', () => {
       hooks.unlock();

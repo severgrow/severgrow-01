@@ -5,8 +5,9 @@
 // mode only change clocks and live columns. The TWO endings that also write the match result both
 // run inside the SAME row-locked `transact` the rest of this file uses:
 //   * LEAVING real-time mode forfeits — the leaver loses the match, reason `resigned`;
-//   * a REAL-TIME TIMEOUT loses — the seat that ran out of time loses the match, reason `timeout`,
-//     exactly like the 24-hour timeout (no auto-played turn, no strike, no way back to 24-hour play).
+//   * a BLITZ TIMEOUT (0.82, owner 2026-11-06) no longer loses: a connected player's turn is played
+//     out by the autoplayer (draw, stop, throw the lowest card). Only a player who stays DISCONNECTED
+//     through the reconnect ladder loses, reason `timeout`.
 // Both publish the same status-change ping a finished move publishes, so the WINNER's client reaches
 // the end screen at once instead of waiting for a poll or a deadline.
 import { matchSetup, scores, stateFromSetup } from '../../../src/engine/index.js';
@@ -675,6 +676,12 @@ export class LiveService {
             return { kind: 'changed' };
           }
           // stage 3: still gone after the short grace → the disconnected player LOSES.
+        } else if (!simultaneous) {
+          // BLITZ (owner, 2026-11-06: "BLITZ replaces real time"; at 00:00 "Turn ends, worst card
+          // thrown"): a CONNECTED player whose 21 s ran out does not lose. Their turn is played out by
+          // the autoplayer (draw, stop, throw the lowest card) and the match goes on.
+          await tx.saveLive({ ...live, autoplayRev: match.revision });
+          return { kind: 'autoplay', rev: match.revision, deadline, seat };
         }
         // Either the player was connected and let the clock run out, or the ladder is exhausted, or
         // a simultaneous drop outlasted the hold. In every case: the seat on the clock loses.

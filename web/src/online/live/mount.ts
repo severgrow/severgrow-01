@@ -31,6 +31,7 @@ import {
   mountLeaveItem,
 } from './ui.js';
 import type { PillModel } from './ui.js';
+import { blitzClockIn } from '../../blitz/timer.js';
 
 export type LiveHost = ReturnHost;
 
@@ -333,21 +334,31 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     if (model.kind !== 'ready' && confirm?.isOpen()) confirm.hide();
     pill.render(model);
     setLeave(!!s?.live);
+    const root = document.documentElement;
     if (!s || !s.live) {
       hud.render(null);
+      if (root.dataset.blitzDuel) {
+        delete root.dataset.blitzDuel;
+        blitzClock()?.off();
+      }
       return;
     }
+    // BLITZ REPLACES REAL TIME (owner, 2026-11-06): the cockpit's LED stopwatch counts the server's own
+    // turn deadline for whoever is moving (YOU / OPP), and every move is sent the moment it is made
+    // (online/duel-session.ts reads `data-blitz-duel`). The old ring on the home gives way to it.
+    root.dataset.blitzDuel = '1';
+    hud.render(null);
     const actor = s.actor;
     const limit = s.limitMs ?? limitFallback;
-    hud.render({
-      live: true,
-      limitMs: limit,
-      deadline: s.turnDeadlineAt === null ? null : toLocal(s.turnDeadlineAt),
-      side: actor === s.mySeat ? 'me' : 'opp',
-      homeKey: homeKey(actor),
-      opponentReconnecting: s.opponent.reconnecting,
-      reduceMotion: reduceMotion(),
-    });
+    const side = actor === s.mySeat ? 'mine' : 'theirs';
+    const clock = blitzClock();
+    if (s.turnDeadlineAt === null) clock?.hold(side, limit);
+    else clock?.run(side, toLocal(s.turnDeadlineAt));
+  };
+  /** The shared Blitz stopwatch in the cockpit (null before the cockpit exists). */
+  const blitzClock = () => {
+    const host = document.getElementById('smart-panel');
+    return host ? blitzClockIn(host, { reduceMotion, tick: () => undefined }) : null;
   };
 
   // Seconds: ticks under 5 s and screen-reader lines at thresholds only (2 s steps under 10 s).

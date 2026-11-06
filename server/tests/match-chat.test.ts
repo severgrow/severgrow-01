@@ -365,7 +365,7 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       await runtime.service.accept(pb, invitation.challenge.id);
       const started = (await x.storage.matchById(x.id))!;
       expect(started.liveManaged).toBe(true);
-      expect(started.turnTimeoutMs).toBe(60000);
+      expect(started.turnTimeoutMs).toBe(21000); // Blitz (owner, 2026-11-06): 21 s a turn
       await x.send(x.waiting.token, 'Live hello');
       // Chat on your own real-time turn is allowed (owner, 2026-10-26).
       x.advance(1100);
@@ -384,7 +384,7 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
         next.turnStartRevision,
       );
       // Past the live clock but not yet advanced: chat must not fail or spend the grace.
-      x.advance(60001);
+      x.advance(21001);
       await runtime.service.presence(pa, 'in_live', x.id);
       await runtime.service.presence(pb, 'in_live', x.id);
       const overdue = await x.storage.matchById(x.id);
@@ -397,8 +397,10 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       );
       expect(await x.storage.matchById(x.id)).toEqual(overdue);
       await runtime.service.tickMatch(x.id);
+      // OWNER CHANGED THE RULE (0.82 Blitz, 2026-11-06): a timed-out turn is played out and the match
+      // goes on (it used to finish the match), so the history is kept AND chat stays open.
       const history = await x.client.chatHistory(x.waiting.token, x.id);
-      expect(history.canSend).toBe(false);
+      expect((await x.storage.matchById(x.id))!.status).toBe('active');
       expect(history.messages.map((m) => m.text)).toEqual([
         'Live hello',
         'Own turn hello',
@@ -406,9 +408,6 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
         'Now you are thinking',
         'Too late',
       ]);
-      await expect(x.send()).rejects.toMatchObject({
-        code: 'MATCH_NOT_ACTIVE',
-      });
     });
     it('accepts a due clock without spending grace, changing deadlines or simulating turns', async () => {
       const x = await setup();

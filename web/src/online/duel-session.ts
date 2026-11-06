@@ -18,6 +18,13 @@ import type { OpponentTurnReplay, ReplayReason } from './opponent-turn-replay.js
 import { shadowFromView } from './shadow.js';
 import { stepContextFor, stepsFromEvents, syncStep } from './steps-from-events.js';
 
+/**
+ * A Blitz duel is on (the live controller marks the page while the match is in Blitz mode,
+ * online/live/mount.ts). Read from the document so the session needs no new wiring.
+ */
+const blitzDuelNow = (): boolean =>
+  typeof document !== 'undefined' && document.documentElement.dataset.blitzDuel === '1';
+
 export type OnlinePlayResult =
   | { ok: true; played: Played | null; catchUp: Step[]; finished: boolean }
   | { ok: false; message: string };
@@ -345,6 +352,27 @@ export class OnlineSession {
       this.log.push(engine);
       const catchUp = this.consumeCatchUp();
       return { ok: true, played: null, catchUp, finished: this.finished };
+    }
+
+    // BLITZ (owner, 2026-11-06: "the moves should be shown as soon as they're done"): in a Blitz duel
+    // every move is committed at once, like a Draw, so the opponent watches it land. No draft, no Undo.
+    if (blitzDuelNow()) {
+      const before = this.buildEngineShadow();
+      const res = await this.driver.commitNow(engine);
+      if (!res.ok) {
+        this.refresh();
+        return { ok: false, message: res.message ?? ONLINE.errMoveIllegal };
+      }
+      this.refresh();
+      const after = this.buildEngineShadow();
+      const played: Played = {
+        before: this.driver.perspective().toDisplayState(before),
+        action,
+        after: this.state,
+        steps: buildSteps(before, engine, after, this.seat).map((s) => mapStepDisplay(s, this.driver)),
+      };
+      this.log.push(engine);
+      return { ok: true, played, catchUp: this.consumeCatchUp(), finished: this.finished };
     }
 
     // Mid-turn draft (Grow / Bloom / Bomb / Blast / …)

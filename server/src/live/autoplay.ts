@@ -26,6 +26,13 @@ export const nextAutoAction = (view: View, drawnCardId: number | null): Action |
     case 'ACT':
       return legal.find((a) => a.t === 'EndAct') ?? legal[0]!;
     case 'DISCARD': {
+      // BLITZ (0.82, owner 2026-11-06: "Turn ends, worst card thrown"): the lowest NUMBER card; a Bomb
+      // only when nothing else is in hand (the same rule as the page's practice Blitz).
+      const worth = (id: number) => { const c = view.hand.find((h) => h.id === id); return !c ? 99 : c.suit === null ? 50 : c.rank; };
+      const lowest = legal
+        .filter((a): a is Extract<Action, { t: 'Discard' }> => a.t === 'Discard')
+        .sort((a, b) => worth(a.card) - worth(b.card) || a.card - b.card)[0];
+      if (lowest) return lowest;
       const drawn = drawnCardId === null ? undefined : legal.find((a) => a.t === 'Discard' && a.card === drawnCardId);
       if (drawn) return drawn;
       // Identical copies are listed once (lowest id): throwing that copy is throwing "the drawn card".

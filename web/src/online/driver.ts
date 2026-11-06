@@ -48,6 +48,11 @@ export type OnlineDriver = {
   snapshot(): MatchDriverSnapshot;
   /** Commit Draw immediately to the server. */
   draw(action: Action): Promise<{ ok: boolean; message?: string }>;
+  /**
+   * BLITZ (0.82): commit one mid-turn move (Grow / Bloom / Bomb / Blast) at once, so the opponent sees
+   * it the moment it is made. Blitz never drafts, so there is nothing local to send with it.
+   */
+  commitNow(action: Action): Promise<{ ok: boolean; message?: string }>;
   /** Local draft mid-turn move (Grow / Bloom / …). */
   draftPlay(action: Action): boolean;
   draftUndo(): boolean;
@@ -230,6 +235,42 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     return res;
   };
 
+  /** One action committed to the server at once (Draw, and every Blitz move). */
+  const commitOne = async (action: Action, kind: 'draw' | 'move'): Promise<{ ok: boolean; message?: string }> => {
+    if (!player || submitting) return { ok: false, message: ONLINE.errBusy };
+    submitting = true;
+    try {
+      mark('req:sent', { kind });
+      const outcome = await submitWithRetries({
+        client: options.client,
+        token: options.token,
+        matchId: options.matchId,
+        expectedRevision: player.revision,
+        requestId: newRequestId(),
+        actions: [action],
+        rulesVersion: player.rulesVersion || CURRENT_RULES_VERSION,
+        refetch,
+      });
+      if (!outcome.ok) {
+        if (outcome.player) applyView(outcome.player, outcome.player.serverNow);
+        notice = outcome.message;
+        emit();
+        return { ok: false, message: outcome.message };
+      }
+      catchUpMode = 'none';
+      try {
+        applyView(outcome.response.player, outcome.response.serverNow);
+      } finally {
+        catchUpMode = 'all';
+      }
+      mark('res:got', { kind, ok: true });
+      mark('server:commit', { kind, serverNow: outcome.response.serverNow });
+      return { ok: true };
+    } finally {
+      submitting = false;
+    }
+  };
+
   return {
     kind: 'online',
 
@@ -245,41 +286,14 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     snapshot,
 
     async draw(action) {
-      if (!player || submitting) return { ok: false, message: ONLINE.errBusy };
       if (action.t !== 'Draw') {
         return { ok: false, message: ONLINE.errDrawOnly };
       }
-      submitting = true;
-      try {
-        mark('req:sent', { kind: 'draw' });
-        const outcome = await submitWithRetries({
-          client: options.client,
-          token: options.token,
-          matchId: options.matchId,
-          expectedRevision: player.revision,
-          requestId: newRequestId(),
-          actions: [action],
-          rulesVersion: player.rulesVersion || CURRENT_RULES_VERSION,
-          refetch,
-        });
-        if (!outcome.ok) {
-          if (outcome.player) applyView(outcome.player, outcome.player.serverNow);
-          notice = outcome.message;
-          emit();
-          return { ok: false, message: outcome.message };
-        }
-        catchUpMode = 'none';
-        try {
-          applyView(outcome.response.player, outcome.response.serverNow);
-        } finally {
-          catchUpMode = 'all';
-        }
-        mark('res:got', { kind: 'draw', ok: true });
-        mark('server:commit', { kind: 'draw', serverNow: outcome.response.serverNow });
-        return { ok: true };
-      } finally {
-        submitting = false;
-      }
+      return commitOne(action, 'draw');
+    },
+
+    async commitNow(action) {
+      return commitOne(action, 'move');
     },
 
     draftPlay(action) {

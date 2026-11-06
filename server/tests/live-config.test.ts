@@ -9,9 +9,10 @@ import { DEFAULT_LIVE_CONFIG, LIVE_TURN_MS_DEFAULT, liveConfigFromEnv } from '..
 import { LIVE } from '../../src/strings.js';
 
 describe('the live turn length', () => {
-  it('defaults to 60 seconds', () => {
-    expect(LIVE_TURN_MS_DEFAULT).toBe(60_000);
-    expect(DEFAULT_LIVE_CONFIG.turnMs).toBe(60_000);
+  // OWNER CHANGED THE RULE (0.82, 2026-11-06): "BLITZ replaces real time ... they have 21 seconds each".
+  it('defaults to 21 seconds (Blitz)', () => {
+    expect(LIVE_TURN_MS_DEFAULT).toBe(21_000);
+    expect(DEFAULT_LIVE_CONFIG.turnMs).toBe(21_000);
   });
 
   it('keeps the one override: LIVE_TURN_MS wins when it is set', () => {
@@ -23,7 +24,7 @@ describe('the live turn length', () => {
       if (previous === undefined) delete process.env.LIVE_TURN_MS;
       else process.env.LIVE_TURN_MS = previous;
     }
-    expect(liveConfigFromEnv().turnMs).toBe(60_000);
+    expect(liveConfigFromEnv().turnMs).toBe(21_000);
   });
 
   it('every real-time turn is exactly the turn clock: no extra seconds on entry or for the replay', () => {
@@ -49,7 +50,6 @@ describe('the live turn length', () => {
     const words = [
       LIVE.goLive,
       LIVE.goLiveAria('Fern', 60),
-      LIVE.terms(60),
       LIVE.chip(60),
       LIVE.chipAria(60),
       LIVE.waiting('Fern', 60),
@@ -60,5 +60,12 @@ describe('the live turn length', () => {
       LIVE.wantsToGoLive,
     ];
     for (const text of words) expect(text).not.toMatch(/\d+\s*(?:s\b|sec)/i);
+  });
+
+  it('the send and accept windows DO say the seconds and no undo (owner, 2026-11-06)', () => {
+    // "in the window asking to confirm send/accept BLITZ say 21seconds, no undo": the number is the
+    // server's own limitMs, so the window never promises a clock the match is not using.
+    expect(LIVE.duelTerms(21)).toBe('21 seconds a turn. No undo.');
+    expect(LIVE.terms(21)).toBe('Same match · 21 seconds a turn · no undo');
   });
 });

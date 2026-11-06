@@ -59,9 +59,10 @@ const MINUTE = 60 * SECOND;
 
 /**
  * The live turn length. ONE source of truth: the server's default, which every `limitMs` the
- * client shows is read from (`LIVE_TURN_MS` overrides it). Owner's call, 2026-10-14: 45 s -> 60 s.
+ * client shows is read from (`LIVE_TURN_MS` overrides it). Owner's calls: 2026-10-14 45 s -> 60 s;
+ * 2026-11-06 "BLITZ replaces real time ... they have 21 seconds each" -> 21 s.
  */
-export const LIVE_TURN_MS_DEFAULT = 60 * SECOND;
+export const LIVE_TURN_MS_DEFAULT = 21 * SECOND;
 
 export const liveConfigFromEnv = (): LiveConfig => ({
   turnMs: envMs('LIVE_TURN_MS', LIVE_TURN_MS_DEFAULT),

@@ -236,7 +236,7 @@ export const ONLINE = Object.freeze({
   emptyMatches: 'No matches yet.',
   firstCardTitle: 'How online duels work',
   firstCardLines: Object.freeze([
-    'Play in real time when both of you are here, or take turns over time.',
+    'Play Blitz when both of you are here, or take turns over time.',
     'Your opponent only sees your turn after you Throw.',
     // Accurate, not scarier than the rule. It used to say "Miss it and you lose", but the server
     // gives ONE grace period per player (gracePeriodsPerPlayer: 1, and the in-match line already
@@ -1137,12 +1137,13 @@ export const INSTALL = Object.freeze({
  * switch the SAME match to a short per-turn clock. Nothing about the board or the rules changes.
  */
 export const LIVE = Object.freeze({
-  // Owner's rename, 2026-10-14: the mode is "Real time" everywhere a player can read it. The
-  // internal identifiers (LIVE_TURN_MS, the `live` mode id, DB columns, file names) stay.
-  goLive: 'Real time',
+  // Owner's rename, 2026-10-14: "Real time"; then 2026-11-06 (0.82): "BLITZ replaces real time" — the
+  // mode is "Blitz" everywhere a player can read it. Internal identifiers (LIVE_TURN_MS, the `live`
+  // mode id, DB columns, file names) stay.
+  goLive: 'Blitz',
   // No rule-stating number of seconds anywhere in the copy (owner, 2026-10-14): the live turn
   // length never appears as words. The live clock in the header is the only place a digit shows.
-  goLiveAria: (name: string, _secs: number) => `Start a real time duel with ${name}`,
+  goLiveAria: (name: string, _secs: number) => `Start a Blitz duel with ${name}`,
   waiting: (name: string, _secs: number) => `Waiting for ${name}`,
   // The waiting words carry no dots: the UI appends the SHARED animated ellipsis (see wait-dots).
   waitingFor: (name: string) => `Waiting for ${name}`,
@@ -1153,45 +1154,47 @@ export const LIVE = Object.freeze({
   // "Waiti…". It is still the word for waiting — never a cut-off word, never a dropped control.
   waitingTiny: 'Wait',
   cancel: 'Cancel',
-  inLiveGame: 'In real time',
-  // The bolt's hidden words when a real-time duel is not possible because the opponent is away.
+  inLiveGame: 'In Blitz',
+  // The bolt's hidden words when a Blitz duel is not possible because the opponent is away.
   away: 'Opponent away',
-  awayAria: (name: string) => `Real time duel: ${name || 'your opponent'} is away`,
+  awayAria: (name: string) => `Blitz duel: ${name || 'your opponent'} is away`,
   notAvailable: 'Not available',
   busy: 'Busy',
-  rateLimited: 'Try real time again later',
-  wantsToGoLive: 'wants a real time duel',
+  rateLimited: 'Try Blitz again later',
+  wantsToGoLive: 'wants a Blitz duel',
   wantsRematch: 'wants a rematch',
-  terms: (_secs: number) => 'Same match · each turn has a countdown',
+  // The ACCEPT window (owner, 2026-11-06: "in the window asking to confirm send/accept BLITZ say
+  // 21seconds, no undo"). The seconds are the server's own limitMs.
+  terms: (secs: number) => `Same match · ${secs} seconds a turn · no undo`,
   accept: 'Accept',
   notNow: 'Not now',
   // The SENDER's confirmation before the invite leaves the device (owner, 2026-10-26: tapping the
   // bolt must ask first). The seconds come from the server's own `limitMs` (LIVE_TURN_MS, default
   // 60 s, env-overridable), so the window never promises a number the match is not using.
-  duelQuestion: 'Real time duel?',
-  duelTerms: (secs: number) => `${secs} seconds on every move.`,
+  duelQuestion: 'Blitz duel?',
+  duelTerms: (secs: number) => `${secs} seconds a turn. No undo.`,
   sendChallenge: 'Send challenge',
   notNowFrom: (name: string) => `${name}: Not now`,
   expired: 'No answer',
-  live: 'Real time',
-  chip: (_secs: number) => 'Real time',
-  chipAria: (_secs: number) => 'Real time duel, each turn has a countdown',
+  live: 'Blitz',
+  chip: (_secs: number) => 'Blitz',
+  chipAria: (_secs: number) => 'Blitz duel, each turn has a countdown',
   timeLeftSr: (secs: number) => `${secs} seconds left`,
   timesUp: "Time's up",
-  leaveLive: 'Leave real time',
+  leaveLive: 'Leave Blitz',
   // Owner's ruling, 2026-10-14: leaving real-time FORFEITS the match, so the confirm states the
   // consequence outright. The warning lives in the confirm itself — there is no way to leave real
   // time that does not acknowledge the loss.
-  leaveConfirm: 'Leave and lose this real-time duel?',
+  leaveConfirm: 'Leave and lose this Blitz duel?',
   // Said BEFORE the situation, on the accept surface (the challenge glass): one short line...
-  leaveWarning: 'Leaving real time loses',
+  leaveWarning: 'Leaving Blitz loses',
   // ...plus the fuller explanation in the same glass window, never a wall of text.
   // Owner, 2026-10-15: the reconnect grace is never explained to players (it still exists).
-  leaveWarningHelp: 'In real time, leaving or running out of time loses the whole match. Normal 24-hour games are unaffected.',
+  leaveWarningHelp: 'In Blitz, leaving loses the whole match; running out of time ends your turn. Normal 24-hour games are unaffected.',
   // The header strip's "the opponent has dropped" state. The animated dots are added by the UI (the
   // shared `wait-dots` treatment), never baked into this string.
   opponentReconnecting: 'Opponent reconnecting',
-  endedTitle: 'Real time ended',
+  endedTitle: 'Blitz ended',
   endedFinished: 'Match over',
   endedLeft: 'Back to 24-hour turns',
   backToYourGame: 'Back to your game',
@@ -1202,7 +1205,7 @@ export const LIVE = Object.freeze({
   rematch: 'Rematch',
   rematchWaiting: (name: string, _secs: number) => `Rematch? Waiting for ${name}`,
   close: 'Close',
-  failed: 'Could not start real time right now.',
+  failed: 'Could not start Blitz right now.',
 });
 
 /**
@@ -1261,7 +1264,7 @@ export const BETA_GUIDE = Object.freeze({
       lines: Object.freeze([
         'Main menu → Play online → invite a friend and send them the code or link.',
         'Each turn can take up to 24 hours. There are no notifications yet, so tell your opponent when you have moved, or agree a time to play together.',
-        'When you both have the match open, you can try Real time: 60 seconds a turn. Careful - in Real time, running out of time or leaving loses the match.',
+        'When you both have the match open, you can play Blitz: 21 seconds a turn, every move seen as it happens. Running out of time ends your turn; leaving loses the match.',
       ]),
     }),
     Object.freeze({
