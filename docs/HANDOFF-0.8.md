@@ -54,8 +54,8 @@ touch.
 
 | # | Step | Status |
 |---|------|--------|
-| 0 | White-blink fix bee46ac3 promoted live (before this pass) | waiting on CI |
-| 1 | Audit: map every duel + menu animation, durations, where input is blocked, jank sources | in progress (duel moves mapped: see Findings) |
+| 0 | White-blink fix bee46ac3 promoted live (before this pass) | ships with 0.8 (its CI's iOS job hung in browser install twice) |
+| 1 | Audit: map every duel + menu animation, durations, where input is blocked, jank sources | done (see Findings) |
 | 2 | Input never blocked by animation (queue-free: next card pickable while effects play) | done (`logic/play-through.ts`, `blocking()` in main.ts, e2e `play-through`) |
 | 3 | Bloom: tile by tile from the connected tile, 0.3 s apart | done (PINNED.bloomGap 1.14) |
 | 4 | Big cuts/Blasts scale with size up to ~2 s; small stay quick | done (cut cap 2000, Big/Huge ripple 80/96 ms, Blast 64 ms/ring up to 1.5 s; 1-4 tile cuts unchanged) |
@@ -64,10 +64,10 @@ touch.
 | 7 | Dust specks on Bomb/Blast (premium or not at all) | done: soft gradient glow (`fx-dust`), ash motes now the same glow; film: `web/e2e/blast-film.ts` |
 | 8 | Charcoal #0e0f10 for every solid black | done (`logic/charcoal.ts`, test `charcoal.test.ts`) |
 | 9 | Menu/screen gaps; soft springs on sheets where good | audited: no gaps (see notes) |
-| 10 | Consistency gaps (radii, focus, tokens, timing) | todo |
+| 10 | Consistency gaps (radii, focus, tokens, timing) | partial: one shared impact family, motes = dust glow, charcoal; frame-cost render work left (see notes) |
 | 11 | Quiet auto-lower on sustained frame drops | done (`player/frame-guard.ts`: <30 fps for 4 s during moves turns off dust/dim/shake for the visit) |
 | 12 | Beta 0.8 label | done |
-| 13 | Full checks, film, push, promote live, confirm | todo |
+| 13 | Full checks, film, push, promote live, confirm | checks green locally (4143 unit tests, all browser suites); pushed to futa0.5-online; next: CI green -> `npm run promote -- <head>` -> dispatch republish -> confirm ROOT_SHA |
 
 ## Findings / notes (append as you go)
 

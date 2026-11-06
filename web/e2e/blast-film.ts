@@ -47,7 +47,7 @@ for (const which of ['blast', 'bomb'] as const) {
   for (const at of [0, 90, 180, 300, 450, 650, 900, 1300]) {
     const wait = at - (Date.now() - t0);
     if (wait > 0) await page.waitForTimeout(wait);
-    await page.screenshot({ path: `${OUT}/${which}-${String(at).padStart(4, '0')}.png`, clip: box ?? undefined });
+    await page.screenshot(box ? { path: `${OUT}/${which}-${String(at).padStart(4, "0")}.png`, clip: box } : { path: `${OUT}/${which}-${String(at).padStart(4, "0")}.png` });
   }
   await page.close();
 }
