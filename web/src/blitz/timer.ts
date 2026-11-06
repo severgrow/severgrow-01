@@ -46,24 +46,32 @@ html.blitz-match #blitz-clock::before {
   display:flex; align-items:center; justify-content:center; overflow:hidden;
 }
 /* Seen through dark, slightly scratched plastic (owner, 2026-11-06: "colours less intense, like it's
-   going through dark slightly scratched plastic screen like normally this type watch would"): muted
-   inks, a low soft glow, a smoked tint and fine scratches over the digits. All static: no cost. */
-#blitz-clock svg { height:72%; width:auto; overflow:visible; color:#bfae8e;
-  filter:drop-shadow(0 0 1px color-mix(in srgb, currentColor 70%, transparent)) drop-shadow(0 0 3.5px color-mix(in srgb, currentColor 30%, transparent)); }
-#blitz-clock[data-stage='amber'] svg { color:#c98a3e; }
-#blitz-clock[data-stage='red'] svg { color:#c4402f; }
+   going through dark slightly scratched plastic screen"; then "the glass texture is good but the [unlit
+   segments] not - remove. make it a bit more intense the color and a tiny bit more glow taking glass
+   texture into account creating glow"). Lit segments only; the ink lights the smoked glass behind it
+   (.bc-glass::before), and the glass texture sits over both. All static: no per-frame cost. */
+#blitz-clock { --bc-ink:#d8c59e; }
+#blitz-clock[data-stage='amber'] { --bc-ink:#e3963f; }
+#blitz-clock[data-stage='red'] { --bc-ink:#e04432; }
+#blitz-clock svg { position:relative; z-index:1; height:72%; width:auto; overflow:visible; color:var(--bc-ink);
+  filter:drop-shadow(0 0 1.2px color-mix(in srgb, currentColor 85%, transparent)) drop-shadow(0 0 5px color-mix(in srgb, currentColor 45%, transparent)); }
 #blitz-clock[data-side='theirs'] svg { opacity:.6; }
-#blitz-clock polygon { fill:currentColor; opacity:.07; }
-#blitz-clock polygon.on { opacity:.84; }
+#blitz-clock[data-side='theirs'] .bc-glass::before { opacity:.5; }
+#blitz-clock polygon { fill:currentColor; opacity:0; }
+#blitz-clock polygon.on { opacity:.94; }
+#blitz-clock .bc-glass::before {
+  content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit; z-index:0;
+  background:radial-gradient(ellipse 58% 62% at 54% 50%, color-mix(in srgb, var(--bc-ink) 20%, transparent), color-mix(in srgb, var(--bc-ink) 6%, transparent) 55%, transparent 80%);
+}
 #blitz-clock .bc-glass::after {
-  content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit;
+  content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit; z-index:2;
   background:
     linear-gradient(118deg, transparent 0 34%, rgb(255 248 230 / .045) 38% 44%, transparent 49%),
     repeating-linear-gradient(103deg, transparent 0 9px, rgb(255 250 235 / .035) 9px 9.6px, transparent 9.6px 23px),
     repeating-linear-gradient(17deg, transparent 0 13px, rgb(255 250 235 / .025) 13px 13.5px, transparent 13.5px 31px),
     linear-gradient(rgb(12 11 10 / .32), rgb(12 11 10 / .22));
 }
-#blitz-clock .bc-colon { fill:currentColor; opacity:.84; }
+#blitz-clock .bc-colon { fill:currentColor; opacity:.94; }
 #blitz-clock .bc-who { position:absolute; left:7px; top:50%; translate:0 -50%; z-index:2;
   font:600 7px/1 var(--font-mono, ui-monospace, monospace); letter-spacing:.12em; color:#8d8577; writing-mode:vertical-rl; rotate:180deg; }
 /* Blitz has no Undo, no Match Intel and no Replay (owner): their keys give their place to the clock. */
