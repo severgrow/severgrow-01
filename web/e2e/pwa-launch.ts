@@ -14,8 +14,9 @@ try{
   await p.waitForFunction(()=>!!(window as any).__severgrow?.ready?.()&&document.getElementById('boot-cover')?.hidden,undefined,{timeout:30000});
   await p.evaluate(()=>{localStorage.setItem('launch-sentinel','keep');Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
   const shield=await p.locator('#boot-cover').evaluate(e=>({hidden:(e as HTMLElement).hidden,opacity:getComputedStyle(e).opacity,background:getComputedStyle(e).backgroundColor}));
-  assert.equal(shield.hidden,!standalone);
-  if(standalone){assert.equal(shield.opacity,'1');assert.equal(shield.background,'rgb(14, 15, 16)');await p.screenshot({path:'/tmp/pwa-launch/snapshot-shield.png'});}
+  // OWNER CHANGED THE RULE (2026-11-06: "unnecessary codex's stuff to be deleted"): no curtain on an app
+  // switch, installed or not; the dark cover is the first launch's only.
+  assert.equal(shield.hidden,true);
   await p.evaluate(()=>{delete (document as any).hidden;document.dispatchEvent(new Event('visibilitychange'));});
   await p.waitForFunction(()=>document.getElementById('boot-cover')?.hidden);
   assert.equal(await p.evaluate(()=>localStorage.getItem('launch-sentinel')),'keep');
@@ -24,7 +25,7 @@ try{
    await p.waitForFunction(()=>document.getElementById('boot-cover')?.hidden);
   }
   await p.screenshot({path:`/tmp/pwa-launch/ready-${standalone}.png`});
-  await p.close();console.log('PASS cold/resume, dark snapshot, unchanged storage:',standalone?'installed':'browser');
+  await p.close();console.log('PASS cold/resume, no app-switch curtain, unchanged storage:',standalone?'installed':'browser');
  }
  const p=await b.newPage({viewport:{width:393,height:852},javaScriptEnabled:false});
  await p.goto(f.origin+'/');
