@@ -70,3 +70,12 @@ real-time Blitz:
 4. **Clock authority:** the server owns the 21 s deadline and the timeout turn-end (the same
    `blitzTimeoutAction` rule, ported to `server/`), so both players see the same 00:00.
 5. **Spectators** (the "fun to watch" goal): the same broadcast feeds a read-only watcher.
+
+## Status 2026-11-06 22:04 UTC: LIVE (9ee7e842 on futasaku.com and /test, ROOT_SHA confirmed)
+
+- Blitz replaces Real time online (words, LED clock for YOU/OPP from the server deadline, every move committed
+  at once, no undo); the send/accept windows say "21 seconds a turn. No undo."; Practice BLITZ has the bolt.
+- Server (owner: "server ready"): 21 s turns; a connected player's timeout plays the turn out (lowest card).
+- Startup: the installed app answers its saved page at once (no white wait), dark max 1.2 s, 400 ms fade; the
+  app-switch curtain is gone. Owner must delete + re-add the home-screen icon to pick up the launch images.
+- Not verified: a real iPhone; a real two-player online Blitz duel end to end.
