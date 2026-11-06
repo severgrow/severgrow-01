@@ -39,7 +39,7 @@ export const PINNED = Object.freeze({
    */
   lessonDwell: 2000,
   /** A whole cut at Normal speed, whatever the number of tiles or chained cuts. */
-  cutCap: 1400,
+  cutCap: 2000,
   /** The cut's local flash never exceeds this, even at Slow speed. */
   flash: 60,
   /** Two short freezes used by the existing choreography (light and heavy impacts). */
@@ -52,7 +52,15 @@ export const PINNED = Object.freeze({
   /** A multi-tile grow starts the next tile when the previous one is this far through its pop. */
   growOverlap: 0.5,
   /** A Bloom lands its tiles this many moves apart (owner, 2026-11-05: a bit slower, room for the stabs). */
-  bloomGap: 0.8,
+  bloomGap: 1.14,
+  /** Beta 0.8 (owner, 2026-11-06: "slow down big blasts or big cuts"): Big / Huge cut ripple, ms per ring. */
+  rippleBig: 80,
+  rippleHuge: 96,
+  /** Blast: ms per ring as the tiles fall, and the longest the biggest Blast may hold. */
+  blastRing: 64,
+  blastMax: 1500,
+  /** The opponent's moves play this much slower than mine ("same weight, a touch slower"). */
+  opponentPace: 1.1,
 });
 
 /** The derived durations, plus the legacy aliases that existing code already reads. */

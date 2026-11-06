@@ -3885,6 +3885,24 @@ html.futasaku-product #campaign .campaign-chapters {
 .fx-mote {
   fill: var(--c-muted);
 }
+/* Beta 0.8: on the board an ash mote is the same soft glow as the dust (never a hard dot) */
+svg.board .fx-mote {
+  fill: var(--fx-dust, var(--c-muted));
+}
+/* Beta 0.8: dust from a Bomb or Blast (a soft gradient glow, effects.ts dust()) */
+.fx-dust {
+  fill: var(--fx-dust, #e8ddc5);
+  pointer-events: none;
+}
+/* Beta 0.8: the light dips under a heavy impact (effects.ts impactDim()): one soft vignette */
+.impact-dim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 3;
+  background: radial-gradient(ellipse 75% 70% at 50% 50%, rgb(14 15 16 / 0.35) 0%, rgb(14 15 16 / 0.85) 100%);
+}
 /* A snapping vein flashes bright before it goes. */
 .vein.snapping {
   stroke: var(--c-text) !important;

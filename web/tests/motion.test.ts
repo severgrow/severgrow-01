@@ -47,17 +47,27 @@ describe('motion tokens', () => {
       liveReveal: 600,
       displayDwell: 1000,
       lessonDwell: 2000,
-      cutCap: 1400,
+      // OWNER CHANGED THE VALUES (Beta 0.8, 2026-11-06: "slow down big blasts or big cuts", "Recommended
+      // 2s is good"; Bloom "Slower, ~0.3 s apart"; opponent "Same weight, a touch slower"). See
+      // docs/HANDOFF-0.8.md.
+      cutCap: 2000,
       flash: 60,
       hitStopShort: 48,
       hitStop: 80,
       ripple: 56,
       growHold: 120,
       growOverlap: 0.5,
-      // OWNER CHANGED THE VALUE (2026-11-05, with the Bloom stabs: "you can slow down a bit blooming
-      // animation"): a Bloom's tiles land 0.8 of a move apart (was growOverlap's 0.5), so each stab
-      // note sounds with its own tile. Other multi-tile reveals keep 0.5.
-      bloomGap: 0.8,
+      // A Bloom's tiles land 1.14 of a move apart: 0.3 s at the 264 ms move (was 0.8, 2026-11-05; 0.5
+      // before that). Other multi-tile reveals keep growOverlap's 0.5.
+      bloomGap: 1.14,
+      /** Big and Huge cuts ripple slower, one ring every 80 / 96 ms (Small and Severe keep `ripple`). */
+      rippleBig: 80,
+      rippleHuge: 96,
+      /** Blast: tiles fall one ring every 64 ms (was 36), and it may hold up to 1.5 s for the biggest. */
+      blastRing: 64,
+      blastMax: 1500,
+      /** The opponent's moves play 10% slower than mine: same weight, easier to follow. */
+      opponentPace: 1.1,
     });
   });
 

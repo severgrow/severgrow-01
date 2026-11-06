@@ -306,6 +306,12 @@ export class BoardView {
       el('stop', { offset: '46%', 'stop-color': '#080906', 'stop-opacity': .19 }, shadow);
       el('stop', { offset: '100%', 'stop-color': '#080906', 'stop-opacity': 0 }, shadow);
       svg.style.setProperty('--seed-stone-shadow', this.url('seed-stone-shadow'));
+      // Beta 0.8: a speck of dust is a soft warm glow with no edge (effects.ts dust()).
+      const dust = el('radialGradient', { id: this.id('fx-dust') }, defs);
+      el('stop', { offset: '0%', 'stop-color': '#f3e9d2', 'stop-opacity': 1 }, dust);
+      el('stop', { offset: '45%', 'stop-color': '#e8ddc5', 'stop-opacity': .55 }, dust);
+      el('stop', { offset: '100%', 'stop-color': '#e8ddc5', 'stop-opacity': 0 }, dust);
+      svg.style.setProperty('--fx-dust', this.url('fx-dust'));
     }
     // Bot fill patterns (colour-blind safe: the bot's tiles always carry a pattern).
     const hatch = el('pattern', { id: this.id('pat-hatch'), width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);

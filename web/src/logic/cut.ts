@@ -20,9 +20,11 @@ export const CUT_CAP_MS = PINNED.cutCap;
 /** Photosensitivity: the flash lasts at most 60ms, at most 35% white, and only around the cut. */
 export const FLASH_MAX_MS = PINNED.flash;
 export const FLASH_MAX_ALPHA = 0.35;
-/** The ripple: one ring of tiles every 70ms, never more than 700ms in all. */
+/** The ripple: one ring every 56ms (Big 80, Huge 96: big cuts are watched fall), never more than 960ms in all. */
 export const RIPPLE_STEP_MS = PINNED.ripple;
-export const RIPPLE_CAP_MS = 700;
+export const RIPPLE_STEP_BIG = PINNED.rippleBig;
+export const RIPPLE_STEP_HUGE = PINNED.rippleHuge;
+export const RIPPLE_CAP_MS = 960;
 export const HITSTOP_MS = PINNED.hitStop;
 export const SEVERE_HITSTOP_MS = PINNED.hitStopShort;
 /** The cut's one link flash (Small and up): at most this long, whatever the speed. */
@@ -110,8 +112,9 @@ const LOOK: Record<CutTier, { anticipation: number; hitstop: number; flashAlpha:
   // 0.75, "sharper in-game feel" (owner, 2026-11-04): every beat a fifth shorter, like the tokens.
   small: { anticipation: 0, hitstop: 0, flashAlpha: 0.22, zoom: 1, pulse: 64, shake: 0, death: 352, crumble: 176, payoff: 240 },
   severe: { anticipation: 48, hitstop: SEVERE_HITSTOP_MS, flashAlpha: 0.3, zoom: 1.012, pulse: 80, shake: SHAKE_SEVERE, death: 320, crumble: 192, payoff: 288 },
-  big: { anticipation: 112, hitstop: HITSTOP_MS, flashAlpha: 0.28, zoom: 1.02, pulse: 104, shake: SHAKE_MAX_BIG, death: 304, crumble: 224, payoff: 320 },
-  huge: { anticipation: 144, hitstop: HITSTOP_MS + 16, flashAlpha: FLASH_MAX_ALPHA, zoom: 1.03, pulse: 120, shake: SHAKE_MAX_HUGE, death: 320, crumble: 240, payoff: 336 },
+  // Beta 0.8: Big and Huge tiles take longer to fall (304 -> 352, 320 -> 384 ms), with the slower ripple.
+  big: { anticipation: 112, hitstop: HITSTOP_MS, flashAlpha: 0.28, zoom: 1.02, pulse: 104, shake: SHAKE_MAX_BIG, death: 352, crumble: 224, payoff: 320 },
+  huge: { anticipation: 144, hitstop: HITSTOP_MS + 16, flashAlpha: FLASH_MAX_ALPHA, zoom: 1.03, pulse: 120, shake: SHAKE_MAX_HUGE, death: 384, crumble: 240, payoff: 336 },
 };
 
 const HAPTIC: Record<CutTier, FeedbackEvent> = { small: 'cutSmall', severe: 'cutMedium', big: 'cutBig', huge: 'cutHuge' };
@@ -180,7 +183,8 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
   if (flashAlpha > 0) push('flash', Math.min(FLASH_MAX_MS, CUT_FLASH_MS), false);
   push('snap', 120, false);
   const maxRing = Math.max(0, ...rings.map((r) => r.ring));
-  const step = maxRing > 0 ? Math.min(RIPPLE_STEP_MS, RIPPLE_CAP_MS / maxRing) : 0;
+  const ringMs = tier === 'huge' ? RIPPLE_STEP_HUGE : tier === 'big' ? RIPPLE_STEP_BIG : RIPPLE_STEP_MS;
+  const step = maxRing > 0 ? Math.min(ringMs, RIPPLE_CAP_MS / maxRing) : 0;
   const rippleAt = t + 60;
   const tiles = rings.map((r) => ({ key: r.key, at: Math.round(rippleAt + r.ring * step), dur: L.death, ring: r.ring }));
   const rippleLen = Math.round(maxRing * step) + L.death;
@@ -190,7 +194,7 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
   stages.push({ name: 'payoff', at: t, dur: L.payoff });
   let total = Math.max(t + L.crumble, ...stages.map((s) => s.at + s.dur));
 
-  // the cap: squeeze everything but the hit-stop (keeps its ~100ms) into 1.8s
+  // the cap: squeeze everything into CUT_CAP_MS (2 s, Beta 0.8)
   let k = 1;
   if (total > CUT_CAP_MS) k = CUT_CAP_MS / total;
   const sc = (x: number) => Math.round(x * k * speed);

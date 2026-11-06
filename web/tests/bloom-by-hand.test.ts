@@ -35,7 +35,9 @@ describe('bloom by hand', () => {
     expect(main).toMatch(/session = new Session\(state, HUMAN, log, base\);\s*bloomPick = \[\];/);
     expect(main).toMatch(/bloomMenu = false;\s*bloomPick = \[\];/);
     expect(main).toMatch(/function cancelSel\(\) \{\s*bloomPick = \[\];/);
-    expect(main).toMatch(/if \(bloomPick\.length && !\(IS_FUTA04 && myTurn\(\) && !busy\(\) && v\.phase === 'ACT' && bloomKindsWith\(bloomPick\)\.length\)\) bloomPick = \[\];/);
+    // Beta 0.8 (owner, 2026-11-06, play through): 'outside my Grow step' now also means 'while an animation I
+    // must watch plays' (blocking()), not any animation: my own move playing keeps the pick.
+    expect(main).toMatch(/if \(bloomPick\.length && !\(IS_FUTA04 && myTurn\(\) && !blocking\(\) && v\.phase === 'ACT' && bloomKindsWith\(bloomPick\)\.length\)\) bloomPick = \[\];/);
   });
   it('after a grow, tapping a picked card twice still goes to Throw', () => {
     expect(main).toMatch(/const sameAgain = session\.sel\.card === id \|\| \(bloomPick\.length === 1 && bloomPick\[0\] === id\);/);

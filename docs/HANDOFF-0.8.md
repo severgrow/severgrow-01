@@ -57,15 +57,15 @@ touch.
 | 0 | White-blink fix bee46ac3 promoted live (before this pass) | waiting on CI |
 | 1 | Audit: map every duel + menu animation, durations, where input is blocked, jank sources | in progress (duel moves mapped: see Findings) |
 | 2 | Input never blocked by animation (queue-free: next card pickable while effects play) | done (`logic/play-through.ts`, `blocking()` in main.ts, e2e `play-through`) |
-| 3 | Bloom: tile by tile from the connected tile, 0.3 s apart | todo |
-| 4 | Big cuts/Blasts scale with size up to ~2 s; small stay quick | todo |
-| 5 | Bomb/Blast heaviness: hit-stop, settle, shake (Blast), light dip, haptic thud — one shared impact | todo |
-| 6 | Opponent moves ~10% slower, same weight | todo |
-| 7 | Dust specks on Bomb/Blast (premium or not at all) | todo |
+| 3 | Bloom: tile by tile from the connected tile, 0.3 s apart | done (PINNED.bloomGap 1.14) |
+| 4 | Big cuts/Blasts scale with size up to ~2 s; small stay quick | done (cut cap 2000, Big/Huge ripple 80/96 ms, Blast 64 ms/ring up to 1.5 s; 1-4 tile cuts unchanged) |
+| 5 | Bomb/Blast heaviness: hit-stop, settle, shake (Blast), light dip, haptic thud — one shared impact | done (`logic/impact.ts`, `heavyImpact()` in main.ts) |
+| 6 | Opponent moves ~10% slower, same weight | done (PINNED.opponentPace in playStep) |
+| 7 | Dust specks on Bomb/Blast (premium or not at all) | done: soft gradient glow (`fx-dust`), ash motes now the same glow; film: `web/e2e/blast-film.ts` |
 | 8 | Charcoal #0e0f10 for every solid black | todo |
 | 9 | Menu/screen gaps; soft springs on sheets where good | todo |
 | 10 | Consistency gaps (radii, focus, tokens, timing) | todo |
-| 11 | Quiet auto-lower on sustained frame drops | todo |
+| 11 | Quiet auto-lower on sustained frame drops | done (`player/frame-guard.ts`: <30 fps for 4 s during moves turns off dust/dim/shake for the visit) |
 | 12 | Beta 0.8 label | todo |
 | 13 | Full checks, film, push, promote live, confirm | todo |
 
@@ -84,3 +84,7 @@ touch.
 - Blast (`megaBomb` case): dark flash, heavyShake on futa04, ring-staggered punch-in (36 ms/ring), hold
   640-840 ms. Bomb (`fruit` case): card flight, pod swell 300 ms, burst, impact. `impact()` skips shake on
   futa04. `watchFrames()` auto-lower is OFF for futa04 (returns early).
+- **Owner rule changes rewritten in tests (Beta 0.8):** `web/tests/motion.test.ts` (PINNED: cutCap 2000,
+  bloomGap 1.14, rippleBig/Huge, blastRing/Max, opponentPace), `web/tests/cut.test.ts` (ripple per tier, cap),
+  `web/tests/bloom-by-hand.test.ts` (blocking()), e2e `futa04-motion` + `cut-severe` ("a tap during my own cut
+  no longer skips it").

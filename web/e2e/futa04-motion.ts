@@ -247,19 +247,21 @@ try {
     assert.deepEqual([...severe.floats], ['−3'], 'a Severe cut shows one −N');
   } finally { await severe.p.close(); }
 
-  // A tap during the cut still fast-forwards it and opens the gate.
+  // OWNER CHANGED THE RULE (Beta 0.8, 2026-11-06: "the animation plays but never gets in the way of
+  // playing the game"): a tap during MY OWN cut no longer skips it. Input stays live and the cut plays
+  // to its end (web/e2e/play-through.ts covers moving on mid-show). Was: "a tap fast-forwards it".
   {
     const { state: cs, action: ca } = cutPosition(3, false);
     const p = await openSaved(390, 844, positionSave({ state: cs }), { sound: false, music: false, coach: false, autoSkip: false, reduceMotion: false, speed: 'normal', vibration: false });
     try {
       await p.evaluate(a => (window as any).__severgrow.playFor(a, 0), ca);
       await p.waitForFunction(() => !!document.documentElement.dataset.cutTier, undefined, { timeout: 8000 });
-      assert.equal(await p.evaluate(() => (window as any).__severgrow.busy()), true, 'the cut holds the gate');
-      const t0 = Date.now();
+      assert.equal(await p.evaluate(() => (window as any).__severgrow.busy()), true, 'the cut is playing');
       await p.locator('#deck').click({ force: true, timeout: 3000 });
-      await p.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 3000 });
-      const ms = Date.now() - t0;
-      assert(ms < 1400, `a tap during the cut fast-forwards it (${ms}ms)`);
+      const after = await p.evaluate(() => ({ busy: (window as any).__severgrow.busy(), ff: ((window as any).__severgrow.animLog() as { ev: string }[]).filter((m) => m.ev === 'fast-forward').length }));
+      assert.equal(after.ff, 0, 'a tap during my own cut does not skip it');
+      assert.equal(after.busy, true, 'the cut keeps playing after the tap');
+      await p.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 4000 });
     } finally { await p.close(); }
   }
 

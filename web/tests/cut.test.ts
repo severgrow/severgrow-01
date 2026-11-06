@@ -1,6 +1,6 @@
 // UI overhaul Part 2: the cinematic cut. Every limit in the brief, checked on the pure plan.
 import { describe, expect, it } from 'vitest';
-import { CASCADE_MAX_POPS, CUT_CAP_MS, CUT_FLASH_MS, CUT_TIERS, FLASH_MAX_ALPHA, FLASH_MAX_MS, HITSTOP_MS, REDUCE_FADE_MS, RIPPLE_CAP_MS, RIPPLE_STEP_MS, SEVERE_HITSTOP_MS, SHAKE_MAX_BIG, SHAKE_MAX_HUGE, SHAKE_SEVERE, cutPlan, cutTier, cutTimeline } from '../src/logic/cut.js';
+import { CASCADE_MAX_POPS, CUT_CAP_MS, CUT_FLASH_MS, CUT_TIERS, FLASH_MAX_ALPHA, FLASH_MAX_MS, HITSTOP_MS, REDUCE_FADE_MS, RIPPLE_CAP_MS, RIPPLE_STEP_BIG, RIPPLE_STEP_HUGE, RIPPLE_STEP_MS, SEVERE_HITSTOP_MS, SHAKE_MAX_BIG, SHAKE_MAX_HUGE, SHAKE_SEVERE, cutPlan, cutTier, cutTimeline } from '../src/logic/cut.js';
 import type { CutInput, CutOptions } from '../src/logic/cut.js';
 import { buildSteps } from '../src/logic/anim.js';
 import { MOTION } from '../src/logic/motion.js';
@@ -36,6 +36,21 @@ describe('tiers', () => {
     expect(cutTier(3, 6)).toBe('huge');
     expect(cutTier(3, 7)).toBe('severe');
     expect(cutTier(1, 1)).toBe('small'); // one tile is never Huge
+  });
+});
+
+describe('big cuts take their time, small ones stay quick (Beta 0.8)', () => {
+  it('a 1-4 tile cut keeps exactly its 0.75 timing', () => {
+    // measured on the 0.75 plan (cap 1400): these never reached the cap, so nothing about them changes
+    expect([1, 2, 3, 4].map((n) => cutPlan(cut(n), NORMAL).total)).toEqual([772, 828, 1012, 1068]);
+  });
+  it('the bigger the cut, the longer it plays, up to about 2 s and never past it', () => {
+    const totals = [5, 6, 8, 10, 14].map((n) => cutPlan(cut(n), NORMAL).total);
+    for (let i = 1; i < totals.length; i++) expect(totals[i]!).toBeGreaterThanOrEqual(totals[i - 1]!);
+    expect(totals[0]!).toBeGreaterThan(1260); // a 5-tile cut was 1260 ms
+    expect(totals.at(-1)!).toBeGreaterThan(1700);
+    expect(Math.max(...totals)).toBeLessThanOrEqual(2000);
+    expect(CUT_CAP_MS).toBe(2000);
   });
 });
 
@@ -174,12 +189,18 @@ describe('the timeline limits', () => {
     expect(cutPlan(cut(8), { ...NORMAL, reduceMotion: true }).scar).toBe(false);
   });
 
-  it(`the ripple: one ring every ${RIPPLE_STEP_MS}ms outward from the cut, all started within ${RIPPLE_CAP_MS}ms`, () => {
-    const p = cutPlan(cut(6), NORMAL);
-    const starts = p.tiles.map((t) => t.at);
-    for (let i = 1; i < p.tiles.length; i++) {
-      expect(p.tiles[i]!.ring).toBeGreaterThanOrEqual(p.tiles[i - 1]!.ring);
-      expect(starts[i]! - starts[i - 1]!).toBe(RIPPLE_STEP_MS);
+  // OWNER CHANGED THE RULE (Beta 0.8, 2026-11-06: "slow down big blasts or big cuts"): Small and Severe
+  // keep one ring every RIPPLE_STEP_MS; Big and Huge fall slower so they can be watched.
+  it(`the ripple: one ring every ${RIPPLE_STEP_MS}ms (Small, Severe), ${RIPPLE_STEP_BIG}ms (Big), ${RIPPLE_STEP_HUGE}ms (Huge), all started within ${RIPPLE_CAP_MS}ms`, () => {
+    expect(RIPPLE_CAP_MS).toBe(960);
+    // (a Huge cut by share — 3 of the victim's 6 — so the 2 s cap does not squeeze its ripple)
+    for (const [c, step] of [[cut(3), RIPPLE_STEP_MS], [cut(6), RIPPLE_STEP_BIG], [cut(3, { victimTiles: 6 }), RIPPLE_STEP_HUGE]] as const) {
+      const p = cutPlan(c, NORMAL);
+      const starts = p.tiles.map((t) => t.at);
+      for (let i = 1; i < p.tiles.length; i++) {
+        expect(p.tiles[i]!.ring).toBeGreaterThanOrEqual(p.tiles[i - 1]!.ring);
+        expect(starts[i]! - starts[i - 1]!).toBe(step);
+      }
     }
     for (const c of all) {
       const q = cutPlan(c, NORMAL);

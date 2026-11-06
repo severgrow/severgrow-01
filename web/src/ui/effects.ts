@@ -12,6 +12,7 @@ import { ParticleBudget } from '../logic/juice.js';
 import { EASE, MOTION, PINNED } from '../logic/motion.js';
 import { INTERFACE_MOTION } from './interface-motion.js';
 import { planBoomerang } from './throw-boomerang.js';
+import { dustSpecks } from '../logic/impact.js';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -149,9 +150,44 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const k = particles.take(count);
     for (let i = 0; i < k; i++) {
       const dx = (i % 2 ? 1 : -1) * (4 + ((x + i * 7) % 9));
-      const c = el('circle', { cx: x, cy: y, r: IS_FUTA04 ? 1.85 : 1.6, class: 'fx-mote' }, board.fx);
-      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: 0.85 }, { transform: `translate(${dx}px, ${-S * 0.6}px)`, opacity: 0 }], { duration: MOTION.move * f, delay: delay + i * PINNED.ripple, easing: EASE.out, fill: 'both' }), MOTION.move * f + 240);
+      // Beta 0.8: a soft glow (svg.board .fx-mote uses the dust gradient), so a little larger than the old dot
+      const c = el('circle', { cx: x, cy: y, r: IS_FUTA04 ? 2.8 : 1.6, class: 'fx-mote' }, board.fx);
+      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: IS_FUTA04 ? 0.6 : 0.85 }, { transform: `translate(${dx}px, ${-S * 0.6}px)`, opacity: 0 }], { duration: MOTION.move * f, delay: delay + i * PINNED.ripple, easing: EASE.out, fill: 'both' }), MOTION.move * f + 240);
     }
+  }
+
+  /**
+   * Beta 0.8: a few specks of dust thrown up by a Bomb or a Blast. Each is a soft-edged glow (the
+   * board's `fx-dust` radial gradient, never a flat dot), leaves in its own direction, drifts out and
+   * settles downward as it fades, with its own size, brightness and timing.
+   */
+  function dust(key: string, n: number, f: number, seed: number) {
+    if (motion() === 0 || n <= 0) return;
+    const { x, y } = centerOf(key);
+    const specks = dustSpecks(particles.take(n), seed);
+    for (const d of specks) {
+      const c = el('circle', { cx: x, cy: y, r: (S * d.r).toFixed(2), class: 'fx-dust' }, board.fx);
+      const tx = S * d.dx;
+      const ty = S * d.dy;
+      particle(c, anim(c, [
+        { transform: 'translate(0,0) scale(.6)', opacity: 0 },
+        { transform: `translate(${(tx * 0.55).toFixed(1)}px, ${(ty * 0.55).toFixed(1)}px) scale(1)`, opacity: d.peak, offset: 0.22 },
+        { transform: `translate(${tx.toFixed(1)}px, ${(ty + S * d.fall).toFixed(1)}px) scale(.85)`, opacity: 0 },
+      ], { duration: d.dur * f, delay: d.delay * f, easing: EASE.out, fill: 'both' }), (d.dur + d.delay) * f + 120);
+    }
+  }
+
+  /**
+   * Beta 0.8: the light dips for a heavy impact: one soft vignette over the board, peak `amount`
+   * (≤0.26), in and out once. A plain opacity fade on one layer that exists only while it plays.
+   */
+  function impactDim(amount: number, ms: number) {
+    if (amount <= 0 || ms <= 0) return;
+    const wrap = $('board-wrap');
+    const d = document.createElement('div');
+    d.className = 'impact-dim';
+    wrap.appendChild(d);
+    removeAfter(anim(d, [{ opacity: 0 }, { opacity: amount, offset: 0.18 }, { opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), d, ms + 60);
   }
 
   /** One tiny spark for a small move. */
@@ -456,5 +492,5 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       particle(c, a, 900 * f);
     }
   };
-  return { flash, cutFlash, flinch, sparks, spark, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, throwBoomerang, flyBack, oppDraw, oppThrow, particles };
+  return { flash, cutFlash, flinch, sparks, spark, drift, dust, impactDim, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, throwBoomerang, flyBack, oppDraw, oppThrow, particles };
 };

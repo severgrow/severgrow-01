@@ -143,23 +143,25 @@ try {
   assert.deepEqual(reduced.m.floats, [], 'Reduce motion: no floating payoff');
   assert.deepEqual(reduced.m.pops, [], 'Reduce motion: no chain reaction');
 
-  // A tap during the cut fast-forwards it and the gate opens again.
+  // OWNER CHANGED THE RULE (Beta 0.8, 2026-11-06: "the animation plays but never gets in the way of
+  // playing the game"): a tap during my own cut no longer skips it; it plays to its end and the gate
+  // opens after. Was: "a tap during the cut fast-forwards it".
   {
     const { p } = await openSaved(3, { sound: false, music: false, coach: false, autoSkip: false, reduceMotion: false, speed: 'normal', vibration: false });
     try {
       await p.waitForFunction(() => !!document.documentElement.dataset.cutTier, undefined, { timeout: 8000 });
-      assert.equal(await p.evaluate(() => (window as any).__severgrow.busy()), true, 'the cut holds the gate');
-      const t0 = Date.now();
+      assert.equal(await p.evaluate(() => (window as any).__severgrow.busy()), true, 'the cut is playing');
       await p.locator('#deck').click({ force: true, timeout: 3000 });
-      await p.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 3000 });
-      const ms = Date.now() - t0;
-      assert(ms < 1400, `a tap during the cut fast-forwards it (${ms}ms)`);
+      const after = await p.evaluate(() => ({ busy: (window as any).__severgrow.busy(), ff: ((window as any).__severgrow.animLog() as { ev: string }[]).filter((m) => m.ev === 'fast-forward').length }));
+      assert.equal(after.ff, 0, 'a tap during my own cut does not skip it');
+      assert.equal(after.busy, true, 'the cut keeps playing after the tap');
+      await p.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 4000 });
     } finally {
       await p.close();
     }
   }
 
-  console.log('Severe cut checks passed: 2 small (no pops), 3/4 severe (2.5px shiver, zoom, flinch, rising pops), 5 big and 8 huge unchanged, Reduce motion a fade, tap fast-forwards');
+  console.log('Severe cut checks passed: 2 small (no pops), 3/4 severe (2.5px shiver, zoom, flinch, rising pops), 5 big and 8 huge unchanged, Reduce motion a fade, a tap never skips my own cut');
 } finally {
   await browser.close();
   await server.close();

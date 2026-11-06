@@ -13,7 +13,7 @@ export type PerfState = { slowMs: number; done: boolean };
 export const perfStart = (): PerfState => ({ slowMs: 0, done: false });
 
 /** One frame: its length in ms. `drop` is true exactly once, when the slow time reaches the limit. */
-export const perfStep = (s: PerfState, frameMs: number, r = PERF_RULES): { state: PerfState; drop: boolean } => {
+export const perfStep = (s: PerfState, frameMs: number, r: { minFps: number; seconds: number; ignoreFrameMs: number } = PERF_RULES): { state: PerfState; drop: boolean } => {
   if (s.done || frameMs > r.ignoreFrameMs) return { state: s, drop: false };
   const slow = frameMs > 1000 / r.minFps;
   const slowMs = slow ? s.slowMs + frameMs : 0;

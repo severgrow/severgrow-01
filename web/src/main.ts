@@ -81,6 +81,9 @@ import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_BEAT_MS, REPLAY_SPEED, actorOf, involvedKeys, nudgeToward, replayDurationScale } from './logic/opponent.js';
 import { playsThrough } from './logic/play-through.js';
+import { impactPlan } from './logic/impact.js';
+import type { ImpactKind } from './logic/impact.js';
+import { extrasOn, guardFrame } from './player/frame-guard.js';
 import { shareCard } from './ui/sharecard.js';
 import { feel, observeLongTasks, perfStart, perfStep } from './logic/perf.js';
 import { dragExceeded, installPress, PRESS_SELECTOR, shouldSkipPress } from './logic/press.js';
@@ -572,7 +575,7 @@ const announceTurn = (player: Player, label?: string) => {
   const tone = turnTone(player, o);
   if (tone && settings.sound) sound.turnFor(player === HUMAN);
 };
-const { flash, cutFlash, flinch, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, throwBoomerang, flyBack, oppDraw, oppThrow, particles } = createEffects(board, () => timeScale(), () => motion());
+const { flash, cutFlash, flinch, sparks, drift, dust, impactDim, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, throwBoomerang, flyBack, oppDraw, oppThrow, particles } = createEffects(board, () => timeScale(), () => motion());
 
 /** Pause and dim the ambient skin loops (lava, fireflies, sway) so a cut or blast reads. */
 function quietAmbient(on: boolean) {
@@ -3989,8 +3992,25 @@ async function impact(m: Moment, f: number, my: number) {
  */
 let perf = perfStart();
 let perfUnsub: (() => void) | null = null;
+let quietPerf = perfStart();
+let quietUnsub: (() => void) | null = null;
 function watchFrames() {
-  if (IS_FUTA04) return; // no automatic effect downgrade or interruption in Futasaku 0.4
+  // Futasaku: no note and no saved downgrade. Only a phone that REALLY struggles quietly loses the
+  // decorative extras for this visit (player/frame-guard.ts, owner 2026-11-06).
+  if (IS_FUTA04) {
+    if (quietUnsub || !extrasOn() || settings.effects === 'low') return;
+    let last = performance.now();
+    quietUnsub = scheduler.subscribe(({ now }) => {
+      quietPerf = guardFrame(quietPerf, now - last);
+      last = now;
+      // (the slow time carries over to the next animation: only frames that play moves are judged)
+      if (!extrasOn() || !busy()) {
+        quietUnsub?.();
+        quietUnsub = null;
+      }
+    });
+    return;
+  }
   if (perfUnsub || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
   let last = performance.now();
   perfUnsub = scheduler.subscribe(({ now }) => {
@@ -4324,6 +4344,24 @@ function glowHand(ms: number): void {
   });
 }
 
+/** Beta 0.8: the effect settings a heavy impact is planned with (logic/impact.ts). */
+const impactOptions = () => ({ effects: settings.effects, reduceMotion: settings.reduceMotion || motion() === 0, extras: extrasOn() });
+
+/**
+ * Beta 0.8: the one heavy impact Bomb and Blast share: the board sinks a fraction and settles back
+ * (the `scale` property, so it composes with the shake's `transform` and the opponent lean's
+ * `translate`), Blast alone shakes, the light dips once, and a few specks of dust lift and settle.
+ */
+function heavyImpact(kind: ImpactKind, key: string, size: number, f: number) {
+  const ip = impactPlan(kind, size, impactOptions());
+  const wrap = $('board-wrap');
+  const body = ip.bodyMs * Math.max(f, 0.5);
+  if (ip.settle > 0) anim(wrap, [{ scale: '1' }, { scale: String(1 - ip.settle), offset: 0.2 }, { scale: String(1 + ip.settle * 0.12), offset: 0.58 }, { scale: '1' }], { duration: body, easing: EASE.out });
+  if (ip.shakePx > 0) anim(wrap, heavyShakeFrames(ip.shakePx), { duration: MOTION.moment * Math.max(f, 0.5), easing: EASE.out });
+  if (ip.dim > 0) impactDim(ip.dim, body);
+  if (ip.dust > 0) dust(key, ip.dust, f, (session?.state.turnNumber ?? 0) * 31 + key.length);
+}
+
 async function playStep(step: Step, my: number) {
   if (stallInject) {
     const pending = stallInject;
@@ -4331,11 +4369,12 @@ async function playStep(step: Step, my: number) {
     await pending;
     if (my !== epoch) return;
   }
-  const f = timeScale();
   const m = motion();
   // Overhaul item 19: the opponent's actions: the rest of the board dims a little, and the
   // view leans 1.5% toward the action (none with Reduce motion)
   const actor = actorOf(step);
+  // Beta 0.8: the opponent's moves have the same weight as mine, about 10% slower to follow.
+  const f = timeScale() * (actor === BOT ? PINNED.opponentPace : 1);
   const involved = involvedKeys(step);
   if (actor === BOT && involved.length) {
     board.focus(involved);
@@ -4548,29 +4587,29 @@ async function playStep(step: Step, my: number) {
       // one dark pulse from the target, sized to the destroyed set (opacity ≤0.4, duration quick)
       let lastRing = 0;
       for (const key of step.destroyed) lastRing = Math.max(lastRing, hexDistance(parseKey(key), center));
-      const hold = Math.max(BLAST_MIN_MS, Math.min(840, lastRing * 36 + MOTION.move * 1.15)) * f;
+      // Beta 0.8 (owner, 2026-11-06: "slow down big blasts ... put some heaviness on bomb and blast"):
+      // one heavy impact (logic/impact.ts), then the tiles fall a ring at a time, slower for bigger Blasts.
+      const ip = impactPlan('blast', step.destroyed.length, impactOptions());
+      const fallStart = IS_FUTA04 ? ip.hitStopMs : 0;
+      const ringMs = IS_FUTA04 ? PINNED.blastRing : 36;
+      const hold = Math.max(BLAST_MIN_MS, Math.min(IS_FUTA04 ? PINNED.blastMax : 840, fallStart + lastRing * ringMs + MOTION.move * 1.15 + (IS_FUTA04 ? 120 : 0))) * f;
       if (IS_FUTA04 && !mine) showLiveStrike(board.fx, step, hold, m === 0);
       else flash(step.target, f, false, { dark: true, ms: MOTION.quick * 1.25 * f, radius: Math.min(4.4, lastRing + 1.15) });
       if (settings.sound) sound.megaBomb(mine);
-      if (mine) vibrate(settings.vibration, 22);
-      // Blast: lowkey but heavy — the board thuds like something solid landed.
-      if (m > 0 && step.destroyed.length >= 1) {
-        const amp = IS_FUTA04 ? Math.min(6.5, 3.5 + step.destroyed.length * 0.35) : 3;
-        anim($('board-wrap'), IS_FUTA04 ? heavyShakeFrames(amp) : shakeFrames(3), {
-          duration: (IS_FUTA04 ? MOTION.moment : MOTION.move) * Math.max(f, 0.5),
-          easing: EASE.out,
-        });
-      }
-      // destroyed tiles punch inward at their own centre, staggered by ring
+      if (mine) vibrate(settings.vibration, IS_FUTA04 ? ip.buzzMs : 22);
+      if (IS_FUTA04) heavyImpact('blast', step.target, step.destroyed.length, f);
+      else if (m > 0 && step.destroyed.length >= 1) anim($('board-wrap'), shakeFrames(3), { duration: MOTION.move * Math.max(f, 0.5), easing: EASE.out });
+      // destroyed tiles punch inward at their own centre, staggered by ring (after the impact's freeze)
       for (const key of step.destroyed) {
         const ringN = hexDistance(parseKey(key), center);
-        const delay = Math.min(ringN * 36, 480) * f;
+        const delay = (fallStart + Math.min(ringN * ringMs, 900)) * f;
         anim(board.tile(key), [
           { transform: 'scale(1)', opacity: 1 },
           { transform: 'scale(0.68)', opacity: 1, offset: 0.5 },
           { transform: 'scale(0)', opacity: 0.45 },
         ], { duration: MOTION.move * 1.1 * f, delay, easing: EASE.out, transformOrigin: 'center', fill: 'forwards' } as KeyframeAnimationOptions);
-        drift(key, delay + MOTION.move * 0.4 * f, f, IS_FUTA04 ? 2 : 1);
+        // one soft ash mote per tile (Beta 0.8: was three; the impact's dust carries the rest)
+        drift(key, delay + MOTION.move * 0.4 * f, f, IS_FUTA04 ? 0 : 1);
       }
       // Blast is the heaviest move: it holds the screen long enough to register (at least 640ms)
       // even when it only clears one ring, which used to be gone in ~430ms.
@@ -4658,6 +4697,12 @@ async function playStep(step: Step, my: number) {
       {
         const hp = hapticFor('throw', settings);
         if (hp && mine) vibrate(true, hp as number | number[]);
+      }
+      // Beta 0.8: the Bomb lands heavy: the board settles, the light dips, a little dust; the pod
+      // holds a beat (the freeze) before it goes.
+      if (IS_FUTA04) {
+        heavyImpact('bomb', step.target, 1, f);
+        await wait(impactPlan('bomb', 1, impactOptions()).hitStopMs * f, my);
       }
       anim(tileEl, m === 0 || b.fadeOnly ? [{ opacity: 0.85 }, { opacity: 0 }] : [{ opacity: 1, transform: `scale(${1 + 0.1 * m})` }, { opacity: 0, transform: `scale(${1 + 0.35 * m})` }], { duration: 260 * f, fill: 'forwards', easing: 'ease-in', transformOrigin: 'center' } as KeyframeAnimationOptions);
       if (mine && b.banner) banner(FRUIT.banner, 'big');
