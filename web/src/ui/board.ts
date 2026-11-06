@@ -599,7 +599,11 @@ export class BoardView {
     this.drawGlows(board);
     if (IS_FUTA04) {
       const contour=this.keys.map(key=>board[key]?.owner??'-').join('');
-      if(contour!==this.contourSignature){this.contourSignature=contour;this.drawTerritoryContour(board);}
+      // A newly drawn wave compacts into the stable joined outline on the next paint,
+      // including the pump's final paint. Never cache its temporary grow-in nodes forever.
+      if(contour!==this.contourSignature || this.layers.contour.querySelector('.grow-in')){
+        this.contourSignature=contour;this.drawTerritoryContour(board);
+      }
       const gold=[...this.richKeys].map(key=>Number(!!board[key])).join('');
       if(gold!==this.richSignature || !rich.childElementCount){
         this.richSignature=gold;rich.replaceChildren();

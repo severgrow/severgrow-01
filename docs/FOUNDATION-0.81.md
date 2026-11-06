@@ -50,7 +50,7 @@ GitHub WebKit runs cover the Safari engine but are not physical-device verificat
 ### Visual guard
 
 `futa04-information` now also runs `board-retained` and `futa04-intel-rework`. The latter compares
-12 complete screenshots at 320x568, 390x844, 844x390 and 1280x800 with reviewed 24x24 RGB composition
+15 complete screenshots at 320x568, 390x844, 844x390, 768x1024 and 1280x800 with reviewed 24x24 RGB composition
 baselines in `web/e2e/baselines/intel.json`. Mean channel error must be <=8/255 and p99 <=42/255 to
 tolerate subpixel font/grain differences while catching missing surfaces, changed layout or material.
 Semantic, viewport, focus and geometry assertions remain independent and are not replaced by pixels.

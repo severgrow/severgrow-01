@@ -138,7 +138,7 @@ export function mountCards() {
   const attributes = ['aria-label', 'aria-description', 'title', 'alt'];
   // The board's SVG contains no Fruit wording. Its tiles are rebuilt during
   // play, so walking that entire subtree for text translation wastes work.
-  const excluded = (node: Node) => (node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement)?.closest('script, style, textarea, input, [contenteditable], #board, .match-chat, #online-hub, [data-message-id], #profile-name, [data-player-text]');
+  const excluded = (node: Node) => (node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement)?.closest('script, style, textarea, input, [contenteditable], #board, .match-chat, #match-chat-panel, #online-hub, #world-chat-list, [data-message-id], #profile-name, [data-player-text]');
   const translate = (node: Node) => {
     if (excluded(node)) return;
     if (node.nodeType === Node.TEXT_NODE) {

@@ -1630,7 +1630,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     const facts = tip.evidence.map((fact) => `<span class="intel-fact"><b>${safe(fact.value)}</b>${safe(fact.label)}</span>`).join('');
     const spokenFacts = tip.evidence.map((fact) => `${fact.value} ${fact.label}`).join(', ');
     const label = `${kind}${severity ? `, ${severity}` : ''}. ${tip.headline} ${tip.detail} ${spokenFacts}. ${INTEL.seeRule}`;
-    return `<button type="button" class="intel-tip${rank === 0 ? ' intel-tip--primary' : ''}" data-rule="${tip.rule}" data-kind="${tip.kind}" data-severity="${tip.severity}" data-rank="${rank}" aria-label="${safe(label)}">`
+    return `<button type="button" class="intel-tip${rank === 0 ? ' intel-tip--primary' : ''}" data-tip="${safe(tip.id)}" data-rule="${tip.rule}" data-kind="${tip.kind}" data-severity="${tip.severity}" data-rank="${rank}" aria-label="${safe(label)}">`
       + `<span class="intel-tip-top"><span class="intel-kind"><span class="intel-tip-mark" aria-hidden="true">${TIP_MARK[tip.kind]}</span>${safe(kind)}</span><span class="intel-tip-sev" aria-hidden="true">${severity}</span></span>`
       + `<span class="intel-tip-headline">${safe(tip.headline)}</span>`
       + `<span class="intel-tip-detail">${safe(tip.detail)}</span>`
@@ -1689,10 +1689,10 @@ export const mountGlassSurface = (onClose: () => void) => {
     const oldTab=oldBody?.dataset.intelPanel as IntelTabId|undefined;
     if(oldBody&&oldTab)intelScroll[oldTab]=oldBody.scrollTop;
     const focused=document.activeElement as HTMLElement|null;
-    const focusSelector=focused&&panel.contains(focused)?focused.classList.contains('intel-close')?'.intel-close':focused.dataset.intelTab?`[data-intel-tab="${focused.dataset.intelTab}"]`:focused.dataset.rule?`.intel-rule[data-rule="${focused.dataset.rule}"]`:focused.closest('.intel-record')?'.intel-record > summary':focused.closest('.intel-full')?'.intel-full > summary':null:null;
+    const focusSelector=focused&&panel.contains(focused)?focused.classList.contains('intel-close')?'.intel-close':focused.dataset.intelTab?`[data-intel-tab="${focused.dataset.intelTab}"]`:focused.dataset.tip?`.intel-tip[data-tip="${focused.dataset.tip}"]`:focused.dataset.rule?`.intel-rule[data-rule="${focused.dataset.rule}"]`:focused.closest('.intel-record')?'.intel-record > summary':focused.closest('.intel-full')?'.intel-full > summary':null:null;
     panel.innerHTML = bar + `<div class="intel-body" id="intel-panel" role="tabpanel" tabindex="0" aria-labelledby="intel-tab-${intelTab}" data-intel-panel="${intelTab}"${animate ? '' : ' style="animation:none"'}>${body}</div>`;
     const nextBody=panel.querySelector<HTMLElement>('.intel-body');if(nextBody)nextBody.scrollTop=intelScroll[intelTab];
-    if(focusSelector)panel.querySelector<HTMLElement>(focusSelector)?.focus({preventScroll:true});
+    if(focusSelector)(panel.querySelector<HTMLElement>(focusSelector)??panel.querySelector<HTMLElement>(`[data-intel-tab="${intelTab}"]`))?.focus({preventScroll:true});
     panel.querySelector('.intel-close')?.addEventListener('click', close, { once: true });
     panel.querySelectorAll<HTMLButtonElement>('.intel-tab').forEach(button => {
       button.addEventListener('keydown',event=>{
@@ -1732,7 +1732,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     // Rules opens with the lesson closest to this moment in view.
     if (intelTab === 'rules' && ruleOpen !== null && animate && intelScroll.rules===0) {
       const open = panel.querySelector<HTMLElement>(`.intel-rule[data-rule="${ruleOpen}"]`);
-      if (open) requestAnimationFrame(() => revealRule(open, true));
+      if (open) requestAnimationFrame(() => {if(mode==='intel'&&!panel.hidden&&open.isConnected)revealRule(open, true);});
     }
     panel.querySelector<HTMLDetailsElement>('.intel-full')?.addEventListener('toggle', event => { fullRules = !!(event.currentTarget as HTMLDetailsElement).open; });
     panel.querySelector<HTMLDetailsElement>('.intel-record')?.addEventListener('toggle',event=>{recordOpen=!!(event.currentTarget as HTMLDetailsElement).open;});

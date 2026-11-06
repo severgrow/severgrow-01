@@ -10,7 +10,7 @@ import { servePreview } from './helpers/preview-port.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 import { resumeSavedGame } from './helpers/menu-nav.js';
 import { allNeighbors, coordKey, homeCoord, newGame, viewFor } from '../../src/engine/index.js';
-import type { State } from '../../src/engine/index.js';
+import type { Action, State } from '../../src/engine/index.js';
 import { matchObservation } from '../src/logic/match-intel.js';
 import { positionSave } from './position.js';
 import {checkVisual} from './helpers/visual-baseline.js';
@@ -47,7 +47,7 @@ const tab = async (page: Page, id: 'now' | 'tips' | 'rules') => {
 };
 
 try {
-  for (const [width, height] of [[320, 568], [390, 844], [844, 390], [1280, 800]] as const) {
+  for (const [width, height] of [[320, 568], [390, 844], [844, 390], [768, 1024], [1280, 800]] as const) {
     const mobile = width < 600;
     const page = await browser.newPage({ viewport: { width, height }, hasTouch: mobile, isMobile: mobile });
     const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
@@ -190,6 +190,13 @@ try {
   });
   check(animation.name === 'intel-tab-in', 'motion on: the panel uses the intel arrival animation');
   check(animation.duration === '0.15s', `motion on: the arrival uses --ix-open (${animation.duration})`);
+  await motionPage.locator('#futasaku-glass .intel-tip').first().focus();
+  const focusedTip=await motionPage.locator('#futasaku-glass .intel-tip').first().getAttribute('data-tip');
+  const draw=await motionPage.evaluate(()=>(window as any).__severgrow.legal().find((a:Action)=>a.t==='Draw'&&a.from==='deck'));
+  check(draw,'live-refresh fixture has a real legal Draw');
+  await motionPage.evaluate(a=>(window as any).__severgrow.playFor(a,0),draw);
+  check(await motionPage.evaluate(id=>(document.activeElement as HTMLElement)?.dataset.tip===id,focusedTip),'a live match update preserves focus on the same strategic tip');
+  await motionPage.waitForFunction(()=>!(window as any).__severgrow.busy());
   await motionPage.close();
 
   console.log(`${checks} Match Intel rework checks passed`);
