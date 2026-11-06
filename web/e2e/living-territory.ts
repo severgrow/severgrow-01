@@ -351,7 +351,10 @@ try{
    const frames:any[]=[];(window as any).__livingFrames=frames;
    let finish!:()=>void;(window as any).__livingFramesDone=new Promise<void>(r=>{finish=r;});
    const start=performance.now(),end=start+400,limit=start+3000;
-   const watchdog=setTimeout(finish,3000);
+   // The geometry check requires three real paints, not three seconds of wall time. Software
+   // WebKit can deliver two valid frames before that window and then starve rAF. Give the sampler
+   // its minimum evidence before closing; the independent colour/timing assertions stay pinned.
+   const watchdog=setTimeout(finish,10000);
    const sample=()=>{
     const svg=document.querySelector<SVGSVGElement>('.world-map-svg'),screen=document.getElementById('online-world-screen');
     const grid=document.getElementById('online-world-grid');
@@ -380,7 +383,7 @@ try{
     // Software WebKit can spend a frame flushing styles. Keep the same minimum observations
     // and continuity assertions, and include a settled frame within a finite deadline.
     const now=performance.now();
-    if(now<limit&&(now<end||frames.length<3||frame.opacity<.999))requestAnimationFrame(sample);
+    if(frames.length<3||(now<limit&&(now<end||frame.opacity<.999)))requestAnimationFrame(sample);
     else {clearTimeout(watchdog);finish();}
    };requestAnimationFrame(sample);
    },{once:true,capture:true});
