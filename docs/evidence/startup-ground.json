@@ -1,0 +1,47 @@
+{
+  "conditions": "Chromium154 software GPU,393x852,DPR1,2xCPU,80ms latency,2MiB/s uncompressed fixture,alternating three samples,one excluded shader warm-up,no concurrent work",
+  "rows": [
+    {
+      "stage": "before",
+      "app": 2818.7000000029802,
+      "planet": 4599,
+      "coherent": 5726.39999999851,
+      "assetRequests": 108
+    },
+    {
+      "stage": "after",
+      "app": 2492,
+      "planet": 3807.7000000029802,
+      "coherent": 4871.39999999851,
+      "assetRequests": 109
+    },
+    {
+      "stage": "after",
+      "app": 2449.3000000044703,
+      "planet": 3944.8000000044703,
+      "coherent": 5181.20000000298,
+      "assetRequests": 109
+    },
+    {
+      "stage": "before",
+      "app": 2911,
+      "planet": 5047.80000000447,
+      "coherent": 6116.60000000149,
+      "assetRequests": 108
+    },
+    {
+      "stage": "before",
+      "app": 2759,
+      "planet": 4525,
+      "coherent": 5743.39999999851,
+      "assetRequests": 105
+    },
+    {
+      "stage": "after",
+      "app": 2420,
+      "planet": 3753,
+      "coherent": 4840.79999999702,
+      "assetRequests": 106
+    }
+  ]
+}

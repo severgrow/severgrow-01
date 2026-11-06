@@ -930,7 +930,7 @@ export class WorldView {
     // declaration on the element, so dropping it restores the menu's own box with no re-fit.
     this.releaseCrop();
     this.menuPreview = true;
-    if (!world) return;
+    if (!world) { this.openPlanet('menu'); return; }
     const owner = identity?.playerId ?? null;
     const changedWorld = this.world?.version !== world.version;
     const firstOwner = !this.visited && !this.previewRemembered && owner !== this.previewOwner;
@@ -2277,7 +2277,10 @@ export class WorldView {
   }
   private pushPlanet() {
     const world = this.world;
-    if (!this.planet || !world) return;
+    if (!this.planet) return;
+    // A fresh installation has no saved public map. Draw only unexplored terrain until the
+    // real read arrives; never hold the menu behind an API request or invent owned/growable land.
+    if (!world) { this.planet.update({cells:[],claims:[],me:null,selected:null,home:null}); return; }
     const me = this.identity?.playerId ?? null;
     this.planet.update({
       cells: world.cells, claims: world.claims, me, selected: this.selected,

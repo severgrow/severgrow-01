@@ -2044,10 +2044,16 @@ async function mountPlayerEnhancements() {
 
   await Promise.all(loads);
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
-    outcomeLight = (await import('./player/atmosphere.js')).mountAtmosphere();
-    (await import('./player/information.js')).mountInformation();
-    (await import('./player/cards.js')).mountCards();
-    glassSurface = (await import('./player/glass-surface.js')).mountGlassSurface(() => {
+    // Fetch independent presentation modules together; keep their mount order unchanged.
+    const [atmosphere,information,cards,glass,help,cockpit,breath] = await Promise.all([
+      import('./player/atmosphere.js'),import('./player/information.js'),import('./player/cards.js'),
+      import('./player/glass-surface.js'),import('./player/help.js'),import('./player/smart-cockpit.js'),
+      import('./player/lesson-breath.js'),
+    ]);
+    outcomeLight = atmosphere.mountAtmosphere();
+    information.mountInformation();
+    cards.mountCards();
+    glassSurface = glass.mountGlassSurface(() => {
       $('futa04-help-button').setAttribute('aria-expanded','false');
       $('futa04-help-button').focus();
     });
@@ -2056,11 +2062,11 @@ async function mountPlayerEnhancements() {
       onBlockedTap: tutorialTapAnywhere,
       isPaintDragging: () => !!draw.ptr || draw.shape.length > 0,
     });
-    futa04Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
-    smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit({
+    futa04Help = help.mountHelp({ sheet, onBulb: toggleMatchIntel });
+    smartCockpit = cockpit.mountSmartCockpit({
       heldMove: () => session ? heldMoveWord(session.sel, session.view.hand.find((c) => c.id === session!.sel.card)?.suit === null) : null,
     });
-    lessonBreath = (await import('./player/lesson-breath.js')).mountLessonBreath();
+    lessonBreath = breath.mountLessonBreath();
     layoutKey = '';
     if (session) render();
   }

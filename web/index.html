@@ -5,12 +5,15 @@
     <!-- The page is dark from its very first frame (owner, 2026-11-06: "it flashes white for like
          0.1s before doing the black fade in"): said before any script or stylesheet loads. -->
     <meta name="color-scheme" content="dark" />
-    <style id="first-ground">html{background:#18191a;color-scheme:dark}html:where(.space-first){background:#0e0f10}</style>
+    <style id="first-ground">html{background:#18191a;color-scheme:dark}html:where(.space-first){background:#0e0f10}html.space-first body{background:#0e0f10}</style>
     <style>html[data-startup="waiting"] {background:#0e0f10} html[data-startup="waiting"] body {opacity:0;visibility:hidden}</style>
+    <!-- A slow or failed planet import must never expose its retired flat-map underlay. -->
+    <style>html.planet-expected .world-grid > .world-map-svg{visibility:hidden!important;pointer-events:none!important}</style>
     <script>
-      // The test menu and its world arrive as one object. A bounded fail-open also works when
+      // Live and test use the same first reveal. A bounded fail-open also works when
       // the main module cannot load; no spinner, network wait or repeat entrance on navigation.
-      if (document.documentElement.classList.contains('v075') && /\/test(?:\/|$)/.test(location.pathname)) {
+      if (document.documentElement.classList.contains('v075') && !/[?&]flat-territory(?:[=&]|$)/.test(location.search)) {
+        document.documentElement.classList.add('planet-expected');
         document.documentElement.dataset.startup = 'waiting';
         var startupFallback = setTimeout(function () {
           delete document.documentElement.dataset.startup;

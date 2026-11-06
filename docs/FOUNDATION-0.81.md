@@ -151,3 +151,9 @@ release workflow with the existing environment configuration. Do not overwrite a
 The original commit remains on release ancestry. For an owner-requested live rollback use
 `npm run promote -- 15f80b7c06f2908611624ba6e5b25e2980e6e8f1` and republish from the approved
 `futa0.5-online` workflow as `RELEASE-FLOW.md` specifies. A moved ref alone is not deployment proof.
+
+## Startup device feedback follow-up
+
+Fresh-install feedback on an iPhone 15 Pro confirmed that the startup issue was not fully solved.
+The production readiness path differed from `/test/`; see [STARTUP-GROUND.md](STARTUP-GROUND.md)
+for the focused follow-up, reproductions and the native-device verification boundary.
