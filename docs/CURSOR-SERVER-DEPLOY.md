@@ -85,3 +85,26 @@ The server is shared by /test and the live site. Old pages keep working against 
 fields are optional. One known mismatch: until the owner promotes, the live page's sell key still
 describes the sale as "+100" in its hidden label, while the server pays 50. Tell the owner, so they can
 promote soon after the deploy.
+
+---
+
+## 2026-11-06: BLITZ replaces Real time (redeploy the `duel` function)
+
+Owner: "BLITZ replaces real time ... they have 21 seconds each and see their moves". The page side is live
+with the next promote; the SERVER side needs this redeploy (no migration):
+
+- `server/src/live/config.ts`: `LIVE_TURN_MS` default 60 s -> **21 s** (an `LIVE_TURN_MS` secret, if set
+  in Supabase, still wins — remove it or set it to `21000`).
+- `server/src/live/service.ts`: a CONNECTED player whose clock runs out no longer loses — the turn is played
+  out by the autoplayer and the match goes on. A player who stays disconnected through the reconnect ladder
+  still loses; leaving still forfeits.
+- `server/src/live/autoplay.ts`: the auto-played turn throws the LOWEST number card (a Bomb only if nothing
+  else), not the drawn card.
+
+Steps: `npm run server:build-edge` must print no diff on `supabase/functions/duel/bundle.ts` (it was rebuilt
+in commit d1144ae7's parent), then `supabase functions deploy duel`. Check: `GET /v1/health` responds; a
+Blitz duel's clock reads 21:00.
+
+Until this is deployed, online Blitz shows the server's old 60 s clock and a timeout still loses. Moves are
+already sent one by one (the page commits each move at once in a Blitz duel; no server change was needed for
+that).
