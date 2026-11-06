@@ -97,3 +97,9 @@ touch.
   like `renderRevealTile()` does for Bloom tiles) — a bigger refactor of main.ts, left for a dedicated pass.
 - **Sheets/screens:** every sheet already opens and closes through `enterSurface`/`exitSurface`
   (interface-motion.ts, a soft settle that is already spring-like); no gaps found, nothing changed there.
+- **After 0.8 (2026-11-06):** home-screen launch screen. The owner still saw a white flash when opening the app
+  from the iPhone home-screen icon: iOS's own launch screen, white unless `apple-touch-startup-image` names a
+  launch image for the exact screen. Added 40 charcoal PNGs (`web/public/splash/`, `web/src/logic/splash.ts`,
+  test `splash.test.ts`). LIVE 12:53 UTC as 15f80b7c. iOS reads them when the icon is ADDED: the owner must
+  delete and re-add the home-screen icon. Server: the owner reports growing anywhere and the 50-Seed sale work
+  live, so the server was deployed; bots-v0.11 not confirmed from here (no network to Supabase).
