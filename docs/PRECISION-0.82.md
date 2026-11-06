@@ -119,3 +119,25 @@ futa05 (110 files). Representative captures were inspected, not just generated.
 The full Node 20 check and exact-source remote matrices are additional mandatory release gates.
 Their final results and the approved publisher run are recorded with the immutable release tag
 after successful publication; this source document does not pre-claim those outcomes.
+
+## Completed gates and Pages retry
+
+Application candidate: `ce74bd114966d54d527610dcd0e07acdaf2f837b`.
+
+- Feature CI [42264048119](https://github.com/severgrow/severgrow-01/actions/runs/42264048119):
+  full check/build plus all 18 browser suites passed. Extra checks 42264048004: all six passed.
+- Release-branch CI [42266856415](https://github.com/severgrow/severgrow-01/actions/runs/42266856415):
+  all 19 jobs passed again. Extra checks 42266856182: all six passed again, including the memory guard.
+- Full local Node 20 run: 4,168 passed, one 60-second bot-simulation timeout, one expected failure,
+  66 skipped. The unchanged `bloom-bands` suite then passed all seven tests alone with one worker
+  and the original timeout. Do not describe the full local run as completely green.
+- An earlier candidate's retained-heap guard flagged growth. It did not recur in either final
+  exact-source CI matrix; the guard and thresholds remain unchanged. This is not proof that all
+  long-session variability has been eliminated.
+- First approved publisher 42266856331 resolved both sources to the candidate and passed CI/build,
+  but Pages returned “Deployment failed, try again later.” A completed build is not a live release.
+
+The publication retry changes this document only. The `live` application source remains the
+CI-tested candidate. The approved release-branch publisher must pass its source gates and deploy
+successfully; do not bypass branch protection or claim publication from a ref move. Final evidence
+is recorded on the release tag after successful deployment.
