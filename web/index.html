@@ -181,6 +181,7 @@
          player/boot-cover.ts once the menu is composed (max 1.2 s), so nothing half-built shows. -->
     <style id="boot-cover-css">
       #boot-cover { display: none; }
+      #boot-cover[hidden] { display: none !important; }
       html.space-first #boot-cover { display: block; position: fixed; inset: 0; z-index: 2147483646; background: #0e0f10; pointer-events: none; }
     </style>
   </head>

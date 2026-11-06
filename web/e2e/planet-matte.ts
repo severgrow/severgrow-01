@@ -240,4 +240,5 @@ await import("./challenge-handoff.js");
 
 await import('./play-world-fade.js');
 // Replay uses its own SVG id, so live-only board CSS must never hide its artwork.
+await import('./pwa-launch.js');
 await import('./replay-offline.js');
