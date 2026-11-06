@@ -17,21 +17,24 @@ function worker(fetcher:typeof fetch,cached?:Response){
   return {answer:answer!,tasks};};
  return {navigate,cache,timers,dispatch:listeners.get('fetch')!,expire:()=>{for(const [id,t] of timers){timers.delete(id);t.fn();}}};
 }
-it('opens the cached app promptly when the navigation network stalls, and still refreshes it',async()=>{
+// OWNER CHANGED THE RULE (2026-11-06: "after adding the app to home screen it loads long and flashes
+// white ... I just want it to have black screen until fully loaded"): iOS paints WHITE while a navigation
+// waits, so a saved page is answered AT ONCE and refreshed in the background (was: wait up to 800 ms).
+it('opens the saved app at once, never waiting on the network, and still refreshes it',async()=>{
  let release!:(r:Response)=>void;
  const fetcher=vi.fn(()=>new Promise<Response>(r=>{release=r;})) as unknown as typeof fetch;
  const w=worker(fetcher,new Response('cached app'));const n=w.navigate();let shown=false;
  void n.answer.then(()=>{shown=true;});await new Promise<void>(r=>setImmediate(r));
- expect([...w.timers.values()].some(t=>t.ms<=1000)).toBe(true);w.expire();await new Promise<void>(r=>setImmediate(r));
- expect(shown).toBe(true);expect(await (await n.answer).text()).toBe('cached app');
+ expect(shown).toBe(true);expect(w.timers.size).toBe(0);expect(await (await n.answer).text()).toBe('cached app');
  release(new Response('fresh app'));await Promise.all(n.tasks);expect(w.cache.put).toHaveBeenCalled();
- expect(fetcher).toHaveBeenCalledTimes(1);expect(w.timers.size).toBe(0);
+ expect(fetcher).toHaveBeenCalledTimes(1);
 });
-it('prefers a fresh navigation and does not wait for the cache write to display it',async()=>{
+it('the refreshed page is saved for the next launch without delaying this one',async()=>{
  const w=worker(vi.fn(async()=>new Response('fresh app')) as unknown as typeof fetch,new Response('old app'));
  w.cache.put.mockImplementation(()=>new Promise<void>(()=>{}));
  const n=w.navigate();let answer:Response|undefined;void n.answer.then(r=>{answer=r;});
- await new Promise<void>(r=>setImmediate(r));expect(answer).toBeDefined();expect(await answer!.text()).toBe('fresh app');
+ await new Promise<void>(r=>setImmediate(r));expect(answer).toBeDefined();expect(await answer!.text()).toBe('old app');
+ expect(w.cache.put).toHaveBeenCalled();
 });
 it('uses the cached app immediately when offline',async()=>{
  const w=worker(vi.fn(async()=>{throw new TypeError('offline');}) as unknown as typeof fetch,new Response('offline app'));
@@ -44,11 +47,11 @@ it('does not manufacture a page when no cached shell exists',async()=>{
  w.expire();await new Promise<void>(r=>setImmediate(r));expect(shown).toBe(false);
  release(new Response('first real page'));expect(await (await n.answer).text()).toBe('first real page');
 });
-it('uses browser navigation preload without fetching the page twice',async()=>{
+it('refreshes through browser navigation preload without fetching the page twice',async()=>{
  const fetcher=vi.fn(async()=>new Response('duplicate')) as unknown as typeof fetch;
- const w=worker(fetcher,new Response('old page'));
- expect(await (await w.navigate(Promise.resolve(new Response('preloaded page'))).answer).text()).toBe('preloaded page');
- expect(fetcher).not.toHaveBeenCalled();
+ const w=worker(fetcher,new Response('old page'));const n=w.navigate(Promise.resolve(new Response('preloaded page')));
+ expect(await (await n.answer).text()).toBe('old page');await Promise.all(n.tasks);
+ expect(fetcher).not.toHaveBeenCalled();expect(w.cache.put).toHaveBeenCalled();
 });
 it('never intercepts or caches the authoritative API',()=>{
  const fetcher=vi.fn() as unknown as typeof fetch,w=worker(fetcher,new Response('cached page'));

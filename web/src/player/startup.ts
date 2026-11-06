@@ -1,4 +1,8 @@
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
+import { EASE } from '../logic/motion.js';
+
+/** The first reveal's fade from black. */
+export const STARTUP_FADE_MS = 400;
 
 export function createStartupGate(reveal:()=>void) {
   let app=false,fonts=false,planet=false,needsPlanet=true,done=false;
@@ -22,7 +26,9 @@ export function mountStartupReveal():void {
     window.removeEventListener('futasaku:startup-visible',fallback);
     observer?.disconnect();
     if(waiting&&interfaceMotionAllowed()){
-      const beat=document.body.animate([{opacity:0},{opacity:1}],{duration:1000,easing:'cubic-bezier(.2,0,.2,1)'});
+      // One short fade from black (owner, 2026-11-06: "black screen until fully loaded and fade in ... no
+      // longer than 1s or 1.5s"): the dark holds at most 1.2 s (index.html), then 400 ms.
+      const beat=document.body.animate([{opacity:0},{opacity:1}],{duration:STARTUP_FADE_MS,easing:EASE.out});
       beat.id='startup-reveal';
     }
     if(waiting)window.dispatchEvent(new Event('futasaku:startup-visible'));

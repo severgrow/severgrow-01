@@ -47,11 +47,12 @@ const networkFirst = (req, key) =>
       return res;
     })
     .catch(() => caches.open(CACHE).then((c) => c.match(key, { ignoreSearch: true })));
-// A radio can report "online" while its navigation hangs. Prefer a timely fresh page, but
-// open the installed cached shell after 800ms and finish this one refresh in the background.
-// Never await a disk write before handing usable HTML to WebKit. No polling or forced reload.
+// THE INSTALLED APP OPENS AT ONCE (owner, 2026-11-06: "after adding the app to home screen it loads
+// long and flashes white"): iOS shows a blank WHITE page between its launch screen and the first paint,
+// so any wait here is a white flash. A saved page is answered immediately and refreshed in the
+// background for the next launch (its build files are hashed, so an older page still finds its own
+// files); only a first visit, with nothing saved yet, waits for the network.
 const navigate = async (event) => {
-  const cached = caches.open(CACHE).then((c) => c.match('./index.html', { ignoreSearch: true })).catch(() => undefined);
   const network = Promise.resolve(event.preloadResponse).then((preloaded) => preloaded || fetch(event.request))
     .then((res) => {
       if (res.ok) {
@@ -61,12 +62,8 @@ const navigate = async (event) => {
       return res;
     });
   event.waitUntil(network.then(() => undefined, () => undefined));
-  let timer;
-  const fallback = new Promise((resolve) => {
-    timer = setTimeout(() => resolve(cached.then((hit) => hit || network)), 800);
-  });
-  try { return await Promise.race([network.catch(() => cached), fallback]); }
-  finally { clearTimeout(timer); }
+  const cached = await caches.open(CACHE).then((c) => c.match('./index.html', { ignoreSearch: true })).catch(() => undefined);
+  return cached || network;
 };
 // P-5: never cache the duel API. Cross-origin calls already bypass this worker; when the API
 // is same-origin under the app path (or proxied), still skip caching match GETs.

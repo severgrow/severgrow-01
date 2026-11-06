@@ -13,13 +13,12 @@ it('waits for a real paint, not the planet-on mount class',()=>{
  const f=setup(true,false);liftBootCover({reduceMotion:false});vi.advanceTimersByTime(300);expect(f.cover.style.opacity).toBe('1');
  vi.advanceTimersByTime(2300);expect(f.cover.hidden).toBe(true);
 });
-it('keeps a reusable dark shield for installed-app snapshots and fades once on return',()=>{
- const f=setup();liftBootCover({reduceMotion:false});vi.advanceTimersByTime(1500);expect(f.cover.hidden).toBe(true);expect(f.cover.remove).not.toHaveBeenCalled();
- f.doc.hidden=true;f.doc.dispatchEvent(new Event('visibilitychange'));expect(f.cover.hidden).toBe(false);expect(f.cover.style.opacity).toBe('1');
- f.doc.hidden=false;f.doc.dispatchEvent(new Event('visibilitychange'));vi.advanceTimersByTime(1500);expect(f.cover.hidden).toBe(true);expect(vi.getTimerCount()).toBe(0);
-});
-it('a second suspension cancels an unfinished reveal',()=>{
- const f=setup();liftBootCover({reduceMotion:false});vi.advanceTimersByTime(40);f.doc.hidden=true;f.doc.dispatchEvent(new Event('visibilitychange'));vi.advanceTimersByTime(1000);expect(f.cover.hidden).toBe(false);expect(f.cover.style.opacity).toBe('1');
+// OWNER CHANGED THE RULE (2026-11-06: "unnecessary codex's stuff to be deleted"): the installed app no
+// longer re-darkens and re-fades on every app switch; the cover is a FIRST-launch cover only.
+it('the installed app gets no curtain when it is switched away from and back',()=>{
+ const f=setup();liftBootCover({reduceMotion:false});vi.advanceTimersByTime(1500);expect(f.cover.hidden).toBe(true);
+ f.doc.hidden=true;f.doc.dispatchEvent(new Event('visibilitychange'));expect(f.cover.hidden).toBe(true);
+ f.doc.hidden=false;f.doc.dispatchEvent(new Event('visibilitychange'));expect(f.cover.hidden).toBe(true);expect(vi.getTimerCount()).toBe(0);
 });
 it('ordinary browser tabs do not get a resume curtain',()=>{
  const f=setup(false);liftBootCover({reduceMotion:false});vi.advanceTimersByTime(1500);f.doc.hidden=true;f.doc.dispatchEvent(new Event('visibilitychange'));expect(f.cover.hidden).toBe(true);

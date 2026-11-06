@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { BOOT_COVER_MAX_MS, BOOT_COVER_FADE_MS } from '../src/player/boot-cover.js';
+import { STARTUP_FADE_MS } from '../src/player/startup.js';
 
 const read = (p: string) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const html = read('../index.html');
@@ -47,7 +48,11 @@ describe('the boot cover', () => {
 
   it('uses one calm first reveal with a bounded readiness wait', () => {
     expect(BOOT_COVER_FADE_MS).toBeGreaterThanOrEqual(150);
-    expect(BOOT_COVER_FADE_MS).toBe(1000); // same calm first reveal as /test
+    // OWNER CHANGED THE RULE (2026-11-06: "black screen until fully loaded and fade in ... no longer
+    // than 1s or 1.5s"): a short fade, so the whole entrance stays inside 1.5 s.
+    expect(BOOT_COVER_FADE_MS).toBe(300);
+    expect(STARTUP_FADE_MS).toBe(400);
+    expect(html).toMatch(/startupFallback = setTimeout\([\s\S]{0,200}\}, 1200\);/);
     expect(BOOT_COVER_MAX_MS).toBeLessThanOrEqual(1500);
     expect(main).toContain('liftBootCover(');
   });

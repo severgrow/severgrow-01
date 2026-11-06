@@ -18,7 +18,7 @@
         var startupFallback = setTimeout(function () {
           delete document.documentElement.dataset.startup;
           window.dispatchEvent(new Event('futasaku:startup-visible'));
-        }, 3500);
+        }, 1200);
         window.addEventListener('futasaku:startup-visible', function () { clearTimeout(startupFallback); }, { once:true });
       }
     </script>
