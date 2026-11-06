@@ -80,6 +80,7 @@ import { breakdownPart, finalTurns } from './logic/endgame.js';
 import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_BEAT_MS, REPLAY_SPEED, actorOf, involvedKeys, nudgeToward, replayDurationScale } from './logic/opponent.js';
+import { playsThrough } from './logic/play-through.js';
 import { shareCard } from './ui/sharecard.js';
 import { feel, observeLongTasks, perfStart, perfStep } from './logic/perf.js';
 import { dragExceeded, installPress, PRESS_SELECTOR, shouldSkipPress } from './logic/press.js';
@@ -488,6 +489,11 @@ let shownScores: [number, number] = [0, 0];
  */
 let shownDiscard: Card[] = [];
 const hiddenCards = new Set<number>();
+/**
+ * A card thrown while my own move was still being shown (play through): it stays in the hand,
+ * untouchable, until its throw step lifts it out, so it never vanishes and then flies from a gap.
+ */
+let throwHeld: Card | null = null;
 let scars: { key: string; owner: Player; age: number; tile?: Tile }[] = [];
 const removedTiles = new WeakMap<Step, Map<string, Tile>>();
 const outcomeSteps = new WeakMap<Step, { tone: 'good' | 'bad'; strength: number }>();
@@ -1798,6 +1804,7 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   shownScores = [v.score, v.opponentScore];
   shownDiscard = [...v.discard];
   hiddenCards.clear();
+  throwHeld = null;
   scars = [];
   inspectKey = null;
   focusKey = null;
@@ -3301,7 +3308,10 @@ function humanPlay(a: Action, opts: { auto?: boolean; flightFrom?: DOMRect } = {
     render();
     return;
   }
-  fastForward();
+  // My own move still showing: the new one queues behind it and the animation keeps playing.
+  if (playThrough()) {
+    if (a.t === 'Discard') throwHeld = session.view.hand.find((c) => c.id === a.card) ?? null;
+  } else fastForward();
   const advice = currentAdvice();
   rememberCardRects();
   let p: Played | null;
@@ -3825,6 +3835,7 @@ function fastForward() {
   epoch++;
   // A skipped flight never plays the boomerang; forget its take-off with the animations it belonged to.
   dragThrowFrom = null;
+  throwHeld = null;
   releaseThrowSwell();
   replaying = false;
   liveReveal = false;
@@ -3911,7 +3922,7 @@ let skippedFrom: State | null = null;
  */
 function autoAdvance() {
   // The tutorial's free turn plays like a real game: once only "end" is left it goes on to Throw.
-  if (!session || (coach.tutorial && !tutorialFreePlayActive()) || !myTurn() || busy() || session.view.phase !== 'ACT') return;
+  if (!session || (coach.tutorial && !tutorialFreePlayActive()) || !myTurn() || blocking() || session.view.phase !== 'ACT') return;
   if (session.state === skippedFrom) return;
   // Levels 1-10: an explanation on screen is read first; dismissing it redraws and comes back here.
   if (lessonActive() && lessonBeatNow?.explain) return;
@@ -4683,6 +4694,12 @@ async function playStep(step: Step, my: number) {
         // hand for one frame. A pile tap has no release box, so it takes off from the card's hand
         // box: same flourish, different start. The box is consumed with the step.
         let from = cardRects.get(step.card.id);
+        // a card held back while my move played through leaves the hand now, from where it rests
+        if (throwHeld?.id === step.card.id) {
+          throwHeld = null;
+          const rest = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
+          if (rest) from = rest.getBoundingClientRect();
+        }
         if (dragThrowFrom) {
           from = dragThrowFrom;
           dragThrowFrom = null;
@@ -5020,6 +5037,14 @@ function countScores(to: [number, number]) {
 // ---------- rendering ----------
 
 const busy = () => queue.pending > 0 || pumping;
+/**
+ * PLAY THROUGH (owner, 2026-11-06, logic/play-through.ts): only my own move is still being shown,
+ * so my input stays live and the animation keeps playing (offline games; the tutorial and the
+ * lessons keep their taught pace, and online moves keep the server's reveal rules).
+ */
+const playThrough = () => busy() && !isOnlineDuel() && !coach.tutorial && !lessonActive() && myTurn() && playsThrough(queue.steps(), currentStep, HUMAN);
+/** An animation that must finish (or be skipped) before the player acts: anything but my own move. */
+const blocking = () => busy() && !playThrough();
 const myTurn = () => {
   if (pregameHold || isStarterRitualPlaying()) return false;
   if (isOnlineDuel()) return !!getOnlineSession()?.myTurn && !getOnlineSession()?.finished;
@@ -5260,7 +5285,7 @@ function render() {
       placeTeachingPanel?.($('coach'), keys);
     });
   }
-  if (myTurn() && !busy() && v.phase === 'ACT' && !autoQueued) {
+  if (myTurn() && !blocking() && v.phase === 'ACT' && !autoQueued) {
     autoQueued = true;
     setTimeout(() => {
       autoQueued = false;
@@ -6891,7 +6916,7 @@ function refreshBoardDrag() {
 function renderBoard(v: View, advice: Advice | null) {
   if (!session) return;
   let o: Overlay = { ...NO_OVERLAY, scars: scars.map(({ key, owner, age, tile }) => ({ key, owner, age, tile })), focusKey, fresh: freshKeys() };
-  if (myTurn() && !busy()) {
+  if (myTurn() && !blocking()) {
     const sel = dragSel ?? session.sel;
     const pending = dragSel ? null : session.pending;
     const pv = pending ? previewMove(v, pending) : null;
@@ -7129,7 +7154,7 @@ function renderControls(v: View, advice: Advice | null) {
   const moves = $('moves');
   moves.replaceChildren();
   $('confirm').hidden = true;
-  if (!myTurn() || busy()) {
+  if (!myTurn() || blocking()) {
     if (session.state.phase === 'GAME_OVER' && !busy() && gameOverDismissed) {
       moves.append(
         button('Results', 'ghost', () => {
@@ -7697,20 +7722,21 @@ function installHandBreath(hand: HTMLElement) {
 function renderHand(v: View, advice: Advice | null) {
   if (!session) return;
   // A pick toward a Bloom only lives in my own Grow step, and only while it can still bloom.
-  if (bloomPick.length && !(IS_FUTA04 && myTurn() && !busy() && v.phase === 'ACT' && bloomKindsWith(bloomPick).length)) bloomPick = [];
+  if (bloomPick.length && !(IS_FUTA04 && myTurn() && !blocking() && v.phase === 'ACT' && bloomKindsWith(bloomPick).length)) bloomPick = [];
   const hand = $('hand');
   const sel = session.sel;
-  const legal = myTurn() && !busy() ? session.legal : [];
+  const legal = myTurn() && !blocking() ? session.legal : [];
   const usable = legal.length ? usableCards(v, legal, { ...sel, card: null }) : new Set<number>();
   const picked = new Set(session.pending ? moveCards(session.pending) : []);
   const coachCards = advice && sel.card === null && !session.pending ? new Set(advice.cards) : new Set<number>();
-  const cards = handOrder(v.hand, settings.handSort);
-  const bloomCards = IS_FUTA04 && myTurn() && !busy() ? new Set(sel.kind?.startsWith('bloom-')
+  const held = throwHeld && !v.hand.some((c) => c.id === throwHeld!.id) ? throwHeld : null;
+  const cards = handOrder(held ? [...v.hand, held] : v.hand, settings.handSort);
+  const bloomCards = IS_FUTA04 && myTurn() && !blocking() ? new Set(sel.kind?.startsWith('bloom-')
     ? kindCards(sel.kind) : sel.card === null && sel.kind === null
       ? legal.flatMap(a => a.t === 'Bloom' || a.t === 'MegaBomb' ? a.cards : []) : []) : new Set<number>();
   // overhaul item 3: cards of the same combo share a small bracket under them
   const combos = bloomsShown() ? comboGroups(v.hand) : new Map<number, number>();
-  const showBloomHints = (settings.bloomHints || !!coach.tutorial || IS_TEST) && myTurn() && !busy() && bloomsShown();
+  const showBloomHints = (settings.bloomHints || !!coach.tutorial || IS_TEST) && myTurn() && !blocking() && bloomsShown();
   const bloomHintIds = showBloomHints
     ? new Set(bloomHintGroups(v, legal).flat())
     : new Set<number>();
@@ -7766,6 +7792,8 @@ function renderHand(v: View, advice: Advice | null) {
     const fs = c.suit === null ? fruitCardState(v, legal, c.id) : null;
     const firstFruit = c.suit === null && cards[i - 1]?.suit !== null && i > 0;
     b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
+    if (held?.id === c.id) b.classList.add('throw-held');
+    b.disabled = held?.id === c.id;
     if (i >= BREATH.maxCards) b.classList.add('breath-off');
     // One of five baked amplitudes (never a custom property: see hand-breath-a* in style.css).
     else b.classList.add(`breath-a${breathAmpStep(weight)}`);
@@ -7894,7 +7922,7 @@ function paintDiscardTop() {
 function renderPiles(v: View, advice: Advice | null) {
   // The product keeps its Throw pile lit in the Throw step (owner, 2026-10-25). Classic copies
   // pass nothing and keep the old both-piles-dimmed look.
-  const looks = pileStates(v.phase, myTurn(), busy(), session!.legal, IS_FUTA04);
+  const looks = pileStates(v.phase, myTurn(), blocking(), session!.legal, IS_FUTA04);
   const top = shownDiscard.at(-1);
   paintDiscardTop();
   if (IS_FUTA04) renderPileMeter($('deck-count'), v.deckCount);
@@ -8799,7 +8827,7 @@ function cancelSel() {
 
 /** A clear choice (one move on the picked spot) plays at once: no Confirm, Undo can take it back. */
 function maybeAutoPlay() {
-  if (!session || !myTurn() || busy()) return;
+  if (!session || !myTurn() || blocking()) return;
   // Futa04 commits a complete card-and-target Sprout, including Strengthen. Blooms finish
   // through the drawing path (a painted shape of any size), so an inferred placement never spends
   // a partly chosen group. A Blast is a whole move at a target like a Sprout: it plays on the tap.
@@ -8826,7 +8854,7 @@ function onCardTap(id: number) {
   if (!session) return;
   // Mid-reveal a tap must not skip the enemy's turn (and must not start mine early).
   if (onlineGateShut()) return revealWaitNotice();
-  if (busy()) fastForward();
+  if (blocking()) fastForward();
   if (!myTurn()) return;
   // Before the draw a card cannot be used yet. It used to be selected silently, so the tap looked
   // broken; now it says why, at the card.
@@ -8965,7 +8993,7 @@ const finePointer = () => typeof matchMedia === 'function' && matchMedia('(point
 /** The picked Bloom while painting is possible (my Grow step, a Bloom picked), else null. */
 let comboMemo: { state: unknown; sel: unknown; combo: Combo | null } | null = null;
 function drawCombo(): Combo | null {
-  if (!session || !myTurn() || busy() || session.view.phase !== 'ACT') return null;
+  if (!session || !myTurn() || blocking() || session.view.phase !== 'ACT') return null;
   // worked out once per position and selection, not on every pointer move
   if (comboMemo?.state !== session.state || comboMemo.sel !== session.sel) comboMemo = { state: session.state, sel: session.sel, combo: comboFor(session.view, session.legal, session.sel) };
   return comboMemo.combo;
@@ -9507,7 +9535,7 @@ function onHexTap(key: string) {
   if (!session) return;
   // Mid-reveal a tap must not skip the enemy's turn: the board is still changing under it.
   if (onlineGateShut()) return revealWaitNotice();
-  if (busy()) fastForward();
+  if (blocking()) fastForward();
   // Bloom undo / unpick on a hex that is not continuing the paint (still allow the
   // first→last endpoint shortcut used by Futa04 Bloom).
   if (IS_FUTA04 && myTurn() && session.view.phase === 'ACT' && (session.sel.kind?.startsWith('bloom-') || draw.shape.length)) {
@@ -10122,13 +10150,13 @@ bind('first-tip-ok', () => {
 bind('deck', () => {
   // The gate first: a tap on the deck mid-reveal used to skip the replay AND commit a Draw.
   if (onlineGateShut()) return revealWaitNotice();
-  if (busy()) fastForward();
+  if (blocking()) fastForward();
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'deck') : undefined;
   if (a) humanPlay(a);
 });
 bind('discard', () => {
   if (onlineGateShut()) return revealWaitNotice();
-  if (busy()) fastForward();
+  if (blocking()) fastForward();
   // The Throw step: the picked card goes onto the pile. This is the third throw gesture (tap the
   // pile while a card is picked); a tap on the card itself only selects/deselects. Nothing picked,
   // nothing thrown. Every mode, online too (humanPlay routes it).

@@ -55,8 +55,8 @@ touch.
 | # | Step | Status |
 |---|------|--------|
 | 0 | White-blink fix bee46ac3 promoted live (before this pass) | waiting on CI |
-| 1 | Audit: map every duel + menu animation, durations, where input is blocked, jank sources | todo |
-| 2 | Input never blocked by animation (queue-free: next card pickable while effects play) | todo |
+| 1 | Audit: map every duel + menu animation, durations, where input is blocked, jank sources | in progress (duel moves mapped: see Findings) |
+| 2 | Input never blocked by animation (queue-free: next card pickable while effects play) | done (`logic/play-through.ts`, `blocking()` in main.ts, e2e `play-through`) |
 | 3 | Bloom: tile by tile from the connected tile, 0.3 s apart | todo |
 | 4 | Big cuts/Blasts scale with size up to ~2 s; small stay quick | todo |
 | 5 | Bomb/Blast heaviness: hit-stop, settle, shake (Blast), light dip, haptic thud — one shared impact | todo |
@@ -71,4 +71,16 @@ touch.
 
 ## Findings / notes (append as you go)
 
-(none yet)
+- **Move animation lives in `web/src/main.ts` `playStep()`** (grow / sever / megaBomb (=Blast) / fruit (=Bomb) /
+  strengthen / discard / draw), fed by `AnimQueue` (`web/src/logic/anim.ts`). Cuts are planned purely in
+  `web/src/logic/cut.ts` (`cutPlan`, tiers small/severe/big/huge) and played by `playCut()` in main.ts.
+- **Before 0.8 any tap during an animation called `fastForward()`** (instant finish). Now `blocking()` =
+  `busy() && !playThrough()`; `playThrough()` is true when only MY steps are queued (offline, not tutorial,
+  not lessons). Input gates switched to `blocking()`: card/hex/deck/discard taps, `humanPlay`, hand legal,
+  board targets, piles, `maybeAutoPlay`, `drawCombo`, `autoAdvance`, `renderControls`. A card thrown
+  mid-show is kept in the hand as `throwHeld` (`.throw-held`) until its flight starts.
+- **Bloom order already walks out from the connected tile** (`web/src/logic/growth-order.ts`, BFS) and the
+  futa04 path reveals tile by tile (`sequential` in the grow case). Only the pace changes (PINNED.bloomGap).
+- Blast (`megaBomb` case): dark flash, heavyShake on futa04, ring-staggered punch-in (36 ms/ring), hold
+  640-840 ms. Bomb (`fruit` case): card flight, pod swell 300 ms, burst, impact. `impact()` skips shake on
+  futa04. `watchFrames()` auto-lower is OFF for futa04 (returns early).

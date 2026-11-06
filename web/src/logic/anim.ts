@@ -158,6 +158,10 @@ export class AnimQueue {
   push(steps: readonly Step[]): void {
     this.queue.push(...steps);
   }
+  /** Every step still waiting, in play order, without consuming any (read by logic/play-through.ts). */
+  steps(): readonly Step[] {
+    return this.queue;
+  }
   /** The next step, without showing it yet. */
   peek(): Step | undefined {
     return this.queue[0];

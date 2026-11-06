@@ -1916,6 +1916,10 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .hand .card.dim {
   opacity: 0.5;
 }
+/* thrown while my move still played (main.ts throwHeld): it waits, untouchable, for its flight */
+.hand .card.throw-held {
+  pointer-events: none;
+}
 .hand.waiting .card {
   opacity: 0.85;
 }
