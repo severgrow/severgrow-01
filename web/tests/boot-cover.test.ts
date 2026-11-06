@@ -29,6 +29,22 @@ describe('the boot cover', () => {
     expect(html.indexOf('id="boot-cover"')).toBeLessThan(html.indexOf('id="menu"'));
   });
 
+  it('says "dark" before anything else loads, so no browser blinks white first (owner, 2026-11-06: "it flashes white for like 0.1s before doing the black fade in")', () => {
+    const head = html.slice(0, html.indexOf('</head>'));
+    const firstLoad = Math.min(...['<script', '<link'].map((t) => head.indexOf(t)).filter((i) => i >= 0));
+    const scheme = head.indexOf('<meta name="color-scheme" content="dark"');
+    const ground = head.indexOf('<style id="first-ground">');
+    expect(scheme).toBeGreaterThan(0);
+    expect(ground).toBeGreaterThan(0);
+    // both before the first script or stylesheet
+    expect(scheme).toBeLessThan(firstLoad);
+    expect(ground).toBeLessThan(firstLoad);
+    const css = head.slice(ground, head.indexOf('</style>', ground));
+    expect(css).toMatch(/html\{[^}]*background:\s*#18191a/);
+    // html:where(): no stronger than style.css, so the loaded page keeps its own ground
+    expect(css).toMatch(/html:where\(\.space-first\)\{[^}]*background:\s*#030404/);
+  });
+
   it('lifts with a short fade, never later than a cap, and is gone after', () => {
     expect(BOOT_COVER_FADE_MS).toBeGreaterThanOrEqual(150);
     expect(BOOT_COVER_FADE_MS).toBeLessThanOrEqual(320);

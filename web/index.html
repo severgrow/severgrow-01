@@ -2,6 +2,10 @@
 <html lang="en" data-theme="ink">
   <head>
     <meta charset="utf-8" />
+    <!-- The page is dark from its very first frame (owner, 2026-11-06: "it flashes white for like
+         0.1s before doing the black fade in"): said before any script or stylesheet loads. -->
+    <meta name="color-scheme" content="dark" />
+    <style id="first-ground">html{background:#18191a;color-scheme:dark}html:where(.space-first){background:#030404}</style>
     <style>html[data-startup="waiting"] {background:#050708} html[data-startup="waiting"] body {opacity:0;visibility:hidden}</style>
     <script>
       // The test menu and its world arrive as one object. A bounded fail-open also works when
