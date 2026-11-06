@@ -131,8 +131,15 @@
     <link rel="stylesheet" href="./src/style.css" />
     <!-- 0.75, the live game only: every rule is scoped to html.v075 (written by the build). -->
     <link rel="stylesheet" href="./src/polish-075.css" />
+    <!-- THE BOOT COVER (owner, 2026-11-06): the live game's first paint is this dark cover, lifted by
+         player/boot-cover.ts once the menu is composed (max 1.2 s), so nothing half-built shows. -->
+    <style id="boot-cover-css">
+      #boot-cover { display: none; }
+      html.space-first #boot-cover { display: block; position: fixed; inset: 0; z-index: 2147483646; background: #030404; pointer-events: none; }
+    </style>
   </head>
   <body>
+    <div id="boot-cover" aria-hidden="true"></div>
     <div id="splash" class="splash" hidden aria-hidden="true"></div>
     <pre id="debug-corner" class="debug-corner" hidden></pre>
     <div id="texture" aria-hidden="true"></div>

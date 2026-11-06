@@ -213,6 +213,7 @@ import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
 import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, saveableSettings, speedFactor } from './logic/settings.js';
 import { mountMenuSoundKey } from './player/menu-sound-key.js';
+import { liftBootCover } from './player/boot-cover.js';
 import { LAB_CATEGORIES, LAB_PRESETS, withLabPreset } from './logic/lab-presets.js';
 import type { LabCategory, LabPreset } from './logic/lab-presets.js';
 import { GLOW_SETTINGS } from './logic/topglow.js';
@@ -10939,6 +10940,8 @@ function setSound(on: boolean) {
   }
 }
 const menuSoundKey = mountMenuSoundKey({ isOn: () => settings.sound, setSound });
+// The page's first paint is a dark cover (index.html); it lifts once the menu is composed.
+liftBootCover({ reduceMotion: settings.reduceMotion });
 sound.setEffects(settings.effects);
 sound.setMix(settings);
 sound.musicOn = settings.music;
