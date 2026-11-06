@@ -150,11 +150,14 @@ export const blitzTimeoutState = (state: State): State => ({
   result: blitzTimeoutResult(state) as unknown as GameResult,
 });
 
-/** The LED clock's text: seconds, then hundredths, like a stopwatch ("21:00" ... "06:28" ... "00:00"). */
+/**
+ * The LED clock's text: minutes and whole seconds, counting down ("00:21" ... "00:07" ... "00:00").
+ * Owner, 2026-11-06: "Change format of clock to 00:21 showing only seconds" (was seconds:hundredths).
+ * A second shows until it has fully run out, the way a countdown reads (20.4 s left shows 00:21).
+ */
 export const blitzClockText = (ms: number): string => {
-  const cs = Math.max(0, Math.floor(ms / 10));
-  const sec = Math.floor(cs / 100);
-  return `${String(sec).padStart(2, '0')}:${String(cs % 100).padStart(2, '0')}`;
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
 
 export type BlitzStage = 'calm' | 'amber' | 'red';

@@ -23,6 +23,11 @@ const CSS = `
   touch-action: none; cursor: grab; outline: 0; background: #0e0f10;
 }
 .world-grid > .planet-canvas:active { cursor: grabbing; }
+/* The planet never POPS in (owner, 2026-11-06: "On start ... instead of smooth fade in it flashes a couple
+   times"): until its first real frame it is transparent, then it fades in once. On a slow phone that
+   frame can come after the menu has already appeared; it then joins it softly instead of in a jump. */
+.world-grid > .planet-canvas { transition: opacity 500ms ease-out; }
+.world-grid > .planet-canvas:not([data-planet-ready]) { opacity: 0; }
 /* BEHIND THE MENU the planet is the backdrop (owner, 2026-11-04): whole, dim, untouchable. The
    menu's living backdrop already stretches this grid over the whole screen. */
 #online-world-screen[data-living-territory="menu"] .world-grid > .planet-canvas {

@@ -2,8 +2,8 @@
 // the led display screen frame, but we make it a timer ... 21:00 (21 seconds but we're showing
 // milliseconds too) ... same style glow as led display but with no dots".
 //
-// One LED frame (the display's own frame art) spanning the two key slots, with a 7-segment stopwatch
-// in it: SS:CC. Pressure: calm ivory, amber from 5 s, red from 3 s; the last three seconds pulse once
+// One LED frame (the display's own frame art) spanning the two key slots, with a 7-segment clock in
+// it: MM:SS (owner, 2026-11-06: "00:21 showing only seconds"). Pressure: calm ivory, amber from 5 s, red from 3 s; the last three seconds pulse once
 // each. On the opponent's turn it shows THEIR clock, dimmer, so you watch their pressure too.
 //
 // Cost: it draws only while a clock is running and the page is visible (one rAF), touches only the
@@ -190,7 +190,7 @@ export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): Blit
         for (const p of cells[i]!) p.classList.toggle('on', lit.includes(p.dataset.seg!));
       }
       shown = text;
-      root.setAttribute('aria-label', `${side === 'mine' ? 'Your' : 'Their'} time: ${text.replace(':', '.')} seconds`);
+      root.setAttribute('aria-label', `${side === 'mine' ? 'Your' : 'Their'} time: ${Number(text.slice(0, 2)) * 60 + Number(text.slice(3))} seconds`);
     }
     const next = blitzStage(ms);
     if (next !== stage) {

@@ -153,7 +153,7 @@ try {
     };
   });
   check(face.shown, 'the LED stopwatch frame is on screen');
-  check(/^(2[01]|1\d):\d\d$/.test(face.text), `it reads like a stopwatch, counting down from 21:00 (${face.text})`);
+  check(/^00:(2[01]|1\d)$/.test(face.text), `it reads 00:21 counting down in whole seconds (${face.text})`);
   check(!face.undo && !face.intel && !face.replay, 'no Undo, no Match Intel, no Replay in Blitz');
   check(!face.ring, 'the old ring clock is gone');
   await page.screenshot({ path: '/tmp/blitz-clock-390.png' });

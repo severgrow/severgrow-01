@@ -27,7 +27,7 @@ export function mountStartupReveal():void {
     observer?.disconnect();
     if(waiting&&interfaceMotionAllowed()){
       // One short fade from black (owner, 2026-11-06: "black screen until fully loaded and fade in ... no
-      // longer than 1s or 1.5s"): the dark holds at most 1.2 s (index.html), then 400 ms.
+      // longer than 1s or 1.5s"): the dark holds at most 1.5 s (index.html), then 400 ms.
       const beat=document.body.animate([{opacity:0},{opacity:1}],{duration:STARTUP_FADE_MS,easing:EASE.out});
       beat.id='startup-reveal';
     }

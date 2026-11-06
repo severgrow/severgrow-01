@@ -99,14 +99,16 @@ describe('Blitz clock', () => {
     expect(blitzRemainingMs(22_000, 30_000)).toBe(0);
   });
 
-  it('reads like a stopwatch: seconds, then hundredths (21:00 down to 00:00)', () => {
-    expect(blitzClockText(21_000)).toBe('21:00');
-    expect(blitzClockText(20_999)).toBe('20:99');
-    expect(blitzClockText(6_280)).toBe('06:28');
-    expect(blitzClockText(3_456)).toBe('03:45');
-    expect(blitzClockText(9)).toBe('00:00');
+  // OWNER CHANGED THE RULE (2026-11-06: "Change format of clock to 00:21 showing only seconds").
+  it('reads minutes:seconds, whole seconds only (00:21 down to 00:00)', () => {
+    expect(blitzClockText(21_000)).toBe('00:21');
+    expect(blitzClockText(20_400)).toBe('00:21');
+    expect(blitzClockText(20_000)).toBe('00:20');
+    expect(blitzClockText(6_280)).toBe('00:07');
+    expect(blitzClockText(999)).toBe('00:01');
     expect(blitzClockText(0)).toBe('00:00');
     expect(blitzClockText(-50)).toBe('00:00');
+    expect(blitzClockText(60_000)).toBe('01:00');
   });
 
   it('pressure: calm, then amber from 5 s, red from 3 s; the last three seconds tick once each', () => {

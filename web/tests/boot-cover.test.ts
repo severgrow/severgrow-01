@@ -52,7 +52,7 @@ describe('the boot cover', () => {
     // than 1s or 1.5s"): a short fade, so the whole entrance stays inside 1.5 s.
     expect(BOOT_COVER_FADE_MS).toBe(300);
     expect(STARTUP_FADE_MS).toBe(400);
-    expect(html).toMatch(/startupFallback = setTimeout\([\s\S]{0,200}\}, 1200\);/);
+    expect(html).toMatch(/startupFallback = setTimeout\([\s\S]{0,200}\}, 1500\);/);
     expect(BOOT_COVER_MAX_MS).toBeLessThanOrEqual(1500);
     expect(main).toContain('liftBootCover(');
   });
