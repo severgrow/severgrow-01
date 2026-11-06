@@ -1,5 +1,20 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-06 — A dark cover in the first paint (no half-built menu on load)
+
+Owner: "in live .com version when opening the website first thing it loads the old logo, the old
+territory view background all for 0.5s and then to our screen. on /test version there is short black
+fade in loading screen that takes you straight to beautiful loaded menu ... the solution from /test
+should be on live too".
+
+Both addresses served byte-identical files (the publish copies one build to both when the commits
+match); what differs is what each address has in the browser (the root carries weeks of saves, an
+account and caches from older builds). A local film of the same build showed a half-styled menu for
+a few frames before the code ran. So the cover is made deliberate for every visit: index.html paints a
+#030404 cover first (CSS in <head>, element before every screen, live game only via html.space-first),
+and web/src/player/boot-cover.ts fades it out (220 ms) once the kanji lockup is in place and the
+planet draws, never later than 1.2 s (a hidden tab lifts by timer). Reduce motion removes it at once.
+
 ## 2026-11-05 (night) — Sound narrowed: a small fixed palette, one sound at a time
 
 Owner, after hearing /test: "The sounds sound too real, Velcro sound is out ... Zip out too ...
