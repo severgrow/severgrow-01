@@ -73,6 +73,17 @@ jobs:
           esac
       - run: node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts
 
+      - name: Keep 0.81 board and Match Intel visual evidence
+        if: always() && matrix.suite == 'futa04-information'
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-081-screens
+          path: |
+            /tmp/v081-intel/
+            /tmp/v081-board/
+            /tmp/main2-shots/
+          retention-days: 7
+
       - name: Keep living Territory visual evidence
         if: always() && (startsWith(matrix.suite, 'living-territory') || matrix.suite == 'territory-final-polish' || startsWith(matrix.suite, 'sphere-test') || matrix.suite == 'planet-matte')
         uses: actions/upload-artifact@v4

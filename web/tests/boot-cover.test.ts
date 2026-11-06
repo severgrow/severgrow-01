@@ -45,9 +45,9 @@ describe('the boot cover', () => {
     expect(css).toMatch(/html:where\(\.space-first\)\{[^}]*background:\s*#0e0f10/);
   });
 
-  it('lifts with a short fade, never later than a cap, and is gone after', () => {
+  it('uses one calm first reveal with a bounded readiness wait', () => {
     expect(BOOT_COVER_FADE_MS).toBeGreaterThanOrEqual(150);
-    expect(BOOT_COVER_FADE_MS).toBeLessThanOrEqual(320);
+    expect(BOOT_COVER_FADE_MS).toBe(1000); // same calm first reveal as /test
     expect(BOOT_COVER_MAX_MS).toBeLessThanOrEqual(1500);
     expect(main).toContain('liftBootCover(');
   });

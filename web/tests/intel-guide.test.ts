@@ -157,6 +157,7 @@ describe('the Tips tab: strategic reads of THIS match', () => {
       if (ids.has('land')) expect([...ids].filter((id) => id !== 'land' && id !== 'stronger')).toEqual([]);
       if (ids.has('stronger')) {
         expect(v.config.allowOvergrow !== false).toBe(true);
+        expect(acting(v)).toBe(true);
         expect(takeable(v)).toBeGreaterThan(0);
       }
       if (v.config.allowOvergrow === false || takeable(v) === 0) expect(ids.has('stronger')).toBe(false);
@@ -230,7 +231,7 @@ describe('the Tips tab: strategic reads of THIS match', () => {
             check(tip.evidence[0]!.value === String(bombs), 'bombs in hand');
             const best = legal.reduce((n, a) => (a.t === 'PlayFruit' ? Math.max(n, v.board[coordKey(a.target)]?.strength ?? 0) : n), 0);
             check(tip.evidence[1]!.value === String(best), 'their best target');
-            check(tip.detail.includes(String(best)), 'detail carries their best');
+            check(tip.headline.includes(String(best)), 'headline carries their best');
             break;
           }
           case 'gold':
@@ -247,10 +248,14 @@ describe('the Tips tab: strategic reads of THIS match', () => {
             check(tip.evidence[1]!.value === String(v.deckCount), 'deck');
             break;
           }
-          case 'stronger':
-            check(tip.evidence[0]!.value === String(takeable(v)), 'takeable');
-            check(tip.headline.includes(String(takeable(v))), 'headline carries the count');
+          case 'stronger': {
+            // 0.82: an actionable recommendation must use this hand's legal moves, rather than
+            // assuming a stronger card might exist on a later turn.
+            const available=new Set(legal.flatMap(a=>a.t==='Sprout'&&v.board[coordKey(a.coord)]?.owner===other(v.player)?[coordKey(a.coord)]:[])).size;
+            check(tip.evidence[0]!.value === String(available), 'legal takeovers');
+            check(tip.headline.includes(String(available)), 'headline carries the count');
             break;
+          }
           default:
             throw new Error(`unknown tip ${tip.id}`);
         }
@@ -298,7 +303,8 @@ describe('the Tips tab: strategic reads of THIS match', () => {
         expect(rank[a.severity] < rank[b.severity] || (rank[a.severity] === rank[b.severity] && a.priority <= b.priority),
           `${a.id} before ${b.id}`).toBe(true);
       }
-      const expected = [...matchAllTips(v)].sort((a, b) => rank[a.severity] - rank[b.severity] || a.priority - b.priority).slice(0, 3);
+      const ranked = [...matchAllTips(v)].sort((a, b) => rank[a.severity] - rank[b.severity] || a.priority - b.priority);
+      const expected = ranked[0]?.id==='surround'&&ranked[0].priority===0 ? ranked.slice(0,1) : ranked.slice(0,3);
       expect(tips.map((t) => t.id)).toEqual(expected.map((t) => t.id));
       expect(nearestRule(tips)).toBe(tips[0]!.rule);
     }

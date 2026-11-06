@@ -73,8 +73,11 @@ describe('the defender is told to answer, never to pay', () => {
     }
   });
 
-  it('says outright that defending costs no Seeds AND that the contested tile is what is at risk', () => {
-    expect(CHALLENGE.defendMeta).toMatch(/NO SEEDS TO PAY/i);
+  it('keeps the stake warning without pricing emphasis (owner 0.82 copy refinement)', () => {
+    expect(CHALLENGE.title).toBe('Challenge');
+    expect(CHALLENGE.defendMeta).toBe('YOUR TILE AT STAKE');
+    expect(CHALLENGE.drawMeta).toBe('NOTHING CHANGES HANDS');
+    expect(CHALLENGE.defendMeta).not.toMatch(/seeds|free/i);
     expect(CHALLENGE.defendMeta).toMatch(/YOUR TILE AT STAKE/i);
     // It is a statement, not a number: no countdown, no amount, nothing to misread as a charge.
     expect(CHALLENGE.defendMeta).not.toMatch(/\d/);

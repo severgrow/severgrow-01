@@ -119,7 +119,11 @@ describe('level 1: taking their tile is impossible, not merely hidden', () => {
     expect(intelTips(v1).map((t) => t.id)).not.toContain('stronger');
     expect(howToReferenceHtml(v1.config)).not.toMatch(/can overgrow/);
     const v2 = viewFor(lessonOpening(L2), YOU);
-    expect(intelTips(v2).map((t) => t.id)).toContain('stronger');
+    // Owner-directed 0.82 advice must describe a legal move now, not a future stronger card.
+    // Keep level 2's taking lesson protected on both sides of its real Draw transition.
+    expect(intelTips(v2).map((t) => t.id)).not.toContain('stronger');
+    const ready = apply(lessonOpening(L2), { t: 'Draw', from: 'deck' });
+    expect(intelTips(viewFor(ready, YOU)).map((t) => t.id)).toContain('stronger');
     expect(howToReferenceHtml(v2.config)).toMatch(/can overgrow/);
   });
 

@@ -273,6 +273,22 @@ try {
   const zoomedOut = await box();
   check('a second double tap zooms back OUT', zoomedOut !== null && zoomedIn !== null && (zoomedOut[2] ?? 0) > (zoomedIn[2] ?? 0) * 1.2, `view width ${zoomedIn?.[2]!.toFixed(2)} -> ${zoomedOut?.[2]!.toFixed(2)}`);
 
+  // Clock-fault integration case, alongside the unchanged trusted-touch cases above. Input
+  // timestamps describe a quick pair even if the system wall clock advances between handlers.
+  const beforeClock=await box();
+  const inputStart=Date.now()/1000-.2;
+  await page.evaluate(()=>{const w=window as any;w.__originalClock=Date.now;let elapsed=0;Date.now=()=>w.__originalClock()+(elapsed+=1000);});
+  try{
+    for(const [type,offset] of [['touchStart',0],['touchEnd',40],['touchStart',90],['touchEnd',130]] as const){
+      await cdp.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchStart'?[{x:cx,y:cy,id:1}]:[],timestamp:inputStart+offset/1000});
+    }
+  }finally{
+    await page.evaluate(()=>{Date.now=(window as any).__originalClock;delete (window as any).__originalClock;});
+  }
+  await page.waitForTimeout(450);
+  const afterClock=await box();
+  check('quick input survives a wall-clock jump between handlers',!!beforeClock&&!!afterClock&&Math.abs(afterClock[2]!-beforeClock[2]!)>.5);
+
   // ---- 7. a slow second tap is two taps, not a double tap --------------------------------------
   const atSlow = await box();
   await tap(cx, cy);

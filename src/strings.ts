@@ -845,10 +845,12 @@ export const HELP = Object.freeze({
  *  sentences, labels are short capitals, the rest is one plain sentence each. Every tip names
  *  only what is public: the board, my own hand and the Throw pile. */
 export const INTEL = Object.freeze({
+  record: 'Match record',
+  comparison: 'YOU · OPPONENT',
   lead: (by: number): string => `You lead by ${by}`,
   behind: (by: number): string => `They lead by ${by}`,
   level: 'All square',
-  scoreLine: (you: number, them: number, turn: number): string => `${you} – ${them} points · turn ${turn}`,
+  scoreLine: (you: number, them: number, _turn: number): string => `${you} - ${them} points`,
   latest: 'LATEST',
   noMoves: 'No moves yet. The first card is face up on the Throw pile.',
   thrown: 'THROWN SO FAR',
@@ -889,21 +891,22 @@ export const INTEL = Object.freeze({
     tips: 'THIS MATCH',
     rules: 'HOW THE GAME WORKS',
     turn: (n: number): string => `TURN ${n}`,
-    reference: 'TEN LESSONS',
+    reference: 'REFERENCE',
   }),
-  /** The scannable four-number readout (plus the public Bomb count). */
+  /** Readout labels, including the folded public Match record. */
   stat: Object.freeze({
     land: 'LAND',
     cuts: 'CUTS',
     deck: 'DECK',
     hand: 'HAND',
-    bombs: 'BOMBS',
+    bombs: 'UNSEEN BOMBS',
   }),
   /** A quiet Tips tab still looks composed: no blank panel, no empty sentence. */
   quiet: Object.freeze({
     title: 'NO OPEN FRONT',
     line: 'Neither home is exposed. The next Grow sets the shape of the match.',
   }),
+  complete: Object.freeze({ title: 'MATCH COMPLETE', line: 'Review the final position in Now.' }),
   /** ONE strategic read of the position, shown on Now above the readout. Every variant is
    *  derived from public information only (board, deck count, both homes). */
   observation: Object.freeze({
@@ -934,10 +937,12 @@ export const INTEL = Object.freeze({
         headline: `Your home has ${left} open sides.`,
         detail: `They hold ${taken} of your home's sides. Fill one before they close the ring.`,
       },
-    surround: (left: number, taken: number, winNow: boolean) => left === 1
+    surround: (left: number, taken: number, finish: 'Grow' | 'Bloom' | null) => finish
+      ? { headline: `You can finish with a ${finish}.`, detail: 'It surrounds their home this turn.' }
+      : left === 1
       ? {
         headline: 'Their home is one side from falling.',
-        detail: winNow ? 'A Grow this turn ends the match.' : `You hold ${taken}. Take the last side and the match is yours.`,
+        detail: `You hold ${taken}. Take the last side and the match is yours.`,
       }
       : {
         headline: `Their home has ${left} open sides.`,
@@ -953,7 +958,7 @@ export const INTEL = Object.freeze({
     }),
     deck: (n: number) => ({
       headline: n === 1 ? 'One card left in the Draw pile.' : `${n} cards left in the Draw pile.`,
-      detail: 'The count is close. Every tile you hold is a point at the end.',
+      detail: 'The final count is close. Gold scores double.',
     }),
     pile: (rank: number) => ({
       headline: 'The pile top completes a Bloom.',
@@ -963,13 +968,13 @@ export const INTEL = Object.freeze({
       headline: `A Blast clears ${tiles} of their tiles.`,
       detail: 'Two Bombs, one move: the target and its neighbours go, and your Grow is untouched.',
     }),
-    bloom: (tiles: number) => ({
+    bloom: (tiles: number, growAvailable = true) => ({
       headline: `A Bloom lands ${tiles} tiles in one move.`,
-      detail: 'It widens the network without spending the Grow you still have.',
+      detail: growAvailable ? 'It widens the network without spending your Grow.' : 'Your Grow is already used. A Bloom is still available.',
     }),
-    bomb: (theirBest: number) => ({
-      headline: 'A Bomb removes any tile you touch.',
-      detail: `Their ${theirBest} is no more safe than any other: strength does not matter, and only the home is immune.`,
+    bomb: (theirBest: number, usesGrow = true) => ({
+      headline: `A Bomb can clear their ${theirBest}.`,
+      detail: `${usesGrow ? 'It uses your Grow.' : 'No Grow spent.'} Homes are immune.`,
     }),
     gold: () => ({
       headline: 'Gold is in reach.',
@@ -983,10 +988,10 @@ export const INTEL = Object.freeze({
       headline: mine > theirs ? `You hold ${mine} tiles to their ${theirs}.`
         : mine < theirs ? `They hold ${theirs} tiles to your ${mine}.`
         : `Level at ${mine} tile${mine === 1 ? '' : 's'} each.`,
-      detail: `No large cut is open on either side. ${deck} cards left in the Draw pile.`,
+      detail: `Keep your land connected. ${deck} cards left in the Draw pile.`,
     }),
     stronger: (takeable: number) => ({
-      headline: `${takeable} of their tiles are open to a stronger card.`,
+      headline: `${takeable} of their tiles ${takeable===1?'is':'are'} open to your stronger card.`,
       detail: 'Take one: they lose a tile and you gain it.',
     }),
   }),
@@ -1229,7 +1234,7 @@ export const FEEDBACK = Object.freeze({
   empty: 'Please write a few words first.',
   guideLink: 'Tester guide',
   close: 'Close',
-  betaVersion: '0.8',
+  betaVersion: '0.82',
   /**
    * The beta line on the main menu, between the wordmark and the buttons: ONE quiet instrument
    * label — the version, then the way to say something (owner, 2026-10-31: minimal; the four-line

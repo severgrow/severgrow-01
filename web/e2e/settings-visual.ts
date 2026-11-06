@@ -33,6 +33,9 @@ try {
     // measures the real, tall Settings sheet, rather than racing an unbound menu control.
     await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true);
     await page.waitForSelector('#acct-settings', { state: 'attached' });
+    // The initial cover can outlive module readiness. Never certify a black launch frame as
+    // a readable Settings screenshot; open only once the real first composition is revealed.
+    await page.waitForFunction(()=>{const cover=document.getElementById('boot-cover');return !cover||cover.hidden;});
     await page.locator('#menu-settings').click();
     await page.waitForTimeout(450);
     // Font/layout work can set data-scroll late on a busy runner. Check the settled cue,
@@ -67,6 +70,7 @@ try {
         fade: fade ? { opacity: Number(getComputedStyle(fade).opacity), box: fade.getBoundingClientRect().toJSON() } : null,
         account: !!document.getElementById('acct-settings') };
     });
+    assert(await page.locator('#sheet-settings').evaluate(el=>getComputedStyle(el).visibility==='visible'&&Number(getComputedStyle(el).opacity)>.9),'the inspected sheet is actually painted');
     assert(geometry.scrollWidth <= width, 'no horizontal page overflow');
     assert(geometry.alpha >= 0.85, 'lit keys behind Settings do not wash through the controls');
     assert(geometry.panel.top >= 0 && geometry.panel.bottom <= height, 'the sheet fits the viewport');
@@ -93,8 +97,13 @@ try {
     }
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/settings-${width}x${height}${largeText ? '-large' : ''}.png` });
     // When extra account controls make the sheet scroll, its title and close key must stay above rows.
-    await page.evaluate(() => { document.getElementById('sheet-settings')!.scrollTop = 1000; });
-    await page.waitForTimeout(80); // the scroll event paints the fade on the next frame
+    await page.evaluate(async () => {
+      const panel=document.getElementById('sheet-settings')!;
+      panel.scrollTop=panel.scrollHeight;
+      // Assert the next painted state, rather than assuming software rendering delivers a
+      // scroll event inside 80ms. No cue threshold or production timing is relaxed.
+      await new Promise<void>(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done())));
+    });
     const sticky = await page.evaluate(() => {
       const title = document.querySelector('#sheet-settings .sheet-head')!;
       const panel = document.getElementById('sheet-settings')!;
@@ -102,7 +111,10 @@ try {
         scrollState: panel.dataset.scroll ?? '', scrollTop: panel.scrollTop, maxScroll: panel.scrollHeight - panel.clientHeight };
     });
     assert(sticky.title.top >= sticky.panel.top && Number(sticky.z) > 0, 'scrolling controls cannot paint over the sticky title');
-    if (sticky.maxScroll > 2) assert(sticky.scrollState === '0', 'at the true end the scroll cue stands down');
+    if (sticky.maxScroll > 2) {
+      assert(Math.abs(sticky.scrollTop-sticky.maxScroll)<=2,`the fixture actually reached the end: ${JSON.stringify(sticky)}`);
+      assert(sticky.scrollState === '0', `at the true end the scroll cue stands down: ${JSON.stringify(sticky)}`);
+    }
     console.log(`PASS Settings ${width}x${height}${largeText ? ' Large text' : ''}: readable glass, visible Hand side, stable title`);
     await page.close();
   }

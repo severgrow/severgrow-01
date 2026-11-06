@@ -69,6 +69,14 @@ export default defineConfig({
       .replace('./futasaku-icon-180.png', './icon-180.png')
       .replace('    <link rel="stylesheet" href="./src/fonts-futa04.css" />\n', '')
       .replace(/<link rel="preload" href="[^"]*(?:besley|commissioner|fragment-mono)[^"]*"[^>]*>/g, '');
+  } } }, { name: 'planet-launch-preload', transformIndexHtml: { order:'post', handler(html,context) {
+    if(process.env.CHANNEL!=='futa05')return html;
+    const tags: {tag:string;attrs:Record<string,string>;injectTo:'head'}[] = [];
+    // The menu needs these two dynamic modules at first paint, not after all game UI mounts.
+    for(const chunk of Object.values(context.bundle??{}))if(chunk.type==='chunk'&&
+      /\/(?:sphere\/planet|online\/lobby-ui)\.ts$/.test(chunk.facadeModuleId??'')&&
+      !html.includes(`href="./${chunk.fileName}"`))tags.push({tag:'link',attrs:{rel:'modulepreload',href:`./${chunk.fileName}`},injectTo:'head'});
+    return {html,tags};
   } } }, { name: 'isolate-development-art', configResolved(config) { output = resolve(config.root, config.build.outDir); }, closeBundle() {
     const channel = process.env.CHANNEL ?? 'futa04';
     // The static /privacy page — real HTML at the real path, on every channel. Google's OAuth

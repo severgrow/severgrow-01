@@ -241,3 +241,7 @@ try {
   }
   console.log(`${checks} information checks passed`);
 } finally { await browser.close(); server?.httpServer.close(); }
+
+// The same product build: protect 0.81's retained art and redesigned Intel on every release.
+await import('./board-retained.js');
+await import('./futa04-intel-rework.js');

@@ -35,7 +35,10 @@ self.addEventListener('install', (e) => {
 // drop older Futa04 caches; also on every page load, since an outgoing worker can still write to
 // its cache for a moment after this one takes over
 const purge = () => caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== CACHE).map((k) => caches.delete(k))));
-self.addEventListener('activate', (e) => e.waitUntil(purge().then(() => self.clients.claim())));
+self.addEventListener('activate', (e) => e.waitUntil(Promise.all([
+  purge(),
+  self.registration.navigationPreload?.enable().catch(() => undefined),
+]).then(() => self.clients.claim())));
 const immutable = (url) => url.pathname.includes('/assets/') || /[?&]v=[0-9a-f]{6,}/.test(url.search);
 const networkFirst = (req, key) =>
   fetch(req)
@@ -44,6 +47,27 @@ const networkFirst = (req, key) =>
       return res;
     })
     .catch(() => caches.open(CACHE).then((c) => c.match(key, { ignoreSearch: true })));
+// A radio can report "online" while its navigation hangs. Prefer a timely fresh page, but
+// open the installed cached shell after 800ms and finish this one refresh in the background.
+// Never await a disk write before handing usable HTML to WebKit. No polling or forced reload.
+const navigate = async (event) => {
+  const cached = caches.open(CACHE).then((c) => c.match('./index.html', { ignoreSearch: true })).catch(() => undefined);
+  const network = Promise.resolve(event.preloadResponse).then((preloaded) => preloaded || fetch(event.request))
+    .then((res) => {
+      if (res.ok) {
+        const copy = res.clone();
+        event.waitUntil(caches.open(CACHE).then((c) => c.put('./index.html', copy)).catch(() => undefined));
+      }
+      return res;
+    });
+  event.waitUntil(network.then(() => undefined, () => undefined));
+  let timer;
+  const fallback = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(cached.then((hit) => hit || network)), 800);
+  });
+  try { return await Promise.race([network.catch(() => cached), fallback]); }
+  finally { clearTimeout(timer); }
+};
 // P-5: never cache the duel API. Cross-origin calls already bypass this worker; when the API
 // is same-origin under the app path (or proxied), still skip caching match GETs.
 const isDuelApi = (url) =>
@@ -59,7 +83,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
   if (req.mode === 'navigate') {
     e.waitUntil(purge());
-    e.respondWith(networkFirst(req, './index.html'));
+    e.respondWith(navigate(e));
   } else if (immutable(url)) {
     e.respondWith(caches.open(CACHE).then(async (c) => {
       const hit = await c.match(req);

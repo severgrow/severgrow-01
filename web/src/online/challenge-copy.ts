@@ -37,7 +37,7 @@
 export const stakeName = (_cellId: string): string => 'your nearest tile';
 
 export const CHALLENGE = Object.freeze({
-  title: 'Territory challenge',
+  title: 'Challenge',
   listLabel: 'Challenges',
   incoming: 'INCOMING',
   outgoing: 'OUTGOING',
@@ -60,7 +60,7 @@ export const CHALLENGE = Object.freeze({
    * The defender's meta line: the owner's report was about being shown a price. Uppercase because
    * the sheet's meta line is set in caps, and deliberately number-free.
    */
-  defendMeta: 'NO SEEDS TO PAY · YOUR TILE AT STAKE',
+  defendMeta: 'YOUR TILE AT STAKE',
   acceptKey: 'ACCEPT',
   declineKey: 'DECLINE',
   /** Declining is the one irreversible key: the first press only arms it. */
@@ -76,7 +76,7 @@ export const CHALLENGE = Object.freeze({
   /** `settleKey` is the harmless fallback only: it posts the same idempotent confirm the server does. */
   settleKey: 'SETTLE NOW',
   drawLine: 'A draw. Nothing changes hands.',
-  drawMeta: 'NOTHING CHANGES HANDS · NO SEEDS TO PAY',
+  drawMeta: 'NOTHING CHANGES HANDS',
   /** `contested` is true when the winner is the challenger, who took this very ground. */
   resolvedLine: (name: string | null, contested: boolean) => {
     if (name === null) return 'Nothing changed hands.';
@@ -112,8 +112,8 @@ export const CHALLENGE = Object.freeze({
    * promises an "answer" when the waiting thing is a turn.
    */
   actionsWaiting: (count: number) => (count === 1
-    ? 'Something in Territory is waiting for you.'
-    : `${count} things in Territory are waiting for you.`),
+    ? 'Something on the Planet is waiting for you.'
+    : `${count} things on the Planet are waiting for you.`),
   /** The crossed swords on a contested tile: the glyph's one spoken name, who and which side. */
   markerFrom: (name: string) => `Challenge on this tile. ${name} challenged you.`,
   markerTo: (name: string) => `Challenge on this tile. You challenged ${name}.`,

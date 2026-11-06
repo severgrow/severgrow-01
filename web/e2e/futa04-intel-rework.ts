@@ -10,13 +10,14 @@ import { servePreview } from './helpers/preview-port.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 import { resumeSavedGame } from './helpers/menu-nav.js';
 import { allNeighbors, coordKey, homeCoord, newGame, viewFor } from '../../src/engine/index.js';
-import type { State } from '../../src/engine/index.js';
+import type { Action, State } from '../../src/engine/index.js';
 import { matchObservation } from '../src/logic/match-intel.js';
 import { positionSave } from './position.js';
+import {checkVisual} from './helpers/visual-baseline.js';
 
 const served = await servePreview(4193, { logLevel: 'silent' });
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
-const dir = 'docs/screens/match-intel';
+const dir = process.env.SHOTS ?? '/tmp/v081-intel';
 mkdirSync(dir, { recursive: true });
 let checks = 0;
 const check = (value: unknown, label: string) => { assert(value, label); checks++; };
@@ -36,7 +37,7 @@ const intentPosition = (seed: number): State => {
 
 const openIntel = async (page: Page) => {
   await page.locator('#futa04-help-button').evaluate((el) => (el as HTMLButtonElement).click());
-  await page.waitForFunction(() => document.querySelector('#futasaku-glass')?.getAttribute('data-mode') === 'intel');
+  await page.waitForFunction(() => {const panel=document.querySelector<HTMLElement>('#futasaku-glass');return panel?.dataset.mode==='intel'&&!panel.hidden&&!panel.inert&&panel.dataset.ixState!=='closing';});
   await page.locator('#futasaku-glass .intel-tab').first().waitFor({ state: 'visible' });
 };
 const tab = async (page: Page, id: 'now' | 'tips' | 'rules') => {
@@ -46,7 +47,7 @@ const tab = async (page: Page, id: 'now' | 'tips' | 'rules') => {
 };
 
 try {
-  for (const [width, height] of [[320, 568], [390, 844], [844, 390], [1280, 800]] as const) {
+  for (const [width, height] of [[320, 568], [390, 844], [844, 390], [768, 1024], [1280, 800]] as const) {
     const mobile = width < 600;
     const page = await browser.newPage({ viewport: { width, height }, hasTouch: mobile, isMobile: mobile });
     const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
@@ -98,8 +99,7 @@ try {
       };
     });
     check(tips.scope === 'THIS MATCH', `${width}: Tips says which surface it is (${tips.scope})`);
-    check(tips.stats.length === 5, `${width}: five-fact readout`);
-    check(tips.stats.find((s) => s.key === 'land')?.value === `${mine}–${theirs}`, `${width}: LAND reads the board (${mine}–${theirs})`);
+    check(tips.stats.length === 0, `${width}: Tips starts with the decision, without repeating Now's readouts`);
     check(tips.tips.length >= 1 && tips.tips.length <= 3, `${width}: one to three ranked tips (${tips.tips.length})`);
     check(tips.tips[0]!.primary, `${width}: the first tip is the primary line`);
     check(tips.tips.every((t, i) => t.rank === i), `${width}: ranks are 0..n in order`);
@@ -111,7 +111,7 @@ try {
     check(!tips.bodyOverflow && !tips.pageOverflow && tips.outside === 0, `${width}: nothing scrolls or bleeds sideways (${JSON.stringify({ body: tips.bodyOverflow, page: tips.pageOverflow, outside: tips.outside })})`);
     check(tips.box.left >= 0 && tips.box.right <= width + 1 && tips.box.top >= 0 && tips.box.bottom <= height + 1, `${width}: the glass fits the viewport`);
     check(tips.animation === 'none' && tips.running === 0, `${width}: reduce motion leaves the panel static`);
-    await page.screenshot({ path: `${dir}/tips-${width}x${height}.png` });
+    await checkVisual(page,`tips-${width}x${height}`,await page.screenshot({ path: `${dir}/tips-${width}x${height}.png` }));
 
     // A tip opens the rule it rests on — the link is behind the verdict word, never a label.
     await page.locator('#futasaku-glass .intel-tip').first().click();
@@ -119,9 +119,10 @@ try {
       `${width}: a tip hands over to the reference, clearly marked as rules`);
     check(await page.locator('#futasaku-glass .intel-rule[aria-expanded="true"]').count() === 1,
       `${width}: the tip opens exactly one lesson card`);
+    check(await page.evaluate(()=>document.activeElement?.matches('.intel-rule[aria-expanded="true"]')),`${width}: the tip hands keyboard focus to its rule`);
     check(await page.locator('#futasaku-glass .intel-rule').count() === 10, `${width}: the reference keeps all ten lessons`);
     check(await page.locator('#futasaku-glass .intel-tip').count() === 0, `${width}: Rules shows no tips — the tabs stay distinct`);
-    await page.screenshot({ path: `${dir}/rules-${width}x${height}.png` });
+    await checkVisual(page,`rules-${width}x${height}`,await page.screenshot({ path: `${dir}/rules-${width}x${height}.png` }));
 
     await tab(page, 'now');
     const now = await page.evaluate(() => ({
@@ -133,7 +134,29 @@ try {
     check(now.scope === 'THE MATCH' && now.stats === 5 && !!now.lead, `${width}: Now keeps the match header and readout`);
     check(!!now.observation && !/LESSON|seed/i.test(now.observation ?? ''), `${width}: Now carries one strategic observation`);
     check(now.observation === matchObservation(view), `${width}: the observation follows the engine's read`);
-    await page.screenshot({ path: `${dir}/now-${width}x${height}.png` });
+    check(!/turn/i.test(await page.locator('#futasaku-glass .intel-sub').textContent()??''),`${width}: the match clock appears once, without a repeated turn label`);
+    const facts=await page.locator('#futasaku-glass .intel-stat:visible').evaluateAll(nodes=>nodes.map(n=>({key:n.getAttribute('data-key'),value:n.querySelector('.intel-stat-v')?.textContent})));
+    check(facts.length===3,`${width}: three immediately useful facts, with record details folded`);
+    check(facts.find(s=>s.key==='land')?.value===`${mine}–${theirs}`,`${width}: LAND agrees with the engine`);
+    // Capture the normal pointer/touch presentation before deliberately exercising keyboard focus.
+    await checkVisual(page,`now-${width}x${height}`,await page.screenshot({ path: `${dir}/now-${width}x${height}.png` }));
+    if(width===390&&process.env.UPDATE_VISUAL_BASELINE!=='1'){
+      const missing=await page.screenshot({style:'#futasaku-glass { visibility:hidden !important; }'});
+      await assert.rejects(()=>checkVisual(page,`now-${width}x${height}`,missing),/visual composition changed/);
+      check(true,'the visual guard rejects a missing reader instead of accepting a dark empty screen');
+    }
+    await page.locator('#futasaku-glass .intel-record > summary').click();
+    check(await page.locator('#futasaku-glass .intel-stat:visible').count()===5,`${width}: cuts and unseen Bomb count remain available in Match record`);
+    check(await page.locator('#futasaku-glass .intel-stat[data-key="bombs"] .intel-stat-k').textContent()==='UNSEEN BOMBS',`${width}: the public count never implies knowledge of their hand`);
+    await page.locator('#futasaku-glass .intel-record > summary').click();
+    await page.locator('#futasaku-glass [data-intel-tab="now"]').focus();
+    await page.keyboard.press('ArrowRight');
+    check(await page.locator('#futasaku-glass [data-intel-tab="tips"]').getAttribute('aria-selected')==='true',`${width}: arrow keys select the next tab`);
+    await page.keyboard.press('End');
+    check(await page.locator('#futasaku-glass [data-intel-tab="rules"]').getAttribute('aria-selected')==='true',`${width}: End selects Rules`);
+    await page.keyboard.press('Home');
+    check(await page.locator('#futasaku-glass [data-intel-tab="now"]').getAttribute('aria-selected')==='true',`${width}: Home returns to Now`);
+    await page.screenshot({path:`${dir}/keyboard-${width}x${height}.png`});
 
     check(errors.length === 0, `${width}: no browser errors (${errors.join(' | ')})`);
     await page.close();
@@ -155,9 +178,53 @@ try {
     text: document.querySelector('#futasaku-glass .intel-tips')?.textContent ?? document.querySelector('#futasaku-glass .intel-quiet')?.textContent ?? '',
     stats: document.querySelectorAll('#futasaku-glass .intel-stat').length,
   }));
-  check(quiet.tips >= 1 && quiet.text.trim().length > 20 && quiet.stats === 5, 'quiet board: the tab still reads as intel, never blank');
+  check(quiet.tips >= 1 && quiet.text.trim().length > 20 && quiet.stats === 0, 'quiet board: useful strategic context without duplicated metrics');
   await quietPage.screenshot({ path: `${dir}/quiet-390x844.png` });
   await quietPage.close();
+
+  // Reading the panel itself is a keyboard action too, not only focusing one of its keys.
+  const reading = await browser.newPage({viewport:{width:390,height:844}});
+  await reading.addInitScript(save=>{localStorage.setItem('main2:severgrow.save.v7',save);localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,speed:'skip',reduceMotion:true}));},positionSave({state:intentPosition(11)}));
+  await reading.goto(served.url);await resumeSavedGame(reading);await openIntel(reading);await tab(reading,'rules');
+  await reading.locator('#futasaku-glass .intel-body').focus();
+  const readingDraw=await reading.evaluate(()=>(window as any).__severgrow.legal().find((a:Action)=>a.t==='Draw'&&a.from==='deck'));
+  check(readingDraw,'reading fixture has a legal live update');
+  await reading.evaluate(a=>(window as any).__severgrow.playFor(a,0),readingDraw);
+  await reading.waitForFunction(()=>!(window as any).__severgrow.busy());
+  check(await reading.evaluate(()=>document.activeElement?.classList.contains('intel-body')),'a live update preserves focus while reading the Rules panel itself');
+  await reading.close();
+
+  const almost = newGame(11);
+  almost.phase='ACT';almost.actor=0;almost.turnPlayer=0;
+  almost.hands[0]=[{id:1002,suit:0,rank:9}];
+  for(const key of Object.keys(almost.board)){
+    almost.terrain[key]='normal';
+    if(!almost.board[key]?.root)almost.board[key]={owner:0,strength:1};
+  }
+  const lastSide=allNeighbors(homeCoord(1,almost.config)).map(coordKey).find(k=>k in almost.board)!;
+  almost.board[lastSide]=null;
+  const finished=await browser.newPage({viewport:{width:390,height:844}});
+  await finished.addInitScript(save=>{localStorage.setItem('main2:severgrow.save.v7',save);localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,speed:'skip',reduceMotion:true}));},positionSave({state:almost}));
+  await finished.goto(served.url);await resumeSavedGame(finished);
+  const winningGrow=await finished.evaluate(key=>(window as any).__severgrow.legal().find((a:Action)=>a.t==='Sprout'&&`${a.coord.q},${a.coord.r}`===key),lastSide);
+  check(winningGrow,'final-review fixture offers the real winning Grow');
+  await openIntel(finished);await tab(finished,'tips');
+  check(await finished.locator('.intel-tip').count()===1,'one verified finish stands alone without competing advice');
+  check((await finished.locator('.intel-tip-headline').textContent())?.includes('finish with a Grow'),'the winning advice names the actual available action');
+  await finished.screenshot({path:`${dir}/winning-tip-390x844.png`});
+  await finished.locator('.intel-close').click();await finished.locator('#futasaku-glass').waitFor({state:'hidden'});
+  await finished.evaluate(a=>(window as any).__severgrow.playFor(a,0),winningGrow);
+  await finished.waitForFunction(()=>!(window as any).__severgrow.busy());
+  // Complete the normal first-win invitation before reviewing the final board.
+  await finished.locator('#install-close').click();
+  if(!await finished.locator('#go-board').isVisible())await finished.locator('#go-more').click();
+  await finished.locator('#go-board').click();await openIntel(finished);await tab(finished,'now');
+  check(await finished.locator('.intel-lead').textContent()==='You won','Now names the actual outcome after the match');
+  check(await finished.locator('.intel-observation').count()===0,'the final position never carries future-turn advice');
+  await finished.screenshot({path:`${dir}/finished-now-390x844.png`});
+  await tab(finished,'tips');
+  check(await finished.locator('.intel-tip').count()===0&&(await finished.locator('.intel-kind').textContent())?.replace('▸','').trim()==='MATCH COMPLETE','finished Tips never recommend another move');
+  await finished.close();
 
   // Motion ON keeps the interface vocabulary: the body arrives with the shared token, not a new one.
   const motionPage = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -176,6 +243,22 @@ try {
   });
   check(animation.name === 'intel-tab-in', 'motion on: the panel uses the intel arrival animation');
   check(animation.duration === '0.15s', `motion on: the arrival uses --ix-open (${animation.duration})`);
+  await motionPage.locator('#futasaku-glass .intel-tip').first().focus();
+  const focusedTip=await motionPage.locator('#futasaku-glass .intel-tip').first().getAttribute('data-tip');
+  const draw=await motionPage.evaluate(()=>(window as any).__severgrow.legal().find((a:Action)=>a.t==='Draw'&&a.from==='deck'));
+  check(draw,'live-refresh fixture has a real legal Draw');
+  await motionPage.evaluate(a=>(window as any).__severgrow.playFor(a,0),draw);
+  check(await motionPage.evaluate(id=>(document.activeElement as HTMLElement)?.dataset.tip===id,focusedTip),'a live match update preserves focus on the same strategic tip');
+  await motionPage.waitForFunction(()=>!(window as any).__severgrow.busy());
+  await motionPage.locator('#hand [data-card]').first().evaluate(el=>(el as HTMLButtonElement).click());
+  const picked=await motionPage.evaluate(()=>(window as any).__severgrow.sel().card);
+  check(picked!==null,'Escape fixture has a picked card');
+  // Intel is already open after the live-update check. Do not toggle the help key shut:
+  // its old data-mode survives closing, so an Escape sent then would target the game.
+  check(await motionPage.locator('#futasaku-glass').isVisible(),'Escape is delivered to the open reader');
+  await motionPage.locator('#futasaku-glass .intel-close').focus();await motionPage.keyboard.press('Escape');
+  await motionPage.locator('#futasaku-glass').waitFor({state:'hidden'});
+  check(await motionPage.evaluate(()=>(window as any).__severgrow.sel().card)===picked,'closing Intel with Escape never cancels the picked card underneath');
   await motionPage.close();
 
   console.log(`${checks} Match Intel rework checks passed`);

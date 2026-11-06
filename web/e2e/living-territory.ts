@@ -146,6 +146,12 @@ try{
   if(process.env.BASELINE_ROOT){await page.screenshot({path:`${shots}/before-${name}.png`});await context.close();continue;}
   await page.waitForSelector('[data-living-territory="menu"] .world-map-svg');
   await page.waitForFunction(()=>!!document.querySelector('.world-hex.mine'));
+  // App/DOM readiness can precede @starting-style's first paint on software WebKit. This section
+  // compares the settled menu with the panel, so await the exact existing target, not a 500ms guess.
+  await page.waitForFunction(target=>{
+   const svg=document.querySelector('.world-map-svg');
+   return !!svg&&Math.abs(Number(getComputedStyle(svg).opacity)-target)<=0.0006;
+  },MENU_MAP_OPACITY);
   await page.screenshot({path:`${shots}/menu-${name}.png`});
   check(`${name}: one real map behind menu`,(await state(page)).count===1);
   check(`${name}: menu backdrop is inert and inaccessible`,await page.evaluate(()=>{
@@ -351,7 +357,10 @@ try{
    const frames:any[]=[];(window as any).__livingFrames=frames;
    let finish!:()=>void;(window as any).__livingFramesDone=new Promise<void>(r=>{finish=r;});
    const start=performance.now(),end=start+400,limit=start+3000;
-   const watchdog=setTimeout(finish,3000);
+   // The geometry check requires three real paints, not three seconds of wall time. Software
+   // WebKit can deliver two valid frames before that window and then starve rAF. Give the sampler
+   // its minimum evidence before closing; the independent colour/timing assertions stay pinned.
+   const watchdog=setTimeout(finish,10000);
    const sample=()=>{
     const svg=document.querySelector<SVGSVGElement>('.world-map-svg'),screen=document.getElementById('online-world-screen');
     const grid=document.getElementById('online-world-grid');
@@ -380,7 +389,7 @@ try{
     // Software WebKit can spend a frame flushing styles. Keep the same minimum observations
     // and continuity assertions, and include a settled frame within a finite deadline.
     const now=performance.now();
-    if(now<limit&&(now<end||frames.length<3||frame.opacity<.999))requestAnimationFrame(sample);
+    if(frames.length<3||(now<limit&&(now<end||frame.opacity<.999)))requestAnimationFrame(sample);
     else {clearTimeout(watchdog);finish();}
    };requestAnimationFrame(sample);
    },{once:true,capture:true});
@@ -730,6 +739,7 @@ try{
    const started=[...frames].reverse().find(f=>f.start!==null);
    const beatStart=started?started.start:null;
    const clockAdvancing=beatStart!==null;
+   const largestPaintGap=Math.max(0,...frames.slice(1).map((frame,index)=>frame.at-frames[index]!.at));
    const swapT=beatStart!==null&&swap>=0?frames[swap]!.at-beatStart:Number.NaN;
    // The samples past the landing keyframe (offset .9, where the map is at DIP and can only be dim).
    // An empty set means the engine painted nothing between the tap and the swap, not that the map
@@ -768,7 +778,7 @@ try{
    // THE RETREAT IS 300ms, NOT THE ARRIVAL'S SECOND (owner, 2026-11-02: "and 0.3s when going back
    // to main menu"). On a live clock the swap is timed against the beat; on a pending one the
    // declared duration is the evidence. Both say the same thing, and both are printed.
-   check(`the retreat clears in one colour-out beat (${clockAdvancing?`${Math.round(swapT)}ms measured on the beat's own clock ≈ ${INTERFACE_MOTION.colourOut}ms, not the ${INTERFACE_MOTION.colourIn}ms arrival`:`${pendingNote}; the framing still swapped ${Math.round(swapAt)}ms after the click, so the declared ${INTERFACE_MOTION.colourOut}ms colour-out token — not the ${INTERFACE_MOTION.colourIn}ms arrival — is the beat`})`,
+   check(`the retreat clears in one colour-out beat (${clockAdvancing?`${Math.round(swapT)}ms measured on the beat's own clock ≈ ${INTERFACE_MOTION.colourOut}ms, not the ${INTERFACE_MOTION.colourIn}ms arrival; largest painted gap ${Math.round(largestPaintGap)}ms`:`${pendingNote}; the framing still swapped ${Math.round(swapAt)}ms after the click, so the declared ${INTERFACE_MOTION.colourOut}ms colour-out token — not the ${INTERFACE_MOTION.colourIn}ms arrival — is the beat`})`,
     swap>0&&!tooQuick&&(clockAdvancing?(swapT>=INTERFACE_MOTION.colourOut&&swapT<INTERFACE_MOTION.colourIn):retreatGraded));
    check(`the retreat runs the colour-out token duration (${INTERFACE_MOTION.colourOut}ms), not a literal`,
     frames.some(f=>f.out===INTERFACE_MOTION.colourOut));

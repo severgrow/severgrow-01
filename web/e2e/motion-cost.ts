@@ -9,6 +9,7 @@ import { preview } from 'vite';
 import { allNeighbors, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, State } from '../../src/engine/index.js';
 import { positionSave } from './position.js';
+import {writeFileSync} from 'node:fs';
 import { cutPosition } from './cut-positions.js';
 import { resumeSavedGame } from './helpers/menu-nav.js';
 
@@ -51,22 +52,34 @@ const measure = async (name: string, state: State, action: Action) => {
   await page.waitForTimeout(1500);
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  await cdp.send('Performance.enable');
+  const metricsBefore=await cdp.send('Performance.getMetrics');
+  if(process.env.MOTION_PROFILE){await cdp.send('Profiler.enable');await cdp.send('Profiler.start');}
   const r = await page.evaluate(async (a) => {
     const g = (window as any).__severgrow;
+    g.clearRenderCosts();
     const gaps: number[] = [];
+    const longs:number[]=[];
+    const observer=new PerformanceObserver(list=>{for(const entry of list.getEntries())longs.push(entry.duration);});
+    observer.observe({type:'longtask',buffered:false});
     let last = performance.now();
     let on = true;
     const tick = (t: number) => { gaps.push(t - last); last = t; if (on) requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
     const t0 = performance.now();
-    g.playFor(a, 0);
+    if(!g.playFor(a, 0))throw new Error('motion-cost fixture action was not accepted');
     while (g.busy() || performance.now() - t0 < 200) await new Promise((res) => setTimeout(res, 50));
     on = false;
-    const f = g.feel();
+    for(const entry of observer.takeRecords())longs.push(entry.duration);
+    observer.disconnect();
     gaps.sort((x, y) => x - y);
     const rc = g.renderCosts ? g.renderCosts() : null;
-    return { rc: rc ? JSON.stringify(rc).slice(0, 300) : null, lt: f.longTasks.recent.slice(-6).map((x: { ms: number }) => Math.round(x.ms)), ms: Math.round(performance.now() - t0), p95: Math.round(gaps[Math.floor(gaps.length * 0.95)]!), max: Math.round(gaps.at(-1)!), frames: gaps.length, longMax: Math.round(f.longTasks.max ?? 0) };
+    return { rc: rc ? JSON.stringify(rc).slice(0, 300) : null, lt:longs.slice(-6).map(Math.round), ms: Math.round(performance.now() - t0), p95: Math.round(gaps[Math.floor(gaps.length * 0.95)]!), max: Math.round(gaps.at(-1)!), frames: gaps.length, longMax: Math.round(Math.max(0,...longs)) };
   }, action);
+  const metricsAfter=await cdp.send('Performance.getMetrics');
+  if(process.env.MOTION_PROFILE){const profile=await cdp.send('Profiler.stop');writeFileSync(`/tmp/motion-${name.replace(/ /g,'-')}.json`,JSON.stringify(profile));}
+  const work=Object.fromEntries(['LayoutDuration','RecalcStyleDuration','ScriptDuration','TaskDuration'].map(key=>[key,Math.round(1000*((metricsAfter.metrics.find(m=>m.name===key)?.value??0)-(metricsBefore.metrics.find(m=>m.name===key)?.value??0)))]));
+  Object.assign(r,{work});
   console.log(`${name.padEnd(8)} ${JSON.stringify(r)}`);
   await page.close();
   return r;
@@ -74,12 +87,13 @@ const measure = async (name: string, state: State, action: Action) => {
 
 try {
   const b = blastFixture();
-  const results = [
+  const results = [];
+  for(let run=0;run<Math.max(1,Math.min(5,Number(process.env.MOTION_RUNS)||1));run++)results.push(
     await measure('blast', b.state, b.blast),
     await measure('bomb', b.state, b.bomb),
     await measure('huge cut', cutPosition(9, false).state, cutPosition(9, false).action),
     await measure('bloom', bloomFixture().state, bloomFixture().bloom),
-  ];
+  );
   assert(results.every((r) => r.frames > 0), 'every move was measured');
   console.log('motion-cost: measured (report only)');
 } finally {

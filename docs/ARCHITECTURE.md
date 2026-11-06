@@ -85,6 +85,23 @@ player's progress is stored under those names.
 - The full contract is pinned by `web/tests/channel-policy.test.ts` and
   `web/tests/storage-prefix-contract.test.ts`.
 
+## 0.81 presentation boundaries
+
+`BoardView` retains tile SVG nodes by key and visual signature (owner, strength, home and material
+readiness). Gold frames, owner contours and top-rank halos have separate invalidation. `setup()`
+clears these caches when geometry/materials change. Never cache authoritative rules in a renderer.
+`WorldLayer.dispose()` cancels queued work and invalidates asynchronous image publication; call it
+before replacing the layer. Old canvases and texture URLs must not survive a replacement board.
+
+Use `ui/dom-update.ts` for frequently published root data/style values: unchanged root attributes
+wake observers and can invalidate inherited styles across the game. Keep layout reads out of
+intermediate board writes. The product cockpit does not consume the legacy `.corner` measurements.
+
+Match Intel's paired counts and move attribution are relative to `view.player`. Its public model
+never shows the other seat's private deck draw. The online adapter already normalises seats, but
+direct model callers must be safe too. Compatibility copy conversion must exclude player content.
+`docs/FOUNDATION-0.81.md` records the source checkpoint, evidence, visual guard and restore path.
+
 ## Working in parallel
 
 - One branch per piece of work, ideally in its own `git worktree`; never work in another agent's

@@ -4,7 +4,7 @@ import type { IntelTip, TipKind } from '../logic/intel-guide.js';
 import { drawLedCells, ledMessageWidth } from './led-cells.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { cardFace, suitClass } from '../ui/effects.js';
-import { INTEL } from '../../../src/strings.js';
+import { INTEL, RESULT } from '../../../src/strings.js';
 
 export type FocusShape = 'hex' | 'card' | 'pill' | 'none';
 export type TutorialWindowButtons = {
@@ -297,15 +297,21 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 /* The readout: five facts, one rhythm, numbers first (territory / cuts / deck / hand / bombs).
    No rules above or below it (owner, 2026-11-02): the per-stat caps already say what each number
    is, and the extra air keeps the strip clear of the prose on either side. */
-#futasaku-glass .intel-stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:2px 6px;
+#futasaku-glass .intel-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:2px 10px;
   margin:0; padding:12px 0 11px; }
 #futasaku-glass .intel-stat { display:flex; flex-wrap:wrap; align-items:baseline; gap:0 3px; min-width:0; }
-#futasaku-glass .intel-stat-k { flex:1 0 100%; font:600 8px/1.1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.12em; color:#a99c81; white-space:nowrap; }
+#futasaku-glass .intel-stat-k { flex:1 0 100%; font:500 10px/1.3 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.1em; color:#b7ab91; white-space:nowrap; }
 #futasaku-glass .intel-stat-v { font:700 14px/1.15 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.01em; color:#f4ebda; font-variant-numeric:tabular-nums; white-space:nowrap; }
 #futasaku-glass .intel-stat-edge { font:700 8px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); font-style:normal; color:#8f846c; }
 #futasaku-glass .intel-stat[data-edge='you'] .intel-stat-edge { color:var(--c-you,#7fcf8d); }
 #futasaku-glass .intel-stat[data-edge='them'] .intel-stat-edge { color:color-mix(in srgb, var(--c-danger,#c96e5c) 70%, #e8ddc9); }
 #futasaku-glass .intel-cards { display:flex; flex-wrap:wrap; align-items:flex-start; gap:5px; }
+#futasaku-glass .intel-comparison { margin:0; font:400 10px/1.4 var(--font-ui); letter-spacing:.06em; color:#b7ab91; }
+#futasaku-glass .intel-record > summary { min-height:44px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; color:#cbbfa0; font:400 12px/1.3 var(--font-ui); }
+#futasaku-glass .intel-record > summary::after { content:'+'; font-size:18px; }
+#futasaku-glass .intel-record[open] > summary::after { content:'−'; }
+#futasaku-glass .intel-record > summary:focus-visible { outline:2px solid #e8ddc9; outline-offset:2px; }
+#futasaku-glass .intel-record .intel-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
 #futasaku-glass .intel-none { margin:0; font:400 12.5px/1.35 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:rgba(240,233,220,.6); }
 #futasaku-glass .intel-card-wrap { position:relative; flex:none; }
 #futasaku-glass .intel-card { display:block; position:relative; width:26px; height:37px; border-radius:3px; box-sizing:border-box; overflow:hidden; background:#171918; border:1px solid #958a70; }
@@ -940,6 +946,9 @@ export const mountGlassSurface = (onClose: () => void) => {
   let intelGuide: IntelGuide = { tips: [], rules: [], rule: 1 };
   let ruleOpen: number | null = null;
   let fullRules = false;
+  let recordOpen=false;
+  let ruleTimer:ReturnType<typeof setTimeout>|undefined;
+  const intelScroll:Record<IntelTabId,number>={now:0,tips:0,rules:0};
   let onIntelTab: ((tab: IntelTabId) => void) | null = null;
   let howToHtml = '';
   let reduceMotion = false;
@@ -1396,6 +1405,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   };
 
   const close = () => {
+    clearTimeout(ruleTimer);
     // Match Intel leaves with the shared interface motion (owner, 2026-10-23: menus open and
     // close "a bit alive and organic"); its content stays until it has gone. A lesson window keeps
     // its own pinned timing and simply goes.
@@ -1414,6 +1424,7 @@ export const mountGlassSurface = (onClose: () => void) => {
    * goes quiet does not make the map jump under the player's finger.
    */
   const hidePanel = (keepBand = false) => {
+    clearTimeout(ruleTimer);
     mode = null; stopLoop(); smooth = null; focusScene = null; lightOff = false; cockpitLesson = false;
     if (panel.dataset.ixState === 'closing') resetSurface(panel);
     panel.hidden = true; showFocus(false); setBloomDemo(false);
@@ -1592,7 +1603,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   };
 
   /** The five facts every player scans: land, cuts made, deck, hand, public Bombs left. */
-  const readoutHtml = (data: MatchIntel): string => {
+  const readoutHtml = (data: MatchIntel, record=false): string => {
     const edge = (you: number, them: number): 'you' | 'them' | 'even' => (you > them ? 'you' : you < them ? 'them' : 'even');
     const cells = [
       { key: 'land', label: INTEL.stat.land, value: `${data.territory[0]}–${data.territory[1]}`, edge: edge(data.territory[0], data.territory[1]) },
@@ -1601,7 +1612,8 @@ export const mountGlassSurface = (onClose: () => void) => {
       { key: 'hand', label: INTEL.stat.hand, value: `${data.handCount}·${data.oppHand}`, edge: null },
       { key: 'bombs', label: INTEL.stat.bombs, value: String(data.fruitUnseen), edge: null },
     ];
-    return `<div class="intel-stats" role="list">${cells.map((cell) => {
+    const shown=cells.filter(cell=>record?cell.key==='cuts'||cell.key==='bombs':cell.key!=='cuts'&&cell.key!=='bombs');
+    return `<div class="intel-stats" role="list">${shown.map((cell) => {
       const arrow = cell.edge === 'you' ? '▲' : cell.edge === 'them' ? '▼' : '';
       const tone = cell.edge && cell.edge !== 'even' ? ` data-edge="${cell.edge}"` : '';
       const spoken = cell.key === 'land' || cell.key === 'cuts' ? `, ${cell.edge === 'you' ? 'you lead' : cell.edge === 'them' ? 'they lead' : 'level'}` : '';
@@ -1618,7 +1630,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     const facts = tip.evidence.map((fact) => `<span class="intel-fact"><b>${safe(fact.value)}</b>${safe(fact.label)}</span>`).join('');
     const spokenFacts = tip.evidence.map((fact) => `${fact.value} ${fact.label}`).join(', ');
     const label = `${kind}${severity ? `, ${severity}` : ''}. ${tip.headline} ${tip.detail} ${spokenFacts}. ${INTEL.seeRule}`;
-    return `<button type="button" class="intel-tip${rank === 0 ? ' intel-tip--primary' : ''}" data-rule="${tip.rule}" data-kind="${tip.kind}" data-severity="${tip.severity}" data-rank="${rank}" aria-label="${safe(label)}">`
+    return `<button type="button" class="intel-tip${rank === 0 ? ' intel-tip--primary' : ''}" data-tip="${safe(tip.id)}" data-rule="${tip.rule}" data-kind="${tip.kind}" data-severity="${tip.severity}" data-rank="${rank}" aria-label="${safe(label)}">`
       + `<span class="intel-tip-top"><span class="intel-kind"><span class="intel-tip-mark" aria-hidden="true">${TIP_MARK[tip.kind]}</span>${safe(kind)}</span><span class="intel-tip-sev" aria-hidden="true">${severity}</span></span>`
       + `<span class="intel-tip-headline">${safe(tip.headline)}</span>`
       + `<span class="intel-tip-detail">${safe(tip.detail)}</span>`
@@ -1629,25 +1641,26 @@ export const mountGlassSurface = (onClose: () => void) => {
   /** NOW: who leads, the match read, the readout, the latest moves and the public thrown cards. */
   const nowHtml = (data: MatchIntel): string => {
     const diff = data.score[0] - data.score[1];
-    const lead = diff > 0 ? INTEL.lead(diff) : diff < 0 ? INTEL.behind(-diff) : INTEL.level;
+    const lead = data.outcome ? RESULT[data.outcome] : diff > 0 ? INTEL.lead(diff) : diff < 0 ? INTEL.behind(-diff) : INTEL.level;
+    const observation = data.outcome ? '' : data.observation ?? INTEL.observation.open(data.deckCount);
     // A deck draw says nothing (the card is hidden), so the latest lines are the moves that show something.
     const telling = data.moves.filter(m => m.verb !== 'DREW');
-    const latest = (telling.length ? telling : data.moves).slice(-2).reverse()
+    const latest = (telling.length ? telling : data.moves).slice(-4).reverse()
       .map(m => `<li class="intel-move" data-who="${m.who}">${safe(INTEL.move(m.who === 'you', m.verb, m.detail))}</li>`).join('');
     const cards = thrownCards(data);
     return scopeHtml('now', data)
-      + `<section class="intel-now-head"><h3 class="intel-lead">${safe(lead)}</h3><p class="intel-sub">${safe(INTEL.scoreLine(data.score[0], data.score[1], data.turn))}</p><p class="intel-observation">${safe(data.observation ?? INTEL.observation.open(data.deckCount))}</p></section>`
-      + readoutHtml(data)
+      + `<section class="intel-now-head"><h3 class="intel-lead">${safe(lead)}</h3><p class="intel-sub">${safe(INTEL.scoreLine(data.score[0], data.score[1], data.turn))}</p>${observation ? `<p class="intel-observation">${safe(observation)}</p>` : ''}</section>`
+      + `<div><p class="intel-comparison">${safe(INTEL.comparison)}</p>${readoutHtml(data)}</div>`
       + `<section><p class="intel-label">${INTEL.latest}</p>${latest ? `<ol class="intel-moves">${latest}</ol>` : `<p class="intel-none">${safe(INTEL.noMoves)}</p>`}</section>`
-      + `<section><p class="intel-label">${INTEL.thrown}</p>${cards ? `<div class="intel-cards">${cards}</div>` : `<p class="intel-none">${safe(INTEL.thrownNone)}</p>`}</section>`;
+      + `<details class="intel-record"${recordOpen?' open':''}><summary>${safe(INTEL.record)}</summary>${readoutHtml(data,true)}<p class="intel-label">${INTEL.thrown}</p>${cards ? `<div class="intel-cards">${cards}</div>` : `<p class="intel-none">${safe(INTEL.thrownNone)}</p>`}</details>`;
   };
 
   /** TIPS: this match's ranked reads, most urgent first; each opens the lesson it rests on. */
   const tipsHtml = (data: MatchIntel): string => {
     const tips = intelGuide.tips;
-    const head = scopeHtml('tips', data) + readoutHtml(data);
+    const head = scopeHtml('tips', data);
     if (!tips.length) {
-      return head + `<div class="intel-quiet"><span class="intel-kind"><span class="intel-tip-mark" aria-hidden="true">▸</span>${safe(INTEL.quiet.title)}</span><p class="intel-quiet-line">${safe(INTEL.quiet.line)}</p></div>`;
+      return head + `<div class="intel-quiet"><span class="intel-kind"><span class="intel-tip-mark" aria-hidden="true">▸</span>${safe(data.outcome ? INTEL.complete.title : INTEL.quiet.title)}</span><p class="intel-quiet-line">${safe(data.outcome ? INTEL.complete.line : INTEL.quiet.line)}</p></div>`;
     }
     return head + `<ul class="intel-tips">${tips.map((tip, rank) => `<li>${tipHtml(tip, rank)}</li>`).join('')}</ul>`;
   };
@@ -1669,14 +1682,25 @@ export const mountGlassSurface = (onClose: () => void) => {
   };
 
   const renderIntel = (data: MatchIntel, animate = true) => {
-    const tab = (id: IntelTabId) => `<button type="button" class="intel-tab" role="tab" data-intel-tab="${id}" aria-selected="${intelTab === id}">${safe(intelLabels[id])}</button>`;
+    clearTimeout(ruleTimer);
+    const tab = (id: IntelTabId) => `<button type="button" class="intel-tab" role="tab" id="intel-tab-${id}" aria-controls="intel-panel" tabindex="${intelTab===id?0:-1}" data-intel-tab="${id}" aria-selected="${intelTab === id}">${safe(intelLabels[id])}</button>`;
     const bar = `<div class="intel-bar"><div class="intel-tabs" role="tablist" aria-label="Match help">${tab('now')}${tab('tips')}${tab('rules')}</div><button class="intel-close" type="button" aria-label="Close">×</button></div>`;
     const body = intelTab === 'now' ? nowHtml(data) : intelTab === 'tips' ? tipsHtml(data) : rulesHtml(data);
-    const scroll = panel.querySelector('.intel-body')?.scrollTop ?? 0;
-    panel.innerHTML = bar + `<div class="intel-body" role="tabpanel" data-intel-panel="${intelTab}"${animate ? '' : ' style="animation:none"'}>${body}</div>`;
-    if (!animate) { const b = panel.querySelector<HTMLElement>('.intel-body'); if (b) b.scrollTop = scroll; }
+    const oldBody=panel.querySelector<HTMLElement>('.intel-body');
+    const oldTab=oldBody?.dataset.intelPanel as IntelTabId|undefined;
+    if(oldBody&&oldTab)intelScroll[oldTab]=oldBody.scrollTop;
+    const focused=document.activeElement as HTMLElement|null;
+    const focusSelector=focused&&panel.contains(focused)?focused.classList.contains('intel-body')?'.intel-body':focused.classList.contains('intel-close')?'.intel-close':focused.dataset.intelTab?`[data-intel-tab="${focused.dataset.intelTab}"]`:focused.dataset.tip?`.intel-tip[data-tip="${focused.dataset.tip}"]`:focused.dataset.rule?`.intel-rule[data-rule="${focused.dataset.rule}"]`:focused.closest('.intel-record')?'.intel-record > summary':focused.closest('.intel-full')?'.intel-full > summary':null:null;
+    panel.innerHTML = bar + `<div class="intel-body" id="intel-panel" role="tabpanel" tabindex="0" aria-labelledby="intel-tab-${intelTab}" data-intel-panel="${intelTab}"${animate ? '' : ' style="animation:none"'}>${body}</div>`;
+    const nextBody=panel.querySelector<HTMLElement>('.intel-body');if(nextBody)nextBody.scrollTop=intelScroll[intelTab];
+    if(focusSelector)(panel.querySelector<HTMLElement>(focusSelector)??panel.querySelector<HTMLElement>(`[data-intel-tab="${intelTab}"]`))?.focus({preventScroll:true});
     panel.querySelector('.intel-close')?.addEventListener('click', close, { once: true });
     panel.querySelectorAll<HTMLButtonElement>('.intel-tab').forEach(button => {
+      button.addEventListener('keydown',event=>{
+        const ids:IntelTabId[]=['now','tips','rules'],index=ids.indexOf(intelTab);
+        const next=event.key==='ArrowRight'?ids[(index+1)%3]:event.key==='ArrowLeft'?ids[(index+2)%3]:event.key==='Home'?'now':event.key==='End'?'rules':null;
+        if(!next)return;event.preventDefault();intelTab=next;onIntelTab?.(next);renderIntel(data);panel.querySelector<HTMLElement>(`[data-intel-tab="${next}"]`)?.focus({preventScroll:true});
+      });
       button.addEventListener('click', () => {
         const next = button.dataset.intelTab as IntelTabId;
         if (next === intelTab) return;
@@ -1689,9 +1713,11 @@ export const mountGlassSurface = (onClose: () => void) => {
     panel.querySelectorAll<HTMLButtonElement>('.intel-tip').forEach(button => {
       button.addEventListener('click', () => {
         ruleOpen = Number(button.dataset.rule);
+        intelScroll.rules=0;
         intelTab = 'rules';
         onIntelTab?.('rules');
         renderIntel(data);
+        panel.querySelector<HTMLElement>(`.intel-rule[data-rule="${ruleOpen}"]`)?.focus({preventScroll:true});
       });
     });
     // A lesson card unfolds in place (no re-render, so the fold can animate).
@@ -1700,15 +1726,17 @@ export const mountGlassSurface = (onClose: () => void) => {
         const level = Number(button.dataset.rule);
         ruleOpen = ruleOpen === level ? null : level;
         panel.querySelectorAll<HTMLButtonElement>('.intel-rule').forEach(b => b.setAttribute('aria-expanded', String(Number(b.dataset.rule) === ruleOpen)));
-        if (ruleOpen !== null) window.setTimeout(() => revealRule(button, false), 270);
+        clearTimeout(ruleTimer);
+        if (ruleOpen !== null) ruleTimer=setTimeout(() => {if(mode==='intel'&&button.isConnected)revealRule(button, false);}, reduceMotion?0:270);
       });
     });
     // Rules opens with the lesson closest to this moment in view.
-    if (intelTab === 'rules' && ruleOpen !== null && animate) {
+    if (intelTab === 'rules' && ruleOpen !== null && animate && intelScroll.rules===0) {
       const open = panel.querySelector<HTMLElement>(`.intel-rule[data-rule="${ruleOpen}"]`);
-      if (open) requestAnimationFrame(() => revealRule(open, true));
+      if (open) requestAnimationFrame(() => {if(mode==='intel'&&!panel.hidden&&open.isConnected)revealRule(open, true);});
     }
     panel.querySelector<HTMLDetailsElement>('.intel-full')?.addEventListener('toggle', event => { fullRules = !!(event.currentTarget as HTMLDetailsElement).open; });
+    panel.querySelector<HTMLDetailsElement>('.intel-record')?.addEventListener('toggle',event=>{recordOpen=!!(event.currentTarget as HTMLDetailsElement).open;});
     requestAnimationFrame(place);
   };
 
@@ -1762,7 +1790,12 @@ export const mountGlassSurface = (onClose: () => void) => {
     requestAnimationFrame(place);
   };
 
-  panel.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); close(); } });
+  panel.addEventListener('keydown', event => {
+    // A reading surface owns its keyboard. Escape closes it without also cancelling a card
+    // underneath; number/draw shortcuts must not play unseen moves while its controls have focus.
+    if(mode==='intel')event.stopPropagation();
+    if (event.key === 'Escape') { event.preventDefault();event.stopPropagation();close(); }
+  });
 
   return {
     tutorial,
@@ -1771,7 +1804,8 @@ export const mountGlassSurface = (onClose: () => void) => {
     close,
     hide: () => {
       hidePanel(false);
-      intelTab = 'now'; howToHtml = ''; ruleOpen = null; fullRules = false;
+      intelTab = 'now'; howToHtml = ''; ruleOpen = null; fullRules = false;recordOpen=false;
+      intelScroll.now=intelScroll.tips=intelScroll.rules=0;clearTimeout(ruleTimer);
     },
     /** Quiet step: no window, no light, but the map keeps the space it had. */
     hidePanel,

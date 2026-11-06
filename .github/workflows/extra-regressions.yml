@@ -2,7 +2,7 @@ name: Extra regression checks
 
 on:
   push:
-    branches: [futa0.5-online, 'fix/**']
+    branches: [futa0.5-online, 'fix/**', 'release/**']
   pull_request:
     paths:
       - 'admin/**'
