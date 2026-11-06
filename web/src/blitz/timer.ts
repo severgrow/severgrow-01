@@ -54,14 +54,14 @@ html.blitz-match #blitz-clock::before {
 #blitz-clock[data-stage='amber'] { --bc-ink:#e3963f; }
 #blitz-clock[data-stage='red'] { --bc-ink:#e04432; }
 #blitz-clock svg { position:relative; z-index:1; height:72%; width:auto; overflow:visible; color:var(--bc-ink);
-  filter:drop-shadow(0 0 1.2px color-mix(in srgb, currentColor 85%, transparent)) drop-shadow(0 0 5px color-mix(in srgb, currentColor 45%, transparent)); }
+  filter:drop-shadow(0 0 .8px color-mix(in srgb, currentColor 85%, transparent)) drop-shadow(0 0 2.4px color-mix(in srgb, currentColor 50%, transparent)); }
 #blitz-clock[data-side='theirs'] svg { opacity:.6; }
 #blitz-clock[data-side='theirs'] .bc-glass::before { opacity:.5; }
 #blitz-clock polygon { fill:currentColor; opacity:0; }
 #blitz-clock polygon.on { opacity:.94; }
 #blitz-clock .bc-glass::before {
   content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit; z-index:0;
-  background:radial-gradient(ellipse 58% 62% at 54% 50%, color-mix(in srgb, var(--bc-ink) 20%, transparent), color-mix(in srgb, var(--bc-ink) 6%, transparent) 55%, transparent 80%);
+  background:radial-gradient(ellipse 44% 46% at 54% 50%, color-mix(in srgb, var(--bc-ink) 18%, transparent), color-mix(in srgb, var(--bc-ink) 4%, transparent) 60%, transparent 85%);
 }
 #blitz-clock .bc-glass::after {
   /* the glass texture at half strength (owner, 2026-11-06: "a bit less visible, by like 50%") */
@@ -82,7 +82,7 @@ html.blitz-match #blitz-clock::before {
 #blitz-clock .bc-who.you { left:1px; rotate:180deg; }
 #blitz-clock .bc-who.opp { right:1px; }
 #blitz-clock[data-side='mine'] .bc-who.you, #blitz-clock[data-side='theirs'] .bc-who.opp {
-  color:var(--bc-ink); text-shadow:0 0 2.5px color-mix(in srgb, var(--bc-ink) 55%, transparent); }
+  color:var(--bc-ink); text-shadow:0 0 1.4px color-mix(in srgb, var(--bc-ink) 60%, transparent); }
 /* Blitz has no Undo, no Match Intel and no Replay (owner): their keys give their place to the clock. */
 html.blitz-match #tool-undo, html.blitz-match #futa04-help-button, html.blitz-match #tool-replay, html.blitz-match #go-replay {
   visibility:hidden !important; pointer-events:none !important;
