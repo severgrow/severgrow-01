@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   BLITZ_DEFAULT, BLITZ_DROP_BOT_LEVEL, BLITZ_FIRST_MAP, BLITZ_KEY, BLITZ_LAST_MAP, BLITZ_MAPS,
-  BLITZ_TURN_MS, blitzAfterGame, blitzDeadlineAt, blitzRemainingMs, blitzTimeoutResult, blitzTimeoutState,
+  BLITZ_TURN_MS, blitzAfterGame, blitzClockText, blitzDeadlineAt, blitzRemainingMs, blitzStage, blitzTempo, blitzTempoLine,
+  blitzTick, blitzTimeoutAction, blitzTimeoutResult, blitzTimeoutState,
   parseBlitzState, pickBlitzMap, readBlitzState, recordBlitzOutcome,
 } from '../src/logic/blitz.js';
 import type { BlitzState, BlitzStore } from '../src/logic/blitz.js';
 import { DIFFICULTIES } from '../src/logic/difficulty.js';
-import { newMatch } from '../../src/engine/index.js';
+import { apply, newMatch, viewFor } from '../../src/engine/index.js';
+import type { Card, State } from '../../src/engine/index.js';
 
 /** The page's store is localStorage; the rule only needs get/set, so a Map is the honest fake. */
 const fakeStore = (seed: Record<string, string> = {}) => {
@@ -86,23 +88,76 @@ describe('Blitz ladder (the only bot rule that is not the tier carry-over)', () 
   });
 });
 
+// OWNER CHANGED THE RULES (0.82 Blitz remodel, 2026-11-06): "we set time to 21:00 (21 seconds but we're
+// showing milliseconds too)"; at 00:00 "Turn ends, worst card thrown" (was: the match is lost). See
+// docs/HANDOFF-0.82-BLITZ.md. The old timeout-loss state helpers stay for the online live duel's reason.
 describe('Blitz clock', () => {
-  it('is 15 seconds a turn', () => {
-    expect(BLITZ_TURN_MS).toBe(15_000);
-    expect(blitzDeadlineAt(1_000)).toBe(16_000);
-    expect(blitzRemainingMs(16_000, 10_000)).toBe(6_000);
-    expect(blitzRemainingMs(16_000, 20_000)).toBe(0);
+  it('is 21 seconds a turn, fresh each turn', () => {
+    expect(BLITZ_TURN_MS).toBe(21_000);
+    expect(blitzDeadlineAt(1_000)).toBe(22_000);
+    expect(blitzRemainingMs(22_000, 10_000)).toBe(12_000);
+    expect(blitzRemainingMs(22_000, 30_000)).toBe(0);
   });
 
-  it('a timeout ends the match as the online live timer does (a loss, reason timeout)', () => {
+  it('reads like a stopwatch: seconds, then hundredths (21:00 down to 00:00)', () => {
+    expect(blitzClockText(21_000)).toBe('21:00');
+    expect(blitzClockText(20_999)).toBe('20:99');
+    expect(blitzClockText(6_280)).toBe('06:28');
+    expect(blitzClockText(3_456)).toBe('03:45');
+    expect(blitzClockText(9)).toBe('00:00');
+    expect(blitzClockText(0)).toBe('00:00');
+    expect(blitzClockText(-50)).toBe('00:00');
+  });
+
+  it('pressure: calm, then amber from 5 s, red from 3 s; the last three seconds tick once each', () => {
+    expect(blitzStage(21_000)).toBe('calm');
+    expect(blitzStage(5_001)).toBe('calm');
+    expect(blitzStage(5_000)).toBe('amber');
+    expect(blitzStage(3_001)).toBe('amber');
+    expect(blitzStage(3_000)).toBe('red');
+    expect(blitzStage(0)).toBe('red');
+    // the tick marks: one as each of 3, 2, 1 begins
+    expect(blitzTick(3_100, 2_990)).toBe(3);
+    expect(blitzTick(2_050, 1_990)).toBe(2);
+    expect(blitzTick(1_020, 999)).toBe(1);
+    expect(blitzTick(2_900, 2_100)).toBeNull();
+    expect(blitzTick(5_100, 4_900)).toBeNull();
+  });
+
+  it('a timeout ends the turn: draw if needed, stop growing, throw the lowest card (a Bomb only if nothing else)', () => {
+    const base = newMatch(4242);
+    const c = (id: number, suit: Card['suit'], rank: number): Card => ({ id, suit, rank });
+    const hand = [c(1, 0, 7), c(2, 1, 2), c(3, null, 0), c(4, 2, 5)];
+    const withHand = (phase: State['phase'], cards: Card[]): State => ({ ...base, phase, actor: 0, turnPlayer: 0, hands: [cards, base.hands[1]] });
+    // Draw phase: draw from the deck first
+    expect(blitzTimeoutAction(viewFor(withHand('DRAW', hand), 0))).toEqual({ t: 'Draw', from: 'deck' });
+    // Act phase: stop
+    expect(blitzTimeoutAction(viewFor(withHand('ACT', hand), 0))).toEqual({ t: 'EndAct' });
+    // Throw phase: the lowest numbered card, never the Bomb while a number card is there
+    expect(blitzTimeoutAction(viewFor(withHand('DISCARD', hand), 0))).toEqual({ t: 'Discard', card: 2 });
+    expect(blitzTimeoutAction(viewFor(withHand('DISCARD', [c(3, null, 0), c(5, null, 0)]), 0))).toEqual({ t: 'Discard', card: 3 });
+    // Played to the end, the turn passes to the opponent and the match goes on
+    let s = withHand('DRAW', hand);
+    for (let i = 0; i < 5 && s.turnPlayer === 0 && s.phase !== 'GAME_OVER'; i++) s = apply(s, blitzTimeoutAction(viewFor(s, 0))!);
+    expect(s.turnPlayer).toBe(1);
+    expect(s.phase).not.toBe('GAME_OVER');
+  });
+
+  it('tempo: the time left at the end of each of my turns, averaged, and the fastest turn', () => {
+    expect(blitzTempo([])).toBeNull();
+    const t = blitzTempo([12_000, 18_500, 3_000])!;
+    expect(t.turns).toBe(3);
+    expect(t.averageLeftMs).toBe(11_167);
+    expect(t.fastestMs).toBe(2_500); // 21 s - 18.5 s left
+    expect(blitzTempoLine(t)).toBe('TEMPO 11.1 s left a turn · fastest 2.5 s');
+  });
+
+  it('the old loss-on-timeout state still exists for the online live duel (reason timeout)', () => {
     const state = newMatch(4242);
     const after = blitzTimeoutState(state);
     expect(after.phase).toBe('GAME_OVER');
-    expect(after.result?.winner).toBe(1);
     expect(after.result?.reason).toBe('timeout');
-    // The same final score the board had, and the original state is not mutated.
     expect(after.result?.scores).toEqual(blitzTimeoutResult(state).scores);
-    expect(state.phase).not.toBe('GAME_OVER');
     expect(state.result ?? null).toBeNull();
   });
 });

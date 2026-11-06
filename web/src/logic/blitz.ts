@@ -13,12 +13,15 @@
 import type { Level } from '../../../src/bots/levels.js';
 import { CAMPAIGN_LEVELS } from '../../../src/campaign/levels.js';
 import type { CampaignLevel } from '../../../src/campaign/levels.js';
-import { scores } from '../../../src/engine/index.js';
-import type { GameResult, Player, State } from '../../../src/engine/index.js';
+import { legalActions, scores } from '../../../src/engine/index.js';
+import type { Action, GameResult, Player, State, View } from '../../../src/engine/index.js';
 import type { FinishResult } from './log.js';
 
-/** One turn. The live duel's own clock is the same visual; Blitz just makes the limit 15 s. */
-export const BLITZ_TURN_MS = 15_000;
+/** One turn: 21 seconds, fresh every turn (owner, 2026-11-06, 0.82 remodel: "we set time to 21:00"). */
+export const BLITZ_TURN_MS = 21_000;
+/** Pressure: amber from 5 s left, red from 3 s; the last three seconds tick. */
+export const BLITZ_AMBER_MS = 5_000;
+export const BLITZ_RED_MS = 3_000;
 
 /** `severgrow.*`: the ladder's own key, never shared with the training tiers' carry-over. */
 export const BLITZ_KEY = 'severgrow.blitz.v1';
@@ -120,7 +123,7 @@ export const pickBlitzMap = (seed: number): CampaignLevel => {
   return BLITZ_MAPS[mixed % BLITZ_MAPS.length]!;
 };
 
-/** The human's clock for this turn: the shared 15 s limit from the moment the turn is playable. */
+/** The clock for this turn: the 21 s limit from the moment the turn is playable. */
 export const blitzDeadlineAt = (now: number): number => now + BLITZ_TURN_MS;
 
 /** What is left of a turn, never negative. */
@@ -146,3 +149,52 @@ export const blitzTimeoutState = (state: State): State => ({
   rotPick: null,
   result: blitzTimeoutResult(state) as unknown as GameResult,
 });
+
+/** The LED clock's text: seconds, then hundredths, like a stopwatch ("21:00" ... "06:28" ... "00:00"). */
+export const blitzClockText = (ms: number): string => {
+  const cs = Math.max(0, Math.floor(ms / 10));
+  const sec = Math.floor(cs / 100);
+  return `${String(sec).padStart(2, '0')}:${String(cs % 100).padStart(2, '0')}`;
+};
+
+export type BlitzStage = 'calm' | 'amber' | 'red';
+/** Pressure clock (owner's idea 1): calm, amber from 5 s, red from 3 s. */
+export const blitzStage = (ms: number): BlitzStage => (ms <= BLITZ_RED_MS ? 'red' : ms <= BLITZ_AMBER_MS ? 'amber' : 'calm');
+
+/**
+ * The last three seconds tick once each: between two frames (`before` -> `after` ms left), the
+ * second that just began (3, 2 or 1), or null.
+ */
+export const blitzTick = (before: number, after: number): 1 | 2 | 3 | null => {
+  for (const s of [3, 2, 1] as const) if (before > s * 1000 && after <= s * 1000) return s;
+  return null;
+};
+
+/**
+ * The time ran out (owner, 2026-11-06: "Turn ends, worst card thrown"): the next action that ends the
+ * turn — draw from the deck if not drawn yet, stop growing, then throw the LOWEST number card (a Bomb
+ * only when nothing else is in hand). The page applies these one by one until the turn passes.
+ */
+export const blitzTimeoutAction = (view: View): Action | null => {
+  const legal = legalActions(view);
+  if (view.phase === 'DRAW') return legal.find((a) => a.t === 'Draw' && a.from === 'deck') ?? legal.find((a) => a.t === 'Draw') ?? null;
+  if (view.phase === 'ACT') return legal.find((a) => a.t === 'EndAct') ?? null;
+  if (view.phase === 'DISCARD') {
+    const throws = legal.filter((a): a is Extract<Action, { t: 'Discard' }> => a.t === 'Discard');
+    const card = (id: number) => view.hand.find((c) => c.id === id);
+    const worth = (id: number) => { const c = card(id); return !c ? 99 : c.suit === null ? 50 : c.rank; };
+    return [...throws].sort((a, b) => worth(a.card) - worth(b.card) || a.card - b.card)[0] ?? null;
+  }
+  return null;
+};
+
+export type BlitzTempo = { turns: number; averageLeftMs: number; fastestMs: number };
+/** Tempo (owner's idea 3): the time left at the end of each of my turns. */
+export const blitzTempo = (leftMs: readonly number[]): BlitzTempo | null => {
+  if (!leftMs.length) return null;
+  const average = Math.round(leftMs.reduce((a, b) => a + b, 0) / leftMs.length);
+  return { turns: leftMs.length, averageLeftMs: average, fastestMs: BLITZ_TURN_MS - Math.max(...leftMs) };
+};
+/** The finish card's one line. */
+export const blitzTempoLine = (t: BlitzTempo): string =>
+  `TEMPO ${(Math.floor(t.averageLeftMs / 100) / 10).toFixed(1)} s left a turn · fastest ${(t.fastestMs / 1000).toFixed(1)} s`;

@@ -6,8 +6,10 @@
 // It builds BOTH builds the feature has to be distinguished in:
 //   * CHANNEL=futa04 (the locked product)               -> the BLITZ tier must not exist;
 //   * CHANNEL=futa05, served the way /test/ is (composed at /test/) -> BLITZ exists, and it starts a
-//     Blitz match, enforces the 15 s clock with the existing live-duel ring/vignette, drops the bot
-//     to 8 after two losses, survives a reload, and returns to 9 after a win.
+//     Blitz match with the 0.82 LED stopwatch (21 s a turn, both players' clocks, no Undo / Match
+//     Intel / Replay); at 00:00 my turn ends on its own and the match goes on (OWNER CHANGED THE RULE,
+//     2026-11-06: was "a timeout loses the match"); drops the bot to 8 after two losses, survives a
+//     reload, and returns to 9 after a win.
 //
 // The live ROOT is the same futa05 build one promote behind /test/, so the same build is also
 // served at `/` here and asserted to have NO BLITZ tier — that is the gate that protects live.
@@ -19,7 +21,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
-import { allNeighbors, apply, coordKey, homeCoord, legalActions, newMatch, rootCoord, scores, viewFor } from '../../src/engine/index.js';
+import { allNeighbors, apply, coordKey, homeCoord, newMatch, rootCoord, scores } from '../../src/engine/index.js';
 import type { Card, State } from '../../src/engine/index.js';
 import { encodeSave } from '../src/logic/persist.js';
 import { serveStaticDist } from './helpers/preview-port.js';
@@ -50,10 +52,11 @@ let servedA: Awaited<ReturnType<typeof serveStaticDist>> | null = null;
 let servedB: Awaited<ReturnType<typeof serveStaticDist>> | null = null;
 
 const open = async (url: string): Promise<Page> => {
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   (page as Page & { __blitzErrors?: string[] }).__blitzErrors = errors;
+  await page.addInitScript(() => { (window as any).__name = (f: unknown) => f; });
   await page.goto(url);
   await page.waitForFunction(() => !!(window as any).__severgrow, undefined, { timeout: 30000 });
   return page;
@@ -120,152 +123,145 @@ try {
   check((await page.locator('#level-grid .difficulty-tile').allTextContents()).at(-1) === 'BLITZ', 'BLITZ is the last Practice tier');
 
   // ---------------------------------------------------------------------------------------------
-  // 3. Starting: a campaign board 30-70, bot 9, a 15 s limit, the live-duel ring.
+  // 3. Starting: a campaign board 30-70, bot 9, the 21 s LED stopwatch in place of Undo + Match Intel.
   // ---------------------------------------------------------------------------------------------
   await page.click('#level-grid [data-difficulty="pro"]');
   await page.waitForFunction(() => (window as any).__severgrow?.blitz?.()?.active === true, undefined, { timeout: 30000 });
   const started = await blitz(page);
-  check(started.turnMs === 15_000, 'the turn limit is 15 s');
+  check(started.turnMs === 21_000, 'the turn limit is 21 s');
   check(started.botLevel === 9, 'a fresh Blitz match starts at bot 9');
   check(started.nextBotLevel === 9, 'the ladder starts at 9');
   check(started.map >= 30 && started.map <= 70, `the board is a campaign map 30-70 (${started.map})`);
-  // ...and it IS that campaign level's authored board, not a regenerated one.
   const map = CAMPAIGN_LEVELS.find((level) => level.number === started.map)!;
-  const boardKeys = await page.evaluate(() => {
-    const s = (window as any).__severgrow.state() as State;
-    return Object.keys(s.board).sort();
-  });
+  const boardKeys = await page.evaluate(() => Object.keys(((window as any).__severgrow.state() as State).board).sort());
   check(JSON.stringify(boardKeys) === JSON.stringify([...map.config.board!.cells].sort()), 'the board is that campaign level\'s own');
-  check(await page.locator('#game:not([hidden])').count() === 1, 'the match is on screen');
 
-  // The clock is the live duel's own ring on my home, with the red vignette near the end.
+  // My clock runs once my turn is playable.
   await page.waitForFunction(() => {
     const b = (window as any).__severgrow?.blitz?.();
-    return !!b && b.deadline !== null;
-  }, undefined, { timeout: 20000 });
-  await page.waitForSelector('.live-ring:not([hidden])', { timeout: 5000 });
-  check((await page.locator('.live-ring').getAttribute('data-side')) === 'me', 'the clock ring sits on my home');
-  // The ring's own face (owner, 2026-11-02: it looked "very plain"): a warm halo behind the arc and
-  // an ember on its leading end. Both are present and painted, and neither is a filter.
-  const ringFace = await page.evaluate(() => {
-    const ring = document.querySelector('.live-ring')!;
-    const halo = ring.querySelector('.halo');
-    const ember = ring.querySelector('.ember');
-    const fg = ring.querySelector('.fg');
+    return !!b && b.deadline !== null && b.side === 'mine' && b.clock?.running;
+  }, undefined, { timeout: 30000 });
+  const face = await page.evaluate(() => {
+    const c = document.getElementById('blitz-clock')!;
+    const r = c.getBoundingClientRect();
+    const vis = (id: string) => { const e = document.getElementById(id); return !!e && getComputedStyle(e).visibility !== 'hidden' && !e.hidden; };
     return {
-      halo: !!halo && Number(getComputedStyle(halo).opacity) > 0,
-      ember: !!ember && getComputedStyle(ember).fill !== 'none',
-      arc: !!fg && getComputedStyle(fg).stroke !== 'none',
-      filtered: getComputedStyle(ring).filter !== 'none' || !!halo && getComputedStyle(halo).filter !== 'none',
+      shown: getComputedStyle(c).display !== 'none' && r.width > 40 && r.height > 20,
+      text: (window as any).__severgrow.blitz().clock.text as string,
+      undo: vis('tool-undo'), intel: vis('futa04-help-button'), replay: vis('tool-replay'),
+      ring: !!document.querySelector('.live-ring:not([hidden])'),
     };
   });
-  check(ringFace.halo, 'the ring carries its warm halo');
-  check(ringFace.ember, 'the ring carries an ember on its leading end');
-  check(ringFace.arc, 'the arc itself is painted');
-  check(!ringFace.filtered, 'no filter on the ring (a filter on an animating element re-rasterises every frame)');
-  // urgent at <= 10 s left; the red vignette (the "time near end" glow) at <= 5 s.
-  await page.waitForSelector('.live-ring[data-urgent="1"]', { timeout: 12000 });
-  check(true, 'the ring turns urgent as the 15 s runs out');
-  await page.waitForSelector('.live-vignette[data-on="1"]', { timeout: 8000 });
-  check(true, 'the existing red vignette glows in the last five seconds');
-  // A turn past the limit is the online rule: the match is lost, not auto-played.
-  await page.waitForSelector('#gameover:not([hidden])', { timeout: 8000 });
-  check((await page.locator('#go-reason').textContent())?.trim() === 'You ran out of time.', 'the finish card says the clock ran out');
-  check((await page.locator('#gameover').getAttribute('class'))?.includes('lost') === true, 'the timeout is a loss');
-  let after = await blitz(page);
-  check(after.nextBotLevel === 9, 'one loss: the next Blitz game is still bot 9');
-  check(JSON.stringify(await page.evaluate(() => JSON.parse(localStorage.getItem('severgrow.blitz.v1')!))) === JSON.stringify({ level: 9, losses: 1 }), 'one loss is persisted');
-  check(await page.locator('.live-ring:not([hidden])').count() === 0, 'the ring is gone after the match');
-  noErrors(page);
+  check(face.shown, 'the LED stopwatch frame is on screen');
+  check(/^(2[01]|1\d):\d\d$/.test(face.text), `it reads like a stopwatch, counting down from 21:00 (${face.text})`);
+  check(!face.undo && !face.intel && !face.replay, 'no Undo, no Match Intel, no Replay in Blitz');
+  check(!face.ring, 'the old ring clock is gone');
+  await page.screenshot({ path: '/tmp/blitz-clock-390.png' });
+  await page.locator('#smart-panel').screenshot({ path: '/tmp/blitz-clock-panel.png' });
 
-  // ---------------------------------------------------------------------------------------------
-  // 4. Two losses in a row: the next match is bot 8.
-  // ---------------------------------------------------------------------------------------------
-  await page.click('#go-rematch'); // "Try again"
-  await page.waitForFunction(() => (window as any).__severgrow?.blitz?.()?.active === true, undefined, { timeout: 30000 });
-  const second = await blitz(page);
-  check(second.botLevel === 9, 'the second game still starts at 9 (only ONE loss so far)');
-  await page.waitForSelector('#gameover:not([hidden])', { timeout: 25000 });
-  after = await blitz(page);
-  check(after.nextBotLevel === 8, 'two losses in a row drop the next Blitz game to bot 8');
-  check(JSON.stringify(await page.evaluate(() => JSON.parse(localStorage.getItem('severgrow.blitz.v1')!))) === JSON.stringify({ level: 8, losses: 2 }), 'the drop is persisted');
-  noErrors(page);
+  // Pressure: amber at 5 s, red at 3 s.
+  await page.waitForFunction(() => (window as any).__severgrow.blitz().clock?.stage === 'amber', undefined, { timeout: 25000 });
+  check(true, 'the clock turns amber in the last 5 s');
+  await page.waitForFunction(() => (window as any).__severgrow.blitz().clock?.stage === 'red', undefined, { timeout: 5000 });
+  check(true, 'and red in the last 3 s');
+  await page.screenshot({ path: '/tmp/blitz-clock-red-390.png' });
+  await page.locator('#smart-panel').screenshot({ path: '/tmp/blitz-clock-panel-red.png' });
 
-  // Persistence across a reload: the ladder is still 8.
-  await page.reload();
-  await page.waitForFunction(() => !!(window as any).__severgrow, undefined, { timeout: 30000 });
-  await openPractice(page);
-  await page.click('#level-grid [data-difficulty="pro"]');
-  await page.waitForFunction(() => (window as any).__severgrow?.blitz?.()?.active === true, undefined, { timeout: 30000 });
-  const third = await blitz(page);
-  check(third.botLevel === 8, 'after a reload the next Blitz game is still bot 8');
+  // 00:00: my turn ends on its own (lowest card thrown), the match goes on, THEIR clock runs.
+  await page.waitForFunction(() => (window as any).__severgrow.blitz().timeouts === 1, undefined, { timeout: 8000 });
+  await page.waitForFunction(() => {
+    const g = (window as any).__severgrow;
+    return g.state().turnPlayer === 1 || g.blitz().side === 'theirs';
+  }, undefined, { timeout: 8000 });
+  check(await page.locator('#gameover:not([hidden])').count() === 0, 'a timeout does not end the match');
+  const t0 = (await blitz(page)).tempo;
+  check(JSON.stringify(t0) === '[0]', `the timed-out turn counts 0 s of tempo (${JSON.stringify(t0)})`);
+  await page.waitForFunction(() => (window as any).__severgrow.blitz().side === 'theirs', undefined, { timeout: 8000 }).catch(() => undefined);
+  // the turn comes back to me with a fresh 21 s
+  await page.waitForFunction(() => {
+    const b = (window as any).__severgrow.blitz();
+    return b.side === 'mine' && b.remainingMs !== null && b.remainingMs > 18_000;
+  }, undefined, { timeout: 30000 });
+  check(true, 'the next turn starts with a fresh 21 s');
+  check(JSON.stringify(await page.evaluate(() => localStorage.getItem('severgrow.blitz.v1'))) === 'null', 'a timeout records nothing on the ladder');
   noErrors(page);
   await page.close();
 
   // ---------------------------------------------------------------------------------------------
-  // 5. A win returns the ladder to 9. The near-win position is a real save (the same decoder the
-  //    product uses), one empty-handed EndAct from a deck-exhaustion win.
+  // 4. Two losses in a row drop the next match to bot 8; the drop survives a reload.
+  //    (A loss is a real finished match: a near-loss save, one empty-handed EndAct from the end.)
   // ---------------------------------------------------------------------------------------------
-  const level = CAMPAIGN_LEVELS.find((l) => l.number === 30)!;
-  const start = newMatch(913_300, level.config);
-  const root = coordKey(rootCoord(0, 'ring2', start.config.boardRadius));
-  const theirs = coordKey(rootCoord(1, 'ring2', start.config.boardRadius));
-  const board = { ...start.board };
-  board[root] = { ...board[root]!, owner: 0, strength: 1 };
-  for (const neighbor of allNeighbors(homeCoord(0, start.config))) {
-    const key = coordKey(neighbor);
-    if (!(key in board) || key === root || key === theirs) continue;
-    if (start.terrain[key] === 'rock') continue;
-    // never next to THEIR home: this win is the deck, never a strangle
-    if (allNeighbors(homeCoord(1, start.config)).some((n) => coordKey(n) === key)) continue;
-    board[key] = { owner: 0, strength: 3 };
-  }
-  const nearWin: State = {
-    ...start,
-    board,
-    hands: [[], start.hands[1]] as [Card[], Card[]],
-    deck: [],
-    deckFinal: { first: 0, remaining: 1 },
-    phase: 'ACT',
-    turnPlayer: 0,
-    actor: 0,
-    rotPick: null,
-    lastResolution: null,
+  const endFixture = (winner: 0 | 1): string => {
+    const level = CAMPAIGN_LEVELS.find((l) => l.number === 30)!;
+    const start = newMatch(913_300, level.config);
+    const owner = winner;
+    const root = coordKey(rootCoord(owner, 'ring2', start.config.boardRadius));
+    const theirs = coordKey(rootCoord(owner === 0 ? 1 : 0, 'ring2', start.config.boardRadius));
+    const board = { ...start.board };
+    board[root] = { ...board[root]!, owner, strength: 1 };
+    for (const neighbor of allNeighbors(homeCoord(owner, start.config))) {
+      const key = coordKey(neighbor);
+      if (!(key in board) || key === root || key === theirs) continue;
+      if (start.terrain[key] === 'rock') continue;
+      if (allNeighbors(homeCoord(owner === 0 ? 1 : 0, start.config)).some((n) => coordKey(n) === key)) continue;
+      board[key] = { owner, strength: 3 };
+    }
+    const near: State = { ...start, board, hands: [[], start.hands[1]] as [Card[], Card[]], deck: [], deckFinal: { first: 0, remaining: 1 }, phase: 'ACT', turnPlayer: 0, actor: 0, rotPick: null, lastResolution: null };
+    const sc = scores(near);
+    assert(winner === 0 ? sc[0] > sc[1] : sc[1] > sc[0], `the fixture is ${winner === 0 ? 'a win' : 'a loss'} on score`);
+    const settled = apply(near, { t: 'EndAct' });
+    assert.equal(settled.phase, 'GAME_OVER', 'the fixture ends on EndAct');
+    assert.equal(settled.result?.winner, winner, 'the fixture ends as planned');
+    return encodeSave({ seed: near.seed, actions: [], coach: null, level: 9, base: near, blitz: true, map: 30 });
   };
-  const sc = scores(nearWin);
-  assert(sc[0] > sc[1], 'the fixture is ahead on score');
-  assert(legalActions(viewFor(nearWin, 0)).some((a) => a.t === 'EndAct'), 'EndAct is legal in the fixture');
-  const settled = apply(nearWin, { t: 'EndAct' });
-  assert.equal(settled.phase, 'GAME_OVER', 'the fixture ends on EndAct');
-  assert.equal(settled.result?.winner, 0, 'the fixture is a human win');
-  const save = encodeSave({ seed: nearWin.seed, actions: [], coach: null, level: 8, base: nearWin, blitz: true, map: 30 });
+  const playFixture = async (save: string, ladder: object): Promise<Page> => {
+    const p = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const errs: string[] = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    (p as Page & { __blitzErrors?: string[] }).__blitzErrors = errs;
+    await p.addInitScript(() => { (window as any).__name = (f: unknown) => f; });
+    await p.addInitScript(([saved, lad]) => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.clear();
+      localStorage.setItem('futa05-test:severgrow.save.v7', saved as string);
+      localStorage.setItem('futa05-test:severgrow.blitz.v1', lad as string);
+      localStorage.setItem('futa05-test:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: false, confirmPolicy: 'always' }));
+    }, [save, JSON.stringify(ladder)]);
+    await p.goto(TEST_URL);
+    await p.waitForFunction(() => !!(window as any).__severgrow, undefined, { timeout: 30000 });
+    await p.waitForSelector('#menu-continue', { state: 'attached', timeout: 20000 });
+    await p.evaluate(() => (document.getElementById('menu-continue') as HTMLElement | null)?.click());
+    await p.waitForFunction(() => (window as any).__severgrow?.blitz?.()?.active === true, undefined, { timeout: 20000 });
+    await idle(p);
+    await p.evaluate(() => (window as any).__severgrow.playFor({ t: 'EndAct' }, 0));
+    await p.waitForSelector('#gameover:not([hidden])', { timeout: 15000 });
+    return p;
+  };
+  {
+    const lost = await playFixture(endFixture(1), { level: 9, losses: 1 });
+    check((await lost.locator('#gameover').getAttribute('class'))?.includes('lost') === true, 'the fixture is lost');
+    check((await blitz(lost)).nextBotLevel === 8, 'two losses in a row drop the next Blitz game to bot 8');
+    check(JSON.stringify(await lost.evaluate(() => JSON.parse(localStorage.getItem('severgrow.blitz.v1')!))) === JSON.stringify({ level: 8, losses: 2 }), 'the drop is persisted');
+    check(await lost.locator('#go-replay').evaluate((e) => getComputedStyle(e).visibility === 'hidden' || (e as HTMLElement).hidden), 'the finish card offers no replay in Blitz');
+    await lost.reload();
+    await lost.waitForFunction(() => !!(window as any).__severgrow?.blitz?.(), undefined, { timeout: 30000 });
+    check((await blitz(lost)).nextBotLevel === 8, 'after a reload the next Blitz game is still bot 8');
+    noErrors(lost);
+    await lost.close();
+  }
 
-  const winPage = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  const winErrors: string[] = [];
-  winPage.on('pageerror', (e) => winErrors.push(e.message));
-  await winPage.addInitScript(([saved]) => {
-    localStorage.clear();
-    localStorage.setItem('futa05:severgrow.save.v7', saved as string);
-    localStorage.setItem('futa05:severgrow.blitz.v1', JSON.stringify({ level: 8, losses: 2 }));
-    localStorage.setItem('futa05:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: false, confirmPolicy: 'always' }));
-  }, [save]);
-  await winPage.goto(TEST_URL);
-  await winPage.waitForFunction(() => !!(window as any).__severgrow, undefined, { timeout: 30000 });
-  await winPage.waitForSelector('#menu-continue', { state: 'attached', timeout: 20000 });
-  // The product menu hides Continue (owner decision); its listener is still bound, and clicking it
-  // is exactly the resume path the classic save uses (see the same trick in cut-severe.ts).
-  await winPage.evaluate(() => (document.getElementById('menu-continue') as HTMLElement | null)?.click());
-  await winPage.waitForFunction(() => (window as any).__severgrow?.blitz?.()?.active === true, undefined, { timeout: 20000 });
-  check((await blitz(winPage)).botLevel === 8, 'the seeded game is a Blitz match at bot 8');
-  await idle(winPage);
-  await winPage.evaluate(() => (window as any).__severgrow.playFor({ t: 'EndAct' }, 0));
-  await winPage.waitForSelector('#gameover:not([hidden])', { timeout: 15000 });
-  check((await winPage.locator('#gameover').getAttribute('class'))?.includes('won') === true, 'the fixture is won');
-  check((await blitz(winPage)).nextBotLevel === 9, 'a win returns the ladder to bot 9');
-  check(JSON.stringify(await winPage.evaluate(() => JSON.parse(localStorage.getItem('severgrow.blitz.v1')!))) === JSON.stringify({ level: 9, losses: 0 }), 'the win is persisted');
-  assert.deepEqual(winErrors, [], 'no page errors on the win path');
-  checks++;
-  await winPage.close();
+  // ---------------------------------------------------------------------------------------------
+  // 5. A win returns the ladder to 9.
+  // ---------------------------------------------------------------------------------------------
+  {
+    const won = await playFixture(endFixture(0), { level: 8, losses: 2 });
+    check((await won.locator('#gameover').getAttribute('class'))?.includes('won') === true, 'the fixture is won');
+    check((await blitz(won)).nextBotLevel === 9, 'a win returns the ladder to bot 9');
+    check(JSON.stringify(await won.evaluate(() => JSON.parse(localStorage.getItem('severgrow.blitz.v1')!))) === JSON.stringify({ level: 9, losses: 0 }), 'the win is persisted');
+    noErrors(won);
+    await won.close();
+  }
 
   console.log(`\nblitz: ${checks} checks passed`);
 } finally {

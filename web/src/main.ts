@@ -81,6 +81,7 @@ import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_BEAT_MS, REPLAY_SPEED, actorOf, involvedKeys, nudgeToward, replayDurationScale } from './logic/opponent.js';
 import { playsThrough } from './logic/play-through.js';
+import { blitzTempoLine, blitzTimeoutAction } from './logic/blitz.js';
 import { impactPlan } from './logic/impact.js';
 import type { ImpactKind } from './logic/impact.js';
 import { extrasOn, guardFrame } from './player/frame-guard.js';
@@ -2034,7 +2035,10 @@ async function mountPlayerEnhancements() {
         hold: () => pregameHold,
         homeKey: () => board.rootKey(HUMAN),
         reduceMotion: () => settings.reduceMotion,
-        onTimeout: () => finishBlitzTimeout(),
+        opponentShowing: () => blocking(),
+        clockHost: () => document.getElementById('smart-panel'),
+        tick: () => sound.press(),
+        onTimeout: () => blitzTimeoutTurn(),
       });
       // The Practice grid may already have been painted while this async mount was loading.
       if (blitz) renderLevelGrid();
@@ -2437,32 +2441,21 @@ async function startBlitzMatch(map: CampaignLevel): Promise<void> {
 }
 
 /**
- * The 15 s clock ran out (EXPERIMENTAL Blitz). A real-time live duel LOSES the match when the turn
- * clock expires — the server ends it with `reason: 'timeout'` and never plays the move for you — and
- * this applies that same rule offline. The finish card, its reason line, the stats and the history
- * are the shared ones; no server call and no online transport are involved.
+ * My 21 s ran out (Blitz, 0.82; owner 2026-11-06: "Turn ends, worst card thrown"). The turn ends on its
+ * own — draw if not drawn, stop growing, throw the lowest card (logic/blitz.ts blitzTimeoutAction) —
+ * and the match goes on. Each step is an ordinary auto move, so it animates and saves like any other.
  */
-function finishBlitzTimeout(): void {
-  if (!session || !blitz || !blitzMatch) return;
-  if (session.state.phase === 'GAME_OVER') return;
-  // The board is already at the final state (nothing was played); stop any in-flight painting so
-  // the result card is read against a settled board, exactly as a finished move does.
-  fastForward();
-  const after = blitz.timeoutState(session.state);
-  const result = after.result;
-  if (!result) return;
-  session.state = after;
-  log.unshift(RESULT.timeoutLost);
-  if (!watching && !coach.tutorial) {
-    stats = recordResult(stats, result, HUMAN, gameLevel);
-    store.set(STATS_KEY, JSON.stringify(stats));
-    noteFinishedForInstall('lost');
-    store.set(PLAY_KEY, JSON.stringify(recordPlay(parsePlay(store.get(PLAY_KEY)), after.history ?? [], HUMAN)));
-    // The ladder's own rule: this is a loss, so the SECOND in a row drops the next bot to 8.
-    blitz.record('loss');
+function blitzTimeoutTurn(): void {
+  if (!session || !blitz || !blitzMatch || isOnlineDuel()) return;
+  cancelSel();
+  smartCockpit?.event({ message: 'TIME', priority: 80, duration: 1200, mode: 'red' });
+  for (let i = 0; i < 4; i++) {
+    const st = session.state;
+    if (st.phase === 'GAME_OVER' || st.turnPlayer !== HUMAN || st.actor !== HUMAN) break;
+    const a = blitzTimeoutAction(session.view);
+    if (!a) break;
+    humanPlay(a, { auto: true });
   }
-  save();
-  render();
 }
 
 /**
@@ -3262,7 +3255,7 @@ function noteFinishedForInstall(outcome: 'won' | 'lost' | 'draw', later = false)
     if (taughtLevel > 3) pendingInstallOutcome = outcome;
     return;
   }
-  installPrompt.noteFinished(outcome);
+  noteInstallFinished(outcome);
 }
 /**
  * Offer the deferred invitation once the player is OUT of a match.
@@ -6332,6 +6325,7 @@ function updateFuta04Help() {
 }
 
 function toggleMatchIntel() {
+  if (blitzMatch) return; // Blitz has no Match Intel (owner, 2026-11-06)
   if (!glassSurface || !session) return;
   if (coach.tutorial && !tutorialFreePlayActive()) return;
   if (tutorialFreePlayActive()) {
@@ -8341,6 +8335,7 @@ function showReplay(model: ReplayModel): void {
 
 /** Open the replay for THIS finish card, in whichever mode the match was played. */
 async function openReplayForFinish(): Promise<void> {
+  if (blitzMatch) return; // Blitz has no Replay (owner, 2026-11-06)
   const go = $('go-replay');
   go.setAttribute('aria-busy', 'true');
   try {
@@ -8542,7 +8537,7 @@ function renderGameOver() {
     const matchId = snapshot.matchId;
     if (onlineResultNoted !== matchId) {
       onlineResultNoted = matchId;
-      installPrompt.noteFinished(won ? 'won' : draw ? 'draw' : 'lost');
+      noteInstallFinished(won ? 'won' : draw ? 'draw' : 'lost');
     }
     $('go-title').textContent = info.title;
     // A duel has no campaign level: its context is the opponent line in #go-sub, never a kicker.
@@ -8735,9 +8730,24 @@ function renderGameOver() {
   setGoExtra('go-cut', !!session?.biggestCut);
   // Every offline match — practice, campaign and a tutorial replay — can be watched back from its
   // own log in memory. There is no stored list offline (owner's decision, 2026-10-25).
-  setReplayAvailable(!!session && session.log.length > 0);
+  setReplayAvailable(!!session && session.log.length > 0 && !blitzMatch);
   $('go-share').textContent = RESULT.share;
   $('go-reason').textContent = taught ? '' : resultReason(r, HUMAN);
+  // Blitz tempo (owner's idea 3, 0.82): the time left at the end of my turns, one quiet line.
+  {
+    const tempo = blitzMatch ? blitz?.tempo() ?? null : null;
+    let line = document.getElementById('go-tempo');
+    if (tempo && !line) {
+      line = document.createElement('p');
+      line.id = 'go-tempo';
+      line.className = 'muted small num go-tempo';
+      $('go-reason').after(line);
+    }
+    if (line) {
+      line.hidden = !tempo;
+      line.textContent = tempo ? blitzTempoLine(tempo) : '';
+    }
+  }
   if (taught) $('go-sub').hidden = true;
   // THE DOUBLE HARVEST (surprise, 2026-10-29): this match's final position, stamped as one small
   // figure. (The one-line summary that sat beside it was removed, owner 2026-10-30.)
@@ -8810,7 +8820,7 @@ function lessonReopenExplanation() {
 
 /** Takes back the player's last move of this turn (nothing hidden was revealed by it). */
 function undoMove() {
-  if (!session) return;
+  if (!session || blitzMatch) return; // Blitz has no Undo (owner, 2026-11-06)
   note({ t: 'undo', at: Date.now() });
   fastForward();
   const before = session.state.board;
@@ -9794,6 +9804,7 @@ function replayOnlineOpponentTurn() {
 
 /** One entry point for the one control: online it is a rebuild, offline it is the kept turns. */
 function replayLastTurn() {
+  if (blitzMatch) return; // Blitz has no Replay (owner, 2026-11-06)
   if (isOnlineDuel()) replayOnlineOpponentTurn();
   else replayBotTurn();
 }
@@ -10989,6 +11000,18 @@ fillIcons();
 // The install invitation: a timed prompt after a played game (no menu button any more). The words
 // live in src/strings.ts; the counting rule lives in logic/install-prompt.ts.
 const installPrompt = mountInstallPrompt({ copy: INSTALL, storage: store });
+/**
+ * A game can finish while the page is still booting (a resumed match ended on its first move): the
+ * invitation is mounted at the end of this module, so until then the finish is counted a moment later
+ * instead of throwing (found by web/e2e/blitz.ts, 2026-11-06).
+ */
+function noteInstallFinished(outcome: 'won' | 'lost' | 'draw'): void {
+  try {
+    installPrompt.noteFinished(outcome);
+  } catch {
+    window.setTimeout(() => noteInstallFinished(outcome), 400);
+  }
+}
 mountAppWindowButton(INSTALL.desktop.windowButton); // computers: open in its own window / full screen
 // once the photo-like grass and lava are painted (in the background), redraw the board with them
 if (!IS_FUTA04) onPhotosReady(() => {
