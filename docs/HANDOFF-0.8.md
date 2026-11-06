@@ -54,7 +54,7 @@ touch.
 
 | # | Step | Status |
 |---|------|--------|
-| 0 | White-blink fix bee46ac3 promoted live (before this pass) | ships with 0.8 (its CI's iOS job hung in browser install twice) |
+| 0 | White-blink fix bee46ac3 promoted live (before this pass) | live with 0.8 |
 | 1 | Audit: map every duel + menu animation, durations, where input is blocked, jank sources | done (see Findings) |
 | 2 | Input never blocked by animation (queue-free: next card pickable while effects play) | done (`logic/play-through.ts`, `blocking()` in main.ts, e2e `play-through`) |
 | 3 | Bloom: tile by tile from the connected tile, 0.3 s apart | done (PINNED.bloomGap 1.14) |
@@ -67,7 +67,7 @@ touch.
 | 10 | Consistency gaps (radii, focus, tokens, timing) | partial: one shared impact family, motes = dust glow, charcoal; frame-cost render work left (see notes) |
 | 11 | Quiet auto-lower on sustained frame drops | done (`player/frame-guard.ts`: <30 fps for 4 s during moves turns off dust/dim/shake for the visit) |
 | 12 | Beta 0.8 label | done |
-| 13 | Full checks, film, push, promote live, confirm | checks green locally (4143 unit tests, all browser suites); pushed to futa0.5-online; next: CI green -> `npm run promote -- <head>` -> dispatch republish -> confirm ROOT_SHA |
+| 13 | Full checks, film, push, promote live, confirm | **LIVE** 2026-11-06 11:29 UTC: futasaku.com and /test both serve b25d1f57 (ROOT_SHA confirmed in the publish log; CI 19/19 green incl. both iOS suites) |
 
 ## Findings / notes (append as you go)
 
