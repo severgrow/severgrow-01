@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BLITZ_DEFAULT, BLITZ_DROP_BOT_LEVEL, BLITZ_FIRST_MAP, BLITZ_KEY, BLITZ_LAST_MAP, BLITZ_MAPS,
-  BLITZ_TURN_MS, blitzAfterGame, blitzClockText, blitzDeadlineAt, blitzRemainingMs, blitzStage, blitzTempo, blitzTempoLine,
+  BLITZ_TURN_MS, blitzAfterGame, blitzClockText, blitzNextFlipIn, blitzDeadlineAt, blitzRemainingMs, blitzStage, blitzTempo, blitzTempoLine,
   blitzTick, blitzTimeoutAction, blitzTimeoutResult, blitzTimeoutState,
   parseBlitzState, pickBlitzMap, readBlitzState, recordBlitzOutcome,
 } from '../src/logic/blitz.js';
@@ -109,6 +109,22 @@ describe('Blitz clock', () => {
     expect(blitzClockText(0)).toBe('00:00');
     expect(blitzClockText(-50)).toBe('00:00');
     expect(blitzClockText(60_000)).toBe('01:00');
+  });
+
+  // Owner, 2026-11-06: "Make sure the clock never lags never slows down and is super reliable". The clock
+  // wakes exactly when the shown second changes (not every frame), and always reads a steady clock.
+  it('wakes exactly when the shown second flips, never drifting', () => {
+    expect(blitzNextFlipIn(21_000)).toBe(1_000);
+    expect(blitzNextFlipIn(20_400)).toBe(400);
+    expect(blitzNextFlipIn(1)).toBe(1);
+    expect(blitzNextFlipIn(0)).toBeNull();
+    expect(blitzNextFlipIn(-5)).toBeNull();
+    // waking at that moment always shows the next second, whatever the start
+    for (const left of [21_000, 20_999, 15_432, 5_001, 3_000, 999]) {
+      const flip = blitzNextFlipIn(left)!;
+      expect(blitzClockText(left - flip)).not.toBe(blitzClockText(left));
+      expect(blitzClockText(left - flip + 1)).toBe(blitzClockText(left));
+    }
   });
 
   it('pressure: calm, then amber from 5 s, red from 3 s; the last three seconds tick once each', () => {

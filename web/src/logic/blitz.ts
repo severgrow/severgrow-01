@@ -160,6 +160,16 @@ export const blitzClockText = (ms: number): string => {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
 
+/**
+ * How long until the shown second changes (ms), or null when the clock has run out. The clock sleeps
+ * exactly this long and then reads the time afresh, so it can never drift or pile up delay.
+ */
+export const blitzNextFlipIn = (leftMs: number): number | null => {
+  if (leftMs <= 0) return null;
+  const r = leftMs % 1000;
+  return r === 0 ? 1000 : r;
+};
+
 export type BlitzStage = 'calm' | 'amber' | 'red';
 /** Pressure clock (owner's idea 1): calm, amber from 5 s, red from 3 s. */
 export const blitzStage = (ms: number): BlitzStage => (ms <= BLITZ_RED_MS ? 'red' : ms <= BLITZ_AMBER_MS ? 'amber' : 'calm');

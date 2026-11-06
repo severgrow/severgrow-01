@@ -11,7 +11,7 @@ import type { Level } from '../../../src/bots/levels.js';
 import type { CampaignLevel } from '../../../src/campaign/levels.js';
 import type { State } from '../../../src/engine/index.js';
 import { FEATURES } from '../channel.js';
-import { BLITZ_TURN_MS, blitzDeadlineAt, blitzRemainingMs, blitzTempo, blitzTimeoutState, pickBlitzMap, readBlitzState, recordBlitzOutcome } from '../logic/blitz.js';
+import { BLITZ_TURN_MS, blitzRemainingMs, blitzTempo, blitzTimeoutState, pickBlitzMap, readBlitzState, recordBlitzOutcome } from '../logic/blitz.js';
 import type { BlitzOutcome, BlitzStore, BlitzTempo } from '../logic/blitz.js';
 import { blitzClockIn } from './timer.js';
 
@@ -112,7 +112,7 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
   const disarmMine = (record: boolean): void => {
     if (timer) window.clearTimeout(timer);
     timer = 0;
-    if (deadline !== null && record) leftAtEnd.push(blitzRemainingMs(deadline, Date.now()));
+    if (deadline !== null && record) leftAtEnd.push(blitzRemainingMs(deadline, performance.now()));
     deadline = null;
   };
 
@@ -131,7 +131,8 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
   };
 
   const armMine = (): void => {
-    deadline = blitzDeadlineAt(Date.now());
+    // the steady clock (never jumps when the phone adjusts its time): owner, "super reliable"
+    deadline = performance.now() + BLITZ_TURN_MS;
     timer = window.setTimeout(expire, BLITZ_TURN_MS);
   };
 
@@ -156,9 +157,9 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
     if (theirsShowing) {
       spent = false;
       if (deadline !== null) disarmMine(true);
-      if (theirDeadline === null) theirDeadline = blitzDeadlineAt(Date.now());
+      if (theirDeadline === null) theirDeadline = performance.now() + BLITZ_TURN_MS;
       side = 'theirs';
-      c?.run('theirs', theirDeadline);
+      c?.runSteady('theirs', theirDeadline);
       return;
     }
     theirDeadline = null;
@@ -173,12 +174,12 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
       return;
     }
     if (deadline === null) armMine();
-    else if (blitzRemainingMs(deadline, Date.now()) === 0) {
+    else if (blitzRemainingMs(deadline, performance.now()) === 0) {
       expire();
       return;
     }
     side = 'mine';
-    c?.run('mine', deadline!);
+    c?.runSteady('mine', deadline!);
   };
 
   /** A hidden tab is checked again when it comes back. */
@@ -247,7 +248,7 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
         losses: ladder.losses,
         turnMs: BLITZ_TURN_MS,
         deadline,
-        remainingMs: deadline === null ? null : blitzRemainingMs(deadline, Date.now()),
+        remainingMs: deadline === null ? null : blitzRemainingMs(deadline, performance.now()),
         side,
         tempo: [...leftAtEnd],
         timeouts,

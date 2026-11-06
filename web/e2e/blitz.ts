@@ -159,6 +159,31 @@ try {
   await page.screenshot({ path: '/tmp/blitz-clock-390.png' });
   await page.locator('#smart-panel').screenshot({ path: '/tmp/blitz-clock-panel.png' });
 
+  // RELIABILITY (owner, 2026-11-06: "Make sure the clock never lags never slows down"): with the CPU 4x
+  // slower, sample the shown seconds against the real time left for 5 s: never more than 1 behind
+  // (a sample can land in the instant the second flips), and every second is shown in turn.
+  {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+    const samples = await page.evaluate(async () => {
+      const g = (window as any).__severgrow;
+      const out: { shown: number; real: number }[] = [];
+      for (let i = 0; i < 40; i++) {
+        const b = g.blitz();
+        const text = b.clock?.text as string;
+        out.push({ shown: Number(text.slice(0, 2)) * 60 + Number(text.slice(3)), real: Math.ceil((b.remainingMs ?? 0) / 1000) });
+        await new Promise((r) => setTimeout(r, 125));
+      }
+      return out;
+    });
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    const worst = Math.max(...samples.map((x) => x.shown - x.real));
+    const seen = new Set(samples.map((x) => x.shown));
+    const span = samples[0]!.shown - samples.at(-1)!.shown;
+    check(worst <= 1 && samples.every((x) => x.shown >= x.real), `at 4x slower CPU the clock is never behind real time by more than the flip instant (worst ${worst})`);
+    check(seen.size >= span, `every second is shown in turn, none skipped (${[...seen].join(',')})`);
+  }
+
   // Pressure: amber at 5 s, red at 3 s.
   await page.waitForFunction(() => (window as any).__severgrow.blitz().clock?.stage === 'amber', undefined, { timeout: 25000 });
   check(true, 'the clock turns amber in the last 5 s');

@@ -8,7 +8,7 @@
 //
 // Cost: it draws only while a clock is running and the page is visible (one rAF), touches only the
 // segments that changed, and its glow is a static drop-shadow on a small box. Nothing runs when idle.
-import { blitzClockText, blitzStage, blitzTick } from '../logic/blitz.js';
+import { blitzClockText, blitzNextFlipIn, blitzStage, blitzTick } from '../logic/blitz.js';
 import type { BlitzStage } from '../logic/blitz.js';
 import { EASE, MOTION } from '../logic/motion.js';
 
@@ -92,8 +92,10 @@ html.blitz-match #tool-undo, html.blitz-match #futa04-help-button, html.blitz-ma
 export type BlitzClockSide = 'mine' | 'theirs';
 
 export type BlitzClock = {
-  /** Run a clock toward `deadline` (ms, Date.now() clock) for one side. */
+  /** Run a clock toward a WALL-clock deadline (ms, Date.now(): the server's turn deadline). */
   run: (side: BlitzClockSide, deadline: number) => void;
+  /** Run a clock toward a STEADY deadline (ms, performance.now(): a local turn). */
+  runSteady: (side: BlitzClockSide, deadline: number) => void;
   /** Hold the clock still showing `ms` (a turn not yet playable, or one that just ended). */
   hold: (side: BlitzClockSide, ms: number) => void;
   /** Hide everything (not a Blitz match on screen). */
@@ -175,8 +177,15 @@ export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): Blit
   let shown = '';
   let stage: BlitzStage = 'calm';
   let side: BlitzClockSide = 'mine';
+  /**
+   * RELIABILITY (owner, 2026-11-06: "Make sure the clock never lags never slows down and is super
+   * reliable"): the deadline is kept on the STEADY clock (performance.now(), which never jumps when the
+   * phone adjusts its time), and the clock sleeps exactly until the shown second flips, then reads the
+   * time afresh — no per-frame work, and a late wake (a busy moment) can never accumulate into drift.
+   */
   let deadline: number | null = null;
   let frame = 0;
+  const now = () => performance.now();
   let lastLeft = Infinity;
   let on = false;
 
@@ -207,7 +216,7 @@ export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): Blit
   const loop = () => {
     frame = 0;
     if (deadline === null) return;
-    const left = Math.max(0, deadline - Date.now());
+    const left = Math.max(0, deadline - now());
     paint(left);
     if (side === 'mine') {
       const s = blitzTick(lastLeft, left);
@@ -217,12 +226,22 @@ export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): Blit
       }
     }
     lastLeft = left;
-    if (left > 0 && !document.hidden) frame = requestAnimationFrame(loop);
+    const flip = blitzNextFlipIn(left);
+    // +2 ms so the wake lands just past the boundary, never a hair before it
+    if (flip !== null && !document.hidden) frame = window.setTimeout(loop, flip + 2);
   };
 
   const stop = () => {
-    if (frame) cancelAnimationFrame(frame);
+    if (frame) window.clearTimeout(frame);
     frame = 0;
+  };
+
+  const start = (s: BlitzClockSide, at: number) => {
+    show(s);
+    deadline = at;
+    lastLeft = Math.max(0, at - now());
+    stop();
+    loop();
   };
 
   const show = (s: BlitzClockSide) => {
@@ -232,20 +251,30 @@ export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): Blit
     document.documentElement.classList.add('blitz-match');
   };
 
+  // Back from the background: read the time at once (a hidden tab's timers are slowed by the browser).
   const onVisible = () => {
-    if (!document.hidden && deadline !== null && !frame) frame = requestAnimationFrame(loop);
+    if (!document.hidden && deadline !== null) {
+      stop();
+      loop();
+    }
   };
   document.addEventListener('visibilitychange', onVisible);
 
   return {
     run(s, at) {
-      show(s);
-      if (deadline === at && frame) return;
-      deadline = at;
-      lastLeft = Math.max(0, at - Date.now());
-      stop();
-      frame = requestAnimationFrame(loop);
-      paint(lastLeft);
+      // the server's wall-clock deadline, turned into the steady clock ONCE; later calls with the same
+      // deadline (every status poll) keep the running countdown instead of nudging it by a few ms
+      const steady = now() + (at - Date.now());
+      if (deadline !== null && side === s && Math.abs(steady - deadline) < 250) {
+        show(s);
+        if (!frame && !document.hidden) loop();
+        return;
+      }
+      start(s, steady);
+    },
+    runSteady(s, at) {
+      if (deadline === at && side === s && frame) return;
+      start(s, at);
     },
     hold(s, ms) {
       show(s);
