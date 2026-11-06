@@ -64,7 +64,8 @@ html.blitz-match #blitz-clock::before {
   background:radial-gradient(ellipse 58% 62% at 54% 50%, color-mix(in srgb, var(--bc-ink) 20%, transparent), color-mix(in srgb, var(--bc-ink) 6%, transparent) 55%, transparent 80%);
 }
 #blitz-clock .bc-glass::after {
-  content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit; z-index:2;
+  /* the glass texture at half strength (owner, 2026-11-06: "a bit less visible, by like 50%") */
+  content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit; z-index:2; opacity:.5;
   background:
     linear-gradient(118deg, transparent 0 34%, rgb(255 248 230 / .045) 38% 44%, transparent 49%),
     repeating-linear-gradient(103deg, transparent 0 9px, rgb(255 250 235 / .035) 9px 9.6px, transparent 9.6px 23px),
@@ -72,8 +73,16 @@ html.blitz-match #blitz-clock::before {
     linear-gradient(rgb(12 11 10 / .32), rgb(12 11 10 / .22));
 }
 #blitz-clock .bc-colon { fill:currentColor; opacity:.94; }
-#blitz-clock .bc-who { position:absolute; left:7px; top:50%; translate:0 -50%; z-index:2;
-  font:600 7px/1 var(--font-mono, ui-monospace, monospace); letter-spacing:.12em; color:#8d8577; writing-mode:vertical-rl; rotate:180deg; }
+/* YOU and OPP (owner, 2026-11-06): both printed on the screen like an old LCD's legends, under the glass.
+   The idle one is a dark cut-out, barely there (black on black); the side whose clock runs lights up in
+   the clock's own ink. YOU keeps its place on the left (reading up); OPP mirrors it on the right. */
+#blitz-clock .bc-who { position:absolute; top:50%; translate:0 -50%; z-index:1;
+  font:600 7px/1 var(--font-mono, ui-monospace, monospace); letter-spacing:.12em; writing-mode:vertical-rl;
+  color:#151615; text-shadow:0 .5px 0 rgb(255 250 235 / .07), 0 -.5px 0 rgb(0 0 0 / .7); }
+#blitz-clock .bc-who.you { left:1px; rotate:180deg; }
+#blitz-clock .bc-who.opp { right:1px; }
+#blitz-clock[data-side='mine'] .bc-who.you, #blitz-clock[data-side='theirs'] .bc-who.opp {
+  color:var(--bc-ink); text-shadow:0 0 2.5px color-mix(in srgb, var(--bc-ink) 55%, transparent); }
 /* Blitz has no Undo, no Match Intel and no Replay (owner): their keys give their place to the clock. */
 html.blitz-match #tool-undo, html.blitz-match #futa04-help-button, html.blitz-match #tool-replay, html.blitz-match #go-replay {
   visibility:hidden !important; pointer-events:none !important;
@@ -113,9 +122,15 @@ export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): Blit
   root.setAttribute('aria-live', 'off');
   const glass = document.createElement('div');
   glass.className = 'bc-glass';
-  const who = document.createElement('span');
-  who.className = 'bc-who';
-  who.setAttribute('aria-hidden', 'true');
+  const legend = (cls: string, word: string) => {
+    const span = document.createElement('span');
+    span.className = `bc-who ${cls}`;
+    span.setAttribute('aria-hidden', 'true');
+    span.textContent = word;
+    return span;
+  };
+  const you = legend('you', 'YOU');
+  const opp = legend('opp', 'OPP');
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 92 36');
@@ -144,8 +159,8 @@ export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): Blit
     dot.setAttribute('class', 'bc-colon');
     svg.append(dot);
   }
-  glass.append(svg);
-  root.append(glass, who);
+  glass.append(you, svg, opp);
+  root.append(glass);
   host.append(root);
 
   let shown = '';
@@ -205,7 +220,6 @@ export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): Blit
     on = true;
     side = s;
     root.dataset.side = s;
-    who.textContent = s === 'mine' ? 'YOU' : 'THEM';
     document.documentElement.classList.add('blitz-match');
   };
 

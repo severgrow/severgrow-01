@@ -177,6 +177,7 @@ try {
   const t0 = (await blitz(page)).tempo;
   check(JSON.stringify(t0) === '[0]', `the timed-out turn counts 0 s of tempo (${JSON.stringify(t0)})`);
   await page.waitForFunction(() => (window as any).__severgrow.blitz().side === 'theirs', undefined, { timeout: 8000 }).catch(() => undefined);
+  if ((await blitz(page)).side === 'theirs') await page.locator('#smart-panel').screenshot({ path: '/tmp/blitz-clock-panel-opp.png' });
   // the turn comes back to me with a fresh 21 s
   await page.waitForFunction(() => {
     const b = (window as any).__severgrow.blitz();
