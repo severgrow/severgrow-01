@@ -21,7 +21,8 @@ try{
   await p.waitForFunction(()=>(window as any).__launch.length>0,undefined,{timeout:15000});
   const first=await p.evaluate(()=>(window as any).__launch[0]);
   assert(first.ready&&first.painted==='true'&&first.fonts==='loaded',JSON.stringify(first));
-  assert.deepEqual(first.durations,[1000],'one original /test one-second fade');
+  // OWNER CHANGED THE RULE (2026-11-06: "black screen until fully loaded and fade in ... no longer than 1s or 1.5s"): 400 ms.
+  assert.deepEqual(first.durations,[400],'one short first fade (400 ms)');
   await p.waitForFunction(()=>!document.body.getAnimations().some(a=>a.id==='startup-reveal'&&a.playState==='running'));
   assert(await p.locator('#menu-play').isVisible());
   const planet=await p.evaluate(()=>(window as any).__severgrow.planet());

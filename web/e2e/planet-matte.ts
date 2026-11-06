@@ -40,7 +40,8 @@ try{
    console.error('Boot after fail-open',await p.evaluate(()=>{const h=(window as any).__severgrow,s=h?.planet?.();return {ready:h?.ready?.(),frames:s?.frames,mode:s?.mode,hidden:document.hidden};}),errors);
   }
   assert(boot.ready&&boot.frames>0&&boot.fonts==='loaded',JSON.stringify(boot));
-  assert.deepEqual(boot.animations,[1000],'one coherent one-second first reveal');
+  // OWNER CHANGED THE RULE (2026-11-06: "fade in ... no longer than 1s or 1.5s"): one 400 ms first reveal.
+  assert.deepEqual(boot.animations,[400],'one coherent short first reveal (400 ms)');
   await p.waitForTimeout(1050);
   const keys=await p.evaluate(fn=>['menu-play','menu-world','menu-settings'].map(id=>(0,eval)(`(${fn})`)(document.getElementById(id))),material.toString());
   assert.deepEqual(keys[0],keys[1],'PLAY has the same material as THE PLANET');assert.deepEqual(keys[1],keys[2],'Settings shares the same key');
