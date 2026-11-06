@@ -20,7 +20,7 @@ const CSS = `
    between the two; the planet module crops it to the window's panel and centres the planet there. */
 .world-grid > .planet-canvas {
   position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; z-index: 0; display: block;
-  touch-action: none; cursor: grab; outline: 0; background: #07090a;
+  touch-action: none; cursor: grab; outline: 0; background: #0e0f10;
 }
 .world-grid > .planet-canvas:active { cursor: grabbing; }
 /* BEHIND THE MENU the planet is the backdrop (owner, 2026-11-04): whole, dim, untouchable. The

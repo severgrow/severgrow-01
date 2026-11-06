@@ -136,10 +136,10 @@ button {
   background: var(--c-bg);
 }
 /* NO FLASH AT START-UP (0.75): a still star field on the page background before the module runs,
-   in the shared space shader's own deep sky (#030404). The live stars replace it the moment they have
+   in the shared space shader's own deep sky (#0e0f10). The live stars replace it the moment they have
    drawn (html.space-lit), so the two never show together. Static: no animation, no script. */
 html.space-first:not(.space-lit) #texture {
-  background-color: #030404;
+  background-color: #0e0f10;
   background-image:
     radial-gradient(1.2px 1.2px at 23px 41px, rgba(219, 214, 199, .82), transparent),
     radial-gradient(1.2px 1.2px at 131px 17px, rgba(219, 214, 199, .55), transparent),
@@ -7348,7 +7348,7 @@ html.align-overlay::before {
   position: fixed;
   inset: 0;
   z-index: 110;
-  background: #050606;
+  background: #0e0f10;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--curtain-out, 240ms) cubic-bezier(.33, 0, .2, 1);

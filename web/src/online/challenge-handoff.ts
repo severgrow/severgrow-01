@@ -14,7 +14,7 @@ export function mountChallengeHandoff(source:HTMLElement) {
       const perform=async()=>{
         const veil=document.createElement('div');veil.id='challenge-duel-handoff';
         veil.setAttribute('aria-hidden','true');veil.dataset.phase='out';
-        veil.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#050708;opacity:0;pointer-events:auto';
+        veil.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#0e0f10;opacity:0;pointer-events:auto';
         document.body.append(veil);
         // Existing #futa04-film-grain stays above the veil (2147483646). Never lift #texture:
         // it is the opaque page background, not the grain, and would hide the duel.

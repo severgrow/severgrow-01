@@ -42,7 +42,8 @@ void main(){
   vec2 p = gl_FragCoord.xy;
   // Deep space, a touch warmer toward the planet so it never floats on flat black.
   float d = length(p - uCentre) / uRadius;
-  vec3 sky = mix(vec3(.030, .036, .034), vec3(.012, .014, .015), smoothstep(.9, 3.2, d));
+  // Beta 0.8 charcoal (owner, 2026-11-06): the deepest sky is #0e0f10, never pure black.
+  vec3 sky = mix(vec3(.068, .072, .070), vec3(.055, .059, .063), smoothstep(.9, 3.2, d));
   float s = (stars(p + uDrift * .35, 9.0 * uScale, .965) * .55 * uLayers.y + stars(p + uDrift, 17.0 * uScale, .955) * uLayers.z) * smoothstep(1.0, 1.25, d);
   if (uLayers.x < .5) { gl_FragColor = vec4(vec3(.86, .84, .78) * s, s); return; }
   sky += vec3(.86, .84, .78) * s;

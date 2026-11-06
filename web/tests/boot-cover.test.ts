@@ -22,7 +22,7 @@ describe('the boot cover', () => {
     expect(css).toContain('html.space-first #boot-cover');
     expect(css).toMatch(/position:\s*fixed/);
     expect(css).toMatch(/inset:\s*0/);
-    expect(css).toMatch(/background:\s*#030404/);
+    expect(css).toMatch(/background:\s*#0e0f10/);
     // the cover sits in <head> so it applies before the body is parsed
     expect(html.indexOf('<style id="boot-cover-css">')).toBeLessThan(html.indexOf('</head>'));
     // the cover element comes before every screen in the body
@@ -42,7 +42,7 @@ describe('the boot cover', () => {
     const css = head.slice(ground, head.indexOf('</style>', ground));
     expect(css).toMatch(/html\{[^}]*background:\s*#18191a/);
     // html:where(): no stronger than style.css, so the loaded page keeps its own ground
-    expect(css).toMatch(/html:where\(\.space-first\)\{[^}]*background:\s*#030404/);
+    expect(css).toMatch(/html:where\(\.space-first\)\{[^}]*background:\s*#0e0f10/);
   });
 
   it('lifts with a short fade, never later than a cap, and is gone after', () => {

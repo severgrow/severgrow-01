@@ -5,8 +5,8 @@
     <!-- The page is dark from its very first frame (owner, 2026-11-06: "it flashes white for like
          0.1s before doing the black fade in"): said before any script or stylesheet loads. -->
     <meta name="color-scheme" content="dark" />
-    <style id="first-ground">html{background:#18191a;color-scheme:dark}html:where(.space-first){background:#030404}</style>
-    <style>html[data-startup="waiting"] {background:#050708} html[data-startup="waiting"] body {opacity:0;visibility:hidden}</style>
+    <style id="first-ground">html{background:#18191a;color-scheme:dark}html:where(.space-first){background:#0e0f10}</style>
+    <style>html[data-startup="waiting"] {background:#0e0f10} html[data-startup="waiting"] body {opacity:0;visibility:hidden}</style>
     <script>
       // The test menu and its world arrive as one object. A bounded fail-open also works when
       // the main module cannot load; no spinner, network wait or repeat entrance on navigation.
@@ -139,7 +139,7 @@
          player/boot-cover.ts once the menu is composed (max 1.2 s), so nothing half-built shows. -->
     <style id="boot-cover-css">
       #boot-cover { display: none; }
-      html.space-first #boot-cover { display: block; position: fixed; inset: 0; z-index: 2147483646; background: #030404; pointer-events: none; }
+      html.space-first #boot-cover { display: block; position: fixed; inset: 0; z-index: 2147483646; background: #0e0f10; pointer-events: none; }
     </style>
   </head>
   <body>

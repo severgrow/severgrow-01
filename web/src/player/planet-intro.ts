@@ -16,13 +16,13 @@ const CSS = `
 #planet-intro {
   position: absolute; inset: 0; z-index: 20; display: grid; place-items: center;
   padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
-  background: color-mix(in srgb, #07090a 62%, transparent);
+  background: color-mix(in srgb, #0e0f10 62%, transparent);
 }
 #planet-intro[hidden] { display: none; }
 #planet-intro .pi-panel {
   position: relative; width: min(360px, 100%); box-sizing: border-box; text-align: center;
   padding: 26px 22px 18px; border-radius: 18px;
-  background: color-mix(in srgb, var(--c-surface, #232425) 92%, #07090a);
+  background: color-mix(in srgb, var(--c-surface, #232425) 92%, #0e0f10);
   border: 1px solid #e8ddc52e;
   box-shadow: 0 18px 48px #000a, inset 0 1px 0 #ffffff0d;
 }
