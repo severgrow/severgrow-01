@@ -1789,7 +1789,12 @@ export const mountGlassSurface = (onClose: () => void) => {
     requestAnimationFrame(place);
   };
 
-  panel.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); close(); } });
+  panel.addEventListener('keydown', event => {
+    // A reading surface owns its keyboard. Escape closes it without also cancelling a card
+    // underneath; number/draw shortcuts must not play unseen moves while its controls have focus.
+    if(mode==='intel')event.stopPropagation();
+    if (event.key === 'Escape') { event.preventDefault();event.stopPropagation();close(); }
+  });
 
   return {
     tutorial,

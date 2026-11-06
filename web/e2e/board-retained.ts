@@ -50,9 +50,13 @@ try{
  assert(!await partial.evaluate(()=>document.documentElement.classList.contains('futa04-card-art-s1-ready')),'failed face keeps its text fallback');
  await partial.evaluate(()=>{
   const chat=document.getElementById('world-chat-list')!;chat.textContent='My fruit trees';
+  const ranking=document.getElementById('online-world-screen')??document.createElement('div');ranking.id='online-world-screen';
+  const name=document.createElement('button');name.id='v081-player-name';name.textContent='Fruit Garden';name.setAttribute('aria-label','Fruit Garden');ranking.append(name);if(!ranking.isConnected)document.body.append(ranking);
   const text=document.createElement('p');text.id='v081-copy';text.textContent='Fruit card';document.body.append(text);
  });
  await partial.waitForFunction(()=>document.getElementById('v081-copy')?.textContent==='Bomb');
  assert.equal(await partial.locator('#world-chat-list').textContent(),'My fruit trees','compatibility copy never rewrites player messages');
+ assert.equal(await partial.locator('#v081-player-name').textContent(),'Fruit Garden','Planet names retain their real spelling');
+ assert.equal(await partial.locator('#v081-player-name').getAttribute('aria-label'),'Fruit Garden','spoken Planet names also stay unchanged');
  await partial.close();console.log('PASS partial art loading and untouched player chat');
 }finally{await b.close();await f.server.close();}

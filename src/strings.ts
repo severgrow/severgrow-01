@@ -850,7 +850,7 @@ export const INTEL = Object.freeze({
   lead: (by: number): string => `You lead by ${by}`,
   behind: (by: number): string => `They lead by ${by}`,
   level: 'All square',
-  scoreLine: (you: number, them: number, turn: number): string => `${you} – ${them} points · turn ${turn}`,
+  scoreLine: (you: number, them: number, _turn: number): string => `${you} - ${them} points`,
   latest: 'LATEST',
   noMoves: 'No moves yet. The first card is face up on the Throw pile.',
   thrown: 'THROWN SO FAR',
@@ -891,7 +891,7 @@ export const INTEL = Object.freeze({
     tips: 'THIS MATCH',
     rules: 'HOW THE GAME WORKS',
     turn: (n: number): string => `TURN ${n}`,
-    reference: 'TEN LESSONS',
+    reference: 'REFERENCE',
   }),
   /** The scannable four-number readout (plus the public Bomb count). */
   stat: Object.freeze({
@@ -899,7 +899,7 @@ export const INTEL = Object.freeze({
     cuts: 'CUTS',
     deck: 'DECK',
     hand: 'HAND',
-    bombs: 'BOMBS',
+    bombs: 'UNSEEN BOMBS',
   }),
   /** A quiet Tips tab still looks composed: no blank panel, no empty sentence. */
   quiet: Object.freeze({

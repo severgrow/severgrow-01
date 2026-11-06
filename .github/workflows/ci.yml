@@ -79,7 +79,7 @@ jobs:
         with:
           name: foundation-081-screens
           path: |
-            docs/screens/match-intel/
+            /tmp/v081-intel/
             /tmp/v081-board/
             /tmp/main2-shots/
           retention-days: 7

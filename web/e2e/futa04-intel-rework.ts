@@ -17,7 +17,7 @@ import {checkVisual} from './helpers/visual-baseline.js';
 
 const served = await servePreview(4193, { logLevel: 'silent' });
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
-const dir = 'docs/screens/match-intel';
+const dir = process.env.SHOTS ?? '/tmp/v081-intel';
 mkdirSync(dir, { recursive: true });
 let checks = 0;
 const check = (value: unknown, label: string) => { assert(value, label); checks++; };
@@ -37,7 +37,7 @@ const intentPosition = (seed: number): State => {
 
 const openIntel = async (page: Page) => {
   await page.locator('#futa04-help-button').evaluate((el) => (el as HTMLButtonElement).click());
-  await page.waitForFunction(() => document.querySelector('#futasaku-glass')?.getAttribute('data-mode') === 'intel');
+  await page.waitForFunction(() => {const panel=document.querySelector<HTMLElement>('#futasaku-glass');return panel?.dataset.mode==='intel'&&!panel.hidden&&!panel.inert&&panel.dataset.ixState!=='closing';});
   await page.locator('#futasaku-glass .intel-tab').first().waitFor({ state: 'visible' });
 };
 const tab = async (page: Page, id: 'now' | 'tips' | 'rules') => {
@@ -134,11 +134,20 @@ try {
     check(now.scope === 'THE MATCH' && now.stats === 5 && !!now.lead, `${width}: Now keeps the match header and readout`);
     check(!!now.observation && !/LESSON|seed/i.test(now.observation ?? ''), `${width}: Now carries one strategic observation`);
     check(now.observation === matchObservation(view), `${width}: the observation follows the engine's read`);
+    check(!/turn/i.test(await page.locator('#futasaku-glass .intel-sub').textContent()??''),`${width}: the match clock appears once, without a repeated turn label`);
     const facts=await page.locator('#futasaku-glass .intel-stat:visible').evaluateAll(nodes=>nodes.map(n=>({key:n.getAttribute('data-key'),value:n.querySelector('.intel-stat-v')?.textContent})));
     check(facts.length===3,`${width}: three immediately useful facts, with record details folded`);
     check(facts.find(s=>s.key==='land')?.value===`${mine}–${theirs}`,`${width}: LAND agrees with the engine`);
+    // Capture the normal pointer/touch presentation before deliberately exercising keyboard focus.
+    await checkVisual(page,`now-${width}x${height}`,await page.screenshot({ path: `${dir}/now-${width}x${height}.png` }));
+    if(width===390&&process.env.UPDATE_VISUAL_BASELINE!=='1'){
+      const missing=await page.screenshot({style:'#futasaku-glass { visibility:hidden !important; }'});
+      await assert.rejects(()=>checkVisual(page,`now-${width}x${height}`,missing),/visual composition changed/);
+      check(true,'the visual guard rejects a missing reader instead of accepting a dark empty screen');
+    }
     await page.locator('#futasaku-glass .intel-record > summary').click();
     check(await page.locator('#futasaku-glass .intel-stat:visible').count()===5,`${width}: cuts and unseen Bomb count remain available in Match record`);
+    check(await page.locator('#futasaku-glass .intel-stat[data-key="bombs"] .intel-stat-k').textContent()==='UNSEEN BOMBS',`${width}: the public count never implies knowledge of their hand`);
     await page.locator('#futasaku-glass .intel-record > summary').click();
     await page.locator('#futasaku-glass [data-intel-tab="now"]').focus();
     await page.keyboard.press('ArrowRight');
@@ -147,7 +156,7 @@ try {
     check(await page.locator('#futasaku-glass [data-intel-tab="rules"]').getAttribute('aria-selected')==='true',`${width}: End selects Rules`);
     await page.keyboard.press('Home');
     check(await page.locator('#futasaku-glass [data-intel-tab="now"]').getAttribute('aria-selected')==='true',`${width}: Home returns to Now`);
-    await checkVisual(page,`now-${width}x${height}`,await page.screenshot({ path: `${dir}/now-${width}x${height}.png` }));
+    await page.screenshot({path:`${dir}/keyboard-${width}x${height}.png`});
 
     check(errors.length === 0, `${width}: no browser errors (${errors.join(' | ')})`);
     await page.close();
@@ -197,6 +206,15 @@ try {
   await motionPage.evaluate(a=>(window as any).__severgrow.playFor(a,0),draw);
   check(await motionPage.evaluate(id=>(document.activeElement as HTMLElement)?.dataset.tip===id,focusedTip),'a live match update preserves focus on the same strategic tip');
   await motionPage.waitForFunction(()=>!(window as any).__severgrow.busy());
+  await motionPage.locator('#hand [data-card]').first().evaluate(el=>(el as HTMLButtonElement).click());
+  const picked=await motionPage.evaluate(()=>(window as any).__severgrow.sel().card);
+  check(picked!==null,'Escape fixture has a picked card');
+  // Intel is already open after the live-update check. Do not toggle the help key shut:
+  // its old data-mode survives closing, so an Escape sent then would target the game.
+  check(await motionPage.locator('#futasaku-glass').isVisible(),'Escape is delivered to the open reader');
+  await motionPage.locator('#futasaku-glass .intel-close').focus();await motionPage.keyboard.press('Escape');
+  await motionPage.locator('#futasaku-glass').waitFor({state:'hidden'});
+  check(await motionPage.evaluate(()=>(window as any).__severgrow.sel().card)===picked,'closing Intel with Escape never cancels the picked card underneath');
   await motionPage.close();
 
   console.log(`${checks} Match Intel rework checks passed`);
