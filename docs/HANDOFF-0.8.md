@@ -62,11 +62,11 @@ touch.
 | 5 | Bomb/Blast heaviness: hit-stop, settle, shake (Blast), light dip, haptic thud — one shared impact | done (`logic/impact.ts`, `heavyImpact()` in main.ts) |
 | 6 | Opponent moves ~10% slower, same weight | done (PINNED.opponentPace in playStep) |
 | 7 | Dust specks on Bomb/Blast (premium or not at all) | done: soft gradient glow (`fx-dust`), ash motes now the same glow; film: `web/e2e/blast-film.ts` |
-| 8 | Charcoal #0e0f10 for every solid black | todo |
-| 9 | Menu/screen gaps; soft springs on sheets where good | todo |
+| 8 | Charcoal #0e0f10 for every solid black | done (`logic/charcoal.ts`, test `charcoal.test.ts`) |
+| 9 | Menu/screen gaps; soft springs on sheets where good | audited: no gaps (see notes) |
 | 10 | Consistency gaps (radii, focus, tokens, timing) | todo |
 | 11 | Quiet auto-lower on sustained frame drops | done (`player/frame-guard.ts`: <30 fps for 4 s during moves turns off dust/dim/shake for the visit) |
-| 12 | Beta 0.8 label | todo |
+| 12 | Beta 0.8 label | done |
 | 13 | Full checks, film, push, promote live, confirm | todo |
 
 ## Findings / notes (append as you go)
@@ -88,3 +88,12 @@ touch.
   bloomGap 1.14, rippleBig/Huge, blastRing/Max, opponentPace), `web/tests/cut.test.ts` (ripple per tier, cap),
   `web/tests/bloom-by-hand.test.ts` (blocking()), e2e `futa04-motion` + `cut-severe` ("a tap during my own cut
   no longer skips it").
+- **Frame cost (measured, not fixed — next priority for smoothness):** `web/e2e/motion-cost.ts` plays a big
+  Blast, a Bomb, a Huge cut and a Bloom at 4x CPU slowdown. Worst frame gaps 150-330 ms both BEFORE this pass
+  (bee46ac3: blast 317, bomb 167, huge cut 217, bloom 217) and after (233 / 150 / 233 / 183): no regression.
+  The stalls are the whole-page `render()` called by `show()` at each step's end (`__severgrow.renderCosts()`:
+  40-240 ms at 4x) and a CPU profile shows they are mostly style/layout/paint ("(program)"), plus forced
+  layouts (`getBoundingClientRect`). A real fix is a narrower render at step boundaries (board + scores only,
+  like `renderRevealTile()` does for Bloom tiles) — a bigger refactor of main.ts, left for a dedicated pass.
+- **Sheets/screens:** every sheet already opens and closes through `enterSurface`/`exitSurface`
+  (interface-motion.ts, a soft settle that is already spring-like); no gaps found, nothing changed there.
