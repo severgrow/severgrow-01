@@ -146,6 +146,12 @@ try{
   if(process.env.BASELINE_ROOT){await page.screenshot({path:`${shots}/before-${name}.png`});await context.close();continue;}
   await page.waitForSelector('[data-living-territory="menu"] .world-map-svg');
   await page.waitForFunction(()=>!!document.querySelector('.world-hex.mine'));
+  // App/DOM readiness can precede @starting-style's first paint on software WebKit. This section
+  // compares the settled menu with the panel, so await the exact existing target, not a 500ms guess.
+  await page.waitForFunction(target=>{
+   const svg=document.querySelector('.world-map-svg');
+   return !!svg&&Math.abs(Number(getComputedStyle(svg).opacity)-target)<=0.0006;
+  },MENU_MAP_OPACITY);
   await page.screenshot({path:`${shots}/menu-${name}.png`});
   check(`${name}: one real map behind menu`,(await state(page)).count===1);
   check(`${name}: menu backdrop is inert and inaccessible`,await page.evaluate(()=>{
