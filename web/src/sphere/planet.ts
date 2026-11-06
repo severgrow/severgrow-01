@@ -12,6 +12,7 @@
 // slide"); that is the only loop, it runs at ~30 fps, and it stops when the planet fills the window,
 // the page is hidden, or reduced motion is on.
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
+import { isDoubleTap, type TapPoint } from '../logic/double-tap.js';
 import { markPlanetPainted } from '../player/startup.js';
 import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT } from './upright.js';
 import { menuDiscRadius } from '../player/planet-lockup.js';
@@ -132,7 +133,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   let frameNow: Frame = { x: 0, y: 0, width: 1, height: 1 }, light = mode === 'menu' ? MENU_LIGHT : 1;
   let shownClip = '', shownLight = '';
   const pointers = new Map<number, { x: number; y: number }>();
-  let start: { x: number; y: number } | null = null, dragged = false, multi = false, pinch = 0, lastTap = 0;
+  let start: { x: number; y: number } | null = null, dragged = false, multi = false, pinch = 0;
+  let lastTap: TapPoint|null = null;
 
   const motion = () => interfaceMotionAllowed();
   /** The frame the current mode asks for: the whole screen behind the menu, the panel in the window. */
@@ -382,7 +384,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       return;
     }
     if (!dragged && start && Math.hypot(p.x - start.x, p.y - start.y) < 6) return;
-    dragged = true;
+    dragged = true;lastTap = null;
     q=northUpDrag(q,north,p.x-lastPointer.x,p.y-lastPointer.y,discRadius(frameNow.width,frameNow.height,zoom));
     lastPointer=p;
     ask();
@@ -391,7 +393,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (!pointers.has(e.pointerId)) return;
     const tap = pointers.size === 1 && !dragged && !multi && e.type === 'pointerup';
     pointers.delete(e.pointerId);
-    if (tap) tapAt(e.clientX, e.clientY);
+    if (tap) tapAt(e.clientX, e.clientY, e.timeStamp);
+    else lastTap = null;
     if(pointers.size===1)lastPointer={...pointers.values().next().value!};
     if(!pointers.size)start=null;
 
@@ -410,10 +413,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     keepAnchor();anchor=null;
     ask();
   }, { signal, passive: false });
-  const tapAt = (x: number, y: number) => {
+  const tapAt = (x: number, y: number, inputAt: number, allowDouble = true) => {
     const index = cellAt(x, y);
-    const now = performance.now(), double = now - lastTap < 320;
-    lastTap = double ? 0 : now;
+    const current = {x,y,at:inputAt}, double = allowDouble && isDoubleTap(lastTap,current,320,30);
+    lastTap = allowDouble && !double ? current : null;
     // A quick second tap zooms in on that spot, like the flat map's double tap; fully zoomed in, it
     // zooms back out to the opening size (owner, 2026-11-04: "double tap when full zoomed in should
     // zoom out not not do anything").
@@ -453,7 +456,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const c = centre();
-      tapAt(c.x, c.y);
+      tapAt(c.x, c.y, e.timeStamp, false);
     }
   }, { signal });
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; stop(); cancelAnimationFrame(raf); raf = 0; }, { signal });

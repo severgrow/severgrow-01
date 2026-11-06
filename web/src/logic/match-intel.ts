@@ -13,6 +13,7 @@ export type IntelMove = {
 };
 
 export type MatchIntel = {
+  outcome: 'won' | 'lost' | 'draw' | null;
   discarded: Card[];
   score: [number, number];
   territory: [number, number];
@@ -106,6 +107,7 @@ export const publicIntelMoves = (view: View, history: readonly Event[], me = vie
  *  most urgent read). Public information only: homes, land and the Draw pile. Home danger outranks
  *  everything — a match can end on the next Grow. */
 export const matchObservation = (view: View): string => {
+  if (view.result !== null) return '';
   const me = view.player;
   const mine = homeSides(view, me);
   const theirs = homeSides(view, me === 0 ? 1 : 0);
@@ -136,6 +138,7 @@ export const matchIntel = (view: View, history: readonly Event[], opening: reado
   const discarded = publicDiscardHistory(view, history, opening);
   const relative=(pair:[number,number]):[number,number]=>view.player===0?pair:[pair[1],pair[0]];
   return {
+    outcome: view.result === null ? null : view.result.winner === null ? 'draw' : view.result.winner === view.player ? 'won' : 'lost',
     discarded,
     score: [view.score, view.opponentScore],
     territory:relative(territory),

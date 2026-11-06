@@ -4,7 +4,7 @@ import type { IntelTip, TipKind } from '../logic/intel-guide.js';
 import { drawLedCells, ledMessageWidth } from './led-cells.js';
 import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { cardFace, suitClass } from '../ui/effects.js';
-import { INTEL } from '../../../src/strings.js';
+import { INTEL, RESULT } from '../../../src/strings.js';
 
 export type FocusShape = 'hex' | 'card' | 'pill' | 'none';
 export type TutorialWindowButtons = {
@@ -1641,14 +1641,15 @@ export const mountGlassSurface = (onClose: () => void) => {
   /** NOW: who leads, the match read, the readout, the latest moves and the public thrown cards. */
   const nowHtml = (data: MatchIntel): string => {
     const diff = data.score[0] - data.score[1];
-    const lead = diff > 0 ? INTEL.lead(diff) : diff < 0 ? INTEL.behind(-diff) : INTEL.level;
+    const lead = data.outcome ? RESULT[data.outcome] : diff > 0 ? INTEL.lead(diff) : diff < 0 ? INTEL.behind(-diff) : INTEL.level;
+    const observation = data.outcome ? '' : data.observation ?? INTEL.observation.open(data.deckCount);
     // A deck draw says nothing (the card is hidden), so the latest lines are the moves that show something.
     const telling = data.moves.filter(m => m.verb !== 'DREW');
     const latest = (telling.length ? telling : data.moves).slice(-4).reverse()
       .map(m => `<li class="intel-move" data-who="${m.who}">${safe(INTEL.move(m.who === 'you', m.verb, m.detail))}</li>`).join('');
     const cards = thrownCards(data);
     return scopeHtml('now', data)
-      + `<section class="intel-now-head"><h3 class="intel-lead">${safe(lead)}</h3><p class="intel-sub">${safe(INTEL.scoreLine(data.score[0], data.score[1], data.turn))}</p><p class="intel-observation">${safe(data.observation ?? INTEL.observation.open(data.deckCount))}</p></section>`
+      + `<section class="intel-now-head"><h3 class="intel-lead">${safe(lead)}</h3><p class="intel-sub">${safe(INTEL.scoreLine(data.score[0], data.score[1], data.turn))}</p>${observation ? `<p class="intel-observation">${safe(observation)}</p>` : ''}</section>`
       + `<div><p class="intel-comparison">${safe(INTEL.comparison)}</p>${readoutHtml(data)}</div>`
       + `<section><p class="intel-label">${INTEL.latest}</p>${latest ? `<ol class="intel-moves">${latest}</ol>` : `<p class="intel-none">${safe(INTEL.noMoves)}</p>`}</section>`
       + `<details class="intel-record"${recordOpen?' open':''}><summary>${safe(INTEL.record)}</summary>${readoutHtml(data,true)}<p class="intel-label">${INTEL.thrown}</p>${cards ? `<div class="intel-cards">${cards}</div>` : `<p class="intel-none">${safe(INTEL.thrownNone)}</p>`}</details>`;
@@ -1659,7 +1660,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     const tips = intelGuide.tips;
     const head = scopeHtml('tips', data);
     if (!tips.length) {
-      return head + `<div class="intel-quiet"><span class="intel-kind"><span class="intel-tip-mark" aria-hidden="true">▸</span>${safe(INTEL.quiet.title)}</span><p class="intel-quiet-line">${safe(INTEL.quiet.line)}</p></div>`;
+      return head + `<div class="intel-quiet"><span class="intel-kind"><span class="intel-tip-mark" aria-hidden="true">▸</span>${safe(data.outcome ? INTEL.complete.title : INTEL.quiet.title)}</span><p class="intel-quiet-line">${safe(data.outcome ? INTEL.complete.line : INTEL.quiet.line)}</p></div>`;
     }
     return head + `<ul class="intel-tips">${tips.map((tip, rank) => `<li>${tipHtml(tip, rank)}</li>`).join('')}</ul>`;
   };
@@ -1689,7 +1690,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     const oldTab=oldBody?.dataset.intelPanel as IntelTabId|undefined;
     if(oldBody&&oldTab)intelScroll[oldTab]=oldBody.scrollTop;
     const focused=document.activeElement as HTMLElement|null;
-    const focusSelector=focused&&panel.contains(focused)?focused.classList.contains('intel-close')?'.intel-close':focused.dataset.intelTab?`[data-intel-tab="${focused.dataset.intelTab}"]`:focused.dataset.tip?`.intel-tip[data-tip="${focused.dataset.tip}"]`:focused.dataset.rule?`.intel-rule[data-rule="${focused.dataset.rule}"]`:focused.closest('.intel-record')?'.intel-record > summary':focused.closest('.intel-full')?'.intel-full > summary':null:null;
+    const focusSelector=focused&&panel.contains(focused)?focused.classList.contains('intel-body')?'.intel-body':focused.classList.contains('intel-close')?'.intel-close':focused.dataset.intelTab?`[data-intel-tab="${focused.dataset.intelTab}"]`:focused.dataset.tip?`.intel-tip[data-tip="${focused.dataset.tip}"]`:focused.dataset.rule?`.intel-rule[data-rule="${focused.dataset.rule}"]`:focused.closest('.intel-record')?'.intel-record > summary':focused.closest('.intel-full')?'.intel-full > summary':null:null;
     panel.innerHTML = bar + `<div class="intel-body" id="intel-panel" role="tabpanel" tabindex="0" aria-labelledby="intel-tab-${intelTab}" data-intel-panel="${intelTab}"${animate ? '' : ' style="animation:none"'}>${body}</div>`;
     const nextBody=panel.querySelector<HTMLElement>('.intel-body');if(nextBody)nextBody.scrollTop=intelScroll[intelTab];
     if(focusSelector)(panel.querySelector<HTMLElement>(focusSelector)??panel.querySelector<HTMLElement>(`[data-intel-tab="${intelTab}"]`))?.focus({preventScroll:true});

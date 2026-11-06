@@ -752,11 +752,12 @@ try {
     });
     // THE RULE CHANGED (owner report, 2026-10-28): the defender is never charged, and the sheet used
     // to show the challenger's 50-Seed stake right above ACCEPT, which read as a price. The defender
-    // is now asked to answer, on a live countdown, and told outright that it costs nothing. The old
+    // is asked to answer on a live countdown, with the tile stake explicit. The 0.82 copy removes
+    // redundant pricing emphasis without changing that rule. The old
     // expectation here pinned the misleading copy; it is updated to the new rule, not weakened.
     check(`[${tag}] the defender sheet states the countdown and never charges them`,
       /Answer within .+ to keep it/.test(defendSheet.line) && !/50|Seeds/i.test(defendSheet.line) &&
-      defendSheet.meta === 'NO SEEDS TO PAY · YOUR TILE AT STAKE', `${defendSheet.line} | ${defendSheet.meta}`);
+      defendSheet.meta === 'YOUR TILE AT STAKE', `${defendSheet.line} | ${defendSheet.meta}`);
     check(`[${tag}] the defender sheet offers ACCEPT as the one primary key`,
       defendSheet.primary === 'ACCEPT' && defendSheet.secondary === 'DECLINE');
     // DECLINE is now armed by the first press (owner review, 2026-10-24): it is the one

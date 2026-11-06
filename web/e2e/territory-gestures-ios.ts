@@ -125,6 +125,8 @@ try {
     // refuses it, rather than assuming either way.
     const w = window as any;
     w.__capture = [] as string[];
+    w.__tapTrace=[];
+    window.addEventListener('pointerup',event=>{if(event.isTrusted&&event.pointerType==='touch'){w.__tapTrace.push({input:event.timeStamp,handled:performance.now()});if(w.__tapTrace.length>32)w.__tapTrace.shift();}},{capture:true});
     const original = Element.prototype.setPointerCapture;
     Element.prototype.setPointerCapture = function (this: Element, id: number) {
       try {
@@ -238,6 +240,7 @@ try {
   check('setPointerCapture is accepted on the SVG in WebKit', (await page.evaluate(`window.__capture.some((c) => c.startsWith('ok'))`)) === true, JSON.stringify(await page.evaluate(`window.__capture.splice(0, 3)`)));
 
   // ---- 2. a real quick double tap zooms, and the same gesture reverses it ---------------------
+  await page.evaluate('window.__tapTrace=[]');
   before = await view();
   await tap(cx, cy);
   await tap(cx, cy);
@@ -255,7 +258,7 @@ try {
   // first one always goes in".
   const firstWay = Math.sign(afterFirst![2]! - before![2]!);
   const secondWay = Math.sign(after![2]! - afterFirst![2]!);
-  check('a second double tap zooms the other way (a toggle)', firstWay !== 0 && secondWay === -firstWay, `${fmt(before?.[2])} -> ${fmt(afterFirst?.[2])} -> ${fmt(after?.[2])}`);
+  check('a second double tap zooms the other way (a toggle)', firstWay !== 0 && secondWay === -firstWay, `${fmt(before?.[2])} -> ${fmt(afterFirst?.[2])} -> ${fmt(after?.[2])}; input/delivery clocks ${JSON.stringify(await page.evaluate('window.__tapTrace'))}`);
 
   // ---- 3. a real pinch zooms -----------------------------------------------------------------
   before = await view();

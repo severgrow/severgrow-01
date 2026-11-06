@@ -17,7 +17,7 @@
 // Pure: it reads the player's View (public information and their own hand) and nothing else.
 // It never reads the opponent's hand or the order of the deck; `View` does not carry either.
 import {
-  allNeighbors, bloomGroups, coordKey, homeCoord, legalActions, parseKey, planMegaBomb,
+  allNeighbors, bloomGroups, coordKey, homeCoord, legalActions, planMegaBomb,
 } from '../../../src/engine/index.js';
 import type { Action, Coord, RulesConfig, View } from '../../../src/engine/index.js';
 import { INTEL, LESSON as W } from '../../../src/strings.js';
@@ -101,25 +101,17 @@ const growths = (v: View, legal: readonly Action[]): { key: string; rank: number
   return out;
 };
 
-/** Their home's sides that are still empty (the ones a Grow can take). */
+/** Every side not yet ours, including a defended side a legal overgrow can take. */
 const theirOpenSides = (v: View): string[] => {
   const their = v.player === 0 ? 1 : 0;
   return allNeighbors(homeCoord(their, v.config))
     .map(coordKey)
-    .filter((key) => key in v.board && v.terrain[key] !== 'rock' && !v.board[key]);
+    .filter((key) => key in v.board && v.terrain[key] !== 'rock' && v.board[key]?.owner !== v.player);
 };
 
-/** Enemy non-home tiles this network could overgrow on a later turn (a stronger card exists). */
-const takeable = (v: View): number => {
-  const me = v.player;
-  const keys = new Set<string>();
-  for (const [key, tile] of Object.entries(v.board)) {
-    if (!tile || tile.owner === me || tile.root || tile.strength >= v.config.maxRank) continue;
-    const coord = parseKey(key);
-    if (allNeighbors(coord).some((n) => v.board[coordKey(n)]?.owner === me)) keys.add(key);
-  }
-  return keys.size;
-};
+/** Only takeovers actually available with this hand and this turn's Grow allowance. */
+const takeable = (v: View,legal:readonly Action[]): number => new Set(legal.flatMap(a =>
+  a.t==='Sprout' && v.board[coordKey(a.coord)]?.owner===(v.player===0?1:0) ? [coordKey(a.coord)] : [])).size;
 
 const maxStrength = (v: View, coords: readonly Coord[]): number =>
   coords.reduce((best, c) => Math.max(best, v.board[coordKey(c)]?.strength ?? 0), 0);
@@ -129,6 +121,7 @@ const maxStrength = (v: View, coords: readonly Coord[]): number =>
  * tests; `intelTips` ranks and bounds it for the panel.
  */
 export const matchAllTips = (v: View, legal: readonly Action[] = legalActions(v)): IntelTip[] => {
+  if (v.result !== null) return [];
   const out: IntelTip[] = [];
   const add = (tip: IntelTip) => { if (!out.some((t) => t.id === tip.id)) out.push(tip); };
   const me = v.player;
@@ -144,7 +137,7 @@ export const matchAllTips = (v: View, legal: readonly Action[] = legalActions(v)
   if (v.result === null && mineHome.taken > 0 && myLeft > 0 && myLeft <= 2) {
     const text = INTEL.tips.home(myLeft, mineHome.taken);
     add({
-      id: 'home', kind: 'danger', severity: 'critical', priority: 0,
+      id: 'home', kind: 'danger', severity: 'critical', priority: 1,
       ...text,
       evidence: [
         { value: `${myLeft}/${mineHome.openSides}`, label: 'OPEN' },
@@ -154,12 +147,15 @@ export const matchAllTips = (v: View, legal: readonly Action[] = legalActions(v)
     });
   }
   if (v.result === null && theirHome.taken > 0 && theirLeft > 0 && theirLeft <= 2) {
-    const open = new Set(theirOpenSides(v));
-    const growKeys = growths(v, legal).map((g) => g.key);
-    const winNow = acting && growKeys.some((key) => open.has(key));
-    const text = INTEL.tips.surround(theirLeft, theirHome.taken, winNow);
+    const open = theirOpenSides(v);
+    // One complete legal action must take every remaining side. Separate alternatives cannot
+    // be added together, and a defended side is still a side the opponent holds.
+    const finish = acting ? legal.find(a => a.t === 'Sprout'
+      ? open.length === 1 && coordKey(a.coord) === open[0]
+      : a.t === 'Bloom' && open.every(key => a.hexes.some(h => coordKey(h) === key))) : undefined;
+    const text = INTEL.tips.surround(theirLeft, theirHome.taken, finish?.t === 'Bloom' ? 'Bloom' : finish ? 'Grow' : null);
     add({
-      id: 'surround', kind: 'opportunity', severity: 'critical', priority: 1,
+      id: 'surround', kind: 'opportunity', severity: 'critical', priority: finish ? 0 : 2,
       ...text,
       evidence: [
         { value: `${theirLeft}/${theirHome.openSides}`, label: 'OPEN' },
@@ -221,7 +217,7 @@ export const matchAllTips = (v: View, legal: readonly Action[] = legalActions(v)
 
     const bloomTiles = legal.reduce((best, a) => (a.t === 'Bloom' ? Math.max(best, a.hexes.length) : best), 0);
     if (bloomTiles > 0) {
-      const text = INTEL.tips.bloom(bloomTiles);
+      const text = INTEL.tips.bloom(bloomTiles, v.sproutsThisTurn < v.config.sproutsPerTurn);
       add({
         id: 'bloom', kind: 'opportunity', severity: 'steady', priority: 7,
         ...text,
@@ -234,7 +230,7 @@ export const matchAllTips = (v: View, legal: readonly Action[] = legalActions(v)
     if (bombs.length) {
       const bombsInHand = v.hand.filter((card) => card.suit === null).length;
       const theirBest = maxStrength(v, bombs.map((a) => a.target));
-      const text = INTEL.tips.bomb(theirBest);
+      const text = INTEL.tips.bomb(theirBest, !!v.config.fruitUsesSprout);
       add({
         id: 'bomb', kind: 'opportunity', severity: 'steady', priority: 8,
         ...text,
@@ -304,8 +300,8 @@ export const matchAllTips = (v: View, legal: readonly Action[] = legalActions(v)
       rule: 4,
     });
   }
-  if (out.length < 2 && v.config.allowOvergrow !== false) {
-    const n = takeable(v);
+  if (acting && out.length < 2 && !out.some(t=>t.id==='cut') && v.config.allowOvergrow !== false) {
+    const n = takeable(v,legal);
     if (n > 0) {
       const text = INTEL.tips.stronger(n);
       add({
@@ -323,8 +319,12 @@ const urgency = (a: IntelTip, b: IntelTip): number =>
   SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.priority - b.priority;
 
 /** The ranked, bounded Tips list for the panel: the most urgent read first, at most three. */
-export const intelTips = (v: View, legal: readonly Action[] = legalActions(v)): IntelTip[] =>
-  [...matchAllTips(v, legal)].sort(urgency).slice(0, 3);
+export const intelTips = (v: View, legal: readonly Action[] = legalActions(v)): IntelTip[] => {
+  const ranked=[...matchAllTips(v, legal)].sort(urgency);
+  // A verified finish makes other advice a distraction. Keep the established three-tip bound
+  // elsewhere, but let this one legal winning action stand on its own.
+  return ranked[0]?.id==='surround'&&ranked[0].priority===0 ? ranked.slice(0,1) : ranked.slice(0,3);
+};
 
 /** The lesson the Rules tab opens at: the one behind the most urgent tip. */
 export const nearestRule = (tips: readonly IntelTip[]): number => tips[0]?.rule ?? 1;

@@ -182,6 +182,50 @@ try {
   await quietPage.screenshot({ path: `${dir}/quiet-390x844.png` });
   await quietPage.close();
 
+  // Reading the panel itself is a keyboard action too, not only focusing one of its keys.
+  const reading = await browser.newPage({viewport:{width:390,height:844}});
+  await reading.addInitScript(save=>{localStorage.setItem('main2:severgrow.save.v7',save);localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,speed:'skip',reduceMotion:true}));},positionSave({state:intentPosition(11)}));
+  await reading.goto(served.url);await resumeSavedGame(reading);await openIntel(reading);await tab(reading,'rules');
+  await reading.locator('#futasaku-glass .intel-body').focus();
+  const readingDraw=await reading.evaluate(()=>(window as any).__severgrow.legal().find((a:Action)=>a.t==='Draw'&&a.from==='deck'));
+  check(readingDraw,'reading fixture has a legal live update');
+  await reading.evaluate(a=>(window as any).__severgrow.playFor(a,0),readingDraw);
+  await reading.waitForFunction(()=>!(window as any).__severgrow.busy());
+  check(await reading.evaluate(()=>document.activeElement?.classList.contains('intel-body')),'a live update preserves focus while reading the Rules panel itself');
+  await reading.close();
+
+  const almost = newGame(11);
+  almost.phase='ACT';almost.actor=0;almost.turnPlayer=0;
+  almost.hands[0]=[{id:1002,suit:0,rank:9}];
+  for(const key of Object.keys(almost.board)){
+    almost.terrain[key]='normal';
+    if(!almost.board[key]?.root)almost.board[key]={owner:0,strength:1};
+  }
+  const lastSide=allNeighbors(homeCoord(1,almost.config)).map(coordKey).find(k=>k in almost.board)!;
+  almost.board[lastSide]=null;
+  const finished=await browser.newPage({viewport:{width:390,height:844}});
+  await finished.addInitScript(save=>{localStorage.setItem('main2:severgrow.save.v7',save);localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,speed:'skip',reduceMotion:true}));},positionSave({state:almost}));
+  await finished.goto(served.url);await resumeSavedGame(finished);
+  const winningGrow=await finished.evaluate(key=>(window as any).__severgrow.legal().find((a:Action)=>a.t==='Sprout'&&`${a.coord.q},${a.coord.r}`===key),lastSide);
+  check(winningGrow,'final-review fixture offers the real winning Grow');
+  await openIntel(finished);await tab(finished,'tips');
+  check(await finished.locator('.intel-tip').count()===1,'one verified finish stands alone without competing advice');
+  check((await finished.locator('.intel-tip-headline').textContent())?.includes('finish with a Grow'),'the winning advice names the actual available action');
+  await finished.screenshot({path:`${dir}/winning-tip-390x844.png`});
+  await finished.locator('.intel-close').click();await finished.locator('#futasaku-glass').waitFor({state:'hidden'});
+  await finished.evaluate(a=>(window as any).__severgrow.playFor(a,0),winningGrow);
+  await finished.waitForFunction(()=>!(window as any).__severgrow.busy());
+  // Complete the normal first-win invitation before reviewing the final board.
+  await finished.locator('#install-close').click();
+  if(!await finished.locator('#go-board').isVisible())await finished.locator('#go-more').click();
+  await finished.locator('#go-board').click();await openIntel(finished);await tab(finished,'now');
+  check(await finished.locator('.intel-lead').textContent()==='You won','Now names the actual outcome after the match');
+  check(await finished.locator('.intel-observation').count()===0,'the final position never carries future-turn advice');
+  await finished.screenshot({path:`${dir}/finished-now-390x844.png`});
+  await tab(finished,'tips');
+  check(await finished.locator('.intel-tip').count()===0&&(await finished.locator('.intel-kind').textContent())?.replace('▸','').trim()==='MATCH COMPLETE','finished Tips never recommend another move');
+  await finished.close();
+
   // Motion ON keeps the interface vocabulary: the body arrives with the shared token, not a new one.
   const motionPage = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   await motionPage.addInitScript((save) => {

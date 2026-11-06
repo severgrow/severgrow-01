@@ -730,6 +730,7 @@ try{
    const started=[...frames].reverse().find(f=>f.start!==null);
    const beatStart=started?started.start:null;
    const clockAdvancing=beatStart!==null;
+   const largestPaintGap=Math.max(0,...frames.slice(1).map((frame,index)=>frame.at-frames[index]!.at));
    const swapT=beatStart!==null&&swap>=0?frames[swap]!.at-beatStart:Number.NaN;
    // The samples past the landing keyframe (offset .9, where the map is at DIP and can only be dim).
    // An empty set means the engine painted nothing between the tap and the swap, not that the map
@@ -768,7 +769,7 @@ try{
    // THE RETREAT IS 300ms, NOT THE ARRIVAL'S SECOND (owner, 2026-11-02: "and 0.3s when going back
    // to main menu"). On a live clock the swap is timed against the beat; on a pending one the
    // declared duration is the evidence. Both say the same thing, and both are printed.
-   check(`the retreat clears in one colour-out beat (${clockAdvancing?`${Math.round(swapT)}ms measured on the beat's own clock ≈ ${INTERFACE_MOTION.colourOut}ms, not the ${INTERFACE_MOTION.colourIn}ms arrival`:`${pendingNote}; the framing still swapped ${Math.round(swapAt)}ms after the click, so the declared ${INTERFACE_MOTION.colourOut}ms colour-out token — not the ${INTERFACE_MOTION.colourIn}ms arrival — is the beat`})`,
+   check(`the retreat clears in one colour-out beat (${clockAdvancing?`${Math.round(swapT)}ms measured on the beat's own clock ≈ ${INTERFACE_MOTION.colourOut}ms, not the ${INTERFACE_MOTION.colourIn}ms arrival; largest painted gap ${Math.round(largestPaintGap)}ms`:`${pendingNote}; the framing still swapped ${Math.round(swapAt)}ms after the click, so the declared ${INTERFACE_MOTION.colourOut}ms colour-out token — not the ${INTERFACE_MOTION.colourIn}ms arrival — is the beat`})`,
     swap>0&&!tooQuick&&(clockAdvancing?(swapT>=INTERFACE_MOTION.colourOut&&swapT<INTERFACE_MOTION.colourIn):retreatGraded));
    check(`the retreat runs the colour-out token duration (${INTERFACE_MOTION.colourOut}ms), not a literal`,
     frames.some(f=>f.out===INTERFACE_MOTION.colourOut));

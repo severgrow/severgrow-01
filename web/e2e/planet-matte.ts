@@ -65,10 +65,14 @@ try{
   const playKeys=await p.evaluate(fn=>['menu-campaign','menu-new'].map(id=>(0,eval)(`(${fn})`)(document.getElementById(id))),material.toString());
   assert.deepEqual(playKeys[0],playKeys[1],'LEVEL and PRACTICE MATCH share the same material');
   await p.screenshot({path:`${shots}/play-${width}.png`});
+  await p.waitForFunction(()=>getComputedStyle(document.getElementById('play-menu')!).opacity==='1'&&!document.querySelector('.planet-canvas'));
+  await p.screenshot({path:`${shots}/play-rest-${width}.png`});
   await p.locator('#menu-new').click();
   const difficulties=await p.locator('.difficulty-tile').evaluateAll((els,fn)=>els.map(el=>(0,eval)(`(${fn})`)(el)),material.toString());
   for(const key of difficulties)assert.deepEqual(key,keys[0],'difficulty uses the same material');
   await p.screenshot({path:`${shots}/difficulty-${width}.png`});
+  await p.waitForFunction(()=>getComputedStyle(document.getElementById('levels')!).opacity==='1');
+  await p.screenshot({path:`${shots}/difficulty-rest-${width}.png`});
   await p.locator('#levels-back').click();
   if(await p.locator('#play-back').isVisible())await p.locator('#play-back').click();
   await p.locator('#menu-world').click();await settled(p);

@@ -14,6 +14,7 @@ import {
   shiftLightness,
 } from '../../../src/tile-colours.js';
 import { CHALLENGE } from './challenge-copy.js';
+import { isDoubleTap } from '../logic/double-tap.js';
 import type { ChallengeMarker } from './challenge-view.js';
 import {
   CHALLENGE_RAIL_MAX,
@@ -4239,15 +4240,15 @@ export class WorldView {
      * The cost is one visible detail: the first tap of a double tap selects the tile it lands on
      * before the zoom. That is a momentary highlight, never a wrong board.
      */
-    const finishTap = (x: number, y: number) => {
-      const now = Date.now();
+    const finishTap = (x: number, y: number, at: number) => {
+      const current = {at,x,y};
       const previous = this.lastTap;
       this.lastTap = null;
-      if (previous && now - previous.at <= DOUBLE_TAP_MS && Math.hypot(x - previous.x, y - previous.y) <= DOUBLE_TAP_SLOP) {
+      if (isDoubleTap(previous,current,DOUBLE_TAP_MS,DOUBLE_TAP_SLOP)) {
         toggleZoom(x, y);
         return;
       }
-      this.lastTap = { at: now, x, y };
+      this.lastTap = current;
       tapAt(x, y);
     };
     svg.addEventListener('wheel', (event) => {
@@ -4421,7 +4422,7 @@ export class WorldView {
       // A tap, not the end of a pan: hand it to the double-tap arbiter. (Mouse's right/middle
       // buttons, a second finger, and a CANCELLED touch are not taps — a cancel means the browser
       // took the gesture, so it can never select a tile.)
-      if (wasSingle && !this.dragged && !this.multiGesture && event.type === 'pointerup' && event.button === 0) { this.fitAfterZoom = false; finishTap(event.clientX, event.clientY); }
+      if (wasSingle && !this.dragged && !this.multiGesture && event.type === 'pointerup' && event.button === 0) { this.fitAfterZoom = false; finishTap(event.clientX, event.clientY, event.timeStamp); }
       if (!this.pointers.size) {
         this.dragged = false;
         this.multiGesture = false;

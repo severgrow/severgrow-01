@@ -6328,7 +6328,7 @@ function renderOnboardingGuide(v: View) {
 
 function updateFuta04Help() {
   const free = tutorialFreePlayActive();
-  const unavailable=!session || (!!coach.tutorial && !free) || !!openSheet || session.state.phase==='GAME_OVER';
+  const unavailable=!session || (!!coach.tutorial && !free) || !!openSheet || (session.state.phase==='GAME_OVER'&&!gameOverDismissed);
   futa04Help?.update({ blocked: IS_FUTA04 ? unavailable : unavailable || busy() || !!session?.pending || !!draw.shape.length || cardPinned });
 }
 
