@@ -236,6 +236,16 @@ try{
    menuFrame=await painted();
    await page.evaluate(()=>{
     (window as any).__firstFrame=null;
+    // Keep the actual animation reference from creation. A software WebKit frame can arrive after
+    // its finished handler has cancelled it, when getAnimations() no longer lists the beat.
+    // Its immutable keyframes still prove the same duration/dip assertions; never rewind its clock.
+    const map=document.querySelector<SVGSVGElement>('.world-map-svg')!;
+    const animate=map.animate.bind(map);(window as any).__arrivalAnimation=null;
+    map.animate=(...args:Parameters<Element['animate']>)=>{
+     const beat=animate(...args);
+     queueMicrotask(()=>{if(beat.id==='living-colour-in')(window as any).__arrivalAnimation=beat;});
+     return beat;
+    };
     document.getElementById('menu-world')!.addEventListener('click',()=>{
      const clickAt=performance.now();
      requestAnimationFrame(()=>{
@@ -250,7 +260,7 @@ try{
       // THE BEAT'S OWN DECLARATION, captured while the beat exists (a finished beat is cancelled, so
       // `getAnimations()` no longer lists it at rest). Keyframes and timing are the author's data, not
       // a renderer's opinion, so Node can judge the invariant even when this callback fired late.
-      const light=svg?.getAnimations().find(a=>a.id==='living-colour-in');
+      const light=svg?.getAnimations().find(a=>a.id==='living-colour-in')??(window as any).__arrivalAnimation as Animation|undefined;
       const lightEffect=light?.effect as KeyframeEffect|null|undefined,lightTiming=lightEffect?.getTiming();
       const structure=light&&lightEffect&&lightTiming?{id:light.id,
        duration:typeof lightTiming.duration==='number'?lightTiming.duration:String(lightTiming.duration),
@@ -302,7 +312,7 @@ try{
     const capture=()=>{
      if((window as any).__colourStructure)return;
      const svg=document.querySelector<SVGSVGElement>('.world-map-svg');
-     const light=svg?.getAnimations().find(a=>a.id==='living-colour-in');
+     const light=svg?.getAnimations().find(a=>a.id==='living-colour-in')??(window as any).__arrivalAnimation as Animation|undefined;
      const effect=light?.effect as KeyframeEffect|null|undefined;
      if(!light||!effect)return;
      const timing=effect.getTiming();
@@ -383,7 +393,7 @@ try{
      anim:anims.length,duration:settle?.effect?.getTiming().duration??null,easing:settle?.effect?.getTiming().easing??null,
      // The colour track is the ONE layer that multiplies every tile's fill: its own duration is
      // recorded here so the assertion can name the owner's token, not a frame estimate.
-     colour:anims.find(a=>a.id==='living-colour-in')?.effect?.getTiming().duration??null,
+     colour:(anims.find(a=>a.id==='living-colour-in')??(window as any).__arrivalAnimation as Animation|undefined)?.effect?.getTiming().duration??null,
      from:(settle as any)?.effect?.getKeyframes?.().map((k:any)=>k.transform)??null};
     frames.push(frame);
     // Software WebKit can spend a frame flushing styles. Keep the same minimum observations
