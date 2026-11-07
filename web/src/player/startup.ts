@@ -1,8 +1,8 @@
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
 import { EASE } from '../logic/motion.js';
 
-/** The first reveal's fade from black. */
-export const STARTUP_FADE_MS = 400;
+/** The first reveal's fade from charcoal into the composed menu (~1 s, owner 2026-11-07). */
+export const STARTUP_FADE_MS = 1000;
 
 export function createStartupGate(reveal:()=>void) {
   let app=false,fonts=false,planet=false,needsPlanet=true,done=false;
@@ -26,8 +26,8 @@ export function mountStartupReveal():void {
     window.removeEventListener('futasaku:startup-visible',fallback);
     observer?.disconnect();
     if(waiting&&interfaceMotionAllowed()){
-      // One short fade from black (owner, 2026-11-06: "black screen until fully loaded and fade in ... no
-      // longer than 1s or 1.5s"): the dark holds at most 1.5 s (index.html), then 400 ms.
+      // One short fade from charcoal (owner, 2026-11-07: dark immediately, then ~1 s into the menu):
+      // the dark holds at most 1.5 s (index.html), then STARTUP_FADE_MS.
       const beat=document.body.animate([{opacity:0},{opacity:1}],{duration:STARTUP_FADE_MS,easing:EASE.out});
       beat.id='startup-reveal';
     }

@@ -32,6 +32,10 @@ describe('charcoal', () => {
     expect(html).toMatch(/html:where\(\.space-first\)\{background:#0e0f10\}/);
     expect(html).toMatch(/html\.space-first #boot-cover \{[^}]*background: #0e0f10/);
     expect(read('../src/player/space-backdrop.ts')).toContain('background: #0e0f10');
+    // After data-startup lifts, main CSS must keep charcoal on the shell (not soil --c-bg).
+    // Specificity without :where() so it beats `html { background: var(--c-bg) }` (H5).
+    const style = read('../src/style.css');
+    expect(style).toMatch(/html\.space-first,\s*\nhtml\.space-first body \{\s*\n\s*background:\s*#0e0f10;/);
   });
 
   it("the space shader's deepest sky is charcoal too, never below it", () => {

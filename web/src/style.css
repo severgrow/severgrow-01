@@ -77,6 +77,14 @@ body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
+/* After the startup gate lifts, keep charcoal on the live shell. `--c-bg` stays soil for boards
+   and panels; without this, the later `html { background: var(--c-bg) }` beats
+   `#first-ground`'s zero-specificity `:where(.space-first)` and a soil strip flashes at reveal
+   (docs/IOS-FLASH-AUDIT-0.83.md H5; owner, 2026-11-07). No `:where()` — specificity must win. */
+html.space-first,
+html.space-first body {
+  background: #0e0f10;
+}
 button {
   font: inherit;
   color: inherit;
@@ -487,24 +495,18 @@ html.test-typography-v2.world-reserved #menu:not([data-laid-out]) #menu-world[hi
   visibility: hidden;
   pointer-events: none;
 }
-/* The emblem is the last thing that used to arrive: `drawLogo()` builds it from an SVG filter
-   during the module's boot, so the whole menu column sat 73px higher until it did. The same
-   silhouette paints the logo's exact box from the first frame (as a CSS mask, no filter); the SVG
-   replaces it in place and the rule steps aside while an SVG child exists (same shape, same size). */
+/* Home-menu PAINT mark: reserve the lockup box from the first frame (CSS image), then branding
+   replaces it with the same PAINT asset (img) so the column never jumps. */
 html.test-typography-v2 #menu #logo {
   display: block;
   width: min(240px, 58vw, 26dvh);
-  aspect-ratio: 1;
+  aspect-ratio: 300 / 94;
   margin: 0 auto;
-  background: var(--c-accent);
+  background: center / contain no-repeat url('./assets/brand/paint-wordmark-shadow.png');
   opacity: 0.9;
-  -webkit-mask: url('./assets/futasaku-primary-logo.svg') center / contain no-repeat;
-  mask: url('./assets/futasaku-primary-logo.svg') center / contain no-repeat;
 }
-html.test-typography-v2 #menu #logo:has(> svg) {
+html.test-typography-v2 #menu #logo:has(> :is(svg, img)) {
   background: none;
-  -webkit-mask: none;
-  mask: none;
   opacity: 1;
 }
 .menu-buttons {
@@ -575,7 +577,8 @@ html.test-typography-v2 #menu #logo:has(> svg) {
    shrink with the column; the label is one line at every size (Large text included). */
 #menu .menu-buttons .btn,
 #menu .menu-footer .btn,
-#play-menu .menu-buttons .btn {
+#play-menu .menu-buttons .btn,
+#levels .level-grid .difficulty-tile {
   min-height: var(--menu-key-h);
   height: var(--menu-key-h);
 }

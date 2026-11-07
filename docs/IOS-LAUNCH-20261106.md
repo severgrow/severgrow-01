@@ -1,26 +1,36 @@
-# Installed-app launch follow-up
+# Installed-app launch (updated 2026-11-07)
 
-Based on 15f80b7c, preserving Claude's Beta 0.8 and startup-image changes.
+## Goal
 
-The supplied 60fps recording shows a bright saved menu in iOS's opening zoom, followed by a dark
-cover and another menu reveal. Analysis of all 275 downscaled frames found no full white frame in
-this particular clip. Other native launch flashes cannot be ruled out by this recording.
+Standalone home-screen launches on both **futasaku.com** and **/test/**: charcoal `#0e0f10`
+immediately → one subtle ~1 s fade into the fully composed menu. No white/grey flash, no old logo,
+no unfinished planet, no double fade.
 
-The page cover now waits for the actual Planet canvas paint and loaded fonts, not just the
-planet-on mount class. Cold launch uses the same one-second reveal as /test; /test no longer stacks
-that body entrance with a second cover. The existing 1.2-second readiness deadline remains.
+## What the page controls
 
-Installed apps retain the same cover as a hidden reusable snapshot shield. visibilitychange/pagehide
-show it synchronously when backgrounding; foreground/BFCache restoration reveal the unchanged app
-with one 220ms fade. Duplicate lifecycle events share one reveal. Ordinary browser tabs do not get
-this resume curtain. Reduced motion skips fades. Frame requests and timers are cancelled when the
-app suspends or the reveal completes. No saved data, gameplay or navigation is changed.
+1. **First byte** (`index.html` `#first-ground`): `html` / `body` background `#0e0f10` (was the
+   greyer soil `#18191a`, which read as a grey flash before `space-first` CSS arrived).
+2. **`theme-color`**: `#0e0f10` (matches the manifest).
+3. **`apple-touch-startup-image`**: plain charcoal PNGs for every listed iPhone/iPad size
+   (`web/src/logic/splash.ts`, `web/public/splash/`). Verified solid `#0e0f10`.
+4. **Startup gate** (`player/startup.ts`): body stays hidden until fonts + planet paint (or the
+   1.5 s fail-open), then **one** 1000 ms fade. Boot cover is hidden whenever
+   `data-startup="waiting"` so the two entrances never stack.
+5. **Manifest** `background_color` / `theme_color`: `#0e0f10`.
 
-Native iOS launch screens and cached snapshots precede page JavaScript. The existing dark startup
-PNGs and color-scheme metadata remain necessary. The snapshot shield is best effort, not a claim
-that web code controls every native animation frame. Existing installs may need one updated
-open/background cycle before their saved preview becomes dark. Do not delete app or save data.
+## Native iOS limits (honest)
 
-Verification: lifecycle unit tests; real Chromium page tests for installed/browser startup,
-background snapshots, resume, BFCache, unchanged storage and JavaScript-disabled first paint.
-Physical iPhone home-screen verification is still required. Browser emulation is not native iOS.
+Native launch chrome **precedes** page JavaScript:
+
+- If a device’s exact `apple-touch-startup-image` media query is missing, iOS may show a white
+  default or a zoom from the home-screen icon snapshot.
+- Cached **snapshots** from earlier opens can briefly show an old bright menu until the next
+  background/foreground cycle refreshes them. Do not delete app or save data to “fix” that.
+- Browser / Playwright emulation is **not** a physical home-screen launch. Physical iPhone
+  verification remains required after this pass.
+
+## Verification
+
+Unit: `boot-cover`, `splash`, `charcoal`, `startup-gate`. Browser: installed-app / PWA viewport
+suites where present. Physical iPhone: add to Home Screen on both live and `/test/`, cold-kill,
+relaunch, confirm charcoal → ~1 s fade, no white/grey.

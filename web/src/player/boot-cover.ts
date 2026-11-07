@@ -1,8 +1,8 @@
 // The first-paint cover (owner, 2026-11-06: black until loaded, then one short fade into the menu).
 // Native iOS launch screens precede JavaScript: the apple startup images (logic/splash.ts) cover that.
 // (The installed-app re-cover on every app switch was removed: it re-darkened the screen on return.)
-export const BOOT_COVER_MAX_MS = 1200;
-export const BOOT_COVER_FADE_MS = 300;
+export const BOOT_COVER_MAX_MS = 1500;
+export const BOOT_COVER_FADE_MS = 1000;
 export const BOOT_RESUME_FADE_MS = 220;
 
 export const liftBootCover = (opts: { reduceMotion: boolean }): void => {
