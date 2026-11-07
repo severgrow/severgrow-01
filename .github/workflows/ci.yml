@@ -22,20 +22,89 @@ jobs:
       - run: npm run web:build && node scripts/check-channel-assets.mjs
       - run: CHANNEL=futa-test npm run web:build && CHANNEL=futa-test node scripts/check-channel-assets.mjs
 
+  # ONE build per channel, shared by every browser suite (owner, 2026-11-07: fast preview path).
+  # Was: each of ~18 matrix jobs rebuilt from scratch (~2–4 min each). Now: two build jobs total.
+  build-futa04:
+    name: build futa04 (browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: CHANNEL=futa04 npm run web:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-futa04
+          path: web/dist
+          retention-days: 1
+
+  build-futa05:
+    name: build futa05 (browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Shared futa05 build for lessons / sphere / planet / territory-challenges. Suites stub the
+      # network; WebKit-safe closed port avoids reserved-port failures in constructors.
+      - run: >
+          CHANNEL=futa05 VITE_FIND_OPPONENT=1
+          VITE_DUEL_API_URL=http://127.0.0.1:65530/functions/v1/duel
+          VITE_SUPABASE_URL=http://127.0.0.1:65530
+          VITE_SUPABASE_ANON_KEY=local
+          npm run web:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-futa05
+          path: web/dist
+          retention-days: 1
+
   browser:
     # Independent suites use separate runners, keeping their assertions and avoiding
     # repeating successful suites when one driver fails.
+    needs: [build-futa04, build-futa05]
     strategy:
       fail-fast: false
       matrix:
-        # Every suite here tests what this branch SHIPS: futa04-*, cut-severe and the territory
-        # suites build the product channel; lessons-3 (levels 1-10, the tutorial) builds futa05.
-        # REMOVED 2026-10-29: smoke, painting, overhaul, monkey, emptyturn, fruitcards and propass built
-        # the historic `live` channel (Main, now frozen at /firststep/ and rebuilt from its own SHA), which
-        # this branch never publishes; smoke also flaked and cost a full re-run of a deploy. They still
-        # run wherever that channel is developed. territory-gestures-ios runs on WebKit: it is the suite
-        # that would have caught the iPhone pan/pinch freeze that Chromium missed (2026-10-28).
-        suite: [futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock, futa04-lesson-9-free, futa04-motion, cut-severe, lessons-3, territory-menu, territory-challenges, territory-gestures, territory-gestures-ios, living-territory, living-territory-ios, territory-final-polish, sphere-test, sphere-test-ios, planet-matte]
+        # Fast preview path (feature branches / PRs): the suites that catch most product breaks.
+        # Full release path (futa0.5-online): every suite below — promote/live still waits for this
+        # full CI on the release-branch commit (docs/RELEASE-FLOW.md). Tests are never deleted.
+        include:
+          # --- always (preview + release) ---
+          - { suite: futa04-critical, channel: futa04, tier: always }
+          - { suite: futa04-information, channel: futa04, tier: always }
+          - { suite: futa04-motion, channel: futa04, tier: always }
+          - { suite: lessons-3, channel: futa05, tier: always }
+          - { suite: territory-menu, channel: futa04, tier: always }
+          - { suite: territory-gestures, channel: futa04, tier: always }
+          - { suite: territory-gestures-ios, channel: futa04, tier: always }
+          - { suite: sphere-test, channel: futa05, tier: always }
+          - { suite: sphere-test-ios, channel: futa05, tier: always }
+          - { suite: planet-matte, channel: futa05, tier: always }
+          # --- release only (futa0.5-online push / promote gate) ---
+          - { suite: futa04-tutorial-intel, channel: futa04, tier: release }
+          - { suite: futa04-tutorial-lock, channel: futa04, tier: release }
+          - { suite: futa04-lesson-9-free, channel: futa04, tier: release }
+          - { suite: cut-severe, channel: futa04, tier: release }
+          - { suite: territory-challenges, channel: futa05, tier: release }
+          - { suite: living-territory, channel: futa04, tier: release }
+          - { suite: living-territory-ios, channel: futa04, tier: release }
+          - { suite: territory-final-polish, channel: futa04, tier: release }
+    # Skip release-only suites on feature branches / PRs (fast preview). Keep them on the
+    # release branch so /test/ and promote still run the full gate.
+    if: >
+      matrix.tier == 'always' ||
+      github.ref == 'refs/heads/futa0.5-online' ||
+      github.base_ref == 'futa0.5-online' ||
+      github.event_name == 'workflow_dispatch'
     # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
     # Playwright 1.56.1 refuses it ("Playwright does not support chromium on ubuntu26.04-x64"),
     # which failed EVERY browser job at `playwright-core install` before a single test ran. Pin the
@@ -55,22 +124,11 @@ jobs:
             *-ios) npx playwright-core install --with-deps webkit ;;
             *) npx playwright-core install --with-deps chromium ;;
           esac
-      # Legacy suites target the classic live channel. Default npm run web:build is futa04.
-      - name: Build the channel this suite tests
-        run: |
-          case "${{ matrix.suite }}" in
-            # territory-challenges stubs every API call itself, against a build pointed at closed port 9.
-            territory-challenges) CHANNEL=futa05 VITE_DUEL_API_URL=http://127.0.0.1:9/functions/v1/duel \
-                VITE_SUPABASE_URL=http://127.0.0.1:9 VITE_SUPABASE_ANON_KEY=local npm run web:build ;;
-            futa04-*|cut-severe|territory-*) CHANNEL=futa04 npm run web:build ;;
-            # futa05 requires its online endpoints at build time; these placeholders are shaped
-            # like the real ones and nothing in lessons-3 talks to them.
-            lessons-3) CHANNEL=futa05 VITE_FIND_OPPONENT=1 VITE_DUEL_API_URL=https://ci.invalid/functions/v1/duel \
-                VITE_SUPABASE_URL=https://ci.invalid VITE_SUPABASE_ANON_KEY=ci-placeholder npm run web:build ;;
-            # WebKit rejects reserved port 9 in WebSocket constructors; use an ordinary closed port.
-            sphere-test*|planet-matte) CHANNEL=futa05 VITE_FIND_OPPONENT=1 VITE_DUEL_API_URL=http://127.0.0.1:65530/functions/v1/duel \
-                VITE_SUPABASE_URL=http://127.0.0.1:65530 VITE_SUPABASE_ANON_KEY=local npm run web:build ;;
-          esac
+      - name: Restore the shared ${{ matrix.channel }} build
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.channel }}
+          path: web/dist
       - run: node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts
 
       - name: Keep 0.81 board and Match Intel visual evidence

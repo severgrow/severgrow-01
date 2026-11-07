@@ -85,15 +85,21 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
 - Only CI-tested commits can go live: a commit that was in the middle of a multi-commit push never had
   its own CI run, so the gate would refuse it. Promote what /test/ shows, or a previous /test/ commit.
 
-## Checks that run on a push (and what was removed, 2026-10-29)
+## Checks that run on a push (and what was removed, 2026-10-29; preview speedup 2026-11-07)
 
 - `ci.yml` `check`: typecheck + every unit test + the futa04 and futa-test builds.
-- `ci.yml` `browser`: futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock,
-  futa04-lesson-9-free, futa04-motion, cut-severe, lessons-3, territory-menu, territory-challenges,
-  territory-gestures, territory-gestures-ios, living-territory, living-territory-ios,
-  territory-final-polish, sphere-test, sphere-test-ios and planet-matte
-  (THE PLANET on /test/, docs/PLANET.md).
-  The `-ios` suites use WebKit (the Safari engine), not physical-device automation.
+- `ci.yml` `build-futa04` / `build-futa05`: **one shared build per channel**, downloaded by every
+  browser suite (was: each matrix job rebuilt — ~2–4 min × ~18). Measured saving: on the order of
+  **30–60 minutes** of redundant build time per CI run, without deleting any suite.
+- `ci.yml` `browser` — two tiers (owner, 2026-11-07: fast preview path + full promote/release gates):
+  - **Always (feature branches / PRs / preview):** futa04-critical, futa04-information,
+    futa04-motion, lessons-3, territory-menu, territory-gestures, territory-gestures-ios,
+    sphere-test, sphere-test-ios, planet-matte.
+  - **Release only (`futa0.5-online` push, PRs into it, or workflow_dispatch):** also
+    futa04-tutorial-intel, futa04-tutorial-lock, futa04-lesson-9-free, cut-severe,
+    territory-challenges, living-territory, living-territory-ios, territory-final-polish.
+  The `-ios` suites use WebKit (the Safari engine), not physical-device automation. Promote still
+  waits for CI on the `futa0.5-online` commit, which runs the **full** browser set.
 - `extra-regressions.yml`: admin-dashboard, online-stale-token-recovery, online-soak-teardown,
   settings-visual, accounts-email, pwa-viewport-layout.
 
