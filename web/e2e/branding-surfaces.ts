@@ -51,6 +51,33 @@ const check = (ok: boolean, what: string) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${what}`);
 };
 
+// The screenshot's actual first character, not an earlier SVG interpretation. Protect its cut.
+{
+  const page = await browser.newPage();
+  await page.evaluate('window.__name = f => f');
+  const master = readFileSync('web/src/assets/futasaku-primary-logo.svg', 'utf8');
+  const paths = [...master.matchAll(/<path d="([^"]+)"/g)].slice(0, 2).map(m => `<path d="${m[1]}"/>`).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="791" height="612" viewBox="215 134 589 456" fill="white">${paths}</svg>`;
+  const overlap = await page.evaluate(async ({ svg, reference }) => {
+    const raster = async (url: string) => {
+      const image = new Image(); image.src = url; await image.decode();
+      const canvas = document.createElement('canvas'); canvas.width = 791; canvas.height = 612;
+      const g = canvas.getContext('2d', { willReadFrequently: true })!;
+      g.drawImage(image, 0, 0, 791, 612); return g.getImageData(0, 0, 791, 612).data;
+    };
+    const [actual, original] = await Promise.all([raster(svg), raster(reference)]);
+    let intersection = 0, union = 0;
+    for (let i = 3; i < actual.length; i += 4) {
+      const a = actual[i]! >= 128, b = original[i]! >= 128;
+      if (a && b) intersection++; if (a || b) union++;
+    }
+    return intersection / union;
+  }, { svg: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
+    reference: `data:image/png;base64,${readFileSync('docs/brand/screenshot-first-character.png').toString('base64')}` });
+  check(overlap >= .985, `first character preserves the screenshot silhouette and inner cut (${(overlap * 100).toFixed(2)}% overlap)`);
+  await page.close();
+}
+
 type View = { w: number; h: number; tag: string };
 const ALL_VIEWS: View[] = [
   { w: 390, h: 844, tag: '390x844' },

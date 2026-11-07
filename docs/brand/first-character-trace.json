@@ -1,0 +1,35 @@
+{
+  "referenceCommit": "ef2f826",
+  "referenceBlob": "69793ecfd7910e8bef58721e5e25f55df2772fa7",
+  "referenceAsset": "web/src/assets/futasaku-wordmark-silhouette.webp",
+  "referenceSha256": "393c3aa821938441d0e1b3ae60c0a0f4c38a9fb884b10ea7ee75dc8943c257e8",
+  "firstCharacterCrop": [
+    79,
+    78,
+    870,
+    690
+  ],
+  "alphaThreshold": 128,
+  "sourceComponents": [
+    2,
+    5
+  ],
+  "constructionModule": 19,
+  "constructionBox": [
+    215,
+    134,
+    589,
+    456
+  ],
+  "modules": [
+    31,
+    24
+  ],
+  "curveFit": {
+    "tool": "potracer 0.0.4",
+    "alphaMax": 0.8,
+    "optimizationToleranceSourcePixels": 1.25
+  },
+  "measuredSilhouetteOverlapBeforeSubpixelBoxAlignment": 0.9942,
+  "remainingCharacterPaths": "unchanged from sketch-spacing-reference.svg"
+}

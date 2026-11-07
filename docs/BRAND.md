@@ -1,17 +1,21 @@
 # Primary FUTASAKU logo
 
-The final master is `web/src/assets/futasaku-primary-logo.svg`. On 7 November 2026 the owner
-requested the first character closer to `final futa.svg`, retaining `sketch.svg`'s spacing.
-The first two paths recover the original's curved counters and sweeping feet. The cap endpoint
-865 and first-character advance 898 retain the attached layout; the remaining three paths and
-the overall viewBox are unchanged from the supplied sketch. Do not stretch the paths.
+The master is `web/src/assets/futasaku-primary-logo.svg`. The owner's screenshot of Beta 0.7,
+build `ef2f826`, is the authoritative first-character reference. The earlier `final futa.svg`
+interpretation was not close enough and must not be reused as the first-character source.
+The first two paths trace the actual screenshot-era original, particularly its narrow inner cut.
+The remaining three paths and the overall viewBox are unchanged from the newer supplied sketch.
 The identical downloadable master is published at `/brand/futasaku-primary-logo.svg`.
 
-Construction uses a 19-unit module: cap 134 to baseline 590 is 456 units, or 24 modules.
-Curve handles sit on a quarter-module (4.75-unit) grid anchored at (215,134), with optical
-exceptions at the supplied cap endpoint and advance. The original references are preserved in
-`docs/brand/`. The editable grid proof is `/brand/futasaku-primary-logo-construction.svg`;
-it is a design reference only and is never loaded by the game.
+Construction uses a 19-unit module: the first character sits in a 31 x 24 module box, 589 x 456
+units, anchored at (215,134), with baseline 590. This preserves the original's proportions rather
+than stretching it into the rejected wider drawing. Curve fitting removes raster edge noise;
+the inner cut follows the original geometry, without quarter-grid rounding of its outline.
+`docs/brand/screenshot-era-wordmark.webp` preserves the historical source; its Git blob is identical
+at `ef2f826` and `50619415`. `first-character-trace.json` records crop, fitting and comparison data.
+The fitted silhouette overlaps the original by 99.42% before subpixel grid-box alignment.
+The earlier SVGs are historical references only. The editable grid proof is
+`/brand/futasaku-primary-logo-construction.svg`; it is never loaded by the game.
 
 `web/src/player/branding.ts` owns the live vector URL and the shared SVG helpers. Menu, HUD,
 finish plate, Planet/online headers, profile, replay player, downloaded video and posters all use

@@ -30,7 +30,7 @@ const sources = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
 const allSource = sources(join(root, 'src')).map((path) => ({ path: path.slice(root.length), text: readFileSync(path, 'utf8') }));
 
 describe('one Futasaku mark, drawn once', () => {
-  it('keeps the supplied spacing and all remaining characters when refining the first character', () => {
+  it('keeps the newer remaining characters and shared canvas when refining the first character', () => {
     const paths = (svg: string) => [...svg.matchAll(/<path d="([^"]+)"/g)].map(match => match[1]);
     const reference = read('../docs/brand/sketch-spacing-reference.svg');
     const final = read('src/assets/futasaku-primary-logo.svg');
