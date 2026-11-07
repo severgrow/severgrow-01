@@ -1,8 +1,8 @@
 // ONE definition of the mark per surface role (owner brand pack, 2026-11-07):
-//   PAINT  → home-screen menu only
-//   PLAIN  → small logos everywhere else
-//   HEX    → app icon + card back (built offline)
-//   FAVICON tree-hex → favicon + tiny marks
+//   PAINT  → home-screen menu only (true vector SVG)
+//   PLAIN  → small logos everywhere else (true vector SVG)
+//   HEX    → app icon + card back (SVG → PNG/WebP offline)
+//   FAVICON tree-hex → favicon + tiny marks (tree-only PNG; HEX has kanji)
 //
 // `web/e2e/branding-surfaces.ts` measures the built page. This file locks the source invariants
 // that make that possible, so a future surface cannot quietly grow a second, drifting logo.
@@ -26,30 +26,29 @@ const sources = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
 const allSource = sources(join(root, 'src')).map((path) => ({ path: path.slice(root.length), text: readFileSync(path, 'utf8') }));
 
 describe('owner brand pack roles', () => {
-  it('ships the four exact owner-supplied rasters', () => {
+  it('ships the owner pure-vector SVGs plus tree-only favicon and HEX PNG derivative', () => {
     for (const name of [
       'src/assets/brand/favicon-tree-hex.png',
-      'src/assets/brand/plain-wordmark.png',
+      'src/assets/brand/plain-wordmark.svg',
+      'src/assets/brand/paint-wordmark.svg',
+      'src/assets/brand/hex-emblem.svg',
       'src/assets/brand/hex-emblem.png',
-      'src/assets/brand/paint-wordmark.png',
-      'src/assets/brand/paint-wordmark-shadow.png',
+      'src/assets/brand/plain-wordmark.png',
     ]) expect(existsSync(join(root, name)), name).toBe(true);
   });
 
-  it('ships a 3× PAINT derivative for the home menu (owner art is 300×94 only)', () => {
-    const pngSize = (rel: string): { w: number; h: number } => {
-      const buf = readFileSync(join(root, rel));
-      expect(buf.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), rel).toBe(true);
-      return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
-    };
-    expect(pngSize('src/assets/brand/paint-wordmark.png')).toEqual({ w: 300, h: 94 });
-    expect(pngSize('src/assets/brand/paint-wordmark-3x.png')).toEqual({ w: 900, h: 282 });
-    expect(pngSize('src/assets/brand/paint-wordmark-shadow-3x.png')).toEqual({ w: 948, h: 330 });
+  it('PAINT and PLAIN SVGs are pure vector (no embedded raster)', () => {
+    for (const name of ['src/assets/brand/plain-wordmark.svg', 'src/assets/brand/paint-wordmark.svg', 'src/assets/brand/hex-emblem.svg']) {
+      const svg = read(name);
+      expect(svg, name).not.toMatch(/<image|data:image/);
+      expect(svg, name).toMatch(/<path/);
+    }
+    expect(read('src/assets/brand/paint-wordmark.svg').match(/<path/g)?.length ?? 0).toBeGreaterThanOrEqual(90);
   });
 
-  it('maps PAINT to the home menu and PLAIN to small marks', () => {
-    expect(branding).toContain("import paintUrl from '../assets/brand/paint-wordmark-shadow-3x.png?url'");
-    expect(branding).toContain("import plainUrl from '../assets/brand/plain-wordmark.png?url'");
+  it('maps PAINT SVG to the home menu and PLAIN SVG to small marks', () => {
+    expect(branding).toContain("import paintUrl from '../assets/brand/paint-wordmark.svg?url'");
+    expect(branding).toContain("import plainUrl from '../assets/brand/plain-wordmark.svg?url'");
     expect(branding).toContain('export const WORDMARK_URL: string = plainUrl');
     expect(branding).toContain('export const PAINT_URL: string = paintUrl');
     expect(branding).toMatch(/Home screen menu ONLY uses PAINT|paintMarkImg|paintUrl/);
@@ -57,7 +56,7 @@ describe('owner brand pack roles', () => {
     expect(branding).toMatch(/markSvg\(id, plainUrl/);
   });
 
-  it('only branding.ts imports the live brand rasters', () => {
+  it('only branding.ts imports the live brand marks', () => {
     const importers = allSource
       .filter((f) => /assets\/brand\/(paint-wordmark|plain-wordmark)/.test(f.text))
       .map((f) => f.path);
@@ -91,7 +90,6 @@ describe('owner brand pack roles', () => {
 
   it('PAINT gets a barely-noticeable almost-black drop shadow on the home menu', () => {
     expect(branding).toMatch(/drop-shadow\(0 1px 1\.5px rgba\(8, 8, 10/);
-    expect(existsSync(join(root, 'src/assets/brand/paint-wordmark-shadow.png'))).toBe(true);
   });
 
   it('the badge stands down while the install invitation is open', () => {
@@ -100,16 +98,23 @@ describe('owner brand pack roles', () => {
       .toMatch(/:has\(#install-prompt:not\(\[hidden\]\)\)\s*#hud-brand\s*\{\s*display:\s*none/);
   });
 
-  it('preloads the PAINT mark, not the retired primary SVG', () => {
-    expect(read('index.html')).toMatch(/paint-wordmark-shadow-3x\.png/);
+  it('preloads the PAINT SVG, not a soft raster upsample or the retired primary SVG', () => {
+    expect(read('index.html')).toMatch(/paint-wordmark\.svg/);
+    expect(read('index.html')).not.toMatch(/paint-wordmark-shadow-3x\.png/);
     expect(read('index.html')).not.toMatch(/futasaku-primary-logo\.svg/);
   });
 
-  it('home PAINT box matches the shadowed mark aspect and avoids crunchy rendering', () => {
+  it('home PAINT box matches the SVG viewBox aspect and avoids crunchy rendering', () => {
     const css = branding.slice(branding.indexOf('export const BRANDING_CSS'));
-    expect(css).toMatch(/#menu #logo\s*\{[^}]*aspect-ratio:\s*316\s*\/\s*110/);
+    expect(css).toMatch(/#menu #logo\s*\{[^}]*aspect-ratio:\s*2106\s*\/\s*662/);
     expect(css).toMatch(/image-rendering:\s*auto/);
-    expect(read('src/style.css')).toMatch(/paint-wordmark-shadow-3x\.png/);
-    expect(read('src/player/planet-lockup.ts')).toMatch(/aspect-ratio:\s*316\s*\/\s*110/);
+    expect(read('src/style.css')).toMatch(/paint-wordmark\.svg/);
+    expect(read('src/player/planet-lockup.ts')).toMatch(/aspect-ratio:\s*2106\s*\/\s*662/);
+  });
+
+  it('does not ship the soft 3× PAINT upsample as a live asset', () => {
+    expect(existsSync(join(root, 'src/assets/brand/paint-wordmark-3x.png'))).toBe(false);
+    expect(existsSync(join(root, 'src/assets/brand/paint-wordmark-shadow-3x.png'))).toBe(false);
+    expect(existsSync(join(root, 'src/assets/brand/paint-wordmark-shadow.png'))).toBe(false);
   });
 });

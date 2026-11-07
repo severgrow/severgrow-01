@@ -1,22 +1,23 @@
-// Owner brand pack (2026-11-07): exact supplied rasters — never redraw letterforms.
-//   PAINT  → home-screen menu only
+// Owner brand pack (2026-11-07): pure-vector SVGs — never redraw letterforms.
+//   PAINT  → home-screen menu only (true vector paint SVG; CSS drop-shadow OK)
 //   PLAIN  → small logos in menus / in-game / everywhere else
-//   HEX    → app icon + card back (built offline)
-//   FAVICON tree-hex → favicon + tiny marks
-// Home PAINT is the owner 300×94 raster, Lanczos-upsampled to 3× for retina (no SVG exists for
-// this brush mark; the retired primary SVG is a different letterform and must not replace it).
-import paintUrl from '../assets/brand/paint-wordmark-shadow-3x.png?url';
-import plainUrl from '../assets/brand/plain-wordmark.png?url';
+//   HEX    → app icon + card back (SVG rasterised offline)
+//   FAVICON tree-hex → favicon + tiny marks (tree-only cream PNG; HEX SVG has kanji)
+import paintUrl from '../assets/brand/paint-wordmark.svg?url';
+import plainUrl from '../assets/brand/plain-wordmark.svg?url';
 import faviconUrl from '../assets/brand/favicon-tree-hex.png?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
 
 /** PLAIN wordmark URL — shared by replay video / poster exports and small HUD marks. */
 export const WORDMARK_URL: string = plainUrl;
-/** Home-menu PAINT mark (3× owner raster + baked almost-black drop shadow). */
+/** Home-menu PAINT mark (true vector SVG). */
 export const PAINT_URL: string = paintUrl;
 /** Tiny tree-hex for favicon-scale uses. */
 export const FAVICON_URL: string = faviconUrl;
+
+/** Owner SVG viewBox width÷height for PLAIN / PAINT (`-28 11 2106 662`). */
+export const WORDMARK_ASPECT = 2106 / 662;
 
 export const BRANDING_CSS = `
 html.futa04-branding.slim-hud .game > .hud {
@@ -92,7 +93,7 @@ html.futa04-branding #menu #logo {
   display: block !important;
   flex: none;
   width: min(200px, 52vw, 22dvh);
-  aspect-ratio: 316 / 110;
+  aspect-ratio: 2106 / 662;
   margin: 0 auto;
 }
 html.futa04-branding #menu #logo img,
@@ -101,7 +102,8 @@ html.futa04-branding #menu #logo svg {
   image-rendering: auto;
 }
 /* PAINT on the home menu: a barely-noticeable almost-black drop shadow so it pops a tiny bit. */
-html.futa04-branding #menu #logo img.paint-mark {
+html.futa04-branding #menu #logo img.paint-mark,
+html.futa04-branding #menu #logo svg.paint-mark {
   filter: drop-shadow(0 1px 1.5px rgba(8, 8, 10, .55));
 }
 `;
@@ -149,11 +151,11 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
   return l;
 }
 
-/** Build an SVG wrapping a raster mark so existing callers that expect SVGSVGElement keep working. */
+/** Build an SVG wrapping a mark so existing callers that expect SVGSVGElement keep working. */
 function markSvg(id: string, href: string, accessible: boolean, wide: boolean, paint = false): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
-  const width = wide ? 300 : 150, height = wide ? 94 : 150;
+  const width = wide ? 2106 : 1254, height = wide ? 662 : 1254;
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   svg.setAttribute('width', String(width));
   svg.setAttribute('height', String(height));
@@ -179,8 +181,8 @@ function paintMarkImg(): HTMLImageElement {
   img.className = 'paint-mark';
   img.src = paintUrl;
   img.alt = '';
-  img.width = 316;
-  img.height = 110;
+  img.width = 2106;
+  img.height = 662;
   img.setAttribute('aria-hidden', 'true');
   img.decoding = 'async';
   img.draggable = false;

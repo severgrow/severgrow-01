@@ -120,8 +120,8 @@
          preloaded, so a cold load painted digits in Fragment Mono until it arrived (font-display:
          block, so they were briefly absent rather than swapped). One 2.6 KB request, no flash. -->
     <link rel="preload" href="./src/fonts/v2/futasaku-numerals-700.woff2" as="font" type="font/woff2" crossorigin />
-    <!-- Home-menu PAINT mark (3× owner raster): decode before first paint so the lockup never swaps mid-fade. -->
-    <link rel="preload" href="./src/assets/brand/paint-wordmark-shadow-3x.png" as="image" type="image/png" />
+    <!-- Home-menu PAINT mark (true vector SVG): decode before first paint so the lockup never swaps mid-fade. -->
+    <link rel="preload" href="./src/assets/brand/paint-wordmark.svg" as="image" type="image/svg+xml" />
     <link rel="preload" href="./hardware/display-frame-supplied.webp" as="image" type="image/webp" />
     <link rel="preload" href="./hardware/button-frame-supplied.webp" as="image" type="image/webp" />
     <link rel="preload" href="./hardware/counter-frame-supplied.webp" as="image" type="image/webp" />

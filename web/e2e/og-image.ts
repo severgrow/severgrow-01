@@ -189,11 +189,11 @@ server.close();
 
 // ---------- 2. compose the card ----------
 
-/** PLAIN wordmark (owner brand pack, 2026-11-07) — cream on transparent, no second tint. */
-const painted = (id: string, file: string, srcW: number, srcH: number, w: number) => {
+/** PLAIN wordmark (owner brand pack) — cream on transparent. Prefer SVG; PNG is the OG fallback. */
+const painted = (id: string, file: string, srcW: number, srcH: number, w: number, mime = 'image/png') => {
   const h = Math.round((w * srcH) / srcW);
   return `<svg class="${id}" width="${w}" height="${h}" viewBox="0 0 ${srcW} ${srcH}" role="img" aria-label="${TITLE}">`
-    + `<image href="${dataUri(readFileSync(file), 'image/png')}" width="${srcW}" height="${srcH}" preserveAspectRatio="xMidYMid meet"/></svg>`;
+    + `<image href="${dataUri(readFileSync(file), mime)}" width="${srcW}" height="${srcH}" preserveAspectRatio="xMidYMid meet"/></svg>`;
 };
 
 const cardHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
@@ -219,7 +219,7 @@ const cardHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
   .tag span { display:block; }
 </style></head><body>
   <div class="board"></div><div class="scrim"></div>
-  <div class="lock">${painted('wordmark', asset('brand/plain-wordmark.png'), 300, 94, 428)}</div>
+  <div class="lock">${painted('wordmark', asset('brand/plain-wordmark.svg'), 2106, 662, 428, 'image/svg+xml')}</div>
   <p class="tag">${TAGLINE.map((line) => `<span>${line}</span>`).join('')}</p>
 </body></html>`;
 

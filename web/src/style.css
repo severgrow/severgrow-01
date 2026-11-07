@@ -496,13 +496,13 @@ html.test-typography-v2.world-reserved #menu:not([data-laid-out]) #menu-world[hi
   pointer-events: none;
 }
 /* Home-menu PAINT mark: reserve the lockup box from the first frame (CSS image), then branding
-   replaces it with the same PAINT asset (img) so the column never jumps. */
+   replaces it with the same PAINT SVG (img) so the column never jumps. */
 html.test-typography-v2 #menu #logo {
   display: block;
   width: min(200px, 52vw, 22dvh);
-  aspect-ratio: 316 / 110;
+  aspect-ratio: 2106 / 662;
   margin: 0 auto;
-  background: center / contain no-repeat url('./assets/brand/paint-wordmark-shadow-3x.png');
+  background: center / contain no-repeat url('./assets/brand/paint-wordmark.svg');
   opacity: 0.9;
 }
 html.test-typography-v2 #menu #logo:has(> :is(svg, img)) {

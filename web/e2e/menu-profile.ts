@@ -599,10 +599,9 @@ try {
     check(`${label}: the Futasaku mark is in the nameplate`, rows.brand === 1);
     // THE MARK'S WIDTH IS THE GUARD AGAINST THE SMUDGE. The owner's live screenshot showed a
     // 29px-wide mark in a 464px-wide image (~6.1% of the screen): the CJK wordmark read as a grey
-    // smear. The game's own 22px-high wordmark is 67.69px wide at the asset's 2200:715 ratio, which
-    // is 17.4% of a 390pt screen (~2.8x the reported stamp). A future edit may not shrink it back:
-    // the floor is 64px (16.4% of 390).
-    const WORDMARK_RATIO = 2200 / 715;
+    // smear. The game's own 22px-high PLAIN SVG is ~70px wide at the 2106:662 viewBox ratio, which
+    // is ~18% of a 390pt screen. A future edit may not shrink it back: the floor is 64px (16.4% of 390).
+    const WORDMARK_RATIO = 2106 / 662;
     const WORDMARK_MIN_W = 64;
     check(`${label}: the nameplate wordmark is the game's 22px wordmark`,
       Math.abs(rows.brandMark.h - 22) <= 0.5 && Math.abs(rows.brandMark.w - rows.brandMark.h * WORDMARK_RATIO) <= 1,

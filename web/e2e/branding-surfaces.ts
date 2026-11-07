@@ -51,10 +51,11 @@ const check = (ok: boolean, what: string) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${what}`);
 };
 
-// Owner brand pack (2026-11-07): exact supplied rasters are present and mapped by role.
-check(existsSync('web/src/assets/brand/paint-wordmark.png'), 'PAINT wordmark asset present');
-check(existsSync('web/src/assets/brand/plain-wordmark.png'), 'PLAIN wordmark asset present');
-check(existsSync('web/src/assets/brand/hex-emblem.png'), 'HEX EMBLEM asset present');
+// Owner brand pack (2026-11-07): pure-vector SVGs present; HEX/favicon rasters for PWA / tiny marks.
+check(existsSync('web/src/assets/brand/paint-wordmark.svg'), 'PAINT wordmark SVG present');
+check(existsSync('web/src/assets/brand/plain-wordmark.svg'), 'PLAIN wordmark SVG present');
+check(existsSync('web/src/assets/brand/hex-emblem.svg'), 'HEX EMBLEM SVG present');
+check(existsSync('web/src/assets/brand/hex-emblem.png'), 'HEX EMBLEM PNG derivative present');
 check(existsSync('web/src/assets/brand/favicon-tree-hex.png'), 'FAVICON tree-hex asset present');
 
 type View = { w: number; h: number; tag: string };
@@ -382,7 +383,12 @@ for (const v of PAGE_VIEWS) {
       check(goState.mark.glassChain.every((n) => n === 'go-card' || n === 'gameover'),
         `${tag}: only the plate's own glass sits behind the mark (${goState.mark.glassChain.join(', ')})`);
       check(goState.mark.animations === 0, `${tag}: the finish mark never animates under Reduce motion (${goState.mark.animations})`);
-      check(goState.mark.asset.includes('plain-wordmark'),
+      // PLAIN ships as a hashed SVG file (not inlined); also accept an inlined data URI that
+      // still carries the owner PLAIN title, so a Vite size-limit regression cannot silently swap
+      // the finish mark to PAINT.
+      const plain = goState.mark.asset.includes('plain-wordmark')
+        || /plain[_%20+]+logo|plain[_%20+]+vector/i.test(goState.mark.asset);
+      check(plain && !/paint-wordmark/i.test(goState.mark.asset),
         `${tag}: the finish mark is the PLAIN wordmark (${goState.mark.asset.split('/').pop()})`);
     }
     check(!goState.cornerShown, `${tag}: the corner mark stands down on the finish plate`);

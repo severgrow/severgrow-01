@@ -12,8 +12,8 @@ html.planet-lockup #menu .menu-stack > #logo {
   flex: none; display: block !important; width: var(--lockup-w, 52vw) !important; max-width: none;
   margin: 0 auto calc(var(--lockup-w, 52vw) * ${GAP_SHARE}) !important;
 }
-/* Shadowed PAINT mark is 316×110 (3× of the owner pad box) — do not stretch into 300/94. */
-html.planet-lockup #menu .menu-stack > #logo { height: auto !important; aspect-ratio: 316 / 110 !important; min-height: 0 !important; }
+/* PAINT true-vector SVG viewBox is 2106×662 — keep the lockup on that aspect. */
+html.planet-lockup #menu .menu-stack > #logo { height: auto !important; aspect-ratio: 2106 / 662 !important; min-height: 0 !important; }
 html.planet-lockup #menu .menu-stack > #logo :is(svg, img) {
   display: block; width: 100% !important; height: auto !important; image-rendering: auto;
 }

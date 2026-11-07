@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-// Regenerates the app icons from the approved primary logo's compatibility raster.
-// First run scripts/build-primary-logo.mjs. Keep the existing opaque soil ground and cream ink.
-// The primary vector remains the only artwork source; these square PNGs are PWA derivatives.
-// The wide mark is contained without distortion. The maskable variant stays inside Android's
+// Regenerates the app icons from the HEX emblem raster (web/src/assets/futasaku-emblem.webp),
+// which scripts/build-brand-from-svg.mjs refreshes from hex-emblem.svg. Prefer that entrypoint.
+// Keep the existing opaque soil ground and cream ink. The maskable variant stays inside Android's
 // 80% safe circle; shown-whole icons retain their 84% width. Output measurements verify both.
 // Run: PW_CHROMIUM=/path/to/chromium node scripts/build-app-icons.mjs
 

@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import { FEEDBACK, PRIVACY } from '../src/strings.js';
@@ -115,12 +115,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    // WebKit (Safari) logs a spurious "Origin … is not allowed by Access-Control-Allow-Origin"
-    // console error for a font loaded from a data: URI. Vite inlines assets under 4KB, and the
-    // small Futasaku Numerals font (2.3KB) was being inlined. Keep fonts as real files on the
-    // futa05 channel so the console stays honest; other channels keep the default inlining.
-    ...(process.env.CHANNEL === 'futa05'
-      ? { assetsInlineLimit: (filePath: string): boolean | undefined => (filePath.endsWith('.woff2') ? false : undefined) }
-      : {}),
+    // Never inline brand SVGs (PLAIN is ~2.5KB and would otherwise become an anonymous data: URI,
+    // which breaks the branding e2e "plain-wordmark" identity check and makes HUD marks harder to
+    // cache/debug). On futa05 also keep .woff2 as real files: WebKit logs a spurious CORS error for
+    // fonts loaded from data: URIs.
+    assetsInlineLimit: (filePath: string): boolean | undefined => {
+      if (filePath.includes(`${sep}brand${sep}`) && filePath.endsWith('.svg')) return false;
+      if (process.env.CHANNEL === 'futa05' && filePath.endsWith('.woff2')) return false;
+      return undefined;
+    },
   },
 });
+
