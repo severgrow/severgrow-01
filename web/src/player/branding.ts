@@ -1,11 +1,9 @@
-// Futasaku 0.4 uses the Futa04 presentation; historical channels keep their existing brand.
-// This SVG deliberately uses only each mark's alpha (feFuncA below). The browser copies contain
-// the exact thresholded silhouettes; the original art stays intact for icon/OG generation.
-import logoUrl from '../assets/futasaku-emblem-silhouette.webp?url';
-import wordmarkUrl from '../assets/futasaku-wordmark-silhouette.webp?url';
+// The approved vector is the primary artwork. Legacy-sized derivatives serve canvas/email only;
+// regenerate them with scripts/build-primary-logo.mjs, never edit a second drawing.
+import logoUrl from '../assets/futasaku-primary-logo.svg?url';
 
-/** The wordmark silhouette's URL, for the replay video's sign-off (one asset, owned here). */
-export const WORDMARK_URL: string = wordmarkUrl;
+/** The primary vector's URL, shared by replay video and poster exports. */
+export const WORDMARK_URL: string = logoUrl;
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
 
@@ -173,8 +171,7 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
   return l;
 }
 
-// The exported PNG has faint alpha fringes in otherwise empty space. Render the mark as
-// uniformly cream, omit those fringes, and crop its transparent margins without stretching.
+// Tint the vector with the established accent; retain the existing surface boxes and alignment.
 function whiteLogo(id: string, accessible: boolean, wordmark = false): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
@@ -190,9 +187,13 @@ function whiteLogo(id: string, accessible: boolean, wordmark = false): SVGSVGEle
     <feFuncB type="linear" slope="0" intercept="1"/><feFuncA type="discrete" tableValues="0 1"/>
   </feComponentTransfer><feFlood style="flood-color:var(--c-accent)"/><feComposite operator="in" in2="logo-mask"/></filter></defs>`;
   const image = document.createElementNS(ns, 'image');
-  image.setAttribute('href', wordmark ? wordmarkUrl : logoUrl);
-  image.setAttribute('width', String(width));
-  image.setAttribute('height', String(height));
+  image.setAttribute('href', logoUrl);
+  image.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  // Keep each existing layout box and optical axis. Contain the vector without stretching it.
+  image.setAttribute('x', wordmark ? '79' : '0');
+  image.setAttribute('y', wordmark ? '57' : '0');
+  image.setAttribute('width', wordmark ? '2072' : String(width));
+  image.setAttribute('height', wordmark ? '638' : String(height));
   image.setAttribute('filter', `url(#${id})`);
   svg.append(image);
   return svg;
@@ -205,13 +206,12 @@ export function drawLogo(kanji = false) {
 }
 
 /**
- * THE KANJI ALONE, cropped to its ink (owner, 2026-11-04: "change logo to kanji with no tree"): the
- * treeless 双サク of the HUD badge, in the same cream, with its transparent margins cut away so the
- * mark's box IS the mark's width (the wordmark below is sized to exactly that).
+ * Primary Japanese mark inside the existing menu box. The Latin title beneath it and the globe
+ * still use the same measured lockup width, centre and spacing.
  */
 function kanjiMark(id: string): SVGSVGElement {
   const svg = whiteLogo(id, false, true);
-  // The ink of futasaku-wordmark-silhouette.webp (2200x715) spans x 79-2151, y 57-695.
+  // Preserve the established menu box; the new vector fits inside it, with its own aspect intact.
   svg.setAttribute('viewBox', '79 57 2072 638');
   svg.setAttribute('width', '2072');
   svg.setAttribute('height', '638');

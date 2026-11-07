@@ -204,7 +204,7 @@ const painted = (id: string, file: string, srcW: number, srcH: number, w: number
     + '<feFuncB type="linear" slope="0" intercept="1"/><feFuncA type="discrete" tableValues="0 1"/>'
     + '</feComponentTransfer>'
     + `<feFlood style="flood-color:${ACCENT}"/><feComposite operator="in" in2="mark-mask"/>`
-    + `</filter></defs><image href="${dataUri(readFileSync(file), 'image/webp')}" width="${srcW}" height="${srcH}" filter="url(#${id}-tint)"/></svg>`;
+    + `</filter></defs><image href="${dataUri(readFileSync(file), 'image/svg+xml')}" width="${srcW}" height="${srcH}" filter="url(#${id}-tint)"/></svg>`;
 };
 
 const cardHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
@@ -230,7 +230,7 @@ const cardHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
   .tag span { display:block; }
 </style></head><body>
   <div class="board"></div><div class="scrim"></div>
-  <div class="lock">${painted('emblem', asset('futasaku-emblem.webp'), 1254, 1254, 112)}${painted('wordmark', asset('futasaku-white.webp'), 2200, 715, 288)}</div>
+  <div class="lock">${painted('wordmark', asset('futasaku-primary-logo.svg'), 1755, 495, 428)}</div>
   <p class="tag">${TAGLINE.map((line) => `<span>${line}</span>`).join('')}</p>
 </body></html>`;
 

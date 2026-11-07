@@ -2,6 +2,10 @@
 
 Current shared finish, 28 October 2026. Applies to future UI work and to the five changes in this pass.
 
+- **Logo:** use the owner-approved primary vector through the shared branding helpers. Preserve
+  its proportions and the existing surface alignment. See [BRAND.md](BRAND.md) for the master,
+  generated app icons, card stamp, email and replay/export usage.
+
 - **Controls:** use the existing native button/hardware classes. A press uses the delegated native depth
   (`logic/press.ts`); the shared surface finish answers over `--ix-press` (90ms). Keep 44px hit
   areas, visible keyboard focus and existing disabled-state behavior. Account and chat keys share

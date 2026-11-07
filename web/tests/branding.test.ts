@@ -30,9 +30,24 @@ const sources = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
 const allSource = sources(join(root, 'src')).map((path) => ({ path: path.slice(root.length), text: readFileSync(path, 'utf8') }));
 
 describe('one Futasaku mark, drawn once', () => {
-  it('only branding.ts imports the silhouette art', () => {
+  it('uses the approved vector as the primary artwork on every live SVG surface', () => {
+    const primary = read('src/assets/futasaku-primary-logo.svg');
+    expect(primary).toContain('viewBox="200 118 1755 495"');
+    expect(primary.match(/<path\b/g)).toHaveLength(5);
+    expect(primary).not.toMatch(/<script|<foreignObject|https?:\/\/(?!www\.w3\.org)/);
+    expect(branding).toContain("import logoUrl from '../assets/futasaku-primary-logo.svg?url'");
+    expect(branding).toContain("image.setAttribute('href', logoUrl)");
+    expect(branding).toContain("image.setAttribute('preserveAspectRatio', 'xMidYMid meet')");
+    expect(read('index.html')).toMatch(/rel="preload"[^>]*futasaku-primary-logo\.svg/);
+    expect(read('src/style.css')).toContain("url('./assets/futasaku-primary-logo.svg')");
+    expect(read('public/brand/futasaku-primary-logo.svg')).toBe(primary);
+    expect(branding).toContain('export const WORDMARK_URL: string = logoUrl');
+    expect(read('../scripts/build-primary-logo.mjs')).toContain('web/src/assets/futasaku-primary-logo.svg');
+  });
+
+  it('only branding.ts imports the primary vector art', () => {
     const importers = allSource
-      .filter((f) => /futasaku-(emblem|wordmark)-silhouette/.test(f.text))
+      .filter((f) => /futasaku-primary-logo/.test(f.text))
       .map((f) => f.path);
     expect(importers, 'a second surface with its own copy of the logo drifts in weight and colour').toEqual([
       'src/player/branding.ts',

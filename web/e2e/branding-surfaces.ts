@@ -377,7 +377,7 @@ for (const v of PAGE_VIEWS) {
       check(goState.mark.glassChain.every((n) => n === 'go-card' || n === 'gameover'),
         `${tag}: only the plate's own glass sits behind the mark (${goState.mark.glassChain.join(', ')})`);
       check(goState.mark.animations === 0, `${tag}: the finish mark never animates under Reduce motion (${goState.mark.animations})`);
-      check(goState.mark.tint !== '' && goState.mark.asset.includes('futasaku-wordmark-silhouette'),
+      check(goState.mark.tint !== '' && goState.mark.asset.includes('futasaku-primary-logo'),
         `${tag}: the finish mark is the SAME asset and tint (${goState.mark.asset.split('/').pop()}, ${goState.mark.tint})`);
     }
     check(!goState.cornerShown, `${tag}: the corner mark stands down on the finish plate`);

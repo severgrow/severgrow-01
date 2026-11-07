@@ -38,7 +38,8 @@ export const brandWordmark = (color: string, height: number): HTMLCanvasElement 
   const img = decoded.get(WORDMARK);
   if (!img || typeof document === 'undefined') return null;
   const h = Math.max(1, Math.round(height));
-  const w = Math.max(1, Math.round((img.naturalWidth / img.naturalHeight) * h));
+  // Preserve the export's established box while containing the approved vector at its own aspect.
+  const w = Math.max(1, Math.round((2200 / 715) * h));
   const key = `${color}|${w}x${h}`;
   const hit = tinted.get(key);
   if (hit) return hit;
@@ -47,7 +48,10 @@ export const brandWordmark = (color: string, height: number): HTMLCanvasElement 
   c.height = h;
   const g = c.getContext('2d');
   if (!g) return null;
-  g.drawImage(img, 0, 0, w, h);
+  const scale = Math.min((2072 / 2200 * w) / 1755, (638 / 715 * h) / 495);
+  const dw = 1755 * scale, dh = 495 * scale;
+  g.drawImage(img, 79 / 2200 * w + (2072 / 2200 * w - dw) / 2,
+    57 / 715 * h + (638 / 715 * h - dh) / 2, dw, dh);
   g.globalCompositeOperation = 'source-in';
   g.fillStyle = color;
   g.fillRect(0, 0, w, h);

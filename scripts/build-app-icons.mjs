@@ -1,28 +1,10 @@
 #!/usr/bin/env node
-// Regenerates the Futasaku Add-to-Home-Screen / PWA icons from the main-menu emblem.
-//
-// Why this exists: the icons under `web/src/assets/futa04-icons/` used to be a separate, busy
-// green-on-white illustration that had nothing to do with the mark the menu shows. The owner asked
-// for the Add-to-Home-Screen icon to be "the classic tree we have in main menu", i.e. the emblem at
-// `web/src/assets/futasaku-emblem.webp` that `web/src/player/branding.ts` renders into `#logo`.
-//
-// That emblem is a plain black silhouette stored with an alpha channel; the menu draws it as a
-// solid cream mark (`--c-accent`, `#efe5cb`) on the app backdrop (`--c-bg`, `#18191a`, the default
-// "soil" theme). So this script treats the webp purely as an alpha mask, recolours it cream, and
-// lays it on a solid `#18191a` square — no transparency anywhere, which iOS requires for the
-// apple-touch-icon (transparent pixels render black there).
-//
-// The maskable icon places the tree's bounding box at 78% of the square side. That matters: Android
-// masks to a circle of diameter 80%, and this tree's widest point sits on its bounding-box edge, so
-// 78% keeps the whole tree inside the safe circle (measured max radial extent 78.3% of the
-// half-side). The icons that are shown whole (the favicon, Android "any" and the iOS
-// apple-touch-icon) fill a little more (84%) so the tree does not look lost in the tile; the tree's
-// silhouette has empty top/bottom corners, so it never reaches the rounded corners iOS cuts away.
-// The script prints both measurements for every file.
-//
-// Run:  node scripts/build-app-icons.mjs
-// It needs Chromium (the same browser `playwright-core` installs for the web e2e suites) only to
-// decode the .webp; everything else is plain Node + zlib, no image dependency.
+// Regenerates the app icons from the approved primary logo's compatibility raster.
+// First run scripts/build-primary-logo.mjs. Keep the existing opaque soil ground and cream ink.
+// The primary vector remains the only artwork source; these square PNGs are PWA derivatives.
+// The wide mark is contained without distortion. The maskable variant stays inside Android's
+// 80% safe circle; shown-whole icons retain their 84% width. Output measurements verify both.
+// Run: PW_CHROMIUM=/path/to/chromium node scripts/build-app-icons.mjs
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -34,7 +16,7 @@ const OUT_DIR = fileURLToPath(new URL('../web/src/assets/futa04-icons/', import.
 
 const BACKGROUND = [0x18, 0x19, 0x1a]; // soil theme --c-bg: the app/menu backdrop
 const INK = [0xef, 0xe5, 0xcb]; // --c-accent: the cream the menu tints the tree with
-const MASKABLE_CONTENT = 0.78; // maskable tree bbox as a fraction of the side (see header note)
+const MASKABLE_CONTENT = 0.77; // wider new mark: keep its tips strictly within Android's 80% circle
 const ANY_CONTENT = 0.84; // shown-whole icons can be fuller; the tree keeps empty corners
 const ALPHA_CUT = 8; // alpha at/below this counts as empty when measuring the tree
 
@@ -54,7 +36,7 @@ const TARGETS = [
 
 async function decodeEmblem() {
   const base64 = readFileSync(SOURCE).toString('base64');
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.PW_CHROMIUM || undefined, args: ['--no-sandbox'] });
   try {
     const page = await browser.newPage();
     const pngBase64 = await page.evaluate(async (url) => {
@@ -240,14 +222,14 @@ function measureIcon(image, size) {
 
 const emblem = await decodeEmblem();
 const bbox = alphaBBox(emblem, ALPHA_CUT);
-console.log(`source emblem ${emblem.width}x${emblem.height}; tree bbox ${bbox.w}x${bbox.h} at (${bbox.minX},${bbox.minY})`);
+console.log(`source emblem ${emblem.width}x${emblem.height}; mark bbox ${bbox.w}x${bbox.h} at (${bbox.minX},${bbox.minY})`);
 
 for (const target of TARGETS) {
   const image = buildIcon(emblem, bbox, target.size, target.content);
   writeFileSync(`${OUT_DIR}${target.name}`, encodePng(target.size, target.size, image.data));
   const m = measureIcon(image, target.size);
   console.log(
-    `${target.name}: ${target.size}x${target.size} RGB, tree at ${(target.content * 100).toFixed(0)}% | ` +
+    `${target.name}: ${target.size}x${target.size} RGB, mark at ${(target.content * 100).toFixed(0)}% | ` +
     `bbox ${m.widthPct.toFixed(1)}%x${m.heightPct.toFixed(1)}% of side, centre offset (${m.offX}, ${m.offY})px | ` +
     `max radial extent ${m.radialPct.toFixed(1)}% of half-side (safe-circle limit 80%)`,
   );
