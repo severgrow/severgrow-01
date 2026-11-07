@@ -34,6 +34,13 @@ export const LIVING_TERRITORY_CSS = `
   box-shadow:inset 0 0 0 1px #e8ddbe1a;
   opacity:1; transition:opacity ${SKIN}ms ${motion.easeOpen};
 }
+/* Opening before the menu's invisible skin received a style update still needs a first frame.
+   Supply the same zero-opacity start when the pseudo-elements have no before-change style yet. */
+@starting-style {
+ #online-world-screen[data-living-territory="world"] .world-grid::before,
+ #online-world-screen[data-living-territory="world"] .world-grid::after,
+ #online-world-screen[data-living-territory="world"]::before { opacity:0; }
+}
 /* THE MENU'S MAP IS A BACKGROUND, NOT A WINDOW (owner, 2026-11-02: "the living territory in main
    menu shouldnt be cropped as in territory menu, it should take the whole background"). The
    Territory screen keeps its framed, rounded .world-grid; on the menu the same grid is lifted out of
