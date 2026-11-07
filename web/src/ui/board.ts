@@ -30,6 +30,7 @@ import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { drawGoldFrame } from './goldframes.js';
 import { hexAtPoint } from '../logic/draw.js';
+import { EASE, MOTION } from '../logic/motion.js';
 
 export { FULL_LOOK, S, centerOf, el, noiseTile, star };
 
@@ -258,7 +259,7 @@ export class BoardView {
       live.add(sig);
       const kept = this.ghostPool.get(sig);
       if (kept) { kept.classList.toggle('blocked', !!g.blocked); continue; }
-      const gg = el('g', { class: `ghost draw-ghost${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
+      const gg = el('g', { class: `ghost draw-ghost arrive${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
       el('path', { d: hexPath(t.key, IS_FUTA04 ? S - 3 : S * tileScale(t.strength, maxRank), shape), class: 'ghost-tile' }, gg);
       const { x, y } = centerOf(t.key);
       if (IS_FUTA04) drawSeedStone(gg, t.key, x, y, t.strength, 0);
@@ -278,10 +279,10 @@ export class BoardView {
     for (const [sig, node] of this.ghostPool) if (!live.has(sig)) { node.remove(); this.ghostPool.delete(sig); }
   }
 
-  /** A small shake of the ghost: lifting the finger on a shape that can't be placed does nothing else. */
+  /** One nudge home. A refused shape used to wag left and right; a refusal is a single click. */
   shake(reduceMotion: boolean) {
     if (reduceMotion) return;
-    this.layers.draw.animate?.([{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }], { duration: 220 });
+    this.layers?.draw.animate?.([{ transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }], { duration: MOTION.quick, easing: EASE.out });
   }
 
   /** Builds the static parts (terrain) for a game and theme. */
@@ -964,7 +965,7 @@ export class BoardView {
       old.setAttribute('fill', this.url('world-prev'));
       old.classList.add('world-prev');
       fill.after(old);
-      const a = old.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 420, easing: 'ease-out', fill: 'forwards' });
+      const a = old.animate([{ opacity: 1 }, { opacity: 0 }], { duration: MOTION.move, easing: EASE.out, fill: 'forwards' });
       a.onfinish = () => old.remove();
     }
   }

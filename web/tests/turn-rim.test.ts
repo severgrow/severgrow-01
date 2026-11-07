@@ -48,4 +48,14 @@ describe('active-turn board contour (0.83 polish)', () => {
     expect(rule).toMatch(/stroke-linecap:\s*round/);
     expect(rule).toMatch(/drop-shadow/);
   });
+
+  it('stays a quiet trace until it is your turn', () => {
+    const css = readFileSync(join(fileURLToPath(new URL('..', import.meta.url)), 'src/polish-075.css'), 'utf8');
+    const resting = css.match(/html\.v075 #board \.planet-turn-rim \{ opacity: ([.\d]+); \}/);
+    const yours = css.match(/html\.v075 body\[data-turn='you'\] #board \.planet-turn-rim \{ opacity: ([.\d]+); \}/);
+    expect(resting).not.toBeNull();
+    expect(yours).not.toBeNull();
+    expect(Number(resting![1])).toBeLessThanOrEqual(0.12);
+    expect(Number(yours![1])).toBe(1);
+  });
 });

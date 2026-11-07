@@ -56,3 +56,19 @@ export function coastGain(frame:{x:number;y:number;width:number;height:number},d
   const span = Math.max(24, frame.height * .12);
   return Math.max(0, Math.min(1, room / span));
 }
+
+/**
+ * One frame of a flick after the finger lifts. `gain` (0..1) is how much of the planet's top
+ * is visible: it sets how long the glide lasts, and it ends the glide once the top is clipped.
+ * The release already multiplied the flick by gain once. Do not multiply again here — that
+ * killed a half-zoomed flick in a few frames.
+ * Returns the slowed velocity, or null when the coast should stop.
+ */
+export function coastStep(vel:{x:number;y:number}, gain:number, dt:number):{x:number;y:number}|null {
+  if(!(gain>0.02) || !(dt>0)) return null;
+  const tau = 140 + 420 * gain;
+  const damp = Math.exp(-Math.min(dt, 48) / tau);
+  const next = { x: vel.x * damp, y: vel.y * damp };
+  if(Math.hypot(next.x, next.y) < 0.03) return null;
+  return next;
+}

@@ -1,7 +1,7 @@
 import { expect,it } from 'vitest';
 import { arcQuat,inverse,rotate,slerp,type Quat } from '../src/sphere/rotation.js';
 import { unit } from '../src/sphere/geometry.js';
-import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT,coastGain } from '../src/sphere/upright.js';
+import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT,coastGain,coastStep } from '../src/sphere/upright.js';
 it('removes roll while keeping exactly the same point at the centre',()=>{
  for(let i=1;i<80;i++){
   const q=arcQuat([0,0,1],[Math.sin(i),Math.cos(i),.4]);
@@ -44,4 +44,19 @@ it('coasts only when the top of the planet is visible, with a continuous zoom tr
  // Between: continuous, not a hard step.
  const a=coastGain(frame, 280), b=coastGain(frame, 250), c=coastGain(frame, 220);
  expect(a).toBeGreaterThan(0); expect(a).toBeLessThan(b); expect(b).toBeLessThan(c); expect(c).toBeLessThanOrEqual(1);
+});
+it('a half-zoomed flick keeps gliding; gain is not applied again every frame',()=>{
+ // Eight frames at 16 ms. Multiplying by gain (0.5) on every frame used to kill this.
+ let half={x:0.8,y:0}, full={x:0.8,y:0};
+ for(let i=0;i<8;i++){
+  const nextHalf=coastStep(half,0.5,16), nextFull=coastStep(full,1,16);
+  expect(nextHalf).not.toBeNull();
+  expect(nextFull).not.toBeNull();
+  half=nextHalf!; full=nextFull!;
+ }
+ expect(half.x).toBeGreaterThan(0.4);
+ expect(full.x).toBeGreaterThan(half.x);
+ // Zoomed in (top clipped) and a flick that has already died both stop.
+ expect(coastStep({x:1,y:0},0,16)).toBeNull();
+ expect(coastStep({x:0.02,y:0},1,16)).toBeNull();
 });

@@ -87,6 +87,12 @@ describe('the film grain stays on top of everything', () => {
     expect(filmZ, 'the film should be near the top of the z-index range').toBeGreaterThan(2147483000);
   });
 
+  it('keeps its own layer, so a filtered logo cannot paint through it', () => {
+    const rule = filmRule();
+    expect(rule, 'a filtered mark punches through a fixed overlay that stays on the root layer').toMatch(/isolation:\s*isolate/);
+    expect(rule).toMatch(/translateZ\(0\)/);
+  });
+
   it('keeps the grain ON the film, with normal blending so it is visible', () => {
     const rule = filmRule();
     expect(rule, 'the grain image must live on the film').toMatch(/background-image:\s*url\(.data:image\/svg/);

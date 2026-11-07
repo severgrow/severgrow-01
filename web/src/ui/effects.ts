@@ -318,7 +318,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     return duration;
   }
 
-  function flyBack(from: HTMLElement, to: HTMLElement, f: number) {
+  function flyBack(from: HTMLElement, to: HTMLElement, f: number, home = false) {
     if (motion() === 0) return;
     const a = from.getBoundingClientRect();
     const b = to.getBoundingClientRect();
@@ -326,15 +326,22 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     d.className = 'flyer card back';
     Object.assign(d.style, { left: `${a.left}px`, top: `${a.top}px`, width: `${a.width}px`, height: `${a.height}px` });
     document.body.appendChild(d);
-    // The opponent's hidden draw: the card stays visible most of the way, then fades as it arrives
-    // (it used to ease in AND fade from the start, so it was barely seen).
+    // A cancelled drag goes home at full size and settles. The rare hidden-draw fallback still
+    // shrinks into a score pill, but on the same move beat — it used to be a hardcoded 380ms.
     const tx = b.left + b.width / 2 - (a.left + a.width / 2);
     const ty = b.top + b.height / 2 - (a.top + a.height / 2);
-    removeAfter(anim(d, [
-      { transform: 'translate(0,0) scale(1)', opacity: 1 },
-      { transform: `translate(${(tx * 0.7).toFixed(1)}px, ${(ty * 0.7).toFixed(1)}px) scale(.6)`, opacity: 1, offset: 0.65 },
-      { transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(.4)`, opacity: 0 },
-    ], { duration: 380 * f, easing: EASE.out, fill: 'forwards' }), d, 0);
+    const frames: Keyframe[] = home
+      ? [
+          { transform: 'translate(0,0) scale(1)', opacity: 1 },
+          { transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(1)`, opacity: 1, offset: 0.82 },
+          { transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(1)`, opacity: 0 },
+        ]
+      : [
+          { transform: 'translate(0,0) scale(1)', opacity: 1 },
+          { transform: `translate(${(tx * 0.7).toFixed(1)}px, ${(ty * 0.7).toFixed(1)}px) scale(.6)`, opacity: 1, offset: 0.65 },
+          { transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(.4)`, opacity: 0 },
+        ];
+    removeAfter(anim(d, frames, { duration: MOTION.move * f, easing: home ? EASE.settle : EASE.out, fill: 'forwards' }), d, 0);
   }
 
   /**

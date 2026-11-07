@@ -49,7 +49,7 @@ html.futa04-information #hand .card.futa04-bloom-pick {
   opacity: .38 !important;
   filter: grayscale(.85) brightness(.72) !important;
   box-shadow: none !important;
-  transition: opacity calc(var(--dur-quick) * var(--anim,1)) ease-out, filter calc(var(--dur-quick) * var(--anim,1)) ease-out !important;
+  transition: opacity calc(var(--dur-quick) * var(--anim,1)) ease-out, filter calc(var(--dur-quick) * var(--anim,1)) ease-out, translate var(--dur-quick) var(--ease-settle) !important;
 }
 .futa04-information #moves .futa04-skip {
   color: var(--c-muted); background: transparent; border: 1px solid var(--c-line);

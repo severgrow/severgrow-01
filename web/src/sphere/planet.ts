@@ -16,7 +16,7 @@
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
 import { isDoubleTap, type TapPoint } from '../logic/double-tap.js';
 import { markPlanetPainted } from '../player/startup.js';
-import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT,coastGain } from './upright.js';
+import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT,coastGain,coastStep } from './upright.js';
 import { menuDiscRadius } from '../player/planet-lockup.js';
 import { claimSpace, DRIFT_PX_PER_MS, DRIFT_Y_SHARE, freeSpace, spaceDrift } from './space.js';
 import { buildSphere, homeQuat, latticeMap, pickCell, unit, type Sphere, type V3 } from './geometry.js';
@@ -267,20 +267,17 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       q = multiply([0, s, 0, Math.cos((MENU_SPIN_RAD_PER_MS * dt) / 2)], q);
     }
     if (mode === 'menu' && !flight && posed) menuMemory = q;
-    // Inertial coast after a drag release (owner, 2026-11-07): only while zoomed out enough that
-    // the top of the planet is visible; gain is continuous; reduced motion skips it.
+    // Inertial coast after a drag release (owner, 2026-11-07): only while the top of the planet
+    // is visible. Gain was applied once at release. Here it only sets the glide's length, and
+    // ends the glide if a pinch hides the top. Reduced motion skips it.
     if (!flight && !pointers.size && motion() && (Math.abs(coastVel.x) + Math.abs(coastVel.y)) > .02) {
       const disc = discRadius(frameNow.width, frameNow.height, zoom);
       const gain = coastGain(frameNow, disc);
-      if (gain < .02) stopCoast();
+      const next = coastStep(coastVel, gain, dt);
+      if (!next) stopCoast();
       else {
-        const radius = disc;
-        q = northUpDrag(q, north, coastVel.x * dt, coastVel.y * dt, radius);
-        // Zoomed out coasts longer; zoomed in decays almost immediately.
-        const tau = 140 + 420 * gain;
-        const damp = Math.exp(-dt / tau);
-        coastVel = { x: coastVel.x * damp * gain, y: coastVel.y * damp * gain };
-        if (Math.hypot(coastVel.x, coastVel.y) < .03) stopCoast();
+        q = northUpDrag(q, north, coastVel.x * dt, coastVel.y * dt, disc);
+        coastVel = next;
       }
     } else if (!motion()) stopCoast();
     if (Math.abs(targetZoom - zoom) > zoom * .0005) zoom += (targetZoom - zoom) * (1 - Math.exp(-dt / 70));

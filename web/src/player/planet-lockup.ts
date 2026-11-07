@@ -7,6 +7,32 @@
 // whatever the font, the screen or the text size. The gap between them is a fixed share of that
 // width. The planet module reads `lockupBox()` and centres its globe on the pair.
 const GAP_SHARE = .075;
+/**
+ * The home PAINT mark's visible ink, as fractions of its viewBox (`-28 11 2106 662`).
+ * Measured from `#approved-geometry` (the clip the bristles are cut to): x 27..2022, y 59..624.
+ * The element is that padded box, so matching the element to the word leaves the brush narrower.
+ */
+export const PAINT_INK = Object.freeze({
+  left: (27 - -28) / 2106,
+  width: (2022 - 27) / 2106,
+  top: (59 - 11) / 662,
+  height: (624 - 59) / 662,
+});
+
+/**
+ * Size and place the logo element so the VISIBLE paint matches the word's ink: same width, same
+ * left edge, and the designed gap measured from the paint, not from the empty viewBox padding.
+ */
+export const paintLockup = (
+  word: { left: number; width: number },
+  placed: { left: number; width: number; height: number },
+): { width: number; shiftX: number; marginBottom: number } => {
+  const width = word.width / PAINT_INK.width;
+  const shiftX = word.left - (placed.left + placed.width * PAINT_INK.left);
+  const bottomPad = placed.height * (1 - PAINT_INK.top - PAINT_INK.height);
+  return { width, shiftX, marginBottom: word.width * GAP_SHARE - bottomPad };
+};
+
 const CSS = `
 html.planet-lockup #menu .menu-stack > #logo {
   flex: none; display: block !important; width: var(--lockup-w, 52vw) !important; max-width: none;
@@ -62,16 +88,21 @@ export const mountPlanetLockup = (): void => {
   }
   document.documentElement.classList.add('planet-lockup');
   if (logo.parentElement !== stack) stack.insertBefore(logo, title);
-  // Same width as the wordmark's ink, and over the same left/right edges: the ink may sit a little
-  // off its element's centre (letter-spacing, side bearings), so the kanji follows the ink.
+  // Same width as the word's ink. The paint does not fill its viewBox, so the element is wider
+  // than the word and shifted until the visible brush shares the word's left and right edges.
   const fit = () => {
     const box = inkBox(title);
     if (!(box.width > 0)) return;
-    logo.style.setProperty('--lockup-w', `${box.width.toFixed(2)}px`);
+    const width = box.width / PAINT_INK.width;
+    logo.style.setProperty('--lockup-w', `${width.toFixed(2)}px`);
     logo.style.translate = '0 0';
     const at = logo.getBoundingClientRect();
-    const shift = box.left - at.left;
-    logo.style.translate = `${shift.toFixed(2)}px 0`;
+    if (!(at.width > 0)) return;
+    const placed = paintLockup(box, at);
+    logo.style.translate = `${placed.shiftX.toFixed(2)}px 0`;
+    // The stylesheet's margin is !important and counts the empty viewBox. This replaces only the
+    // bottom, so the gap under the paint stays a share of the word.
+    logo.style.setProperty('margin-bottom', `${placed.marginBottom.toFixed(2)}px`, 'important');
   };
   // THE WHOLE GROUP SITS IN THE MIDDLE (owner, 2026-11-04: "There should be the same amount of space on
   // top and bottom, so logo together with the buttons and globe should be centered vertically too").

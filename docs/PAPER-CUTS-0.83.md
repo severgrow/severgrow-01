@@ -5,9 +5,8 @@ planet dirty set).
 
 ## Board active-turn LED contour
 
-**Already improved** in `web/src/polish-075.css` (other agent, 2026-11-07): FUTASAKU amber kept,
-narrow bright core + softer outer wash, short dash segments, cheap-hardware strip feel on
-`.planet-turn-line` / `.planet-turn-glow` when `data-turn='you'`.
+**Already improved** in `web/src/polish-075.css`: FUTASAKU amber, one continuous hairline
+(not dashes) with a soft wash. The line stays quiet while it is their turn and lights on yours.
 
 `web/src/style.css` was still being edited in parallel, so this helper did **not** add a second
 LED refinement there. No gap to fill unless that polish-075 block is later dropped.

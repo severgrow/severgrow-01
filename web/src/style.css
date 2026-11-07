@@ -1307,8 +1307,7 @@ svg.usable .hex-cell {
   fill: none;
   stroke: var(--c-you);
   stroke-width: 2.4;
-  /* Legal targets pulse gently into view, then breathe. */
-  animation: target-in 0.28s ease-out both, breathe 1.6s ease-in-out 0.28s infinite;
+  /* Arrival is owned by the later .target rule. No idle breath here. */
   transform-box: fill-box;
   transform-origin: center;
 }
@@ -1849,7 +1848,8 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .hand .card {
   transform-origin: 50% 100%;
   transform: rotate(var(--rot, 0deg)) translateY(var(--dy, 0px));
-  transition: transform var(--dur-quick) var(--ease-settle), opacity var(--dur-quick);
+  translate: 0 0;
+  transition: transform var(--dur-quick) var(--ease-settle), opacity var(--dur-quick) var(--ease-settle), translate var(--dur-quick) var(--ease-settle);
   margin-left: min(-6px, calc((100% - 28px - var(--n) * var(--cw)) / max(var(--n) - 1, 1)));
   /* Phase 1: a card's weight is a shadow under it, set once per render (never per frame). */
   box-shadow: 0 var(--shadow-y, 2px) var(--shadow-blur, 4px) rgba(0, 0, 0, var(--shadow-alpha, 0.28));
@@ -1925,6 +1925,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 }
 .hand.waiting .card {
   opacity: 0.85;
+  translate: 0 2px;
 }
 .c-num {
   justify-self: start;
@@ -4613,7 +4614,7 @@ svg.board .fx-mote {
   pointer-events: none;
 }
 .top-glow.glow-in {
-  animation: glow-in 500ms ease-out both;
+  animation: glow-in var(--dur-move) var(--ease-out) both;
 }
 @keyframes glow-in {
   from {
@@ -5201,7 +5202,7 @@ html[data-layout='side'] .dock-overlays {
   /* NO `filter` here (documented invariant): the card is the element that lifts, and a filter on an
      animating node re-rasterises it every frame. The dimmed card below reaches its state with
      opacity alone. */
-  transition: transform var(--dur-quick) var(--ease-settle), opacity var(--dur-quick);
+  transition: transform var(--dur-quick) var(--ease-settle), opacity var(--dur-quick) var(--ease-settle), translate var(--dur-quick) var(--ease-settle);
 }
 .dock .hand-row > .hand .card.lifted {
   transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - var(--lift, 18px))) scale(1.04);
@@ -5375,6 +5376,13 @@ html[data-layout='stack'] .board-wrap {
   stroke-opacity: 0.85;
   animation: ghost-breathe 1.8s ease-in-out infinite;
 }
+/* A hex the player has just painted arrives once. Kept ghosts do not get .arrive again. */
+@keyframes ghost-arrive {
+  from { opacity: 0; }
+}
+.draw-ghost.arrive .ghost-tile {
+  animation: ghost-arrive var(--dur-quick) var(--ease-out) both, ghost-breathe 1.8s ease-in-out var(--dur-quick) infinite;
+}
 .ghost.replaces .ghost-tile {
   fill: color-mix(in srgb, var(--c-you) 55%, var(--c-bot));
   stroke: var(--c-bot);
@@ -5423,7 +5431,8 @@ html[data-layout='stack'] .board-wrap {
   stroke-opacity: 0.6;
 }
 .reduce-motion .ghost .ghost-tile,
-.reduce-motion .draw-ghost .ghost-tile {
+.reduce-motion .draw-ghost .ghost-tile,
+.reduce-motion .draw-ghost.arrive .ghost-tile {
   animation: none;
 }
 .reduce-motion .ghost-vein {
@@ -5748,7 +5757,7 @@ html[data-layout='side'] .dock-overlays {
   border-radius: 2px;
   background: linear-gradient(90deg, var(--c-you) 0 calc(var(--share, 0.5) * 100%), var(--c-bot) calc(var(--share, 0.5) * 100%) 100%);
   opacity: 0.8;
-  transition: --share 0.6s cubic-bezier(0.34, 1.4, 0.64, 1);
+  transition: --share var(--dur-move) var(--ease-standard);
 }
 .race-fill::after {
   /* the middle mark: who is ahead of level */

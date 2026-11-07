@@ -94,7 +94,10 @@ html.v075 #board .planet-shadow-near { fill: rgba(0, 0, 0, .34); }
    Immediate state paint, independent of queued announcements; never a loop. */
 html.v075 #board .planet-turn-glow { fill: none; stroke: var(--turn-rim-ink); stroke-width: 6; stroke-linejoin: round; opacity: .0286; }
 html.v075 #board .planet-turn-line { fill: none; stroke: var(--turn-rim-ink); stroke-width: 1.1; stroke-linejoin: round; opacity: .85; }
-html.v075 #board .planet-turn-rim { opacity: .22; }
+/* Quiet until it is your turn. The line below stays bright; this group is the dimmer,
+   so their move reads as a trace and yours as the lamp. Do not raise this without
+   lowering the line, or both turns look lit. */
+html.v075 #board .planet-turn-rim { opacity: .1; }
 html.v075 body[data-turn='you'] #board .planet-turn-rim { opacity: 1; }
 html.v075 body[data-turn='you'] #board .planet-turn-glow { opacity: .13; }
 

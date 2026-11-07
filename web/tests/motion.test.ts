@@ -94,6 +94,15 @@ describe('motion tokens', () => {
     expect(token('dur-moment')).toBe('calc(var(--dur-consequence) * 2 + var(--dur-ack) / 2)');
   });
 
+  it('a new top-rank halo arrives on the move beat, not a half-second fade', () => {
+    expect(css).toMatch(/\.top-glow\.glow-in \{\s*animation: glow-in var\(--dur-move\) var\(--ease-out\) both;/);
+  });
+
+  it('the score bar eases on the move beat and does not spring past the score', () => {
+    expect(css).toMatch(/\.race-fill \{[^}]*transition:\s*--share var\(--dur-move\) var\(--ease-standard\);/);
+    expect(css).not.toMatch(/cubic-bezier\(0\.34,\s*1\.4/);
+  });
+
   it('the CSS easings are the same family', () => {
     expect(token('ease-standard')).toBe(EASE.standard);
     expect(token('ease-settle')).toBe(EASE.settle);

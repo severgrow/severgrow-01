@@ -2,10 +2,10 @@
 //   PAINT  → home-screen menu only (true vector paint SVG; CSS drop-shadow OK)
 //   PLAIN  → small logos in menus / in-game / everywhere else
 //   HEX    → app icon + card back (SVG rasterised offline)
-//   FAVICON tree-hex → favicon + tiny marks (tree-only cream PNG; HEX SVG has kanji)
+//   FAVICON tree-hex → the page icon only (index.html). Do not import that PNG here: it is
+//   ~710KB and nothing in the app reads it, so an import would ship it inside the JS bundle.
 import paintUrl from '../assets/brand/paint-wordmark.svg?url';
 import plainUrl from '../assets/brand/plain-wordmark.svg?url';
-import faviconUrl from '../assets/brand/favicon-tree-hex.png?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
 
@@ -13,8 +13,6 @@ import type { Layout, Viewport } from '../logic/layout.js';
 export const WORDMARK_URL: string = plainUrl;
 /** Home-menu PAINT mark (true vector SVG). */
 export const PAINT_URL: string = paintUrl;
-/** Tiny tree-hex for favicon-scale uses. */
-export const FAVICON_URL: string = faviconUrl;
 
 /** Owner SVG viewBox width÷height for PLAIN / PAINT (`-28 11 2106 662`). */
 export const WORDMARK_ASPECT = 2106 / 662;
@@ -195,15 +193,6 @@ export function drawLogo(_kanji = false) {
   // Home screen menu ONLY uses PAINT (owner, 2026-11-07).
   container.replaceChildren(paintMarkImg());
 }
-
-/**
- * Primary Japanese mark inside the existing menu box. Kept as a helper name for call sites that
- * used to ask for the kanji SVG; the home menu now always shows PAINT.
- */
-function kanjiMark(id: string): SVGSVGElement {
-  return markSvg(id, paintUrl, false, true, true);
-}
-void kanjiMark;
 
 export function createHudBrandMark(id = 'futasaku-hud-plain'): SVGSVGElement {
   return markSvg(id, plainUrl, true, true);

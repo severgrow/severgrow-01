@@ -92,7 +92,7 @@ import { attachSchedulerPause, scheduler } from './logic/scheduler.js';
 import { mountHiddenPause } from './ui/hidden-pause.js';
 import { mountViewportGuard } from './ui/viewport-guard.js';
 import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './logic/timing.js';
-import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
+import { DECK_BEAT, SCORE_BEAT, deckMoment, scoreProgress, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { EASE, BREATH, MOTION, PINNED, breathAmpStep, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
@@ -1837,7 +1837,7 @@ function dealIn() {
     const flying: Animation[] = [];
     document.querySelectorAll<HTMLElement>('#hand .card').forEach((card, i) => {
       const r = card.getBoundingClientRect();
-      const animation = anim(card, [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, rotate: '-12deg', opacity: 0 }, { translate: '0 0', rotate: '0deg', opacity: 1 }], { duration: 420 * timeScale(), delay: i * 70 * timeScale(), easing: 'cubic-bezier(.2,.8,.3,1.05)', fill: 'backwards' });
+      const animation = anim(card, [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, opacity: 0 }, { translate: '0 0', opacity: 1 }], { duration: PINNED.humanDraw * timeScale(), delay: i * MOTION.ack * timeScale(), easing: EASE.settle, fill: 'backwards' });
       if (animation) flying.push(animation);
     });
     if (!flying.length) { handSettled = true; if (lessonNow) render(); return; }
@@ -3333,6 +3333,7 @@ function humanPlay(a: Action, opts: { auto?: boolean; flightFrom?: DOMRect } = {
     console.error('move refused', error);
     board.shake(settings.reduceMotion);
     if (settings.sound) sound.illegal();
+    vibrate(settings.vibration, 12);
     if (a.t === 'Bloom') {
       draw = { ...draw, msg: "That shape can't be placed" };
       paintDraw();
@@ -3390,6 +3391,7 @@ async function humanPlayOnline(a: Action, flightFrom?: DOMRect) {
       draw = { ...draw, msg: result.message };
       board.shake(settings.reduceMotion);
       if (settings.sound) sound.illegal();
+      vibrate(settings.vibration, 12);
       paintDraw();
       render();
       return;
@@ -4628,8 +4630,9 @@ async function playStep(step: Step, my: number) {
       return;
     }
     case 'remove': {
-      for (const k of step.keys) anim(board.tile(k), [{ opacity: 1 }, { opacity: 0 }], { duration: 300 * f, fill: 'forwards' });
-      await wait(320 * f, my);
+      // Rot sinks into the tile. Fruit has its own burst; this is only the quiet disappearance.
+      for (const k of step.keys) anim(board.tile(k), [{ transform: 'scale(1)', transformOrigin: 'center', opacity: 1 }, { transform: 'scale(0.86)', transformOrigin: 'center', opacity: 0 }], { duration: MOTION.move * f, easing: EASE.out, fill: 'forwards' });
+      await wait(MOTION.move * f, my);
       show();
       return;
     }
@@ -4905,6 +4908,7 @@ function showBreakdown(p: Player) {
     ...b.lines.map((t) => Object.assign(document.createElement('span'), { textContent: t })),
   );
   pop.hidden = false;
+  enterSurface(pop);
 }
 
 let lastAmbBoard: State['board'] | null = null;
@@ -5065,10 +5069,10 @@ function countScores(to: [number, number]) {
   const start: [number, number] = [...shownScores];
   if (start[0] === target[0] && start[1] === target[1]) return;
   const t0 = performance.now();
-  const dur = 600 * Math.max(timeScale(), 0.3);
+  const dur = SCORE_BEAT.countMs * Math.max(timeScale(), 0.3);
   scoreUnsub?.();
   scoreUnsub = scheduler.subscribe(({ now }) => {
-    const k = Math.min(1, (now - t0) / dur);
+    const k = scoreProgress((now - t0) / dur);
     shownScores = [Math.round(start[0] + (target[0] - start[0]) * k), Math.round(start[1] + (target[1] - start[1]) * k)];
     $('score-you').textContent = String(shownScores[0]);
     $('score-bot').textContent = String(shownScores[1]);
@@ -5078,10 +5082,10 @@ function countScores(to: [number, number]) {
       scoreUnsub = null;
     }
   });
-  // A fast tick, then a tiny bounce on the final number.
-  const bounce: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(1.28)', offset: 0.45 }, { transform: 'scale(0.96)', offset: 0.75 }, { transform: 'scale(1)' }];
-  if (target[0] !== start[0]) anim($('score-you'), bounce, { duration: 360, delay: dur });
-  if (target[1] !== start[1]) anim($('score-bot'), bounce, { duration: 360, delay: dur });
+  // The digits have arrived: one small click on the number that changed, not a bounce.
+  const pop: Keyframe[] = [{ transform: 'scale(1)' }, { transform: `scale(${SCORE_BEAT.popScale})`, offset: 0.55 }, { transform: 'scale(1)' }];
+  if (target[0] !== start[0]) anim($('score-you'), pop, { duration: SCORE_BEAT.popMs, delay: dur, easing: EASE.settle });
+  if (target[1] !== start[1]) anim($('score-bot'), pop, { duration: SCORE_BEAT.popMs, delay: dur, easing: EASE.settle });
 }
 
 // ---------- rendering ----------
@@ -6561,7 +6565,7 @@ function renderHud() {
   const turn = $('turn');
   turn.className = `turn ${over ? 'over' : st.turnPlayer === HUMAN ? 'you' : 'bot'}${thinking ? ' thinking' : ''}`;
   const turnKey = over ? 'over' : `${st.turnPlayer}`;
-  if (turnKey !== lastTurnKey && lastTurnKey !== '' && !settings.reduceMotion && settings.speed !== 'skip') anim(turn, [{ opacity: 0.25 }, { opacity: 1 }], { duration: 280 * Math.max(timeScale(), 0.35), easing: 'ease-out' });
+  if (turnKey !== lastTurnKey && lastTurnKey !== '' && !settings.reduceMotion && settings.speed !== 'skip') anim(turn, [{ opacity: 0.25 }, { opacity: 1 }], { duration: MOTION.quick * Math.max(timeScale(), 0.35), easing: EASE.out });
   lastTurnKey = turnKey;
   // Online the duel strip (directly above) already owns the turn word, and there is no bot level:
   // the pill carries the turn clock only — never a "Level N" that does not exist online.
@@ -6573,7 +6577,7 @@ function renderHud() {
     ? '<b>Game over</b>'
     : isOnlineDuel()
       ? ''
-      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>${currentMatchLabel()}</small>`;
+      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : `${OPP.Label} turn`}</b><small>${currentMatchLabel()}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
@@ -7990,9 +7994,9 @@ function renderPiles(v: View, advice: Advice | null) {
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
     const df = Math.max(timeScale(), 0.35);
     if (dm === 'last') {
-      anim($('deck'), [{ transform: 'scale(1)' }, { transform: 'scale(1.12) rotate(-3deg)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 600 * df, easing: 'cubic-bezier(.3,1.5,.5,1)' });
+      anim($('deck'), [{ transform: 'scale(1)' }, { transform: `scale(${DECK_BEAT.lastScale})`, offset: 0.45 }, { transform: 'scale(1)' }], { duration: DECK_BEAT.ms * df, easing: EASE.settle });
       if (settings.sound) sound.chime();
-    } else anim($('deck'), [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0.4, transform: 'scale(0.9) translateY(4px)' }], { duration: 700 * df, easing: 'ease-out' });
+    } else anim($('deck'), [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0.4, transform: 'scale(0.9) translateY(4px)' }], { duration: DECK_BEAT.ms * df, easing: EASE.out });
   }
   lastDeckSeen = v.deckCount;
   // overhaul item 6: the stacks are as thick as the piles are big; the last card stands alone
@@ -8239,7 +8243,7 @@ function presentResult(go: HTMLElement, wasHidden: boolean): void {
     // sheets do, so the card is a plate landing, not a panel that was simply there. Its own title
     // keeps the CSS reveal it already owns (`go-title-in`, 60ms later) — one choreography each.
     resetSurface(card);
-    enterSurface(card, { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE });
+    enterSurface(card, { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE, delay: interfaceMotionAllowed() ? PINNED.hitStop : 0 });
   }
 }
 /** One exit for every path that puts the result away, so the board always comes back to life. */
@@ -9473,6 +9477,7 @@ const drawHandlers = {  down(p: Pt, e: PointerEvent) {
     if (draw.shape.length === c.n) {
       board.shake(settings.reduceMotion);
       if (settings.sound) sound.illegal();
+      vibrate(settings.vibration, 12);
       draw = { ...draw, msg: paintProblem(session!.view, c, draw.shape, draw.reverse) };
     }
     render();
@@ -10372,7 +10377,7 @@ const dragLayer = mountDragLayer({
     if (hp) vibrate(true, hp as number | number[]);
   },
   reducedMotion: () => settings.reduceMotion || motion() === 0,
-  flyBack: (from, to) => flyBack(from, to, timeScale()),
+  flyBack: (from, to) => flyBack(from, to, timeScale(), true),
 });
 dragLayer.attachHand($('hand'));
 dragLayer.attachDeck($('deck'));
