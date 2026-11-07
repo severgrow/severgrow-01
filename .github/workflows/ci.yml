@@ -67,44 +67,26 @@ jobs:
           path: web/dist
           retention-days: 1
 
+  # Fast preview path (feature branches / PRs): suites that catch most product breaks.
+  # Full release path adds `browser-release` below. Promote/live still waits for the whole CI
+  # workflow on the futa0.5-online commit (docs/RELEASE-FLOW.md). Tests are never deleted.
+  # Two jobs (not one matrix + job-level `if: matrix.*`): GHA rejects `matrix` in job `if`.
   browser:
-    # Independent suites use separate runners, keeping their assertions and avoiding
-    # repeating successful suites when one driver fails.
     needs: [build-futa04, build-futa05]
     strategy:
       fail-fast: false
       matrix:
-        # Fast preview path (feature branches / PRs): the suites that catch most product breaks.
-        # Full release path (futa0.5-online): every suite below — promote/live still waits for this
-        # full CI on the release-branch commit (docs/RELEASE-FLOW.md). Tests are never deleted.
         include:
-          # --- always (preview + release) ---
-          - { suite: futa04-critical, channel: futa04, tier: always }
-          - { suite: futa04-information, channel: futa04, tier: always }
-          - { suite: futa04-motion, channel: futa04, tier: always }
-          - { suite: lessons-3, channel: futa05, tier: always }
-          - { suite: territory-menu, channel: futa04, tier: always }
-          - { suite: territory-gestures, channel: futa04, tier: always }
-          - { suite: territory-gestures-ios, channel: futa04, tier: always }
-          - { suite: sphere-test, channel: futa05, tier: always }
-          - { suite: sphere-test-ios, channel: futa05, tier: always }
-          - { suite: planet-matte, channel: futa05, tier: always }
-          # --- release only (futa0.5-online push / promote gate) ---
-          - { suite: futa04-tutorial-intel, channel: futa04, tier: release }
-          - { suite: futa04-tutorial-lock, channel: futa04, tier: release }
-          - { suite: futa04-lesson-9-free, channel: futa04, tier: release }
-          - { suite: cut-severe, channel: futa04, tier: release }
-          - { suite: territory-challenges, channel: futa05, tier: release }
-          - { suite: living-territory, channel: futa04, tier: release }
-          - { suite: living-territory-ios, channel: futa04, tier: release }
-          - { suite: territory-final-polish, channel: futa04, tier: release }
-    # Skip release-only suites on feature branches / PRs (fast preview). Keep them on the
-    # release branch so /test/ and promote still run the full gate.
-    if: >
-      matrix.tier == 'always' ||
-      github.ref == 'refs/heads/futa0.5-online' ||
-      github.base_ref == 'futa0.5-online' ||
-      github.event_name == 'workflow_dispatch'
+          - { suite: futa04-critical, channel: futa04 }
+          - { suite: futa04-information, channel: futa04 }
+          - { suite: futa04-motion, channel: futa04 }
+          - { suite: lessons-3, channel: futa05 }
+          - { suite: territory-menu, channel: futa04 }
+          - { suite: territory-gestures, channel: futa04 }
+          - { suite: territory-gestures-ios, channel: futa04 }
+          - { suite: sphere-test, channel: futa05 }
+          - { suite: sphere-test-ios, channel: futa05 }
+          - { suite: planet-matte, channel: futa05 }
     # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
     # Playwright 1.56.1 refuses it ("Playwright does not support chromium on ubuntu26.04-x64"),
     # which failed EVERY browser job at `playwright-core install` before a single test ran. Pin the
@@ -143,9 +125,59 @@ jobs:
           retention-days: 7
 
       - name: Keep living Territory visual evidence
-        if: always() && (startsWith(matrix.suite, 'living-territory') || matrix.suite == 'territory-final-polish' || startsWith(matrix.suite, 'sphere-test') || matrix.suite == 'planet-matte')
+        if: always() && (startsWith(matrix.suite, 'sphere-test') || matrix.suite == 'planet-matte')
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.suite }}-screens
-          path: ${{ matrix.suite == 'planet-matte' && '/tmp/planet-matte/' || matrix.suite == 'territory-final-polish' && '/tmp/territory-final-polish/' || startsWith(matrix.suite, 'sphere-test') && '/tmp/sphere-test/' || '/tmp/living-territory/' }}
+          path: ${{ matrix.suite == 'planet-matte' && '/tmp/planet-matte/' || '/tmp/sphere-test/' }}
+          retention-days: 7
+
+  browser-release:
+    name: browser (release gate)
+    # Full promote/release gate — only on futa0.5-online (and PRs into it / manual dispatch).
+    if: >
+      github.ref == 'refs/heads/futa0.5-online' ||
+      github.base_ref == 'futa0.5-online' ||
+      github.event_name == 'workflow_dispatch'
+    needs: [build-futa04, build-futa05]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { suite: futa04-tutorial-intel, channel: futa04 }
+          - { suite: futa04-tutorial-lock, channel: futa04 }
+          - { suite: futa04-lesson-9-free, channel: futa04 }
+          - { suite: cut-severe, channel: futa04 }
+          - { suite: territory-challenges, channel: futa05 }
+          - { suite: living-territory, channel: futa04 }
+          - { suite: living-territory-ios, channel: futa04 }
+          - { suite: territory-final-polish, channel: futa04 }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install the browser this suite drives
+        run: |
+          case "${{ matrix.suite }}" in
+            *-ios) npx playwright-core install --with-deps webkit ;;
+            *) npx playwright-core install --with-deps chromium ;;
+          esac
+      - name: Restore the shared ${{ matrix.channel }} build
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.channel }}
+          path: web/dist
+      - run: node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts
+
+      - name: Keep living Territory visual evidence
+        if: always() && (startsWith(matrix.suite, 'living-territory') || matrix.suite == 'territory-final-polish')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.suite }}-screens
+          path: ${{ matrix.suite == 'territory-final-polish' && '/tmp/territory-final-polish/' || '/tmp/living-territory/' }}
           retention-days: 7

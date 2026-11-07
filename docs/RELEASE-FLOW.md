@@ -91,11 +91,13 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
 - `ci.yml` `build-futa04` / `build-futa05`: **one shared build per channel**, downloaded by every
   browser suite (was: each matrix job rebuilt — ~2–4 min × ~18). Measured saving: on the order of
   **30–60 minutes** of redundant build time per CI run, without deleting any suite.
-- `ci.yml` `browser` — two tiers (owner, 2026-11-07: fast preview path + full promote/release gates):
-  - **Always (feature branches / PRs / preview):** futa04-critical, futa04-information,
-    futa04-motion, lessons-3, territory-menu, territory-gestures, territory-gestures-ios,
-    sphere-test, sphere-test-ios, planet-matte.
-  - **Release only (`futa0.5-online` push, PRs into it, or workflow_dispatch):** also
+- `ci.yml` browser jobs — two tiers (owner, 2026-11-07: fast preview path + full promote/release
+  gates; implemented as separate `browser` / `browser-release` jobs because GHA rejects `matrix` in
+  a job-level `if`):
+  - **`browser` (always):** futa04-critical, futa04-information, futa04-motion, lessons-3,
+    territory-menu, territory-gestures, territory-gestures-ios, sphere-test, sphere-test-ios,
+    planet-matte.
+  - **`browser-release` (`futa0.5-online` push, PRs into it, or workflow_dispatch):** also
     futa04-tutorial-intel, futa04-tutorial-lock, futa04-lesson-9-free, cut-severe,
     territory-challenges, living-territory, living-territory-ios, territory-final-polish.
   The `-ios` suites use WebKit (the Safari engine), not physical-device automation. Promote still
