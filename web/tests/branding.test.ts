@@ -1,16 +1,12 @@
-// ONE definition of the mark, and a mark that can never sit under a veil again.
-//
-// Owner (2026-10-24): "when paused - dont blur the futasaku in top right corner , show the same
-// logo nicely symmetricallyy on the end of game screen and any similar ... use branding very
-// wisely, but have nearly every page have the logo somewhere".
+// ONE definition of the mark per surface role (owner brand pack, 2026-11-07):
+//   PAINT  → home-screen menu only
+//   PLAIN  → small logos everywhere else
+//   HEX    → app icon + card back (built offline)
+//   FAVICON tree-hex → favicon + tiny marks
 //
 // `web/e2e/branding-surfaces.ts` measures the built page. This file locks the source invariants
-// that make that possible, so a future surface cannot quietly grow a second, drifting logo:
-//   - exactly one module imports the silhouette assets, and exactly one function builds the mark;
-//   - the pause/finish/submenu mark is the SAME helper (`createHudBrandMark`), never a copy;
-//   - the mark is app-level and fixed, above the veils, not a child of the HUD (`#game`), where
-//     the pause scrim's and the finish screen's `backdrop-filter` used to smear it.
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+// that make that possible, so a future surface cannot quietly grow a second, drifting logo.
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -29,62 +25,45 @@ const sources = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
 
 const allSource = sources(join(root, 'src')).map((path) => ({ path: path.slice(root.length), text: readFileSync(path, 'utf8') }));
 
-describe('one Futasaku mark, drawn once', () => {
-  it('keeps the newer remaining characters and shared canvas when refining the first character', () => {
-    const paths = (svg: string) => [...svg.matchAll(/<path d="([^"]+)"/g)].map(match => match[1]);
-    const reference = read('../docs/brand/sketch-spacing-reference.svg');
-    const final = read('src/assets/futasaku-primary-logo.svg');
-    expect(final.match(/viewBox="([^"]+)"/)?.[1]).toBe(reference.match(/viewBox="([^"]+)"/)?.[1]);
-    expect(paths(final).slice(2)).toEqual(paths(reference).slice(2));
-    expect(paths(final).slice(0, 2)).not.toEqual(paths(reference).slice(0, 2));
+describe('owner brand pack roles', () => {
+  it('ships the four exact owner-supplied rasters', () => {
+    for (const name of [
+      'src/assets/brand/favicon-tree-hex.png',
+      'src/assets/brand/plain-wordmark.png',
+      'src/assets/brand/hex-emblem.png',
+      'src/assets/brand/paint-wordmark.png',
+      'src/assets/brand/paint-wordmark-shadow.png',
+    ]) expect(existsSync(join(root, name)), name).toBe(true);
   });
 
-  it('uses the approved vector as the primary artwork on every live SVG surface', () => {
-    const primary = read('src/assets/futasaku-primary-logo.svg');
-    expect(primary).toContain('viewBox="200 118 1755 495"');
-    expect(primary.match(/<path\b/g)).toHaveLength(5);
-    expect(primary).not.toMatch(/<script|<foreignObject|https?:\/\/(?!www\.w3\.org)/);
-    expect(branding).toContain("import logoUrl from '../assets/futasaku-primary-logo.svg?url'");
-    expect(branding).toContain("image.setAttribute('href', logoUrl)");
-    expect(branding).toContain("image.setAttribute('preserveAspectRatio', 'xMidYMid meet')");
-    expect(read('index.html')).toMatch(/rel="preload"[^>]*futasaku-primary-logo\.svg/);
-    expect(read('src/style.css')).toContain("url('./assets/futasaku-primary-logo.svg')");
-    expect(read('public/brand/futasaku-primary-logo.svg')).toBe(primary);
-    expect(branding).toContain('export const WORDMARK_URL: string = logoUrl');
-    expect(read('../scripts/build-primary-logo.mjs')).toContain('web/src/assets/futasaku-primary-logo.svg');
+  it('maps PAINT to the home menu and PLAIN to small marks', () => {
+    expect(branding).toContain("import paintUrl from '../assets/brand/paint-wordmark-shadow.png?url'");
+    expect(branding).toContain("import plainUrl from '../assets/brand/plain-wordmark.png?url'");
+    expect(branding).toContain('export const WORDMARK_URL: string = plainUrl');
+    expect(branding).toContain('export const PAINT_URL: string = paintUrl');
+    expect(branding).toMatch(/Home screen menu ONLY uses PAINT|paintMarkImg|paintUrl/);
+    expect(branding).toContain('createHudBrandMark');
+    expect(branding).toMatch(/markSvg\(id, plainUrl/);
   });
 
-  it('only branding.ts imports the primary vector art', () => {
+  it('only branding.ts imports the live brand rasters', () => {
     const importers = allSource
-      .filter((f) => /futasaku-primary-logo/.test(f.text))
+      .filter((f) => /assets\/brand\/(paint-wordmark|plain-wordmark)/.test(f.text))
       .map((f) => f.path);
-    expect(importers, 'a second surface with its own copy of the logo drifts in weight and colour').toEqual([
+    expect(importers, 'a second surface with its own logo import drifts').toEqual([
       'src/player/branding.ts',
     ]);
   });
 
-  it('the mask is built in exactly one function', () => {
-    // The alpha-thresholded silhouette: one feComponentTransfer, one feFlood tinted by --c-accent.
-    expect(branding.match(/<feComponentTransfer/g)?.length ?? 0).toBe(1);
-    expect(branding.match(/--c-accent/g)?.length ?? 0).toBeGreaterThan(0);
-    expect(branding).not.toMatch(/fill\s*[:=]\s*['"]#(?:fff|ffffff|d4af37)/i);
-  });
-
   it('every surface asks the same helper for its mark', () => {
-    // The finish plate's cap and the HUD badge are ONE helper, one asset, one filter treatment.
     expect(branding).toMatch(/export function createHudBrandMark/);
     const finishes = main.match(/createHudBrandMark/g)?.length ?? 0;
     expect(finishes, 'main.ts must not hand-build a second mark').toBe(0);
     const players = allSource.filter((f) => /createHudBrandMark/.test(f.text)).map((f) => f.path).sort();
-    // Three surfaces, ONE helper: the lobby's header, the replay's footer (owner brief, 2026-10-25:
-    // "the replay shows only the board and the logo") and branding.ts that builds it. The replay
-    // asks this helper rather than drawing its own mark — which is exactly what the rule wants.
     expect(players).toEqual(['src/online/lobby-ui.ts', 'src/player/branding.ts', 'src/replay/player.ts']);
   });
 
   it('the mark is mounted outside #game, where the veils cannot reach it', () => {
-    // The pause scrim and the finish screen blur their backdrop; anything inside #game is behind
-    // them. The badge is appended to the page itself.
     expect(branding).toMatch(/document\.body\.append\(image\)/);
     expect(branding).not.toMatch(/#game > \.hud'\)\?\.append/);
   });
@@ -92,26 +71,26 @@ describe('one Futasaku mark, drawn once', () => {
   it('the badge is fixed above every veil and never filtered', () => {
     const css = branding.slice(branding.indexOf('export const BRANDING_CSS'));
     const rule = css.match(/#hud-brand\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(rule, 'the badge needs its own layer above the scrim (z 10), sheets (z 11) and the finish plate (z 12)').toMatch(/position:\s*fixed/);
+    expect(rule).toMatch(/position:\s*fixed/);
     expect(rule).toMatch(/z-index:\s*7[0-9]/);
     expect(rule, 'a filter would blur the badge by design').not.toMatch(/(^|;|\s)(-webkit-)?filter\s*:/);
-    // The finish cap and the corner badge share one size token, set once on the document.
     expect(css).toMatch(/#go-brand\s*\{[^}]*var\(--futasaku-logo-height/);
     expect(branding).toMatch(/setProperty\('--futasaku-logo-height'/);
   });
 
+  it('PAINT gets a barely-noticeable almost-black drop shadow on the home menu', () => {
+    expect(branding).toMatch(/drop-shadow\(0 1px 1\.5px rgba\(8, 8, 10/);
+    expect(existsSync(join(root, 'src/assets/brand/paint-wordmark-shadow.png'))).toBe(true);
+  });
+
   it('the badge stands down while the install invitation is open', () => {
-    // The invitation is z 13, under the badge's z 74, so without this the corner mark floats sharp
-    // over the invitation's 20px blur — the one dialog that explicitly wants to be the only thing
-    // in focus. A practice-game win offers the invitation while the finish plate is up (the badge
-    // is already down there), but the 900 ms deferred invitation for lessons 4-10 can open over a
-    // screen that DOES carry it, so this cannot rely on the finish-plate rule.
-    //
-    // Deliberately CSS-only: the mark is hidden by the invitation's own state, so it comes back by
-    // itself when the invitation closes. A JS flag would need a second sync to turn it back on, and
-    // nothing calls one on close.
     const css = branding.slice(branding.indexOf('export const BRANDING_CSS'));
-    expect(css, 'the CSS must suppress the badge for as long as the invitation is open')
+    expect(css)
       .toMatch(/:has\(#install-prompt:not\(\[hidden\]\)\)\s*#hud-brand\s*\{\s*display:\s*none/);
+  });
+
+  it('preloads the PAINT mark, not the retired primary SVG', () => {
+    expect(read('index.html')).toMatch(/paint-wordmark-shadow\.png/);
+    expect(read('index.html')).not.toMatch(/futasaku-primary-logo\.svg/);
   });
 });

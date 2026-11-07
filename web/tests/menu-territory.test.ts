@@ -172,7 +172,7 @@ describe('the entry ships the read-outs hidden, either side of a label that neve
     expect(territory).not.toMatch(/(^|;)\s*height\s*:/);
     expect(territory).not.toMatch(/(^|;)\s*min-height\s*:/);
     expect(styleCss).toMatch(/--menu-key-h: 50px/);
-    expect(styleCss).toMatch(/#menu \.menu-buttons \.btn,\s*#menu \.menu-footer \.btn,\s*#play-menu \.menu-buttons \.btn \{\s*min-height: var\(--menu-key-h\);\s*height: var\(--menu-key-h\);/);
+    expect(styleCss).toMatch(/#menu \.menu-buttons \.btn,\s*#menu \.menu-footer \.btn,\s*#play-menu \.menu-buttons \.btn,\s*#levels \.level-grid \.difficulty-tile \{\s*min-height: var\(--menu-key-h\);\s*height: var\(--menu-key-h\);/);
   });
 
   it('animates only a real change, on opacity, with the shared tokens and a static reduced mode', () => {

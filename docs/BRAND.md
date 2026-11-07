@@ -1,46 +1,30 @@
-# Primary FUTASAKU logo
+# FUTASAKU brand pack (owner, 2026-11-07)
 
-The master is `web/src/assets/futasaku-primary-logo.svg`. The owner's screenshot of Beta 0.7,
-build `ef2f826`, is the authoritative first-character reference. The earlier `final futa.svg`
-interpretation was not close enough and must not be reused as the first-character source.
-The first two paths trace the actual screenshot-era original, particularly its narrow inner cut.
-The remaining three paths and the overall viewBox are unchanged from the newer supplied sketch.
-The identical downloadable master is published at `/brand/futasaku-primary-logo.svg`.
+Exact owner-supplied rasters. Do not recreate or redraw.
 
-Construction uses a 19-unit module: the first character sits in a 31 x 24 module box, 589 x 456
-units, anchored at (215,134), with baseline 590. This preserves the original's proportions rather
-than stretching it into the rejected wider drawing. Curve fitting removes raster edge noise;
-the inner cut follows the original geometry, without quarter-grid rounding of its outline.
-`docs/brand/screenshot-era-wordmark.webp` preserves the historical source; its Git blob is identical
-at `ef2f826` and `50619415`. `first-character-trace.json` records crop, fitting and comparison data.
-The fitted silhouette overlaps the original by 99.42% before subpixel grid-box alignment.
-The earlier SVGs are historical references only. The editable grid proof is
-`/brand/futasaku-primary-logo-construction.svg`; it is never loaded by the game.
+| Role | File | Where |
+| --- | --- | --- |
+| **FAVICON** | `web/src/assets/brand/favicon-tree-hex.png` | Favicon and tiny marks (tree in hex, no kanji) |
+| **PLAIN** | `web/src/assets/brand/plain-wordmark.png` | All small logos in menus, in-game, HUD, finish, profile, replay |
+| **HEX EMBLEM** | `web/src/assets/brand/hex-emblem.png` | App icon + back of cards |
+| **PAINT** | `web/src/assets/brand/paint-wordmark.png` (+ `paint-wordmark-shadow.png`) | Home-screen menu **only** |
 
-`web/src/player/branding.ts` owns the live vector URL and the shared SVG helpers. Menu, HUD,
-finish plate, Planet/online headers, profile, replay player, downloaded video and posters all use
-that source. Existing layout boxes, lockup width, optical positions, accent tint and opacity stay
-in place; contain the new artwork within those boxes, preserving its proportions.
+`web/src/player/branding.ts` owns the live URLs. The home menu mounts PAINT (with a barely-noticeable
+almost-black drop shadow). Small marks use PLAIN via `createHudBrandMark` / `createWordmarkMark`.
+Independent Besley “FUTASAKU” text headings stay typography — only their wordmark tracking is tightened.
 
-Generate compatibility images, the stamped card back, PWA icons and email header with:
+## Regenerating derivatives
 
 ```sh
-node scripts/build-primary-logo.mjs
-node scripts/build-app-icons.mjs
-node scripts/build-email-wordmark.mjs
+# Icons from HEX EMBLEM, favicon from tree-hex, card back stamp, PAINT shadow:
+# (see the misc-polish brand scripts / the commit that introduced web/src/assets/brand/)
+node scripts/build-app-icons.mjs   # still accepts emblem webp; prefer the hex-emblem PNG source
 ```
 
-The scripts use the existing Playwright Chromium installation (`PW_CHROMIUM` can select a binary).
-The `*-emblem*` and `*-wordmark*` WebP filenames are compatibility derivatives, not alternative
-logos. `cards/back-frame.webp` is the existing card's frame/paper with its old central stamp removed;
-the primary-logo generator adds the new vector stamp. Keep the frame and dimensions unchanged.
-App icons retain the existing ground, square sizes and opaque iOS format. The Android maskable
-variant is contained inside its safe circle. Email stays 300x92 pixels for the 150x46 template.
+App icons live in `web/src/assets/futa04-icons/`. The Vite build copies them into `web/dist` for
+product channels. Regenerate the social card with `node --import tsx web/e2e/og-image.ts --no-build`
+and bump `og.jpg?v=` in `web/index.html` when the committed card changes.
 
-Regenerate the social card from a built product with `node --import tsx web/e2e/og-image.ts --no-build`.
-It uses one primary vector in the existing left-hand brand area, without a duplicate emblem.
-Increment the `og.jpg?v=` value in both metadata tags when regenerating the committed card.
-
-Run the branding/share-preview/email unit tests and `web/e2e/branding-surfaces.ts`, inspect mobile
-and desktop captures, and verify replay exports. Historical screenshots and locked legacy release
-branches are records; they are not alternate sources for new branding.
+Historical SVG masters under `web/src/assets/futasaku-primary-logo.svg` and
+`/brand/futasaku-primary-logo.svg` are retained as construction records; the live game no longer
+loads them.

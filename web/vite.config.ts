@@ -95,7 +95,11 @@ export default defineConfig({
         manifest.name = 'Futasaku TEST';
         manifest.short_name = 'Futa TEST';
       }
-      for (const icon of ['futasaku-icon-180.png', ...manifest.icons.map((entry: { src: string }) => entry.src)])
+      for (const icon of [
+        'futasaku-icon-180.png',
+        'futasaku-favicon-192.png',
+        ...manifest.icons.map((entry: { src: string }) => entry.src),
+      ])
         cpSync(fileURLToPath(new URL(`./src/assets/futa04-icons/${icon}`, import.meta.url)), resolve(output, icon));
       writeFileSync(path, JSON.stringify(manifest, null, 2) + '\n');
     }

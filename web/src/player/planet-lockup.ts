@@ -12,8 +12,8 @@ html.planet-lockup #menu .menu-stack > #logo {
   flex: none; display: block !important; width: var(--lockup-w, 62vw) !important; max-width: none;
   margin: 0 auto calc(var(--lockup-w, 62vw) * ${GAP_SHARE}) !important;
 }
-html.planet-lockup #menu .menu-stack > #logo { height: auto !important; aspect-ratio: 2072 / 638 !important; min-height: 0 !important; }
-html.planet-lockup #menu .menu-stack > #logo svg { display: block; width: 100% !important; height: 100% !important; }
+html.planet-lockup #menu .menu-stack > #logo { height: auto !important; aspect-ratio: 300 / 94 !important; min-height: 0 !important; }
+html.planet-lockup #menu .menu-stack > #logo :is(svg, img) { display: block; width: 100% !important; height: 100% !important; }
 `;
 
 /** The wordmark's INK box (viewport px): its glyphs, not its line box or its centred element. */

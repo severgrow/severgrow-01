@@ -5,8 +5,10 @@
     <!-- The page is dark from its very first frame (owner, 2026-11-06: "it flashes white for like
          0.1s before doing the black fade in"): said before any script or stylesheet loads. -->
     <meta name="color-scheme" content="dark" />
-    <style id="first-ground">html{background:#18191a;color-scheme:dark}html:where(.space-first){background:#0e0f10}html.space-first body{background:#0e0f10}</style>
-    <style>html[data-startup="waiting"] {background:#0e0f10} html[data-startup="waiting"] body {opacity:0;visibility:hidden}</style>
+    <!-- Charcoal from the first byte: never the greyer soil #18191a (owner, 2026-11-07: white/grey
+         flash on standalone home-screen launches of both live and /test/). -->
+    <style id="first-ground">html{background:#0e0f10;color-scheme:dark}html:where(.space-first){background:#0e0f10}html.space-first body{background:#0e0f10}body{background:#0e0f10}</style>
+    <style>html[data-startup="waiting"] {background:#0e0f10} html[data-startup="waiting"] body {opacity:0;visibility:hidden;background:#0e0f10}</style>
     <!-- A slow or failed planet import must never expose its retired flat-map underlay. -->
     <style>html.planet-expected .world-grid > .world-map-svg{visibility:hidden!important;pointer-events:none!important}</style>
     <script>
@@ -84,10 +86,10 @@
       })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#18191a" />
+    <meta name="theme-color" content="#0e0f10" />
     <meta name="description" content="Futasaku: grow your network, keep it joined to your home, cut your opponent's links." />
     <title>Futasaku</title>
-    <link rel="icon" type="image/png" href="./futasaku-icon-192.png" />
+    <link rel="icon" type="image/png" href="./futasaku-favicon-192.png" />
     <!-- The share card. og:image MUST be ABSOLUTE: the Open Graph spec requires it, and real
          scrapers (WhatsApp, iMessage, Slack) drop a relative path rather than resolving it — which
          is how a link preview ends up with no picture, or with a stale one. The `?v=` is a
@@ -99,7 +101,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Futasaku" />
     <meta property="og:url" content="https://www.futasaku.com/" />
-    <meta property="og:image" content="https://www.futasaku.com/og.jpg?v=6" />
+    <meta property="og:image" content="https://www.futasaku.com/og.jpg?v=7" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -108,7 +110,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Futasaku" />
     <meta name="twitter:description" content="Grow your network. Keep it joined to your home. Cut your opponent's links." />
-    <meta name="twitter:image" content="https://www.futasaku.com/og.jpg?v=6" />
+    <meta name="twitter:image" content="https://www.futasaku.com/og.jpg?v=7" />
     <meta name="twitter:image:alt" content="A Futasaku duel board: green growth around your home, the opponent's red pushing in, with the Futasaku wordmark." />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./futasaku-icon-180.png" />
@@ -118,9 +120,8 @@
          preloaded, so a cold load painted digits in Fragment Mono until it arrived (font-display:
          block, so they were briefly absent rather than swapped). One 2.6 KB request, no flash. -->
     <link rel="preload" href="./src/fonts/v2/futasaku-numerals-700.woff2" as="font" type="font/woff2" crossorigin />
-    <!-- The menu emblem paints from the first frame (see the mask rule in style.css) and the
-         boot then replaces it with the filtered SVG of the same silhouette. -->
-    <link rel="preload" href="./src/assets/futasaku-primary-logo.svg" as="image" type="image/svg+xml" />
+    <!-- Home-menu PAINT mark: decode before first paint so the lockup never swaps mid-fade. -->
+    <link rel="preload" href="./src/assets/brand/paint-wordmark-shadow.png" as="image" type="image/png" />
     <link rel="preload" href="./hardware/display-frame-supplied.webp" as="image" type="image/webp" />
     <link rel="preload" href="./hardware/button-frame-supplied.webp" as="image" type="image/webp" />
     <link rel="preload" href="./hardware/counter-frame-supplied.webp" as="image" type="image/webp" />

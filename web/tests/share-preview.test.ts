@@ -98,9 +98,9 @@ describe('the shared link preview', () => {
     ].map((m) => m[1]!);
     expect(refs.length).toBeGreaterThan(0);
     for (const ref of refs) {
-      // A `futasaku-icon-*` name is the current art that `scripts/build-app-icons.mjs` draws from
-      // the menu emblem; the bare `icon-*` files are the legacy build's and must not be named here.
-      expect(ref).toMatch(/^futasaku-icon-\d+\.png$/);
+      // App icons: HEX EMBLEM derivatives (`futasaku-icon-*`). Favicon: tree-hex (`futasaku-favicon-*`).
+      // Bare `icon-*` files are the legacy build's and must not be named here.
+      expect(ref).toMatch(/^futasaku-(?:icon|favicon)-\d+\.png$/);
       const file = resolve(ICONS, ref);
       expect(existsSync(file), `${file} is missing`).toBe(true);
       // The apple-touch-icon must have no alpha: iOS paints transparent pixels solid black.

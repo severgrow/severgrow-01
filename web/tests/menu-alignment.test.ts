@@ -172,11 +172,12 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
 });
 
 describe('the difficulty tiles are the same button as the menu', () => {
-  it('do not carry their own height or corner (they inherit the shared .btn scale: 56 big, pill)', () => {
+  it('share the menu key height and never invent their own corner', () => {
     const shared = rulesFor(styleCss, '#levels .level-grid .difficulty-tile');
     expect(shared.length).toBeGreaterThan(0);
     const body = shared.map((r) => r.body).join('\n');
-    expect(body).not.toMatch(/min-height\s*:/);
+    // Owner, 2026-11-07: BLITZ + bolt must match EASY/MEDIUM/HARD metrics — same --menu-key-h.
+    expect(body).toMatch(/min-height:\s*var\(--menu-key-h\)/);
     expect(body).not.toMatch(/border-radius\s*:/);
   });
 });

@@ -51,32 +51,11 @@ const check = (ok: boolean, what: string) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${what}`);
 };
 
-// The screenshot's actual first character, not an earlier SVG interpretation. Protect its cut.
-{
-  const page = await browser.newPage();
-  await page.evaluate('window.__name = f => f');
-  const master = readFileSync('web/src/assets/futasaku-primary-logo.svg', 'utf8');
-  const paths = [...master.matchAll(/<path d="([^"]+)"/g)].slice(0, 2).map(m => `<path d="${m[1]}"/>`).join('');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="791" height="612" viewBox="215 134 589 456" fill="white">${paths}</svg>`;
-  const overlap = await page.evaluate(async ({ svg, reference }) => {
-    const raster = async (url: string) => {
-      const image = new Image(); image.src = url; await image.decode();
-      const canvas = document.createElement('canvas'); canvas.width = 791; canvas.height = 612;
-      const g = canvas.getContext('2d', { willReadFrequently: true })!;
-      g.drawImage(image, 0, 0, 791, 612); return g.getImageData(0, 0, 791, 612).data;
-    };
-    const [actual, original] = await Promise.all([raster(svg), raster(reference)]);
-    let intersection = 0, union = 0;
-    for (let i = 3; i < actual.length; i += 4) {
-      const a = actual[i]! >= 128, b = original[i]! >= 128;
-      if (a && b) intersection++; if (a || b) union++;
-    }
-    return intersection / union;
-  }, { svg: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
-    reference: `data:image/png;base64,${readFileSync('docs/brand/screenshot-first-character.png').toString('base64')}` });
-  check(overlap >= .985, `first character preserves the screenshot silhouette and inner cut (${(overlap * 100).toFixed(2)}% overlap)`);
-  await page.close();
-}
+// Owner brand pack (2026-11-07): exact supplied rasters are present and mapped by role.
+check(existsSync('web/src/assets/brand/paint-wordmark.png'), 'PAINT wordmark asset present');
+check(existsSync('web/src/assets/brand/plain-wordmark.png'), 'PLAIN wordmark asset present');
+check(existsSync('web/src/assets/brand/hex-emblem.png'), 'HEX EMBLEM asset present');
+check(existsSync('web/src/assets/brand/favicon-tree-hex.png'), 'FAVICON tree-hex asset present');
 
 type View = { w: number; h: number; tag: string };
 const ALL_VIEWS: View[] = [
@@ -208,7 +187,7 @@ const finish = async (page: Page) => {
 
 /** The one mark the eye can see on a surface, whatever element carries it. */
 const COUNT_MARKS = `(() => {
-  const sel = ['#logo svg', '#hud-brand', '#go-brand', '#online-brand', '.online-brand'];
+  const sel = ['#logo img', '#logo svg', '#hud-brand', '#go-brand', '#online-brand', '.online-brand'];
   const seen = new Set();
   const out = [];
   for (const s of sel) for (const el of document.querySelectorAll(s)) {
@@ -218,7 +197,7 @@ const COUNT_MARKS = `(() => {
     const r = el.getBoundingClientRect();
     if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0 || !el.getClientRects().length) continue;
     if (r.width < 1 || r.height < 1) continue;
-    out.push({ id: el.id || (el.closest('#logo') ? '#logo svg' : s), r: { x:+r.x.toFixed(1), y:+r.y.toFixed(1), w:+r.width.toFixed(1), h:+r.height.toFixed(1), right:+r.right.toFixed(1), bottom:+r.bottom.toFixed(1) } });
+    out.push({ id: el.id || (el.closest('#logo') ? '#logo mark' : s), r: { x:+r.x.toFixed(1), y:+r.y.toFixed(1), w:+r.width.toFixed(1), h:+r.height.toFixed(1), right:+r.right.toFixed(1), bottom:+r.bottom.toFixed(1) } });
   }
   return out;
 })()`;
@@ -246,7 +225,7 @@ for (const v of PAGE_VIEWS) {
   await page.waitForSelector('#menu:not([hidden])', { timeout: 20_000 });
   await page.waitForTimeout(500);
   const menuMarks = (await page.evaluate(COUNT_MARKS)) as { id: string }[];
-  check(menuMarks.length === 1 && menuMarks[0]!.id === '#logo svg', `${tag}: the menu carries exactly ONE mark (the big logo) — ${menuMarks.map((m) => m.id).join(', ') || 'none'}`);
+  check(menuMarks.length === 1 && menuMarks[0]!.id === '#logo mark', `${tag}: the menu carries exactly ONE mark (the big logo) — ${menuMarks.map((m) => m.id).join(', ') || 'none'}`);
   if (SHOTS) await page.screenshot({ path: join(SHOTS, `menu-${tag}.png`) });
 
   // ---- Settings from the MENU: the menu's big logo is still the one mark ----
@@ -255,7 +234,7 @@ for (const v of PAGE_VIEWS) {
   await page.waitForTimeout(400);
   const menuSheetMarks = (await page.evaluate(COUNT_MARKS)) as { id: string }[];
   const menuSheetBadge = (await page.evaluate(MARK)) as { visible: boolean };
-  check(menuSheetMarks.length === 1 && menuSheetMarks[0]!.id === '#logo svg',
+  check(menuSheetMarks.length === 1 && menuSheetMarks[0]!.id === '#logo mark',
     `${tag}: Settings over the menu still shows ONE mark (${menuSheetMarks.map((m) => m.id).join(', ') || 'none'})`);
   check(!menuSheetBadge.visible, `${tag}: no corner badge is added over the menu`);
   await page.evaluate(() => document.querySelector<HTMLElement>('#sheet-settings [data-close]')?.click());
@@ -387,7 +366,6 @@ for (const v of PAGE_VIEWS) {
           centre: +((mr.left + mr.right) / 2).toFixed(1), filterChain, glassChain,
           animations: mark!.getAnimations({ subtree: true }).length,
           asset: mark!.querySelector('image')?.getAttribute('href') ?? '',
-          tint: getComputedStyle(mark!.querySelector('feFlood')!).floodColor,
         } : null,
         cardCentre: +((sr.left + sr.right) / 2).toFixed(1),
         cornerShown: !!hud && !!hs && hs.display !== 'none' && !!hud.getClientRects().length,
@@ -404,8 +382,8 @@ for (const v of PAGE_VIEWS) {
       check(goState.mark.glassChain.every((n) => n === 'go-card' || n === 'gameover'),
         `${tag}: only the plate's own glass sits behind the mark (${goState.mark.glassChain.join(', ')})`);
       check(goState.mark.animations === 0, `${tag}: the finish mark never animates under Reduce motion (${goState.mark.animations})`);
-      check(goState.mark.tint !== '' && goState.mark.asset.includes('futasaku-primary-logo'),
-        `${tag}: the finish mark is the SAME asset and tint (${goState.mark.asset.split('/').pop()}, ${goState.mark.tint})`);
+      check(goState.mark.asset.includes('plain-wordmark'),
+        `${tag}: the finish mark is the PLAIN wordmark (${goState.mark.asset.split('/').pop()})`);
     }
     check(!goState.cornerShown, `${tag}: the corner mark stands down on the finish plate`);
     check(marks.length === 1 && marks[0]!.id === 'go-brand',
