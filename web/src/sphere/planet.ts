@@ -6,15 +6,17 @@
 // This module only draws and steers. Territory (world-view.ts) keeps every rule, request, selection
 // bar, sheet and window: a tap here hands it a flat tile id, exactly as a tap on the flat map did.
 //
-// MOTION: north-up dragging and anchored pinch/wheel zoom stop at the input endpoint,
-// a tap selects, a tap on tiles too small to hit flies in. Opening flies in from space to your land.
+// MOTION: north-up dragging and anchored pinch/wheel zoom. On release, a short inertial coast
+// runs only when the top of the planet is visible in the window (zoomed out); zoomed in stops
+// almost at once. Continuous transition. New interaction and reduced motion cancel coast. A tap
+// selects; a tap on tiles too small to hit flies in. Opening flies in from space to your land.
 // The stars slide slowly while any space is on screen (owner: "deep space subtle + space with slow
-// slide"); that is the only loop, it runs at ~30 fps, and it stops when the planet fills the window,
-// the page is hidden, or reduced motion is on.
+// slide"); that loop runs at ~30 fps and stops when the planet fills the window, the page is
+// hidden, or reduced motion is on.
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
 import { isDoubleTap, type TapPoint } from '../logic/double-tap.js';
 import { markPlanetPainted } from '../player/startup.js';
-import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT } from './upright.js';
+import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT,coastGain } from './upright.js';
 import { menuDiscRadius } from '../player/planet-lockup.js';
 import { claimSpace, DRIFT_PX_PER_MS, DRIFT_Y_SHARE, freeSpace, spaceDrift } from './space.js';
 import { buildSphere, homeQuat, latticeMap, pickCell, unit, type Sphere, type V3 } from './geometry.js';
@@ -110,7 +112,11 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   let ground: Ground | null = null, input: PlanetInput | null = null, signature = '';
   let selected: number | null = null, pulseUntil = 0;
   let q: Quat = [0, 0, 0, 1], zoom = 1, targetZoom = 1;
-  let lastPointer={x:0,y:0};
+  let lastPointer={x:0,y:0}, lastMoveAt=0;
+  /** Screen-px/ms of the last drag sample; used for release coast. */
+  let dragVel={x:0,y:0};
+  /** Inertial coast after release (screen-px/ms), cleared by a new touch or reduced motion. */
+  let coastVel={x:0,y:0};
   /** `elapsed` advances by each painted frame's (capped) time, never by the wall clock: a busy main
    *  thread (the window opening, data arriving) pauses the flight instead of skipping most of it. */
   /** `aimPx`: the tile size a flight into the window lands on, re-read against the panel every frame
@@ -157,7 +163,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const spaceVisible = () => discRadius(frameNow.width, frameNow.height, zoom) < Math.hypot(frameNow.width, frameNow.height) / 2;
   const cancelDrift=()=>{clearTimeout(driftTimer);driftTimer=0;};
   const ask = () => { cancelDrift();if (!raf && !disposed && !frozen && !lost && !document.hidden) raf = requestAnimationFrame(frame); };
-  const stop = () => { cancelDrift();flight = null; targetZoom = zoom; };
+  const stopCoast = () => { coastVel = { x: 0, y: 0 }; };
+  const stop = () => { cancelDrift();flight = null; targetZoom = zoom; stopCoast(); };
   const centre = () => ({ x: view.left + frameNow.x + frameNow.width / 2, y: view.top + frameNow.y + frameNow.height / 2 });
   const spread = () => { const [a, b] = [...pointers.values()]; return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0; };
   const kinOf = (index: number | null) => {
@@ -260,6 +267,22 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       q = multiply([0, s, 0, Math.cos((MENU_SPIN_RAD_PER_MS * dt) / 2)], q);
     }
     if (mode === 'menu' && !flight && posed) menuMemory = q;
+    // Inertial coast after a drag release (owner, 2026-11-07): only while zoomed out enough that
+    // the top of the planet is visible; gain is continuous; reduced motion skips it.
+    if (!flight && !pointers.size && motion() && (Math.abs(coastVel.x) + Math.abs(coastVel.y)) > .02) {
+      const disc = discRadius(frameNow.width, frameNow.height, zoom);
+      const gain = coastGain(frameNow, disc);
+      if (gain < .02) stopCoast();
+      else {
+        const radius = disc;
+        q = northUpDrag(q, north, coastVel.x * dt, coastVel.y * dt, radius);
+        // Zoomed out coasts longer; zoomed in decays almost immediately.
+        const tau = 140 + 420 * gain;
+        const damp = Math.exp(-dt / tau);
+        coastVel = { x: coastVel.x * damp * gain, y: coastVel.y * damp * gain };
+        if (Math.hypot(coastVel.x, coastVel.y) < .03) stopCoast();
+      }
+    } else if (!motion()) stopCoast();
     if (Math.abs(targetZoom - zoom) > zoom * .0005) zoom += (targetZoom - zoom) * (1 - Math.exp(-dt / 70));
     else zoom = targetZoom;
     if (anchor && !flight) { keepAnchor(); if (zoom === targetZoom) anchor = null; }
@@ -281,7 +304,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     renderer.render(q, zoom, pulse, offset, frameNow);
     if(input&&ground)announcePaint();
     spaceDrift.x = offset[0]; spaceDrift.y = offset[1];
-    const busy = !!flight || !!frameTween || zoom !== targetZoom || pulseUntil > now;
+    const coasting = (Math.abs(coastVel.x) + Math.abs(coastVel.y)) > .02;
+    const busy = !!flight || !!frameTween || zoom !== targetZoom || pulseUntil > now || coasting;
     if (busy) ask();
     // The slow slide: about 30 frames a second, only while there is space to see.
     else if (drifting) driftTimer=window.setTimeout(()=>{driftTimer=0;if(mode==='menu'||spaceVisible())ask();},18);
@@ -360,11 +384,11 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (e.button !== 0 || lost || !renderer || mode === 'menu') return;
     e.preventDefault();
     canvas.focus({ preventScroll: true });
-    stop(); lastFrame = 0; anchor = null;
+    stop(); lastFrame = 0; anchor = null; dragVel = { x: 0, y: 0 }; lastMoveAt = e.timeStamp || performance.now();
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { canvas.setPointerCapture(e.pointerId); } catch { /* a cancelled touch */ }
     if (pointers.size === 1) { start = { x: e.clientX, y: e.clientY }; dragged = false; multi = false; lastPointer={x:e.clientX,y:e.clientY}; }
-    else { multi = true; dragged = true; pinch = spread(); }
+    else { multi = true; dragged = true; pinch = spread(); stopCoast(); }
   }, { signal });
   canvas.addEventListener('pointermove', (e) => {
     if (!pointers.has(e.pointerId)) return;
@@ -385,7 +409,14 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     }
     if (!dragged && start && Math.hypot(p.x - start.x, p.y - start.y) < 6) return;
     dragged = true;lastTap = null;
-    q=northUpDrag(q,north,p.x-lastPointer.x,p.y-lastPointer.y,discRadius(frameNow.width,frameNow.height,zoom));
+    const now = e.timeStamp || performance.now();
+    const dtMove = Math.max(8, Math.min(48, now - (lastMoveAt || now - 16)));
+    const dx = p.x - lastPointer.x, dy = p.y - lastPointer.y;
+    // Exponential blend so a flick's last samples dominate without one-frame spikes.
+    const sample = { x: dx / dtMove, y: dy / dtMove };
+    dragVel = { x: dragVel.x * .35 + sample.x * .65, y: dragVel.y * .35 + sample.y * .65 };
+    lastMoveAt = now;
+    q=northUpDrag(q,north,dx,dy,discRadius(frameNow.width,frameNow.height,zoom));
     lastPointer=p;
     ask();
   }, { signal });
@@ -393,11 +424,22 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (!pointers.has(e.pointerId)) return;
     const tap = pointers.size === 1 && !dragged && !multi && e.type === 'pointerup';
     pointers.delete(e.pointerId);
-    if (tap) tapAt(e.clientX, e.clientY, e.timeStamp);
+    if (tap) { tapAt(e.clientX, e.clientY, e.timeStamp); stopCoast(); }
     else lastTap = null;
     if(pointers.size===1)lastPointer={...pointers.values().next().value!};
-    if(!pointers.size)start=null;
-
+    if(!pointers.size){
+      start=null;
+      // Start coast only after a real drag, when motion is allowed, scaled by how visible the top is.
+      if (dragged && !multi && e.type === 'pointerup' && motion()) {
+        const disc = discRadius(frameNow.width, frameNow.height, zoom);
+        const gain = coastGain(frameNow, disc);
+        if (gain > .02 && Math.hypot(dragVel.x, dragVel.y) > .05) {
+          coastVel = { x: dragVel.x * gain, y: dragVel.y * gain };
+          ask();
+        } else stopCoast();
+      } else stopCoast();
+      dragVel = { x: 0, y: 0 };
+    }
   };
   canvas.addEventListener('pointerup', release, { signal });
   canvas.addEventListener('pointercancel', release, { signal });

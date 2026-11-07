@@ -1,7 +1,7 @@
 import { expect,it } from 'vitest';
 import { arcQuat,inverse,rotate,slerp,type Quat } from '../src/sphere/rotation.js';
 import { unit } from '../src/sphere/geometry.js';
-import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT } from '../src/sphere/upright.js';
+import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT,coastGain } from '../src/sphere/upright.js';
 it('removes roll while keeping exactly the same point at the centre',()=>{
  for(let i=1;i<80;i++){
   const q=arcQuat([0,0,1],[Math.sin(i),Math.cos(i),.4]);
@@ -34,4 +34,14 @@ it('keeps geographic up throughout dragging, with stable pole limits and no foll
  }
  const held=northUpDrag(q,[0,1,0],0,0,240);
  q.forEach((v,i)=>expect(held[i]).toBeCloseTo(v,10));
+});
+it('coasts only when the top of the planet is visible, with a continuous zoom transition',()=>{
+ const frame={x:0,y:0,width:400,height:600};
+ // Disc fills past the top edge → zoomed in → no coast.
+ expect(coastGain(frame, 340)).toBe(0);
+ // Top limb sits well inside the frame → full coast.
+ expect(coastGain(frame, 180)).toBe(1);
+ // Between: continuous, not a hard step.
+ const a=coastGain(frame, 280), b=coastGain(frame, 250), c=coastGain(frame, 220);
+ expect(a).toBeGreaterThan(0); expect(a).toBeLessThan(b); expect(b).toBeLessThan(c); expect(c).toBeLessThanOrEqual(1);
 });

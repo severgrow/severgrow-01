@@ -268,11 +268,35 @@ try {
     const releasePose=(await planet(p))!;
     check(`[${tag}] geographic north remains upright during dragging`,Math.abs(releasePose.north[0]!)<1e-6&&releasePose.north[1]!>0);
     await p.mouse.up();
+    // Zoomed-out releases may coast; wait for the inertial coast to settle (owner, 2026-11-07).
+    await p.waitForFunction(()=>{
+      const pl=(window as any).__severgrow.planet();
+      return pl && !pl.flying && Math.abs(pl.north[0])<1e-4;
+    },undefined,{timeout:2500}).catch(()=>undefined);
     await settled(p);
     s = (await planet(p))!;
-    check(`[${tag}] release keeps the exact final drag pose`,s.q.every((v,i)=>Math.abs(v-releasePose.q[i]!)<1e-8));
+    check(`[${tag}] north stays upright after release`,Math.abs(s.north[0]!)<1e-4&&s.north[1]!>0);
     check(`[${tag}] a drag turns the planet`, JSON.stringify(s.q) !== JSON.stringify(before.q));
     check(`[${tag}] a drag never changes the selection`, s.selected === before.selected);
+    // Zoomed in: coast must stop almost immediately (top of planet not visible).
+    const zoomInBefore = (await planet(p))!;
+    await p.mouse.move(cx, cy);
+    for (let i = 0; i < 8; i++) { await p.mouse.wheel(0, -180); await p.waitForTimeout(20); }
+    await p.waitForTimeout(80);
+    await p.mouse.move(cx - 40, cy);
+    await p.mouse.down();
+    for (let i = 1; i <= 6; i++) { await p.mouse.move(cx - 40 + i * 10, cy); await p.waitForTimeout(16); }
+    const zoomedPose = (await planet(p))!;
+    await p.mouse.up();
+    await p.waitForTimeout(120);
+    const zoomedAfter = (await planet(p))!;
+    check(`[${tag}] zoomed-in release stops almost immediately`,
+      zoomedAfter.q.every((v:number,i:number)=>Math.abs(v-zoomedPose.q[i]!)<.002),
+      `Δ=${zoomedAfter.q.map((v:number,i:number)=>Math.abs(v-zoomedPose.q[i]!).toFixed(4)).join(',')}`);
+    // Restore a comfortable zoom for the rest of the suite.
+    while ((await planet(p))!.zoom > zoomInBefore.zoom * 1.02) {
+      await p.mouse.wheel(0, 180); await p.waitForTimeout(16);
+    }
     // The finger moved 120px right; the ground follows during the gesture.
     const moved = (await screenOf(p, '0,0'))!;
     check(`[${tag}] the ground follows the finger`, moved.x - ground0.x > 60, `${(moved.x - ground0.x).toFixed(0)}px`);

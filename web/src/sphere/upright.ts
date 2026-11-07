@@ -28,7 +28,8 @@ export function uprightTarget(q:Quat,north:V3,pivot?:V3):Quat {
 }
 
 /** Geographic drag: longitude wraps freely; latitude gently resists near the poles. Every
- * returned pose is already upright. Releasing input needs no correction, timer or inertia. */
+ * returned pose is already upright. Inertial coast after release is handled by the planet module
+ * (only when the top of the planet is visible); this helper itself is still instantaneous. */
 export const NORTH_PITCH_LIMIT=Math.PI/2-.16;
 export function northUpDrag(q:Quat,north:V3,dx:number,dy:number,radius:number):Quat {
   const up=rotate(q,north),roll=Math.atan2(up[0],up[1]);
@@ -40,4 +41,18 @@ export function northUpDrag(q:Quat,north:V3,dx:number,dy:number,radius:number):Q
   const target=Math.max(-NORTH_PITCH_LIMIT,Math.min(NORTH_PITCH_LIMIT,pitch+delta));
   const yaw=dx*gain,s=Math.sin(yaw/2),axis=unit(north),tilt=(target-pitch)/2;
   return multiply([Math.sin(tilt),0,0,Math.cos(tilt)],multiply(flat,[axis[0]*s,axis[1]*s,axis[2]*s,Math.cos(yaw/2)]));
+}
+
+/**
+ * How much inertial coast a release may keep (0..1). Owner, 2026-11-07: restore coast only when
+ * zoomed out enough that the top of the planet is visible in the window; zoomed in stops almost
+ * at once. Continuous transition. Pure so tests can pin it without a canvas.
+ */
+export function coastGain(frame:{x:number;y:number;width:number;height:number},disc:number):number {
+  if(!(disc>0) || !(frame.height>0)) return 0;
+  const planetTop = frame.y + frame.height / 2 - disc;
+  // Room above the top limb inside the frame. Zero (or less) when the top is clipped = zoomed in.
+  const room = planetTop - frame.y;
+  const span = Math.max(24, frame.height * .12);
+  return Math.max(0, Math.min(1, room / span));
 }

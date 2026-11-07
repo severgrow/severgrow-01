@@ -40,9 +40,9 @@ try{
    console.error('Boot after fail-open',await p.evaluate(()=>{const h=(window as any).__severgrow,s=h?.planet?.();return {ready:h?.ready?.(),frames:s?.frames,mode:s?.mode,hidden:document.hidden};}),errors);
   }
   assert(boot.ready&&boot.frames>0&&boot.fonts==='loaded',JSON.stringify(boot));
-  // OWNER CHANGED THE RULE (2026-11-06: "fade in ... no longer than 1s or 1.5s"): one 400 ms first reveal.
-  assert.deepEqual(boot.animations,[400],'one coherent short first reveal (400 ms)');
-  await p.waitForTimeout(1050);
+  // OWNER CHANGED THE RULE (2026-11-07): one ~1 s fade into the composed menu.
+  assert.deepEqual(boot.animations,[1000],'one coherent ~1s first reveal');
+  await p.waitForTimeout(1200);
   const keys=await p.evaluate(fn=>['menu-play','menu-world','menu-settings'].map(id=>(0,eval)(`(${fn})`)(document.getElementById(id))),material.toString());
   assert.deepEqual(keys[0],keys[1],'PLAY has the same material as THE PLANET');assert.deepEqual(keys[1],keys[2],'Settings shares the same key');
   assert(String(keys[0]![6]).includes('blur('),'matte menu keys restore the shared backdrop blur');
@@ -143,17 +143,28 @@ try{
   const grid=(await p.locator('#online-world-grid').boundingBox())!,cx=grid.x+grid.width/2,cy=grid.y+grid.height/2;
   await p.mouse.move(cx-35,cy+20);await p.mouse.down();await p.mouse.move(cx+50,cy-50,{steps:8});
   const before=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
-  await p.mouse.up();await settled(p);
+  await p.mouse.up();
+  // Coast may run while the top of the planet is visible; wait for it to settle.
+  await p.waitForTimeout(650);await settled(p);
   const after=await p.evaluate(()=>(window as any).__severgrow.planet());
-  assert(before.every((v,i)=>Math.abs(v-after.q[i])<.000001),'release preserves the exact final drag pose');
-  await p.waitForTimeout(650);
-  const held=await p.evaluate(()=>(window as any).__severgrow.planet());
-  assert(before.every((v,i)=>Math.abs(v-held.q[i])<.000001),'no post-release correction or drift');
   if(Math.hypot(after.north[0],after.north[1])>.15){assert(Math.abs(after.north[0])<.0001&&after.north[1]>0,'north rests upright');}
+  void before;
+  await p.waitForTimeout(400);
+  const held=await p.evaluate(()=>(window as any).__severgrow.planet());
+  assert(after.q.every((v:number,i:number)=>Math.abs(v-held.q[i])<.0005),'coast settles; no late correction');
+  // Zoomed in: release must stop almost immediately.
+  await p.mouse.move(cx,cy);
+  for(let i=0;i<10;i++){await p.mouse.wheel(0,-200);await p.waitForTimeout(16);}
+  await p.mouse.move(cx-30,cy+10);await p.mouse.down();await p.mouse.move(cx+40,cy-20,{steps:6});
+  const zoomed=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
+  await p.mouse.up();await p.waitForTimeout(140);
+  const zoomedEnd=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
+  assert(zoomed.every((v,i)=>Math.abs(v-zoomedEnd[i]!)<.002),'zoomed-in release stops almost immediately');
   await p.screenshot({path:`${shots}/planet-${width}.png`});
+  const preTap=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
   await p.mouse.click(cx,cy);await p.waitForTimeout(250);
   const tapped=await p.evaluate(()=>(window as any).__severgrow.planet().q) as number[];
-  assert(tapped.every((v,i)=>Math.abs(v-after.q[i])<.00001),'a central tile tap does not roll the camera');
+  assert(tapped.every((v,i)=>Math.abs(v-preTap[i]!)<.00001),'a central tile tap does not roll the camera');
   const zoomBeforeWheel=await p.evaluate(()=>(window as any).__severgrow.planet().zoom);
   await p.mouse.move(cx,cy);await p.mouse.wheel(0,120);
   await p.waitForFunction(z=>Math.abs((window as any).__severgrow.planet().zoom-z)>1e-5,zoomBeforeWheel);
