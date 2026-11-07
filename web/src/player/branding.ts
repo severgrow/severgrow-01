@@ -14,7 +14,7 @@ export const WORDMARK_URL: string = plainUrl;
 /** Home-menu PAINT mark (true vector SVG). */
 export const PAINT_URL: string = paintUrl;
 
-/** Owner SVG viewBox width÷height for PLAIN / PAINT (`-28 11 2106 662`). */
+/** PLAIN wordmark viewBox width÷height (`-28 11 2106 662`). The home PAINT box is tighter: 1995×565. */
 export const WORDMARK_ASPECT = 2106 / 662;
 
 export const BRANDING_CSS = `
@@ -91,7 +91,7 @@ html.futa04-branding #menu #logo {
   display: block !important;
   flex: none;
   width: min(200px, 52vw, 22dvh);
-  aspect-ratio: 2106 / 662;
+  aspect-ratio: 1995 / 565;
   margin: 0 auto;
 }
 html.futa04-branding #menu #logo img,
@@ -179,8 +179,8 @@ function paintMarkImg(): HTMLImageElement {
   img.className = 'paint-mark';
   img.src = paintUrl;
   img.alt = '';
-  img.width = 2106;
-  img.height = 662;
+  img.width = 1995;
+  img.height = 565;
   img.setAttribute('aria-hidden', 'true');
   img.decoding = 'async';
   img.draggable = false;

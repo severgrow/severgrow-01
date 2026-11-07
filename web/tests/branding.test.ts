@@ -106,10 +106,10 @@ describe('owner brand pack roles', () => {
 
   it('home PAINT box matches the SVG viewBox aspect and avoids crunchy rendering', () => {
     const css = branding.slice(branding.indexOf('export const BRANDING_CSS'));
-    expect(css).toMatch(/#menu #logo\s*\{[^}]*aspect-ratio:\s*2106\s*\/\s*662/);
+    expect(css).toMatch(/#menu #logo\s*\{[^}]*aspect-ratio:\s*1995\s*\/\s*565/);
     expect(css).toMatch(/image-rendering:\s*auto/);
     expect(read('src/style.css')).toMatch(/paint-wordmark\.svg/);
-    expect(read('src/player/planet-lockup.ts')).toMatch(/aspect-ratio:\s*2106\s*\/\s*662/);
+    expect(read('src/player/planet-lockup.ts')).toMatch(/aspect-ratio:\s*1995\s*\/\s*565/);
   });
 
   it('does not ship the soft 3× PAINT upsample as a live asset', () => {

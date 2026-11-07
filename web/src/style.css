@@ -500,7 +500,7 @@ html.test-typography-v2.world-reserved #menu:not([data-laid-out]) #menu-world[hi
 html.test-typography-v2 #menu #logo {
   display: block;
   width: min(200px, 52vw, 22dvh);
-  aspect-ratio: 2106 / 662;
+  aspect-ratio: 1995 / 565;
   margin: 0 auto;
   background: center / contain no-repeat url('./assets/brand/paint-wordmark.svg');
   opacity: 0.9;
