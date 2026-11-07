@@ -30,6 +30,15 @@ const sources = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
 const allSource = sources(join(root, 'src')).map((path) => ({ path: path.slice(root.length), text: readFileSync(path, 'utf8') }));
 
 describe('one Futasaku mark, drawn once', () => {
+  it('keeps the supplied spacing and all remaining characters when refining the first character', () => {
+    const paths = (svg: string) => [...svg.matchAll(/<path d="([^"]+)"/g)].map(match => match[1]);
+    const reference = read('../docs/brand/sketch-spacing-reference.svg');
+    const final = read('src/assets/futasaku-primary-logo.svg');
+    expect(final.match(/viewBox="([^"]+)"/)?.[1]).toBe(reference.match(/viewBox="([^"]+)"/)?.[1]);
+    expect(paths(final).slice(2)).toEqual(paths(reference).slice(2));
+    expect(paths(final).slice(0, 2)).not.toEqual(paths(reference).slice(0, 2));
+  });
+
   it('uses the approved vector as the primary artwork on every live SVG surface', () => {
     const primary = read('src/assets/futasaku-primary-logo.svg');
     expect(primary).toContain('viewBox="200 118 1755 495"');

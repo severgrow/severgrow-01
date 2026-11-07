@@ -1,9 +1,17 @@
 # Primary FUTASAKU logo
 
-The approved master is `web/src/assets/futasaku-primary-logo.svg`, supplied by the owner on
-7 November 2026 as `sketch.svg`, replacing that day's earlier `final futa.svg`. It is stored
-unchanged. Do not redraw it or stretch its paths.
+The final master is `web/src/assets/futasaku-primary-logo.svg`. On 7 November 2026 the owner
+requested the first character closer to `final futa.svg`, retaining `sketch.svg`'s spacing.
+The first two paths recover the original's curved counters and sweeping feet. The cap endpoint
+865 and first-character advance 898 retain the attached layout; the remaining three paths and
+the overall viewBox are unchanged from the supplied sketch. Do not stretch the paths.
 The identical downloadable master is published at `/brand/futasaku-primary-logo.svg`.
+
+Construction uses a 19-unit module: cap 134 to baseline 590 is 456 units, or 24 modules.
+Curve handles sit on a quarter-module (4.75-unit) grid anchored at (215,134), with optical
+exceptions at the supplied cap endpoint and advance. The original references are preserved in
+`docs/brand/`. The editable grid proof is `/brand/futasaku-primary-logo-construction.svg`;
+it is a design reference only and is never loaded by the game.
 
 `web/src/player/branding.ts` owns the live vector URL and the shared SVG helpers. Menu, HUD,
 finish plate, Planet/online headers, profile, replay player, downloaded video and posters all use

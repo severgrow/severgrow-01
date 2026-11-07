@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="160 80 1850 610" role="img" aria-label="Futasaku primary logo construction grid">
+<title>Final FUTASAKU logo construction</title>
+<defs><pattern id="module" x="215" y="134" width="19" height="19" patternUnits="userSpaceOnUse"><path d="M19 0H0V19" fill="none" stroke="#777e71" stroke-width=".6" opacity=".32"/></pattern></defs>
+<rect x="160" y="80" width="1850" height="610" fill="#18191a"/>
+<rect x="215" y="134" width="683" height="456" fill="url(#module)" stroke="#c4a669" stroke-width="1"/>
+<g stroke="#c4a669" stroke-width="1" opacity=".6"><path d="M200 134H1955M200 590H1955M865 118V613M898 118V613" fill="none"/></g>
+<g fill="#F8EDD2">
+    <path d="M 215 134 H 865 L 732.75 400 C 780.25 452.25 832.5 499.75 898 542.5 L 785 590 L 690 480.75 L 604.5 590 H 490.5 L 637.75 404.75 L 542.75 295.5 C 561.75 267 580.75 243.25 595 224.25 C 609.25 262.25 637.75 300.25 675.75 338.25 L 761.25 210 C 699.5 214.75 642.5 214.75 585.5 210 C 509.5 319.25 462 390.5 428.75 419 C 405 357.25 362.25 305 305.25 262.25 L 400.25 262.25 L 433.5 324 L 495.25 210 C 371.75 191 319.5 195.75 267.25 205.25 C 248.25 181.5 229.25 157.75 215 134 Z"/>
+    <path d="M 538 300.25 L 523.75 404.75 L 576 466.5 L 523.75 528.25 L 490.5 485.5 C 447.75 514 414.5 547.25 386 590 L 281.5 533 C 357.5 514 433.5 461.75 538 300.25 Z"/>
+    <path d="M 794.322 314.371 L 835.03 234.312 L 959 233 V 134 H 1062 V 233 H 1202 V 134 H 1305 V 233 L 1481.657 233.214 L 1423.437 313.097 L 1306 314 V 358 C 1306 454 1262 511 1200 551 C 1139 586 1076 596 1014 597 L 950 526 C 1056 517 1150 480 1181 424 C 1197 397 1202 374 1202 358 V 314 H 1063 V 436 H 959 V 314 Z"/>
+    <path d="M 1390 396 L 1580 134 H 1702 L 1527 304 C 1487 340 1439 378 1390 396 Z"/>
+    <path d="M 1941 233 L 1631.947 231.86 L 1550.709 313.097 L 1754 314 C 1682 432 1568 500 1424 532 L 1492 596 C 1670 572 1820 448 1941 233 Z"/>
+  </g>
+<g fill="#c4a669" font-family="monospace" font-size="16"><text x="215" y="112">CAP 134</text><text x="215" y="636">BASE 590 / 456 UNITS = 24 MODULES</text><text x="215" y="667">19-UNIT MODULE / 4.75-UNIT CURVE GRID / ATTACHED SPACING RETAINED</text></g>
+</svg>
