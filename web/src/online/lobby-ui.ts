@@ -1276,16 +1276,17 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const card = document.createElement('div');
     card.className = 'world-invitation-card';
     const title = document.createElement('strong');
+    // Title keeps the currency word here (src/strings.ts must stay free of "seed"; see seed-icon.ts).
     title.textContent = '100 SEEDS';
     const line = document.createElement('p');
-    line.textContent = 'Your place in the world is waiting.';
+    line.textContent = ONLINE.worldInviteBody;
     const actions = document.createElement('div');
     const open = document.createElement('button');
     open.className = 'world-invitation-primary';
     open.textContent = ONLINE.worldInviteOpen;
     const later = document.createElement('button');
     later.className = 'world-invitation-secondary';
-    later.textContent = 'LATER';
+    later.textContent = ONLINE.worldInviteLater;
     const finish = (go: boolean) => {
       sheet.remove(); invitationOpen = false; invitationDismissedThisSession = true;
       void client.acknowledgeWorldInvitation(id.token).catch(() => { /* Retry on a later session. */ });

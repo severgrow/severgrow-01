@@ -152,6 +152,10 @@ export const ONLINE = Object.freeze({
   worldActivity: 'Recent tiles',
   /** the Seeds invitation card's button that opens the Territory (uppercase, like its LATER sibling) */
   worldInviteOpen: 'OPEN TERRITORY',
+  /** the invitation card's quiet dismiss key (uppercase sibling of worldInviteOpen) */
+  worldInviteLater: 'LATER',
+  /** one line under the balance on the Seeds invitation card */
+  worldInviteBody: 'Your place in the world is waiting.',
   playWithFriend: 'Play with a friend',
   findOpponent: 'Find opponent',
   // No baked-in dots: the UI appends the SHARED animated ellipsis (web/src/online/live/wait-dots.ts).
@@ -246,7 +250,7 @@ export const ONLINE = Object.freeze({
   ] as const),
   firstCardOk: 'Got it',
   storageNote:
-    'Your online matches live on this device until accounts exist.',
+    'Guest matches live on this device. Sign in to keep them on every device.',
   /**
    * Shown once when a rejected token forced a fresh guest on this device. Honest, not alarming:
    * the old identity (and its matches) is gone, so the player knows why their list is empty.
@@ -1440,7 +1444,7 @@ export const PROFILE = Object.freeze({
   connectedTiles: 'CONNECTED TILES',
   matchesWon: 'Matches won',
   /** An em dash is a FACT: this value is not known. It is never a made-up 0. */
-  unknown: '-',
+  unknown: '—',
   /** Player stats (owner, 2026-11-01): two rows of three, the offline record above the online one. */
   playTitle: 'Your games',
   /** VISITOR MODE (owner, 2026-11-01: "allow to look up other peoples profile on territory"). The

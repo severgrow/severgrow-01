@@ -80,4 +80,13 @@ describe('parked-search copy (punchy standard)', () => {
     expect(ONLINE.waitingTitle).toBe('Waiting for a friend');
     expect(ONLINE.joinSubmit).toBe('Join');
   });
+
+  it('keeps guest storage and the Seeds invitation honest once accounts exist', () => {
+    expect(ONLINE.storageNote.toLowerCase()).not.toContain('until accounts exist');
+    expect(ONLINE.storageNote.toLowerCase()).toMatch(/guest/);
+    expect(ONLINE.storageNote.toLowerCase()).toMatch(/sign in/);
+    expect(ONLINE.worldInviteOpen).toBe('OPEN TERRITORY');
+    expect(ONLINE.worldInviteLater).toBe('LATER');
+    expect(ONLINE.worldInviteBody.length).toBeGreaterThan(8);
+  });
 });
