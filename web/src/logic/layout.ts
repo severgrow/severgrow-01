@@ -66,7 +66,9 @@ export type Thumb = {
  *  shared side margin (board, piles, fan, tools), icon buttons, the fan's end tilt (deg) and
  *  rise (of its width), the dock's cap (of the usable height), the most the board may reach
  *  under the dock (of its height), the bottom margin and the largest gap between map and dock. */
-export const THUMB = { slice: 44, minSlice: 34, maxSlice: 48, sliceOf: 0.64, lift: 10, pileW: 56, edge: 8, icon: 44, tilt: 7, rise: 0.12, cap: 0.45, /** the touch minimum a card may not go below */ minCard: 44, /** the dock cap allowed to reach it on the shortest phone */ minCardCap: 0.48, overlapMax: 0, bottom: 12, mapGap: 24, gap: 14 } as const;
+/* sliceOf 0.67 (was 0.64): a tiny bit more hand spread so cards are easier to pick, without
+   shrinking below the 44pt touch floor on the shortest phones (owner, 2026-11-07). */
+export const THUMB = { slice: 45, minSlice: 35, maxSlice: 50, sliceOf: 0.67, lift: 10, pileW: 56, edge: 8, icon: 44, tilt: 7, rise: 0.12, cap: 0.45, /** the touch minimum a card may not go below */ minCard: 44, /** the dock cap allowed to reach it on the shortest phone */ minCardCap: 0.48, overlapMax: 0, bottom: 12, mapGap: 24, gap: 14 } as const;
 /** Room kept above the dock's top element (a picked card's lift reaches into it). */
 const TOP_KEEP = 2;
 

@@ -56,7 +56,8 @@ ${T} body {
   --lh-control: 1.15;
   --lh-body: 1.48;
   --lh-small: 1.3;
-  --track-brand: -0.03em;
+  /* Menu FUTASAKU wordmark only (via .title): letters kiss, not crush (owner, 2026-11-07). */
+  --track-brand: -0.055em;
   --track-heading: -0.012em;
   --track-action: 0.02em;
   --track-caps: 0.08em;

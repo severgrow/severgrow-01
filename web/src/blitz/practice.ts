@@ -197,18 +197,19 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
     // THE TIER IS CALLED BLITZ (owner, 2026-11-02: "BLITZ should be call BLITZ no 'PRO' in practice
     // match"). It sits in the same grid as EASY / MEDIUM / HARD, so it wears that family's shape but
     // its own name — the mode is the feature, not a difficulty rung.
-    button.textContent = 'BLITZ';
-    // The online duels' bolt beside the word, as tall as its letters (owner, 2026-11-06: "BLITZ X - but
-    // x is the lightning"). The same path as the Blitz duel key (online/live/ui.ts).
+    // One line: BLITZ + lightning, same metrics as the other difficulty tiles (owner, 2026-11-07).
+    button.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;gap:.28em;white-space:nowrap';
+    const label = document.createElement('span');
+    label.textContent = 'BLITZ';
     const bolt = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     bolt.setAttribute('viewBox', '5 2.5 13.4 19');
     bolt.setAttribute('aria-hidden', 'true');
     bolt.setAttribute('class', 'blitz-bolt');
-    bolt.style.cssText = 'height:.74em;width:auto;margin-left:.32em;vertical-align:-.02em;fill:currentColor;overflow:visible';
+    bolt.style.cssText = 'height:.78em;width:auto;flex:none;fill:currentColor;overflow:visible';
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', 'M13.4 2.5 5 13.6h6.1l-1.3 7.9 8.6-11.3h-6.2z');
     bolt.append(path);
-    button.append(bolt);
+    button.append(label, bolt);
     button.setAttribute('aria-label', 'Blitz: 21 seconds a turn against the computer at level 9.');
     button.addEventListener('click', () => {
       hooks.unlock();

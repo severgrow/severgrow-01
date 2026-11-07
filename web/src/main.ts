@@ -2306,6 +2306,13 @@ async function startGame(
     await warmFirstBoard();
     if (generation !== startGameGeneration) return;
   }
+  // Card faces decode while the menu is up. Await them (capped ~2 s) before the deal so mid-game
+  // class flips do not jump the hand art (owner, 2026-11-07). Already-ready = 0 ms, never theater.
+  {
+    const cards = await import('./player/cards.js');
+    await Promise.race([cards.preloadCardArt().catch(() => undefined), new Promise<void>((r) => setTimeout(r, 2000))]);
+    if (generation !== startGameGeneration) return;
+  }
   // A server-issued ticket makes a new Training result verifiable. An offline start stays playable
   // with its local seed, but cannot claim spendable Seeds without a prior ticket.
   let ticketId: string | null = null;

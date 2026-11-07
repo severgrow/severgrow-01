@@ -154,9 +154,15 @@ html.v075.futa04-information #board .l-territory-contour .territory-contour:is(.
   stroke: rgba(0,0,0,.48); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
   filter: drop-shadow(0 .65px .45px rgba(240,233,220,.12));
 }
-/* A fine warm emitter inside a soft halo. One static edge filter, never the tiles or digits. */
+/* Active-turn LED strip (owner, 2026-11-07): FUTASAKU amber kept, a cheap hardware strip feel —
+   a narrow bright core, a softer outer wash, short dash segments. Restrained, not neon. */
 html.v075 #board .planet-turn-line {
-  stroke-width: .7; opacity: .78;
-  filter: drop-shadow(0 0 1.1px var(--turn-rim-ink));
+  stroke-width: 1.15; opacity: .88;
+  stroke-dasharray: 3.2 2.4;
+  stroke-linecap: butt;
+  filter:
+    drop-shadow(0 0 .45px color-mix(in srgb, var(--turn-rim-ink) 88%, #fff))
+    drop-shadow(0 0 1.6px color-mix(in srgb, var(--turn-rim-ink) 55%, transparent));
 }
-html.v075 body[data-turn='you'] #board .planet-turn-glow { opacity: .22; }
+html.v075 body[data-turn='you'] #board .planet-turn-glow { opacity: .18; }
+html.v075 body[data-turn='you'] #board .planet-turn-line { opacity: .95; }
