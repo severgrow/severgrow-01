@@ -1,7 +1,8 @@
 # Primary FUTASAKU logo
 
 The approved master is `web/src/assets/futasaku-primary-logo.svg`, supplied by the owner on
-7 November 2026 as `final futa.svg`. It is stored unchanged. Do not redraw it or stretch its paths.
+7 November 2026 as `sketch.svg`, replacing that day's earlier `final futa.svg`. It is stored
+unchanged. Do not redraw it or stretch its paths.
 The identical downloadable master is published at `/brand/futasaku-primary-logo.svg`.
 
 `web/src/player/branding.ts` owns the live vector URL and the shared SVG helpers. Menu, HUD,
