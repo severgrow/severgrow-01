@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { confirmedTurn, mountTurnRim, turnRimState } from '../src/player/turn-rim.js';
 import { LIGHT_TONES } from '../src/player/light.js';
@@ -32,5 +35,17 @@ describe('the board rim follows the current turn, not the announcement queue', (
     sync(null, 0);
     expect(dataset.turn).toBe('none');
     expect(style.setProperty).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('active-turn board contour (0.83 polish)', () => {
+  it('is a continuous amber LED hairline, not dashed segments', () => {
+    const css = readFileSync(join(fileURLToPath(new URL('..', import.meta.url)), 'src/polish-075.css'), 'utf8');
+    const block = css.slice(css.indexOf('html.v075 #board .planet-turn-line {'));
+    const rule = block.slice(0, block.indexOf('}', block.indexOf('stroke-dasharray')) + 1);
+    expect(rule).toMatch(/stroke-dasharray:\s*none/);
+    expect(rule).not.toMatch(/stroke-dasharray:\s*[0-9]/);
+    expect(rule).toMatch(/stroke-linecap:\s*round/);
+    expect(rule).toMatch(/drop-shadow/);
   });
 });

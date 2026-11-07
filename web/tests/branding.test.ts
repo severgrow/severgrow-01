@@ -36,8 +36,19 @@ describe('owner brand pack roles', () => {
     ]) expect(existsSync(join(root, name)), name).toBe(true);
   });
 
+  it('ships a 3× PAINT derivative for the home menu (owner art is 300×94 only)', () => {
+    const pngSize = (rel: string): { w: number; h: number } => {
+      const buf = readFileSync(join(root, rel));
+      expect(buf.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), rel).toBe(true);
+      return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+    };
+    expect(pngSize('src/assets/brand/paint-wordmark.png')).toEqual({ w: 300, h: 94 });
+    expect(pngSize('src/assets/brand/paint-wordmark-3x.png')).toEqual({ w: 900, h: 282 });
+    expect(pngSize('src/assets/brand/paint-wordmark-shadow-3x.png')).toEqual({ w: 948, h: 330 });
+  });
+
   it('maps PAINT to the home menu and PLAIN to small marks', () => {
-    expect(branding).toContain("import paintUrl from '../assets/brand/paint-wordmark-shadow.png?url'");
+    expect(branding).toContain("import paintUrl from '../assets/brand/paint-wordmark-shadow-3x.png?url'");
     expect(branding).toContain("import plainUrl from '../assets/brand/plain-wordmark.png?url'");
     expect(branding).toContain('export const WORDMARK_URL: string = plainUrl');
     expect(branding).toContain('export const PAINT_URL: string = paintUrl');
@@ -90,7 +101,15 @@ describe('owner brand pack roles', () => {
   });
 
   it('preloads the PAINT mark, not the retired primary SVG', () => {
-    expect(read('index.html')).toMatch(/paint-wordmark-shadow\.png/);
+    expect(read('index.html')).toMatch(/paint-wordmark-shadow-3x\.png/);
     expect(read('index.html')).not.toMatch(/futasaku-primary-logo\.svg/);
+  });
+
+  it('home PAINT box matches the shadowed mark aspect and avoids crunchy rendering', () => {
+    const css = branding.slice(branding.indexOf('export const BRANDING_CSS'));
+    expect(css).toMatch(/#menu #logo\s*\{[^}]*aspect-ratio:\s*316\s*\/\s*110/);
+    expect(css).toMatch(/image-rendering:\s*auto/);
+    expect(read('src/style.css')).toMatch(/paint-wordmark-shadow-3x\.png/);
+    expect(read('src/player/planet-lockup.ts')).toMatch(/aspect-ratio:\s*316\s*\/\s*110/);
   });
 });

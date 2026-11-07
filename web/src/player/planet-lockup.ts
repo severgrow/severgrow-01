@@ -9,11 +9,14 @@
 const GAP_SHARE = .075;
 const CSS = `
 html.planet-lockup #menu .menu-stack > #logo {
-  flex: none; display: block !important; width: var(--lockup-w, 62vw) !important; max-width: none;
-  margin: 0 auto calc(var(--lockup-w, 62vw) * ${GAP_SHARE}) !important;
+  flex: none; display: block !important; width: var(--lockup-w, 52vw) !important; max-width: none;
+  margin: 0 auto calc(var(--lockup-w, 52vw) * ${GAP_SHARE}) !important;
 }
-html.planet-lockup #menu .menu-stack > #logo { height: auto !important; aspect-ratio: 300 / 94 !important; min-height: 0 !important; }
-html.planet-lockup #menu .menu-stack > #logo :is(svg, img) { display: block; width: 100% !important; height: 100% !important; }
+/* Shadowed PAINT mark is 316×110 (3× of the owner pad box) — do not stretch into 300/94. */
+html.planet-lockup #menu .menu-stack > #logo { height: auto !important; aspect-ratio: 316 / 110 !important; min-height: 0 !important; }
+html.planet-lockup #menu .menu-stack > #logo :is(svg, img) {
+  display: block; width: 100% !important; height: auto !important; image-rendering: auto;
+}
 `;
 
 /** The wordmark's INK box (viewport px): its glyphs, not its line box or its centred element. */

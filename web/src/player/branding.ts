@@ -1,9 +1,11 @@
-// Owner brand pack (2026-11-07): exact supplied rasters — never redraw.
+// Owner brand pack (2026-11-07): exact supplied rasters — never redraw letterforms.
 //   PAINT  → home-screen menu only
 //   PLAIN  → small logos in menus / in-game / everywhere else
 //   HEX    → app icon + card back (built offline)
 //   FAVICON tree-hex → favicon + tiny marks
-import paintUrl from '../assets/brand/paint-wordmark-shadow.png?url';
+// Home PAINT is the owner 300×94 raster, Lanczos-upsampled to 3× for retina (no SVG exists for
+// this brush mark; the retired primary SVG is a different letterform and must not replace it).
+import paintUrl from '../assets/brand/paint-wordmark-shadow-3x.png?url';
 import plainUrl from '../assets/brand/plain-wordmark.png?url';
 import faviconUrl from '../assets/brand/favicon-tree-hex.png?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
@@ -11,7 +13,7 @@ import type { Layout, Viewport } from '../logic/layout.js';
 
 /** PLAIN wordmark URL — shared by replay video / poster exports and small HUD marks. */
 export const WORDMARK_URL: string = plainUrl;
-/** Home-menu PAINT mark (baked almost-black drop shadow). */
+/** Home-menu PAINT mark (3× owner raster + baked almost-black drop shadow). */
 export const PAINT_URL: string = paintUrl;
 /** Tiny tree-hex for favicon-scale uses. */
 export const FAVICON_URL: string = faviconUrl;
@@ -89,11 +91,15 @@ html.futa04-branding #menu #terrarium { display: none !important; }
 html.futa04-branding #menu #logo {
   display: block !important;
   flex: none;
-  width: min(240px, 58vw, 26dvh);
+  width: min(200px, 52vw, 22dvh);
+  aspect-ratio: 316 / 110;
   margin: 0 auto;
 }
 html.futa04-branding #menu #logo img,
-html.futa04-branding #menu #logo svg { display: block; width: 100%; height: auto; }
+html.futa04-branding #menu #logo svg {
+  display: block; width: 100%; height: auto;
+  image-rendering: auto;
+}
 /* PAINT on the home menu: a barely-noticeable almost-black drop shadow so it pops a tiny bit. */
 html.futa04-branding #menu #logo img.paint-mark {
   filter: drop-shadow(0 1px 1.5px rgba(8, 8, 10, .55));
@@ -173,6 +179,8 @@ function paintMarkImg(): HTMLImageElement {
   img.className = 'paint-mark';
   img.src = paintUrl;
   img.alt = '';
+  img.width = 316;
+  img.height = 110;
   img.setAttribute('aria-hidden', 'true');
   img.decoding = 'async';
   img.draggable = false;

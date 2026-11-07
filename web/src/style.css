@@ -499,10 +499,10 @@ html.test-typography-v2.world-reserved #menu:not([data-laid-out]) #menu-world[hi
    replaces it with the same PAINT asset (img) so the column never jumps. */
 html.test-typography-v2 #menu #logo {
   display: block;
-  width: min(240px, 58vw, 26dvh);
-  aspect-ratio: 300 / 94;
+  width: min(200px, 52vw, 22dvh);
+  aspect-ratio: 316 / 110;
   margin: 0 auto;
-  background: center / contain no-repeat url('./assets/brand/paint-wordmark-shadow.png');
+  background: center / contain no-repeat url('./assets/brand/paint-wordmark-shadow-3x.png');
   opacity: 0.9;
 }
 html.test-typography-v2 #menu #logo:has(> :is(svg, img)) {
