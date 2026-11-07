@@ -43,11 +43,10 @@ export const FEATURES = Object.freeze({
    */
   campaign: CHANNEL === 'futa04' || CHANNEL === 'futa05',
   /**
-   * EXPERIMENTAL Blitz (Practice only): the STAGING COPY, and nothing else. The live root is the
-   * same `futa05` build one promote behind it, so the channel is not enough: the `/test/` route is
-   * what makes this true only for the staging copy and always false for the futa04 product.
+   * FUTASAKU BLITZ in Practice (owner, 2026-11-06: "it's still a mode in PRACTICE MATCH ... promote to
+   * both live and test"): the whole futa05 game, live root and /test/. The locked futa04 line: never.
    */
-  blitz: CHANNEL === 'futa05' && IS_TEST_ROUTE,
+  blitz: CHANNEL === 'futa05',
   /**
    * THE PLANET (owner, 2026-11-04): the Territory window shows its ground as a planet in space,
    * called THE PLANET, and the planet is the main menu's backdrop. First on the staging copy; then

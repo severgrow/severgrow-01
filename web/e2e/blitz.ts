@@ -1,4 +1,4 @@
-// EXPERIMENTAL BLITZ — the /test/-only Practice tier, end to end in Chromium.
+// FUTASAKU BLITZ — the Practice tier, end to end in Chromium.
 //
 //   npm run check
 //   npx tsx web/e2e/blitz.ts
@@ -11,8 +11,8 @@
 //     2026-11-06: was "a timeout loses the match"); drops the bot to 8 after two losses, survives a
 //     reload, and returns to 9 after a win.
 //
-// The live ROOT is the same futa05 build one promote behind /test/, so the same build is also
-// served at `/` here and asserted to have NO BLITZ tier — that is the gate that protects live.
+// OWNER CHANGED THE RULE (2026-11-06/07: "it's still a mode in PRACTICE MATCH ... promote to both live
+// and test"; "cant see blitz mode in practice"): the same futa05 build at the live ROOT now HAS the tier.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -99,7 +99,7 @@ try {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // 2. The /test/ copy: BLITZ exists; the live ROOT of the same build does not.
+  // 2. BLITZ exists at the live ROOT and on the /test/ copy of the same build.
   // ---------------------------------------------------------------------------------------------
   const site = mkdtempSync(join(tmpdir(), 'blitz-site-'));
   cleanup.push(site);
@@ -111,8 +111,8 @@ try {
   {
     const live = await open(servedB.url); // the same bytes, at the LIVE root path
     await openPractice(live);
-    check(await live.locator('#level-grid [data-difficulty="pro"]').count() === 0, 'the futa05 build at the LIVE ROOT has no BLITZ tier');
-    check((await blitz(live)) === null, 'the futa05 build at the LIVE ROOT has no Blitz hook');
+    check(await live.locator('#level-grid [data-difficulty="pro"]').count() === 1, 'the futa05 build at the LIVE ROOT has the BLITZ tier');
+    check((await blitz(live)) !== null, 'the futa05 build at the LIVE ROOT has the Blitz hook');
     noErrors(live);
     await live.close();
   }

@@ -2020,9 +2020,7 @@ async function mountPlayerEnhancements() {
   }
 
 
-  // EXPERIMENTAL Blitz. The channel guard keeps its module out of the futa04 product build
-  // entirely; the module's own FEATURES.blitz gate (channel + the /test/ route) keeps it off the
-  // live root, which is the same futa05 build one promote behind the staging copy.
+  // Practice Blitz. The channel guard keeps its module out of the futa04 product build entirely.
   if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa05') {
     loads.push(import('./blitz/practice.js').then((m) => {
       blitz = m.mountBlitzPractice({

@@ -71,8 +71,8 @@ const HUMAN = 0;
 const SELECTED_KEY = 'severgrow.difficulty';
 
 /**
- * Mount the tier — or nothing. `FEATURES.blitz` is false on futa04 and on the futa05 live ROOT (the
- * same build one promote behind /test/), so neither can ever create the tile, the HUD or a timer.
+ * Mount the tier — or nothing. `FEATURES.blitz` is false on futa04, so the locked line can never
+ * create the tile, the HUD or a timer.
  */
 export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
   if (!FEATURES.blitz) return null;

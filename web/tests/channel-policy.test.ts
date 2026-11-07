@@ -97,14 +97,14 @@ describe('release channel policy', () => {
     expect(boot('test').policy.FEATURES.lab).toBe(true);
     expect(boot('test').policy.FEATURES.ownershipMarks).toBe(false);
   });
-  it('experimental Blitz exists ONLY on the /test/ copy', () => {
-    // /test/ is the futa05 build moved to the staging path (docs/RELEASE-FLOW.md). The live root is
-    // the SAME channel, so only the route can separate them — and it does.
+  it('Practice Blitz is part of the live game (futa05 root and /test/)', () => {
+    // OWNER CHANGED THE RULE (2026-11-06: "BLITZ replaces real time ... and also it's still a mode in
+    // PRACTICE MATCH ... promote to both live and test"; 2026-11-07: "still cant see blitz mode in
+    // practice" on the live site). It was /test/-only; now every futa05 route has it.
     expect(boot('futa05', '/test/').policy.FEATURES.blitz).toBe(true);
     expect(boot('futa05', '/test/index.html').policy.FEATURES.blitz).toBe(true);
-    expect(boot('futa05', '/').policy.FEATURES.blitz).toBe(false); // the live root: never
-    expect(boot('futa05', '/2/').policy.FEATURES.blitz).toBe(false);
-    expect(boot('futa05', '/test2/').policy.FEATURES.blitz).toBe(false);
+    expect(boot('futa05', '/').policy.FEATURES.blitz).toBe(true); // the live root
+    expect(boot('futa05', '/2/').policy.FEATURES.blitz).toBe(true);
     // The locked product and every other copy: never.
     expect(boot('futa04').policy.FEATURES.blitz).toBe(false);
     expect(boot('futa04', '/test/').policy.FEATURES.blitz).toBe(false);
