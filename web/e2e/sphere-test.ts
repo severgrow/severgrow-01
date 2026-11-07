@@ -281,8 +281,24 @@ try {
     // Zoomed in: coast must stop almost immediately (top of planet not visible).
     const zoomInBefore = (await planet(p))!;
     await p.mouse.move(cx, cy);
-    for (let i = 0; i < 8; i++) { await p.mouse.wheel(0, -180); await p.waitForTimeout(20); }
+    if (ios && webkitTouch) {
+      // Mobile WebKit has no wheel — pinch in to fill the window before the coast check.
+      const touch = (type: string, points: { x: number; y: number; id: number }[]) =>
+        webkitTouch.session.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((t) => ({ ...t, x: Math.round(t.x), y: Math.round(t.y) })) });
+      await touch('touchStart', [{ x: cx - 40, y: cy, id: 1 }]); await p.waitForTimeout(16);
+      await touch('touchStart', [{ x: cx - 40, y: cy, id: 1 }, { x: cx + 40, y: cy, id: 2 }]);
+      for (let i = 1; i <= 8; i++) {
+        const d = 80 + i * 28;
+        await touch('touchMove', [{ x: cx - d / 2, y: cy, id: 1 }, { x: cx + d / 2, y: cy, id: 2 }]);
+        await p.waitForTimeout(16);
+      }
+      await touch('touchEnd', [{ x: cx - 150, y: cy, id: 1 }]); await p.waitForTimeout(16);
+      await touch('touchEnd', [{ x: cx + 150, y: cy, id: 2 }]);
+    } else {
+      for (let i = 0; i < 8; i++) { await p.mouse.wheel(0, -180); await p.waitForTimeout(20); }
+    }
     await p.waitForTimeout(80);
+    await settled(p).catch(() => undefined);
     await p.mouse.move(cx - 40, cy);
     await p.mouse.down();
     for (let i = 1; i <= 6; i++) { await p.mouse.move(cx - 40 + i * 10, cy); await p.waitForTimeout(16); }
@@ -294,8 +310,25 @@ try {
       zoomedAfter.q.every((v:number,i:number)=>Math.abs(v-zoomedPose.q[i]!)<.002),
       `Δ=${zoomedAfter.q.map((v:number,i:number)=>Math.abs(v-zoomedPose.q[i]!).toFixed(4)).join(',')}`);
     // Restore a comfortable zoom for the rest of the suite.
-    while ((await planet(p))!.zoom > zoomInBefore.zoom * 1.02) {
-      await p.mouse.wheel(0, 180); await p.waitForTimeout(16);
+    if (ios && webkitTouch) {
+      const touch = (type: string, points: { x: number; y: number; id: number }[]) =>
+        webkitTouch.session.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((t) => ({ ...t, x: Math.round(t.x), y: Math.round(t.y) })) });
+      while ((await planet(p))!.zoom > zoomInBefore.zoom * 1.05) {
+        await touch('touchStart', [{ x: cx - 140, y: cy, id: 1 }]); await p.waitForTimeout(16);
+        await touch('touchStart', [{ x: cx - 140, y: cy, id: 1 }, { x: cx + 140, y: cy, id: 2 }]);
+        for (let i = 1; i <= 8; i++) {
+          const d = 280 - i * 28;
+          await touch('touchMove', [{ x: cx - d / 2, y: cy, id: 1 }, { x: cx + d / 2, y: cy, id: 2 }]);
+          await p.waitForTimeout(16);
+        }
+        await touch('touchEnd', [{ x: cx - 20, y: cy, id: 1 }]); await p.waitForTimeout(16);
+        await touch('touchEnd', [{ x: cx + 20, y: cy, id: 2 }]);
+        await settled(p).catch(() => undefined);
+      }
+    } else {
+      while ((await planet(p))!.zoom > zoomInBefore.zoom * 1.02) {
+        await p.mouse.wheel(0, 180); await p.waitForTimeout(16);
+      }
     }
     // The finger moved 120px right; the ground follows during the gesture.
     const moved = (await screenOf(p, '0,0'))!;

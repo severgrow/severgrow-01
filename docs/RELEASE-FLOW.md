@@ -88,9 +88,10 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
 ## Checks that run on a push (and what was removed, 2026-10-29; preview speedup 2026-11-07)
 
 - `ci.yml` `check`: typecheck + every unit test + the futa04 and futa-test builds.
-- `ci.yml` `build-futa04` / `build-futa05`: **one shared build per channel**, downloaded by every
-  browser suite (was: each matrix job rebuilt — ~2–4 min × ~18). Measured saving: on the order of
-  **30–60 minutes** of redundant build time per CI run, without deleting any suite.
+- `ci.yml` shared builds: **one futa04** plus **three futa05 env variants** (sphere / lessons /
+  challenges — different VITE stubs), downloaded by the browser suites (was: each matrix job
+  rebuilt — ~2–4 min × ~18). Measured saving: on the order of **30–50 minutes** of redundant
+  build time per CI run, without deleting any suite.
 - `ci.yml` browser jobs — two tiers (owner, 2026-11-07: fast preview path + full promote/release
   gates; implemented as separate `browser` / `browser-release` jobs because GHA rejects `matrix` in
   a job-level `if`):

@@ -22,8 +22,10 @@ jobs:
       - run: npm run web:build && node scripts/check-channel-assets.mjs
       - run: CHANNEL=futa-test npm run web:build && CHANNEL=futa-test node scripts/check-channel-assets.mjs
 
-  # ONE build per channel, shared by every browser suite (owner, 2026-11-07: fast preview path).
-  # Was: each of ~18 matrix jobs rebuilt from scratch (~2–4 min each). Now: two build jobs total.
+  # Shared builds (owner, 2026-11-07: fast preview path). Was: each of ~18 matrix jobs rebuilt
+  # (~2–4 min each). Now: one futa04 + three futa05 env variants (lessons / sphere / challenges
+  # need different VITE_* stubs — a single futa05 artifact caused ERR_CONNECTION_REFUSED on
+  # territory-challenges). Measured saving: on the order of 30–50 minutes of redundant rebuild.
   build-futa04:
     name: build futa04 (browser)
     runs-on: ubuntu-24.04
@@ -42,8 +44,8 @@ jobs:
           path: web/dist
           retention-days: 1
 
-  build-futa05:
-    name: build futa05 (browser)
+  build-futa05-sphere:
+    name: build futa05 sphere (browser)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -53,8 +55,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # Shared futa05 build for lessons / sphere / planet / territory-challenges. Suites stub the
-      # network; WebKit-safe closed port avoids reserved-port failures in constructors.
+      # WebKit-safe closed port — constructors must not hit a reserved port.
       - run: >
           CHANNEL=futa05 VITE_FIND_OPPONENT=1
           VITE_DUEL_API_URL=http://127.0.0.1:65530/functions/v1/duel
@@ -63,7 +64,54 @@ jobs:
           npm run web:build
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-futa05
+          name: dist-futa05-sphere
+          path: web/dist
+          retention-days: 1
+
+  build-futa05-lessons:
+    name: build futa05 lessons (browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: >
+          CHANNEL=futa05 VITE_FIND_OPPONENT=1
+          VITE_DUEL_API_URL=https://ci.invalid/functions/v1/duel
+          VITE_SUPABASE_URL=https://ci.invalid
+          VITE_SUPABASE_ANON_KEY=ci-placeholder
+          npm run web:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-futa05-lessons
+          path: web/dist
+          retention-days: 1
+
+  build-futa05-challenges:
+    name: build futa05 challenges (browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # territory-challenges stubs every API call; build pointed at closed port 9 (ERR_UNSAFE_PORT filtered).
+      - run: >
+          CHANNEL=futa05
+          VITE_DUEL_API_URL=http://127.0.0.1:9/functions/v1/duel
+          VITE_SUPABASE_URL=http://127.0.0.1:9
+          VITE_SUPABASE_ANON_KEY=local
+          npm run web:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-futa05-challenges
           path: web/dist
           retention-days: 1
 
@@ -72,21 +120,21 @@ jobs:
   # workflow on the futa0.5-online commit (docs/RELEASE-FLOW.md). Tests are never deleted.
   # Two jobs (not one matrix + job-level `if: matrix.*`): GHA rejects `matrix` in job `if`.
   browser:
-    needs: [build-futa04, build-futa05]
+    needs: [build-futa04, build-futa05-sphere, build-futa05-lessons]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { suite: futa04-critical, channel: futa04 }
-          - { suite: futa04-information, channel: futa04 }
-          - { suite: futa04-motion, channel: futa04 }
-          - { suite: lessons-3, channel: futa05 }
-          - { suite: territory-menu, channel: futa04 }
-          - { suite: territory-gestures, channel: futa04 }
-          - { suite: territory-gestures-ios, channel: futa04 }
-          - { suite: sphere-test, channel: futa05 }
-          - { suite: sphere-test-ios, channel: futa05 }
-          - { suite: planet-matte, channel: futa05 }
+          - { suite: futa04-critical, artifact: futa04 }
+          - { suite: futa04-information, artifact: futa04 }
+          - { suite: futa04-motion, artifact: futa04 }
+          - { suite: lessons-3, artifact: futa05-lessons }
+          - { suite: territory-menu, artifact: futa04 }
+          - { suite: territory-gestures, artifact: futa04 }
+          - { suite: territory-gestures-ios, artifact: futa04 }
+          - { suite: sphere-test, artifact: futa05-sphere }
+          - { suite: sphere-test-ios, artifact: futa05-sphere }
+          - { suite: planet-matte, artifact: futa05-sphere }
     # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
     # Playwright 1.56.1 refuses it ("Playwright does not support chromium on ubuntu26.04-x64"),
     # which failed EVERY browser job at `playwright-core install` before a single test ran. Pin the
@@ -106,10 +154,10 @@ jobs:
             *-ios) npx playwright-core install --with-deps webkit ;;
             *) npx playwright-core install --with-deps chromium ;;
           esac
-      - name: Restore the shared ${{ matrix.channel }} build
+      - name: Restore the shared ${{ matrix.artifact }} build
         uses: actions/download-artifact@v4
         with:
-          name: dist-${{ matrix.channel }}
+          name: dist-${{ matrix.artifact }}
           path: web/dist
       - run: node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts
 
@@ -139,19 +187,19 @@ jobs:
       github.ref == 'refs/heads/futa0.5-online' ||
       github.base_ref == 'futa0.5-online' ||
       github.event_name == 'workflow_dispatch'
-    needs: [build-futa04, build-futa05]
+    needs: [build-futa04, build-futa05-challenges]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { suite: futa04-tutorial-intel, channel: futa04 }
-          - { suite: futa04-tutorial-lock, channel: futa04 }
-          - { suite: futa04-lesson-9-free, channel: futa04 }
-          - { suite: cut-severe, channel: futa04 }
-          - { suite: territory-challenges, channel: futa05 }
-          - { suite: living-territory, channel: futa04 }
-          - { suite: living-territory-ios, channel: futa04 }
-          - { suite: territory-final-polish, channel: futa04 }
+          - { suite: futa04-tutorial-intel, artifact: futa04 }
+          - { suite: futa04-tutorial-lock, artifact: futa04 }
+          - { suite: futa04-lesson-9-free, artifact: futa04 }
+          - { suite: cut-severe, artifact: futa04 }
+          - { suite: territory-challenges, artifact: futa05-challenges }
+          - { suite: living-territory, artifact: futa04 }
+          - { suite: living-territory-ios, artifact: futa04 }
+          - { suite: territory-final-polish, artifact: futa04 }
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -167,10 +215,10 @@ jobs:
             *-ios) npx playwright-core install --with-deps webkit ;;
             *) npx playwright-core install --with-deps chromium ;;
           esac
-      - name: Restore the shared ${{ matrix.channel }} build
+      - name: Restore the shared ${{ matrix.artifact }} build
         uses: actions/download-artifact@v4
         with:
-          name: dist-${{ matrix.channel }}
+          name: dist-${{ matrix.artifact }}
           path: web/dist
       - run: node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts
 
