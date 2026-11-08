@@ -9,6 +9,7 @@
 // browser-free, so a unit test can pin every way a duel finishes (KO, deck exhaustion, timeout,
 // resignation, reduced motion) without driving two phones.
 import type { Step } from './anim.js';
+import { MOTION } from './motion.js';
 
 /**
  * Steps that change nothing the player is watching, so none of them may hold the plate:
@@ -54,3 +55,44 @@ export const RESULT_HOLD_STALL_MS = 6_000;
 
 /** True once a held board has been silent for the whole stall window. */
 export const resultHoldStalled = (quietMs: number): boolean => quietMs >= RESULT_HOLD_STALL_MS;
+
+/**
+ * One beat on the last tile, after the board has settled and before the plate covers it.
+ * A finish that never moved the board (a timeout, a resignation, a match already over) does not
+ * wait. Reduced motion does not wait. The beat is the move tempo, not an extra delay on the plate.
+ */
+export const RESULT_BREATH_MS = MOTION.move;
+
+export type ResultBreath = {
+  /** A result is wanted. False resets the breath, so the next match starts clean. */
+  wanted: boolean;
+  /** A board-changing step is in flight or still queued. */
+  moving: boolean;
+  reducedMotion: boolean;
+  /** This finish has already seen the board move. */
+  sawMotion: boolean;
+  /** When the settled board started its beat, or null if it has not. */
+  breathFrom: number | null;
+  now: number;
+};
+
+export type ResultBreathNext = {
+  /** The plate may cover the board. */
+  show: boolean;
+  sawMotion: boolean;
+  breathFrom: number | null;
+  /** Wake the page this many ms from now, or null when nothing is waiting. */
+  waitMs: number | null;
+};
+
+export const stepResultBreath = (s: ResultBreath): ResultBreathNext => {
+  if (!s.wanted) return { show: false, sawMotion: false, breathFrom: null, waitMs: null };
+  if (s.reducedMotion) return { show: !s.moving, sawMotion: false, breathFrom: null, waitMs: null };
+  const sawMotion = s.sawMotion || s.moving;
+  // Still moving, or nothing ever moved: no beat. A timeout shows at once.
+  if (s.moving || !sawMotion) return { show: !s.moving, sawMotion, breathFrom: null, waitMs: null };
+  const from = s.breathFrom ?? s.now;
+  const left = RESULT_BREATH_MS - (s.now - from);
+  if (left <= 0) return { show: true, sawMotion: true, breathFrom: from, waitMs: null };
+  return { show: false, sawMotion: true, breathFrom: from, waitMs: left };
+};

@@ -98,6 +98,12 @@ describe('motion tokens', () => {
     expect(css).toMatch(/\.top-glow\.glow-in \{\s*animation: glow-in var\(--dur-move\) var\(--ease-out\) both;/);
   });
 
+  it('a newly painted hex clicks once on the move beat and then stays still', () => {
+    expect(css).toMatch(/\.draw-ghost\.arrive \{\s*transform-box: fill-box;\s*transform-origin: center;\s*animation: ghost-click var\(--dur-move\) var\(--ease-spring\) both;\s*\}/);
+    expect(css).toMatch(/\.draw-ghost\.arrive \.ghost-tile \{\s*animation: none;\s*\}/);
+    expect(css).not.toMatch(/draw-ghost\.arrive \.ghost-tile \{[^}]*ghost-breathe/);
+  });
+
   it('the score bar eases on the move beat and does not spring past the score', () => {
     expect(css).toMatch(/\.race-fill \{[^}]*transition:\s*--share var\(--dur-move\) var\(--ease-standard\);/);
     expect(css).not.toMatch(/cubic-bezier\(0\.34,\s*1\.4/);

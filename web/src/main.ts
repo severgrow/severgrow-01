@@ -96,7 +96,7 @@ import { DECK_BEAT, SCORE_BEAT, deckMoment, scoreProgress, splashPlan, sporesHom
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { EASE, BREATH, MOTION, PINNED, breathAmpStep, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
-import { boardHasSettled, resultHoldStalled } from './logic/result-hold.js';
+import { boardHasSettled, resultHoldStalled, stepResultBreath } from './logic/result-hold.js';
 import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface, INTERFACE_MOTION } from './ui/interface-motion.js';
 import { screenArrival } from './ui/screen-motion.js';
@@ -2453,7 +2453,7 @@ async function startBlitzMatch(map: CampaignLevel): Promise<void> {
 }
 
 /**
- * My 21 s ran out (Blitz, 0.82; owner 2026-11-06: "Turn ends, worst card thrown"). The turn ends on its
+ * My Blitz clock ran out (0.82; owner 2026-11-06: "Turn ends, worst card thrown"). The turn ends on its
  * own — draw if not drawn, stop growing, throw the lowest card (logic/blitz.ts blitzTimeoutAction) —
  * and the match goes on. Each step is an ordinary auto move, so it animates and saves like any other.
  */
@@ -8243,7 +8243,8 @@ function presentResult(go: HTMLElement, wasHidden: boolean): void {
     // sheets do, so the card is a plate landing, not a panel that was simply there. Its own title
     // keeps the CSS reveal it already owns (`go-title-in`, 60ms later) — one choreography each.
     resetSurface(card);
-    enterSurface(card, { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE, delay: interfaceMotionAllowed() ? PINNED.hitStop : 0 });
+    // The beat was already held on the last tile. The plate rises as soon as it is allowed to.
+    enterSurface(card, { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE, delay: 0 });
   }
 }
 /** One exit for every path that puts the result away, so the board always comes back to life. */
@@ -8436,6 +8437,38 @@ function disarmResultHold(): void {
   resultHoldSince = 0;
 }
 
+/**
+ * After a finish that moved the board, hold one beat on the last tile, then let the plate rise.
+ * A timeout, a resignation and a match that was already over do not wait. Reduced motion does not.
+ */
+let resultBreathSaw = false;
+let resultBreathFrom: number | null = null;
+let resultBreathTimer = 0;
+
+function plateMayCover(wanted: boolean, moving: boolean): boolean {
+  const next = stepResultBreath({
+    wanted,
+    moving,
+    reducedMotion: settings.reduceMotion,
+    sawMotion: resultBreathSaw,
+    breathFrom: resultBreathFrom,
+    now: performance.now(),
+  });
+  resultBreathSaw = next.sawMotion;
+  resultBreathFrom = next.breathFrom;
+  if (resultBreathTimer) {
+    window.clearTimeout(resultBreathTimer);
+    resultBreathTimer = 0;
+  }
+  if (next.waitMs !== null) {
+    resultBreathTimer = window.setTimeout(() => {
+      resultBreathTimer = 0;
+      render();
+    }, next.waitMs);
+  }
+  return next.show;
+}
+
 function checkResultHold(): void {
   const os = getOnlineSession();
   if (!os?.finished || !$('gameover').hidden) {
@@ -8513,9 +8546,17 @@ function renderGameOver() {
       playing: currentStep?.k ?? null,
       reducedMotion: settings.reduceMotion,
     });
+    // One beat on the last tile once that move has landed. Reduced motion, and the catch-up frame
+    // before the steps exist, are not "moving", so neither of them starts the beat early.
+    const moving = wanted && !os?.isPreparingCatchUp && !settings.reduceMotion && !boardHasSettled({
+      waiting: queue.kinds(),
+      playing: currentStep?.k ?? null,
+      reducedMotion: false,
+    });
+    const breathed = plateMayCover(wanted, moving);
     // Once the plate is up, a later render of the same match never takes it down (only `wanted`
     // can: leaving, or the player dismissing it).
-    const show = wanted && (!wasHidden || settled);
+    const show = wanted && (!wasHidden || (settled && breathed));
     if (!show) {
       go.hidden = true;
       document.body.classList.remove('result');
@@ -8612,7 +8653,9 @@ function renderGameOver() {
   }
   const st = session?.state;
   const wasHidden = !!go.hidden;
-  const show = !!st && st.phase === 'GAME_OVER' && !!st.result && !busy() && !gameOverDismissed && !$('game').hidden;
+  const ready = !!st && st.phase === 'GAME_OVER' && !!st.result && !gameOverDismissed && !$('game').hidden;
+  const moving = ready && busy() && !settings.reduceMotion;
+  const show = ready && !busy() && plateMayCover(ready, moving);
   if (go.hidden === !show) {
     if (!show) document.body.classList.remove('result');
     return;

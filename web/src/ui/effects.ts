@@ -29,6 +29,33 @@ export const removeAfter = (a: Animation | null, node: Element, fallbackMs: numb
   else setTimeout(() => node.remove(), fallbackMs);
 };
 
+/**
+ * A throw onto the pile. The .68 mark is when the real pile top may change; the card is still a
+ * hair small there. It then clicks to the pile's own size and only then fades, so the fade covers
+ * an identical card and the old top never flashes. The whole flight stays on `EASE.out`: the
+ * settle is these three frames, not a new curve on the fade.
+ */
+export const THROW_PILE = Object.freeze({
+  landAt: 0.68,
+  clickAt: 0.8,
+  seatedAt: 0.9,
+  approach: 0.96,
+  click: 1.02,
+});
+
+export const throwPileFrames = (dx: number, dy: number, sc: number): Keyframe[] => {
+  const approach = sc * THROW_PILE.approach;
+  const click = sc * THROW_PILE.click;
+  return [
+    { transform: 'translate(0,0) scale(1)', opacity: 1 },
+    { transform: `translate(${dx * .55}px, ${dy * .55 - 20}px) scale(${(1 + sc) / 2})`, opacity: 1, offset: .48 },
+    { transform: `translate(${dx}px, ${dy}px) scale(${approach})`, opacity: 1, offset: THROW_PILE.landAt },
+    { transform: `translate(${dx}px, ${dy}px) scale(${click})`, opacity: 1, offset: THROW_PILE.clickAt },
+    { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: 1, offset: THROW_PILE.seatedAt },
+    { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: 0 },
+  ];
+};
+
 /** The class for a card's look: its suit (s0-s3), or `fruit` for a v0.6 Fruit card. */
 export const suitClass = (c: Card): string => (c.suit === null ? 'fruit' : `s${c.suit}`);
 
@@ -268,18 +295,13 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const dx = to.left + to.width / 2 - (from.left + from.width / 2);
     const dy = to.top + to.height / 2 - (from.top + from.height / 2);
     const sc = to.height / Math.max(from.height, 1);
-    // Futa04 fly-to-pile: snappy land, fade begins once the card is seated.
-    const land = sc * 0.92;
     const frames: Keyframe[] = motion() === 0
       ? [{ opacity: 1 }, { opacity: 0 }]
       : IS_FUTA04
-        ? [{ transform: 'translate(0,0) scale(1)', opacity: 1 },
-          { transform: `translate(${dx * .55}px, ${dy * .55 - 20}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.48 },
-          { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 1, offset: .68 },
-          { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 0 }]
+        ? throwPileFrames(dx, dy, sc)
         : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
     const duration = (IS_FUTA04 ? PINNED.throwFlight : 440) * f;
-    if (onLand && IS_FUTA04) setTimeout(onLand, duration * .68);
+    if (onLand && IS_FUTA04) setTimeout(onLand, duration * THROW_PILE.landAt);
     else onLand?.();
     removeAfter(anim(d, frames, { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }

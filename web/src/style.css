@@ -5376,12 +5376,21 @@ html[data-layout='stack'] .board-wrap {
   stroke-opacity: 0.85;
   animation: ghost-breathe 1.8s ease-in-out infinite;
 }
-/* A hex the player has just painted arrives once. Kept ghosts do not get .arrive again. */
-@keyframes ghost-arrive {
-  from { opacity: 0; }
+/* A hex the player has just painted clicks once, the same small land as a placed tile, then stays
+   still. Kept ghosts do not get .arrive again, and they keep the quiet breathe below. */
+@keyframes ghost-click {
+  from { opacity: 0; transform: scale(0.86); }
+  72% { opacity: 1; transform: scale(1.02); }
+  90% { opacity: 1; transform: translateY(1px) scale(1); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.draw-ghost.arrive {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ghost-click var(--dur-move) var(--ease-spring) both;
 }
 .draw-ghost.arrive .ghost-tile {
-  animation: ghost-arrive var(--dur-quick) var(--ease-out) both, ghost-breathe 1.8s ease-in-out var(--dur-quick) infinite;
+  animation: none;
 }
 .ghost.replaces .ghost-tile {
   fill: color-mix(in srgb, var(--c-you) 55%, var(--c-bot));
@@ -5432,6 +5441,7 @@ html[data-layout='stack'] .board-wrap {
 }
 .reduce-motion .ghost .ghost-tile,
 .reduce-motion .draw-ghost .ghost-tile,
+.reduce-motion .draw-ghost.arrive,
 .reduce-motion .draw-ghost.arrive .ghost-tile {
   animation: none;
 }

@@ -18,11 +18,14 @@ import { AnimQueue } from '../src/logic/anim.js';
 import { OnlineSession } from '../src/online/duel-session.js';
 import type { OnlineDriver } from '../src/online/driver.js';
 import { onlinePerspective } from '../src/online/perspective.js';
+import { MOTION } from '../src/logic/motion.js';
 import {
+  RESULT_BREATH_MS,
   RESULT_HOLD_STALL_MS,
   boardHasSettled,
   isSettledStep,
   resultHoldStalled,
+  stepResultBreath,
 } from '../src/logic/result-hold.js';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
@@ -76,6 +79,39 @@ describe('may the result plate cover the board?', () => {
   });
 });
 
+describe('one beat on the last tile', () => {
+  const base = { wanted: true, moving: false, reducedMotion: false, sawMotion: false, breathFrom: null, now: 1_000 };
+
+  it('is the move beat, not a second hand-picked delay', () => {
+    expect(RESULT_BREATH_MS).toBe(MOTION.move);
+  });
+
+  it('shows at once when the finish never moved the board', () => {
+    expect(stepResultBreath(base)).toMatchObject({ show: true, sawMotion: false, waitMs: null });
+  });
+
+  it('waits out the beat after a move, then shows', () => {
+    const started = stepResultBreath({ ...base, moving: true });
+    expect(started).toMatchObject({ show: false, sawMotion: true, breathFrom: null, waitMs: null });
+    const holding = stepResultBreath({ ...base, sawMotion: true, now: 1_000 });
+    expect(holding.show).toBe(false);
+    expect(holding.breathFrom).toBe(1_000);
+    expect(holding.waitMs).toBe(RESULT_BREATH_MS);
+    const mid = stepResultBreath({ ...base, sawMotion: true, breathFrom: 1_000, now: 1_000 + RESULT_BREATH_MS - 1 });
+    expect(mid.show).toBe(false);
+    expect(mid.waitMs).toBe(1);
+    const done = stepResultBreath({ ...base, sawMotion: true, breathFrom: 1_000, now: 1_000 + RESULT_BREATH_MS });
+    expect(done).toMatchObject({ show: true, waitMs: null });
+  });
+
+  it('does not wait when motion is reduced, and a dismissed result resets', () => {
+    expect(stepResultBreath({ ...base, reducedMotion: true, sawMotion: true })).toMatchObject({ show: true, sawMotion: false });
+    expect(stepResultBreath({ ...base, wanted: false, sawMotion: true, breathFrom: 1_000 })).toEqual({
+      show: false, sawMotion: false, breathFrom: null, waitMs: null,
+    });
+  });
+});
+
 describe('the queue the gate reads', () => {
   it('kinds() reports the waiting steps in play order, without consuming them', () => {
     const q = new AnimQueue({});
@@ -96,7 +132,7 @@ describe('the online finish screen asks the gate', () => {
   it('main.ts uses the shared decision in the online branch', () => {
     // A source-level pin: the online branch must not go back to "show as soon as the view lands".
     expect(mainSource).toMatch(/const settled = wanted && !os\?\.isPreparingCatchUp && boardHasSettled\(\{/);
-    expect(mainSource).toMatch(/const show = wanted && \(!wasHidden \|\| settled\)/);
+    expect(mainSource).toMatch(/const show = wanted && \(!wasHidden \|\| \(settled && breathed\)\)/);
     // ...and it must hold (with the stall net armed), not just return silently, while it waits.
     expect(mainSource).toMatch(/if \(wanted\) armResultHold\(\);/);
   });
