@@ -17,7 +17,7 @@ describe('the publish number', () => {
     for (const bad of ['', '<!doctype html><title>404</title>', 'test 46f8579a', 'zzzzzzzz', null]) expect(buildTagOf(bad)).toBeNull();
   });
   it('is faint and small, and never says "test"', () => {
-    expect(BUILD_TAG_CSS).toMatch(/#menu-beta \.beta-build \{[^}]*opacity:\s*0?\.[0-4]/);
+    expect(BUILD_TAG_CSS).toMatch(/#menu-beta \.beta-build \{[^}]*opacity:\s*0?\.(3[5-9]|4[0-9])/);
     const src = read('../src/feedback/build-tag.ts');
     // the span holds the number and nothing else: no "test", no label
     expect(src).toContain('span.textContent = tag;');

@@ -11,7 +11,7 @@ export const buildTagOf = (text: string | null | undefined): string | null => {
 
 export const BUILD_TAG_CSS = `
 #menu-beta .beta-build {
-  margin-left: .5em; opacity: .2; font-size: .74em; letter-spacing: .04em;
+  margin-left: .5em; opacity: .42; font-size: .8em; letter-spacing: .04em;
   font-variant-numeric: tabular-nums; user-select: text;
 }
 `;
