@@ -29,6 +29,10 @@ await new Promise<void>(r=>api.listen(0,'127.0.0.1',r));
 const base=`http://127.0.0.1:${(api.address() as AddressInfo).port}`;
 const guest=async()=>await (await fetch(`${base}/v1/guests`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).json() as {token:string;player:{id:string;kind:string;displayName:string|null}};
 const me=await guest(),other=await guest();
+// OWNER CHANGED THE RULE (futa0.84, 2026-11-08): only a signed-in account grows a planet tile, and the
+// in-flight-claim case grows one. The page's player is an account on the server and in the page.
+{const players=(storage as unknown as {players:Map<string,{kind:string;upgradedAt?:number|null}>}).players;
+ players.set(me.player.id,{...players.get(me.player.id)!,kind:'account',upgradedAt:Date.now()});me.player.kind='account';}
 for(const g of [me,other]){
  await store.adminAdjustSeeds({playerId:g.player.id,delta:2000,reason:'e2e',actorId:'e2e',requestId:`fund-${g.player.id}`,now:Date.now()});
  await store.acknowledgeInvitation(g.player.id);
