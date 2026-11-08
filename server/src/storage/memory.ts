@@ -7,6 +7,10 @@ import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
 import { prunableMatches } from '../retention.js';
 import type { RetentionRow } from '../retention.js';
+import {
+  furtherAheadWire,
+  type AccountCampaignProgressWire,
+} from '../account-campaign-progress.js';
 import type { OfflineCounters, OfflineSummary, OnlineGameResult } from '../protocol.js';
 import { aggregateOfflineStats, mergeOfflineCounters } from '../offline.js';
 import type {
@@ -68,6 +72,8 @@ export class MemoryStorage implements Storage {
   private readonly linkCodes = new Map<string, DeviceLinkCode>();
   /** player id → device id → that device's cumulative offline counters (migration 0022). */
   private readonly offlineByPlayer = new Map<string, Map<string, OfflineCounters>>();
+  /** player id → further-ahead campaign progress snapshot (migration 0023). */
+  private readonly campaignProgressByPlayer = new Map<string, AccountCampaignProgressWire>();
 
   /** Synchronous copy boundary for the local chat adapter; no async gap before its write. */
   chatAuthority(id: string): { match: MatchRecord | null; participants: Participant[] } {
@@ -125,6 +131,23 @@ export class MemoryStorage implements Storage {
     devices.set(counters.deviceId, copy(stored ? mergeOfflineCounters(stored, counters) : counters));
     this.offlineByPlayer.set(playerId, devices);
     return aggregateOfflineStats([...devices.values()]);
+  }
+
+  async accountCampaignProgressOf(playerId: string): Promise<AccountCampaignProgressWire | null> {
+    const stored = this.campaignProgressByPlayer.get(playerId);
+    return stored ? copy(stored) : null;
+  }
+
+  async mergeAccountCampaignProgress(
+    playerId: string,
+    incoming: AccountCampaignProgressWire,
+    _now: number,
+  ): Promise<AccountCampaignProgressWire> {
+    const stored = this.campaignProgressByPlayer.get(playerId);
+    const kept = stored ? furtherAheadWire(stored, incoming) : incoming;
+    if (stored && kept === stored) return copy(stored);
+    this.campaignProgressByPlayer.set(playerId, copy(kept));
+    return copy(kept);
   }
 
   // ---- matches ----

@@ -5,6 +5,8 @@ import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
 import { mountStartupReveal } from './player/startup.js';
 import { mountAchievementToast } from './player/achievement-toast.js';
 import type { AchievementToastController } from './player/achievement-toast.js';
+import { mountKeepProgress } from './player/keep-progress.js';
+import type { KeepProgressController } from './player/keep-progress.js';
 import { browserStorage } from '../../server/src/client.js';
 // EXPERIMENTAL Blitz (/test/ only): presentation + wiring; its rules live in logic/blitz.ts.
 import type { BlitzPractice } from './blitz/practice.js';
@@ -183,7 +185,8 @@ import {
   TUTORIAL_LEVEL_COUNT,
 } from './logic/campaign.js';
 import type { CampaignMatchKind } from './logic/campaign.js';
-import { fetchServerFeatures, mergeFurtherAheadProgress } from './logic/account-progress.js';
+import { fetchServerFeatures, mergeFurtherAheadProgress, readAccountIdentity } from './logic/account-progress.js';
+import { syncAccountCampaignProgress } from './logic/account-campaign-sync.js';
 import {
   cachedAccountClearsForThisDevice,
   fetchAccountHighestLevel,
@@ -3209,9 +3212,15 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
           // A NEW clear changes the account too. Forget the remembered account answer so the NEXT
           // open asks once more; this session keeps the device half, which already contains this win,
           // so the suggestion stays correct without a second request.
-          if (after.completed.length > campaignProgress.completed.length) forgetAccountClears(store);
+          const advanced = after.completed.length > campaignProgress.completed.length;
           campaignProgress = after;
           saveCampaignProgress();
+          if (advanced) {
+            forgetAccountClears(store);
+            keepProgress?.note('level-clear');
+            // Signed-in: push the further-ahead snapshot when the network is up (silent if not).
+            void syncAccountLevel();
+          }
         }
       }
       if (onlineBuildEnabled() && session) {
@@ -3621,6 +3630,7 @@ function currentMatchLabel(): string {
  */
 /** Quiet achievement line; mounted once after startup. Null only until that mount runs. */
 let achievementToasts: AchievementToastController | null = null;
+let keepProgress: KeepProgressController | null = null;
 let campaignLevel: CampaignLevel | null = null;
 /**
  * EXPERIMENTAL Blitz (/test/ only, Practice): the mounted tier, or null when the feature is off.
@@ -3779,15 +3789,31 @@ async function syncAccountLevel(): Promise<void> {
     storage: store,
     fetchHighest: fetchAccountHighestLevel,
   });
+  let highest: number | null | undefined;
   if (result.status === 'signed-out') {
     accountClears = null;
+    highest = null;
   } else if (result.status === 'ok') {
     accountClears = result.levels;
+    highest = result.highest;
     const after = mergeFurtherAheadProgress(campaignProgress, result.levels);
     if (after !== campaignProgress) {
       campaignProgress = after;
       saveCampaignProgress();
     }
+  } else {
+    highest = undefined;
+  }
+  // Further-ahead snapshot sync (migration 0023): pull account progress, merge, push when local wins.
+  // Silent on older servers / failures; never blocks a duel or a level.
+  const synced = await syncAccountCampaignProgress({
+    storage: store,
+    local: campaignProgress,
+    serverHighest: highest ?? (accountClears && accountClears.length > 0 ? accountClears[accountClears.length - 1]! : null),
+  });
+  if (synced.localChanged) {
+    campaignProgress = synced.progress;
+    saveCampaignProgress();
   }
   if (accountClears === beforeClears && campaignProgress === beforeProgress) return;
   // The menu's LEVEL <n> entry and the suggestion are painted from progress; repaint in place so a
@@ -11496,6 +11522,14 @@ void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => un
 // a device with nothing queued makes no request at all.
 void settleQueuedSeedsOnBoot();
 mountStartupReveal();
+const coveredForQuietPrompts = (): boolean => {
+  const over = document.getElementById('gameover');
+  const victory = !!over && !over.hidden;
+  const clock = document.getElementById('blitz-clock');
+  const blitzDecision = document.documentElement.classList.contains('blitz-match')
+    && clock?.dataset.side === 'mine';
+  return victory || blitzDecision;
+};
 achievementToasts = mountAchievementToast({
   playerId: () => {
     try {
@@ -11509,16 +11543,20 @@ achievementToasts = mountAchievementToast({
   storage: () => browserStorage(),
   campaignLevel: () => campaignLevel?.number ?? null,
   clearedThrough: () => Math.max(0, unlockedThrough(campaignProgress) - 1),
-  covered: () => {
-    const over = document.getElementById('gameover');
-    const victory = !!over && !over.hidden;
-    const clock = document.getElementById('blitz-clock');
-    const blitzDecision = document.documentElement.classList.contains('blitz-match')
-      && clock?.dataset.side === 'mine';
-    return victory || blitzDecision;
+  covered: coveredForQuietPrompts,
+  reduceMotion: () => !interfaceMotionAllowed(),
+});
+keepProgress = mountKeepProgress({
+  storage: () => browserStorage(),
+  kind: () => readAccountIdentity(browserStorage())?.kind ?? null,
+  covered: coveredForQuietPrompts,
+  onSignIn: () => {
+    const btn = document.getElementById('menu-login') as HTMLButtonElement | null;
+    btn?.click();
   },
   reduceMotion: () => !interfaceMotionAllowed(),
 });
+window.addEventListener('futasaku:first-claim', () => keepProgress?.note('first-claim'));
 {
   // When a Blitz decision ends, release any line that was held for it.
   let wasBlitzDecision = false;
@@ -11526,7 +11564,10 @@ achievementToasts = mountAchievementToast({
     const clock = document.getElementById('blitz-clock');
     const mine = document.documentElement.classList.contains('blitz-match')
       && clock?.dataset.side === 'mine';
-    if (wasBlitzDecision && !mine) achievementToasts?.release();
+    if (wasBlitzDecision && !mine) {
+      achievementToasts?.release();
+      keepProgress?.release();
+    }
     wasBlitzDecision = mine;
   };
   const blitzCoverWatch = new MutationObserver(checkBlitzCover);

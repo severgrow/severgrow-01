@@ -1389,6 +1389,11 @@ export const ACCOUNT = Object.freeze({
   welcomeTitle: 'Keep your games',
   welcomeBody: 'Sign in to keep your online matches safe and pick them up on any phone or computer.',
   welcomeSmall: 'Games against the computer never need an account. You can sign in later from Settings.',
+  /** Quiet optional line after a guest clears a level (or a first claim). Dismissible, once. */
+  keepProgressTitle: 'Keep your progress',
+  keepProgressBody: 'Sign in to keep campaign progress on every device.',
+  keepProgressYes: 'Sign in',
+  keepProgressDismiss: 'Not now',
   privacy: 'Privacy',
   hubGuest: 'Playing as a guest: your matches live only on this device.',
   settingsTitle: 'Account',

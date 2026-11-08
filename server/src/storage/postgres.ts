@@ -17,6 +17,8 @@ import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
 import { prunableMatches } from '../retention.js';
 import type { RetentionRow } from '../retention.js';
+import type { AccountCampaignProgressWire } from '../account-campaign-progress.js';
+import { furtherAheadWire } from '../account-campaign-progress.js';
 import type { MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult } from '../protocol.js';
 import type {
   CommitBatchInput,
@@ -1086,6 +1088,58 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       const summary = await readOfflineSummary(client, playerId);
       await client.query('commit');
       return summary;
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release?.();
+    }
+  },
+
+  async accountCampaignProgressOf(playerId: string): Promise<AccountCampaignProgressWire | null> {
+    const result = await pool.query(
+      `select completed, best from account_campaign_progress where player_id = $1`,
+      [playerId],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const completed = Array.isArray(row.completed) ? row.completed.map(String) : [];
+    const best = asJson<AccountCampaignProgressWire['best']>(row.best) ?? {};
+    return { completed, best };
+  },
+
+  async mergeAccountCampaignProgress(
+    playerId: string,
+    incoming: AccountCampaignProgressWire,
+    now: number,
+  ): Promise<AccountCampaignProgressWire> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const existing = await client.query(
+        `select completed, best from account_campaign_progress where player_id = $1 for update`,
+        [playerId],
+      );
+      const row = existing.rows[0];
+      const stored: AccountCampaignProgressWire | null = row
+        ? {
+            completed: Array.isArray(row.completed) ? row.completed.map(String) : [],
+            best: asJson<AccountCampaignProgressWire['best']>(row.best) ?? {},
+          }
+        : null;
+      const kept = stored ? furtherAheadWire(stored, incoming) : incoming;
+      // Always upsert the kept (further-ahead) snapshot so a lagging body cannot become the row.
+      await client.query(
+        `insert into account_campaign_progress(player_id, completed, best, updated_at)
+         values ($1, $2::jsonb, $3::jsonb, $4)
+         on conflict (player_id) do update set
+           completed = excluded.completed,
+           best = excluded.best,
+           updated_at = excluded.updated_at`,
+        [playerId, kept.completed, kept.best, now],
+      );
+      await client.query('commit');
+      return kept;
     } catch (error) {
       await client.query('rollback').catch(() => undefined);
       throw error;

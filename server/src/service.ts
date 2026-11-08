@@ -38,6 +38,7 @@ import type {
   SubmitActionRequest,
   SubmitActionResponse,
 } from './protocol.js';
+import { parseAccountCampaignProgress } from './account-campaign-progress.js';
 import { parseOfflineCounters } from './offline.js';
 import { fromEngineResult } from './protocol.js';
 import { actorChanged, gatedRevisionFor, gatedStateFor, turnBoundaryAdvanced } from './turn-boundary.js';
@@ -189,6 +190,26 @@ export class MatchService {
    */
   async putOfflineStats(player: PlayerRecord, body: Record<string, unknown>): Promise<OfflineSummary> {
     return this.storage.mergeOfflineStats(player.id, parseOfflineCounters(body), this.now());
+  }
+
+  /**
+   * The account's campaign progress snapshot (migration 0023), or null when none was posted.
+   * Authenticated player only — the token names the row, never an id from the request.
+   */
+  async accountCampaignProgress(player: PlayerRecord) {
+    return this.storage.accountCampaignProgressOf(player.id);
+  }
+
+  /**
+   * Keep the further-ahead of the stored campaign snapshot and this device's POST. Seeds,
+   * Territory and achievement rewards are never written here.
+   */
+  async putAccountCampaignProgress(player: PlayerRecord, body: Record<string, unknown>) {
+    return this.storage.mergeAccountCampaignProgress(
+      player.id,
+      parseAccountCampaignProgress(body),
+      this.now(),
+    );
   }
 
   /**
