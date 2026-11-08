@@ -923,6 +923,15 @@ export class WorldView {
     }
   }
 
+  /**
+   * Quiet achievement line (web/src/player/achievement-toast.ts), injected by lobby-ui from main.
+   * Only a real non-empty achievements list is passed; the empty deadline fallback is never a note.
+   */
+  private achievementNoteHook: ((doneIds: readonly string[]) => void) | null = null;
+  setAchievementNote(note: (doneIds: readonly string[]) => void): void {
+    this.achievementNoteHook = note;
+  }
+
   /** The same renderer at rest. No polling/subscription; chat may warm one authenticated page. */
   preview(world: World | null, identity: Identity | null, fromMemory = false) {
     if (this.active) this.close(true);
@@ -2806,6 +2815,13 @@ export class WorldView {
       this.achievementsLoading = false;
     }
     this.achievements = afterAchievementsRead(this.achievements, outcome);
+    if (outcome.kind === 'loaded' && outcome.views.length > 0) {
+      try {
+        this.achievementNoteHook?.(outcome.views.filter((view) => view.done).map((view) => view.id));
+      } catch {
+        /* a toast failure must never block the achievements window */
+      }
+    }
     this.paintPanel();
   }
 

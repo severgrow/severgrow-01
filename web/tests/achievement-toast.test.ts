@@ -321,7 +321,9 @@ describe('the line itself', () => {
     expect(ACHIEVEMENT_TOAST_CSS).toContain('border: 0');
     expect(ACHIEVEMENT_TOAST_CSS).not.toMatch(/confetti/i);
     expect(source).not.toMatch(/confetti|Audio\(|\.cue\(|sound\(/);
-    expect(main).not.toContain('mountAchievementToast');
-    expect(main).not.toContain('achievement-toast');
+    expect(main).toContain('mountAchievementToast');
+    expect(main).toContain('achievement-toast');
+    expect(main).toContain('onAchievementsDone');
+    expect(main).toContain('achievementToasts?.release()');
   });
 });

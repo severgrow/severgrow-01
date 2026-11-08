@@ -3,6 +3,9 @@ import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
 import { mountStartupReveal } from './player/startup.js';
+import { mountAchievementToast } from './player/achievement-toast.js';
+import type { AchievementToastController } from './player/achievement-toast.js';
+import { browserStorage } from '../../server/src/client.js';
 // EXPERIMENTAL Blitz (/test/ only): presentation + wiring; its rules live in logic/blitz.ts.
 import type { BlitzPractice } from './blitz/practice.js';
 import { showLiveStrike } from './ui/live-strike.js';
@@ -161,6 +164,7 @@ import {
   parseProgress,
   reconcileProgress,
   serializeProgress,
+  unlockedThrough,
   CAMPAIGN_PROGRESS_KEY,
 } from '../../src/campaign/index.js';
 import type { CampaignLevel, CampaignProgress } from '../../src/campaign/index.js';
@@ -3616,6 +3620,8 @@ function currentMatchLabel(): string {
  * production source of match overrides (see `overridesForMatch`), and it is cleared by every other
  * way a match can start, so a campaign board can never leak into a classic or online game.
  */
+/** Quiet achievement line; mounted once after startup. Null only until that mount runs. */
+let achievementToasts: AchievementToastController | null = null;
 let campaignLevel: CampaignLevel | null = null;
 /**
  * EXPERIMENTAL Blitz (/test/ only, Practice): the mounted tier, or null when the feature is off.
@@ -8289,6 +8295,7 @@ function hideGameOver(): void {
   }
   document.body.classList.remove('result');
   syncVeil();
+  achievementToasts?.release();
 }
 
 /**
@@ -11198,6 +11205,8 @@ void import('./online/lobby-ui.js').then(async (m) => {
     // can never disagree about where the player is (owner report, 2026-10-24: "im at level 23 - but
     // on territory it says im level 11").
     campaignLevel: () => currentLevel(campaignProgress).number,
+    // Quiet achievement line: Territory feeds done ids after a real achievements read.
+    onAchievementsDone: (doneIds) => achievementToasts?.note(doneIds),
     // The Territory is part of the same instrument as the board, so its keys speak in the same
     // voice. It reuses the bank's existing cues; it never ships a second sound system.
     cue: (name: string) => sound.cue(name),
@@ -11480,5 +11489,47 @@ void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => un
 // a device with nothing queued makes no request at all.
 void settleQueuedSeedsOnBoot();
 mountStartupReveal();
+achievementToasts = mountAchievementToast({
+  playerId: () => {
+    try {
+      const raw = browserStorage()?.get('severgrow.duel.identity.v1');
+      const id = raw ? JSON.parse(raw) as { playerId?: unknown } : null;
+      return typeof id?.playerId === 'string' ? id.playerId : null;
+    } catch {
+      return null;
+    }
+  },
+  storage: () => browserStorage(),
+  campaignLevel: () => campaignLevel?.number ?? null,
+  clearedThrough: () => Math.max(0, unlockedThrough(campaignProgress) - 1),
+  covered: () => {
+    const over = document.getElementById('gameover');
+    const victory = !!over && !over.hidden;
+    const clock = document.getElementById('blitz-clock');
+    const blitzDecision = document.documentElement.classList.contains('blitz-match')
+      && clock?.dataset.side === 'mine';
+    return victory || blitzDecision;
+  },
+  reduceMotion: () => !interfaceMotionAllowed(),
+});
+{
+  // When a Blitz decision ends, release any line that was held for it.
+  let wasBlitzDecision = false;
+  const checkBlitzCover = () => {
+    const clock = document.getElementById('blitz-clock');
+    const mine = document.documentElement.classList.contains('blitz-match')
+      && clock?.dataset.side === 'mine';
+    if (wasBlitzDecision && !mine) achievementToasts?.release();
+    wasBlitzDecision = mine;
+  };
+  const blitzCoverWatch = new MutationObserver(checkBlitzCover);
+  blitzCoverWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  const attachClockWatch = () => {
+    const clock = document.getElementById('blitz-clock');
+    if (clock) blitzCoverWatch.observe(clock, { attributes: true, attributeFilter: ['data-side'] });
+  };
+  attachClockWatch();
+  new MutationObserver(attachClockWatch).observe(document.body, { childList: true, subtree: true });
+}
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

@@ -12,7 +12,7 @@
 //   * Reduced motion is the same line with no travel. The plate itself never moves: the blur stays
 //     on a still node, and only the words travel, and only when motion is on.
 //
-// NOT WIRED. The parent calls `mountAchievementToast` from web/src/main.ts. See that function.
+// Wired from web/src/main.ts (after mountStartupReveal) and WorldView.loadAchievements via lobby-ui.
 import type { KeyValue } from '../../../server/src/client.js';
 import { ACHIEVEMENT_COPY } from '../online/achievement-copy.js';
 import { INTERFACE_MOTION, interfaceMotionAllowed } from '../ui/interface-motion.js';
@@ -262,44 +262,11 @@ const titleFor = (id: string): string | null => {
 const STYLE_ID = 'achievement-toast-style';
 
 /**
- * Mount the line. Call it ONCE from `web/src/main.ts`, on the line after `mountStartupReveal()`
- * (line 11470). `campaignLevel` (line 3619) and `campaignProgress` (line 3723) are already in scope.
- * The signed-in id is the stored duel identity (`severgrow.duel.identity.v1`, guest or account),
- * read through `browserStorage()` so the channel prefix is applied:
- *
- *   const achievementToasts = mountAchievementToast({
- *     playerId: () => {
- *       try {
- *         const raw = browserStorage()?.get('severgrow.duel.identity.v1');
- *         const id = raw ? JSON.parse(raw) as { playerId?: unknown } : null;
- *         return typeof id?.playerId === 'string' ? id.playerId : null;
- *       } catch { return null; }
- *     },
- *     storage: () => browserStorage(),
- *     campaignLevel: () => campaignLevel?.number ?? null,
- *     clearedThrough: () => Math.max(0, unlockedThrough(campaignProgress) - 1),
- *     covered: () => {
- *       const over = document.getElementById('gameover');
- *       const victory = !!over && !over.hidden;
- *       const clock = document.getElementById('blitz-clock');
- *       const blitzDecision = document.documentElement.classList.contains('blitz-match')
- *         && clock?.dataset.side === 'mine';
- *       return victory || blitzDecision;
- *     },
- *     reduceMotion: () => !interfaceMotionAllowed(),
- *   });
- *
- * Feed it from `WorldView.loadAchievements` (`web/src/online/world-view.ts`, after
- * `afterAchievementsRead`, around line 2808) only when the outcome kind is `loaded` and
- * `views.length > 0` — an empty list is the server's deadline fallback, not "none earned":
- *
- *   achievementToasts.note(views.filter((view) => view.done).map((view) => view.id));
- *
- * Call `release()` at the end of `hideGameOver()` (`web/src/main.ts` line 8277), after the finish
- * card is hidden, and when the Blitz clock leaves the player's side (`#blitz-clock` `data-side`
- * is no longer `mine`, or `html` loses `blitz-match`). `note()` with the same ids also releases,
- * because `covered()` is read at call time. Do not call `release()` from the pre-show path in
- * `renderGameOver` (line 8574): that hide is the pause before the card, not the player leaving it.
+ * Mount the line. Called once from `web/src/main.ts` after `mountStartupReveal()`.
+ * Territory feeds done ids through `WorldView.setAchievementNote` / lobby `onAchievementsDone`.
+ * `release()` runs from `hideGameOver()` and when the Blitz clock leaves the player's side.
+ * Do not call `release()` from the pre-show path in `renderGameOver`: that hide is the pause
+ * before the card, not the player leaving it.
  */
 export function mountAchievementToast(hooks: AchievementToastHooks): AchievementToastController {
   const queue: string[] = [];

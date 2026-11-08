@@ -94,6 +94,11 @@ export type LobbyUiHooks = {
    * about the player's own number.
    */
   campaignLevel?: () => number | null;
+  /**
+   * Done achievement ids from a real Territory read. The quiet toast in main.ts consumes them;
+   * absent, the map still paints the achievements window as before.
+   */
+  onAchievementsDone?: (doneIds: readonly string[]) => void;
   now?: () => number;
 };
 
@@ -722,6 +727,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   // The Territory's own-tile level comes from this device's campaign record, not from the server's
   // last paid clear (owner report, 2026-10-24).
   worldView.setMyLevel(() => hooks.campaignLevel?.() ?? null);
+  if (hooks.onAchievementsDone) worldView.setAchievementNote(hooks.onAchievementsDone);
 
   const reloadMatches = async () => {
     // Single flight: a slow request must not let the 10s hub poll stack a second list read.
