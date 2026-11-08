@@ -206,3 +206,16 @@ describe('Blitz boards come from campaign levels 30-70', () => {
     expect(picked.size).toBe(BLITZ_MAPS.length); // no board is unreachable
   });
 });
+
+describe('the clock glass glows evenly (owner, 2026-11-08: "too much light glow in the very middle")', () => {
+  it('the light behind the digits is a soft, wide wash with no bright centre', async () => {
+    const { BLITZ_CLOCK_CSS } = await import('../src/blitz/timer.js');
+    const glow = /\.bc-glass::before \{[\s\S]*?background:radial-gradient\(ellipse (\d+)% (\d+)% at (\d+)% 50%, color-mix\(in srgb, var\(--bc-ink\) (\d+)%/.exec(BLITZ_CLOCK_CSS);
+    expect(glow).not.toBeNull();
+    const [, w, h, x, centre] = glow!.map(Number);
+    expect(centre).toBeLessThanOrEqual(9); // was 18: the hot spot
+    expect(w).toBeGreaterThanOrEqual(60); // spread across all four digits, not pooled in the middle
+    expect(h).toBeGreaterThanOrEqual(55);
+    expect(x).toBe(50);
+  });
+});

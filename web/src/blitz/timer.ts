@@ -63,7 +63,8 @@ html.blitz-match #blitz-clock::before {
 #blitz-clock polygon.on { opacity:.94; }
 #blitz-clock .bc-glass::before {
   content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit; z-index:0;
-  background:radial-gradient(ellipse 44% 46% at 54% 50%, color-mix(in srgb, var(--bc-ink) 18%, transparent), color-mix(in srgb, var(--bc-ink) 4%, transparent) 60%, transparent 85%);
+  /* owner, 2026-11-08: "too much light glow in the very middle" — a soft even wash across the digits */
+  background:radial-gradient(ellipse 64% 58% at 50% 50%, color-mix(in srgb, var(--bc-ink) 8%, transparent), color-mix(in srgb, var(--bc-ink) 4%, transparent) 55%, transparent 92%);
 }
 #blitz-clock .bc-glass::after {
   /* the glass texture at half strength (owner, 2026-11-06: "a bit less visible, by like 50%") */
