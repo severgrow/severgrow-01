@@ -182,3 +182,17 @@ describe('the install words speak each platform\'s language (owner, 2026-11-08)'
     }
   });
 });
+
+describe('the install invitation opens only on the end screen (owner, 2026-11-08: "never show ... mid game")', () => {
+  it('a finish is remembered, and offered when the result card is presented', async () => {
+    const { readFileSync } = await import('node:fs');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const note = main.slice(main.indexOf('function noteInstallFinished('), main.indexOf('mountAppWindowButton('));
+    expect(note).toContain('installOutcomeWaiting = outcome');
+    expect(note).not.toMatch(/installPrompt\.noteFinished\(outcome\)/);
+    const offer = main.slice(main.indexOf('function offerEndOfGamePrompts('), main.indexOf('function offerEndOfGamePrompts(') + 1200);
+    expect(offer).toContain('endScreenReady()');
+    expect(offer).toContain('installPrompt.noteFinished(');
+    expect(offer).toMatch(/installPrompt\.isOpen\(\)/);
+  });
+});

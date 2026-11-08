@@ -8,9 +8,6 @@ import { enterSurface, interfaceMotionAllowed } from '../ui/interface-motion.js'
 
 export const KEEP_PROGRESS_KEY = 'severgrow.account.keep-progress.v1';
 
-/** How long the line stays if the player does neither: one timeout, then it leaves (still once). */
-export const KEEP_PROGRESS_DWELL_MS = 12_000;
-
 export type KeepProgressMemory = {
   dismissed: boolean;
   /** Already shown once on this device (even if not dismissed). */
@@ -48,27 +45,35 @@ export const keepProgressDecision = (input: {
 };
 
 export const KEEP_PROGRESS_CSS = `
+/* A dialog over the finished game, the screen behind blurred (owner, 2026-11-08: "always at the end
+   game blurring the rest of the screen behind"), the same treatment as the install invitation. */
 #keep-progress {
-  /* centred by margins, not translate: the shared entrance animates translate */
-  position: fixed; z-index: 8; left: 0; right: 0; margin-inline: auto;
-  bottom: max(24px, calc(env(safe-area-inset-bottom, 0px) + 18px));
-  box-sizing: border-box;
-  width: max-content; max-width: min(320px, calc(100% - 32px));
-  margin-block: 0; padding: 12px 14px; border: 0; border-radius: 15px;
-  text-align: center;
+  position: fixed; inset: 0; z-index: 30;
+  display: grid; place-items: center; padding: 16px;
   color: var(--instrument-selection, #f2e5c5);
+}
+#keep-progress[hidden] { display: none; }
+#keep-progress::before {
+  content: ''; position: absolute; inset: 0;
+  background: color-mix(in srgb, #0e0f10 38%, transparent);
+  -webkit-backdrop-filter: blur(20px) brightness(0.5) saturate(0.9);
+  backdrop-filter: blur(20px) brightness(0.5) saturate(0.9);
+}
+#keep-progress .keep-progress-card {
+  position: relative; box-sizing: border-box;
+  width: min(340px, 100%); padding: 18px 18px 16px; border-radius: 18px;
+  text-align: center;
   background: var(--dark-glass);
   -webkit-backdrop-filter: var(--dark-glass-blur);
   backdrop-filter: var(--dark-glass-blur);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .22);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .35);
 }
-#keep-progress[hidden] { display: none; }
 #keep-progress .keep-progress-title {
   display: block; margin: 0;
-  font-size: .9rem; letter-spacing: .04em; color: #f2e7cb;
+  font-size: 1rem; letter-spacing: .04em; color: #f2e7cb;
 }
 #keep-progress .keep-progress-body {
-  display: block; margin: 4px 0 10px;
+  display: block; margin: 6px 0 14px;
   font-size: var(--instrument-label-size, .6875rem);
   letter-spacing: var(--instrument-tracking, .08em);
   color: var(--instrument-muted, #e8ddc5b3);
@@ -77,9 +82,9 @@ export const KEEP_PROGRESS_CSS = `
   display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
 }
 #keep-progress .keep-progress-actions button {
-  min-height: 44px; min-width: 44px; padding: 0 14px; border-radius: 12px;
+  min-height: 44px; min-width: 44px; padding: 0 16px; border-radius: 12px;
   border: 0;
-  background: rgba(242, 237, 228,.06); color: #f2e7cb;
+  background: rgba(242, 237, 228, .06); color: #f2e7cb;
   font: inherit; letter-spacing: .04em; cursor: pointer;
 }
 #keep-progress .keep-progress-actions button.primary {
@@ -143,8 +148,9 @@ export const mountKeepProgress = (hooks: KeepProgressHooks): KeepProgressControl
   const root = document.createElement('div');
   root.id = 'keep-progress';
   root.hidden = true;
-  // A small panel with two keys: a named region, not a live status that reads its keys aloud.
-  root.setAttribute('role', 'region');
+  // A dialog over the finished game (owner, 2026-11-08), named by its title.
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-modal', 'true');
   root.setAttribute('aria-label', ACCOUNT.keepProgressTitle);
   const title = document.createElement('strong');
   title.className = 'keep-progress-title';
@@ -162,7 +168,10 @@ export const mountKeepProgress = (hooks: KeepProgressHooks): KeepProgressControl
   no.type = 'button';
   no.textContent = ACCOUNT.keepProgressDismiss;
   actions.append(yes, no);
-  root.append(title, body, actions);
+  const card = document.createElement('div');
+  card.className = 'keep-progress-card';
+  card.append(title, body, actions);
+  root.append(card);
   document.body.append(root);
 
   let held: KeepProgressReason | null = null;
@@ -173,10 +182,7 @@ export const mountKeepProgress = (hooks: KeepProgressHooks): KeepProgressControl
     return !interfaceMotionAllowed();
   };
 
-  let dwell: ReturnType<typeof setTimeout> | undefined;
   const hide = (): void => {
-    clearTimeout(dwell);
-    dwell = undefined;
     root.hidden = true;
   };
 
@@ -184,10 +190,8 @@ export const mountKeepProgress = (hooks: KeepProgressHooks): KeepProgressControl
     root.dataset.motion = motionStill() ? 'still' : 'motion';
     root.hidden = false;
     // The same soft arrival as every other sheet (nothing under reduced motion).
-    enterSurface(root);
-    // It is a suggestion, not a gate: it leaves on its own so it never sits over the next match.
-    clearTimeout(dwell);
-    dwell = setTimeout(hide, KEEP_PROGRESS_DWELL_MS);
+    enterSurface(card);
+    yes.focus();
   };
 
   const readMem = (): KeepProgressMemory => parseKeepProgressMemory(hooks.storage()?.get(KEEP_PROGRESS_KEY) ?? null);

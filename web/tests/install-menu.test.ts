@@ -59,7 +59,10 @@ describe('every finished game is counted, online included', () => {
     // the one recorder, `installPrompt.noteFinished`.
     const calls = mainSource.match(/^\s+noteInstallFinished\(/gm) ?? [];
     expect(calls.length).toBe(2);
-    expect(mainSource).toMatch(/function noteInstallFinished\([^)]*\): void \{\s*try \{\s*installPrompt\.noteFinished\(outcome\);/);
+    // OWNER CHANGED THE RULE (2026-11-08: never mid-game): the finish is remembered and handed to the
+    // one recorder when the end screen is up (offerEndOfGamePrompts), still once per finish.
+    expect(mainSource).toMatch(/function noteInstallFinished\([^)]*\): void \{[\s\S]*?installOutcomeWaiting = outcome;\s*offerEndOfGamePrompts\(\);/);
+    expect(mainSource).toMatch(/installPrompt\.noteFinished\(waiting\);/);
   });
 
   it('counts an online result once per match (the finish screen re-renders)', () => {

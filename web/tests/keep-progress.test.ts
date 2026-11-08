@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  KEEP_PROGRESS_DWELL_MS,
   KEEP_PROGRESS_KEY,
   keepProgressDecision,
   parseKeepProgressMemory,
@@ -74,21 +73,22 @@ describe('keep-progress offer rules', () => {
   });
 });
 
-describe('keep-progress waits for the result and then gets out of the way (review, 0.84)', () => {
+describe('keep-progress opens only at the end of a game, over a blurred screen (owner, 2026-11-08)', () => {
+  // OWNER CHANGED THE RULE: "never show the open separate window type window mid game - always at the end
+  // game blurring the rest of the screen behind - same for account login when guest". It used to wait for
+  // the result card to be put away and then show a strip at the bottom of the screen (12 s dwell).
   const read = (p: string) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
   const main = read('../src/main.ts');
   const src = read('../src/player/keep-progress.ts');
-  it('is released when the result card is put away, like the achievement line', () => {
-    const hide = main.slice(main.indexOf('function hideGameOver'), main.indexOf('\n}\n', main.indexOf('function hideGameOver')));
-    expect(hide).toContain('keepProgress?.release()');
+  it('is held unless the result card is on screen, and is offered when the card is presented', () => {
+    expect(main).toMatch(/keepProgress = mountKeepProgress\(\{[\s\S]*?covered: \(\) => !endScreenReady\(\)/);
+    const present = main.slice(main.indexOf('function presentResult('), main.indexOf('function hideGameOver('));
+    expect(present).toContain('offerEndOfGamePrompts()');
   });
-  it('treats a finished match whose card has not been put away yet as covered', () => {
-    expect(main).toMatch(/keepProgress = mountKeepProgress\(\{[\s\S]*?covered: \(\) => coveredForQuietPrompts\(\) \|\| resultPending\(\)/);
-  });
-  it('leaves on its own after a short dwell, so it never sits over the next match', () => {
-    expect(KEEP_PROGRESS_DWELL_MS).toBeGreaterThanOrEqual(8000);
-    expect(KEEP_PROGRESS_DWELL_MS).toBeLessThanOrEqual(15000);
-    expect(src).toMatch(/setTimeout\(hide, KEEP_PROGRESS_DWELL_MS\)/);
+  it('is a centred dialog over a blurred scrim, not a strip at the bottom', () => {
+    expect(src).toMatch(/#keep-progress \{[^}]*position: fixed; inset: 0;/);
+    expect(src).toMatch(/#keep-progress::before \{[^}]*backdrop-filter: blur\(/);
+    expect(src).not.toMatch(/setTimeout\(hide, KEEP_PROGRESS_DWELL_MS\)/);
   });
 });
 
@@ -96,7 +96,7 @@ describe('keep-progress details (review, 0.84)', () => {
   const read = (p: string) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
   const src = read('../src/player/keep-progress.ts');
   it('arrives like every other surface: the shared entrance, nothing under reduced motion', () => {
-    expect(src).toContain('enterSurface(root');
+    expect(src).toContain('enterSurface(card');
   });
   it('shows a keyboard focus ring on its keys', () => {
     expect(src).toMatch(/#keep-progress \.keep-progress-actions button:focus-visible \{[^}]*outline:/);
@@ -106,8 +106,8 @@ describe('keep-progress details (review, 0.84)', () => {
     expect(keys).toMatch(/border:\s*0/);
     expect(src).not.toMatch(/border-color:\s*rgba/);
   });
-  it('is a named region with keys, not a live status', () => {
-    expect(src).toContain("root.setAttribute('role', 'region')");
+  it('is a named dialog over the finished game, not a live status', () => {
+    expect(src).toContain("root.setAttribute('role', 'dialog')");
     expect(src).toContain("root.setAttribute('aria-label', ACCOUNT.keepProgressTitle)");
   });
   it('Escape puts it away like Not now', () => {

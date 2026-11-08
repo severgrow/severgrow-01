@@ -8345,6 +8345,8 @@ function presentResult(go: HTMLElement, wasHidden: boolean): void {
     // The beat was already held on the last tile. The plate rises as soon as it is allowed to.
     enterSurface(card, { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE, delay: 0 });
   }
+  // the end screen is up: the invitation / sign-in prompt may open over it now
+  offerEndOfGamePrompts();
 }
 /** One exit for every path that puts the result away, so the board always comes back to life. */
 /** The Planet's lesson window over the won level 10 card (web/src/player/planet-intro.ts). */
@@ -8376,8 +8378,6 @@ function hideGameOver(): void {
   document.body.classList.remove('result');
   syncVeil();
   achievementToasts?.release();
-  // After this task: the caller marks the result dismissed (or leaves the board) right after the hide.
-  window.setTimeout(() => keepProgress?.release(), 0);
 }
 
 /**
@@ -11172,11 +11172,43 @@ const installPrompt = mountInstallPrompt({ copy: INSTALL, storage: store });
  * instead of throwing (found by web/e2e/blitz.ts, 2026-11-06).
  */
 function noteInstallFinished(outcome: 'won' | 'lost' | 'draw'): void {
-  try {
-    installPrompt.noteFinished(outcome);
-  } catch {
-    window.setTimeout(() => noteInstallFinished(outcome), 400);
-  }
+  // Never mid-game (owner, 2026-11-08): the finish is remembered and offered on the end screen.
+  installOutcomeWaiting = outcome;
+  offerEndOfGamePrompts();
+}
+/** A finish waiting for the end screen before it may open the install invitation. */
+let installOutcomeWaiting: 'won' | 'lost' | 'draw' | null = null;
+let endPromptTimer = 0;
+/** The result card is up: the only place an invitation or a sign-in prompt may open. */
+function endScreenReady(): boolean {
+  const go = document.getElementById('gameover');
+  return !!go && !go.hidden && !$('game').hidden;
+}
+/**
+ * THE END-OF-GAME PROMPTS (owner, 2026-11-08: "never show the open separate window type window mid game -
+ * always at the end game blurring the rest of the screen behind - same for account login when guest").
+ * Once the result card has landed: the install invitation first; the guest's keep-progress only when the
+ * invitation is not open. Both are dialogs over a blurred screen; neither ever opens during play.
+ */
+function offerEndOfGamePrompts(): void {
+  if (!endScreenReady()) return;
+  window.clearTimeout(endPromptTimer);
+  endPromptTimer = window.setTimeout(() => {
+    endPromptTimer = 0;
+    if (!endScreenReady()) return;
+    const waiting = installOutcomeWaiting;
+    if (waiting) {
+      try {
+        installPrompt.noteFinished(waiting);
+        installOutcomeWaiting = null;
+      } catch {
+        // mounted at the end of this module: a finish during boot is offered a moment later
+        window.setTimeout(offerEndOfGamePrompts, 400);
+        return;
+      }
+    }
+    if (!installPrompt.isOpen()) keepProgress?.release();
+  }, 700);
 }
 mountAppWindowButton(INSTALL.desktop.windowButton); // computers: open in its own window / full screen
 // once the photo-like grass and lava are painted (in the background), redraw the board with them
@@ -11601,16 +11633,11 @@ achievementToasts = mountAchievementToast({
   covered: coveredForQuietPrompts,
   reduceMotion: () => !interfaceMotionAllowed(),
 });
-/** A finished match on the board whose result has not been put away yet (its card may still be coming). */
-const resultPending = (): boolean => {
-  const st = session?.state;
-  return !!st && st.phase === 'GAME_OVER' && !gameOverDismissed && !$('game').hidden;
-};
 keepProgress = mountKeepProgress({
   storage: () => browserStorage(),
   kind: () => readAccountIdentity(browserStorage())?.kind ?? null,
-  // A level clear is noted the moment it is won, before the victory card: wait for that card.
-  covered: () => coveredForQuietPrompts() || resultPending(),
+  // Only on the end screen, never during play, and never on top of the install invitation.
+  covered: () => !endScreenReady() || installPrompt.isOpen(),
   onSignIn: () => {
     const btn = document.getElementById('menu-login') as HTMLButtonElement | null;
     btn?.click();
