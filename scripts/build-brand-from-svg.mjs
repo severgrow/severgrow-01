@@ -114,7 +114,8 @@ try {
     canvas.width = 256; canvas.height = 356;
     const g = canvas.getContext('2d');
     g.drawImage(paper, 0, 0);
-    const stamp = Math.round(Math.min(256, 356) * 0.48 * 1.08);
+    // ...and 15% larger again (owner, 2026-11-08: "can still be 15% bigger than it is now").
+    const stamp = Math.round(Math.min(256, 356) * 0.48 * 1.08 * 1.15);
     const x = Math.round((256 - stamp) / 2);
     const y = Math.round((356 - stamp) / 2);
     // Bake the cream mark; slight grain so it matches the face-down paper.
