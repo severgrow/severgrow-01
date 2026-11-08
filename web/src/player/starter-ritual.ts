@@ -283,7 +283,11 @@ class StarterRitual {
     const midY = (you.y + opponent.y) / 2;
     const gap = Math.abs(you.y - opponent.y) - ch;
     this.deckScale = clamp(gap / (ch * 1.12), 0.58, 1);
-    const deck: Point = {
+    // The emblem sits on the middle tile itself from the first frame (owner, 2026-11-08: "always be
+    // exactly in the middle of the middle tile"); the dealt-card midpoint is only the fallback when
+    // the board cannot be measured.
+    const tile = this.centerPoint();
+    const deck: Point = tile ?? {
       x: clamp((you.x + opponent.x) / 2, marginX, vw - marginX),
       y: clamp(midY, marginY, vh - marginY),
     };
@@ -370,6 +374,8 @@ class StarterRitual {
   private async fullTimeline(): Promise<void> {
     // The kanji blooms several seconds from now: decode it while the deck arrives.
     this.warmKanji();
+    // The board is still rising into place when the ritual starts: keep the emblem on the tile.
+    this.followTile();
     await this.arrival();
     if (this.cancelled || this.skipRequested) return;
 
@@ -866,6 +872,37 @@ class StarterRitual {
     if (!point) return;
     this.refs.deckAnchor.style.left = `${point.x.toFixed(2)}px`;
     this.refs.deckAnchor.style.top = `${point.y.toFixed(2)}px`;
+  }
+
+  /**
+   * Keep the deck (and the outcome words) on the middle tile while the board settles: one rect read a
+   * frame, only until the tile has been still for a few frames (or the ritual ends / exits). Finite.
+   */
+  private followTile(): void {
+    if (typeof requestAnimationFrame !== 'function' || !this.options.centerTile) return;
+    let still = 0;
+    // Start from where the deck actually is, so the first frame that differs counts as a move.
+    let lastX = parseFloat(this.refs.deckAnchor.style.left) || 0;
+    let lastY = parseFloat(this.refs.deckAnchor.style.top) || 0;
+    const started = performance.now();
+    const step = (): void => {
+      if (this.cancelled || this.finished || this.exiting) return;
+      const p = this.centerPoint();
+      if (p) {
+        const moved = Math.abs(p.x - lastX) > 0.5 || Math.abs(p.y - lastY) > 0.5;
+        if (moved) {
+          still = 0;
+          lastX = p.x;
+          lastY = p.y;
+          this.refs.deckAnchor.style.left = `${p.x.toFixed(2)}px`;
+          this.refs.deckAnchor.style.top = `${p.y.toFixed(2)}px`;
+          this.refs.outcome.style.top = `${p.y.toFixed(1)}px`;
+        } else still++;
+      }
+      if (still >= 8 || performance.now() - started > 2500) return;
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   /** The middle hex as painted, or the unclamped midpoint of the two home tiles. */

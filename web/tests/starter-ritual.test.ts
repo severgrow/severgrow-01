@@ -204,6 +204,34 @@ describe('the kanji is ready before it blooms (review, 0.84)', () => {
   });
 });
 
+describe('the emblem is on the middle tile the whole time (owner, 2026-11-08)', () => {
+  // "the emblem logo on back card in middle should always be exactly in the middle of the middle tile
+  // - it's below on your vid". The deck waited on the midpoint of the two dealt cards (18 px below the
+  // tile on a 390 x 844 phone) and only moved onto the tile at the gather.
+  it('lays the deck out on the middle tile from the first frame, the dealt-card midpoint only as a fallback', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const src = readFileSync(fileURLToPath(new URL('../src/player/starter-ritual.ts', import.meta.url)), 'utf8');
+    const layout = src.slice(src.indexOf('private layout(): void {'), src.indexOf('private onResize'));
+    expect(layout).toContain('this.centerPoint()');
+    expect(layout.indexOf('this.centerPoint()')).toBeLessThan(layout.indexOf('r.deckAnchor.style.left'));
+  });
+  it('follows the tile while the board settles into place, then stops (measured: the board rises 23 px during arrival)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const src = readFileSync(fileURLToPath(new URL('../src/player/starter-ritual.ts', import.meta.url)), 'utf8');
+    const full = src.slice(src.indexOf('private async fullTimeline'), src.indexOf('private async reducedTimeline'));
+    expect(full.indexOf('this.followTile()')).toBeLessThan(full.indexOf('await this.arrival()'));
+    const follow = src.slice(src.indexOf('private followTile(): void {'), src.indexOf('private followTile(): void {') + 1400);
+    expect(follow).toContain('requestAnimationFrame');
+    // finite: it stops once the tile has been still, and never outlives the ritual or the exit
+    expect(follow).toMatch(/still >= /);
+    expect(follow).toMatch(/this\.exiting|this\.finished/);
+    // starts from where the deck is: a NaN start never counts as a move, and the follow gave up at once
+    expect(follow).not.toContain('NaN');
+  });
+});
+
 describe('the kanji comes out of the card, then leaves quickly (owner, 2026-11-08)', () => {
   // "make it look like it's actually coming from the card, in a smooth interesting but cheap way.
   // make it fade out disappear but quickly when game starts"

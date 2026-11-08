@@ -21,7 +21,9 @@ import { PINNED } from '../logic/motion.js';
 import { INTERFACE_MOTION } from './interface-motion.js';
 
 /** Leg lengths as shares of the whole flight. */
-const SHARE = Object.freeze({ windup: 0.08, out: 0.3, kiss: 0.12, back: 0.36, catch: 0.08, fade: 0.06 });
+// Owner, 2026-11-08: "the throw starts from the board, it should start from the card in hand" - the
+// departure gets more of the flight (wind-up .10, out .33) and the kiss a little less.
+const SHARE = Object.freeze({ windup: 0.1, out: 0.33, kiss: 0.08, back: 0.35, catch: 0.08, fade: 0.06 });
 
 const total = PINNED.boomerang;
 const ms = (share: number): number => Math.round(total * share);
@@ -51,7 +53,7 @@ export const BOOMERANG = Object.freeze({
   /** The kiss: how far the card gives as it touches the board. */
   press: 0.94,
   /** Wind-up: a small lift and tip as the hand lets go. */
-  liftPx: 10,
+  liftPx: 14,
   liftTip: 4,
   liftScale: 1.05,
   /** Degrees on the way out. The way home is one whole turn. */
@@ -125,7 +127,8 @@ export const planBoomerang = (
   const frames: Keyframe[] = [
     { transform: pose(0, 0, 0, 1), opacity: 1, offset: 0, easing: INTERFACE_MOTION.easeOpen },
     // 1. wind-up: the hand lets go
-    { transform: pose(0, -B.liftPx, B.liftTip, B.liftScale), opacity: 1, offset: B.liftAt, easing: INTERFACE_MOTION.easeOpen },
+    // ...then it gathers speed OFF the hand (easeClose accelerates), so the departure is seen
+    { transform: pose(0, -B.liftPx, B.liftTip, B.liftScale), opacity: 1, offset: B.liftAt, easing: INTERFACE_MOTION.easeClose },
     // 2. out: most of the way, turning
     {
       transform: pose(outX * 0.62, outY * 0.62 - 18, B.spinOut, lerp(B.liftScale, B.boardScale, 0.62)),

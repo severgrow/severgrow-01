@@ -52,6 +52,20 @@ describe('the boomerang has its own, slower beat', () => {
   });
 });
 
+describe('the throw visibly leaves the hand (owner, 2026-11-08: "the throw starts from the board, it should start from the card in hand")', () => {
+  it('gives the departure time and lets it gather speed off the hand', () => {
+    expect(BOOMERANG.windup / BOOMERANG.total).toBeGreaterThanOrEqual(0.1);
+    expect(BOOMERANG.out / BOOMERANG.total).toBeGreaterThanOrEqual(0.32);
+    const plan = planBoomerang(from, board, to, true);
+    // from the lifted card, the first stretch of the way out ACCELERATES (easeClose): it leaves the
+    // hand on screen instead of jumping most of the way to the board in its first frames
+    const lift = plan.frames.find((f) => f.offset === BOOMERANG.liftAt)!;
+    expect(lift.easing).toBe(INTERFACE_MOTION.easeClose);
+    // the first frame: exactly where the card sits in the hand
+    expect(String(plan.frames[0]!.transform)).toContain('translate(0.0px, 0.0px)');
+  });
+});
+
 describe('the six legs read', () => {
   const plan = planBoomerang(from, board, to, true);
   const frameAt = (offset: number) => plan.frames.find((f) => f.offset === offset)!;
