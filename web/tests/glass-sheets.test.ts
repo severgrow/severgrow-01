@@ -136,6 +136,29 @@ describe('Match Intel\'s own glass has no frame either', () => {
   });
 });
 
+describe('the online lobby card is dark glass with no green frame (owner, 2026-11-08)', () => {
+  // Guest strip and "Opponent found" used the green-tinted #243024 mix with a stroked edge.
+  // They now share the classic --dark-glass recipe; the how-duels explainer is gone.
+  const online = readFileSync(fileURLToPath(new URL('../src/online/online-css.ts', import.meta.url)), 'utf8');
+  const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
+  const lobby = readFileSync(fileURLToPath(new URL('../src/online/lobby-ui.ts', import.meta.url)), 'utf8');
+  it('online-card wears --dark-glass with no border contour', () => {
+    const card = /\.online-card \{([^}]*)\}/.exec(online)?.[1] ?? '';
+    expect(card).toMatch(/background: var\(--dark-glass\);/);
+    expect(card).toMatch(/backdrop-filter: var\(--dark-glass-blur\);/);
+    expect(card).toMatch(/border-radius: 15px;/);
+    expect(card).toMatch(/border: 0;/);
+    expect(card).toMatch(/outline: none;/);
+    expect(online).not.toMatch(/#243024/);
+  });
+  it('the how-duels first card is removed from markup and the hub open path', () => {
+    expect(html).not.toContain('online-first-card');
+    expect(html).not.toContain('How online duels work');
+    expect(lobby).not.toContain('maybeFirstCard');
+    expect(lobby).not.toContain('online-first-ok');
+  });
+});
+
 describe('the Territory challenge card is the same window as every other sheet (owner, 2026-11-02)', () => {
   // "territory and profile windows dont match really - we should never use frame contour like in
   // territory challenge ... BOTH (and any other similar) should be using our classic dark glass

@@ -139,7 +139,7 @@ type Pane = 'ranking' | 'challenges' | 'achievements' | 'colour';
 
 /** One key of the tile bar: an action kind plus the words it is SPOKEN with (the text is gone). */
 type TileBarAction = {
-  kind: 'grow' | 'sell' | 'challenge' | 'profile';
+  kind: 'grow' | 'sell' | 'challenge' | 'profile' | 'signin';
   label: string;
   run: () => void;
   armed?: boolean;
@@ -425,7 +425,7 @@ export const stalePointers = (
   return stale;
 };
 
-type Identity = { token: string; playerId: string };
+type Identity = { token: string; playerId: string; kind?: 'guest' | 'account' };
 
 /**
  * The wallet line above the map (2026-10-22). It never tells a signed-in player to sign in: before
@@ -2384,18 +2384,32 @@ export class WorldView {
         // the game's own Grow action, so the world map and the board speak the same language.
         // NOT "FREE TILE" (owner, 2026-11-04: it "sounds like you can take it for free"): nobody holds
         // it, and growing it costs Seeds.
-        line = !available && this.wallet && this.wallet.balance < world.cost ? ONLINE.worldUnclaimedShort(world.cost, SEEDS_WORD)
+        // Owner: guests earn Seeds, but placing a tile on the planet still needs a signed-in account.
+        const canPlace = this.identity?.kind === 'account';
+        line = !canPlace && this.identityKnown
+          ? ONLINE.worldSignInToGrow
+          : !available && this.wallet && this.wallet.balance < world.cost ? ONLINE.worldUnclaimedShort(world.cost, SEEDS_WORD)
           // Out of reach today (a server that still keeps the seen-map rule): say so, rather than show
           // a price with no key to pay it.
           : !available && this.wallet ? ONLINE.worldUnclaimedFar
           : ONLINE.worldUnclaimed(world.cost, SEEDS_WORD);
         if (available && !this.busy) {
-          const armed = this.growArmed === cellId;
-          actions = [{
-            kind: 'grow',
-            label: armed ? ONLINE.worldGrowConfirm : ONLINE.worldGrowKey, armed,
-            run: () => { if (armed) void this.claim(); else { this.growArmed = cellId; this.paintSelection(); } },
-          }];
+          if (!canPlace) {
+            actions = [{
+              kind: 'signin',
+              label: ONLINE.worldSignInKey,
+              run: () => {
+                (document.getElementById('menu-login') as HTMLButtonElement | null)?.click();
+              },
+            }];
+          } else {
+            const armed = this.growArmed === cellId;
+            actions = [{
+              kind: 'grow',
+              label: armed ? ONLINE.worldGrowConfirm : ONLINE.worldGrowKey, armed,
+              run: () => { if (armed) void this.claim(); else { this.growArmed = cellId; this.paintSelection(); } },
+            }];
+          }
         }
       }
     }
@@ -2427,6 +2441,9 @@ export class WorldView {
         if (action.kind === 'sell') {
           key.classList.add('world-key-text');
           key.textContent = action.armed ? ONLINE.worldSellKeyArmed : ONLINE.worldSellKey(this.world?.saleReturn ?? this.world?.cost ?? 0);
+        } else if (action.kind === 'signin') {
+          key.classList.add('world-key-text');
+          key.textContent = ONLINE.worldSignInKey;
         } else key.insertAdjacentHTML('afterbegin', action.armed ? TILE_BAR_ICONS.confirm : TILE_BAR_ICONS[action.kind]);
         return key;
       });
@@ -2449,7 +2466,8 @@ export class WorldView {
     });
   }
   private async claim() {
-    if (!this.identity || !this.selected || this.busy) return;
+    // Planet/Territory placement stays account-only (guests keep earning Seeds elsewhere).
+    if (!this.identity || this.identity.kind !== 'account' || !this.selected || this.busy) return;
     this.busy = true;
     this.working = 'grow';
     const cellId = this.selected;

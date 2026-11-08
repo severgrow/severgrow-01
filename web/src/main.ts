@@ -289,7 +289,7 @@ import { onlineBuildEnabled } from './online/config.js';
 import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname } from './accounts/menu-key.js';
 import { paintBetaLine } from './feedback/beta-line.js';
 import { queueSeedProof } from './online/seed-rewards.js';
-import { requestTrainingTicket, settleQueuedSeedsOnBoot, settleSeedProof } from './online/seed-settle.js';
+import { requestTrainingTicket, settleQueuedSeedsOnBoot, TRAINING_TICKET_WAIT_MS, warmSeedIdentity, settleSeedProof } from './online/seed-settle.js';
 import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
 import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
@@ -2331,7 +2331,9 @@ async function startGame(
     if (generation !== startGameGeneration) return;
   }
   // A server-issued ticket makes a new Training result verifiable. An offline start stays playable
-  // with its local seed, but cannot claim spendable Seeds without a prior ticket.
+  // with its local seed, but cannot claim spendable Seeds without a prior ticket. Guests are paid
+  // too (owner, 2026-11-08) — the wait must cover minting a guest on a cold Edge, not only a warm
+  // identity's round trip (see TRAINING_TICKET_WAIT_MS).
   let ticketId: string | null = null;
   if (difficulty && onlineBuildEnabled() && !IS_TEST) {
     const ticket = await Promise.race([
@@ -2339,7 +2341,7 @@ async function startGame(
       // hub had mounted (or after its chunk failed to load) used to begin with no ticket at all,
       // which meant no proof and no payment for a game the player had already played.
       requestTrainingTicket(level),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), TRAINING_TICKET_WAIT_MS)),
     ]);
     if (generation !== startGameGeneration) return;
     if (ticket) { seed = ticket.seed; ticketId = ticket.id; }
@@ -11488,6 +11490,9 @@ void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => un
 // right on their next visit, without having to win another game first. Silent and fire-and-forget;
 // a device with nothing queued makes no request at all.
 void settleQueuedSeedsOnBoot();
+// Warm a guest identity early so the next Practice match can get a Seeds ticket without racing a
+// cold guest mint (owner, 2026-11-08: offline guests must be paid so they are encouraged to sign in).
+void warmSeedIdentity();
 mountStartupReveal();
 achievementToasts = mountAchievementToast({
   playerId: () => {

@@ -205,6 +205,11 @@ export class WorldEconomyService {
   campaignHighestLevel(player: PlayerRecord) { return this.store.campaignHighestLevel(player.id); }
 
   async claim(player: PlayerRecord, cellId: string, requestId: string) {
+    // Guests earn Seeds (so they are encouraged to sign in and keep them), but growing a planet tile
+    // is for a signed-in account only (owner, 2026-11-08).
+    if (player.kind !== 'account') {
+      throw new ApiError('FORBIDDEN', 'Sign in to grow a tile on the planet.');
+    }
     if (!/^[A-Za-z0-9_-]{8,100}$/.test(requestId)) throw new ApiError('INVALID_REQUEST', 'A claim request ID is required.');
     const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
     if (!(await this.matches.hitRateLimit(`seeds:claim:${player.id}`, bucket, 120)).ok) {
