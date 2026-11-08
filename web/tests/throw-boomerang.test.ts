@@ -1,117 +1,120 @@
-// The swipe-up throw's boomerang is ONE authored motion, built from the interface-motion
-// vocabulary (`--ix-*` / INTERFACE_MOTION). It is presentation only: the plan takes rects and a
-// motion gate, never a session or a legal action. Reduce motion / Speed off returns no flight.
-//
-// It must also FIT THE THROW: the discard step holds for `PINNED.throw` (396 ms) and the card's
-// own flight is `PINNED.throwFlight` (320 ms). The boomerang is the interface vocabulary SCALED to
-// that beat, so a future `INTERFACE_MOTION` edit can never silently push a throw past its step.
+// THE THROW'S BOOMERANG.
+// OWNER CHANGED THE RULE (2026-11-08: "how boomerang effect of card going to discard pile after throw -
+// it doesn't look satisfying and is too quick. work on it to make it 10/10"). It used to be squeezed into
+// the 248 ms card beat so it fit inside the discard step's wait; since 0.8 a player's own animation
+// never blocks input and a throw ends the turn, so it has its own beat, `PINNED.boomerang`, and six
+// readable legs: wind-up, out, kiss, a curved one-turn return, the catch, the hand-off.
+// It is still presentation only (rects and a motion gate, never a session), and still transform +
+// opacity with the interface easings.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PINNED } from '../src/logic/motion.js';
 import { INTERFACE_MOTION } from '../src/ui/interface-motion.js';
-import { BOOMERANG, planBoomerang } from '../src/ui/throw-boomerang.js';
+import { BOOMERANG, PILE_THUD, PILE_THUD_MS, planBoomerang } from '../src/ui/throw-boomerang.js';
 
 const from = { left: 120, top: 600, width: 72, height: 100 };
 const board = { x: 300, y: 260 };
 const to = { left: 24, top: 120, width: 40, height: 56 };
 
-/** The same legs at full interface length (a menu arriving, not a card thrown). */
-const authored = INTERFACE_MOTION.open + INTERFACE_MOTION.press + INTERFACE_MOTION.close
-  + Math.round(INTERFACE_MOTION.press * 0.6);
-
 const number = (value: Keyframe['transform'], re: RegExp): number =>
   Number(re.exec(String(value))?.[1] ?? 0);
+const xy = (value: Keyframe['transform']): [number, number] => {
+  const m = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(String(value))!;
+  return [Number(m[1]), Number(m[2])];
+};
 
-describe('the swipe-up boomerang', () => {
-  it('is the interface-motion vocabulary scaled to the throw beat, not a second language', () => {
-    // OUT and BACK keep their share of the move (within the 1 ms that integer rounding can shift):
-    // these are the two legs that carry the card, so their ratio to the interface vocabulary is the
-    // thing that stops this being a second animation language.
-    expect(BOOMERANG.out / BOOMERANG.total).toBeCloseTo(INTERFACE_MOTION.open / authored, 2);
-    expect(BOOMERANG.back / BOOMERANG.total).toBeCloseTo(INTERFACE_MOTION.close / authored, 2);
-    // The FADE and HOLD shares deliberately differ from the menu proportions since 2026-10-26: the
-    // owner reported the animation as invisible, and the placed moment is what the eye needs to
-    // catch. The fade is now a fixed 8 ms hand-off (the pile already turned over at `landMs`), and
-    // the hold absorbs the rest of the beat. Pinned as the new intent, not silently dropped.
-    expect(BOOMERANG.fade).toBe(8);
-    expect(BOOMERANG.hold).toBeGreaterThan(INTERFACE_MOTION.press * (PINNED.throwFlight / authored));
-    // The four legs still partition the beat exactly.
-    expect(BOOMERANG.total).toBe(BOOMERANG.out + BOOMERANG.hold + BOOMERANG.back + BOOMERANG.fade);
-    // ...and the whole flight still fits inside the discard step's wait.
-    expect(BOOMERANG.total).toBe(PINNED.throwFlight);
-    expect(BOOMERANG.total).toBeLessThan(PINNED.throw);
+describe('the boomerang has its own, slower beat', () => {
+  it('runs PINNED.boomerang, well past the old 248 ms squeeze, and its legs partition it', () => {
+    expect(BOOMERANG.total).toBe(PINNED.boomerang);
+    expect(BOOMERANG.total).toBeGreaterThanOrEqual(2 * PINNED.throwFlight);
+    expect(BOOMERANG.total).toBeLessThanOrEqual(700); // satisfying, never sluggish
+    expect(BOOMERANG.windup + BOOMERANG.out + BOOMERANG.kiss + BOOMERANG.back + BOOMERANG.catch + BOOMERANG.fade).toBe(BOOMERANG.total);
+    for (const leg of [BOOMERANG.windup, BOOMERANG.out, BOOMERANG.kiss, BOOMERANG.back, BOOMERANG.catch, BOOMERANG.fade]) {
+      expect(leg).toBeGreaterThan(0);
+    }
+    // the way home is the longest leg: it is the boomerang
+    expect(BOOMERANG.back).toBeGreaterThan(BOOMERANG.out);
+    const plan = planBoomerang(from, board, to, true);
+    expect(plan.duration).toBe(PINNED.boomerang);
+    expect(plan.landMs).toBe(Math.round(BOOMERANG.total * BOOMERANG.landAt));
+    expect(plan.landMs).toBeLessThan(plan.duration);
+  });
 
+  it('speaks the interface vocabulary: its easings are the interface tokens, transform + opacity only', () => {
     const plan = planBoomerang(from, board, to, true);
     const allowed = new Set<string>([INTERFACE_MOTION.easeOpen, INTERFACE_MOTION.easeClose]);
     for (const frame of plan.frames) {
       if (frame.easing) expect(allowed.has(String(frame.easing))).toBe(true);
+      expect(Object.keys(frame).filter((k) => !['transform', 'opacity', 'offset', 'easing'].includes(k))).toEqual([]);
     }
-
-    // No hand-written curve in the module: every easing is one of the two tokens above.
     const source = readFileSync(new URL('../src/ui/throw-boomerang.ts', import.meta.url), 'utf8');
     expect(source).not.toContain('cubic-bezier');
   });
+});
 
-  it('fits the discard step: the flight is the card beat, inside the step wait', () => {
-    // THE REGRESSION THIS GUARDS (2026-10-25): at interface length the boomerang was 624 ms and the
-    // discard step awaited all of it, holding the turn 634 ms against a 396 ms beat (+228 ms).
-    expect(BOOMERANG.total).toBe(PINNED.throwFlight);
-    expect(BOOMERANG.total).toBeLessThan(PINNED.throw);
-    // The beat has to leave room for the fade after the arrival, or the hand-over would unscreen
-    // the old pile top. Every leg is still a real, positive segment: nothing was dropped.
-    expect(BOOMERANG.out).toBeGreaterThan(0);
-    expect(BOOMERANG.hold).toBeGreaterThan(0);
-    expect(BOOMERANG.back).toBeGreaterThan(0);
-    expect(BOOMERANG.fade).toBeGreaterThan(0);
+describe('the six legs read', () => {
+  const plan = planBoomerang(from, board, to, true);
+  const frameAt = (offset: number) => plan.frames.find((f) => f.offset === offset)!;
 
-    const plan = planBoomerang(from, board, to, true);
-    expect(plan.duration).toBe(PINNED.throwFlight);
-    expect(plan.duration).toBeLessThan(PINNED.throw);
-    expect(plan.landMs).toBe(Math.round(BOOMERANG.total * BOOMERANG.landAt));
-    expect(plan.landMs).toBeLessThan(plan.duration);
-    // Most of the flight is the move out and home; the fade is the short hand-over tail.
-    expect(BOOMERANG.landAt).toBeGreaterThan(0.85);
+  it('winds up: the card rises off the hand, tips back and grows a touch', () => {
+    const lift = frameAt(BOOMERANG.liftAt);
+    expect(xy(lift.transform)).toEqual([0, -BOOMERANG.liftPx]);
+    expect(number(lift.transform, /rotate\((-?[\d.]+)deg\)/)).toBe(BOOMERANG.liftTip);
+    expect(number(lift.transform, /scale\(([\d.]+)\)/)).toBeCloseTo(BOOMERANG.liftScale, 3);
   });
 
-  it('settles at the board, then lands on the pile rect', () => {
-    const plan = planBoomerang(from, board, to, true);
-    const settle = plan.frames.find((frame) => frame.offset === BOOMERANG.settleAt);
-    expect(settle, 'a frame where the card settles').toBeTruthy();
-    const toBoardX = board.x - (from.left + from.width / 2);
-    const toBoardY = board.y - (from.top + from.height / 2);
-    expect(String(settle!.transform)).toContain(`translate(${toBoardX.toFixed(1)}px, ${toBoardY.toFixed(1)}px)`);
-    expect(number(settle!.transform, /rotate\((-?[\d.]+)deg\)/)).toBe(0);
-    expect(String(settle!.transform)).toContain(`scale(${BOOMERANG.boardScale.toFixed(3)})`);
+  it('arrives square on the board, gives as it touches, and is seated', () => {
+    const settle = frameAt(BOOMERANG.settleAt);
+    expect(xy(settle.transform)).toEqual([board.x - (from.left + from.width / 2), board.y - (from.top + from.height / 2)]);
+    expect(number(settle.transform, /rotate\((-?[\d.]+)deg\)/)).toBe(0);
+    const scales = plan.frames
+      .filter((f) => Number(f.offset) >= BOOMERANG.settleAt && Number(f.offset) <= BOOMERANG.holdAt)
+      .map((f) => number(f.transform, /scale\(([\d.]+)\)/));
+    expect(Math.min(...scales)).toBeCloseTo(BOOMERANG.boardScale * BOOMERANG.press, 3);
+    expect(scales.at(-1)).toBeCloseTo(BOOMERANG.boardScale, 3);
+  });
 
+  it('comes home on a curve, turning one whole turn like a real boomerang', () => {
+    const rotations = plan.frames.map((f) => number(f.transform, /rotate\((-?[\d.]+)deg\)/));
+    expect(rotations.at(-1)).toBe(360); // one whole turn: upright again on the pile
+    expect(Math.max(...rotations)).toBe(360);
+    // the middle of the way home is well off the straight board -> pile line
+    const s = xy(frameAt(BOOMERANG.settleAt).transform);
+    const e = xy(frameAt(BOOMERANG.landAt).transform);
+    const m = xy(plan.frames.find((f) => Number(f.offset) > BOOMERANG.holdAt && Number(f.offset) < BOOMERANG.landAt)!.transform);
+    const len = Math.hypot(e[0] - s[0], e[1] - s[1]);
+    const off = Math.abs((e[0] - s[0]) * (s[1] - m[1]) - (s[0] - m[0]) * (e[1] - s[1])) / len;
+    expect(off / len).toBeGreaterThan(0.12);
+  });
+
+  it('is caught a touch big on the pile, seats at the pile size, then hands over with a short fade', () => {
+    const toX = to.left + to.width / 2 - (from.left + from.width / 2);
+    const toY = to.top + to.height / 2 - (from.top + from.height / 2);
+    const pile = to.height / from.height;
+    const land = frameAt(BOOMERANG.landAt);
+    expect(xy(land.transform)).toEqual([Number(toX.toFixed(1)), Number(toY.toFixed(1))]);
+    expect(number(land.transform, /scale\(([\d.]+)\)/)).toBeCloseTo(pile * BOOMERANG.catchScale, 3);
+    expect(land.opacity).toBe(1);
+    const seat = frameAt(BOOMERANG.seatAt);
+    expect(number(seat.transform, /scale\(([\d.]+)\)/)).toBeCloseTo(pile, 3);
+    expect(seat.opacity).toBe(1);
     const last = plan.frames.at(-1)!;
-    const toPileX = to.left + to.width / 2 - (from.left + from.width / 2);
-    const toPileY = to.top + to.height / 2 - (from.top + from.height / 2);
-    expect(String(last.transform)).toContain(`translate(${toPileX.toFixed(1)}px, ${toPileY.toFixed(1)}px)`);
-    expect(String(last.transform)).toContain(`scale(${(to.height / from.height).toFixed(3)})`);
     expect(last.opacity).toBe(0);
-
-    // Arrival (opacity 1, on the pile) comes BEFORE the fade: the pile top is handed over while
-    // the card is still covering it.
-    const arrival = plan.frames.at(-2)!;
-    expect(arrival.opacity).toBe(1);
-    expect(arrival.offset).toBe(BOOMERANG.landAt);
-    expect(String(arrival.transform)).toContain(`translate(${toPileX.toFixed(1)}px, ${toPileY.toFixed(1)}px)`);
+    expect(BOOMERANG.fade).toBeLessThanOrEqual(60);
   });
 
-  it('turns slightly on the way out and the way home, and never spins twice', () => {
-    const plan = planBoomerang(from, board, to, true);
-    const rotations = plan.frames.map((frame) => number(frame.transform, /rotate\((-?[\d.]+)deg\)/));
-    expect(rotations.some((r) => r === BOOMERANG.spinOut)).toBe(true);
-    expect(rotations.some((r) => r === BOOMERANG.spinBack)).toBe(true);
-    expect(Math.max(...rotations.map(Math.abs))).toBeLessThanOrEqual(12);
-    // one turn out, one turn home, then aligned: no continuous spin
-    const changes = rotations.filter((r, i) => i > 0 && r !== rotations[i - 1]).length;
-    expect(changes).toBeLessThanOrEqual(4);
+  it('the pile answers the catch with a small, quick thud (transform only)', () => {
+    expect(PILE_THUD_MS).toBeLessThanOrEqual(260);
+    for (const f of PILE_THUD) expect(Object.keys(f).filter((k) => !['transform', 'offset'].includes(k))).toEqual([]);
+    expect(Math.min(...PILE_THUD.map((f) => number(f.transform, /scale\(([\d.]+)\)/)))).toBeGreaterThan(0.93);
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    expect(main).toContain('PILE_THUD');
   });
+});
 
+describe('the boomerang stays safe', () => {
   it('Reduce motion / Speed off returns no flight at all', () => {
     expect(planBoomerang(from, board, to, false)).toEqual({ duration: 0, frames: [], landMs: 0 });
-    // A hidden or zero-size source has nothing to fly from either.
     expect(planBoomerang({ left: 0, top: 0, width: 0, height: 0 }, board, to, true)).toEqual({ duration: 0, frames: [], landMs: 0 });
   });
 
@@ -120,16 +123,11 @@ describe('the swipe-up boomerang', () => {
   });
 
   it('still flies when the throw was released on the pile itself', () => {
-    // A drop onto the Throw pile takes off where the finger let go: `from` and `to` are the same
-    // box. The card still has to visit the board, or the gesture would get no flourish at all.
     const onPile = { left: to.left, top: to.top, width: to.width, height: to.height };
     const plan = planBoomerang(onPile, board, to, true);
     expect(plan.duration).toBe(BOOMERANG.total);
     const settle = plan.frames.find((frame) => frame.offset === BOOMERANG.settleAt);
-    expect(settle, 'it still settles over the board').toBeTruthy();
     expect(String(settle!.transform)).toContain(`translate(${(board.x - (onPile.left + onPile.width / 2)).toFixed(1)}px`);
-    const last = plan.frames.at(-1)!;
-    expect(String(last.transform)).toContain('translate(0.0px, 0.0px)');
-    expect(last.opacity).toBe(0);
+    expect(String(plan.frames.at(-1)!.transform)).toContain('translate(0.0px, 0.0px)');
   });
 });

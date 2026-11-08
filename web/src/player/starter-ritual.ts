@@ -26,6 +26,25 @@ import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
 import { RITUAL_DECK_SIZE } from '../logic/starter-ritual.js';
 import { WORDMARK_URL as plainMarkUrl } from './branding.js';
 
+/**
+ * The kanji leaving the card (owner, 2026-11-08: "make it look like it's actually coming from the card
+ * ... fade out ... quickly when game starts"). It lies in the card face, tilted back, at the emblem's
+ * own size; lights there; stands up toward the viewer as it lifts; holds a beat; then leaves fast while
+ * the cards already head for the pile. Transform and opacity only.
+ */
+export const KANJI = Object.freeze({
+  /** Degrees the mark is tilted back while it still lies in the card. */
+  tiltDeg: 58,
+  /** Lift: from the emblem to its peak size (a fraction of the mark's full width). */
+  liftMs: 440,
+  holdMs: 150,
+  /** The exit, not awaited: the game is already starting under it. */
+  leaveMs: 170,
+  peak: 0.62,
+  /** How far the card gives under the mark as it leaves (scale). */
+  press: 0.962,
+});
+
 /** How long the outcome ("You start" / "Opponent starts") is held before the deck gathers. */
 export const RESULT_HOLD_MS = 1000;
 
@@ -880,14 +899,33 @@ class StarterRitual {
     this.kanji = img;
     const wide = img.getBoundingClientRect().width || Math.min(window.innerWidth * 0.92, 640);
     const emblem = this.refs.deckAnchor.getBoundingClientRect().width || this.cardSize().w;
-    // Start about the size of the mark inside the card, so it reads as coming out of the emblem.
+    // The emblem's own size, so the first frame reads as the card's mark lighting up.
     const start = clamp((emblem * 0.42) / wide, 0.08, 0.3);
+    const lying = `perspective(720px) rotateX(${KANJI.tiltDeg}deg)`;
+    const standing = 'perspective(720px) rotateX(0deg)';
+    // The card gives a little under the mark as it leaves, then comes back: it was pushed OUT of it.
+    this.animate(this.refs.deck, [
+      { scale: 1 },
+      { scale: KANJI.press, offset: 0.34 },
+      { scale: 1 },
+    ], { duration: this.ms(KANJI.liftMs), easing: 'cubic-bezier(.3,.7,.3,1)' });
     await this.playAnimations([this.animate(img, [
-      { scale: start, opacity: 0, easing: 'cubic-bezier(.2,.7,.2,1)' },
-      { scale: 1, opacity: 1, offset: 0.58, easing: 'linear' },
-      { scale: 1, opacity: 1, offset: 0.76, easing: 'cubic-bezier(.4,0,.2,1)' },
-      { scale: 1.05, opacity: 0 },
-    ], { duration: this.ms(780), easing: 'linear' })]);
+      { transform: `${lying} translateY(0) scale(${start.toFixed(3)})`, opacity: 0 },
+      // lit, still lying in the card face
+      { transform: `${lying} translateY(0) scale(${(start * 1.06).toFixed(3)})`, opacity: 1, offset: 0.16 },
+      // standing up toward the viewer as it lifts off the card
+      { transform: `${standing} translateY(-6%) scale(${KANJI.peak})`, opacity: 1 },
+    ], { duration: this.ms(KANJI.liftMs), easing: 'cubic-bezier(.2,.75,.25,1)' })]);
+    if (this.cancelled || this.finished || this.skipRequested) return;
+    await this.sleep(this.ms(KANJI.holdMs));
+    if (this.cancelled || this.finished || this.skipRequested) return;
+    // Leave quickly while the game starts: not awaited, and not one of the ritual's own animations,
+    // so the cards filing to the pile never wait for it and never cancel it mid-fade.
+    const leave = img.animate([
+      { transform: `${standing} translateY(-6%) scale(${KANJI.peak})`, opacity: 1 },
+      { transform: `${standing} translateY(-9%) scale(${(KANJI.peak * 1.07).toFixed(3)})`, opacity: 0 },
+    ], { duration: this.ms(KANJI.leaveMs), easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' });
+    leave.finished.then(() => { if (this.kanji === img) this.clearKanji(); }, () => undefined);
   }
 
   /** Start decoding the mark once per ritual; resolves true when it can paint at once. */

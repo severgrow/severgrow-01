@@ -1,65 +1,66 @@
-// THE SWIPE-UP THROW'S BOOMERANG (owner, 2026-10-25).
+// THE THROW'S BOOMERANG (owner, 2026-10-25; remade 2026-11-08: "it doesn't look satisfying and is too
+// quick. work on it to make it 10/10").
 //
-// One authored motion: the card lifts off the hand, flies toward the board, turns a few degrees,
-// settles into alignment for an instant as if placed, then comes back to the Throw pile — a
-// boomerang. It is deliberately quiet: one turn out, one turn home, no bounce, no loop.
+// One authored motion, in six readable legs:
+//   1. wind-up  - the card rises off the hand a hair, tips back, grows a touch: the hand lets go;
+//   2. out      - it arcs to the board, turning, and arrives square at a near-tile size;
+//   3. kiss     - it presses onto the board for an instant (a small give, then seated), as if placed;
+//   4. back     - it comes home on a curved path, spinning one full turn like a real boomerang;
+//   5. catch    - it lands a touch big on the pile and settles to the pile's own size;
+//   6. hand-off - a short fade over the pile top, which turned over at the catch.
+// The pile answers the catch with its own small thud (main.ts, `PILE_THUD`).
 //
 // PRESENTATION ONLY. The game commits the throw before this plan is read (main.ts calls
 // session.play, then the discard step draws the flight). Nothing here sees the session, an action
 // or the legal move list, so it can never gate or delay the real move; fast-forward skips it.
+// Since 0.8 a player's own animation never blocks their input, and a throw ends the turn, so the
+// flight may be longer than the old 248 ms squeeze: it is `PINNED.boomerang`.
 //
-// The vocabulary is the interface-motion one (the `--ix-*` tokens, mirrored in
-// `ui/interface-motion.ts`): the outbound leg is `open`, the settle hold is `press`, the return is
-// `close`, and the short fade that hands the pile over is a fraction of `press`. No new curves.
-//
-// IT FITS THE THROW'S OWN BEAT (fix, 2026-10-25). Read at its interface length the four legs total
-// 624 ms (open 300 + press 90 + close 180 + fade 54), and the discard step awaited all of it: a
-// human throw held the turn 634 ms where the ordinary throw's beat was 396 ms (406 ms measured
-// with frame overhead), i.e. +228 ms against the game's rhythm, and the card flew 1.6x longer than
-// the step it sits in. `futa04-motion`'s contract is that the throw fits INSIDE the action wait. So
-// the segments are SCALED by a factor of the beat — the same four legs, the same proportions, the
-// same interface curves, played at the card's own flight length `PINNED.throwFlight` (320 ms)
-// instead of at a menu's opening length. Scaling (rather than inventing beat-relative fractions)
-// keeps every leg tied to the vocabulary the rest of the interface uses, so an edit to
-// `INTERFACE_MOTION` moves this flight with it.
+// Easing comes from the interface vocabulary (`INTERFACE_MOTION`), no hand-written curve here.
 import { PINNED } from '../logic/motion.js';
 import { INTERFACE_MOTION } from './interface-motion.js';
 
-/** The authored interface length of the four legs (the move at menu speed: 624 ms). */
-const authored = INTERFACE_MOTION.open + INTERFACE_MOTION.press + INTERFACE_MOTION.close
-  + Math.round(INTERFACE_MOTION.press * 0.6);
-/** 320/624: the card's own flight beat, inside the discard step's 396 ms wait. */
-const beatScale = PINNED.throwFlight / authored;
-const out = Math.round(INTERFACE_MOTION.open * beatScale);
-const hold = Math.round(INTERFACE_MOTION.press * beatScale);
-const back = Math.round(INTERFACE_MOTION.close * beatScale);
-const land = out + hold + back;
-/**
- * The fade is a HAND-OFF, not a leg of the flight: the pile already turned over at `landMs`, so the
- * fade only covers the swap. It no longer takes its menu share of the beat (28 ms of a 320 ms
- * flight), because the owner reported the animation as invisible (2026-10-26) and the placed moment
- * — the card sitting aligned on the board — is the part the eye needs to catch. That time becomes
- * HOLD instead: still inside the same 320 ms beat, still the same four legs, no leg invented.
- */
-const fade = 8;
-const holdMs = hold + (PINNED.throwFlight - land - fade);
-const total = out + holdMs + back + fade;
+/** Leg lengths as shares of the whole flight. */
+const SHARE = Object.freeze({ windup: 0.08, out: 0.3, kiss: 0.12, back: 0.36, catch: 0.08, fade: 0.06 });
+
+const total = PINNED.boomerang;
+const ms = (share: number): number => Math.round(total * share);
+const windup = ms(SHARE.windup);
+const out = ms(SHARE.out);
+const kiss = ms(SHARE.kiss);
+const back = ms(SHARE.back);
+const catchMs = ms(SHARE.catch);
+const fade = total - windup - out - kiss - back - catchMs;
 
 export const BOOMERANG = Object.freeze({
+  windup,
   out,
-  hold: holdMs,
+  kiss,
   back,
+  catch: catchMs,
   fade,
   total,
-  /** Fractions of `total` (the test and the discard step read these, never repeat them). */
-  settleAt: out / total,
-  holdAt: (out + holdMs) / total,
-  landAt: (out + holdMs + back) / total,
+  /** Fractions of `total` (the tests and the discard step read these, never repeat them). */
+  liftAt: windup / total,
+  settleAt: (windup + out) / total,
+  holdAt: (windup + out + kiss) / total,
+  landAt: (windup + out + kiss + back) / total,
+  seatAt: (windup + out + kiss + back + catchMs) / total,
   /** How big the card is while it appears placed on the board (a near-tile size). */
   boardScale: 0.72,
-  /** Degrees: a small turn on the way out and a smaller one on the way home. */
-  spinOut: -11,
-  spinBack: 7,
+  /** The kiss: how far the card gives as it touches the board. */
+  press: 0.94,
+  /** Wind-up: a small lift and tip as the hand lets go. */
+  liftPx: 10,
+  liftTip: 4,
+  liftScale: 1.05,
+  /** Degrees on the way out. The way home is one whole turn. */
+  spinOut: -16,
+  spinBack: 360,
+  /** The return path bows out by this share of its length (a curve, not a straight line home). */
+  bow: 0.2,
+  /** The catch lands this much bigger than the pile, then seats. */
+  catchScale: 1.08,
 });
 
 export type FlightRect = { left: number; top: number; width: number; height: number };
@@ -93,6 +94,7 @@ export const planBoomerang = (
   if (!allowed || from.width < 1 || from.height < 1 || to.height < 1) {
     return { duration: 0, frames: [], landMs: 0 };
   }
+  const B = BOOMERANG;
   const cx = from.left + from.width / 2;
   const cy = from.top + from.height / 2;
   const outX = board.x - cx;
@@ -100,39 +102,53 @@ export const planBoomerang = (
   const toX = to.left + to.width / 2 - cx;
   const toY = to.top + to.height / 2 - cy;
   const pileScale = to.height / Math.max(from.height, 1);
-  const midOut = BOOMERANG.settleAt * 0.62;
-  const midBack = BOOMERANG.holdAt + (BOOMERANG.landAt - BOOMERANG.holdAt) * 0.55;
+  // The way home bows out to one side: the perpendicular of the board->pile line, at its middle.
+  const dx = toX - outX;
+  const dy = toY - outY;
+  const len = Math.hypot(dx, dy) || 1;
+  const bowX = (-dy / len) * len * B.bow;
+  const bowY = (dx / len) * len * B.bow;
+  const midOut = lerp(B.liftAt, B.settleAt, 0.6);
+  const midBack = lerp(B.holdAt, B.landAt, 0.5);
+  const kissAt = lerp(B.settleAt, B.holdAt, 0.35);
   const frames: Keyframe[] = [
     { transform: pose(0, 0, 0, 1), opacity: 1, offset: 0, easing: INTERFACE_MOTION.easeOpen },
-    // The lift: most of the way to the board, already turning.
+    // 1. wind-up: the hand lets go
+    { transform: pose(0, -B.liftPx, B.liftTip, B.liftScale), opacity: 1, offset: B.liftAt, easing: INTERFACE_MOTION.easeOpen },
+    // 2. out: most of the way, turning
     {
-      transform: pose(outX * 0.64, outY * 0.64 - 12, BOOMERANG.spinOut, lerp(1, BOOMERANG.boardScale, 0.64)),
+      transform: pose(outX * 0.62, outY * 0.62 - 18, B.spinOut, lerp(B.liftScale, B.boardScale, 0.62)),
       opacity: 1,
       offset: midOut,
-    },
-    // Aligned: rotation zero, a near-tile size, as if it had been placed for a moment.
-    {
-      transform: pose(outX, outY, 0, BOOMERANG.boardScale),
-      opacity: 1,
-      offset: BOOMERANG.settleAt,
       easing: INTERFACE_MOTION.easeOpen,
     },
-    { transform: pose(outX, outY, 0, BOOMERANG.boardScale), opacity: 1, offset: BOOMERANG.holdAt },
-    // The boomerang home: a smaller turn the other way.
+    // ...arriving square on the board
+    { transform: pose(outX, outY, 0, B.boardScale), opacity: 1, offset: B.settleAt, easing: INTERFACE_MOTION.easeOpen },
+    // 3. kiss: a small give, then seated, as if placed
+    { transform: pose(outX, outY, 0, B.boardScale * B.press), opacity: 1, offset: kissAt, easing: INTERFACE_MOTION.easeOpen },
+    { transform: pose(outX, outY, 0, B.boardScale), opacity: 1, offset: B.holdAt, easing: INTERFACE_MOTION.easeOpen },
+    // 4. back: a curved path home, one whole turn
     {
-      transform: pose(
-        lerp(outX, toX, 0.55),
-        lerp(outY, toY, 0.55),
-        BOOMERANG.spinBack,
-        lerp(BOOMERANG.boardScale, pileScale, 0.55),
-      ),
+      transform: pose(lerp(outX, toX, 0.5) + bowX, lerp(outY, toY, 0.5) + bowY, B.spinBack / 2, lerp(B.boardScale, pileScale, 0.5)),
       opacity: 1,
       offset: midBack,
       easing: INTERFACE_MOTION.easeOpen,
     },
-    // Arrival: exactly on the pile's rect (centre + its height), before the fade.
-    { transform: pose(toX, toY, 0, pileScale), opacity: 1, offset: BOOMERANG.landAt },
-    { transform: pose(toX, toY, 0, pileScale), opacity: 0, offset: 1 },
+    // 5. the catch: on the pile, a touch big...
+    { transform: pose(toX, toY, B.spinBack, pileScale * B.catchScale), opacity: 1, offset: B.landAt, easing: INTERFACE_MOTION.easeOpen },
+    // ...then seated at the pile's own size
+    { transform: pose(toX, toY, B.spinBack, pileScale), opacity: 1, offset: B.seatAt },
+    // 6. hand-off over the pile top
+    { transform: pose(toX, toY, B.spinBack, pileScale), opacity: 0, offset: 1 },
   ];
-  return { duration: BOOMERANG.total, frames, landMs: Math.round(BOOMERANG.total * BOOMERANG.landAt) };
+  return { duration: B.total, frames, landMs: Math.round(B.total * B.landAt) };
 };
+
+/** The pile's own small thud at the catch (transform only; main.ts plays it on the pile). */
+export const PILE_THUD: Keyframe[] = [
+  { transform: 'scale(1)' },
+  { transform: 'scale(0.955)', offset: 0.35 },
+  { transform: 'scale(1.012)', offset: 0.7 },
+  { transform: 'scale(1)' },
+];
+export const PILE_THUD_MS = 220;

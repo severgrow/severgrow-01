@@ -62,14 +62,17 @@ try {
   // plus the boomerang's shape: a turn out, alignment over the board, arrival before the fade.
   // The step's real hold is measured further down, from the pump's own log (a fast-forward below
   // cuts this one short on purpose, so its length here would prove nothing).
-  assert.equal(thrown.duration,PINNED.throwFlight,'throw flies on the Futa04 short beat');
-  assert(thrown.duration! < PINNED.throw,`the throw finishes inside the action wait (${thrown.duration} < ${PINNED.throw})`);
+  // OWNER CHANGED THE RULE (2026-11-08: the boomerang "doesn't look satisfying and is too quick"): it
+  // has its own beat, PINNED.boomerang, with a one-turn curved return and a catch on the pile.
+  assert.equal(thrown.duration,PINNED.boomerang,'the boomerang flies on its own beat');
   const throwFrames = thrown.frames ?? [];
   const rotations = throwFrames.map(f=>/rotate\((-?[\d.]+)deg\)/.exec(String(f.transform ?? ''))?.[1]);
   assert(rotations.some(r=>r!==undefined && Math.abs(Number(r))>0),'the throw turns on its way out (the boomerang)');
   assert(rotations.includes('0'),'it aligns over the board as if placed');
-  assert.equal(throwFrames.at(-2)?.offset,BOOMERANG.landAt,'the pile is handed the card on arrival, before the fade');
-  assert.equal(Number(throwFrames.at(-2)?.opacity),1,'the card is still visible when it reaches the pile');
+  assert(rotations.includes('360'),'it comes home turning one whole turn');
+  const caught = throwFrames.find(f=>f.offset===BOOMERANG.landAt);
+  assert(caught,'the pile is handed the card at the catch, before the fade');
+  assert.equal(Number(caught!.opacity),1,'the card is still visible when it reaches the pile');
   assert.equal(Number(throwFrames.at(-1)?.opacity),0,'and fades only over the new pile top');
   await page.locator('#deck').evaluate(el=>(el as HTMLElement).click()); // existing tap-to-skip path
   await page.waitForFunction(() => !(window as any).__severgrow.busy(),undefined,{timeout:30000});
@@ -149,8 +152,10 @@ try {
   assert(discardStep && typeof discardStep.ms === 'number', 'the discard step publishes its duration');
   // Measured on the built product: 405-412 ms (the 396 ms wait plus frame overhead); the bug was
   // 634 ms. 100 ms of headroom keeps a loaded runner from faking a red, and +228 ms still fails.
-  assert(discardStep!.ms! < PINNED.throw + 100,
-    `the discard step keeps its ${PINNED.throw}ms beat instead of waiting out the flight (${discardStep!.ms}ms)`);
+  // Since 2026-11-08 the step waits the boomerang out (a throw ends the turn; own animation never
+  // blocks input). It must not wait any longer than that.
+  assert(discardStep!.ms! < PINNED.boomerang + 100,
+    `the discard step waits the boomerang and nothing more (${discardStep!.ms}ms, beat ${PINNED.boomerang}ms)`);
 
   await page.goto(`${BASE}?seed=3`);
   await page.waitForSelector('#deck.ready');

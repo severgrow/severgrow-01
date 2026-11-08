@@ -2,6 +2,7 @@
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
+import { PILE_THUD, PILE_THUD_MS } from './ui/throw-boomerang.js';
 import { mountStartupReveal } from './player/startup.js';
 import { mountMenuZoomLock } from './player/menu-zoom-lock.js';
 import { mountAchievementToast } from './player/achievement-toast.js';
@@ -4834,7 +4835,15 @@ async function playStep(step: Step, my: number) {
             // of ~406 ms (+228 ms). max() is a floor for the flight, never a reason to stretch the
             // beat: the unit test pins the flight inside the wait, and `futa04-motion` measures
             // the step itself.
-            const flightMs = throwBoomerang(step.card, from, point, to, f, land);
+            // 2026-11-08: the boomerang has its own beat (PINNED.boomerang) and the step waits it out:
+            // a throw ends the turn and my own animation never blocks my input (0.8), so the only
+            // thing that waits is the opponent's turn, by ~300 ms. The pile thuds at the catch.
+            const pileEl = $('discard');
+            const catchAndThud = () => {
+              land();
+              if (motionOn()) pileEl.animate(PILE_THUD, { duration: PILE_THUD_MS * f, easing: INTERFACE_MOTION.easeOpen });
+            };
+            const flightMs = throwBoomerang(step.card, from, point, to, f, catchAndThud);
             await wait(Math.max(PINNED.throw * f, flightMs), my);
           } else if (flight === 'ordinary') {
             flyCard(step.card, from, to, f, land);

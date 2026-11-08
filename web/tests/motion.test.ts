@@ -44,6 +44,8 @@ describe('motion tokens', () => {
       humanDraw: 312,
       throw: 312,
       throwFlight: 248,
+      // OWNER CHANGED THE VALUE (2026-11-08: the boomerang was "too quick"): its own beat, not throwFlight.
+      boomerang: 620,
       liveReveal: 600,
       displayDwell: 1000,
       lessonDwell: 2000,

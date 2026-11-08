@@ -28,6 +28,12 @@ export const PINNED = Object.freeze({
   throw: 312,
   /** The thrown card's own flight, which lands inside that wait (32359b5: the snappier beat). */
   throwFlight: 248,
+  /**
+   * The human throw's boomerang (owner, 2026-11-08: "doesn't look satisfying and is too quick ... make
+   * it 10/10"): wind-up, out, a kiss on the board, a curved one-turn return, a catch on the pile.
+   * A throw ends the turn and own animation never blocks input (0.8), so it may outlast `throw`.
+   */
+  boomerang: 620,
   /** The shortest hold for a live enemy turn, so a quiet turn cannot blink past. */
   liveReveal: 600,
   /** The LED display's minimum dwell before another message may replace it (normal play). */

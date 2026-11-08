@@ -204,6 +204,34 @@ describe('the kanji is ready before it blooms (review, 0.84)', () => {
   });
 });
 
+describe('the kanji comes out of the card, then leaves quickly (owner, 2026-11-08)', () => {
+  // "make it look like it's actually coming from the card, in a smooth interesting but cheap way.
+  // make it fade out disappear but quickly when game starts"
+  it('lights on the emblem at the emblem size, lifts off the card face toward the viewer, the card gives under it', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const src = readFileSync(fileURLToPath(new URL('../src/player/starter-ritual.ts', import.meta.url)), 'utf8');
+    const bloom = src.slice(src.indexOf('private async bloomKanji'), src.indexOf('private clearKanji'));
+    // starts lying in the card (tilted back) at the emblem's own size, lights there, then stands up
+    expect(bloom).toContain("rotateX(${KANJI.tiltDeg}deg)");
+    expect(bloom).toContain('scale(${start');
+    // the card presses as the mark leaves it
+    expect(bloom).toMatch(/this\.animate\(this\.refs\.deck, \[/);
+    // only transform / opacity: cheap, no filter or blur on a moving layer
+    expect(bloom).not.toMatch(/filter|blur|box-shadow/);
+    // the exit is NOT awaited: the cards head for the pile while the mark is already leaving
+    expect(bloom).toMatch(/const leave = img\.animate\(/);
+    expect(bloom).not.toMatch(/await\s+leave/);
+  });
+  it('the leave is quick and the whole moment stays short', async () => {
+    const { KANJI } = await import('../src/player/starter-ritual.js');
+    expect(KANJI.leaveMs).toBeLessThanOrEqual(200);
+    expect(KANJI.liftMs + KANJI.holdMs).toBeLessThanOrEqual(640);
+    expect(KANJI.peak).toBeLessThan(1); // not a full-screen slam
+    expect(KANJI.tiltDeg).toBeGreaterThan(20);
+  });
+});
+
 describe('which matches open with the ritual (owner, 2026-10-24)', () => {
   it('plays on a practice match and on every campaign level from 9 on', () => {
     expect(RITUAL_FROM_CAMPAIGN_LEVEL).toBe(9);
