@@ -64,12 +64,12 @@ try {
   // cuts this one short on purpose, so its length here would prove nothing).
   // OWNER CHANGED THE RULE (2026-11-08: the boomerang "doesn't look satisfying and is too quick"): it
   // has its own beat, PINNED.boomerang, with a one-turn curved return and a catch on the pile.
-  assert.equal(thrown.duration,PINNED.boomerang,'the boomerang flies on its own beat');
+  assert.equal(thrown.duration,PINNED.boomerang,'the throw flies on its own beat (one flick)');
   const throwFrames = thrown.frames ?? [];
   const rotations = throwFrames.map(f=>/rotate\((-?[\d.]+)deg\)/.exec(String(f.transform ?? ''))?.[1]);
   assert(rotations.some(r=>r!==undefined && Math.abs(Number(r))>0),'the throw turns on its way out (the boomerang)');
-  assert(rotations.includes('0'),'it aligns over the board as if placed');
-  assert(rotations.includes('360'),'it comes home turning one whole turn');
+  // 2026-11-08: one flick, no stop on the board; a light turn that straightens for the catch
+  assert.equal(rotations.at(-1),'0','it lands upright on the pile');
   const caught = throwFrames.find(f=>f.offset===BOOMERANG.landAt);
   assert(caught,'the pile is handed the card at the catch, before the fade');
   assert.equal(Number(caught!.opacity),1,'the card is still visible when it reaches the pile');

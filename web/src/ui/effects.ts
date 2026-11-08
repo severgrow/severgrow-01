@@ -319,7 +319,10 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     f: number,
     onLand?: () => void,
   ): number {
-    const plan = planBoomerang(from, boardPoint, to, motion() > 0 && f > 0, { width: window.innerWidth, height: window.innerHeight });
+    // the hand's middle: a card left of it bows and turns one way, right of it the other
+    const handRect = document.getElementById('hand')?.getBoundingClientRect();
+    const handMid = handRect && handRect.width > 0 ? handRect.left + handRect.width / 2 : undefined;
+    const plan = planBoomerang(from, boardPoint, to, motion() > 0 && f > 0, { width: window.innerWidth, height: window.innerHeight }, handMid === undefined ? {} : { handMid });
     if (!plan.duration) {
       onLand?.();
       return 0;

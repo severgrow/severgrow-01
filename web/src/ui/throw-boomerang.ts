@@ -1,68 +1,42 @@
-// THE THROW'S BOOMERANG (owner, 2026-10-25; remade 2026-11-08: "it doesn't look satisfying and is too
-// quick. work on it to make it 10/10").
+// THE THROW: ONE FLICK (owner, 2026-11-08: "the flight of the card doesn't look natural, it shouldn't
+// 'stop' on board and then go back to throw pile - it should be a quick flick flight natural not stopping -
+// from hand towards the board and back to throw pile. doesn't always have to have the same path - can be
+// depended on its position in hand ... physically correct"; "light spin ... quick - but satisfying, not
+// annoying"). It replaced the six-leg boomerang (a kiss and a hold on the board).
 //
-// One authored motion, in six readable legs:
-//   1. wind-up  - the card rises off the hand a hair, tips back, grows a touch: the hand lets go;
-//   2. out      - it arcs to the board, turning, and arrives square at a near-tile size;
-//   3. kiss     - it presses onto the board for an instant (a small give, then seated), as if placed;
-//   4. back     - it comes home on a curved path, spinning one full turn like a real boomerang;
-//   5. catch    - it lands a touch big on the pile and settles to the pile's own size;
-//   6. hand-off - a short fade over the pile top, which turned over at the catch.
-// The pile answers the catch with its own small thud (main.ts, `PILE_THUD`).
+// The path is ONE cubic curve: from the card's place in the hand, out toward the board, and back into the
+// Throw pile. It bows to the side the card sat on in the hand (left of the hand's middle bows one way,
+// right the other), so no two throws trace quite the same line, and it always bows toward the middle of
+// the screen. Speed is a flick's: fastest off the hand, slowest around the turn (never stopped), quicker
+// again before the catch. The card turns a little as it flies out and straightens as the pile catches it,
+// a touch big, then seats at the pile's size; a short fade hands over to the pile top.
 //
-// PRESENTATION ONLY. The game commits the throw before this plan is read (main.ts calls
-// session.play, then the discard step draws the flight). Nothing here sees the session, an action
-// or the legal move list, so it can never gate or delay the real move; fast-forward skips it.
-// Since 0.8 a player's own animation never blocks their input, and a throw ends the turn, so the
-// flight may be longer than the old 248 ms squeeze: it is `PINNED.boomerang`.
-//
-// Easing comes from the interface vocabulary (`INTERFACE_MOTION`), no hand-written curve here.
+// PRESENTATION ONLY: rects in, keyframes out. The game commits the throw before this plan is read.
+// effects.ts plays the frames on an even clock (`easing: 'linear'`): the timing lives in the samples.
 import { PINNED } from '../logic/motion.js';
 import { INTERFACE_MOTION } from './interface-motion.js';
 
-/** Leg lengths as shares of the whole flight. */
-// Owner, 2026-11-08: "the throw starts from the board, it should start from the card in hand" - the
-// departure gets more of the flight (wind-up .10, out .33) and the kiss a little less.
-const SHARE = Object.freeze({ windup: 0.1, out: 0.33, kiss: 0.08, back: 0.35, catch: 0.08, fade: 0.06 });
-
 const total = PINNED.boomerang;
-const ms = (share: number): number => Math.round(total * share);
-const windup = ms(SHARE.windup);
-const out = ms(SHARE.out);
-const kiss = ms(SHARE.kiss);
-const back = ms(SHARE.back);
-const catchMs = ms(SHARE.catch);
-const fade = total - windup - out - kiss - back - catchMs;
 
 export const BOOMERANG = Object.freeze({
-  windup,
-  out,
-  kiss,
-  back,
-  catch: catchMs,
-  fade,
   total,
-  /** Fractions of `total` (the tests and the discard step read these, never repeat them). */
-  liftAt: windup / total,
-  settleAt: (windup + out) / total,
-  holdAt: (windup + out + kiss) / total,
-  landAt: (windup + out + kiss + back) / total,
-  seatAt: (windup + out + kiss + back + catchMs) / total,
-  /** How big the card is while it appears placed on the board (a near-tile size). */
-  boardScale: 0.72,
-  /** The kiss: how far the card gives as it touches the board. */
-  press: 0.94,
-  /** Wind-up: a small lift and tip as the hand lets go. */
-  liftPx: 14,
-  liftTip: 4,
-  liftScale: 1.05,
-  /** Degrees on the way out. The way home is one whole turn. */
-  spinOut: -16,
-  spinBack: 360,
-  /** The return path bows out by this share of its length (a curve, not a straight line home). */
-  bow: 0.2,
+  /** The flight ends on the pile here; then the catch settles and the hand-off fades. */
+  landAt: 0.86,
+  seatAt: 0.94,
+  /** How far toward the board the curve's controls reach (1 = the board point itself). */
+  reach: 1.15,
+  /** Sideways bow as a share of the flight's length, plus a little more for a card far from the middle. */
+  bow: 0.12,
+  bowExtra: 0.04,
+  /** Light spin: the peak turn in degrees, plus a little for a card far from the middle. */
+  spin: 72,
+  spinExtra: 16,
+  /** Flick speed profile: 0 = even, toward 1 = fast ends and a slow turn. */
+  flick: 0.1,
   /** The catch lands this much bigger than the pile, then seats. */
-  catchScale: 1.08,
+  catchScale: 1.07,
+  /** Flight samples (the curve is drawn by many short straight steps on an even clock). */
+  samples: 14,
 });
 
 export type FlightRect = { left: number; top: number; width: number; height: number };
@@ -76,89 +50,94 @@ export type BoomerangPlan = {
 };
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
-
+const clamp = (v: number, a: number, b: number): number => Math.min(b, Math.max(a, v));
 const at = (x: number, y: number): string => `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
-
 const pose = (x: number, y: number, deg: number, scale: number): string =>
-  `${at(x, y)} rotate(${deg}deg) scale(${scale.toFixed(3)})`;
+  `${at(x, y)} rotate(${Number(deg.toFixed(1))}deg) scale(${scale.toFixed(3)})`;
+
+type P = { x: number; y: number };
+const cubic = (p0: P, p1: P, p2: P, p3: P, t: number): P => {
+  const u = 1 - t;
+  return {
+    x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
+    y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y,
+  };
+};
 
 /**
- * Plan the flight in viewport coordinates. `board` is the point on the board it settles over
- * (the player's home), `to` is the Throw pile's real rect. Returns `duration: 0` and no frames
- * when motion is not allowed, or when there is no box to fly from.
+ * Plan the flight in viewport coordinates. `board` is the point on the board the flick reaches toward,
+ * `to` the Throw pile's real rect, `view` the screen (the bow stays on it), `handMid` the x of the hand's
+ * middle (the card's side of it sets the bow and the spin). No motion, or no box: no flight.
  */
 export const planBoomerang = (
   from: FlightRect,
   board: { x: number; y: number },
   to: FlightRect,
   allowed: boolean,
-  /** The screen, so the way home bows toward its middle and never off an edge. */
   view: { width: number; height: number } = { width: 0, height: 0 },
+  opts: { handMid?: number } = {},
 ): BoomerangPlan => {
-  if (!allowed || from.width < 1 || from.height < 1 || to.height < 1) {
-    return { duration: 0, frames: [], landMs: 0 };
-  }
+  if (!allowed || from.width < 1 || from.height < 1 || to.height < 1) return { duration: 0, frames: [], landMs: 0 };
   const B = BOOMERANG;
   const cx = from.left + from.width / 2;
   const cy = from.top + from.height / 2;
-  const outX = board.x - cx;
-  const outY = board.y - cy;
-  const toX = to.left + to.width / 2 - cx;
-  const toY = to.top + to.height / 2 - cy;
+  const out = { x: board.x - cx, y: board.y - cy };
+  const end = { x: to.left + to.width / 2 - cx, y: to.top + to.height / 2 - cy };
   const pileScale = to.height / Math.max(from.height, 1);
-  // The way home bows out to one side: the perpendicular of the board->pile line, at its middle.
-  const dx = toX - outX;
-  const dy = toY - outY;
-  const len = Math.hypot(dx, dy) || 1;
-  let bowX = (-dy / len) * len * B.bow;
-  let bowY = (dx / len) * len * B.bow;
-  if (view.width > 0 && view.height > 0) {
-    // Bow toward the screen's middle: flip when the chosen side points away from it.
-    const midX = cx + (outX + toX) / 2;
-    const midY = cy + (outY + toY) / 2;
-    if (bowX * (view.width / 2 - midX) + bowY * (view.height / 2 - midY) < 0) {
-      bowX = -bowX;
-      bowY = -bowY;
+  // The card's place in the hand: -1 far left .. +1 far right (the screen's middle when unknown).
+  const mid = opts.handMid ?? (view.width > 0 ? view.width / 2 : cx);
+  const place = clamp((cx - mid) / 140, -1, 1);
+  const side0 = place < 0 ? -1 : 1;
+  const len = Math.hypot(end.x - out.x, end.y - out.y) + Math.hypot(out.x, out.y);
+  const px = -(end.y - 0) / (Math.hypot(end.x, end.y) || 1);
+  const py = (end.x - 0) / (Math.hypot(end.x, end.y) || 1);
+  const apex = { x: out.x * B.reach, y: out.y * B.reach };
+
+  const build = (side: number, shrink: number) => {
+    const bow = (B.bow + B.bowExtra * Math.abs(place)) * len * side * shrink;
+    const p1 = { x: apex.x + px * bow, y: apex.y + py * bow };
+    // out on one side, home on the other: a narrow loop, so the card swings through the turn and never stalls
+    const p2 = { x: lerp(apex.x, end.x, 0.5) - px * bow * 1.4, y: lerp(apex.y, end.y, 0.5) - py * bow * 1.4 };
+    return (t: number) => cubic({ x: 0, y: 0 }, p1, p2, end, t);
+  };
+  const onScreen = (curve: (t: number) => P): boolean => {
+    if (!(view.width > 0 && view.height > 0)) return true;
+    for (let i = 0; i <= 24; i++) {
+      const q = curve(i / 24);
+      if (cx + q.x < 0 || cx + q.x > view.width || cy + q.y < 0 || cy + q.y > view.height) return false;
     }
+    return true;
+  };
+  // Prefer the card's own side; flip if that leaves the screen; shrink the bow as a last resort.
+  let side = side0;
+  let curve = build(side, 1);
+  if (!onScreen(curve)) { side = -side0; curve = build(side, 1); }
+  for (let shrink = 0.75; !onScreen(curve) && shrink > 0.1; shrink -= 0.2) curve = build(side, shrink);
+
+  const spinPeak = (B.spin + B.spinExtra * Math.abs(place)) * side;
+  const frames: Keyframe[] = [];
+  for (let i = 0; i <= B.samples; i++) {
+    const s = i / B.samples;
+    // a flick: param speed 1 + flick*cos(2*pi*s) - fast at both ends, slowest at the turn
+    const t = s + (B.flick * Math.sin(2 * Math.PI * s)) / (2 * Math.PI);
+    const q = curve(t);
+    // a light turn out, straightening for the catch
+    const rot = spinPeak * Math.sin(Math.PI * Math.min(1, s * 1.08)) * (1 - s * 0.15);
+    const scale = s < 0.5 ? lerp(1, 0.86, s / 0.5) : lerp(0.86, pileScale * B.catchScale, (s - 0.5) / 0.5);
+    frames.push({
+      transform: i === B.samples ? pose(end.x, end.y, 0, pileScale * B.catchScale) : pose(q.x, q.y, rot, scale),
+      opacity: 1,
+      offset: Number((s * B.landAt).toFixed(4)),
+      ...(i === 0 ? { easing: 'linear' } : {}),
+    });
   }
-  const midOut = lerp(B.liftAt, B.settleAt, 0.6);
-  const midBack = lerp(B.holdAt, B.landAt, 0.5);
-  const kissAt = lerp(B.settleAt, B.holdAt, 0.35);
-  const frames: Keyframe[] = [
-    { transform: pose(0, 0, 0, 1), opacity: 1, offset: 0, easing: INTERFACE_MOTION.easeOpen },
-    // 1. wind-up: the hand lets go
-    // ...then it gathers speed OFF the hand (easeClose accelerates), so the departure is seen
-    { transform: pose(0, -B.liftPx, B.liftTip, B.liftScale), opacity: 1, offset: B.liftAt, easing: INTERFACE_MOTION.easeClose },
-    // 2. out: most of the way, turning
-    {
-      transform: pose(outX * 0.62, outY * 0.62 - 18, B.spinOut, lerp(B.liftScale, B.boardScale, 0.62)),
-      opacity: 1,
-      offset: midOut,
-      easing: INTERFACE_MOTION.easeOpen,
-    },
-    // ...arriving square on the board
-    { transform: pose(outX, outY, 0, B.boardScale), opacity: 1, offset: B.settleAt, easing: INTERFACE_MOTION.easeOpen },
-    // 3. kiss: a small give, then seated, as if placed
-    { transform: pose(outX, outY, 0, B.boardScale * B.press), opacity: 1, offset: kissAt, easing: INTERFACE_MOTION.easeOpen },
-    { transform: pose(outX, outY, 0, B.boardScale), opacity: 1, offset: B.holdAt, easing: INTERFACE_MOTION.easeOpen },
-    // 4. back: a curved path home, one whole turn
-    {
-      transform: pose(lerp(outX, toX, 0.5) + bowX, lerp(outY, toY, 0.5) + bowY, B.spinBack / 2, lerp(B.boardScale, pileScale, 0.5)),
-      opacity: 1,
-      offset: midBack,
-      easing: INTERFACE_MOTION.easeOpen,
-    },
-    // 5. the catch: on the pile, a touch big...
-    { transform: pose(toX, toY, B.spinBack, pileScale * B.catchScale), opacity: 1, offset: B.landAt, easing: INTERFACE_MOTION.easeOpen },
-    // ...then seated at the pile's own size
-    { transform: pose(toX, toY, B.spinBack, pileScale), opacity: 1, offset: B.seatAt },
-    // 6. hand-off over the pile top
-    { transform: pose(toX, toY, B.spinBack, pileScale), opacity: 0, offset: 1 },
-  ];
+  frames[frames.length - 1]!.offset = B.landAt;
+  frames.push({ transform: pose(end.x, end.y, 0, pileScale), opacity: 1, offset: B.seatAt, easing: INTERFACE_MOTION.easeOpen });
+  frames.push({ transform: pose(end.x, end.y, 0, pileScale), opacity: 0, offset: 1 });
   return { duration: B.total, frames, landMs: Math.round(B.total * B.landAt) };
 };
 
-/** The pile's own small thud at the catch (transform only; main.ts plays it on the pile). */
+/** The pile's own small thud at the catch (transform only; ui/feel.ts plays it on the pile). */
 export const PILE_THUD: Keyframe[] = [
   { transform: 'scale(1)' },
   { transform: 'scale(0.955)', offset: 0.35 },

@@ -33,7 +33,7 @@ export const PINNED = Object.freeze({
    * it 10/10"): wind-up, out, a kiss on the board, a curved one-turn return, a catch on the pile.
    * A throw ends the turn and own animation never blocks input (0.8), so it may outlast `throw`.
    */
-  boomerang: 620,
+  boomerang: 500,
   /** The shortest hold for a live enemy turn, so a quiet turn cannot blink past. */
   liveReveal: 600,
   /** The LED display's minimum dwell before another message may replace it (normal play). */
