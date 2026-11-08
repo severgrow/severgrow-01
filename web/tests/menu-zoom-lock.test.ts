@@ -14,8 +14,7 @@ const main = read('../src/main.ts');
 
 describe('the main menu cannot be zoomed', () => {
   it('stops a touch pinch from starting while the menu shows (pan only, no pinch-zoom)', () => {
-    expect(MENU_ZOOM_LOCK_CSS).toContain('html.menu-zoom-lock');
-    expect(MENU_ZOOM_LOCK_CSS).toMatch(/touch-action:\s*pan-x pan-y/);
+    expect(MENU_ZOOM_LOCK_CSS).toMatch(/#menu \{ touch-action:\s*pan-x pan-y; \}/);
   });
   it('refuses Safari gesture zoom and the trackpad pinch (ctrl + wheel)', () => {
     for (const name of ['gesturestart', 'gesturechange', 'gestureend']) expect(src).toContain(`'${name}'`);
@@ -31,12 +30,15 @@ describe('the main menu cannot be zoomed', () => {
     }
     expect(k('a', true)).toBe(false);
   });
-  it('is on only while the menu shows, and pins the viewport scale only then', () => {
+  it('is on only while the menu shows, and writes nothing to the page when the menu comes back', () => {
     expect(src).toContain("getElementById('menu')");
     // Territory opens OVER the menu (the menu stays unhidden): its planet keeps its own pinch.
     expect(src).toContain("getElementById('online-world-screen')");
     expect(src).toContain('!menu.hidden && (!world || !!world.hidden)');
-    expect(src).toContain('maximum-scale=1');
+    // CI (living-territory-ios, 2026-11-08): rewriting the viewport meta / toggling a class on <html>
+    // as the menu returned made WebKit relayout mid Territory retreat. The lock is a flag only.
+    expect(src).not.toContain('viewport');
+    expect(src).not.toMatch(/classList\.toggle/);
     expect(src).toMatch(/attributeFilter:\s*\['hidden'\]/);
     // one attribute on one element: no page-subtree watcher
     expect(src).not.toMatch(/subtree:\s*true/);

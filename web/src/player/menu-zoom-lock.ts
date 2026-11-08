@@ -6,15 +6,16 @@
 //
 // Cost: one attribute observer on #menu and #online-world-screen (their `hidden`), and listeners that only act while locked.
 
+// Static: a pinch that starts on the menu never begins (pan stays). Nothing is toggled at runtime, so
+// coming back to the menu restyles nothing and leaves the zoom meta alone (rewriting that meta made
+// WebKit relayout in the middle of the Territory retreat).
 export const MENU_ZOOM_LOCK_CSS = `
-html.menu-zoom-lock, html.menu-zoom-lock body { touch-action: pan-x pan-y; }
+#menu { touch-action: pan-x pan-y; }
 `;
 
 /** Ctrl or Cmd with + - = _ 0: the browser's page-zoom keys. */
 export const isZoomKey = (e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey'>): boolean =>
   (e.ctrlKey || e.metaKey) && ['+', '-', '=', '_', '0'].includes(e.key);
-
-const LOCKED_VIEWPORT = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
 
 export const mountMenuZoomLock = (): void => {
   if (typeof document === 'undefined') return;
@@ -28,17 +29,10 @@ export const mountMenuZoomLock = (): void => {
   style.textContent = MENU_ZOOM_LOCK_CSS;
   document.head.append(style);
 
-  const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
-  const openViewport = viewport?.content ?? '';
   let locked = false;
-
+  // Only a flag: the listeners below read it. No class, no style, no meta write.
   const sync = (): void => {
-    const next = !menu.hidden && (!world || !!world.hidden);
-    if (next === locked) return;
-    locked = next;
-    document.documentElement.classList.toggle('menu-zoom-lock', locked);
-    // Android honours the viewport's maximum-scale; iOS ignores it, and the gesture guard covers it.
-    if (viewport) viewport.content = locked ? LOCKED_VIEWPORT : openViewport;
+    locked = !menu.hidden && (!world || !!world.hidden);
   };
 
   const refuse = (e: Event): void => {
