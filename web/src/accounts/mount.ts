@@ -545,7 +545,7 @@ export const mountAccounts = async (): Promise<void> => {
     const guest = button('acct-btn', ACCOUNT.playAsGuest, 'welcome-guest');
     const actions = el('div', 'acct-actions');
     actions.append(emailButton('online'), g, guest);
-    welcome.panel.append(el('h2', '', ACCOUNT.welcomeTitle), el('p', '', ACCOUNT.welcomeBody), actions, status, el('p', 'acct-small', ACCOUNT.welcomeSmall), privacyLink());
+    welcome.panel.append(el('h2', '', ACCOUNT.welcomeTitle), el('p', '', ACCOUNT.welcomeBody), actions, status, privacyLink());
     g.addEventListener('click', () => void start('online', g, status));
     guest.addEventListener('click', () => {
       try {

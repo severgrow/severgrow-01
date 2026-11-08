@@ -1388,7 +1388,6 @@ export const ACCOUNT = Object.freeze({
   playAsGuest: 'Play as guest',
   welcomeTitle: 'Keep your games',
   welcomeBody: 'Sign in to keep your online matches safe and pick them up on any phone or computer.',
-  welcomeSmall: 'Games against the computer never need an account. You can sign in later from Settings.',
   privacy: 'Privacy',
   hubGuest: 'Playing as a guest: your matches live only on this device.',
   settingsTitle: 'Account',
