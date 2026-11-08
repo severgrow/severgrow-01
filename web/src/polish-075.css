@@ -165,7 +165,7 @@ html.v075 #board .planet-turn-line {
   stroke-linecap: round;
   stroke-linejoin: round;
   filter:
-    drop-shadow(0 0 .45px color-mix(in srgb, var(--turn-rim-ink) 88%, #fff))
+    drop-shadow(0 0 .45px color-mix(in srgb, var(--turn-rim-ink) 88%, #f2ede4))
     drop-shadow(0 0 1.6px color-mix(in srgb, var(--turn-rim-ink) 55%, transparent));
 }
 html.v075 body[data-turn='you'] #board .planet-turn-glow { opacity: .18; }

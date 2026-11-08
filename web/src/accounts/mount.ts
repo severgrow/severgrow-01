@@ -79,14 +79,14 @@ ${glassBaseCss('.acct-glass')}
 .acct-glass ul { margin:0; padding-left:18px; display:grid; gap:6px; }
 .acct-small { font-size:12px; color:#b7a98a !important; }
 .acct-email-form { display:flex; flex-direction:column; gap:12px; }
-.acct-email-form input { min-height:48px; width:100%; border:1px solid rgba(214,204,177,.28); border-radius:8px; padding:10px 12px; background:rgba(255,255,255,.04); color:#f0e9dc; font:inherit; font-size:max(16px,1rem); }
+.acct-email-form input { min-height:48px; width:100%; border:1px solid rgba(214,204,177,.28); border-radius:8px; padding:10px 12px; background:rgba(242, 237, 228,.04); color:#f0e9dc; font:inherit; font-size:max(16px,1rem); }
 .acct-email-form input:focus-visible { outline:2px solid #f0e9dc; outline-offset:2px; }
 .acct-email-form .acct-actions { justify-content:space-between; gap:8px; }
 .acct-email-form label { color:var(--instrument-muted); }
 .acct-actions { display:flex; flex-direction:column; gap:8px; }
 .acct-actions.row { flex-direction:row; justify-content:flex-end; flex-wrap:wrap; }
 .acct-btn { min-height:44px; padding:0 16px; border-radius:999px; cursor:pointer; border:1px solid rgba(214,204,177,.28);
-  background:rgba(255,255,255,.04); color:#f0e9dc; font:700 .875rem/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; }
+  background:rgba(242, 237, 228,.04); color:#f0e9dc; font:700 .875rem/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; }
 .acct-btn.danger { border-color:rgba(224,115,92,.6); color:#f2b3a3; }
 .acct-btn.danger.solid { background:#c4553f; border-color:#c4553f; color:#fff6ef; }
 .acct-btn:disabled { opacity:.55; cursor:default; }
@@ -112,7 +112,7 @@ ${glassBaseCss('.acct-glass')}
 .acct-toast[data-tone='bad'] { border-color:rgba(224,115,92,.6); }
 /* The nickname field: dark glass, NO border contour — the fill alone marks it, cream text on focus. */
 .acct-input { min-height:44px; width:100%; box-sizing:border-box; padding:0 14px; border:0; border-radius:12px;
-  background:rgba(255,255,255,.07); color:#f6ecd8; font:600 max(16px, 1rem)/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
+  background:rgba(242, 237, 228,.07); color:#f6ecd8; font:600 max(16px, 1rem)/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
 .acct-input::placeholder { color:#8f866f; font-weight:400; }
 .acct-input:focus-visible { outline:2px solid #f0e9dc; outline-offset:1px; }
 `;

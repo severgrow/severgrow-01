@@ -443,8 +443,8 @@ export class BoardView {
     el('stop', { offset: 0.58, 'stop-color': '#000', 'stop-opacity': 0 }, shade);
     el('stop', { offset: 1, 'stop-color': '#000', 'stop-opacity': 0.34 }, shade);
     const slab = el('linearGradient', { id: this.id('planet-slab'), x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
-    el('stop', { offset: 0, 'stop-color': '#fff', 'stop-opacity': 0.07 }, slab);
-    el('stop', { offset: 0.42, 'stop-color': '#fff', 'stop-opacity': 0 }, slab);
+    el('stop', { offset: 0, 'stop-color': '#f2ede4', 'stop-opacity': 0.07 }, slab);
+    el('stop', { offset: 0.42, 'stop-color': '#f2ede4', 'stop-opacity': 0 }, slab);
     el('stop', { offset: 1, 'stop-color': '#000', 'stop-opacity': 0.16 }, slab);
     const skin = el('g', { class: 'l-planet-skin', 'aria-hidden': 'true', 'pointer-events': 'none' });
     this.svg.insertBefore(skin, this.layers.contour);

@@ -79,7 +79,7 @@ export const KEEP_PROGRESS_CSS = `
 #keep-progress .keep-progress-actions button {
   min-height: 44px; min-width: 44px; padding: 0 14px; border-radius: 12px;
   border: 0;
-  background: rgba(255,255,255,.06); color: #f2e7cb;
+  background: rgba(242, 237, 228,.06); color: #f2e7cb;
   font: inherit; letter-spacing: .04em; cursor: pointer;
 }
 #keep-progress .keep-progress-actions button.primary {

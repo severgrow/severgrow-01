@@ -451,7 +451,7 @@ export const REPLAY_CSS = `
   padding: 0 13px;
   border: 1px solid var(--rp-line);
   border-radius: 10px;
-  background: rgba(255, 255, 255, .05);
+  background: rgba(242, 237, 228, .05);
   color: var(--rp-ink);
   font: var(--w-ui-regular, 400) 11.5px/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
   letter-spacing: .12em;
@@ -522,7 +522,7 @@ export const REPLAY_CSS = `
   background: rgba(14, 16, 14, .8);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
-  box-shadow: inset 0 0 0 1px rgba(233, 216, 173, .14), inset 0 1px 0 rgba(255, 255, 255, .05), 0 10px 28px rgba(0, 0, 0, .5);
+  box-shadow: inset 0 0 0 1px rgba(233, 216, 173, .14), inset 0 1px 0 rgba(242, 237, 228, .05), 0 10px 28px rgba(0, 0, 0, .5);
   pointer-events: none;
   opacity: 0;
   translate: -50% -6px;

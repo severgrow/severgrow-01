@@ -613,7 +613,7 @@ html[data-guide='off'] .step-cue {
   padding: 7px 14px 7px 7px;
   border-radius: 999px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(180deg, rgba(242, 237, 228, 0.07), rgba(242, 237, 228, 0) 55%),
     rgba(17, 19, 17, 0.62);
   -webkit-backdrop-filter: blur(10px) saturate(1.25);
   backdrop-filter: blur(10px) saturate(1.25);
@@ -621,7 +621,7 @@ html[data-guide='off'] .step-cue {
     0 0 0 1px rgba(var(--cue-c), 0.22),
     0 10px 28px -8px rgba(0, 0, 0, 0.6),
     0 2px 6px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    inset 0 1px 0 rgba(242, 237, 228, 0.08);
   white-space: nowrap;
   overflow: hidden;
 }
@@ -630,7 +630,7 @@ html[data-guide='off'] .step-cue {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 30%, rgba(var(--cue-c), 0.22) 48%, rgba(255, 255, 255, 0.18) 50%, transparent 66%);
+  background: linear-gradient(105deg, transparent 30%, rgba(var(--cue-c), 0.22) 48%, rgba(242, 237, 228, 0.18) 50%, transparent 66%);
   transform: translateX(-110%);
   pointer-events: none;
 }
@@ -765,7 +765,7 @@ html[data-onboard='1'] .available {
   border-radius: 999px;
   border: 1px solid rgba(var(--gd-cream), 0.2);
   background: rgba(18, 16, 14, 0.84);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(242, 237, 228, 0.06);
   color: #f6f1e4;
   font-family: var(--font-display, inherit);
   font-size: 12px;
@@ -812,7 +812,7 @@ html[data-onboard='1'] .available {
   gap: 5px;
   margin-left: 4px;
   padding-left: 11px;
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid rgba(242, 237, 228, 0.1);
   align-self: stretch;
   align-items: center;
 }
@@ -820,7 +820,7 @@ html[data-onboard='1'] .available {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1.2px rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 0 0 1.2px rgba(242, 237, 228, 0.32);
 }
 .step-cue[data-step='opp'] .cue-pips {
   display: none;
@@ -828,7 +828,7 @@ html[data-onboard='1'] .available {
 .step-cue[data-step='grow'] .cue-pips i[data-p='draw'],
 .step-cue[data-step='throw'] .cue-pips i[data-p='draw'],
 .step-cue[data-step='throw'] .cue-pips i[data-p='grow'] {
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(242, 237, 228, 0.4);
   box-shadow: none;
 }
 .step-cue[data-step='draw'] .cue-pips i[data-p='draw'],

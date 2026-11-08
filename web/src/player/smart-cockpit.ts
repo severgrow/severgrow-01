@@ -192,7 +192,7 @@ html.futa04-information #smart-led.led-alarm #smart-led-bloom { animation:smart-
 /* A flash is one 60 ms breath of at most 35% white on the display's own glass. Never a strobe,
    never a filter on the glyph canvas. */
 html.futa04-information #smart-led-flash {
-  position:absolute; inset:0; pointer-events:none; background:#fff; opacity:0;
+  position:absolute; inset:0; pointer-events:none; background:#f2ede4; opacity:0;
   border-radius:inherit; z-index:3;
 }
 html.futa04-information #smart-led-window.led-flash-cut #smart-led-flash { animation:smart-led-flash-cut 60ms linear 1; }

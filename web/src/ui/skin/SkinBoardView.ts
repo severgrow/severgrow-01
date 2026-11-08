@@ -721,15 +721,15 @@ export class SkinBoardView extends BoardView {
       // a shared slice reaches past the side (into the neighbour, which fades the other way)
       const a = (sh ? far : corners)[i]!;
       const b = (sh ? far : corners)[(i + 1) % 6]!;
-      let fill = '#fff';
+      let fill = '#f2ede4';
       if (sh) {
         const gid = `${id}-${i}`;
         const gr = el('linearGradient', { id: gid, gradientUnits: 'userSpaceOnUse', x1: c.x, y1: c.y, x2: ((a[0] + b[0]) / 2).toFixed(2), y2: ((a[1] + b[1]) / 2).toFixed(2) }, m);
-        el('stop', { offset: 0.6, 'stop-color': '#fff' }, gr);
+        el('stop', { offset: 0.6, 'stop-color': '#f2ede4' }, gr);
         el('stop', { offset: 1, 'stop-color': '#000' }, gr);
         fill = `url(#${gid})`;
       }
-      el('path', { d: `M${c.x.toFixed(2)},${c.y.toFixed(2)}L${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}Z`, fill, stroke: fill === '#fff' ? '#fff' : 'none', 'stroke-width': 0.3 }, m);
+      el('path', { d: `M${c.x.toFixed(2)},${c.y.toFixed(2)}L${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}Z`, fill, stroke: fill === '#f2ede4' ? '#f2ede4' : 'none', 'stroke-width': 0.3 }, m);
     }
     return id;
   }

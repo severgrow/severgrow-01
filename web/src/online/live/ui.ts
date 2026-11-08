@@ -47,7 +47,7 @@ ${WAIT_DOTS_CSS}
 .live-glass .lg-warn small { display:block; color:#b7a98a; font-size:11px; letter-spacing:.03em; }
 .live-glass .lg-actions { grid-column:1 / -1; display:flex; gap:8px; margin-top:10px; }
 .live-glass .lg-actions button { flex:1; min-height:44px; min-width:44px; border-radius:10px; font:700 14px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
-  letter-spacing:.08em; cursor:pointer; border:1px solid rgba(214,204,177,.22); background:rgba(255,255,255,.04); color:${CREAM}; }
+  letter-spacing:.08em; cursor:pointer; border:1px solid rgba(214,204,177,.22); background:rgba(242, 237, 228,.04); color:${CREAM}; }
 .live-glass .lg-actions button.primary { background:${MOSS}; border-color:${MOSS}; color:${MOSS_INK}; }
 .live-glass .lg-actions button:focus-visible { outline:2px solid ${CREAM}; outline-offset:2px; }
 /* The real-time BOLT (owner, 2026-10-15): one icon, no words. It now lives in the HUD header,
@@ -78,7 +78,7 @@ html.slim-hud .game > .hud > .live-pill { grid-column:2; grid-row:1; justify-sel
 .live-chip { order:-1; flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; min-height:24px; padding:0 8px; border-radius:6px;
   background:rgba(224,115,92,.14); border:1px solid rgba(224,115,92,.55); color:#f6d3c8;
   font:800 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.14em; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.live-chip[data-urgent='1'] { background:rgba(224,115,92,.28); color:#fff; }
+.live-chip[data-urgent='1'] { background:rgba(224,115,92,.28); color:#f2ede4; }
 /* "Opponent reconnecting" in the strip: the words plus the SHARED animated dots. The order puts it
    just before the live clock; it is its own node, so the header's model never overwrites it. */
 .live-reconnect { order:2; flex:0 0 auto; display:inline-flex; align-items:center; color:#e2d4b4;

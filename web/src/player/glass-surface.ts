@@ -180,7 +180,7 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass[data-mode='tutorial'] .glass-head-slot > button {
   width:100%; height:100%; min-height:0; min-width:0; padding:0 6px; box-sizing:border-box;
   border:1px solid rgba(214,204,177,.22); border-radius:8px;
-  background:rgba(255,255,255,.05); color:#f0e9dc;
+  background:rgba(242, 237, 228,.05); color:#f0e9dc;
   font:400 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
   letter-spacing:.04em; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   pointer-events:auto;
@@ -323,20 +323,20 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 /* Tips and Rules: soft filled rows, never a frame. */
 #futasaku-glass .intel-tips, #futasaku-glass .intel-rules { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
 #futasaku-glass :is(.intel-tip, .intel-rule) { display:block; width:100%; box-sizing:border-box; margin:0; border:0; border-radius:11px; text-align:left;
-  background:rgba(255,255,255,.045); color:#f0e9dc; cursor:pointer; transition:background-color 160ms ease; -webkit-tap-highlight-color:transparent; }
-#futasaku-glass :is(.intel-tip, .intel-rule):is(:hover,:focus-visible) { background:rgba(255,255,255,.08); outline:none; }
+  background:rgba(242, 237, 228,.045); color:#f0e9dc; cursor:pointer; transition:background-color 160ms ease; -webkit-tap-highlight-color:transparent; }
+#futasaku-glass :is(.intel-tip, .intel-rule):is(:hover,:focus-visible) { background:rgba(242, 237, 228,.08); outline:none; }
 #futasaku-glass :is(.intel-tip, .intel-rule):focus-visible { box-shadow:0 0 0 2px rgba(232,221,201,.7); }
 /* A tip is an INSTRUMENT readout: a verdict row, a headline, the decision it implies, and the
    facts behind it. Kind and severity are carried by the word, the glyph and the fill, never by a
    line and never by colour alone — the same rule the rest of the game follows. */
 #futasaku-glass .intel-tip { --tip-ink:#cbbfa0; display:grid; gap:5px; padding:10px 12px 11px;
-  background:rgba(255,255,255,.045); }
+  background:rgba(242, 237, 228,.045); }
 #futasaku-glass .intel-tip[data-kind='danger'] { --tip-ink:color-mix(in srgb, var(--c-danger,#c96e5c) 66%, #e8ddc9); }
 #futasaku-glass .intel-tip[data-kind='opportunity'] { --tip-ink:color-mix(in srgb, var(--c-you,#7fcf8d) 76%, #e8ddc9); }
 #futasaku-glass .intel-tip[data-kind='tempo'] { --tip-ink:#cbbfa0; }
 #futasaku-glass .intel-tip[data-kind='endgame'] { --tip-ink:color-mix(in srgb, var(--c-gold,#f2c14e) 74%, #e8ddc9); }
 /* Severity is the word, the glyph and the fill, never a line (owner, 2026-11-02). */
-#futasaku-glass .intel-tip[data-severity='critical'] { background:rgba(255,255,255,.062); }
+#futasaku-glass .intel-tip[data-severity='critical'] { background:rgba(242, 237, 228,.062); }
 #futasaku-glass .intel-tip--primary { padding:11px 13px 12px; }
 #futasaku-glass .intel-tip-top { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
 #futasaku-glass .intel-kind { display:inline-flex; align-items:center; gap:6px; min-width:0;
@@ -356,7 +356,7 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
   font:600 8.5px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.1em; color:#b3a587; }
 #futasaku-glass .intel-fact b { font:700 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#f0e6d0; font-variant-numeric:tabular-nums; }
 /* The quiet Tips tab: composed, never blank and never a bare apology. */
-#futasaku-glass .intel-quiet { display:grid; gap:7px; padding:13px 13px 14px; border-radius:11px; background:rgba(255,255,255,.035); }
+#futasaku-glass .intel-quiet { display:grid; gap:7px; padding:13px 13px 14px; border-radius:11px; background:rgba(242, 237, 228,.035); }
 #futasaku-glass .intel-quiet-line { margin:0; font:400 12.5px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.012em; color:rgba(240,233,220,.72); text-wrap:pretty; }
 #futasaku-glass .intel-rule { padding:0; }
 #futasaku-glass .intel-rule-head { display:grid; grid-template-columns:24px 1fr auto; align-items:center; gap:10px; min-height:46px; padding:0 12px; }
@@ -367,7 +367,7 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass .intel-rule-num { font:600 9.5px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.14em; color:#a99c81; font-variant-numeric:tabular-nums; }
 #futasaku-glass .intel-rule-fold { display:grid; grid-template-rows:0fr; transition:grid-template-rows 260ms cubic-bezier(.22,.72,.24,1); }
 #futasaku-glass .intel-rule[aria-expanded='true'] .intel-rule-fold { grid-template-rows:1fr; }
-#futasaku-glass .intel-rule[aria-expanded='true'] { background:rgba(255,255,255,.075); }
+#futasaku-glass .intel-rule[aria-expanded='true'] { background:rgba(242, 237, 228,.075); }
 #futasaku-glass .intel-rule-line { overflow:hidden; min-height:0; font:400 13px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.012em; color:rgba(240,233,220,.84); text-wrap:pretty; }
 #futasaku-glass .intel-rule-line > span { display:block; padding:0 12px 12px 46px; }
 @media (prefers-reduced-motion: reduce) { #futasaku-glass .intel-rule-fold { transition:none; } }
@@ -570,7 +570,7 @@ html.futa04-lesson .sheet { z-index: 51; }
   50% { opacity:.72; }
 }
 #tutorial-focus .focus-pointer { filter:drop-shadow(0 1px 3px rgba(0,0,0,.4)) drop-shadow(0 0 8px var(--light-bloom,rgba(233,216,173,.32))); transform-origin:10px 4px; }
-#tutorial-focus .focus-pointer-body { fill:color-mix(in srgb,var(--light-core,#fff) 35%,#fff 65%); stroke:none; }
+#tutorial-focus .focus-pointer-body { fill:color-mix(in srgb,var(--light-core,#f2ede4) 35%,#f2ede4 65%); stroke:none; }
 #tutorial-focus[data-bob='1'] .focus-pointer { animation:tutorial-pointer-tap 1.1s ease-in-out infinite; }
 #tutorial-focus[data-bob='hard'] .focus-pointer { animation:tutorial-pointer-tap-hard .85s ease-in-out infinite; }
 @keyframes tutorial-pointer-tap { 0%,100% { transform:translate(0,0); } 45% { transform:translate(var(--bob-x,0px),var(--bob-y,7px)); } }

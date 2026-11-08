@@ -941,13 +941,13 @@ html.kbd .board:focus-visible {
   stop-color: var(--c-you);
 }
 .st-bulb-hi.you {
-  stop-color: color-mix(in srgb, var(--c-you) 70%, #fff);
+  stop-color: color-mix(in srgb, var(--c-you) 70%, #f2ede4);
 }
 .st-bulb.bot {
   stop-color: var(--c-bot);
 }
 .st-bulb-hi.bot {
-  stop-color: color-mix(in srgb, var(--c-bot) 72%, #fff);
+  stop-color: color-mix(in srgb, var(--c-bot) 72%, #f2ede4);
 }
 .lit {
   stroke-width: 1.3;
@@ -1223,7 +1223,7 @@ svg.usable .hex-cell {
   stroke: var(--m-mossTop);
 }
 .veins.bot .vein {
-  stroke: color-mix(in srgb, var(--c-bot) 45%, #fff);
+  stroke: color-mix(in srgb, var(--c-bot) 45%, #f2ede4);
 }
 /* A new vein draws itself on, from the old tile to the new one, finishing with its tile. */
 .vein.grow-in {
@@ -4222,7 +4222,7 @@ svg.board .fx-mote {
 .grass-flower.puff {
   fill: #f6f4ec;
   opacity: 0.75;
-  stroke: #ffffff;
+  stroke: #f2ede4;
   stroke-width: 0.6;
   stroke-dasharray: 0.4 0.6;
 }
@@ -4332,7 +4332,7 @@ svg.board .fx-mote {
 }
 /* bot veins: glowing fissures in coral-red */
 .veins.bot .vein {
-  stroke: color-mix(in srgb, var(--m-fire) 80%, #fff);
+  stroke: color-mix(in srgb, var(--m-fire) 80%, #f2ede4);
 }
 /* The moss detail turns around its tile's centre (given in the transform itself),
    not around its own box like the rest of a tile's parts. */
@@ -4711,7 +4711,7 @@ svg.board .fx-mote {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, transparent 35%, color-mix(in srgb, currentColor 35%, white) 50%, transparent 65%);
+  background: linear-gradient(100deg, transparent 35%, color-mix(in srgb, currentColor 35%, #f2ede4) 50%, transparent 65%);
   opacity: 0.35;
   transform: translateX(-120%);
   animation: tp-sweep 650ms ease-out forwards;
@@ -5749,7 +5749,7 @@ html[data-layout='side'] .dock-overlays {
   pointer-events: none;
   opacity: 0;
   background: none;
-  box-shadow: inset 0 2px 3px color-mix(in srgb, #000 60%, transparent), inset 0 -1px 0 color-mix(in srgb, #fff 6%, transparent);
+  box-shadow: inset 0 2px 3px color-mix(in srgb, #000 60%, transparent), inset 0 -1px 0 color-mix(in srgb, #f2ede4 6%, transparent);
   transition: opacity var(--dur-ack) var(--ease-standard);
 }
 :is(button, [role="button"], .card, .hand-slot, label, summary):has(> .press-shade) {
@@ -5882,11 +5882,11 @@ html.final-turns .game::after {
   filter: drop-shadow(0 10px 16px color-mix(in srgb, #000 55%, transparent));
 }
 .sun-hi {
-  stop-color: #fff;
+  stop-color: #f2ede4;
   stop-opacity: 0.07;
 }
 .sun-mid {
-  stop-color: #fff;
+  stop-color: #f2ede4;
   stop-opacity: 0;
 }
 .sun-lo {
@@ -5902,11 +5902,11 @@ html.final-turns .game::after {
   stroke-linejoin: round;
 }
 .edge-hi {
-  stop-color: #fff;
+  stop-color: #f2ede4;
   stop-opacity: 0.22;
 }
 .edge-lo {
-  stop-color: #fff;
+  stop-color: #f2ede4;
   stop-opacity: 0;
 }
 .soil-speck {
@@ -5939,7 +5939,7 @@ html.final-turns .game::after {
 }
 .amb-pulse {
   fill: none;
-  stroke: color-mix(in srgb, var(--c-you) 55%, #fff);
+  stroke: color-mix(in srgb, var(--c-you) 55%, #f2ede4);
   stroke-width: 2.4;
   stroke-linecap: round;
   stroke-dasharray: 12 200;
@@ -5965,7 +5965,7 @@ html.final-turns .game::after {
   }
 }
 .amb-glint {
-  fill: #fff;
+  fill: #f2ede4;
   opacity: 0;
   transform-box: fill-box;
   transform-origin: center;
@@ -6109,7 +6109,7 @@ html.final-turns .game::after {
 }
 /* Part 2: the cut's impact flash (local, soft-edged, ≤35% white, ≤60ms) */
 .fx-cutflash {
-  fill: #fff;
+  fill: #f2ede4;
   opacity: 0;
   pointer-events: none;
 }
@@ -6221,7 +6221,7 @@ html.final-turns .game::after {
 }
 .tr-shine {
   fill: none;
-  stroke: #fff;
+  stroke: #f2ede4;
   stroke-opacity: 0.35;
   stroke-width: 2.5;
   stroke-linecap: round;
@@ -6326,7 +6326,7 @@ html.final-turns .game::after {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background: radial-gradient(ellipse 70% 55% at 12% 6%, color-mix(in srgb, #fff 6%, transparent), transparent 70%);
+  background: radial-gradient(ellipse 70% 55% at 12% 6%, color-mix(in srgb, #f2ede4 6%, transparent), transparent 70%);
 }
 /* Part 4: the one-time Smoother mode note (bottom of the board, never over the dock) */
 .smoother {
@@ -6404,7 +6404,7 @@ html.final-turns .game::after {
 .hand .card.fruit.fruit-ready {
   border-color: color-mix(in srgb, var(--suit) 80%, var(--c-line));
   box-shadow:
-    inset 1px 1px 0 color-mix(in srgb, var(--m-rimLight, #fff) calc(var(--m-rim, 0.3) * 60%), transparent),
+    inset 1px 1px 0 color-mix(in srgb, var(--m-rimLight, #f2ede4) calc(var(--m-rim, 0.3) * 60%), transparent),
     1px 4px 7px -3px color-mix(in srgb, #000 75%, transparent),
     0 0 10px 1px color-mix(in srgb, var(--suit) 45%, transparent);
 }
@@ -7640,7 +7640,7 @@ html.settings-essentials #settings-report {
     border-color: color-mix(in srgb, var(--c-line) 90%, var(--c-text));
   }
   .btn.primary:hover:not(:disabled) {
-    background-image: linear-gradient(rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.035));
+    background-image: linear-gradient(rgba(242, 237, 228, 0.035), rgba(242, 237, 228, 0.035));
   }
 }
 
@@ -7655,7 +7655,7 @@ html.settings-essentials #settings-report {
 }
 .btn.primary {
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #f2ede4 34%, transparent),
     0 1px 0 color-mix(in srgb, #000 45%, transparent);
 }
 .btn.ghost {

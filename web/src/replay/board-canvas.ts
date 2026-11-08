@@ -402,8 +402,8 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
         cell.terrain === 'rich'
           ? 'rgba(233, 216, 173, .12)'
           : cell.terrain === 'rock'
-            ? 'rgba(255, 255, 255, .045)'
-            : 'rgba(255, 255, 255, .035)';
+            ? 'rgba(242, 237, 228, .045)'
+            : 'rgba(242, 237, 228, .035)';
       g.fillRect(cell.x - r, cell.y - r, r * 2, r * 2);
     }
     if (cell.terrain === 'rock' && rocks.length) {

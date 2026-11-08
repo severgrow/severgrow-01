@@ -17,7 +17,7 @@ export const drawShareCard = (d: ShareData): HTMLCanvasElement => {
   g.fillStyle = col.bg;
   g.fillRect(0, 0, SHARE_W, SHARE_H);
   const light = g.createRadialGradient(SHARE_W * 0.2, SHARE_H * 0.1, 40, SHARE_W * 0.2, SHARE_H * 0.1, SHARE_W * 1.1);
-  light.addColorStop(0, 'rgba(255,255,255,0.08)');
+  light.addColorStop(0, 'rgba(242, 237, 228,0.08)');
   light.addColorStop(1, 'rgba(0,0,0,0.25)');
   g.fillStyle = light;
   g.fillRect(0, 0, SHARE_W, SHARE_H);
@@ -47,7 +47,7 @@ export const drawShareCard = (d: ShareData): HTMLCanvasElement => {
   };
   for (const cell of B.cells) {
     hexAt(cell.x, cell.y, B.hex - 2);
-    g.fillStyle = cell.owner === null ? 'rgba(255,255,255,0.05)' : cell.owner === d.me ? col.you : col.bot;
+    g.fillStyle = cell.owner === null ? 'rgba(242, 237, 228,0.05)' : cell.owner === d.me ? col.you : col.bot;
     g.globalAlpha = cell.owner === null ? 1 : cell.root ? 1 : 0.82;
     g.fill();
     g.globalAlpha = 1;
