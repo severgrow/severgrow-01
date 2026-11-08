@@ -123,14 +123,25 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
      */
     const profileRoute = /^\/v1\/players\/([^/]+)\/profile$/.exec(path);
     if (method === 'GET' && profileRoute) {
-      await service.authenticate(bearer(req.headers.get('authorization')));
+      const viewer = await service.authenticate(bearer(req.headers.get('authorization')));
       let playerId = profileRoute[1]!;
       try {
         playerId = decodeURIComponent(playerId);
       } catch {
         throw new ApiError('NOT_FOUND', 'No such player.');
       }
-      return { status: 200, body: { ok: true, profile: await service.publicProfile(playerId), serverNow: service.serverNow() } };
+      const profile = await service.publicProfile(playerId);
+      const headToHead =
+        viewer.id !== playerId ? await service.headToHead(viewer.id, playerId) : undefined;
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          profile,
+          ...(headToHead !== undefined ? { headToHead } : {}),
+          serverNow: service.serverNow(),
+        },
+      };
     }
 
     if (method === 'PATCH' && path === '/v1/players/me') {

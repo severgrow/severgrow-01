@@ -102,7 +102,7 @@ const fakeDocument = () => {
     'profile-play-offline', 'profile-play-online', 'profile-title', 'profile-name-label',
     'profile-tiles-label', 'profile-wins-label', 'profile-seeds-label', 'profile-play-title',
     'profile-play-offline-label', 'profile-play-online-label', 'profile-flag', 'profile-colour',
-    'profile-visitor', 'profile-level', 'profile-colour-hex',
+    'profile-visitor', 'profile-level', 'profile-colour-hex', 'profile-rivalry',
   ];
   const byId: Record<string, FakeNode> = {};
   for (const id of ids) byId[id] = node({ textContent: '-' });
@@ -128,6 +128,7 @@ const visitor = (over: Partial<VisitorFacts> = {}): VisitorFacts => ({
   tiles: 2,
   colour: { css: 'hsl(341 42% 53%)', name: 'Rose', hex: '#b95575' },
   online: { games: 5, wins: 3, longestStreak: 2 },
+  rivalryLine: null,
   ...over,
 });
 
@@ -189,6 +190,16 @@ describe('one sheet, two modes: the mode is a single attribute', () => {
     // The online record is the only grid actually carrying values.
     const text = env.byId['profile-play-online']!.children.map((tile) => tile.children.map((part) => part.textContent).join(':'));
     expect(text).toEqual([`${PROFILE.games}:5`, `${PROFILE.winRate}:60%`, `${PROFILE.longestStreak}:2`]);
+  });
+
+  it('paints a head-to-head line only when history exists', () => {
+    const env = fakeDocument();
+    const ui = installProfileUI(env.doc);
+    ui.openVisitor(visitor());
+    expect(env.byId['profile-rivalry']!.getAttribute?.('hidden')).not.toBeNull();
+    ui.showVisitor(visitor({ rivalryLine: 'YOU 4 — 3 MAPLEFOX' }));
+    expect(env.byId['profile-rivalry']!.textContent).toBe('YOU 4 — 3 MAPLEFOX');
+    expect(env.byId['profile-rivalry']!.getAttribute?.('hidden')).toBeNull();
   });
 
   it('visitor mode carries NO Seeds row and NO offline value, even if an own profile painted first', () => {

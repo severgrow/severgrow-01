@@ -2762,6 +2762,20 @@ html:has(#sheet-profile:not([hidden])) #menu .menu-inner { opacity: .28; }
 #sheet-profile:not([data-mode='visitor']) .sp-visitor {
   display: none;
 }
+/* Personal head-to-head (v0.84): one quiet scoreline above their games record. */
+#sheet-profile .sp-rivalry {
+  margin: 0.35rem 0 0.55rem;
+  font-family: var(--font-ui);
+  font-size: var(--instrument-label-size, 0.6875rem);
+  line-height: 1.35;
+  letter-spacing: var(--instrument-tracking, 0.08em);
+  text-align: center;
+  color: var(--instrument-muted, var(--c-muted));
+}
+#sheet-profile:not([data-mode='visitor']) .sp-rivalry,
+#sheet-profile .sp-rivalry[hidden] {
+  display: none;
+}
 #sheet-profile[data-mode='visitor'] .sp-row-seeds,
 #sheet-profile[data-mode='visitor'] .sp-row-wins,
 #sheet-profile[data-mode='visitor'] .sp-play-row[data-play-row='offline'] {

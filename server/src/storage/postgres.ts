@@ -833,6 +833,27 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     }));
   },
 
+  async headToHead(viewerId: string, opponentId: string) {
+    const { rows } = await pool.query(
+      `select count(*)::int as games,
+              count(*) filter (where (m.result->>'winner')::int = me.seat)::int as you_wins,
+              count(*) filter (where (m.result->>'winner')::int = them.seat)::int as them_wins,
+              count(*) filter (where (m.result->>'winner') is null)::int as draws
+         from matches m
+         join match_participants me on me.match_id = m.id and me.player_id = $1
+         join match_participants them on them.match_id = m.id and them.player_id = $2
+        where m.status = 'finished' and m.result is not null`,
+      [viewerId, opponentId],
+    );
+    const row = rows[0]!;
+    return {
+      games: asNumber(row.games),
+      youWins: asNumber(row.you_wins),
+      themWins: asNumber(row.them_wins),
+      draws: asNumber(row.draws),
+    };
+  },
+
   async addParticipant(participant: Participant): Promise<{ ok: true } | Fail> {
     const { rows } = await pool.query('select player_id, seat from match_participants where match_id = $1', [participant.matchId]);
     if (rows.some((r) => asString(r.player_id) === participant.playerId)) {

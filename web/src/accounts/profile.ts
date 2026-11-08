@@ -82,6 +82,8 @@ export type VisitorFacts = {
   /** The colour as the map draws it, plus its palette name and its hex for the visitor's line. */
   colour: { css: string; name: string; hex: string | null } | null;
   online: Record3 | null;
+  /** Personal head-to-head, when the server knows one (`YOU 4 — 3 NAME`). */
+  rivalryLine?: string | null;
 };
 
 /** A known, sane count, or the honest em dash. A count is a whole, non-negative number. */
@@ -172,6 +174,7 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
   // level inside the name line (the Territory tile bar's own `LEVEL 22` word). Own mode renders
   // neither, so its four rows and two records are byte-for-byte the layout they were.
   const levelText = doc.getElementById('profile-level');
+  const rivalryLine = doc.getElementById('profile-rivalry');
   const playTitle = doc.getElementById('profile-play-title');
 
   const fillGrid = (grid: HTMLElement, record: Record3 | null) => {
@@ -225,6 +228,10 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
 
     fillGrid(offlineGrid!, facts.offline);
     fillGrid(onlineGrid!, facts.online);
+    if (rivalryLine) {
+      rivalryLine.textContent = '';
+      rivalryLine.setAttribute('hidden', '');
+    }
   };
 
   /** The one place the colour tile is drawn, shared by the own and visitor modes. */
@@ -289,6 +296,12 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     fillGrid(offlineGrid!, null);
     fillGrid(onlineGrid!, facts?.online ?? null);
     if (playTitle) playTitle.textContent = PROFILE.theirGames;
+    const rivalry = facts?.rivalryLine && facts.rivalryLine.trim() ? facts.rivalryLine.trim() : '';
+    if (rivalryLine) {
+      rivalryLine.textContent = rivalry;
+      if (rivalry) rivalryLine.removeAttribute('hidden');
+      else rivalryLine.setAttribute('hidden', '');
+    }
   };
 
   let opened = false;

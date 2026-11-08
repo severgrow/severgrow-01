@@ -189,7 +189,8 @@ describe('the allow-list is closed: nothing private can appear', () => {
     const h = await harness();
     await seedMatches(h);
     const { body } = await get(h, SUBJECT);
-    expect(Object.keys(body).sort()).toEqual(['ok', 'profile', 'serverNow']);
+    expect(Object.keys(body).sort()).toEqual(['headToHead', 'ok', 'profile', 'serverNow']);
+    expect(body.headToHead).toEqual({ games: 0, youWins: 0, themWins: 0, draws: 0 });
     const profile = body.profile as Record<string, unknown>;
     expect(Object.keys(profile).sort()).toEqual([
       'colourId', 'connectedTiles', 'displayName', 'level', 'online', 'tag', 'tiles',

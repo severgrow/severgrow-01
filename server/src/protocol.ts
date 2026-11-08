@@ -115,6 +115,12 @@ export type PublicPlayerProfile = {
   online: { games: number; wins: number; longestStreak: number };
 };
 
+/**
+ * HEAD-TO-HEAD between two signed-in players — finished duels only, from the ASKER's seat.
+ * Carried beside `PublicPlayerProfile` on the profile route; never part of the public allow-list.
+ */
+export type HeadToHead = { games: number; youWins: number; themWins: number; draws: number };
+
 export type MatchListEntry = {
   matchId: string;
   status: MatchStatus;
