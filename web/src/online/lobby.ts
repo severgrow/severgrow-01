@@ -1,6 +1,7 @@
 // Phase 4 — lobby helpers (pure). Menu words live in src/strings.ts ONLINE.*.
 
 import type { MatchListEntry, MatchStatus } from '../../../server/src/protocol.js';
+export type { MatchStatus };
 import { formatRemaining } from './clock.js';
 import { PARKED_OFFER_MS, publicAppOrigin } from './config.js';
 import { ONLINE, REPLAY } from '../../../src/strings.js';
@@ -28,6 +29,40 @@ export const findTap = (hasSearch: boolean, cancelPending: boolean): FindTap => 
   if (cancelPending) return 'wait';
   if (hasSearch) return 'resume';
   return 'park';
+};
+
+/**
+ * Error codes that mean this client's parked search or invite wait can never come back — keep
+ * polling would only burn radio and leave the player on a dead screen.
+ */
+export const definiteMatchPollLost = (code: string | null | undefined): boolean => {
+  if (!code) return false;
+  switch (code) {
+    case 'NOT_FOUND':
+    case 'MATCH_NOT_FOUND':
+    case 'NOT_A_PARTICIPANT':
+    case 'MATCH_EXPIRED':
+      return true;
+    default:
+      return false;
+  }
+};
+
+export type MatchPollVerdict = 'active' | 'waiting' | 'cleared' | 'retry';
+
+/**
+ * One decision for the 2 s lobby polls (parked search, invite wait, rematch wait). Transient errors
+ * retry; a finished waiting row or a definitive not-found clears local state.
+ */
+export const matchPollVerdict = (
+  status: MatchStatus | null,
+  errorCode: string | null | undefined,
+): MatchPollVerdict => {
+  if (status === 'active') return 'active';
+  if (status === 'waiting') return 'waiting';
+  if (status === 'finished') return 'cleared';
+  if (definiteMatchPollLost(errorCode)) return 'cleared';
+  return 'retry';
 };
 
 export type LobbyBucket = 'your_turn' | 'waiting' | 'finished';

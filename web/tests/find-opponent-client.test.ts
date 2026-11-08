@@ -4,7 +4,13 @@ import { describe, expect, it } from 'vitest';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike, KeyValue } from '../../server/src/client.js';
 import { ONLINE } from '../../src/strings.js';
-import { PARKED_OFFER_MS, findTap, isSearchParked } from '../src/online/lobby.js';
+import {
+  PARKED_OFFER_MS,
+  definiteMatchPollLost,
+  findTap,
+  isSearchParked,
+  matchPollVerdict,
+} from '../src/online/lobby.js';
 
 const mem = (): KeyValue => {
   const map = new Map<string, string>();
@@ -15,6 +21,26 @@ const recordingFetch = (body: unknown, calls: string[]): FetchLike => async (url
   calls.push(`${init.method} ${new URL(url).pathname}`);
   return { status: 200, ok: true, json: async () => body };
 };
+
+describe('parked-search polls: definite loss vs retry', () => {
+  it('treats only definitive not-found codes as cleared', () => {
+    for (const code of ['NOT_FOUND', 'MATCH_NOT_FOUND', 'NOT_A_PARTICIPANT', 'MATCH_EXPIRED']) {
+      expect(definiteMatchPollLost(code)).toBe(true);
+      expect(matchPollVerdict(null, code)).toBe('cleared');
+    }
+    for (const code of ['RATE_LIMITED', 'DB_UNAVAILABLE', 'UNAUTHORIZED', null, '']) {
+      expect(definiteMatchPollLost(code)).toBe(false);
+      expect(matchPollVerdict(null, code)).toBe('retry');
+    }
+  });
+
+  it('reads active, waiting, and finished statuses without a second guess', () => {
+    expect(matchPollVerdict('active', null)).toBe('active');
+    expect(matchPollVerdict('waiting', null)).toBe('waiting');
+    expect(matchPollVerdict('finished', null)).toBe('cleared');
+    expect(matchPollVerdict('waiting', 'MATCH_NOT_FOUND')).toBe('waiting');
+  });
+});
 
 describe('Find-opponent client endpoints', () => {
   it('parks via /v1/matchmaking/find and cancels via /v1/matchmaking/cancel', async () => {

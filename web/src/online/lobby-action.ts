@@ -42,6 +42,10 @@ const TIMEOUT = Symbol('lobby action timeout');
 /** A find/create/join is a short request; 20s is far past any healthy round trip. */
 const DEFAULT_TIMEOUT_MS = 20_000;
 
+/** After an `await`, return false when the guard timed out or another action took over. */
+export const lobbyActionStillCurrent = (guard: LobbyActionGuard, action: string): boolean =>
+  guard.current() === action;
+
 export const createLobbyActionGuard = (options: LobbyActionGuardOptions = {}): LobbyActionGuard => {
   const defaultTimeout = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   let current: string | null = null;

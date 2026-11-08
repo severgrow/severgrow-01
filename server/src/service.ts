@@ -406,9 +406,15 @@ export class MatchService {
     throw new ApiError('INTERNAL', 'Could not find an opponent right now. Please try again.');
   }
 
-  /** Stop a parked search: retire it so no later searcher is matched into it. Calm no-op otherwise. */
+  /**
+   * Stop a parked search: retire it so no later searcher is matched into it. Calm no-op otherwise.
+   *
+   * Not join-rate-limited on purpose. Find resumes share the join budget; if Stop searching reused
+   * that bucket, a player who re-tapped Find could be stuck in the queue until the waiting window
+   * expired. Cancel only deletes the caller's own one-seat waiting row (or no-ops), and parking
+   * itself stays capped by findOpponent's join limit.
+   */
   async cancelSearch(player: PlayerRecord): Promise<{ cancelled: boolean }> {
-    await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
     return { cancelled: await this.storage.cancelOpenQueueMatch(player.id, this.now()) };
   }
 

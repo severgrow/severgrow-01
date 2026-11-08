@@ -5,7 +5,7 @@
 // only cleared when the first one happened to settle. The guard is DOM-free so it can be proved
 // here without a browser; lobby-ui.ts is the only thing that paints the pending state.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createLobbyActionGuard } from '../src/online/lobby-action.js';
+import { createLobbyActionGuard, lobbyActionStillCurrent } from '../src/online/lobby-action.js';
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -53,6 +53,23 @@ describe('the lobby action guard: a second tap cannot dispatch a second request'
     await expect(guard.run('join', async () => { throw boom; })).rejects.toBe(boom);
     expect(guard.isBusy()).toBe(false);
     await expect(guard.run('join', async () => 'recovered')).resolves.toEqual({ started: true, value: 'recovered' });
+  });
+
+  it('reports whether this action still holds the guard after an await', async () => {
+    vi.useFakeTimers();
+    const guard = createLobbyActionGuard({ timeoutMs: 1000 });
+    const hung = deferred<string>();
+    const run = guard.run('find', async () => {
+      expect(lobbyActionStillCurrent(guard, 'find')).toBe(true);
+      await hung.promise;
+      expect(lobbyActionStillCurrent(guard, 'find')).toBe(false);
+      return 'late';
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(run).resolves.toEqual({ started: true, timedOut: true });
+    hung.resolve('late');
+    await Promise.resolve();
+    expect(lobbyActionStillCurrent(guard, 'find')).toBe(false);
   });
 
   it('releases on timeout, even when the request never settles', async () => {

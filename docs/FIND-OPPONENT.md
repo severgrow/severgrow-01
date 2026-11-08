@@ -123,6 +123,9 @@ resigned**) are deliberately unchanged. No emoji anywhere.
 - `server/tests/find-opponent-parking.test.ts` — parking persists past 20s, FIFO with 3 parked,
   no self/double (incl. concurrent double-tap), never a second parked entry, cap refusal, atomic
   one-match race, matched-while-away list state/deadline/ping, cancel, rate limits.
+- `server/tests/matchmaking-hardening.test.ts` — Stop searching still works after Find resumes
+  spend the join budget; cancel→find→cancel never doubles a player's queue rows; a paired result
+  is two distinct human seats; expired parked searches stay unclaimable.
 - `server/tests/timeout-grace.test.ts` — first miss extends, second loses, per-seat independence,
   idempotency (lazy read racing the sweeper), clock semantics, grace disabled.
 - `server/tests/postgres.integration.test.ts` — real DB: two simultaneous searchers → exactly one
