@@ -39,6 +39,7 @@ import type { SeedWallet } from '../../../server/src/seeds/types.js';
 
 import {
   FIRST_ONLINE_CARD_KEY,
+  findTap,
   friendlyJoinError,
   inviteLink,
   isSearchParked,
@@ -71,11 +72,17 @@ export type LobbyUiHooks = {
     liveJoin: boolean;
   }) => void;
   /**
-   * Start a local game against the computer (the existing offline game). Offered from a long
-   * parked search; the search keeps running in the background. Never touches online state, so the
-   * offline save/Continue mechanism is unchanged.
+   * Start a practice match (the existing offline game). Offered from a parked search; the search
+   * keeps running in the background. Never touches online state, so the offline save is unchanged.
    */
   startComputerGame?: () => void;
+  /**
+   * Play the current campaign level while the search keeps running. The page leaves any online
+   * duel, resumes a saved campaign match silently when one exists, otherwise starts the current
+   * level. It must not wipe the classic save. Not named `startCampaignLevel`: that function
+   * already opens one level by id.
+   */
+  startOfferedLevel?: () => void;
   /**
    * Play one of the game's own sound cues by name (the bank in `ui/sound-bank.ts`). The Territory
    * screen uses it so its keys speak the same voice as the board; absent, it is simply silent.
@@ -248,6 +255,19 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let searchTimer: ReturnType<typeof setInterval> | null = null;
   /** A search request that is still out (poll-gate.ts keeps the 2 s tick from stacking one). */
   let searchInFlight = false;
+  /** True while a cancel has not landed. A Find tap during it must not park another entry. */
+  let cancelPending = false;
+  /**
+   * Find and cancel share one queue. A second Find resumes the entry already in hand, and a Find
+   * that arrives while a cancel is in flight waits until that cancel lands, so the client never
+   * parks a second queue entry.
+   */
+  let searchQueue: Promise<unknown> = Promise.resolve();
+  const enqueueSearch = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = searchQueue.then(task, task);
+    searchQueue = run.then(() => undefined, () => undefined);
+    return run;
+  };
   let computerGameActive = false;
   let pendingMatched: { token: string; payload: MatchViewPayload } | null = null;
 
@@ -267,6 +287,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     stopHubPoll();
     search = null;
     waiting = null;
+    syncLooking();
   };
 
   /** Show the one honest line for a replaced identity in whichever online screen is open. */
@@ -294,6 +315,63 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     style.textContent = WAIT_DOTS_CSS;
     document.head.append(style);
   }
+
+  // "Looking for opponent" on the board, between the menu and the logo. Fixed, so it is not a
+  // grid child of the HUD (a grid child would shove the menu). It lives inside #game .hud, so it
+  // hides with the game. The dots are the shared wait-dots, not a second animation.
+  const LOOKING_CSS = `
+#online-search-looking {
+  position: fixed;
+  z-index: 8;
+  top: var(--futasaku-logo-top, 16px);
+  left: calc(env(safe-area-inset-left, 0px) + 56px);
+  right: calc(env(safe-area-inset-right, 0px) + 108px);
+  height: var(--futasaku-logo-height, 22px);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+  color: var(--instrument-muted, var(--c-muted));
+  font-size: var(--instrument-label-size, .6875rem);
+  letter-spacing: var(--instrument-tracking, .08em);
+  line-height: 1;
+  white-space: nowrap;
+}
+#online-search-looking[hidden] { display: none !important; }
+#online-search-looking .online-search-looking-words {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+`;
+  const mountLooking = () => {
+    const hud = document.querySelector('#game .hud');
+    if (!hud || document.getElementById('online-search-looking')) return;
+    if (!document.getElementById('online-search-looking-css')) {
+      const style = document.createElement('style');
+      style.id = 'online-search-looking-css';
+      style.textContent = LOOKING_CSS;
+      document.head.append(style);
+    }
+    const el = document.createElement('p');
+    el.id = 'online-search-looking';
+    el.setAttribute('role', 'status');
+    el.hidden = true;
+    const words = document.createElement('span');
+    words.className = 'online-search-looking-words';
+    words.textContent = ONLINE.searchLooking;
+    el.append(words, waitDots());
+    hud.append(el);
+  };
+  mountLooking();
+  const syncLooking = () => {
+    const el = document.getElementById('online-search-looking');
+    if (!el) return;
+    // Only while a search is running AND the offline game from this offer is on screen.
+    el.hidden = !(search && computerGameActive);
+  };
 
   // The waiting headline is ONE stable text node plus ONE persistent dots node: the search screen
   // re-renders every 2s, and rebuilding the dots each time would restart the CSS animation before
@@ -712,6 +790,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     maybeFirstCard();
     closeMatchedPrompt();
     computerGameActive = false;
+    syncLooking();
     // A search may still be running in the background: say so, but never block the hub.
     notice('online-hub-notice', search ? ONLINE.searchStatusSr : '');
     const linkBlock = document.getElementById('online-link-block');
@@ -787,14 +866,39 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (options && mode !== 'search') options.hidden = true;
   };
 
+  /** The campaign level named on the offer, or null when this build has no campaign place. */
+  const offeredLevel = (): number | null => {
+    const n = hooks.campaignLevel?.();
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 1) return null;
+    return Math.trunc(n);
+  };
+
+  const paintSearchOffer = () => {
+    const computer = document.getElementById('online-search-computer');
+    if (computer) computer.textContent = ONLINE.searchPlayComputer;
+    const invite = document.getElementById('online-search-invite');
+    if (invite) invite.textContent = ONLINE.searchInviteFriend;
+    const keep = document.getElementById('online-search-keep');
+    if (keep) keep.textContent = ONLINE.searchKeepWaiting;
+    const levelBtn = document.getElementById('online-search-level');
+    const level = offeredLevel();
+    if (levelBtn) {
+      levelBtn.hidden = level == null;
+      if (level != null) levelBtn.textContent = ONLINE.searchPlayLevel(level);
+    }
+  };
+
   const renderSearch = () => {
     if (!search) return;
     const parked = isSearchParked(now() - search.startedAt, parkedOfferMs());
     // Active search shows the animated dots; the parked "Nobody yet" offer is a still state.
     setWaitingTitle(parked ? ONLINE.searchParkedTitle : ONLINE.searchTitle, !parked);
-    $('online-waiting-body').textContent = parked ? ONLINE.searchParkedBody : ONLINE.searchBody;
+    const level = offeredLevel() ?? 1;
+    $('online-waiting-body').textContent = parked ? ONLINE.searchParkedBody(level) : ONLINE.searchBody;
+    paintSearchOffer();
     const options = document.getElementById('online-search-options');
     if (options) options.hidden = !parked;
+    syncLooking();
   };
 
   const stopSearchTimer = () => {
@@ -808,19 +912,40 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     stopSearchTimer();
     search = null;
     setWaitingMode('invite');
+    syncLooking();
   };
 
-  const cancelSearchAndStop = async () => {
+  /**
+   * `cleared` — the queue entry is gone (or there was none). `kept` — the cancel did not land,
+   * so the same entry stays and must not be replaced. `left` — something else already took the
+   * search (a match went live); the caller must not open the hub over that.
+   */
+  type SearchCancel = 'cleared' | 'kept' | 'left';
+
+  const cancelSearchAndStop = (): Promise<SearchCancel> => enqueueSearch(async () => {
     const s = search;
-    stopSearch();
-    if (s) {
-      try {
-        await client.cancelSearch(s.token);
-      } catch {
-        /* calm: the search may already be gone */
+    if (!s) return 'cleared';
+    // Keep the slot until the server agrees. Clearing it first is how a second Find parks again.
+    cancelPending = true;
+    stopSearchTimer();
+    try {
+      await client.cancelSearch(s.token);
+    } catch {
+      if (search === s) {
+        if (!searchTimer) searchTimer = setInterval(() => void pollSearch(), 2000);
+        syncLooking();
+        return 'kept';
       }
+      return 'left';
+    } finally {
+      cancelPending = false;
     }
-  };
+    if (search !== s) return 'left';
+    search = null;
+    setWaitingMode('invite');
+    syncLooking();
+    return 'cleared';
+  });
 
   /** Gentle, dismissible "Opponent found" prompt while the player is inside a computer game. */
   const openMatchedPrompt = (token: string, payload: MatchViewPayload) => {
@@ -887,8 +1012,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     renderSearch();
   };
 
-  const startSearch = (token: string, matchId: string) => {
-    search = { token, matchId, startedAt: now() };
+  /** Show the search already in hand. Does not reset its clock and does not ask the server. */
+  const resumeSearch = () => {
+    if (!search) return;
     waiting = null;
     if (pollTimer) {
       clearInterval(pollTimer);
@@ -900,8 +1026,18 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     renderSearch();
     notice('online-waiting-notice', ONLINE.searchStatusSr);
     flashIdentityReplaced();
-    stopSearchTimer();
-    searchTimer = setInterval(() => void pollSearch(), 2000);
+    if (!searchTimer) searchTimer = setInterval(() => void pollSearch(), 2000);
+    syncLooking();
+  };
+
+  const startSearch = (token: string, matchId: string) => {
+    // Already in the queue: resume that entry. Adopting a new id here would be a second one.
+    if (search) {
+      resumeSearch();
+      return;
+    }
+    search = { token, matchId, startedAt: now() };
+    resumeSearch();
   };
 
   /**
@@ -1018,23 +1154,40 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   const findOpponent = async () => {
     if (!findOpponentEnabled()) return;
-    await guard.run('find', async () => {
-      const id = await ensureIdentity();
-      if (!id) return;
-      noticeWithDots('online-hub-notice', ONLINE.findOpponentLooking);
-      try {
-        const res = await client.findOpponent(id.token);
-        serverOffset = res.serverNow - now();
-        if (res.paired && res.player.status === 'active') {
-          // Paired with an opponent right now: a live join.
-          launchDuel(id.token, res.player, true);
+    await enqueueSearch(async () => {
+      const gate = findTap(search !== null, cancelPending);
+      // Resume, or wait out a cancel. Either way: do not park a second entry.
+      if (gate !== 'park') {
+        if (gate === 'resume') resumeSearch();
+        return;
+      }
+      await guard.run('find', async () => {
+        const id = await ensureIdentity();
+        if (!id) return;
+        // The cancel or another find may have taken the slot while this waited on the guard.
+        if (findTap(search !== null, cancelPending) !== 'park') {
+          if (search) resumeSearch();
           return;
         }
-        // Parked: we stay in the queue and keep polling, even if the player leaves the screen.
-        startSearch(id.token, res.match.matchId);
-      } catch (error) {
-        notice('online-hub-notice', errorMessage(error));
-      }
+        noticeWithDots('online-hub-notice', ONLINE.findOpponentLooking);
+        try {
+          const res = await client.findOpponent(id.token);
+          serverOffset = res.serverNow - now();
+          if (search) {
+            resumeSearch();
+            return;
+          }
+          if (res.paired && res.player.status === 'active') {
+            // Paired with an opponent right now: a live join.
+            launchDuel(id.token, res.player, true);
+            return;
+          }
+          // Parked: we stay in the queue and keep polling, even if the player leaves the screen.
+          startSearch(id.token, res.match.matchId);
+        } catch (error) {
+          notice('online-hub-notice', errorMessage(error));
+        }
+      });
     });
   };
 
@@ -1378,7 +1531,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   $('online-cancel-match').addEventListener('click', () => {
     if (search && waitingEl.dataset.mode === 'search') {
       void (async () => {
-        await cancelSearchAndStop();
+        const stopped = await cancelSearchAndStop();
+        if (stopped !== 'cleared') {
+          if (stopped === 'kept') notice('online-waiting-notice', ONLINE.errGeneric);
+          return;
+        }
         await openHub();
         notice('online-hub-notice', ONLINE.searchCancelled);
       })();
@@ -1404,16 +1561,26 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       await openHub();
     })();
   });
-  // Play the computer: the offline game starts and the search KEEPS RUNNING in the background.
+  // Practice match: the offline game starts and the search KEEPS RUNNING in the background.
   document.getElementById('online-search-computer')?.addEventListener('click', () => {
+    if (!search) return;
     computerGameActive = true;
+    syncLooking();
     hooks.startComputerGame?.();
+  });
+  // Current campaign level: same search, same "still looking" line. Does not wipe the classic save.
+  document.getElementById('online-search-level')?.addEventListener('click', () => {
+    if (!search || !hooks.startOfferedLevel) return;
+    computerGameActive = true;
+    syncLooking();
+    hooks.startOfferedLevel();
   });
   // Invite a friend instead: stop the search, then open the invite screen.
   document.getElementById('online-search-invite')?.addEventListener('click', () => {
     void (async () => {
-      await cancelSearchAndStop();
-      await createMatch();
+      const stopped = await cancelSearchAndStop();
+      if (stopped === 'cleared') await createMatch();
+      else if (stopped === 'kept') notice('online-waiting-notice', ONLINE.errGeneric);
     })();
   });
   // Keep searching: hide the offer and give the queue another full window.

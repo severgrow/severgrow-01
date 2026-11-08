@@ -11208,16 +11208,28 @@ void import('./online/lobby-ui.js').then(async (m) => {
     // A finished duel's row opens its replay (owner brief, 2026-10-25): the lobby made the
     // authorised read; the page owns the player.
     openReplay: (payload) => openPastReplay(payload),
-    // The honest computer fallback: a normal offline game (same engine, same save/Continue). The
-    // parked online search keeps running in the lobby controller and surfaces an "Opponent found"
-    // prompt if someone turns up. A local game is not a server match, so it never counts against
-    // the 10-unfinished-games cap. An in-progress computer game is RESUMED, never overwritten, so
+    // Practice match: a normal offline game (same engine, same save/Continue). The parked online
+    // search keeps running in the lobby controller and surfaces an "Opponent found" prompt if
+    // someone turns up. A local game is not a server match, so it never counts against the
+    // 10-unfinished-games cap. An in-progress computer game is RESUMED, never overwritten, so
     // choosing this offer can never lose the player's local game.
     startComputerGame: () => {
       leaveOnline();
       const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
       if (saved && saved.state.phase !== 'GAME_OVER') continueGame();
       else void startGame(randomSeed(), settings.level);
+    },
+    // Current level, from the same offer. Resume a saved campaign match with no question; otherwise
+    // start the level the player is on. The classic save is a different key and is left alone.
+    // Not named startCampaignLevel: that function already exists and takes a level.
+    startOfferedLevel: () => {
+      leaveOnline();
+      const saved = campaignResume();
+      if (saved) {
+        continueCampaignMatch(saved);
+        return;
+      }
+      startCampaignLevel(currentLevel(campaignProgress));
     },
     openDuel: ({ matchId, token, view: player, liveJoin }) => {
       const api = duelApiUrl();
