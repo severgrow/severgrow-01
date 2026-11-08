@@ -270,3 +270,39 @@ describe('positioning pass: a symmetric dock', () => {
     expect(computeLayout({ w: 360, h: 640 }).hexPx).toBeGreaterThan(50.0 * 1.05);
   });
 });
+
+// OWNER, 2026-11-08: "on desktop hand and cockpit should be lower down, if you divide screen into 4 equal
+// parts - it should be roughly centred in the bottom right corner of 4 rectangles"; the board: "centred in
+// left half". Desktops (>= 1000 x 650) split the screen in halves; compact landscape keeps its fit.
+describe('desktop quarters: board centred in the left half, cockpit + hand in the bottom-right quarter', () => {
+  for (const [w, h] of [[1280, 800], [1440, 900], [1920, 1080], [2560, 1440]] as const) {
+    it(`${w}x${h}`, () => {
+      const l = computeLayout({ w, h });
+      expect(l.mode).toBe('side');
+      expect(l.quad).toBe(true);
+      const bx = l.board.x + l.board.w / 2;
+      expect(Math.abs(bx - w / 4)).toBeLessThanOrEqual(w * 0.03);
+      expect(l.board.x + l.board.w).toBeLessThanOrEqual(w / 2);
+      const dx = l.dock.x + l.dock.w / 2;
+      const dy = l.dock.y + l.dock.h / 2;
+      expect(Math.abs(dx - (w * 3) / 4)).toBeLessThanOrEqual(w * 0.03);
+      // centred on the bottom-right quarter's middle, or as low as it can go without leaving the screen
+      expect(dy).toBeGreaterThan(h * 0.6);
+      expect(l.dock.y + l.dock.h).toBeLessThanOrEqual(h);
+      expect(l.dock.x).toBeGreaterThanOrEqual(w / 2);
+      expect(overlaps(l.board, l.dock)).toBe(false);
+    });
+  }
+  it('compact landscape (a phone on its side, a short window) keeps its old fit', () => {
+    expect(computeLayout({ w: 900, h: 420 }).quad ?? false).toBe(false);
+    expect(computeLayout({ w: 1000, h: 620 }).quad ?? false).toBe(false);
+  });
+  it('the page places the cockpit on that quarter centre, and keeps it on screen', async () => {
+    const { readFileSync } = await import('node:fs');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const fn = main.slice(main.indexOf('function centreSideDock('), main.indexOf('function centreSideDock(') + 2200);
+    expect(fn).toMatch(/innerWidth \* 0\.75/);
+    expect(fn).toMatch(/innerHeight \* 0\.75/);
+    expect(fn).toContain('--side-dock-shift-y');
+  });
+});

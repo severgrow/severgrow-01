@@ -6795,6 +6795,22 @@ function centreSideDock(): void {
   const box = document.getElementById('futa04-box')?.getBoundingClientRect();
   if (!tiles || !box || tiles.width === 0 || box.width === 0) return; // not drawn yet: the next render retries
   sideDockStale = false;
+  if (root.dataset.quad === '1') {
+    // DESKTOP QUARTERS (owner, 2026-11-08): the cockpit + hand centred on the bottom-right quarter's
+    // middle (75% across, 75% down), never off the bottom of the screen and never over the board.
+    const dock = document.querySelector<HTMLElement>('#game .dock')?.getBoundingClientRect();
+    if (!dock || dock.width === 0) return;
+    const sx = parseFloat(root.style.getPropertyValue('--side-dock-shift')) || 0;
+    const sy = parseFloat(root.style.getPropertyValue('--side-dock-shift-y')) || 0;
+    const restX = dock.left - sx + dock.width / 2; // its centre with no shift
+    const restTop = dock.top - sy;
+    const wantX = Math.max(innerWidth * 0.75, tiles.right + 24 + dock.width / 2);
+    const wantTop = Math.min(innerHeight * 0.75 - dock.height / 2, innerHeight - 12 - dock.height);
+    root.style.setProperty('--side-dock-shift', `${Math.round(wantX - restX)}px`);
+    root.style.setProperty('--side-dock-shift-y', `${Math.round(Math.max(wantTop, 8) - restTop)}px`);
+    return;
+  }
+  root.style.removeProperty('--side-dock-shift-y');
   const current = parseFloat(root.style.getPropertyValue('--side-dock-shift')) || 0;
   const left = box.left - current; // where the cockpit sits with no shift
   const room = innerWidth - tiles.right;
@@ -6924,6 +6940,9 @@ function applyLayout() {
   root.setProperty('--cw', px(l.card.w));
   root.setProperty('--slice', px(l.card.slice));
   document.documentElement.dataset.layout = l.mode;
+  // desktop quarters (owner, 2026-11-08): board in the left half, cockpit + hand on the bottom-right quarter
+  if (l.quad) document.documentElement.dataset.quad = '1';
+  else delete document.documentElement.dataset.quad;
   board.svg.setAttribute('preserveAspectRatio', (l.thumb && !tutorialOnEarly) ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
   if (IS_FUTA04) requestAnimationFrame(alignDrawPiles);

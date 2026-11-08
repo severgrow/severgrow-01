@@ -7503,6 +7503,19 @@ html.futa04-branding[data-layout='side'] .dock {
   margin-block: 0;
   translate: var(--side-dock-shift, 0px) 0;
 }
+/* DESKTOP QUARTERS (owner, 2026-11-08): two equal halves; the board centred in the left one, the
+   cockpit + hand moved by main.ts centreSideDock onto the bottom-right quarter's middle. */
+html[data-layout='side'][data-quad='1'] .play {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+html[data-layout='side'][data-quad='1'] .dock {
+  justify-self: center;
+  width: var(--dock-w, 380px);
+}
+html.futa04-branding[data-layout='side'][data-quad='1'] .dock,
+html.v075.futa04-branding[data-layout='side'][data-quad='1'] .dock {
+  translate: var(--side-dock-shift, 0px) var(--side-dock-shift-y, 0px);
+}
 
 /* ---------- levels 1-10 (lessons) ---------- */
 /* A tap's only mark on the map: a small ring where it landed (the words are in the glass / LED). */
