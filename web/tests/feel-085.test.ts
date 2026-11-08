@@ -40,6 +40,9 @@ describe('5. a drawn card leaves the pile with a tilt that unwinds, and the pile
     expect(main).toContain('drawFrames(');
     expect(main).toContain('DRAW_PILE_GIVE');
   });
+  it('the opponent\'s draw makes the same pile give (one rule for both seats)', () => {
+    expect(main.split('DRAW_PILE_GIVE, {').length - 1).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe('6. "not allowed" is a short head-shake that settles, not one nudge', () => {

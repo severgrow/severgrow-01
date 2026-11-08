@@ -115,6 +115,31 @@ describe('the six legs read', () => {
 });
 
 describe('the boomerang stays safe', () => {
+  it('the way home always bows toward the middle of the screen, never off its edge', () => {
+    const view = { width: 390, height: 844 };
+    const centre = { x: view.width / 2, y: view.height / 2 };
+    // the pile near the LEFT edge and near the RIGHT edge: the bow flips to stay on screen
+    for (const pile of [{ left: 8, top: 700, width: 40, height: 56 }, { left: 342, top: 700, width: 40, height: 56 }]) {
+      const plan = planBoomerang(from, board, pile, true, view);
+      const mid = plan.frames.find((f) => Number(f.offset) > BOOMERANG.holdAt && Number(f.offset) < BOOMERANG.landAt)!;
+      const [mx, my] = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(String(mid.transform))!.slice(1).map(Number);
+      const cx = from.left + from.width / 2;
+      const cy = from.top + from.height / 2;
+      const midScreen = { x: cx + mx!, y: cy + my! };
+      const straight = {
+        x: (board.x + pile.left + pile.width / 2) / 2,
+        y: (board.y + pile.top + pile.height / 2) / 2,
+      };
+      // the bow leans to the screen-centre side of the straight path, and stays on screen
+      const bow = { x: midScreen.x - straight.x, y: midScreen.y - straight.y };
+      expect(bow.x * (centre.x - straight.x) + bow.y * (centre.y - straight.y)).toBeGreaterThan(0);
+      expect(midScreen.x).toBeGreaterThan(0);
+      expect(midScreen.x).toBeLessThan(view.width);
+      expect(midScreen.y).toBeGreaterThan(0);
+      expect(midScreen.y).toBeLessThan(view.height);
+    }
+  });
+
   it('Reduce motion / Speed off returns no flight at all', () => {
     expect(planBoomerang(from, board, to, false)).toEqual({ duration: 0, frames: [], landMs: 0 });
     expect(planBoomerang({ left: 0, top: 0, width: 0, height: 0 }, board, to, true)).toEqual({ duration: 0, frames: [], landMs: 0 });

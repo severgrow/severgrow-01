@@ -4492,6 +4492,8 @@ async function playStep(step: Step, my: number) {
         const seat = oppSeat();
         const source = $('deck').querySelector<HTMLElement>('.pile-card') ?? $('deck');
         const ms = seat ? oppDraw(source, seat, f, !!quickShow) : 0;
+        // 0.85: the pile gives as it lets the opponent's card go too (one rule for both seats).
+        if (seat && IS_FUTA04 && m > 0 && !quickShow) $('deck').animate(DRAW_PILE_GIVE, { duration: DRAW_PILE_GIVE_MS * f, easing: EASE.out });
         if (seat) {
           if (settings.sound) sound.rustle();
           await wait(ms, my);

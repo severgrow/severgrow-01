@@ -90,6 +90,8 @@ export const planBoomerang = (
   board: { x: number; y: number },
   to: FlightRect,
   allowed: boolean,
+  /** The screen, so the way home bows toward its middle and never off an edge. */
+  view: { width: number; height: number } = { width: 0, height: 0 },
 ): BoomerangPlan => {
   if (!allowed || from.width < 1 || from.height < 1 || to.height < 1) {
     return { duration: 0, frames: [], landMs: 0 };
@@ -106,8 +108,17 @@ export const planBoomerang = (
   const dx = toX - outX;
   const dy = toY - outY;
   const len = Math.hypot(dx, dy) || 1;
-  const bowX = (-dy / len) * len * B.bow;
-  const bowY = (dx / len) * len * B.bow;
+  let bowX = (-dy / len) * len * B.bow;
+  let bowY = (dx / len) * len * B.bow;
+  if (view.width > 0 && view.height > 0) {
+    // Bow toward the screen's middle: flip when the chosen side points away from it.
+    const midX = cx + (outX + toX) / 2;
+    const midY = cy + (outY + toY) / 2;
+    if (bowX * (view.width / 2 - midX) + bowY * (view.height / 2 - midY) < 0) {
+      bowX = -bowX;
+      bowY = -bowY;
+    }
+  }
   const midOut = lerp(B.liftAt, B.settleAt, 0.6);
   const midBack = lerp(B.holdAt, B.landAt, 0.5);
   const kissAt = lerp(B.settleAt, B.holdAt, 0.35);

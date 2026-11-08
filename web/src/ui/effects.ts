@@ -320,7 +320,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     f: number,
     onLand?: () => void,
   ): number {
-    const plan = planBoomerang(from, boardPoint, to, motion() > 0 && f > 0);
+    const plan = planBoomerang(from, boardPoint, to, motion() > 0 && f > 0, { width: window.innerWidth, height: window.innerHeight });
     if (!plan.duration) {
       onLand?.();
       return 0;
