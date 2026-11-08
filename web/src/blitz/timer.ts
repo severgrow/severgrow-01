@@ -11,6 +11,7 @@
 import { blitzClockText, blitzNextFlipIn, blitzStage, blitzTick } from '../logic/blitz.js';
 import type { BlitzStage } from '../logic/blitz.js';
 import { EASE, MOTION } from '../logic/motion.js';
+import { LIGHT_TONES } from '../player/light.js';
 import { BLITZ_CLOCK_EVENT } from '../logic/blitz-clock-event.js';
 import type { BlitzClockSignal } from '../logic/blitz-clock-event.js';
 
@@ -43,8 +44,12 @@ html.blitz-match #blitz-clock::before {
   content:''; position:absolute; inset:0; pointer-events:none;
   background:url('./hardware/display-frame-supplied.webp') center / contain no-repeat; z-index:0;
 }
+/* THE SAME DEVICE AS THE LED DISPLAY ABOVE (owner, 2026-11-08: "make the timer look like from the
+   same physical device as the led display"): the display's own glass colour, its faint pixel grid and
+   the game's light palette (player/light.ts), not a glass and inks of the clock's own. */
 #blitz-clock .bc-glass {
-  position:relative; z-index:1; width:100%; height:100%; border-radius:6px; background:#0b0d0c;
+  position:relative; z-index:1; width:100%; height:100%; border-radius:6px; background:#090c0b;
+  background-image:radial-gradient(circle,rgba(166,128,78,.20) .65px,transparent .8px); background-size:2.3px 3.1px; background-position:0 2.6px;
   display:flex; align-items:center; justify-content:center; overflow:hidden;
 }
 /* Seen through dark, slightly scratched plastic (owner, 2026-11-06: "colours less intense, like it's
@@ -52,9 +57,9 @@ html.blitz-match #blitz-clock::before {
    segments] not - remove. make it a bit more intense the color and a tiny bit more glow taking glass
    texture into account creating glow"). Lit segments only; the ink lights the smoked glass behind it
    (.bc-glass::before), and the glass texture sits over both. All static: no per-frame cost. */
-#blitz-clock { --bc-ink:#d8c59e; }
-#blitz-clock[data-stage='amber'] { --bc-ink:#e3963f; }
-#blitz-clock[data-stage='red'] { --bc-ink:#e04432; }
+#blitz-clock { --bc-ink:${LIGHT_TONES.amber.core}; }
+#blitz-clock[data-stage='amber'] { --bc-ink:#f0a24e; }
+#blitz-clock[data-stage='red'] { --bc-ink:${LIGHT_TONES.red.core}; }
 #blitz-clock svg { position:relative; z-index:1; height:72%; width:auto; overflow:visible; color:var(--bc-ink);
   filter:drop-shadow(0 0 .8px color-mix(in srgb, currentColor 85%, transparent)) drop-shadow(0 0 2.4px color-mix(in srgb, currentColor 50%, transparent)); }
 #blitz-clock[data-side='theirs'] svg { opacity:.6; }
