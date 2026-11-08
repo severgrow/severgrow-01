@@ -6784,10 +6784,18 @@ function alignDrawPiles() {
  * size. It only ever moves left, and always keeps clear of the board.
  */
 let sideDockStale = true;
+// The board's entrance (v075-board-rise) scales and lifts it: a measurement taken mid-rise is off by its
+// offset. Place the desktop quarters again once it has landed.
+document.getElementById('board-wrap')?.addEventListener('animationend', (e) => {
+  if ((e as AnimationEvent).animationName === 'v075-board-rise' && document.documentElement.dataset.quad === '1') centreSideDock();
+});
 function centreSideDock(): void {
   const root = document.documentElement;
   if (root.dataset.layout !== 'side') {
     root.style.removeProperty('--side-dock-shift');
+    root.style.removeProperty('--side-dock-shift-y');
+    root.style.removeProperty('--quad-board-x');
+    root.style.removeProperty('--quad-board-y');
     sideDockStale = false;
     return;
   }
@@ -6798,19 +6806,32 @@ function centreSideDock(): void {
   if (root.dataset.quad === '1') {
     // DESKTOP QUARTERS (owner, 2026-11-08): the cockpit + hand centred on the bottom-right quarter's
     // middle (75% across, 75% down), never off the bottom of the screen and never over the board.
+    // The board: its right edge on the screen's middle, the same space above and below it (owner,
+    // 2026-11-08). A relative offset, not translate: the board's entrance animation owns translate.
+    const bx = parseFloat(root.style.getPropertyValue('--quad-board-x')) || 0;
+    const by = parseFloat(root.style.getPropertyValue('--quad-board-y')) || 0;
+    const restRight = tiles.right - bx;
+    const restMidY = tiles.top - by + tiles.height / 2;
+    const boardX = Math.round(innerWidth / 2 - restRight);
+    const boardY = Math.round(innerHeight / 2 - restMidY);
+    root.style.setProperty('--quad-board-x', `${boardX}px`);
+    root.style.setProperty('--quad-board-y', `${boardY}px`);
+    const boardRight = restRight + boardX;
     const dock = document.querySelector<HTMLElement>('#game .dock')?.getBoundingClientRect();
     if (!dock || dock.width === 0) return;
     const sx = parseFloat(root.style.getPropertyValue('--side-dock-shift')) || 0;
     const sy = parseFloat(root.style.getPropertyValue('--side-dock-shift-y')) || 0;
     const restX = dock.left - sx + dock.width / 2; // its centre with no shift
     const restTop = dock.top - sy;
-    const wantX = Math.max(innerWidth * 0.75, tiles.right + 24 + dock.width / 2);
+    const wantX = Math.max(innerWidth * 0.75, boardRight + 24 + dock.width / 2);
     const wantTop = Math.min(innerHeight * 0.75 - dock.height / 2, innerHeight - 12 - dock.height);
     root.style.setProperty('--side-dock-shift', `${Math.round(wantX - restX)}px`);
     root.style.setProperty('--side-dock-shift-y', `${Math.round(Math.max(wantTop, 8) - restTop)}px`);
     return;
   }
   root.style.removeProperty('--side-dock-shift-y');
+  root.style.removeProperty('--quad-board-x');
+  root.style.removeProperty('--quad-board-y');
   const current = parseFloat(root.style.getPropertyValue('--side-dock-shift')) || 0;
   const left = box.left - current; // where the cockpit sits with no shift
   const room = innerWidth - tiles.right;

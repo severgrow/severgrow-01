@@ -305,4 +305,15 @@ describe('desktop quarters: board centred in the left half, cockpit + hand in th
     expect(fn).toMatch(/innerHeight \* 0\.75/);
     expect(fn).toContain('--side-dock-shift-y');
   });
+  it('the board touches the screen middle with its right edge, with the same space above and below it', async () => {
+    // owner, 2026-11-08: "the board should be higher up - same margin on top and bottom" / "a bit to the
+    // right, so with right edge it touches the middle of the screen"
+    const { readFileSync } = await import('node:fs');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const fn = main.slice(main.indexOf('function centreSideDock('), main.indexOf('function centreSideDock(') + 3000);
+    expect(fn).toMatch(/innerWidth \/ 2 - restRight/);
+    expect(fn).toMatch(/innerHeight \/ 2 - restMidY/);
+    const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\[data-quad='1'\] \.board-wrap \{[^}]*position: relative;[^}]*left: var\(--quad-board-x, 0px\);[^}]*top: var\(--quad-board-y, 0px\);/);
+  });
 });

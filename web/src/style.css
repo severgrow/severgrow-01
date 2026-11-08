@@ -7508,6 +7508,12 @@ html.futa04-branding[data-layout='side'] .dock {
 html[data-layout='side'][data-quad='1'] .play {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
+html[data-layout='side'][data-quad='1'] .board-wrap {
+  /* main.ts centreSideDock: right edge on the screen's middle, equal space above and below */
+  position: relative;
+  left: var(--quad-board-x, 0px);
+  top: var(--quad-board-y, 0px);
+}
 html[data-layout='side'][data-quad='1'] .dock {
   justify-self: center;
   width: var(--dock-w, 380px);
