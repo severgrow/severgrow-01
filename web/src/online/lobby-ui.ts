@@ -7,7 +7,7 @@ import { FEATURES } from '../channel.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
 import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
-import { createLobbyActionGuard } from './lobby-action.js';
+import { createLobbyActionGuard, lobbyActionStillCurrent } from './lobby-action.js';
 import { pollDue } from './poll-gate.js';
 import {
   countNeedingResponse,
@@ -41,6 +41,7 @@ import {
   FIRST_ONLINE_CARD_KEY,
   findTap,
   friendlyJoinError,
+  matchPollVerdict,
   inviteLink,
   isSearchParked,
   isWellFormedInviteCode,
@@ -820,6 +821,16 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     pollTimer = setInterval(() => void pollWaiting(), 2000);
   };
 
+  const clearInviteWait = async (line: string) => {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    waiting = null;
+    await openHub();
+    notice('online-hub-notice', line);
+  };
+
   const pollWaiting = async () => {
     if (!waiting) return;
     // A hidden tab asks nothing, and a request still out is never stacked on (poll-gate.ts).
@@ -827,18 +838,33 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const id = identity.peek();
     if (!id) return;
     waitingInFlight = true;
+    const current = waiting;
     try {
-      const res = await client.getState(id.token, waiting.matchId);
+      const res = await client.getState(id.token, current.matchId);
       serverOffset = res.serverNow - now();
-      if (res.player.status === 'active') {
-        const payload = res.player;
-        if (pollTimer) clearInterval(pollTimer);
-        pollTimer = null;
-        // The friend just joined while we sat on the waiting screen: this is our live-join moment.
-        launchDuel(id.token, payload, true);
+      if (waiting?.matchId !== current.matchId) return;
+      switch (matchPollVerdict(res.player.status, null)) {
+        case 'active':
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
+          launchDuel(id.token, res.player, true);
+          return;
+        case 'cleared':
+          await clearInviteWait(
+            res.player.status === 'finished' ? ONLINE.errFinished : ONLINE.waitingInviteHint,
+          );
+          return;
+        default:
+          return;
       }
-    } catch {
-      /* keep waiting; quiet */
+    } catch (error) {
+      if (waiting?.matchId !== current.matchId) return;
+      const code = error instanceof DuelError ? error.code : null;
+      if (matchPollVerdict(null, code) === 'cleared') {
+        await clearInviteWait(code === 'NOT_A_PARTICIPANT' ? ONLINE.identityReset : ONLINE.errGeneric);
+      }
     } finally {
       waitingInFlight = false;
     }
@@ -986,32 +1012,50 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (!exitSurface(card ?? el, { onDone: done })) done();
   };
 
+  const clearParkedSearch = async (line: string) => {
+    stopSearch();
+    closeMatchedPrompt();
+    computerGameActive = false;
+    syncLooking();
+    if (!waitingEl.hidden && waitingEl.dataset.mode === 'search') await openHub();
+    notice('online-hub-notice', line);
+  };
+
   const pollSearch = async () => {
     if (!search) return;
     // Same gate as the waiting screen: a hidden tab asks nothing and a stuck request is not stacked.
     if (!pollDue({ hidden: document.hidden, inFlight: searchInFlight })) return;
     searchInFlight = true;
+    const current = search;
     try {
-      const res = await client.getState(search.token, search.matchId);
+      const res = await client.getState(current.token, current.matchId);
       serverOffset = res.serverNow - now();
-      const payload = res.player;
-      const token = search.token;
-      if (payload.status === 'active') {
-        stopSearch();
-        void reloadMatches();
-        if (computerGameActive) openMatchedPrompt(token, payload);
-        else launchDuel(token, payload, true);
+      if (search?.matchId !== current.matchId) return;
+      const token = current.token;
+      switch (matchPollVerdict(res.player.status, null)) {
+        case 'active': {
+          const wasComputer = computerGameActive;
+          stopSearch();
+          computerGameActive = false;
+          syncLooking();
+          void reloadMatches();
+          if (wasComputer) openMatchedPrompt(token, res.player);
+          else launchDuel(token, res.player, true);
+          return;
+        }
+        case 'cleared':
+          await clearParkedSearch(ONLINE.searchCancelled);
+          return;
+        default:
+          break;
+      }
+    } catch (error) {
+      if (search?.matchId !== current.matchId) return;
+      const code = error instanceof DuelError ? error.code : null;
+      if (matchPollVerdict(null, code) === 'cleared') {
+        await clearParkedSearch(ONLINE.searchCancelled);
         return;
       }
-      if (payload.status === 'finished') {
-        // The parked search expired (nobody came within the window). Calm, honest exit.
-        stopSearch();
-        void openHub();
-        notice('online-hub-notice', ONLINE.searchCancelled);
-        return;
-      }
-    } catch {
-      /* quiet: a transient failure must not drop a parked search */
     } finally {
       searchInFlight = false;
     }
@@ -1132,6 +1176,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         if (!id) return 'failed';
         try {
           const res = await client.rematch(id.token, finishedMatchId);
+          if (!lobbyActionStillCurrent(guard, 'create')) return 'failed';
           serverOffset = res.serverNow - now();
           if (res.player.status === 'active') {
             launchDuel(id.token, res.player, true);
@@ -1167,7 +1212,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         if (gate === 'resume') resumeSearch();
         return;
       }
-      await guard.run('find', async () => {
+      const out = await guard.run('find', async () => {
         const id = await ensureIdentity();
         if (!id) return;
         // The cancel or another find may have taken the slot while this waited on the guard.
@@ -1178,6 +1223,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         noticeWithDots('online-hub-notice', ONLINE.findOpponentLooking);
         try {
           const res = await client.findOpponent(id.token);
+          if (!lobbyActionStillCurrent(guard, 'find')) return;
           serverOffset = res.serverNow - now();
           if (search) {
             resumeSearch();
@@ -1191,9 +1237,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
           // Parked: we stay in the queue and keep polling, even if the player leaves the screen.
           startSearch(id.token, res.match.matchId);
         } catch (error) {
-          notice('online-hub-notice', errorMessage(error));
+          if (lobbyActionStillCurrent(guard, 'find')) notice('online-hub-notice', errorMessage(error));
         }
       });
+      if (out.started && out.timedOut) notice('online-hub-notice', ONLINE.errGeneric);
     });
   };
 
