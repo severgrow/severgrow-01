@@ -46,7 +46,7 @@ await new Promise<void>((resolve, reject) => {
       CHANNEL: 'futa05',
       VITE_FIND_OPPONENT: '1',
       VITE_DUEL_API_URL: apiBase,
-      // The product window is three minutes; the walk shortens it so it never waits for real.
+      // The product window is 5 seconds; the walk shortens it so it never waits the real 5 s.
       VITE_PARKED_OFFER_MS: '1200',
     },
     stdio: ['ignore', 'ignore', 'inherit'],

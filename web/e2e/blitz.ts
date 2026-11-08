@@ -128,7 +128,7 @@ try {
   await page.click('#level-grid [data-difficulty="pro"]');
   await page.waitForFunction(() => (window as any).__severgrow?.blitz?.()?.active === true, undefined, { timeout: 30000 });
   const started = await blitz(page);
-  check(started.turnMs === 21_000, 'the turn limit is 21 s');
+  check(started.turnMs === 30_000, 'the turn limit is 30 s');
   check(started.botLevel === 9, 'a fresh Blitz match starts at bot 9');
   check(started.nextBotLevel === 9, 'the ladder starts at 9');
   check(started.map >= 30 && started.map <= 70, `the board is a campaign map 30-70 (${started.map})`);
@@ -153,7 +153,7 @@ try {
     };
   });
   check(face.shown, 'the LED stopwatch frame is on screen');
-  check(/^00:(2[01]|1\d)$/.test(face.text), `it reads 00:21 counting down in whole seconds (${face.text})`);
+  check(/^00:(30|2\d)$/.test(face.text), `it reads 00:30 counting down in whole seconds (${face.text})`);
   check(!face.undo && !face.intel && !face.replay, 'no Undo, no Match Intel, no Replay in Blitz');
   check(!face.ring, 'the old ring clock is gone');
   await page.screenshot({ path: '/tmp/blitz-clock-390.png' });

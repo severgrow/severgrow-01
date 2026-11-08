@@ -1273,7 +1273,7 @@ export const BETA_GUIDE = Object.freeze({
       lines: Object.freeze([
         'Main menu → Play online → invite a friend and send them the code or link.',
         'Each turn can take up to 24 hours. There are no notifications yet, so tell your opponent when you have moved, or agree a time to play together.',
-        'When you both have the match open, you can play Blitz: 21 seconds a turn, every move seen as it happens. Running out of time ends your turn; leaving loses the match.',
+        'When you both have the match open, you can play Blitz: 30 seconds a turn, every move seen as it happens. Running out of time ends your turn; leaving loses the match.',
       ]),
     }),
     Object.freeze({

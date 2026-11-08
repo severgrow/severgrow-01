@@ -2,18 +2,17 @@
 
 import type { MatchListEntry, MatchStatus } from '../../../server/src/protocol.js';
 import { formatRemaining } from './clock.js';
-import { publicAppOrigin } from './config.js';
+import { PARKED_OFFER_MS, publicAppOrigin } from './config.js';
 import { ONLINE, REPLAY } from '../../../src/strings.js';
 
 export const FIRST_ONLINE_CARD_KEY = 'severgrow.duel.firstCard.v1';
 export const WARN_LAST_MS = 2 * 3_600_000; // last 2 hours (P-12)
 
 /**
- * After this long parked in the Find-opponent queue, offer the honest computer fallback alongside
- * waiting (never instead of it — the search keeps running). Replaces the old "invite a friend"
- * prompt, which was the only option before parking existed.
+ * After this long parked in the Find-opponent queue, offer a game against the computer alongside
+ * waiting (never instead of it — the search keeps running). The number lives in `config.ts`.
  */
-export const PARKED_OFFER_MS = 3 * 60 * 1000;
+export { PARKED_OFFER_MS };
 export const isSearchParked = (elapsedMs: number, offerMs = PARKED_OFFER_MS): boolean => elapsedMs >= offerMs;
 
 export type LobbyBucket = 'your_turn' | 'waiting' | 'finished';

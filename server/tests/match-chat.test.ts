@@ -365,7 +365,7 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
       await runtime.service.accept(pb, invitation.challenge.id);
       const started = (await x.storage.matchById(x.id))!;
       expect(started.liveManaged).toBe(true);
-      expect(started.turnTimeoutMs).toBe(21000); // Blitz (owner, 2026-11-06): 21 s a turn
+      expect(started.turnTimeoutMs).toBe(30000); // Blitz (owner, 2026-11-08): 30 s a turn
       await x.send(x.waiting.token, 'Live hello');
       // Chat on your own real-time turn is allowed (owner, 2026-10-26).
       x.advance(1100);

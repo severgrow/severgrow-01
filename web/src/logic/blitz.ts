@@ -17,8 +17,8 @@ import { legalActions, scores } from '../../../src/engine/index.js';
 import type { Action, GameResult, Player, State, View } from '../../../src/engine/index.js';
 import type { FinishResult } from './log.js';
 
-/** One turn: 21 seconds, fresh every turn (owner, 2026-11-06, 0.82 remodel: "we set time to 21:00"). */
-export const BLITZ_TURN_MS = 21_000;
+/** One turn: 30 seconds, fresh every turn (owner, 2026-11-08: 30 s, was 21 s on 2026-11-06). */
+export const BLITZ_TURN_MS = 30_000;
 /** Pressure: amber from 5 s left, red from 3 s; the last three seconds tick. */
 export const BLITZ_AMBER_MS = 5_000;
 export const BLITZ_RED_MS = 3_000;
@@ -123,7 +123,7 @@ export const pickBlitzMap = (seed: number): CampaignLevel => {
   return BLITZ_MAPS[mixed % BLITZ_MAPS.length]!;
 };
 
-/** The clock for this turn: the 21 s limit from the moment the turn is playable. */
+/** The clock for this turn: the turn limit from the moment the turn is playable. */
 export const blitzDeadlineAt = (now: number): number => now + BLITZ_TURN_MS;
 
 /** What is left of a turn, never negative. */

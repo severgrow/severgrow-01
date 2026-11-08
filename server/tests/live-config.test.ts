@@ -9,22 +9,22 @@ import { DEFAULT_LIVE_CONFIG, LIVE_TURN_MS_DEFAULT, liveConfigFromEnv } from '..
 import { LIVE } from '../../src/strings.js';
 
 describe('the live turn length', () => {
-  // OWNER CHANGED THE RULE (0.82, 2026-11-06): "BLITZ replaces real time ... they have 21 seconds each".
-  it('defaults to 21 seconds (Blitz)', () => {
-    expect(LIVE_TURN_MS_DEFAULT).toBe(21_000);
-    expect(DEFAULT_LIVE_CONFIG.turnMs).toBe(21_000);
+  // OWNER CHANGED THE RULE (2026-11-08): 30 seconds a turn. Was 21 s on 2026-11-06.
+  it('defaults to 30 seconds (Blitz)', () => {
+    expect(LIVE_TURN_MS_DEFAULT).toBe(30_000);
+    expect(DEFAULT_LIVE_CONFIG.turnMs).toBe(30_000);
   });
 
   it('keeps the one override: LIVE_TURN_MS wins when it is set', () => {
     const previous = process.env.LIVE_TURN_MS;
     try {
-      process.env.LIVE_TURN_MS = '30000';
-      expect(liveConfigFromEnv().turnMs).toBe(30_000);
+      process.env.LIVE_TURN_MS = '45000';
+      expect(liveConfigFromEnv().turnMs).toBe(45_000);
     } finally {
       if (previous === undefined) delete process.env.LIVE_TURN_MS;
       else process.env.LIVE_TURN_MS = previous;
     }
-    expect(liveConfigFromEnv().turnMs).toBe(21_000);
+    expect(liveConfigFromEnv().turnMs).toBe(30_000);
   });
 
   it('every real-time turn is exactly the turn clock: no extra seconds on entry or for the replay', () => {

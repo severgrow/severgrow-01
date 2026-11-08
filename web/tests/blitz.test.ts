@@ -92,15 +92,17 @@ describe('Blitz ladder (the only bot rule that is not the tier carry-over)', () 
 // showing milliseconds too)"; at 00:00 "Turn ends, worst card thrown" (was: the match is lost). See
 // docs/HANDOFF-0.82-BLITZ.md. The old timeout-loss state helpers stay for the online live duel's reason.
 describe('Blitz clock', () => {
-  it('is 21 seconds a turn, fresh each turn', () => {
-    expect(BLITZ_TURN_MS).toBe(21_000);
-    expect(blitzDeadlineAt(1_000)).toBe(22_000);
-    expect(blitzRemainingMs(22_000, 10_000)).toBe(12_000);
-    expect(blitzRemainingMs(22_000, 30_000)).toBe(0);
+  // OWNER CHANGED THE RULE (2026-11-08): 30 seconds a turn, was 21.
+  it('is 30 seconds a turn, fresh each turn', () => {
+    expect(BLITZ_TURN_MS).toBe(30_000);
+    expect(blitzDeadlineAt(1_000)).toBe(31_000);
+    expect(blitzRemainingMs(31_000, 10_000)).toBe(21_000);
+    expect(blitzRemainingMs(31_000, 40_000)).toBe(0);
   });
 
   // OWNER CHANGED THE RULE (2026-11-06: "Change format of clock to 00:21 showing only seconds").
   it('reads minutes:seconds, whole seconds only (00:21 down to 00:00)', () => {
+    expect(blitzClockText(30_000)).toBe('00:30');
     expect(blitzClockText(21_000)).toBe('00:21');
     expect(blitzClockText(20_400)).toBe('00:21');
     expect(blitzClockText(20_000)).toBe('00:20');
@@ -114,13 +116,13 @@ describe('Blitz clock', () => {
   // Owner, 2026-11-06: "Make sure the clock never lags never slows down and is super reliable". The clock
   // wakes exactly when the shown second changes (not every frame), and always reads a steady clock.
   it('wakes exactly when the shown second flips, never drifting', () => {
-    expect(blitzNextFlipIn(21_000)).toBe(1_000);
+    expect(blitzNextFlipIn(30_000)).toBe(1_000);
     expect(blitzNextFlipIn(20_400)).toBe(400);
     expect(blitzNextFlipIn(1)).toBe(1);
     expect(blitzNextFlipIn(0)).toBeNull();
     expect(blitzNextFlipIn(-5)).toBeNull();
     // waking at that moment always shows the next second, whatever the start
-    for (const left of [21_000, 20_999, 15_432, 5_001, 3_000, 999]) {
+    for (const left of [30_000, 20_999, 15_432, 5_001, 3_000, 999]) {
       const flip = blitzNextFlipIn(left)!;
       expect(blitzClockText(left - flip)).not.toBe(blitzClockText(left));
       expect(blitzClockText(left - flip + 1)).toBe(blitzClockText(left));
@@ -128,7 +130,7 @@ describe('Blitz clock', () => {
   });
 
   it('pressure: calm, then amber from 5 s, red from 3 s; the last three seconds tick once each', () => {
-    expect(blitzStage(21_000)).toBe('calm');
+    expect(blitzStage(BLITZ_TURN_MS)).toBe('calm');
     expect(blitzStage(5_001)).toBe('calm');
     expect(blitzStage(5_000)).toBe('amber');
     expect(blitzStage(3_001)).toBe('amber');
@@ -166,8 +168,8 @@ describe('Blitz clock', () => {
     const t = blitzTempo([12_000, 18_500, 3_000])!;
     expect(t.turns).toBe(3);
     expect(t.averageLeftMs).toBe(11_167);
-    expect(t.fastestMs).toBe(2_500); // 21 s - 18.5 s left
-    expect(blitzTempoLine(t)).toBe('TEMPO 11.1 s left a turn · fastest 2.5 s');
+    expect(t.fastestMs).toBe(11_500); // 30 s - 18.5 s left
+    expect(blitzTempoLine(t)).toBe('TEMPO 11.1 s left a turn · fastest 11.5 s');
   });
 
   it('the old loss-on-timeout state still exists for the online live duel (reason timeout)', () => {

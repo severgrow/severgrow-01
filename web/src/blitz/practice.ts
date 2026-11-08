@@ -3,7 +3,7 @@
 // without a browser.
 //
 // 0.82 REMODEL (owner, 2026-11-06, docs/HANDOFF-0.82-BLITZ.md): the clock is an LED stopwatch in the
-// cockpit (`blitz/timer.ts`), 21 s a turn, fresh each turn. It shows MY time on my turn and THEIR
+// cockpit (`blitz/timer.ts`), 30 s a turn, fresh each turn. It shows MY time on my turn and THEIR
 // time while their turn is being played, so both players' pressure is visible. At 00:00 my turn ends
 // on its own (draw, stop, throw the lowest card): the match goes on. The time left at the end of each
 // of my turns is my TEMPO, shown on the finish card. (The live-duel ring is no longer used here.)
@@ -210,7 +210,7 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
     path.setAttribute('d', 'M13.4 2.5 5 13.6h6.1l-1.3 7.9 8.6-11.3h-6.2z');
     bolt.append(path);
     button.append(label, bolt);
-    button.setAttribute('aria-label', 'Blitz: 21 seconds a turn against the computer at level 9.');
+    button.setAttribute('aria-label', `Blitz: ${BLITZ_TURN_MS / 1000} seconds a turn against the computer at level 9.`);
     button.addEventListener('click', () => {
       hooks.unlock();
       hooks.store.set(SELECTED_KEY, 'pro');

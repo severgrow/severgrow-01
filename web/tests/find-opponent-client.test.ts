@@ -69,10 +69,11 @@ describe('parked-search copy (punchy standard)', () => {
     expect(ONLINE.matchedTitle.toLowerCase()).not.toContain('computer');
   });
 
-  it('keeps the parked offer at the three-minute window', () => {
-    expect(PARKED_OFFER_MS).toBe(180_000);
-    expect(isSearchParked(179_999)).toBe(false);
-    expect(isSearchParked(180_000)).toBe(true);
+  // OWNER CHANGED THE RULE (2026-11-08): offer a computer game after 5 seconds, was 3 minutes.
+  it('offers a computer game after 5 seconds, and not before', () => {
+    expect(PARKED_OFFER_MS).toBe(5_000);
+    expect(isSearchParked(4_999)).toBe(false);
+    expect(isSearchParked(5_000)).toBe(true);
   });
 
   it('does not churn already-punchy labels', () => {
