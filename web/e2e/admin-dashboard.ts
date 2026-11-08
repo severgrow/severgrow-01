@@ -310,7 +310,9 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
   const overview = await textOf(page);
   check('Overview shows the new counters', /New reports/.test(overview) && /New crashes/.test(overview));
   check('Overview shows the worst shipped build', /index-E2E00001\.js/.test(overview), 'the seeded asset name');
-  check('Overview states what it cannot measure', /cannot measure/.test(overview) && /Active users/.test(overview));
+  // futa084-analytics: player activity moved to the Analytics screen; Overview names what it cannot
+  // measure and sends the owner there (was "Active users ... no such figure is shown").
+  check('Overview states what it cannot measure', /cannot measure/.test(overview) && /Open Analytics/.test(overview));
   check('Overview labels the duel modes honestly', /Find opponent/.test(overview) && /Invite/.test(overview));
   await page.screenshot({ path: `${OUT}overview-desktop.png`, fullPage: true });
 

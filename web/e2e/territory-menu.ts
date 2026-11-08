@@ -62,6 +62,15 @@ for (const [i, g] of others.entries()) {
 }
 await fetch(`${apiBase}/v1/territory/chat`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${others[0]!.token}`},body:JSON.stringify({text:'Moderation fixture',requestId:randomUUID()})});
 const me = await guestOf();
+// OWNER CHANGED THE RULE (futa0.84, 2026-11-08): guests earn Seeds but only a signed-in account grows a
+// planet tile (server/tests/guest-planet-claim.test.ts). This suite walks the account's tile bar, so the
+// player is an account on the server and in the page (a guest's bar offers Sign in instead).
+{
+  const players = (storage as unknown as { players: Map<string, { kind: string; upgradedAt?: number | null }> }).players;
+  const row = players.get(me.player.id)!;
+  players.set(me.player.id, { ...row, kind: 'account', upgradedAt: Date.now() });
+  me.player.kind = 'account';
+}
 await fund(me.player.id, 3);
 await store.claim(me.player.id, '-2,-4', 'menu-owned-fixture', Date.now());
 await store.acknowledgeInvitation(me.player.id); // the one-time 100 Seeds card is not what this suite tests
