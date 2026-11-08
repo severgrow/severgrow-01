@@ -57,6 +57,11 @@ describe('formatRivalryLine', () => {
     expect(formatRivalryLine({ games: 2, youWins: 1, themWins: 1, draws: 0 }, 'RYK')).toBe('YOU 1 — 1 RYK');
   });
 
+  it('names the draws when there are any (review, 0.84), and only then', () => {
+    expect(formatRivalryLine({ games: 8, youWins: 4, themWins: 3, draws: 1 }, 'RYK')).toBe('YOU 4 — 3 RYK · 1 DRAW');
+    expect(formatRivalryLine({ games: 9, youWins: 4, themWins: 3, draws: 2 }, 'RYK')).toBe('YOU 4 — 3 RYK · 2 DRAWS');
+  });
+
   it('stays silent when there is no history yet', () => {
     expect(formatRivalryLine({ games: 0, youWins: 0, themWins: 0, draws: 0 }, 'RYK')).toBeNull();
   });

@@ -45,5 +45,6 @@ export const formatRivalryLine = (
   if (record.games <= 0) return null;
   const name = rivalryDisplayName(opponentDisplayName);
   if (!name) return null;
-  return `YOU ${record.youWins} — ${record.themWins} ${name}`;
+  const draws = record.draws > 0 ? ` · ${record.draws} DRAW${record.draws === 1 ? '' : 'S'}` : '';
+  return `YOU ${record.youWins} — ${record.themWins} ${name}${draws}`;
 };

@@ -91,3 +91,31 @@ describe('keep-progress waits for the result and then gets out of the way (revie
     expect(src).toMatch(/setTimeout\(hide, KEEP_PROGRESS_DWELL_MS\)/);
   });
 });
+
+describe('keep-progress details (review, 0.84)', () => {
+  const read = (p: string) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+  const src = read('../src/player/keep-progress.ts');
+  it('arrives like every other surface: the shared entrance, nothing under reduced motion', () => {
+    expect(src).toContain('enterSurface(root');
+  });
+  it('shows a keyboard focus ring on its keys', () => {
+    expect(src).toMatch(/#keep-progress \.keep-progress-actions button:focus-visible \{[^}]*outline:/);
+  });
+  it('is dark glass with no stroked contour on its keys', () => {
+    const keys = src.slice(src.indexOf('#keep-progress .keep-progress-actions button {'), src.indexOf('}', src.indexOf('#keep-progress .keep-progress-actions button {')));
+    expect(keys).toMatch(/border:\s*0/);
+    expect(src).not.toMatch(/border-color:\s*rgba/);
+  });
+  it('is a named region with keys, not a live status', () => {
+    expect(src).toContain("root.setAttribute('role', 'region')");
+    expect(src).toContain("root.setAttribute('aria-label', ACCOUNT.keepProgressTitle)");
+  });
+  it('Escape puts it away like Not now', () => {
+    expect(src).toMatch(/key === 'Escape'/);
+  });
+  it('never offers Sign in in a build that has no sign-in key', () => {
+    expect(src).toContain('hooks.canSignIn');
+    const main = read('../src/main.ts');
+    expect(main).toMatch(/canSignIn: \(\) => !!document\.getElementById\('menu-login'\)/);
+  });
+});

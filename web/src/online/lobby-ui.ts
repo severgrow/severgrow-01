@@ -903,7 +903,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const parked = isSearchParked(now() - search.startedAt, parkedOfferMs());
     // Active search shows the animated dots; the parked "Nobody yet" offer is a still state.
     setWaitingTitle(parked ? ONLINE.searchParkedTitle : ONLINE.searchTitle, !parked);
-    const level = offeredLevel() ?? 1;
+    // The line names a level only when the offer has a level key for it.
+    const level = hooks.startOfferedLevel ? offeredLevel() : null;
     $('online-waiting-body').textContent = parked ? ONLINE.searchParkedBody(level) : ONLINE.searchBody;
     paintSearchOffer();
     const options = document.getElementById('online-search-options');

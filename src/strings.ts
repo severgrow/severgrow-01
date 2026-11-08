@@ -169,8 +169,8 @@ export const ONLINE = Object.freeze({
   searchBody: 'You are in the queue. The duel opens the moment someone else joins.',
   searchParkedTitle: 'Nobody yet',
   /** Owner, 2026-11-08: name the practice match and the player's own level, and say a real opponent still connects. */
-  searchParkedBody: (level: number) =>
-    `Practice match or level ${level} while you're waiting. If we find an opponent, you'll be connected.`,
+  searchParkedBody: (level: number | null) =>
+    `Practice match${level == null ? '' : ` or level ${level}`} while you're waiting. If we find an opponent, you'll be connected.`,
   searchPlayComputer: 'Practice match',
   searchPlayLevel: (level: number) => `Level ${level}`,
   searchInviteFriend: 'Invite a friend',

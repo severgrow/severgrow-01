@@ -4,7 +4,7 @@
 // decision or the victory / Seeds card. Not a modal — a small dark-glass line with Sign in / Not now.
 import type { KeyValue } from '../../../server/src/client.js';
 import { ACCOUNT } from '../../../src/strings.js';
-import { interfaceMotionAllowed } from '../ui/interface-motion.js';
+import { enterSurface, interfaceMotionAllowed } from '../ui/interface-motion.js';
 
 export const KEEP_PROGRESS_KEY = 'severgrow.account.keep-progress.v1';
 
@@ -49,11 +49,12 @@ export const keepProgressDecision = (input: {
 
 export const KEEP_PROGRESS_CSS = `
 #keep-progress {
-  position: fixed; z-index: 8; left: 50%;
+  /* centred by margins, not translate: the shared entrance animates translate */
+  position: fixed; z-index: 8; left: 0; right: 0; margin-inline: auto;
   bottom: max(24px, calc(env(safe-area-inset-bottom, 0px) + 18px));
-  translate: -50% 0; box-sizing: border-box;
+  box-sizing: border-box;
   width: max-content; max-width: min(320px, calc(100% - 32px));
-  margin: 0; padding: 12px 14px; border: 0; border-radius: 15px;
+  margin-block: 0; padding: 12px 14px; border: 0; border-radius: 15px;
   text-align: center;
   color: var(--instrument-selection, #f2e5c5);
   background: var(--dark-glass);
@@ -77,13 +78,15 @@ export const KEEP_PROGRESS_CSS = `
 }
 #keep-progress .keep-progress-actions button {
   min-height: 44px; min-width: 44px; padding: 0 14px; border-radius: 12px;
-  border: 1px solid rgba(242, 229, 197, .28);
+  border: 0;
   background: rgba(255,255,255,.06); color: #f2e7cb;
   font: inherit; letter-spacing: .04em; cursor: pointer;
 }
 #keep-progress .keep-progress-actions button.primary {
   background: rgba(242, 229, 197, .16);
-  border-color: rgba(242, 229, 197, .45);
+}
+#keep-progress .keep-progress-actions button:focus-visible {
+  outline: 2px solid var(--instrument-focus, #f2e5c5); outline-offset: 2px;
 }
 #keep-progress[data-motion="still"] { transition: none; animation: none; }
 @media (prefers-reduced-motion: reduce) {
@@ -101,6 +104,8 @@ export type KeepProgressHooks = {
   /** Open the existing sign-in flow (Google or email). */
   onSignIn: () => void;
   reduceMotion?: () => boolean;
+  /** False when this build has no sign-in key (then nothing is offered). Omitted: assume it has. */
+  canSignIn?: () => boolean;
 };
 
 export type KeepProgressController = {
@@ -138,7 +143,9 @@ export const mountKeepProgress = (hooks: KeepProgressHooks): KeepProgressControl
   const root = document.createElement('div');
   root.id = 'keep-progress';
   root.hidden = true;
-  root.setAttribute('role', 'status');
+  // A small panel with two keys: a named region, not a live status that reads its keys aloud.
+  root.setAttribute('role', 'region');
+  root.setAttribute('aria-label', ACCOUNT.keepProgressTitle);
   const title = document.createElement('strong');
   title.className = 'keep-progress-title';
   title.textContent = ACCOUNT.keepProgressTitle;
@@ -176,6 +183,8 @@ export const mountKeepProgress = (hooks: KeepProgressHooks): KeepProgressControl
   const show = (): void => {
     root.dataset.motion = motionStill() ? 'still' : 'motion';
     root.hidden = false;
+    // The same soft arrival as every other sheet (nothing under reduced motion).
+    enterSurface(root);
     // It is a suggestion, not a gate: it leaves on its own so it never sits over the next match.
     clearTimeout(dwell);
     dwell = setTimeout(hide, KEEP_PROGRESS_DWELL_MS);
@@ -185,6 +194,8 @@ export const mountKeepProgress = (hooks: KeepProgressHooks): KeepProgressControl
 
   const consider = (reason: KeepProgressReason): void => {
     if (disposed) return;
+    // A build with no sign-in key has nothing to offer: never show a Sign in that does nothing.
+    if (hooks.canSignIn && !hooks.canSignIn()) return;
     if (hooks.covered()) {
       held = reason;
       return;
@@ -209,6 +220,10 @@ export const mountKeepProgress = (hooks: KeepProgressHooks): KeepProgressControl
   no.addEventListener('click', () => {
     writeMemory(hooks.storage(), { dismissed: true, offered: true });
     hide();
+  });
+  // Escape puts it away like Not now.
+  root.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') no.click();
   });
 
   return {

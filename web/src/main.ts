@@ -11574,6 +11574,7 @@ keepProgress = mountKeepProgress({
     const btn = document.getElementById('menu-login') as HTMLButtonElement | null;
     btn?.click();
   },
+  canSignIn: () => !!document.getElementById('menu-login'),
   reduceMotion: () => !interfaceMotionAllowed(),
 });
 window.addEventListener('futasaku:first-claim', () => keepProgress?.note('first-claim'));

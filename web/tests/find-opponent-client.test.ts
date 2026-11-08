@@ -104,6 +104,10 @@ describe('parked-search copy (punchy standard)', () => {
     expect(ONLINE.searchInviteFriend).toBe('Invite a friend');
     expect(ONLINE.searchKeepWaiting).toBe('Keep searching');
     expect(ONLINE.searchLooking).toBe('Looking for opponent');
+    // Detail (review, 0.84): with no level key on the offer, the line does not name a level either.
+    expect(ONLINE.searchParkedBody(null)).toBe(
+      "Practice match while you're waiting. If we find an opponent, you'll be connected.",
+    );
     // The matched copy talks about an opponent, never the computer.
     expect(ONLINE.matchedTitle.toLowerCase()).not.toContain('computer');
   });
