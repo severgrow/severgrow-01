@@ -180,7 +180,9 @@ describe('the gathered emblem sits on the middle tile (owner, 2026-11-08)', () =
     expect(measure).toBeGreaterThan(seat);
     expect(bloom).toBeGreaterThan(measure);
     expect(pile).toBeGreaterThan(bloom);
-    expect(src).toContain("plain-wordmark.svg?url");
+    expect(src).toContain("WORDMARK_URL as plainMarkUrl");
+    expect(src).toContain("from './branding.js'");
+    expect(src).not.toContain("plain-wordmark.svg?url");
     expect(src).not.toContain('EASE.spring');
     expect(src).toMatch(/private layout\(\): void \{[\s\S]*?if \(this\.exiting\) return;/);
     const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
