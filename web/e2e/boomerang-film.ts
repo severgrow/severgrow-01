@@ -41,5 +41,5 @@ try {
   console.log(`boomerang film: ${shots.length} frames over ${total} ms -> ${OUT}`);
 } finally {
   await browser.close();
-  await new Promise<void>((r) => server.close(() => r()));
+  await server.close();
 }

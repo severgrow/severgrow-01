@@ -115,6 +115,15 @@ describe('the six legs read', () => {
 });
 
 describe('the boomerang stays safe', () => {
+  it('the flight runs on an even clock: each leg carries its own easing, never a second curve on top', () => {
+    // FOUND ON FILM (2026-11-08): effects.ts played these frames with easing easeOpen on the WHOLE
+    // animation as well as on each leg. The outer ease-out raced through the timeline, so the card was
+    // on the pile ~45% of the way in and sat there: the flight felt too quick however long it was.
+    const effects = readFileSync(new URL('../src/ui/effects.ts', import.meta.url), 'utf8');
+    const fn = effects.slice(effects.indexOf('function throwBoomerang('), effects.indexOf('function flyBack('));
+    expect(fn).toMatch(/anim\(d, plan\.frames, \{ duration, easing: 'linear'/);
+  });
+
   it('the way home always bows toward the middle of the screen, never off its edge', () => {
     const view = { width: 390, height: 844 };
     const centre = { x: view.width / 2, y: view.height / 2 };

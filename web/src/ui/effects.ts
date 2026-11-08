@@ -10,7 +10,6 @@ const IS_FUTA04 = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04
 import { FRUIT } from '../../../src/strings.js';
 import { ParticleBudget } from '../logic/juice.js';
 import { EASE, MOTION, PINNED } from '../logic/motion.js';
-import { INTERFACE_MOTION } from './interface-motion.js';
 import { planBoomerang } from './throw-boomerang.js';
 import { dustSpecks } from '../logic/impact.js';
 
@@ -333,7 +332,8 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const duration = plan.duration * f;
     if (onLand) setTimeout(onLand, plan.landMs * f);
     removeAfter(
-      anim(d, plan.frames, { duration, easing: INTERFACE_MOTION.easeOpen, fill: 'forwards' }),
+      // The legs carry their own easing (throw-boomerang.ts); the whole flight runs on an even clock.
+      anim(d, plan.frames, { duration, easing: 'linear', fill: 'forwards' }),
       d,
       duration + 40,
     );
