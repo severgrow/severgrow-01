@@ -3,12 +3,12 @@
 // Builds a local futa05 app (VITE_FIND_OPPONENT=1) against an in-memory MatchService, then drives
 // two independent browser contexts:
 //   * A parks (nobody waiting) and sits on an honest "Finding an opponent" screen;
-//   * after the parked window the three offers appear (Play the computer / Invite a friend /
+//   * after the parked window the offers appear (Practice match / Level 1 / Invite a friend /
 //     Keep searching) — and "Keep searching" hides them again;
 //   * B taps Find opponent: it joins A's parked search and BOTH open the live duel;
-//   * A chooses "Play the computer" while searching: the offline game runs and the search keeps
-//     going; when B arrives, A gets the dismissible "Opponent found" prompt and "Play now" opens
-//     the duel. The offline game is never lost (Continue still exists).
+//   * A chooses "Practice match" while searching: the offline game runs, "Looking for opponent"
+//     sits on the board, and the search keeps going; when B arrives, A gets the dismissible
+//     "Opponent found" prompt and "Play now" opens the duel. The offline game is never lost.
 //
 //   npx tsx web/e2e/online-find-opponent-states.ts
 import { spawn } from 'node:child_process';
@@ -126,9 +126,9 @@ try {
   check('parked title is honest', (await a.textContent('#online-waiting-title'))?.includes('Nobody yet') === true);
   check('three clear offers appear when parked', (await visible(a, 'online-search-options')) === true);
   const offers = await a.evaluate(() =>
-    ['online-search-computer', 'online-search-invite', 'online-search-keep'].map((id) => document.getElementById(id)?.textContent ?? ''),
+    ['online-search-computer', 'online-search-level', 'online-search-invite', 'online-search-keep'].map((id) => document.getElementById(id)?.textContent ?? ''),
   );
-  check('offer labels are punchy and exact', offers.join('|') === 'Play the computer|Invite a friend|Keep searching', offers.join('|'));
+  check('offer labels are punchy and exact', offers.join('|') === 'Practice match|Level 1|Invite a friend|Keep searching', offers.join('|'));
   await a.screenshot({ path: `${OUT}find-opponent-parked-390x844.png` });
 
   // Keep searching hides the offer again.
@@ -153,10 +153,23 @@ try {
   await c.waitForTimeout(2_500);
   await c.click('#online-search-computer');
   await c.waitForSelector('#game:not([hidden])', { timeout: 15_000 });
-  check('play the computer opens the offline game', (await visible(c, 'game')) === true);
-  // The computer game is the local game, never an online duel: the duel HUD is absent, and the
-  // offer the player tapped said "Play the computer" (asserted exactly above).
-  check('the computer game is the local game, not an online duel', (await visible(c, 'duel-hud')) === false);
+  check('practice match opens the offline game', (await visible(c, 'game')) === true);
+  // The practice match is the local game, never an online duel: the duel HUD is absent, and the
+  // offer the player tapped said "Practice match" (asserted exactly above).
+  check('the practice match is the local game, not an online duel', (await visible(c, 'duel-hud')) === false);
+  const looking = await c.evaluate(() => {
+    const el = document.getElementById('online-search-looking');
+    if (!el || el.hidden) return '';
+    const style = getComputedStyle(el);
+    const inHud = !!el.closest('#game .hud');
+    const words = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    return `${el.getAttribute('role')}|${inHud ? 'hud' : 'no'}|${style.position}|${style.pointerEvents}|${words}`;
+  });
+  check(
+    'looking line is a fixed status between the menu and the logo',
+    looking === 'status|hud|fixed|none|Looking for opponent',
+    looking,
+  );
 
   const d = await newPage(vp);
   await openFind(d);

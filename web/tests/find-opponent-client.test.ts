@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike, KeyValue } from '../../server/src/client.js';
 import { ONLINE } from '../../src/strings.js';
-import { PARKED_OFFER_MS, isSearchParked } from '../src/online/lobby.js';
+import { PARKED_OFFER_MS, findTap, isSearchParked } from '../src/online/lobby.js';
 
 const mem = (): KeyValue => {
   const map = new Map<string, string>();
@@ -37,12 +37,14 @@ describe('parked-search copy (punchy standard)', () => {
       ONLINE.searchTitle,
       ONLINE.searchBody,
       ONLINE.searchParkedTitle,
-      ONLINE.searchParkedBody,
+      ONLINE.searchParkedBody(4),
       ONLINE.searchPlayComputer,
+      ONLINE.searchPlayLevel(4),
       ONLINE.searchInviteFriend,
       ONLINE.searchKeepWaiting,
       ONLINE.searchStop,
       ONLINE.searchCancelled,
+      ONLINE.searchLooking,
       ONLINE.matchedTitle,
       ONLINE.matchedBody,
       ONLINE.matchedPlayNow,
@@ -57,16 +59,42 @@ describe('parked-search copy (punchy standard)', () => {
     }
     // Buttons stay two or three words.
     expect(ONLINE.searchPlayComputer.length).toBeLessThanOrEqual(20);
+    expect(ONLINE.searchPlayLevel(12).length).toBeLessThanOrEqual(20);
     expect(ONLINE.searchInviteFriend.length).toBeLessThanOrEqual(20);
     expect(ONLINE.searchKeepWaiting.length).toBeLessThanOrEqual(20);
     expect(ONLINE.matchedPlayNow.length).toBeLessThanOrEqual(12);
     expect(ONLINE.matchedLater.length).toBeLessThanOrEqual(8);
   });
 
-  it('never suggests the computer is a person', () => {
-    expect(ONLINE.searchPlayComputer.toLowerCase()).toContain('computer');
+  // OWNER CHANGED THE OFFER (2026-11-08): a practice match or the current level, not "Play the computer".
+  it('offers a practice match or the current level, never calling that match an opponent', () => {
+    expect(ONLINE.searchParkedTitle).toBe('Nobody yet');
+    expect(ONLINE.searchPlayComputer).toBe('Practice match');
+    expect(ONLINE.searchPlayComputer.toLowerCase()).not.toContain('opponent');
+    expect(ONLINE.searchPlayLevel(4)).toBe('Level 4');
+    expect(ONLINE.searchParkedBody(4)).toBe(
+      "Practice match or level 4 while you're waiting. If we find an opponent, you'll be connected.",
+    );
+    expect(ONLINE.searchInviteFriend).toBe('Invite a friend');
+    expect(ONLINE.searchKeepWaiting).toBe('Keep searching');
+    expect(ONLINE.searchLooking).toBe('Looking for opponent');
     // The matched copy talks about an opponent, never the computer.
     expect(ONLINE.matchedTitle.toLowerCase()).not.toContain('computer');
+  });
+
+  it('a repeat find, a cancel still in flight, and a resume do not park a second entry', () => {
+    let hasSearch = false;
+    let cancelPending = false;
+    const tap = () => findTap(hasSearch, cancelPending);
+    expect(tap()).toBe('park');
+    hasSearch = true;
+    expect(tap()).toBe('resume');
+    cancelPending = true;
+    expect(tap()).toBe('wait');
+    cancelPending = false;
+    expect(tap()).toBe('resume');
+    hasSearch = false;
+    expect(tap()).toBe('park');
   });
 
   // OWNER CHANGED THE RULE (2026-11-08): offer a computer game after 5 seconds, was 3 minutes.

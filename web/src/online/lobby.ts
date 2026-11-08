@@ -9,11 +9,26 @@ export const FIRST_ONLINE_CARD_KEY = 'severgrow.duel.firstCard.v1';
 export const WARN_LAST_MS = 2 * 3_600_000; // last 2 hours (P-12)
 
 /**
- * After this long parked in the Find-opponent queue, offer a game against the computer alongside
- * waiting (never instead of it — the search keeps running). The number lives in `config.ts`.
+ * After this long parked in the Find-opponent queue, offer a practice match or the current
+ * campaign level alongside waiting (never instead of it — the search keeps running). The number
+ * lives in `config.ts`.
  */
 export { PARKED_OFFER_MS };
 export const isSearchParked = (elapsedMs: number, offerMs = PARKED_OFFER_MS): boolean => elapsedMs >= offerMs;
+
+/**
+ * What a Find tap may do with the queue. `park` is the only action that creates an entry, and
+ * only when this client is not already in one and a cancel has landed. A repeat find resumes
+ * the same entry. A find while a cancel is still in flight waits, so find → cancel → resume
+ * cannot leave two queue entries.
+ */
+export type FindTap = 'park' | 'resume' | 'wait';
+
+export const findTap = (hasSearch: boolean, cancelPending: boolean): FindTap => {
+  if (cancelPending) return 'wait';
+  if (hasSearch) return 'resume';
+  return 'park';
+};
 
 export type LobbyBucket = 'your_turn' | 'waiting' | 'finished';
 

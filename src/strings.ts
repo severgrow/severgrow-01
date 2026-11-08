@@ -165,10 +165,15 @@ export const ONLINE = Object.freeze({
   searchTitle: 'Finding an opponent',
   searchBody: 'You are in the queue. The duel opens the moment someone else joins.',
   searchParkedTitle: 'Nobody yet',
-  searchParkedBody: 'You stay in the queue.',
-  searchPlayComputer: 'Play the computer',
+  /** Owner, 2026-11-08: name the practice match and the player's own level, and say a real opponent still connects. */
+  searchParkedBody: (level: number) =>
+    `Practice match or level ${level} while you're waiting. If we find an opponent, you'll be connected.`,
+  searchPlayComputer: 'Practice match',
+  searchPlayLevel: (level: number) => `Level ${level}`,
   searchInviteFriend: 'Invite a friend',
   searchKeepWaiting: 'Keep searching',
+  /** Shown on the board, between the menu and the logo, while that offline game waits. */
+  searchLooking: 'Looking for opponent',
   searchStop: 'Stop searching',
   searchCancelled: 'Search stopped',
   searchStatusSr: 'Searching for an opponent.',
