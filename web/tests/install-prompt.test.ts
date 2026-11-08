@@ -148,13 +148,37 @@ describe('desktop words (owner, 2026-10-15)', () => {
     const { INSTALL } = await import('../../src/strings.js');
     const { installCopyFor } = await import('../src/logic/install-prompt.js');
     const desk = installCopyFor(INSTALL, true);
-    expect(desk.title).toBe('Open FUTASAKU in its own window');
-    expect(desk.install).toBe('Open in its own window');
+    // OWNER CHANGED THE COPY (2026-11-08: "some of its copy is lame ... adjusted to iOS/android/desktop").
+    expect(desk.title).toBe('Give FUTASAKU its own window');
+    expect(desk.install).toBe('Install');
     for (const line of [desk.title, desk.install, ...desk.why, ...desk.manualSteps]) expect(line).not.toMatch(/home screen/i);
     expect(desk.done).toBe(INSTALL.done);
     expect(desk.never).toBe(INSTALL.never);
     const phone = installCopyFor(INSTALL, false);
     expect(phone.title).toBe(INSTALL.title);
-    expect(phone.install).toBe('Add to home screen');
+    // The phone button only shows where the browser's own dialog exists (Android / Chromium), and that
+    // dialog says Install.
+    expect(phone.install).toBe('Install');
+  });
+});
+
+describe('the install words speak each platform\'s language (owner, 2026-11-08)', () => {
+  it('names what each platform actually shows, in short lines', async () => {
+    const { INSTALL } = await import('../../src/strings.js');
+    expect(INSTALL.title).toBe('Put FUTASAKU on your home screen');
+    // iPhone: the Share button, which on iOS 26 sits under the ⋯ button, then Add to Home Screen.
+    expect(INSTALL.iosSteps.join(' ')).toMatch(/Share/);
+    expect(INSTALL.iosSteps.join(' ')).toMatch(/⋯/);
+    expect(INSTALL.iosSteps.join(' ')).toMatch(/Add to Home Screen/);
+    // Android without the browser dialog: its own menu words.
+    expect(INSTALL.manualSteps.join(' ')).toMatch(/⋮/);
+    expect(INSTALL.manualSteps.join(' ')).toMatch(/Install app/);
+    // Computer: Chrome / Edge and Safari each get their own line.
+    expect(INSTALL.desktop.manualSteps.some((l) => /^Chrome or Edge:/.test(l))).toBe(true);
+    expect(INSTALL.desktop.manualSteps.some((l) => /^Safari on a Mac:/.test(l) && /Add to Dock/.test(l))).toBe(true);
+    for (const line of [INSTALL.title, ...INSTALL.why, ...INSTALL.iosSteps, ...INSTALL.manualSteps,
+      INSTALL.desktop.title, ...INSTALL.desktop.why, ...INSTALL.desktop.manualSteps]) {
+      expect(line.length, line).toBeLessThanOrEqual(64);
+    }
   });
 });

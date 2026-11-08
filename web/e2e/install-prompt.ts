@@ -12,6 +12,7 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { startLocalDuel, openSeat, openDuel, waitIdle } from './helpers/local-duel.js';
 import type { LocalDuel, LocalMatch, SeatSession } from './helpers/local-duel.js';
+import { INSTALL } from '../../src/strings.js';
 
 const OUT = resolve('docs/screens/install-prompt');
 mkdirSync(OUT, { recursive: true });
@@ -74,7 +75,7 @@ try {
   await big.page.waitForSelector(PROMPT, { timeout: 30_000 });
   const deskTitle = await big.page.locator('#install-title').innerText();
   const deskText = await big.page.locator('#install-prompt').innerText();
-  check(deskTitle === 'Open FUTASAKU in its own window', `desktop: offers its own window (${deskTitle})`);
+  check(deskTitle === INSTALL.desktop.title, `desktop: offers its own window (${deskTitle})`);
   check(!/home screen/i.test(deskText), 'desktop: never mentions a home screen');
   check(/home screen/i.test(winnerTitleOnPhone), 'phone: still offers the home screen');
   await big.page.screenshot({ path: `${OUT}/first-online-win-1280x800.png` });

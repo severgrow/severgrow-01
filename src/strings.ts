@@ -1094,37 +1094,41 @@ export const TUTORIAL = Object.freeze({
  * accounts — so these words still read correctly once sign-in ships.
  */
 export const INSTALL = Object.freeze({
-  title: 'Grow FUTASAKU on your home screen',
+  // Owner, 2026-11-08: "some of its copy is lame ... quick, easy and adjusted to iOS/Android/desktop".
+  // Short lines in each platform's own words: Android's dialog says Install, iOS 26 keeps Share under ⋯.
+  title: 'Put FUTASAKU on your home screen',
   why: Object.freeze([
-    'Opens full-screen - straight in, no browser bars',
-    'Works offline, even with no signal',
-    'One tap from your home screen - no typing the address',
+    'Full screen - no browser bars',
+    'Plays offline, even with no signal',
+    'One tap to open',
   ] as const),
-  install: 'Add to home screen',
+  /** Shown only where the browser's own install dialog exists (Android / Chromium). */
+  install: 'Install',
   done: 'Got it',
   notNow: 'Not now',
   never: "Don't show again",
   iosSteps: Object.freeze([
-    'Tap the Share button - the square with the arrow pointing up.',
+    'Tap Share (on iOS 26 it is under the ⋯ button).',
     // iOS 26 asks whether to "Open as Web App"; off, the game opens inside Safari with its bars.
-    'Choose Add to Home Screen, keep Open as Web App on, then tap Add.',
+    'Tap Add to Home Screen, keep Open as Web App on, tap Add.',
   ] as const),
+  /** Android browsers without the install dialog (Samsung Internet, Firefox ...). */
   manualSteps: Object.freeze([
-    'Open your browser menu (the three dots).',
-    'Choose Install app or Add to Home Screen.',
+    'Open the browser menu (⋮).',
+    'Tap Install app or Add to Home screen.',
   ] as const),
   /**
    * On a computer there is no home screen: Chrome and Edge install the game as its own window,
    * started from the dock, taskbar or Start menu. Same invitation, desktop words.
    */
   desktop: Object.freeze({
-    title: 'Open FUTASAKU in its own window',
+    title: 'Give FUTASAKU its own window',
     why: Object.freeze([
-      'Its own window - no tabs, no browser bars',
-      'Works offline, even with no connection',
-      'Start it from your dock, taskbar or Start menu',
+      'No tabs, no browser bars',
+      'Plays offline',
+      'Opens from your dock, taskbar or Start menu',
     ] as const),
-    install: 'Open in its own window',
+    install: 'Install',
     /** The icon-only button, top right of the main menu on a computer (its tooltip / screen-reader name). */
     windowButton: Object.freeze({
       install: 'Open FUTASAKU in its own window',
@@ -1132,11 +1136,12 @@ export const INSTALL = Object.freeze({
       exitFullscreen: 'Leave full screen',
     }),
     manualSteps: Object.freeze([
-      'Click the install icon at the right end of the address bar (Safari on a Mac: open the File menu).',
-      'Choose Install (Safari: Add to Dock).',
+      'Chrome or Edge: click the install icon in the address bar.',
+      'Safari on a Mac: File, then Add to Dock.',
     ] as const),
   }),
 });
+
 
 /**
  * Live duels (test channel only, `web/src/online/live/`). Two players who share an online match
@@ -1253,7 +1258,7 @@ export const BETA_GUIDE = Object.freeze({
     Object.freeze({
       heading: 'Put it on your home screen',
       lines: Object.freeze([
-        'iPhone (Safari): tap Share, then Add to Home Screen.',
+        'iPhone (Safari): tap Share (under ⋯ on iOS 26), then Add to Home Screen.',
         'Android (Chrome): tap the ⋮ menu, then Install app or Add to Home screen.',
         'It then opens full-screen like an app, and works offline for games against the computer.',
       ]),
