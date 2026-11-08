@@ -2,7 +2,7 @@
 // `commitMove`: no two moves may be applied on the same revision, and a repeated requestId must
 // return the original outcome without applying again.
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
-import type { MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult, PlayerSummary } from '../protocol.js';
+import type { HeadToHead, MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult, PlayerSummary } from '../protocol.js';
 import type { RetentionRow } from '../retention.js';
 
 export type PlayerRecord = {
@@ -290,6 +290,11 @@ export interface Storage {
   matchesOfPlayer(playerId: string): Promise<MatchRecord[]>;
   /** One-query match list with opponent names (P-15). */
   listMatchesForPlayer(playerId: string): Promise<MatchListRow[]>;
+  /**
+   * Finished duels between `viewerId` and `opponentId`, counted from the viewer's seat. Unfinished
+   * matches and waiting rows never appear. One bounded aggregate — no per-match fan-out.
+   */
+  headToHead(viewerId: string, opponentId: string): Promise<HeadToHead>;
   addParticipant(participant: Participant): Promise<{ ok: true } | Fail>;
   /** Moves a waiting match to active once both seats are filled. Returns the updated match. */
   activateMatch(matchId: string, now: number, turnTimeoutMs: number): Promise<MatchRecord | null>;

@@ -7,7 +7,7 @@ import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
 import { prunableMatches } from '../retention.js';
 import type { RetentionRow } from '../retention.js';
-import type { OfflineCounters, OfflineSummary, OnlineGameResult } from '../protocol.js';
+import type { HeadToHead, OfflineCounters, OfflineSummary, OnlineGameResult } from '../protocol.js';
 import { aggregateOfflineStats, mergeOfflineCounters } from '../offline.js';
 import type {
   CommitBatchInput,
@@ -332,6 +332,29 @@ export class MemoryStorage implements Storage {
       });
     }
     return out;
+  }
+
+  async headToHead(viewerId: string, opponentId: string): Promise<HeadToHead> {
+    const seen = new Set<string>();
+    let games = 0;
+    let youWins = 0;
+    let themWins = 0;
+    let draws = 0;
+    for (const [matchId, list] of this.participants) {
+      if (seen.has(matchId)) continue;
+      const me = list.find((p) => p.playerId === viewerId);
+      const them = list.find((p) => p.playerId === opponentId);
+      if (!me || !them || list.length !== 2) continue;
+      const match = this.matches.get(matchId);
+      if (!match || match.status !== 'finished' || !match.result) continue;
+      seen.add(matchId);
+      games += 1;
+      const winner = match.result.winner;
+      if (winner === null) draws += 1;
+      else if (winner === me.seat) youWins += 1;
+      else themWins += 1;
+    }
+    return { games, youWins, themWins, draws };
   }
 
   async addParticipant(participant: Participant): Promise<{ ok: true } | Fail> {

@@ -163,6 +163,11 @@ export class MatchService {
     return await this.economy.publicProfile(playerId);
   }
 
+  /** Finished duels between the viewer and another player, from the viewer's seat. */
+  async headToHead(viewerId: string, opponentId: string) {
+    return this.storage.headToHead(viewerId, opponentId);
+  }
+
   /**
    * The account's OFFLINE record over every device (migration 0022). The player comes from the
    * token, never the request, so one account can only ever read its own numbers. A player who has

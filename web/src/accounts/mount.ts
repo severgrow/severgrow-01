@@ -23,7 +23,9 @@ import type { ProfileFacts } from './profile.js';
 import { PLAYER_PROFILE_EVENT } from './profile-request.js';
 import type { PlayerProfileRequest } from './profile-request.js';
 import { visitorFacts } from './visitor-profile.js';
-import type { PublicPlayerProfile } from '../../../server/src/protocol.js';
+import type { HeadToHead, PublicPlayerProfile } from '../../../server/src/protocol.js';
+import { formatRivalryLine } from '../logic/rivalry.js';
+import type { VisitorFacts } from './profile.js';
 import { STATS_KEY, parseStats } from '../logic/stats.js';
 import { accountRecord, offlineRecord } from '../logic/match-record.js';
 import { DEVICE_KEY, deviceIdFrom, matchesWonEver, newDeviceId, offlineCounters } from '../logic/offline-sync.js';
@@ -731,6 +733,17 @@ export const mountAccounts = async (): Promise<void> => {
    * overwrite a newer sheet.
    */
   let visitorRequest = 0;
+  const visitorFromWire = (
+    wire: PublicPlayerProfile | null | undefined,
+    headToHead: HeadToHead | undefined,
+  ): VisitorFacts | null => {
+    const facts = visitorFacts(wire ?? null);
+    if (!facts) return null;
+    return {
+      ...facts,
+      rivalryLine: headToHead ? formatRivalryLine(headToHead, wire?.displayName) : null,
+    };
+  };
   const openPlayerProfile = (playerId: string, opener: HTMLElement | null) => {
     const seq = ++visitorRequest;
     profile.openVisitor(null, opener);
@@ -738,8 +751,8 @@ export const mountAccounts = async (): Promise<void> => {
     if (!identity) return;
     void apiGet(`/v1/players/${encodeURIComponent(playerId)}/profile`, identity.token).then((body) => {
       if (seq !== visitorRequest) return;
-      const wire = (body as { profile?: PublicPlayerProfile } | null)?.profile;
-      profile.showVisitor(visitorFacts(wire ?? null));
+      const payload = body as { profile?: PublicPlayerProfile; headToHead?: HeadToHead } | null;
+      profile.showVisitor(visitorFromWire(payload?.profile, payload?.headToHead));
     });
   };
   window.addEventListener(PLAYER_PROFILE_EVENT, (event) => {
