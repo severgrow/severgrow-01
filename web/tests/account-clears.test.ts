@@ -254,12 +254,39 @@ describe('the source keeps the efficiency promises', () => {
     expect(body).not.toMatch(/\bawait\b|fetch\(/);
   });
 
-  it('asks once per menu open: no refresh path, and a clear only forgets the cache', () => {
-    // The only caller is boot / a sign-in reload; there is no second request after a clear.
-    expect(mainSource).toContain('void syncAccountLevel();');
-    expect(mainSource).not.toContain('syncAccountLevel({ refresh: true })');
+  // OWNER CHANGED THE RULE (2026-11-08: "any device should always know what level player is on and it
+  // should always be the latest one, so the highest"): it used to ask once and then trust the cache
+  // until THIS device cleared a level. Now boot paints the cache and re-asks (fresh), and so does every
+  // return to the foreground, at most once a minute.
+  it('paints the cached answer first, then re-asks the server; a clear still forgets the cache', () => {
+    expect(mainSource).toContain('void syncAccountLevel().then(() => recheckAccountLevel());');
     // A new clear invalidates the cache, so the NEXT open reads once more; this session keeps the
     // device half and makes no extra request.
     expect(mainSource).toContain('forgetAccountClears(store)');
+  });
+});
+
+describe('every device knows the highest level (owner, 2026-11-08: "on some devices im at level 59 and some other 60")', () => {
+  // A device cached the account's answer the first time it asked and only forgot it when THAT device
+  // cleared a level, so a clear made on another device never reached it.
+  it('a fresh read asks the server even with a cached answer, and the higher answer wins', async () => {
+    const store = signedIn();
+    writeCachedAccountClears(store, 'player-1', levelsFromHighest(58));
+    let asked = 0;
+    const result = await loadAccountClears({ storage: store, fetchHighest: async () => { asked++; return 59; }, fresh: true, attempted: new Set() });
+    expect(asked).toBe(1);
+    expect(result).toMatchObject({ status: 'ok', highest: 59 });
+    expect(readCachedAccountClears(store, 'player-1')).toHaveLength(59);
+  });
+  it('never moves down: a lower server answer keeps the higher cached one', async () => {
+    const store = signedIn();
+    writeCachedAccountClears(store, 'player-1', levelsFromHighest(60));
+    const result = await loadAccountClears({ storage: store, fetchHighest: async () => 59, fresh: true, attempted: new Set() });
+    expect(result).toMatchObject({ status: 'ok', highest: 60 });
+  });
+  it('the page re-checks on start and whenever it comes back to the foreground (throttled)', () => {
+    expect(mainSource).toMatch(/visibilitychange[\s\S]{0,120}recheckAccountLevel\(\)/);
+    expect(mainSource).toContain("void syncAccountLevel({ fresh: true });");
+    expect(mainSource).toMatch(/ACCOUNT_RECHECK_MS/);
   });
 });

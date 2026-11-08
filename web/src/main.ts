@@ -3793,11 +3793,12 @@ async function syncRandomDeals(): Promise<void> {
  * Levels unlock in order, so `levelsFromHighest` turns that one number into the cleared chapter-1
  * levels the suggestion unions.
  */
-async function syncAccountLevel(): Promise<void> {
+async function syncAccountLevel(opts: { fresh?: boolean } = {}): Promise<void> {
   if (!FEATURES.campaign || !onlineBuildEnabled()) return;
   const beforeProgress = campaignProgress;
   const beforeClears = accountClears;
   const result = await loadAccountClears({
+    ...(opts.fresh ? { fresh: true } : {}),
     storage: store,
     fetchHighest: fetchAccountHighestLevel,
   });
@@ -3837,6 +3838,18 @@ async function syncAccountLevel(): Promise<void> {
 // A sign-in finishes by reloading (the accounts module's own flow), so boot covers it; this event is
 // the belt-and-braces path if that flow ever stops reloading.
 window.addEventListener('futasaku:identity', () => { void syncAccountLevel(); });
+// Every device knows the highest level (owner, 2026-11-08: "on some devices im at level 59 and some
+// other 60"): ask the account again on start and whenever the app comes back to the foreground (a
+// home-screen app is resumed, not restarted), at most once a minute. The level only ever goes up.
+const ACCOUNT_RECHECK_MS = 60_000;
+let accountCheckedAt = 0;
+const recheckAccountLevel = (): void => {
+  const now = Date.now();
+  if (now - accountCheckedAt < ACCOUNT_RECHECK_MS) return;
+  accountCheckedAt = now;
+  void syncAccountLevel({ fresh: true });
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden) recheckAccountLevel(); });
 let lastBoard: unknown = null;
 let lastOverlay = '';
 let coachWhyOpen = false;
@@ -11220,7 +11233,8 @@ else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
 else showScreen('menu');
 // One background read on boot: a signed-in account's place comes from the server (a guest never
 // asks). It repaints the menu if it moves; the first paint is already usable without it.
-void syncAccountLevel();
+// ...then the fresh read: the cached answer painted first, the server's (higher) answer follows.
+void syncAccountLevel().then(() => recheckAccountLevel());
 void syncRandomDeals();
 
 // The main-menu tagline ("GROW · CONNECT · CONQUER") is NOT on the menu — the owner had it removed

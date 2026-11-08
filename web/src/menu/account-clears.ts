@@ -151,6 +151,12 @@ export type AccountClearsDeps = {
   fetchHighest: (token: string) => Promise<number | null>;
   /** Per-session attempt memory. Tests pass their own set so cases cannot leak into each other. */
   attempted?: Set<string>;
+  /**
+   * Ask the server even when an answer is cached (owner, 2026-11-08: "on some devices im at level 59
+   * and some other 60"). The cache only paints first; a fresh read is how a clear made on ANOTHER
+   * device reaches this one. The answer never moves down: the higher of cached and fetched is kept.
+   */
+  fresh?: boolean;
 };
 
 /** One attempt per player per page session, even when the read fails (no retry loop). */
@@ -168,14 +174,15 @@ export const loadAccountClears = async (deps: AccountClearsDeps): Promise<Accoun
   if (!identity || identity.kind !== 'account') return { status: 'signed-out' };
 
   const cached = readCachedAccountClears(deps.storage, identity.playerId);
-  if (cached) return { status: 'ok', highest: highestOf(cached), levels: cached };
+  if (cached && !deps.fresh) return { status: 'ok', highest: highestOf(cached), levels: cached };
 
   const attempted = deps.attempted ?? sessionAttempts;
   const already = inflight.get(identity.playerId);
   if (already) return already;
-  if (attempted.has(identity.playerId)) return { status: 'unavailable' };
+  if (attempted.has(identity.playerId) && !deps.fresh) return { status: 'unavailable' };
 
   attempted.add(identity.playerId);
+  const known = cached;
   const request = (async (): Promise<AccountClearsResult> => {
     let highest: number | null;
     try {
@@ -183,9 +190,11 @@ export const loadAccountClears = async (deps: AccountClearsDeps): Promise<Accoun
     } catch {
       // Offline, a 401, a 500, an aborted request: the device's truth is untouched and nothing is
       // cached, so this failure cannot outlive the session as a false answer.
-      return { status: 'unavailable' };
+      return known ? { status: 'ok', highest: highestOf(known), levels: known } : { status: 'unavailable' };
     }
-    const levels = levelsFromHighest(highest);
+    // Never down: a fresh answer below the cached one keeps the cached one.
+    const fetched = levelsFromHighest(highest);
+    const levels = known !== null && (highestOf(known) ?? 0) > (highestOf(fetched) ?? 0) ? known : fetched;
     writeCachedAccountClears(deps.storage, identity.playerId, levels);
     return { status: 'ok', highest: highestOf(levels), levels };
   })().finally(() => inflight.delete(identity.playerId));
