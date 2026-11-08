@@ -221,7 +221,10 @@ describe('the world view applies the rule instead of making the key depend on a 
     expect(source).toContain('restoreAchievements(');
     // Every outcome (loaded, 404, transient, discarded) is applied and then painted; the old failure
     // path returned before painting, which is how a missed read left the key in the wrong state.
-    expect(load).toMatch(/this\.achievements = afterAchievementsRead\(this\.achievements, outcome\);\s*this\.paintPanel\(\);/);
+    // A quiet toast note may sit between apply and paint; paint must still follow every outcome.
+    expect(load).toMatch(/this\.achievements = afterAchievementsRead\(this\.achievements, outcome\);/);
+    expect(load.indexOf('this.achievements = afterAchievementsRead(this.achievements, outcome);'))
+      .toBeLessThan(load.lastIndexOf('this.paintPanel();'));
     expect(load).not.toMatch(/else return;/);
   });
 

@@ -24,7 +24,7 @@ import { cardFace, suitClass } from '../ui/effects.js';
 import { preloadCardArt } from './cards.js';
 import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
 import { RITUAL_DECK_SIZE } from '../logic/starter-ritual.js';
-import plainMarkUrl from '../assets/brand/plain-wordmark.svg?url';
+import { WORDMARK_URL as plainMarkUrl } from './branding.js';
 
 /** How long the outcome ("You start" / "Opponent starts") is held before the deck gathers. */
 export const RESULT_HOLD_MS = 1000;
