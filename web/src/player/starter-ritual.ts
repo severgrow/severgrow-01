@@ -72,6 +72,8 @@ export type StarterRitualOptions = {
    */
   readonly centerTile?: () => DOMRect | null;
   readonly onPhase?: (phase: StarterRitualPhase) => void;
+  /** The deck has landed on the real draw pile (the page thuds the pile). */
+  readonly onFiled?: () => void;
 };
 
 const TEMPO_SCALE: Record<StarterRitualTempo, number> = { slow: 1.16, normal: 1, fast: 0.82, skip: 1 };
@@ -848,6 +850,9 @@ class StarterRitual {
       easing: 'ease-out',
     }));
     await this.playAnimations(stream);
+    if (!this.cancelled && !this.skipRequested) {
+      try { this.options.onFiled?.(); } catch { /* a flourish never holds the match */ }
+    }
     this.finish();
   }
 

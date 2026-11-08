@@ -108,7 +108,9 @@ describe('the six legs read', () => {
     for (const f of PILE_THUD) expect(Object.keys(f).filter((k) => !['transform', 'offset'].includes(k))).toEqual([]);
     expect(Math.min(...PILE_THUD.map((f) => number(f.transform, /scale\(([\d.]+)\)/)))).toBeGreaterThan(0.93);
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    expect(main).toContain('PILE_THUD');
+    const feel = readFileSync(new URL('../src/ui/feel.ts', import.meta.url), 'utf8');
+    expect(feel).toContain('PILE_THUD');
+    expect(main).toContain('thudPile(pileEl');
   });
 });
 

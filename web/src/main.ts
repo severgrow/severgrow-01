@@ -2,7 +2,7 @@
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
-import { PILE_THUD, PILE_THUD_MS } from './ui/throw-boomerang.js';
+import { DRAW_PILE_GIVE, DRAW_PILE_GIVE_MS, drawFrames, thudPile } from './ui/feel.js';
 import { mountStartupReveal } from './player/startup.js';
 import { mountMenuZoomLock } from './player/menu-zoom-lock.js';
 import { mountAchievementToast } from './player/achievement-toast.js';
@@ -2247,6 +2247,8 @@ async function runStarterRitual(view: StarterRitualView): Promise<void> {
     // Display seat 0 is always the local player (moss/tree), online and offline alike.
     homeRects: () => ({ you: homeTileRect(HUMAN), opponent: homeTileRect(BOT) }),
     centerTile: centerTileRect,
+    // 0.85: the draw pile thuds as the ritual's deck lands on it.
+    onFiled: () => thudPile($('deck'), 1, motionOn(), INTERFACE_MOTION.easeOpen),
   });
 }
 
@@ -4473,12 +4475,12 @@ async function playStep(step: Step, my: number) {
           // Draw: out of the pile and into the hand with a 4% scale overshoot, then rest.
           const frames = IS_FUTA04
             ? m === 0 ? [{ opacity: 0 }, { opacity: 1 }]
-              : [{ translate: `${dx}px ${dy}px`, scale: `${(from.height / Math.max(r.height, 1)).toFixed(2)}`, opacity: 1 },
-                 { translate: `${(dx * .42).toFixed(1)}px ${(dy * .42 - 14).toFixed(1)}px`, scale: '.96', opacity: 1, offset:.5 },
-                 { translate: '0 0', scale: '1.04', opacity: 1, offset:.8 },
-                 { translate: '0 0', scale: '1', opacity: 1 }]
+              // 0.85: out of the pile tilted, unwinding into the hand (ui/feel.ts).
+              : drawFrames(dx, dy, from.height / Math.max(r.height, 1))
             : m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }];
           anim(to, frames, { duration: (IS_FUTA04 ? PINNED.humanDraw : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
+          // 0.85: the pile gives a little as it lets the card go.
+          if (IS_FUTA04 && m > 0) (step.from === 'deck' ? $('deck') : $('discard')).animate(DRAW_PILE_GIVE, { duration: DRAW_PILE_GIVE_MS * f, easing: EASE.out });
         }
         sound.draw(step.from !== 'deck');
         await wait((IS_FUTA04 ? PINNED.humanDraw : 240) * f, my);
@@ -4818,6 +4820,7 @@ async function playStep(step: Step, my: number) {
           dragThrowFrom = null;
         }
         const flight = IS_FUTA04 ? throwFlight(motionOn()) : 'ordinary';
+        let caughtHaptic = false;
         if (from) {
           const to = ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect();
           const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
@@ -4841,7 +4844,11 @@ async function playStep(step: Step, my: number) {
             const pileEl = $('discard');
             const catchAndThud = () => {
               land();
-              if (motionOn()) pileEl.animate(PILE_THUD, { duration: PILE_THUD_MS * f, easing: INTERFACE_MOTION.easeOpen });
+              thudPile(pileEl, f, motionOn(), INTERFACE_MOTION.easeOpen);
+              // 0.85: felt at the catch, in sync with the thud (it used to buzz after the fade).
+              const hp = hapticFor('throw', settings);
+              if (hp) vibrate(true, hp as number | number[]);
+              caughtHaptic = true;
             };
             const flightMs = throwBoomerang(step.card, from, point, to, f, catchAndThud);
             await wait(Math.max(PINNED.throw * f, flightMs), my);
@@ -4860,13 +4867,19 @@ async function playStep(step: Step, my: number) {
         // boomerang just landed on, so releasing it here cannot pull the landing out from under
         // the card.
         releaseThrowSwell();
-        const hp = hapticFor('throw', settings);
-        if (hp) vibrate(true, hp as number | number[]);
+        if (!caughtHaptic) {
+          const hp = hapticFor('throw', settings);
+          if (hp) vibrate(true, hp as number | number[]);
+        }
       } else {
         const seat = oppSeat();
         if (seat) {
           if (settings.sound) sound.rustle();
-          const ms = oppThrow(step.card, seat, $('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard'), f, !!quickShow, land);
+          const ms = oppThrow(step.card, seat, $('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard'), f, !!quickShow, () => {
+            land();
+            // 0.85: the same pile thud as my catch.
+            thudPile($('discard'), f, motionOn() && !quickShow, INTERFACE_MOTION.easeOpen);
+          });
           await wait(ms, my);
           if (my !== epoch) return;
           if (settings.sound) sound.throw();

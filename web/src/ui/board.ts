@@ -4,6 +4,7 @@
 // whatever board it is given.
 import { FEATURES, IS_FUTA04 } from '../channel.js';
 import { outlinePath } from './outline.js';
+import { DENY_SHAKE, DENY_SHAKE_MS } from './feel.js';
 import { allNeighbors, boardCoords, connectedKeys, coordKey, hexDistance, homeCoord, parseKey } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
@@ -282,7 +283,8 @@ export class BoardView {
   /** One nudge home. A refused shape used to wag left and right; a refusal is a single click. */
   shake(reduceMotion: boolean) {
     if (reduceMotion) return;
-    this.layers?.draw.animate?.([{ transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }], { duration: MOTION.quick, easing: EASE.out });
+    // 0.85: a short head-shake that settles, not one nudge (ui/feel.ts).
+    this.layers?.draw.animate?.(DENY_SHAKE, { duration: DENY_SHAKE_MS, easing: 'linear' });
   }
 
   /** Builds the static parts (terrain) for a game and theme. */
