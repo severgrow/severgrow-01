@@ -294,6 +294,7 @@ import type { Beats } from './logic/emptyturn.js';
 import { onlineBuildEnabled } from './online/config.js';
 import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname } from './accounts/menu-key.js';
 import { paintBetaLine } from './feedback/beta-line.js';
+import { paintBuildTag } from './feedback/build-tag.js';
 import { queueSeedProof } from './online/seed-rewards.js';
 import { requestTrainingTicket, seedIdentityWarm, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof } from './online/seed-settle.js';
 import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
@@ -904,6 +905,7 @@ function layoutMenu(canContinue: boolean) {
   $('menu-foot').setAttribute('aria-label', MENU.footerLabel);
   paintEarlyAccountKey($('menu-login') as HTMLButtonElement, accountsConfiguredInThisBuild());
   paintBetaLine(document.getElementById('menu-beta'));
+  void paintBuildTag(document.getElementById('menu-beta'));
   // The account key's words are owned by the accounts module, not by this layout pass: a signed-out
   // guest sees MENU.login, a signed-in player sees their NAME, and both are the SAME key (one entry,
   // one flow, one place). Writing MENU.login here would stomp the name on every return to the menu.
