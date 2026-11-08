@@ -1503,11 +1503,14 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         // Start the public map immediately; identity and Seed settlement never block its arrival.
         const publicMap = worldSource.read();
         void publicMap.catch(() => undefined);
-        // Settle queued Seed proofs first, so the wallet read below already includes them.
-        await syncSeedRewards();
-        if (menuEl?.hidden !== false) return;
-        // One wallet + one map read, remembered for the profile too (territory-cache.ts).
+        // The counts FIRST (owner, 2026-11-08: "I don't see my seeds and tiles amount on the territory
+        // button"): awaiting the Seeds settlement before this read left the key empty for as long as
+        // a slow or stuck settle took. One wallet + one map read, remembered for the profile too.
         await readMenuCounts(undefined, publicMap);
+        // Then settle queued Seed proofs; read the wallet again only if that actually paid something.
+        const settled = await syncSeedRewards().catch(() => null);
+        if (menuEl?.hidden !== false) return;
+        if (settled && settled.awards.length > 0) await readMenuCounts(undefined, worldSource.read());
       } finally {
         menuPass = null;
       }

@@ -221,3 +221,17 @@ describe('the menu show pays ONE wallet read and ONE map read, never a poll', ()
     expect(lobbySource).toMatch(/territoryUI\.paint\(cachedTerritory\(identity\.peek\(\)\?\.playerId \?\? null\)\)/);
   });
 });
+
+describe('the menu key shows the Seeds and tiles first, then settles rewards (owner, 2026-11-08)', () => {
+  // "I also don't see my seeds and tiles amount on the territory button - why?" The pass awaited the
+  // Seeds settlement BEFORE reading the counts, so a slow or stuck settle left the key empty.
+  it('reads the counts before settling, and reads again only when a settle paid something', () => {
+    const pass = lobbySource.slice(lobbySource.indexOf('const refreshMenu ='), lobbySource.indexOf("window.addEventListener('futasaku:menu'"));
+    const read = pass.indexOf('await readMenuCounts(undefined, publicMap)');
+    const settle = pass.indexOf('syncSeedRewards()');
+    expect(read).toBeGreaterThan(-1);
+    expect(settle).toBeGreaterThan(read);
+    expect(pass).toMatch(/\.awards\.length/);
+    expect(pass).toMatch(/syncSeedRewards\(\)\.catch\(/);
+  });
+});
