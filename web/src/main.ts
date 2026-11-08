@@ -3,6 +3,7 @@ import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
 import { mountStartupReveal } from './player/startup.js';
+import { mountMenuZoomLock } from './player/menu-zoom-lock.js';
 import { mountAchievementToast } from './player/achievement-toast.js';
 import { BLITZ_CLOCK_EVENT, blitzDecisionOf } from './logic/blitz-clock-event.js';
 import type { BlitzClockSignal } from './logic/blitz-clock-event.js';
@@ -11533,6 +11534,8 @@ void settleQueuedSeedsOnBoot();
 // cold guest mint (owner, 2026-11-08: offline guests must be paid so they are encouraged to sign in).
 void warmSeedIdentity();
 mountStartupReveal();
+// The main menu does not zoom (owner, 2026-11-08); every other screen keeps the browser's zoom.
+mountMenuZoomLock();
 const coveredForQuietPrompts = (): boolean => {
   const over = document.getElementById('gameover');
   const victory = !!over && !over.hidden;
