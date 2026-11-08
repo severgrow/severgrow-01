@@ -266,11 +266,18 @@ export const ONLINE_CSS = `
   text-align: center;
 }
 .online-code-hint[hidden] { display: none; }
+/* Dark glass, no green frame (owner, 2026-11-08): the guest strip, "Opponent found", and any
+   other lobby card share the same --dark-glass recipe as Territory / profile windows — fill +
+   blur + soft shadow, never a stroked contour. */
 .online-card {
   padding: 0.9rem 1rem;
-  border-radius: 12px;
-  background: color-mix(in srgb, #243024 90%, #000);
-  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 15px;
+  border: 0;
+  outline: none;
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
 }
 /* "Opponent found" prompt: a small dark-glass card centred above whatever is on screen (the
    computer game). No new tokens or borders — it reuses the existing .online-card component. */

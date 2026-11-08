@@ -6,7 +6,6 @@ import { formatRemaining } from './clock.js';
 import { PARKED_OFFER_MS, publicAppOrigin } from './config.js';
 import { ONLINE, REPLAY } from '../../../src/strings.js';
 
-export const FIRST_ONLINE_CARD_KEY = 'severgrow.duel.firstCard.v1';
 export const WARN_LAST_MS = 2 * 3_600_000; // last 2 hours (P-12)
 
 /**

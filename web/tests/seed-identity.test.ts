@@ -198,8 +198,19 @@ describe('the settle pays the identity that is actually playing', () => {
     // The wiring that makes the recovery real: without this line nothing moves a proof left behind
     // by a finish card that could not reach the server, until the player wins another game.
     const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
-    expect(main).toMatch(/import \{ requestTrainingTicket, settleQueuedSeedsOnBoot, settleSeedProof \} from '\.\/online\/seed-settle\.js';/);
+    expect(main).toMatch(/import \{ requestTrainingTicket, settleQueuedSeedsOnBoot, TRAINING_TICKET_WAIT_MS, warmSeedIdentity, settleSeedProof \} from '\.\/online\/seed-settle\.js';/);
     expect(main).toMatch(/void settleQueuedSeedsOnBoot\(\);/);
+    expect(main).toMatch(/void warmSeedIdentity\(\);/);
+  });
+
+  it('a Training start waits long enough for a cold guest mint, and warms identity on boot', () => {
+    // Owner report, 2026-11-08: offline guests got no Seeds because the ticket race lost to 1.2 s.
+    const settle = readFileSync(fileURLToPath(new URL('../src/online/seed-settle.ts', import.meta.url)), 'utf8');
+    const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
+    expect(settle).toMatch(/export const TRAINING_TICKET_WAIT_MS = 8_000;/);
+    expect(settle).toMatch(/export const warmSeedIdentity/);
+    expect(main).toContain('TRAINING_TICKET_WAIT_MS');
+    expect(main).not.toMatch(/setTimeout\(\(\) => resolve\(null\), 1200\)/);
   });
 });
 

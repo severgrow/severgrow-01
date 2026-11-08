@@ -93,13 +93,16 @@ describe('the keys speak, because their text is gone', () => {
   });
 
   // OWNER CHANGED THE RULE (2026-11-04: "Replace the selling icon button with 'Sell'"): the SELL key
-  // alone speaks in words; every other key stays an icon with no visible text.
-  it('only the sell key writes visible text; it says SELL and the Seeds it pays back', () => {
+  // speaks in words; Sign in (guest grow gate, 2026-11-08) does too. Every other key stays an icon.
+  it('only the sell and sign-in keys write visible text', () => {
     const paint = source.slice(source.indexOf('private paintSelection()'), source.indexOf('private async claim()'));
-    expect(paint.match(/key\.(textContent|innerText)\s*=/g) ?? []).toHaveLength(1);
+    expect(paint.match(/key\.(textContent|innerText)\s*=/g) ?? []).toHaveLength(2);
     expect(paint).toMatch(/if \(action\.kind === 'sell'\) \{[^}]*key\.textContent = /);
+    expect(paint).toMatch(/action\.kind === 'signin'[\s\S]*key\.textContent = ONLINE\.worldSignInKey/);
     expect(ONLINE.worldSellKey(50)).toBe('SELL · +50');
     expect(ONLINE.worldSellKeyArmed).toBe('TAP TO SELL');
+    expect(ONLINE.worldSignInKey).toBe('Sign in');
+    expect(ONLINE.worldSignInToGrow).toBe('SIGN IN TO GROW');
   });
 
   it('the key keeps the old class (handlers/tests) and joins the MENU key family', () => {

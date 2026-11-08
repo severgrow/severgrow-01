@@ -140,6 +140,9 @@ export const ONLINE = Object.freeze({
    *  the replacement. */
   worldGrowKey: 'Grow a tile',
   worldGrowConfirm: 'Confirm grow',
+  /** Guest on an unclaimed tile (owner, 2026-11-08): Seeds pay to guests; growing needs an account. */
+  worldSignInToGrow: 'SIGN IN TO GROW',
+  worldSignInKey: 'Sign in',
   worldSeeProfile: 'See profile',
   worldGrowing: 'Growing…',
   worldSelling: 'Selling…',
@@ -243,17 +246,6 @@ export const ONLINE = Object.freeze({
   statusFinished: 'Finished',
   warnLastTwoHours: 'Less than 2 hours left',
   emptyMatches: 'No matches yet.',
-  firstCardTitle: 'How online duels work',
-  firstCardLines: Object.freeze([
-    'Play Blitz when both of you are here, or take turns over time.',
-    'Your opponent only sees your turn after you Throw.',
-    // Accurate, not scarier than the rule. It used to say "Miss it and you lose", but the server
-    // gives ONE grace period per player (gracePeriodsPerPlayer: 1, and the in-match line already
-    // reads "Time ran out — one more chance"). Overstating it could make a tester abandon a duel
-    // they would have survived.
-    'Each turn has 24 hours. Run out of time and you get one more chance; run out twice and you lose.',
-  ] as const),
-  firstCardOk: 'Got it',
   storageNote:
     'Guest matches live on this device. Sign in to keep them on every device.',
   /**
@@ -1388,7 +1380,6 @@ export const ACCOUNT = Object.freeze({
   playAsGuest: 'Play as guest',
   welcomeTitle: 'Keep your games',
   welcomeBody: 'Sign in to keep your online matches safe and pick them up on any phone or computer.',
-  welcomeSmall: 'Games against the computer never need an account. You can sign in later from Settings.',
   /** Quiet optional line after a guest clears a level (or a first claim). Dismissible, once. */
   keepProgressTitle: 'Keep your progress',
   keepProgressBody: 'Sign in to keep campaign progress on every device.',

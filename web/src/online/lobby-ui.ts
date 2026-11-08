@@ -38,7 +38,6 @@ import { settlePendingSeeds } from './seed-settle.js';
 import type { SeedWallet } from '../../../server/src/seeds/types.js';
 
 import {
-  FIRST_ONLINE_CARD_KEY,
   findTap,
   friendlyJoinError,
   matchPollVerdict,
@@ -700,7 +699,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   };
   worldView = new WorldView(client, async () => {
     const id = await ensureIdentity();
-    return id ? { token: id.token, playerId: id.playerId } : null;
+    return id ? { token: id.token, playerId: id.playerId, kind: id.kind } : null;
   }, () => worldSource.read(), async () => {
     // A late mutation acknowledgement must not reuse a menu read that began before it committed.
     if (menuPass) await menuPass.catch(() => undefined);
@@ -771,30 +770,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }, HUB_POLL_MS);
   };
 
-  const maybeFirstCard = () => {
-    const card = $('online-first-card');
-    const storage = browserStorage();
-    const seen = storage?.get(FIRST_ONLINE_CARD_KEY) === '1';
-    if (seen) {
-      card.hidden = true;
-      return;
-    }
-    $('online-first-title').textContent = ONLINE.firstCardTitle;
-    const ul = $('online-first-list');
-    ul.replaceChildren();
-    for (const line of ONLINE.firstCardLines) {
-      const li = document.createElement('li');
-      li.textContent = line;
-      ul.appendChild(li);
-    }
-    $('online-first-ok').textContent = ONLINE.firstCardOk;
-    card.hidden = false;
-  };
-
   const openHub = async () => {
     fillCopy();
     show('hub');
-    maybeFirstCard();
     closeMatchedPrompt();
     computerGameActive = false;
     syncLooking();
@@ -1651,10 +1629,6 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     closeMatchedPrompt();
     notice('online-hub-notice', ONLINE.matchedNotice);
     void reloadMatches();
-  });
-  $('online-first-ok').addEventListener('click', () => {
-    browserStorage()?.set(FIRST_ONLINE_CARD_KEY, '1');
-    $('online-first-card').hidden = true;
   });
 
   const linkMake = document.getElementById('online-link-make');

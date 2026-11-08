@@ -189,6 +189,35 @@ export const settleQueuedSeedsOnBoot = async (
 };
 
 /**
+ * How long a Training start may wait for a ticket before the match begins without Seeds.
+ *
+ * Owner report, 2026-11-08: a guest playing offline got no Seeds. The start used to race the ticket
+ * against 1.2 s — enough when an identity was already warm, but a first visit must mint a guest AND
+ * reach a cold Edge function, which routinely takes longer. Eight seconds still keeps the board
+ * from hanging forever; `warmSeedIdentity` below spends that wait on the menu so a later Practice
+ * start usually already has a guest ready.
+ */
+export const TRAINING_TICKET_WAIT_MS = 8_000;
+
+/**
+ * Mint (or confirm) a guest identity as soon as the app is up, so the next Practice match can get a
+ * training ticket without waiting on guest creation. Silent, fire-and-forget, never blocks paint.
+ * Guests are paid Seeds so they are encouraged to sign in and keep them (owner, 2026-11-08).
+ */
+export const warmSeedIdentity = async (
+  connect: SeedConnector = seedConnection,
+): Promise<void> => {
+  try {
+    const seeds = connect();
+    if (!seeds) return;
+    if (seeds.identity.peek()) return;
+    await seeds.identity.ensure();
+  } catch (error) {
+    console.warn('[FUTASAKU] could not warm a Seeds identity on boot:', error);
+  }
+};
+
+/**
  * A server-issued ticket makes a Training result verifiable (and therefore payable). Issued through
  * this module rather than the lobby, for the same reason the settle is: a training game started
  * before the hub finished mounting used to begin with no ticket at all, which meant no proof and no
