@@ -19,7 +19,11 @@ import {
   reconcileProgress,
 } from '../../src/campaign/index.js';
 import type { CampaignProgress } from '../../src/campaign/index.js';
-import { readAccountIdentity } from '../src/logic/account-progress.js';
+import {
+  accountHighestFromLevels,
+  mergeFurtherAheadProgress,
+  readAccountIdentity,
+} from '../src/logic/account-progress.js';
 import { tutorialLevel, tutorialLevels } from '../src/logic/campaign.js';
 import { IDENTITY_STORAGE_KEY } from '../src/online/identity.js';
 import type { KeyValue } from '../../server/src/client.js';
@@ -111,6 +115,32 @@ describe("the server's known place raises a local record, never lowers it", () =
     expect(currentLevel(after).number).toBe(37);
   });
 });
+
+describe('the further-ahead account merge', () => {
+  it('reads the furthest level from a sorted account-clears list', () => {
+    expect(accountHighestFromLevels(null)).toBeNull();
+    expect(accountHighestFromLevels([])).toBeNull();
+    expect(accountHighestFromLevels([1, 2, 10])).toBe(10);
+    expect(accountHighestFromLevels([36])).toBe(36);
+  });
+
+  it('raises a stale device record to match cached account clears without waiting on the network', () => {
+    const local: CampaignProgress = { version: 1, unlocked: 1, completed: [], best: {} };
+    const after = mergeFurtherAheadProgress(local, levelsFromAccountStub(36));
+    expect(currentLevel(after).number).toBe(37);
+    expect(after.completed).toHaveLength(36);
+    expect(local.completed).toEqual([]);
+  });
+
+  it('keeps a device record that is already further ahead', () => {
+    const local = placeAt(40);
+    expect(mergeFurtherAheadProgress(local, levelsFromAccountStub(36))).toBe(local);
+  });
+});
+
+/** Sorted 1..n, matching `levelsFromHighest` on the client. */
+const levelsFromAccountStub = (highest: number): number[] =>
+  Array.from({ length: highest }, (_, i) => i + 1);
 
 describe('the identity the account read is allowed to use', () => {
   const account = (kind: 'guest' | 'account') => kv({ [IDENTITY_STORAGE_KEY]: accountIdentity(kind) });

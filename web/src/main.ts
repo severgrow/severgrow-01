@@ -162,7 +162,6 @@ import {
   isUnlocked,
   nextCampaignLevel,
   parseProgress,
-  reconcileProgress,
   serializeProgress,
   unlockedThrough,
   CAMPAIGN_PROGRESS_KEY,
@@ -184,7 +183,7 @@ import {
   TUTORIAL_LEVEL_COUNT,
 } from './logic/campaign.js';
 import type { CampaignMatchKind } from './logic/campaign.js';
-import { fetchServerFeatures } from './logic/account-progress.js';
+import { fetchServerFeatures, mergeFurtherAheadProgress } from './logic/account-progress.js';
 import {
   cachedAccountClearsForThisDevice,
   fetchAccountHighestLevel,
@@ -3741,6 +3740,15 @@ const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializePro
  * With no cache, the device record paints first and the network answer refines it when it arrives.
  */
 let accountClears: readonly number[] | null = cachedAccountClearsForThisDevice(store);
+// A returning signed-in device may still hold a stale progress record while the cached account
+// answer is already on disk: raise before the first menu paint, not only after the async fetch.
+{
+  const raised = mergeFurtherAheadProgress(campaignProgress, accountClears);
+  if (raised !== campaignProgress) {
+    campaignProgress = raised;
+    saveCampaignProgress();
+  }
+}
 /**
  * Whether this server can check a random campaign deal (owner, 2026-11-01). Remembered on the device,
  * so offline play keeps the last answer; asked once at boot. Until the server says yes, levels 11+
@@ -3775,8 +3783,7 @@ async function syncAccountLevel(): Promise<void> {
     accountClears = null;
   } else if (result.status === 'ok') {
     accountClears = result.levels;
-    // The same answer, as the "furthest level" the existing account-place rule reads.
-    const after = reconcileProgress(campaignProgress, result.highest);
+    const after = mergeFurtherAheadProgress(campaignProgress, result.levels);
     if (after !== campaignProgress) {
       campaignProgress = after;
       saveCampaignProgress();
