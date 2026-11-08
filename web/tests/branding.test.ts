@@ -98,8 +98,11 @@ describe('owner brand pack roles', () => {
       .toMatch(/:has\(#install-prompt:not\(\[hidden\]\)\)\s*#hud-brand\s*\{\s*display:\s*none/);
   });
 
-  it('preloads the PAINT SVG, not a soft raster upsample or the retired primary SVG', () => {
-    expect(read('index.html')).toMatch(/paint-wordmark\.svg/);
+  // OWNER CHANGED THE RULE (2026-11-08: the desktop menu showed the brush grain as rectangles, "should
+  // never happen"): the home menu uses a 4x render of the vector, not the SVG. Still never a SOFT
+  // upsample: it is rendered from the vector at 4x its largest on-screen size.
+  it('preloads the 4x PAINT render, not a soft raster upsample or the retired primary SVG', () => {
+    expect(read('index.html')).toMatch(/rel="preload" href="\.\/src\/assets\/brand\/paint-wordmark-4x\.webp"/);
     expect(read('index.html')).not.toMatch(/paint-wordmark-shadow-3x\.png/);
     expect(read('index.html')).not.toMatch(/futasaku-primary-logo\.svg/);
   });
@@ -108,7 +111,7 @@ describe('owner brand pack roles', () => {
     const css = branding.slice(branding.indexOf('export const BRANDING_CSS'));
     expect(css).toMatch(/#menu #logo\s*\{[^}]*aspect-ratio:\s*1995\s*\/\s*565/);
     expect(css).toMatch(/image-rendering:\s*auto/);
-    expect(read('src/style.css')).toMatch(/paint-wordmark\.svg/);
+    expect(read('src/style.css')).toMatch(/paint-wordmark-4x\.webp/);
     expect(read('src/player/planet-lockup.ts')).toMatch(/aspect-ratio:\s*1995\s*\/\s*565/);
   });
 
@@ -116,5 +119,23 @@ describe('owner brand pack roles', () => {
     expect(existsSync(join(root, 'src/assets/brand/paint-wordmark-3x.png'))).toBe(false);
     expect(existsSync(join(root, 'src/assets/brand/paint-wordmark-shadow-3x.png'))).toBe(false);
     expect(existsSync(join(root, 'src/assets/brand/paint-wordmark-shadow.png'))).toBe(false);
+  });
+});
+
+describe('the home PAINT mark cannot come apart (owner, 2026-11-08)', () => {
+  it('is one 4x render of the vector: wide enough for a retina desktop menu, and small', async () => {
+    const { readFileSync, statSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const file = fileURLToPath(new URL('../src/assets/brand/paint-wordmark-4x.webp', import.meta.url));
+    const buf = readFileSync(file);
+    // RIFF....WEBP, VP8L/VP8X: width from the VP8X header (24-bit, little-endian, +1)
+    expect(buf.subarray(0, 4).toString()).toBe('RIFF');
+    expect(buf.subarray(8, 12).toString()).toBe('WEBP');
+    const chunk = buf.subarray(12, 16).toString();
+    const width = chunk === 'VP8X' ? 1 + buf.readUIntLE(24, 3) : 0;
+    expect(width).toBeGreaterThanOrEqual(1800); // the desktop menu shows it at ~450 px, x4
+    expect(statSync(file).size).toBeLessThan(200_000);
+    const branding = readFileSync(fileURLToPath(new URL('../src/player/branding.ts', import.meta.url)), 'utf8');
+    expect(branding).toContain('img.src = paintMenuUrl;');
   });
 });

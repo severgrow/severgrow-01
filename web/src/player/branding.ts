@@ -5,6 +5,11 @@
 //   FAVICON tree-hex → the page icon only (index.html). Do not import that PNG here: it is
 //   ~710KB and nothing in the app reads it, so an import would ship it inside the JS bundle.
 import paintUrl from '../assets/brand/paint-wordmark.svg?url';
+// The home menu shows the PAINT mark as ONE image rendered from that vector at 4x its largest size
+// (owner, 2026-11-08: the desktop menu showed the brush grain as rectangles behind the letters, which
+// "should never happen"). WebKit can paint the SVG's clipped grain group without its clip; a 4x render
+// of the same vector is just as sharp on a retina screen and cannot come apart. 107 KB (the SVG: 528 KB).
+import paintMenuUrl from '../assets/brand/paint-wordmark-4x.webp?url';
 import plainUrl from '../assets/brand/plain-wordmark.svg?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
@@ -177,10 +182,10 @@ function markSvg(id: string, href: string, accessible: boolean, wide: boolean, p
 function paintMarkImg(): HTMLImageElement {
   const img = document.createElement('img');
   img.className = 'paint-mark';
-  img.src = paintUrl;
+  img.src = paintMenuUrl;
   img.alt = '';
-  img.width = 1995;
-  img.height = 565;
+  img.width = 2000;
+  img.height = 566;
   img.setAttribute('aria-hidden', 'true');
   img.decoding = 'async';
   img.draggable = false;

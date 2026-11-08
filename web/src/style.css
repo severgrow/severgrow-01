@@ -502,7 +502,7 @@ html.test-typography-v2 #menu #logo {
   width: min(200px, 52vw, 22dvh);
   aspect-ratio: 1995 / 565;
   margin: 0 auto;
-  background: center / contain no-repeat url('./assets/brand/paint-wordmark.svg');
+  background: center / contain no-repeat url('./assets/brand/paint-wordmark-4x.webp');
   opacity: 0.9;
 }
 html.test-typography-v2 #menu #logo:has(> :is(svg, img)) {
