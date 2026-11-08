@@ -64,3 +64,19 @@ describe('7. the draw pile thuds as the ritual\'s cards land on it', () => {
     expect(main).toMatch(/onFiled: \(\) => thudPile\(/);
   });
 });
+
+describe('the Bomb card is shown once (owner, 2026-11-08: "it shows the bomb card twice")', () => {
+  it('the opponent\'s Bomb flies from their seat; the strike that follows shows the glow, not a second card', () => {
+    const at = main.indexOf("case 'fruit': {");
+    const fruit = main.slice(at, main.indexOf("case 'discard': {", at));
+    expect(fruit).toContain('oppThrow(step.card, seat, hex');
+    expect(fruit).toMatch(/showLiveStrike\([^;]*\{ cards: false \}\)/);
+    const strike = read('../src/ui/live-strike.ts');
+    expect(strike).toMatch(/opts\.cards !== false/);
+  });
+  it('the Blast keeps its two strike cards: they are the only place its cards appear', () => {
+    const at = main.indexOf("case 'megaBomb': {");
+    const blast = main.slice(at, at + 3000);
+    expect(blast).not.toMatch(/showLiveStrike\([^;]*cards: false/);
+  });
+});

@@ -4773,7 +4773,8 @@ async function playStep(step: Step, my: number) {
         }
       }
       await anticipate(mo, f, my);
-      if (IS_FUTA04 && !mine && my === epoch) showLiveStrike(board.fx, step, (MOTION.move + MOTION.quick) * f, m === 0);
+      // the card has just flown onto the tile: the strike adds the glow, not a second Bomb card
+      if (IS_FUTA04 && !mine && my === epoch) showLiveStrike(board.fx, step, (MOTION.move + MOTION.quick) * f, m === 0, { cards: false });
       // the pod swells (a plain fade with Reduce motion)
       anim(tileEl, m === 0 || b.fadeOnly ? [{ opacity: 1 }, { opacity: 0.85 }] : [{ transform: 'scale(1)' }, { transform: `scale(${1 + 0.14 * m})`, offset: 0.7 }, { transform: `scale(${1 + 0.1 * m})` }], { duration: 300 * f, fill: 'forwards', easing: 'ease-out', transformOrigin: 'center' } as KeyframeAnimationOptions);
       await wait(300 * f, my);
