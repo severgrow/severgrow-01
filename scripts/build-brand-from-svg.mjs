@@ -101,7 +101,10 @@ try {
   writeFileSync(join(root, 'web/src/assets/futasaku-emblem-silhouette.webp'), Buffer.from(hexWebp, 'base64'));
   console.log('futasaku-emblem.webp refreshed from hex-emblem.svg');
 
-  // Card back: stamp HEX into the existing paper frame (centred, ~48% of short side).
+  // Card back: stamp HEX into the existing paper frame, centred.
+  // 0.48 of the short side was the first stamp. The face-down emblem is 8%
+  // larger than that (owner, 2026-11-08): same hex geometry, still clear of
+  // the paper edge. Do not scale the whole card to get this.
   const frame = readFileSync(join(cardsDir, 'back-frame.webp')).toString('base64');
   const hexUri = `data:image/svg+xml;base64,${readFileSync(HEX_SVG).toString('base64')}`;
   const card = await page.evaluate(async ({ frame, hexUri }) => {
@@ -111,7 +114,7 @@ try {
     canvas.width = 256; canvas.height = 356;
     const g = canvas.getContext('2d');
     g.drawImage(paper, 0, 0);
-    const stamp = Math.round(Math.min(256, 356) * 0.48);
+    const stamp = Math.round(Math.min(256, 356) * 0.48 * 1.08);
     const x = Math.round((256 - stamp) / 2);
     const y = Math.round((356 - stamp) / 2);
     // Bake the cream mark; slight grain so it matches the face-down paper.
