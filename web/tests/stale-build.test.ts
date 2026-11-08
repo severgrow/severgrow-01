@@ -24,3 +24,10 @@ describe('a page left open across a deploy recovers by reloading once', () => {
     expect(shouldReloadForStaleBuild(null, 1)).toBe(false);
   });
 });
+
+it('the module recovery reloads through the fresh address too (the worker answers it from the network)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/logic/stale-build.ts', import.meta.url), 'utf8');
+  expect(src).toContain("searchParams.set('_fresh'");
+  expect(src).not.toMatch(/location\.reload\(\)/);
+});

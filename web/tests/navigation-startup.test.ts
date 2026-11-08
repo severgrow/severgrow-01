@@ -10,8 +10,8 @@ function worker(fetcher:typeof fetch,cached?:Response){
  runInNewContext(source,{URL,Response,Promise,setTimeout:(fn:()=>void,ms:number)=>{timers.set(++next,{fn,ms});return next;},clearTimeout:(id:number)=>timers.delete(id),fetch:fetcher,
   caches:{open:async()=>cache,keys:async()=>[]},
   self:{registration:{scope:'https://game.example/'},addEventListener:(type:string,fn:any)=>listeners.set(type,fn)}});
- const navigate=(preloadResponse?:Promise<Response>)=>{let answer:Promise<Response>|undefined;const tasks:Promise<unknown>[]=[];
-  listeners.get('fetch')!({request:{url:'https://game.example/',method:'GET',mode:'navigate'},
+ const navigate=(preloadResponse?:Promise<Response>,url='https://game.example/')=>{let answer:Promise<Response>|undefined;const tasks:Promise<unknown>[]=[];
+  listeners.get('fetch')!({request:{url,method:'GET',mode:'navigate'},
    preloadResponse,
    respondWith:(p:Promise<Response>)=>{answer=p;},waitUntil:(p:Promise<unknown>)=>tasks.push(p)});
   return {answer:answer!,tasks};};
@@ -58,4 +58,19 @@ it('never intercepts or caches the authoritative API',()=>{
  const respondWith=vi.fn();
  w.dispatch({request:{url:'https://game.example/functions/v1/duel/v1/world',method:'GET',mode:'cors'},respondWith,waitUntil:vi.fn()});
  expect(respondWith).not.toHaveBeenCalled();expect(w.cache.match).not.toHaveBeenCalled();
+});
+
+// LIVE (owner, 2026-11-08: "on futasaku.com territory keeps loading forever"): a phone opened its SAVED
+// page from an earlier deploy; that page's lazily loaded code no longer exists on the site, and the
+// stale-page recovery reloads with ?_fresh=... — which this worker answered from the SAME saved page
+// again, so the recovery could never recover. A recovery reload now always gets the network page.
+it('a stale-page recovery reload (?_fresh=) gets the network page, never the saved one',async()=>{
+ const w=worker(vi.fn(async()=>new Response('new app')) as unknown as typeof fetch,new Response('old app'));
+ const n=w.navigate(undefined,'https://game.example/?_fresh=123');
+ expect(await (await n.answer).text()).toBe('new app');
+ await Promise.all(n.tasks);expect(w.cache.put).toHaveBeenCalled();
+});
+it('…and offline, the recovery still falls back to the saved page rather than nothing',async()=>{
+ const w=worker(vi.fn(async()=>{throw new TypeError('offline');}) as unknown as typeof fetch,new Response('saved app'));
+ expect(await (await w.navigate(undefined,'https://game.example/?_fresh=9').answer).text()).toBe('saved app');
 });

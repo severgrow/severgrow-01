@@ -63,6 +63,10 @@ const navigate = async (event) => {
     });
   event.waitUntil(network.then(() => undefined, () => undefined));
   const cached = await caches.open(CACHE).then((c) => c.match('./index.html', { ignoreSearch: true })).catch(() => undefined);
+  // A STALE-PAGE RECOVERY (owner, 2026-11-08: "territory keeps loading forever"): the page reloads with
+  // ?_fresh= when its own code files are gone from the site. Answering that from the same saved page
+  // would fail again, so the recovery waits for the network page (the saved one only when offline).
+  if (new URL(event.request.url).searchParams.has('_fresh')) return network.catch(() => cached || Response.error());
   return cached || network;
 };
 // P-5: never cache the duel API. Cross-origin calls already bypass this worker; when the API

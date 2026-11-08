@@ -281,8 +281,6 @@ class StarterRitual {
     // between them so it never sits behind a dealt card. The result takes the deck's own place;
     // the deck dims underneath it during the reveal, then returns for the final gather.
     const midY = (you.y + opponent.y) / 2;
-    const gap = Math.abs(you.y - opponent.y) - ch;
-    this.deckScale = clamp(gap / (ch * 1.12), 0.58, 1);
     // The emblem sits on the middle tile itself from the first frame (owner, 2026-11-08: "always be
     // exactly in the middle of the middle tile"); the dealt-card midpoint is only the fallback when
     // the board cannot be measured.
@@ -291,6 +289,10 @@ class StarterRitual {
       x: clamp((you.x + opponent.x) / 2, marginX, vw - marginX),
       y: clamp(midY, marginY, vh - marginY),
     };
+    // Shrink to the free gap on the NEARER side, so the deck never covers a dealt card even when the
+    // tile is not exactly halfway between them.
+    const gap = 2 * Math.min(Math.abs(deck.y - you.y), Math.abs(deck.y - opponent.y)) - ch;
+    this.deckScale = clamp(gap / (ch * 1.12), 0.58, 1);
     r.deckAnchor.style.left = `${deck.x.toFixed(1)}px`;
     r.deckAnchor.style.top = `${deck.y.toFixed(1)}px`;
     r.deckAnchor.style.setProperty('--ritual-deck-scale', this.deckScale.toFixed(3));
@@ -875,8 +877,9 @@ class StarterRitual {
   }
 
   /**
-   * Keep the deck (and the outcome words) on the middle tile while the board settles: one rect read a
-   * frame, only until the tile has been still for a few frames (or the ritual ends / exits). Finite.
+   * Keep the composition on the board while it settles: deck on the middle tile, cards on their homes.
+   * One layout a frame, only until the tile has been still for a few frames (or the ritual ends /
+   * exits). Finite.
    */
   private followTile(): void {
     if (typeof requestAnimationFrame !== 'function' || !this.options.centerTile) return;
@@ -894,9 +897,8 @@ class StarterRitual {
           still = 0;
           lastX = p.x;
           lastY = p.y;
-          this.refs.deckAnchor.style.left = `${p.x.toFixed(2)}px`;
-          this.refs.deckAnchor.style.top = `${p.y.toFixed(2)}px`;
-          this.refs.outcome.style.top = `${p.y.toFixed(1)}px`;
+          // the whole composition moves with the board: deck on the tile, cards on their homes
+          this.layout();
         } else still++;
       }
       if (still >= 8 || performance.now() - started > 2500) return;

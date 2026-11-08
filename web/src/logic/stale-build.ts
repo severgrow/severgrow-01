@@ -32,6 +32,10 @@ export const installStaleBuildReload = (win: Window = window): void => {
     try { store = win.sessionStorage; } catch { store = null; }
     if (!shouldReloadForStaleBuild(store, Date.now())) return;
     event.preventDefault();
-    win.location.reload();
+    // Through the fresh address: the offline worker answers ?_fresh= from the network, never from the
+    // saved page that named the missing files (public/futa04-sw.js).
+    const next = new URL(win.location.href);
+    next.searchParams.set('_fresh', String(Date.now()));
+    win.location.replace(next.href);
   });
 };
