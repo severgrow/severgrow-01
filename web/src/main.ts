@@ -2200,6 +2200,18 @@ const drawPileRect = (): DOMRect | null => {
   return rect && rect.width > 1 && rect.height > 1 ? rect : null;
 };
 
+/** The middle hex, as painted. The ritual seats the gathered deck's emblem on this tile. */
+const centerTileRect = (): DOMRect | null => {
+  if (!session) return null;
+  try {
+    const hex = document.querySelector<SVGGraphicsElement>('#board .hex-cell[data-key="0,0"] .hex');
+    const rect = hex?.getBoundingClientRect();
+    return rect && rect.width > 1 && rect.height > 1 ? rect : null;
+  } catch {
+    return null;
+  }
+};
+
 /** One home tile as painted: the ritual places each dealt card beside its owner's own home. */
 const homeTileRect = (seat: Player): DOMRect | null => {
   if (!session) return null;
@@ -2224,6 +2236,7 @@ async function runStarterRitual(view: StarterRitualView): Promise<void> {
     deckTarget: drawPileRect,
     // Display seat 0 is always the local player (moss/tree), online and offline alike.
     homeRects: () => ({ you: homeTileRect(HUMAN), opponent: homeTileRect(BOT) }),
+    centerTile: centerTileRect,
   });
 }
 

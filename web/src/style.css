@@ -3198,6 +3198,22 @@ html:has(#sheet-profile:not([hidden])) #menu .menu-inner { opacity: .28; }
   text-shadow: 0 1px 22px rgba(8, 9, 10, .85), 0 0 2px rgba(8, 9, 10, .6);
 }
 .starter-ritual.is-reduced .ritual-outcome { transition: none; }
+/* The plain kanji, bloomed out of the gathered emblem for one beat. It lives on the body, above the
+   veil, so the overlay's overflow cannot crop it and a perspective here cannot flatten the card
+   flips. Scale is the "toward the screen"; there is no idle loop once the element is removed. */
+.ritual-kanji {
+  position: fixed;
+  z-index: 16;
+  width: min(92vw, 640px);
+  height: auto;
+  aspect-ratio: 2106 / 662;
+  margin: 0;
+  translate: -50% -50%;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  opacity: 0;
+}
 /* Short screens: keep the whole ritual inside the viewport height. */
 @media (max-height: 430px) {
   .starter-ritual { --ritual-card-w: clamp(56px, min(20vmin, 24vh), 92px); }

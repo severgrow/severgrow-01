@@ -24,6 +24,7 @@ import { cardFace, suitClass } from '../ui/effects.js';
 import { preloadCardArt } from './cards.js';
 import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
 import { RITUAL_DECK_SIZE } from '../logic/starter-ritual.js';
+import plainMarkUrl from '../assets/brand/plain-wordmark.svg?url';
 
 /** How long the outcome ("You start" / "Opponent starts") is held before the deck gathers. */
 export const RESULT_HOLD_MS = 1000;
@@ -45,6 +46,12 @@ export type StarterRitualOptions = {
   readonly deckTarget?: () => DOMRect | null;
   /** The two home tiles in screen space: where each dealt card belongs. */
   readonly homeRects?: () => RitualHomeRects;
+  /**
+   * The middle tile of the board, measured when the cards come back together. The deck is seated
+   * on THIS hex, not on the midpoint of the two dealt cards: that midpoint drifts whenever a card
+   * is nudged off its home or clamped to the screen, which is why the emblem sometimes missed.
+   */
+  readonly centerTile?: () => DOMRect | null;
   readonly onPhase?: (phase: StarterRitualPhase) => void;
 };
 
@@ -151,6 +158,8 @@ class StarterRitual {
   private exiting = false;
   private deckScale = 1;
   private settleTimer: ReturnType<typeof setInterval> | undefined;
+  /** The plain kanji that blooms out of the gathered emblem. Removed the moment the ritual ends. */
+  private kanji: HTMLImageElement | null = null;
 
   constructor(options: StarterRitualOptions, refs: Refs) {
     this.options = options;
@@ -206,6 +215,9 @@ class StarterRitual {
    * without ever covering a card. On a phone this reads as top card, deck/result, bottom card.
    */
   private layout(): void {
+    // Once the cards are coming back together the deck is seated on the centre hex. A later
+    // resize must not put it back on the midpoint of the dealt cards, or the emblem drifts again.
+    if (this.exiting) return;
     const r = this.refs;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -664,10 +676,11 @@ class StarterRitual {
   }
 
   /**
-   * The exit, in two readable beats:
-   *   1. the two revealed cards are gathered back onto the deck at the middle of the screen;
-   *   2. every card — all nine deck layers and the two dealt ones — travels to the real draw pile,
-   *      each on its own short arc with a small stagger, fading only as it arrives.
+   * The exit, in three readable beats:
+   *   1. the two revealed cards are gathered back onto the deck, which is seated on the middle tile
+   *      (not on the midpoint of the two dealt cards — that point drifts when a card is nudged or clamped);
+   *   2. the plain kanji comes out of that emblem, grows toward the viewer, and fades;
+   *   3. every card travels to the real draw pile, each on its own short arc, fading only as it arrives.
    * The overlay then fades, so the finished pile is the last thing the eye rests on.
    */
   private async exit(fast: boolean): Promise<void> {
@@ -686,6 +699,10 @@ class StarterRitual {
       return;
     }
 
+    // The dealt cards sit beside their homes, nudged outward and clamped to the screen, so the
+    // midpoint between them is the middle hex only when neither card was moved. Seat the stack on
+    // the tile itself before anything measures it: left/top is the visual centre even while scaled.
+    this.seatDeckOnCenter();
     // Beat 1: gather the two dealt cards over the deck, and bring the deck itself back up as they
     // arrive — the ritual's stack visibly re-forms before it is filed away.
     const deckC = centerOfRect(r.deck.getBoundingClientRect());
@@ -714,7 +731,7 @@ class StarterRitual {
       this.faceDown(r.youFront, r.youBack, 0),
       this.faceDown(r.opponentFront, r.opponentBack, this.ms(36)),
     ]);
-    if (this.cancelled || this.skipRequested) return;
+    if (this.cancelled || this.finished || this.skipRequested) return;
 
     // Beat 1½: the two cards are back on the deck, so the stack is whole again — nine. Swap the
     // travelling cards for their own layers at the same point on screen (cancelling the fills
@@ -723,7 +740,12 @@ class StarterRitual {
     for (const card of [r.youCard, r.opponentCard]) card.style.opacity = '0';
     for (const slot of [r.youSlot, r.opponentSlot]) slot.classList.remove('is-winner', 'is-losing');
 
-    // Beat 2: every card files into the real draw pile.
+    // Beat 2: the stack is whole and its emblem is on the middle tile. The plain kanji comes out of
+    // that emblem, grows toward the viewer, and fades — the signal that the game is beginning.
+    await this.bloomKanji(deckC);
+    if (this.cancelled || this.finished || this.skipRequested) return;
+
+    // Beat 3: every card files into the real draw pile.
     const pileRect = this.options.deckTarget?.() ?? null;
     const pile = pileRect && pileRect.width > 1 && pileRect.height > 1 ? pileRect : null;
     const pileTarget = pile
@@ -804,6 +826,65 @@ class StarterRitual {
     }));
     await this.playAnimations(stream);
     this.finish();
+  }
+
+  /**
+   * Move the deck anchor so its visual centre — left/top, because of the negative margin and the
+   * centred scale — is the middle of the middle tile. Falls back to the midpoint of the two homes,
+   * which is the same point when the homes are mirrors and neither measurement has been clamped.
+   */
+  private seatDeckOnCenter(): void {
+    const point = this.centerPoint();
+    if (!point) return;
+    this.refs.deckAnchor.style.left = `${point.x.toFixed(2)}px`;
+    this.refs.deckAnchor.style.top = `${point.y.toFixed(2)}px`;
+  }
+
+  /** The middle hex as painted, or the unclamped midpoint of the two home tiles. */
+  private centerPoint(): Point | null {
+    const tile = this.options.centerTile?.() ?? null;
+    if (tile && tile.width > 1 && tile.height > 1) return centerOfRect(tile);
+    const homes = this.options.homeRects?.() ?? { you: null, opponent: null };
+    if (homes.you && homes.opponent && homes.you.width > 1 && homes.opponent.width > 1) {
+      const a = centerOfRect(homes.you);
+      const b = centerOfRect(homes.opponent);
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+    return null;
+  }
+
+  /**
+   * The plain kanji, and only the kanji, grows out of the emblem toward the viewer and then fades.
+   * Scale stands in for "toward the screen": a perspective on the overlay would flatten the card
+   * flips. No overshoot — the mark eases out to full size, holds, and dissolves.
+   */
+  private async bloomKanji(at: Point): Promise<void> {
+    if (this.cancelled || this.finished || typeof document === 'undefined' || !document.body) return;
+    const img = document.createElement('img');
+    img.className = 'ritual-kanji';
+    img.src = plainMarkUrl;
+    img.alt = '';
+    img.draggable = false;
+    img.setAttribute('aria-hidden', 'true');
+    img.style.left = `${at.x.toFixed(2)}px`;
+    img.style.top = `${at.y.toFixed(2)}px`;
+    document.body.append(img);
+    this.kanji = img;
+    const wide = img.getBoundingClientRect().width || Math.min(window.innerWidth * 0.92, 640);
+    const emblem = this.refs.deckAnchor.getBoundingClientRect().width || this.cardSize().w;
+    // Start about the size of the mark inside the card, so it reads as coming out of the emblem.
+    const start = clamp((emblem * 0.42) / wide, 0.08, 0.3);
+    await this.playAnimations([this.animate(img, [
+      { scale: start, opacity: 0, easing: 'cubic-bezier(.2,.7,.2,1)' },
+      { scale: 1, opacity: 1, offset: 0.58, easing: 'linear' },
+      { scale: 1, opacity: 1, offset: 0.76, easing: 'cubic-bezier(.4,0,.2,1)' },
+      { scale: 1.05, opacity: 0 },
+    ], { duration: this.ms(780), easing: 'linear' })]);
+  }
+
+  private clearKanji(): void {
+    this.kanji?.remove();
+    this.kanji = null;
   }
 
   // ---------------------------------------------------------------- helpers
@@ -961,6 +1042,7 @@ class StarterRitual {
 
   private reset(): void {
     this.cancelAnimations();
+    this.clearKanji();
     clearInterval(this.settleTimer);
     this.settleTimer = undefined;
     const r = this.refs;
@@ -1011,6 +1093,7 @@ class StarterRitual {
     if (this.finished) return;
     this.finished = true;
     this.cancelAnimations();
+    this.clearKanji();
     this.resolveWaits();
     for (const id of [...this.timers]) clearTimeout(id);
     this.timers.clear();

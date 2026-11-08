@@ -162,6 +162,33 @@ describe('the outcome is readable (owner, 2026-10-23)', () => {
   });
 });
 
+describe('the gathered emblem sits on the middle tile (owner, 2026-11-08)', () => {
+  it('seats the deck on the centre hex before the cards meet, then blooms the plain kanji', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const src = readFileSync(fileURLToPath(new URL('../src/player/starter-ritual.ts', import.meta.url)), 'utf8');
+    const exit = src.slice(src.indexOf('private async exit'), src.indexOf('private baseOffsets'));
+    const fast = exit.indexOf('if (fast)');
+    const seat = exit.indexOf('this.seatDeckOnCenter()');
+    const measure = exit.indexOf('const deckC = centerOfRect');
+    const bloom = exit.indexOf('await this.bloomKanji(deckC)');
+    const pile = exit.indexOf('const toPile');
+    // A short fade (reduced motion, or a skip) leaves before any of this. The full exit seats the
+    // emblem, measures that point, blooms the kanji, and only then streams the cards to the pile.
+    expect(fast).toBeGreaterThan(-1);
+    expect(seat).toBeGreaterThan(fast);
+    expect(measure).toBeGreaterThan(seat);
+    expect(bloom).toBeGreaterThan(measure);
+    expect(pile).toBeGreaterThan(bloom);
+    expect(src).toContain("plain-wordmark.svg?url");
+    expect(src).not.toContain('EASE.spring');
+    expect(src).toMatch(/private layout\(\): void \{[\s\S]*?if \(this\.exiting\) return;/);
+    const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
+    expect(main).toContain('centerTile: centerTileRect');
+    expect(main).toContain('[data-key="0,0"]');
+  });
+});
+
 describe('which matches open with the ritual (owner, 2026-10-24)', () => {
   it('plays on a practice match and on every campaign level from 9 on', () => {
     expect(RITUAL_FROM_CAMPAIGN_LEVEL).toBe(9);
