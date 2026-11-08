@@ -95,8 +95,9 @@ describe('the challenger names the tile, never a Seed price', () => {
   });
 
   it('names the stake in the meta line instead of an amount', () => {
-    expect(CHALLENGE.sendMeta('your tile 3,-10')).toBe('24 H TO ANSWER');
-    expect(CHALLENGE.sendMeta('your tile 3,-10')).toContain('24 H TO ANSWER');
+    // Owner, 2026-11-08: a new challenge's answer window is 48 hours. This used to pin 24.
+    expect(CHALLENGE.sendMeta('your tile 3,-10')).toBe('48 H TO ANSWER');
+    expect(CHALLENGE.waitLine('RYK')).toContain('48 h');
     expect(CHALLENGE.sent('your tile 3,-10')).toContain('your tile 3,-10');
     // No sentence anywhere implies that challenging is paid in Seeds.
     for (const text of challengerFacing()) {
@@ -116,14 +117,15 @@ describe('the challenger names the tile, never a Seed price', () => {
 describe('the defender’s countdown is live, and honest at zero', () => {
   const HOUR = 60 * 60 * 1000;
   const start = 1_000_000;
-  const challenge = { challengerName: 'RYK', expiresAt: start + 24 * HOUR };
+  // A new challenge's window (owner, 2026-11-08). The old fixture pinned 24 hours.
+  const challenge = { challengerName: 'RYK', expiresAt: start + 48 * HOUR };
 
-  it('re-reads the deadline: the same sheet says 23 h an hour later, without reopening', () => {
-    expect(defendSheetCopy(challenge, start).line).toContain('24 h');
-    expect(defendSheetCopy(challenge, start + HOUR).line).toContain('23 h');
-    expect(defendSheetCopy(challenge, start + 23 * HOUR + 59 * 60_000).line).toContain('1 min');
+  it('re-reads the deadline: the same sheet says 47 h an hour later, without reopening', () => {
+    expect(defendSheetCopy(challenge, start).line).toContain('48 h');
+    expect(defendSheetCopy(challenge, start + HOUR).line).toContain('47 h');
+    expect(defendSheetCopy(challenge, start + 47 * HOUR + 59 * 60_000).line).toContain('1 min');
     // Never a price, at any point of the countdown.
-    for (const now of [start, start + HOUR, start + 23 * HOUR]) {
+    for (const now of [start, start + HOUR, start + 47 * HOUR]) {
       const copy = defendSheetCopy(challenge, now);
       expect(copy.line).not.toMatch(/\d+\s*seeds/i);
       expect(copy.meta).toBe(CHALLENGE.defendMeta);
@@ -132,7 +134,7 @@ describe('the defender’s countdown is live, and honest at zero', () => {
   });
 
   it('stops asking at the deadline and says exactly what the server does', () => {
-    for (const now of [start + 24 * HOUR, start + 30 * HOUR]) {
+    for (const now of [start + 48 * HOUR, start + 60 * HOUR]) {
       const copy = defendSheetCopy(challenge, now);
       expect(copy.expired).toBe(true);
       expect(copy.line).toBe(CHALLENGE.deadlineLine('RYK'));

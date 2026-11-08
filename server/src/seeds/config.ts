@@ -42,8 +42,13 @@ export const SEED_ECONOMY = Object.freeze({
  * challenge is free, and the challenger puts one of their OWN tiles at stake instead
  * (`server/src/seeds/stake.ts`). The timers below are not economy values: they are the defender's
  * answer window and the outer bound on a linked duel that never resolves.
+ *
+ * THE ANSWER WINDOW (owner, 2026-11-08): 48 hours for a challenge sent from now on. A row already
+ * waiting keeps the `expires_at` it was given — this constant is read only when a challenge is
+ * created, never to rewrite one. It is not the linked-duel turn clock (`TERRITORY_TURN_TIMEOUT_MS`
+ * in `service.ts`), which stays 24 hours.
  */
-export const WORLD_CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
+export const WORLD_CHALLENGE_TTL_MS = 48 * 60 * 60 * 1000;
 export const WORLD_CHALLENGE_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 /** At most this many OPEN outgoing challenges per challenger, and incoming per defender. */
 export const WORLD_CHALLENGE_OPEN_LIMIT = 3;

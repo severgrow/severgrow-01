@@ -661,7 +661,7 @@ export class MatchService {
     // "unknown" bucket) can never block routine housekeeping. It is still rate limited.
     const bucket = options.internal === true ? 'sweep:internal' : `sweep:ip:${clientIp ?? 'unknown'}`;
     await this.rateLimit(bucket, HOUR_MS, this.config.rateLimits.sweepPerIpPerHour);
-    // Territory challenges: an unanswered 24 h challenge forfeits, and an accepted one older than
+    // Territory challenges: an unanswered challenge forfeits at its own deadline, and an accepted one older than
     // 7 days closes stale. The same daily housekeeping call that clears matches applies both.
     await this.economy?.expireChallenges(this.now()).catch(() => 0);
     const result = await this.storage.sweep(this.now(), GUEST_MAX_AGE_MS);

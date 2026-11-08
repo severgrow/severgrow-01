@@ -13,7 +13,7 @@ export const CHALLENGE_LOW_MS = 6 * 60 * 60 * 1000;
  */
 export const CHALLENGE_RAIL_MAX = 8;
 
-/** How much of the 24 h answer window is LEFT, 1 → 0. Nothing but a pending challenge has a ring. */
+/** How much of this row's answer window is LEFT, 1 → 0. A new challenge spans 48 h; an older row keeps the span it was given. Nothing but a pending challenge has a ring. */
 export const ringFraction = (
   challenge: Pick<WorldChallengeWire, 'createdAt' | 'expiresAt' | 'status'>,
   now: number,
@@ -41,7 +41,9 @@ export const remainingLabel = (ms: number): string => {
   const minutes = Math.floor(ms / 60_000);
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `${hours} h`;
+  // Days start only past a full new answer window. At 48 h the label says "48 h", so a challenge
+  // just sent does not flash "2 d" and then "47 h" a minute later (owner, 2026-11-08).
+  if (hours <= 48) return `${hours} h`;
   return `${Math.floor(hours / 24)} d`;
 };
 

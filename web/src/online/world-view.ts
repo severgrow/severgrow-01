@@ -1347,7 +1347,7 @@ export class WorldView {
       this.paintWallet();
       this.paintPanel();
       this.paintSelection();
-      // The ring must keep draining even when the world revision is unchanged (a 24 h timer does not
+      // The ring must keep draining even when the world revision is unchanged (an answer timer does not
       // bump ownership). These only touch attributes, the swords and the challenge strip, never the map.
       this.paintRings();
       this.paintSwords();

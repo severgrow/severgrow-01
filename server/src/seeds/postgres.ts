@@ -742,7 +742,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
       for (const row of due.rows) {
         const c = challengeFromRow(row);
         if (c.status === 'pending') {
-          // Unanswered for 24 h: the owner's decision is a forfeit. The challenger takes the
+          // Unanswered past this row's expires_at: the owner's decision is a forfeit. The challenger takes the
           // contested tile; their own staked tile was never escrowed, so it stays theirs. The
           // defender is never charged. (A legacy Seed row still gets its recorded stake back.)
           if (await takeCell(client, c.cellId, c.defenderId, c.challengerId, now)) {
