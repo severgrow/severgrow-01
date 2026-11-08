@@ -84,6 +84,7 @@ const READ_ENDPOINTS: { method: string; path: string }[] = [
   { method: 'GET', path: '/v1/admin/session' },
   { method: 'GET', path: '/v1/admin/whats-new' },
   { method: 'GET', path: '/v1/admin/overview' },
+  { method: 'GET', path: '/v1/admin/analytics' },
   { method: 'GET', path: '/v1/admin/ops' },
   { method: 'GET', path: '/v1/admin/reports' },
   { method: 'GET', path: '/v1/admin/reports.csv' },

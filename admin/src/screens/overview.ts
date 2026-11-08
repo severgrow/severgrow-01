@@ -1,8 +1,7 @@
 // Overview — the honest front page.
 //
-// Everything here is a count the database can actually produce. There is deliberately NO "active
-// users", retention or engagement figure: `players` has no last-seen column a dashboard may trust
-// (presence is live-duel state, not history), so the panel says so instead of inventing a number.
+// Match, report, Seeds and world counts live here. Player activity / retention lives on Analytics
+// (`/v1/admin/analytics`), built from proven duel finishes, claims and creates — not a visit log.
 import type { AdminOverview } from '../../../server/src/admin/types.js';
 import { ADMIN_MIGRATION_PENDING } from '../api.js';
 import type { OverviewResponse, WhatsNew } from '../types.js';
@@ -35,7 +34,7 @@ export const renderOverview = async (host: HTMLElement, ctx: Ctx): Promise<void>
 
   panes.append(
     honesty('What this page cannot measure', [
-      'Active users, retention and engagement: the database keeps no trustworthy per-player last-seen history, so no such figure is shown.',
+      'Player activity and return rates: the Overview counts matches and economy rows only. Open Analytics for DAU/WAU, create-day D1/D7 (complete windows only), and the new-player funnel — from finished duels, claims and creates, not a visit log.',
       'Campaign and Training matches: they never create a row in `matches`, so they are absent from the match counts above and appear on the Campaign screen instead.',
       'A level nobody has ever played leaves no row at all — clearance is counted from what the server recorded, never from the authored level list.',
     ]),
@@ -147,6 +146,11 @@ const panels = (data: AdminOverview, ctx: Ctx): Node[] => {
             { caption: `Exact: feedback_reports grouped by the normalised build, newest 7 days. ${data.reports.byBuild.length > buildRows.length ? `Showing the 8 worst of ${data.reports.byBuild.length} builds.` : ''}` },
           )),
       el('p', {}, button('Open the report list', () => ctx.navigate('#/reports'), { small: true })),
+    ]),
+
+    card('Players at a glance', [
+      el('p', { class: 'muted', text: 'DAU/WAU, create-day retention and the new-player funnel live on the Analytics screen — same database, humans only, test accounts excluded.' }),
+      el('p', {}, button('Open Analytics', () => ctx.navigate('#/analytics'), { small: true })),
     ]),
 
     card('Seeds awarded and spent', [

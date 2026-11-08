@@ -27,6 +27,7 @@ import type {
   AdminReportRow,
   AdminStore,
 } from './types.js';
+import { shapeAnalytics, type AnalyticsPlayerFact } from './analytics.js';
 import { TAG_SCAN_LIMIT, normalizeBuild } from './types.js';
 import { DAY_MS, clampLimit, decodeCursor, lastDays, pageOf, str, utcDay } from './util.js';
 
@@ -243,6 +244,66 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
         health: { dbOk: true, dbMs: null },
       };
       return overview;
+    },
+
+    async analytics(now) {
+      const humans = visiblePlayers();
+      const visible = await visibleMatches();
+      const claims = [...(economy()?.claims.values() ?? [])].filter((c) => !isMarked(c.ownerId));
+      const rematchIds = new Set<string>();
+      for (const match of visible) {
+        if (match.status !== 'finished') continue;
+        const rematch = await sources.storage.rematchOf(match.id);
+        if (rematch) rematchIds.add(rematch.id);
+      }
+
+      const facts = new Map<string, AnalyticsPlayerFact>();
+      for (const player of humans) {
+        facts.set(player.id, {
+          playerId: player.id,
+          createdAt: player.createdAt,
+          activityDays: new Set([utcDay(player.createdAt)]),
+          finishedMatchCount: 0,
+          invitesSent: 0,
+          invitesJoined: 0,
+          hasClaim: false,
+          rematchCount: 0,
+        });
+      }
+
+      for (const claim of claims) {
+        const fact = facts.get(claim.ownerId);
+        if (!fact) continue;
+        fact.hasClaim = true;
+        fact.activityDays.add(utcDay(claim.claimedAt));
+      }
+
+      for (const match of visible) {
+        const parts = await sources.storage.participantsOf(match.id);
+        const friend = modeOf(match) === 'friend';
+        const finished = match.status === 'finished' && match.finishedAt !== null;
+        const isRematch = rematchIds.has(match.id);
+        const seat0 = parts.find((p) => p.seat === 0);
+        const joined = parts.length >= 2;
+
+        if (friend && seat0 && facts.has(seat0.playerId)) {
+          const creator = facts.get(seat0.playerId)!;
+          creator.invitesSent += 1;
+          if (joined) creator.invitesJoined += 1;
+        }
+
+        for (const part of parts) {
+          const fact = facts.get(part.playerId);
+          if (!fact) continue;
+          if (finished) {
+            fact.finishedMatchCount += 1;
+            fact.activityDays.add(utcDay(match.finishedAt!));
+          }
+          if (isRematch && finished) fact.rematchCount += 1;
+        }
+      }
+
+      return shapeAnalytics([...facts.values()], now);
     },
 
     async reports(filter) {

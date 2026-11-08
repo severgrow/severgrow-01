@@ -238,12 +238,17 @@ states this so "bots" cannot be read as "in-game opponents".
 | Rules drift | `matches.rules_version` grouped against `CURRENT_RULES_VERSION` |
 | Guest → account | `players.kind`, `created_at`, `player_identities` |
 | Health | the same storage ping `/v1/health?db=1` already uses |
+| DAU / WAU (proven activity) | distinct non-test players with a finished duel, a territory claim, or a create on that UTC day / last 7 UTC days (`GET /v1/admin/analytics`) |
+| Create-day D1 / D7 | of players created on cohort day C, share with proven activity on C+1 / C+7 — **null until the observation window is complete** |
+| New-player funnel (28 d) | first finished match, first claim, invite sent/joined, rematch, repeat matches among non-test creates in the lookback |
 
 ### Unavailable, and shown as unavailable rather than guessed
 
-- **Active users, retention, engagement, DAU/MAU.** The database keeps no trustworthy per-player
-  last-seen history. `players` has no such column, and live-duel `presence_*` is current state, not a
-  history. The Overview screen says so in a labelled panel. **No such metric is displayed.**
+- **Browser sessions, page views, or a classic last-seen visit log.** The database has no per-day
+  presence history; live-duel `presence_*` is current state only. Analytics therefore defines
+  "active" from finished duels, claims and creates, and prints that definition on the screen.
+- **Incomplete D1 / D7 windows.** A cohort younger than the offset never shows a partial rate — the
+  cell is `—` / `null`, not a cheerful fraction of a half-day.
 - **Campaign/Training matches in the match counts.** They never create a `matches` row; they are
   counted on the Campaign screen from their reward receipts. The Overview panel says so.
 - **A level nobody has ever played.** It leaves no row anywhere, so the dashboard cannot distinguish

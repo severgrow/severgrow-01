@@ -234,6 +234,11 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
       return { status: 200, body: { ok: true, ...overview, rulesVersion: deps.rulesVersion, health } };
     }
 
+    if (req.method === 'GET' && path === '/v1/admin/analytics') {
+      const analytics = await deps.store.analytics(now);
+      return { status: 200, body: { ok: true, ...analytics } };
+    }
+
     if (req.method === 'GET' && path === '/v1/admin/ops') {
       // SEQUENTIAL, not Promise.all: two store methods in flight at once is the same parallel batch
       // that hangs the deployed Edge runtime (postgres.js + the transaction pooler) for the other
