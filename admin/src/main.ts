@@ -29,7 +29,7 @@ import { formatDateTime, parseHash } from './format.js';
 /** The sections, grouped the way the owner asks questions: who plays, what they play, what broke. */
 const ROUTES: readonly { group: string; route: string; label: string }[] = [
   { group: 'Today', route: 'overview', label: 'Overview' },
-  { group: 'Today', route: 'analytics', label: 'Analytics' },
+  { group: 'Today', route: 'analytics', label: 'Players & retention' },
   { group: 'Players', route: 'players', label: 'All players' },
   { group: 'Players', route: 'bots', label: 'Bots (test accounts)' },
   { group: 'Players', route: 'player', label: 'Look up a player' },

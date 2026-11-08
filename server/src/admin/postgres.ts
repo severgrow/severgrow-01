@@ -12,6 +12,7 @@ import { newId } from '../ids.js';
 import { playerTag } from '../../../src/player-tag.js';
 import { shapeCampaign } from './campaign.js';
 import { classificationOf, shapePlayers, PLAYERS_LIMIT } from './players.js';
+import { shapeAnalytics, type AnalyticsPlayerFact } from './analytics.js';
 import type { PgPool } from '../storage/postgres.js';
 import type {
   AdminAuditEntry,
@@ -343,6 +344,66 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
         health: { dbOk: true, dbMs: null },
       };
       return overview;
+    },
+
+    async analytics(now) {
+      const players = await pool.query(
+        `select p.id, p.created_at from players p where ${NOT_TEST('p')}`,
+      );
+      const finishes = await pool.query(
+        `select mp.player_id, m.finished_at, m.rematch_of
+           from match_participants mp
+           join matches m on m.id = mp.match_id
+          where m.status = 'finished' and m.finished_at is not null
+            and ${MATCH_VISIBLE('m')}`,
+      );
+      const claims = await pool.query(
+        `select c.owner_id, c.claimed_at from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`,
+      );
+      const invites = await pool.query(
+        `select mp.player_id as creator_id,
+                (select count(*)::int from match_participants mp2 where mp2.match_id = m.id) as seats
+           from matches m
+           join match_participants mp on mp.match_id = m.id and mp.seat = 0
+          where m.open_queue = false and m.live_since is null
+            and ${MATCH_VISIBLE('m')}`,
+      );
+
+      const facts = new Map<string, AnalyticsPlayerFact>();
+      for (const row of players.rows) {
+        const id = str(row.id);
+        const createdAt = num(row.created_at);
+        facts.set(id, {
+          playerId: id,
+          createdAt,
+          activityDays: new Set([utcDay(createdAt)]),
+          finishedMatchCount: 0,
+          invitesSent: 0,
+          invitesJoined: 0,
+          hasClaim: false,
+          rematchCount: 0,
+        });
+      }
+      for (const row of finishes.rows) {
+        const fact = facts.get(str(row.player_id));
+        if (!fact) continue;
+        fact.finishedMatchCount += 1;
+        fact.activityDays.add(utcDay(num(row.finished_at)));
+        if (row.rematch_of !== null && row.rematch_of !== undefined) fact.rematchCount += 1;
+      }
+      for (const row of claims.rows) {
+        const fact = facts.get(str(row.owner_id));
+        if (!fact) continue;
+        fact.hasClaim = true;
+        fact.activityDays.add(utcDay(num(row.claimed_at)));
+      }
+      for (const row of invites.rows) {
+        const fact = facts.get(str(row.creator_id));
+        if (!fact) continue;
+        fact.invitesSent += 1;
+        if (num(row.seats) >= 2) fact.invitesJoined += 1;
+      }
+      return shapeAnalytics([...facts.values()], now);
     },
 
     async reports(filter) {

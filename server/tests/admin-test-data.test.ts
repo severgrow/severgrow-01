@@ -197,6 +197,7 @@ describe('the real SQL store filters test data in every read', () => {
     const reads: [string, () => Promise<unknown>][] = [
       ['countsSince', () => store.countsSince(NOW - DAY, NOW)],
       ['overview', () => store.overview(NOW)],
+      ['analytics', () => store.analytics(NOW)],
       ['reports', () => store.reports({ limit: 5 })],
       ['stuck', () => store.stuck(NOW, windows)],
       ['rulesVersionCounts', () => store.rulesVersionCounts()],

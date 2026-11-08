@@ -7,11 +7,13 @@
 // invite codes or hidden hands — the field lists below are the whole contract, and the router
 // returns exactly these.
 import type { FeedbackKind } from '../feedback/feedback.js';
+import type { AdminAnalytics } from './analytics.js';
 import type { AdminPlayers, PlayerClassification } from './players.js';
+
+export type { AdminAnalytics, AdminAnalyticsFunnel, AdminRetentionCohort } from './analytics.js';
 
 export type AdminTriageStatus = 'new' | 'reviewing' | 'resolved';
 
-/** A day bucket keyed by UTC day (`YYYY-MM-DD`), the same key the Seeds economy stores. */
 /** A day bucket keyed by UTC day (`YYYY-MM-DD`), the same key the Seeds economy stores. */
 export type AdminDayCount = { day: string; n: number };
 export type AdminValueCount = { value: string; n: number };
@@ -295,6 +297,11 @@ export interface AdminStore {
   /** New rows since `since`, for the "since you last looked" counters. */
   countsSince(since: number, now: number): Promise<{ reports: number; crashes: number; claims: number; matches: number }>;
   overview(now: number): Promise<AdminOverview>;
+  /**
+   * Retention and funnel figures from stored activity (finished duels, claims, creates).
+   * Test accounts are excluded. Incomplete D1/D7 windows are null, never partial.
+   */
+  analytics(now: number): Promise<AdminAnalytics>;
   reports(filter: AdminReportFilter): Promise<AdminPage<AdminReportRow>>;
   triage(input: { reportId: string; status: AdminTriageStatus; note: string; actorId: string; now: number }): Promise<{ changed: boolean; previous: AdminTriageStatus | null } | null>;
   audit(entry: AdminAuditEntry): Promise<void>;
