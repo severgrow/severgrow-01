@@ -65,7 +65,7 @@ export const CHALLENGE = Object.freeze({
   declineKey: 'DECLINE',
   /** Declining is the one irreversible key: the first press only arms it. */
   declineConfirm: 'TAP AGAIN TO DECLINE',
-  waitLine: (name: string) => `You challenged ${name}. They have 24 h to answer - your tile is at stake.`,
+  waitLine: (name: string) => `You challenged ${name}. They have 48 h to answer - your tile is at stake.`,
   duelLine: 'Win the duel, take the ground. Lose it, they take your tile.',
   openDuelKey: 'OPEN DUEL',
   /**
@@ -94,7 +94,7 @@ export const CHALLENGE = Object.freeze({
    */
   deadlineLine: (name: string) => `The deadline passed. ${name} takes this ground.`,
   /** The challenger's offer's meta line: the stake, then the answer window. Never a Seed amount. */
-  sendMeta: (_tile: string) => '24 H TO ANSWER',
+  sendMeta: (_tile: string) => '48 H TO ANSWER',
   /** The same meta for a challenge that already exists (waiting, contested, settling). */
   stakeMeta: (tile: string) => `${tile.toUpperCase()} AT STAKE`,
   /** The map ring's spoken name, so a screen reader is told which tile is at risk. */

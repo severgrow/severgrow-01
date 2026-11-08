@@ -24,7 +24,7 @@ disconnect, only to a duel they chose to play — and so the reversal is narrow 
 ## The loop, in one paragraph
 
 You may challenge a **neighbour's tile that shares a hex side with your own territory**. The
-challenge is a formal invitation you pay to make: you put 50 Seeds behind it, and the defender has **24 h**
+challenge is a formal invitation you pay to make: you put 50 Seeds behind it, and the defender has **48 h**
 to answer. Decline, or let the timer run out, and the challenge **lapses and your Seeds come back** —
 the defender keeps their tile. Accept, and the two of you are handed a **linked duel** (the existing
 match engine, unchanged). When that duel finishes, **either player may confirm the result, and the
@@ -34,7 +34,8 @@ Then the map is redrawn for both, and the loser's territory is one cell smaller.
 Why this shape:
 
 - **The tile moves only after a real game, or after silence.** As BUILT (owner's decision, 2026-10-21)
-  an unanswered challenge is a FORFEIT: after 24 h the challenger takes the tile. See the warning
+  an unanswered challenge is a FORFEIT: after its answer window the challenger takes the tile. A challenge
+  sent now waits **48 h**; one already waiting keeps the deadline it was given. See the warning
   below, because this is the one rule that can cost an absent player their ground.
 - **It is a stake, not a fee.** Both sides put something real on it (one a tile, one the Seeds), so
   the risk is symmetric even though the objects differ. The amount moved 100 → 50 on 2026-10-24
@@ -52,7 +53,7 @@ and refunds the challenger's own stake. Consequences, all accepted deliberately 
 
 - A player who is ill, travelling or simply not logging in **loses paid tiles without playing**.
 - Anyone can park three challenges on a quiet neighbourhood and collect it daily for free.
-- The defence is social (the defender gets 24 h of notice in the rail and can decline, which keeps
+- The defence is social (the defender gets 48 h of notice in the rail and can decline, which keeps
   the tile) and economic (the challenger risks 50 Seeds per attempt, returned only on a win or a
   decline).
 
@@ -74,7 +75,8 @@ are not the owner, that constant should be revisited first.
 4. **Cost.** The challenger escrows **50 Seeds** (`SEED_ECONOMY.challengeStake`). It is debited on *send* (so you cannot promise
    money you spent) and refunded on lapse/decline. On a win it returns to you; on a loss it is paid
    to the defender. Seeds are only ever moved, never created or destroyed by this feature.
-5. **The timer.** 24 h from send. A cell may be challenged again only after its previous challenge
+5. **The timer.** 48 h from send, for a new challenge (owner, 2026-11-08). A challenge already waiting
+   keeps the deadline it was given. A cell may be challenged again only after its previous challenge
    is closed, so a defender with one aggressive neighbour cannot be spammed.
 6. **Resolution.** Accept creates a match with `kind = 'territory'` and both players seated; the
    challenge stores `match_id`. When the match finishes, **either** participant may `POST
@@ -155,7 +157,7 @@ ink, one `--territory` accent. The challenge layer adds **four** things and no n
   every motion mode, so reduced motion (and the moving-map pause) has nothing to switch off.
 - **The timer ring.** The signature element. A thin ring **traced along the hex's own outline**
   (the same 6-point `hexPath` the tiles use, so it is the cell's shape, not a circle stuck on top),
-  draining clockwise from full to empty over the 24 h. It is `stroke-dasharray` animated on the
+  draining clockwise from full to empty over that row's answer window (48 h when it was just sent). It is `stroke-dasharray` animated on the
   path, so it costs one attribute and no layout. Under 6 h it starts a slow breath; on expiry it
   collapses to nothing over 400 ms. On the challenge list each row carries a small version of the
   same ring, so one shape means one thing everywhere.
@@ -181,7 +183,8 @@ match engine with `kind = 'territory'`; a duel is a duel. Claims, the ledger's i
 
 1. **May a played duel transfer a paid tile?** → **Yes, the winner takes the cell.** Code.
 2. **If the defender never answers within 24 h?** → **Forfeit: the challenger takes the tile.**
-   Code (`expireChallenges`). The warning above applies.
+   Code (`expireChallenges`). The warning above applies. On 2026-11-08 the owner lengthened that
+   answer window to **48 h for a new challenge only**. A challenge already waiting keeps its deadline.
 3. **The stake?** → **Challenger escrows 50; the winner takes it and the tile.** Code. (The owner
    first answered 100 — one tile's price — then set it to 50 on 2026-10-24, because the two purchases
    are not the same thing and the offer read as buying the land.)

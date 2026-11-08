@@ -113,10 +113,11 @@ export type TrainingTicket = { id: string; playerId: string; seed: number; botLe
  *   - the winner takes the LOSER's tile, and nobody's wallet moves.
  *
  * `status` mirrors the design doc:
- *   pending   the defender has 24 h to answer; the challenger's own tile is at stake
+ *   pending   the defender has 48 h to answer (a row already waiting keeps its own deadline);
+ *             the challenger's own tile is at stake
  *   accepted  a linked `kind = 'territory'` duel exists; it settles itself when the duel finishes
  *   declined  the defender refused; nothing changes hands
- *   expired   the 24 h window passed unanswered; the challenger takes the contested tile by forfeit
+ *   expired   the answer window passed unanswered; the challenger takes the contested tile by forfeit
  *   resolved  a played duel settled it; the winner took the loser's tile
  *   stale     accepted but not settled within 7 days; nothing transfers
  *
@@ -209,7 +210,7 @@ export type WorldChallengeWire = {
   matchWinnerId: string | null;
   winnerId: string | null;
   resolvedAt: number | null;
-  /** Pending only: milliseconds left on the 24 h answer timer (never negative). */
+  /** Pending only: milliseconds left on that row's answer timer (never negative). */
   remainingMs: number;
   serverNow: number;
 };
@@ -326,7 +327,7 @@ export interface WorldEconomyStore {
    * player never has to press CONFIRM / TAKE THE GROUND.
    */
   challengesAwaitingSettlement(): Promise<WorldChallenge[]>;
-  /** Apply due forfeits (24 h) and stale closes (7 d), and settle finished duels. Returns rows changed. */
+  /** Apply due forfeits (each row's own answer deadline) and stale closes (7 d), and settle finished duels. Returns rows changed. */
   expireChallenges(now: number): Promise<number>;
 
   // ---- Owner edits from the admin dashboard (docs/ADMIN.md §3a) -------------

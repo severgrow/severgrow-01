@@ -132,6 +132,36 @@ describe('the stake is chosen, free, and never a Seed', () => {
     expect(h.store.challenges.size).toBe(1);
   });
 
+  it('a NEW challenge waits 48 hours; one already waiting keeps the deadline it was given', async () => {
+    // Owner, 2026-11-08: the response window is 48 hours for challenges sent from now on.
+    // Nothing rewrites an existing expires_at. The linked-duel turn clock stays 24 hours.
+    const HOUR = 60 * 60 * 1000;
+    const NEW_WINDOW = 48 * HOUR;
+    const OLD_WINDOW = 24 * HOUR;
+    const h = makeHarness();
+    await h.register(h.a, h.b);
+    h.own(pair.near, h.a.id);
+    h.own(pair.target, h.b.id);
+
+    const sent = await send(h, h.a, pair.target, 'forty-eight-hour-window');
+    expect(sent.ok).toBe(true);
+    if (!sent.ok) return;
+    expect(sent.challenge.expiresAt - sent.challenge.createdAt).toBe(NEW_WINDOW);
+    expect(WORLD_CHALLENGE_TTL_MS).toBe(NEW_WINDOW);
+
+    // A row already in the store, given 24 hours when it was sent, still forfeits at that deadline.
+    const waiting = { ...sent.challenge, id: 'already-waiting', expiresAt: h.now() + OLD_WINDOW };
+    h.store.challenges.set(waiting.id, waiting);
+    h.advance(OLD_WINDOW - 1);
+    expect(await h.service.expireChallenges(h.now())).toBe(0);
+    expect((await h.store.challenge(waiting.id))?.status).toBe('pending');
+    expect((await h.store.challenge(sent.challenge.id))?.status).toBe('pending');
+    h.advance(1);
+    expect(await h.service.expireChallenges(h.now())).toBe(1);
+    expect((await h.store.challenge(waiting.id))?.status).toBe('expired');
+    expect((await h.store.challenge(sent.challenge.id))?.status).toBe('pending');
+  });
+
   it('refuses a challenger with no tile of their own with NO_TILE', async () => {
     const h = makeHarness();
     await h.register(h.a, h.b, h.c);

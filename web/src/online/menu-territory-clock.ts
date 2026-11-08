@@ -5,7 +5,7 @@
 //   - ONE interval, started only when a deadline exists and stopped the moment none does (a
 //     closed window, a resolved challenge, an unread list, or a menu pass that finds nothing);
 //   - a tick only formats the time and writes ONE text node, and only when the short label has
-//     actually changed (it moves once a minute for most of the 24 h window);
+//     actually changed (it moves once a minute for most of the answer window);
 //   - no layout read, no animation, no fetch: the deadline comes from the read the menu already
 //     made, and the formatter is the lobby's own (`formatRemaining`, "18h 42m").
 //

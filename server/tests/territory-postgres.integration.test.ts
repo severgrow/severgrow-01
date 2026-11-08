@@ -2,7 +2,7 @@
 //
 // territory-challenges.test.ts proves the rules on the in-memory store. This file runs the same
 // loop against the SQL store and SQL match storage, so the paths that move a paid tile or Seeds -
-// accept -> linked duel -> confirm, the 24 h forfeit, the 7-day stale close and two challengers
+// accept -> linked duel -> confirm, the answer-window forfeit, the 7-day stale close and two challengers
 // racing for one tile - have executed against the migration before anything is deployed.
 // Opt-in like the other integration suites: REQUIRE_DATABASE=1 and DATABASE_URL.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -120,7 +120,7 @@ describe.skipIf(!enabled)('Territory challenges on real Postgres', () => {
     expect((await balance(challenger)) + (await balance(defender))).toBe(total);
   });
 
-  it('an unanswered challenge forfeits after 24 h: the tile moves, the challenger is refunded', async () => {
+  it('an unanswered challenge forfeits after its answer window: the tile moves, the challenger is refunded', async () => {
     const { target, challenger, defender } = await setup();
     const total = (await balance(challenger)) + (await balance(defender));
     const sent = await service.sendChallenge(challenger, target, `req-${crypto.randomUUID()}`);

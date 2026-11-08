@@ -513,7 +513,7 @@ export class WorldEconomyService {
 
   // ---- Territory challenges (docs/TERRITORY-CHALLENGES.md) ------------------
 
-  /** Apply due forfeits (24 h) and stale closes (7 d). Also called by the daily sweeper. */
+  /** Apply due forfeits (each row's answer deadline) and stale closes (7 d). Also called by the daily sweeper. */
   expireChallenges(now: number = this.now()): Promise<number> {
     return this.store.expireChallenges(now);
   }

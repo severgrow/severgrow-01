@@ -19,7 +19,8 @@ import {
 } from '../src/online/challenge-view.js';
 
 const HOUR = 60 * 60 * 1000;
-const TTL = 24 * HOUR;
+/** A new challenge's answer window (owner, 2026-11-08). The ring follows the row's own span. */
+const TTL = 48 * HOUR;
 
 const challenge = (over: Partial<WorldChallengeWire> = {}): WorldChallengeWire => ({
   id: 'c1',
@@ -46,10 +47,10 @@ const challenge = (over: Partial<WorldChallengeWire> = {}): WorldChallengeWire =
   ...over,
 });
 
-describe('the 24 h ring', () => {
-  it('is full at send, half at noon and empty at the deadline', () => {
+describe('the 48 h ring', () => {
+  it('is full at send, half way through and empty at the deadline', () => {
     expect(ringFraction(challenge(), 0)).toBe(1);
-    expect(ringFraction(challenge(), 12 * HOUR)).toBe(0.5);
+    expect(ringFraction(challenge(), TTL / 2)).toBe(0.5);
     expect(ringFraction(challenge(), TTL)).toBe(0);
     // A late read never goes below nothing (the ring has already collapsed).
     expect(ringFraction(challenge(), TTL + HOUR)).toBe(0);
@@ -81,7 +82,11 @@ describe('the one time label', () => {
     expect(remainingLabel(HOUR)).toBe('1 h');
     expect(remainingLabel(23 * HOUR + 59 * 60_000)).toBe('23 h');
     expect(remainingLabel(47 * HOUR)).toBe('47 h');
-    expect(remainingLabel(48 * HOUR + 1)).toBe('2 d');
+    // A full new answer window reads in hours. Days begin only once more than 48 h is left.
+    // This used to switch at 48 h ("2 d"), which a 48 h window would flash for its first minute.
+    expect(remainingLabel(48 * HOUR)).toBe('48 h');
+    expect(remainingLabel(48 * HOUR + 1)).toBe('48 h');
+    expect(remainingLabel(49 * HOUR)).toBe('2 d');
   });
 });
 
