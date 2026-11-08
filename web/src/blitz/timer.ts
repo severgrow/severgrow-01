@@ -11,6 +11,8 @@
 import { blitzClockText, blitzNextFlipIn, blitzStage, blitzTick } from '../logic/blitz.js';
 import type { BlitzStage } from '../logic/blitz.js';
 import { EASE, MOTION } from '../logic/motion.js';
+import { BLITZ_CLOCK_EVENT } from '../logic/blitz-clock-event.js';
+import type { BlitzClockSignal } from '../logic/blitz-clock-event.js';
 
 /** Which segments light for each digit (a b c d e f g, the usual 7-segment order). */
 const DIGITS: Record<string, string> = {
@@ -244,11 +246,22 @@ export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): Blit
     loop();
   };
 
+  /** Tell listeners (BLITZ_CLOCK_EVENT) only when on/off or the side actually changed. */
+  let signalled = '';
+  const signal = () => {
+    const key = `${on}:${on ? side : ''}`;
+    if (key === signalled) return;
+    signalled = key;
+    const detail: BlitzClockSignal = { on, side: on ? side : null };
+    window.dispatchEvent(new CustomEvent(BLITZ_CLOCK_EVENT, { detail }));
+  };
+
   const show = (s: BlitzClockSide) => {
     on = true;
     side = s;
     root.dataset.side = s;
     document.documentElement.classList.add('blitz-match');
+    signal();
   };
 
   // Back from the background: read the time at once (a hidden tab's timers are slowed by the browser).
@@ -287,11 +300,16 @@ export const mountBlitzClock = (host: HTMLElement, hooks: BlitzClockHooks): Blit
       deadline = null;
       stop();
       document.documentElement.classList.remove('blitz-match');
+      signal();
     },
     snapshot: () => ({ on, text: shown, stage, side, running: deadline !== null }),
     destroy() {
       stop();
       document.removeEventListener('visibilitychange', onVisible);
+      if (on) {
+        on = false;
+        signal();
+      }
       root.remove();
     },
   };

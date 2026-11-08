@@ -11512,24 +11512,5 @@ achievementToasts = mountAchievementToast({
   },
   reduceMotion: () => !interfaceMotionAllowed(),
 });
-{
-  // When a Blitz decision ends, release any line that was held for it.
-  let wasBlitzDecision = false;
-  const checkBlitzCover = () => {
-    const clock = document.getElementById('blitz-clock');
-    const mine = document.documentElement.classList.contains('blitz-match')
-      && clock?.dataset.side === 'mine';
-    if (wasBlitzDecision && !mine) achievementToasts?.release();
-    wasBlitzDecision = mine;
-  };
-  const blitzCoverWatch = new MutationObserver(checkBlitzCover);
-  blitzCoverWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-  const attachClockWatch = () => {
-    const clock = document.getElementById('blitz-clock');
-    if (clock) blitzCoverWatch.observe(clock, { attributes: true, attributeFilter: ['data-side'] });
-  };
-  attachClockWatch();
-  new MutationObserver(attachClockWatch).observe(document.body, { childList: true, subtree: true });
-}
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

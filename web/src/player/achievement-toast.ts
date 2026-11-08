@@ -16,6 +16,8 @@
 import type { KeyValue } from '../../../server/src/client.js';
 import { ACHIEVEMENT_COPY } from '../online/achievement-copy.js';
 import { INTERFACE_MOTION, interfaceMotionAllowed } from '../ui/interface-motion.js';
+import { BLITZ_CLOCK_EVENT, blitzDecisionOf } from '../logic/blitz-clock-event.js';
+import type { BlitzClockSignal } from '../logic/blitz-clock-event.js';
 
 /** Campaign levels 1 through this one never toast. Clearing this level ends the quiet chapter. */
 export const QUIET_CAMPAIGN_THROUGH = 10;
@@ -264,7 +266,8 @@ const STYLE_ID = 'achievement-toast-style';
 /**
  * Mount the line. Called once from `web/src/main.ts` after `mountStartupReveal()`.
  * Territory feeds done ids through `WorldView.setAchievementNote` / lobby `onAchievementsDone`.
- * `release()` runs from `hideGameOver()` and when the Blitz clock leaves the player's side.
+ * `release()` runs from `hideGameOver()`, and by itself when the Blitz clock leaves the player's side
+ * (BLITZ_CLOCK_EVENT from `blitz/timer.ts`).
  * Do not call `release()` from the pre-show path in `renderGameOver`: that hide is the pause
  * before the card, not the player leaving it.
  */
@@ -395,6 +398,25 @@ export function mountAchievementToast(hooks: AchievementToastHooks): Achievement
     if (decision.show.length) enqueue(decision.show);
   };
 
+  const release = (): void => {
+    if (gone) return;
+    const playerId = hooks.playerId();
+    if (!playerId) return;
+    const decision = releaseAchievementToasts(readAchievementToastMemory(hooks.storage(), playerId), context());
+    apply(decision, playerId);
+  };
+
+  // A Blitz decision ends when the clock leaves the player's side (or turns off): release a held
+  // line then. The clock sends one event per change, so nothing runs between moves.
+  let blitzDecision = false;
+  const onBlitzClock = (event: Event): void => {
+    const detail = (event as CustomEvent<BlitzClockSignal>).detail;
+    const now = !!detail && blitzDecisionOf(detail);
+    if (blitzDecision && !now) release();
+    blitzDecision = now;
+  };
+  if (typeof window !== 'undefined') window.addEventListener(BLITZ_CLOCK_EVENT, onBlitzClock);
+
   return {
     note(doneIds) {
       if (gone) return;
@@ -406,15 +428,10 @@ export function mountAchievementToast(hooks: AchievementToastHooks): Achievement
       });
       apply(decision, playerId);
     },
-    release() {
-      if (gone) return;
-      const playerId = hooks.playerId();
-      if (!playerId) return;
-      const decision = releaseAchievementToasts(readAchievementToastMemory(hooks.storage(), playerId), context());
-      apply(decision, playerId);
-    },
+    release,
     dispose() {
       gone = true;
+      if (typeof window !== 'undefined') window.removeEventListener(BLITZ_CLOCK_EVENT, onBlitzClock);
       clearTimer();
       queue.length = 0;
       showing = null;

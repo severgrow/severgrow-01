@@ -327,3 +327,18 @@ describe('the line itself', () => {
     expect(main).toContain('achievementToasts?.release()');
   });
 });
+
+describe('the Blitz cover costs nothing between moves', () => {
+  // Review, 0.84: the first wiring watched the whole page (a subtree MutationObserver on <body>), so
+  // every render of the board ran the toast's check. The clock now says when its side changes.
+  const timer = readFileSync(`${root}/web/src/blitz/timer.ts`, 'utf8');
+  it('never observes the page subtree for the toast', () => {
+    expect(main).not.toMatch(/observe\(document\.body,\s*\{[^}]*subtree:\s*true/);
+    expect(main).not.toContain('checkBlitzCover');
+    expect(source).not.toContain('MutationObserver');
+  });
+  it('hears the clock change sides from one event the clock sends', () => {
+    expect(timer).toContain('BLITZ_CLOCK_EVENT');
+    expect(source).toContain('BLITZ_CLOCK_EVENT');
+  });
+});

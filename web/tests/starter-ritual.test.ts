@@ -191,6 +191,19 @@ describe('the gathered emblem sits on the middle tile (owner, 2026-11-08)', () =
   });
 });
 
+describe('the kanji is ready before it blooms (review, 0.84)', () => {
+  it('decodes the mark when the ritual starts, and skips the bloom rather than show it half-drawn', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const src = readFileSync(fileURLToPath(new URL('../src/player/starter-ritual.ts', import.meta.url)), 'utf8');
+    const full = src.slice(src.indexOf('private async fullTimeline'), src.indexOf('private async reducedTimeline'));
+    expect(full.indexOf('this.warmKanji()')).toBeGreaterThan(-1);
+    expect(full.indexOf('this.warmKanji()')).toBeLessThan(full.indexOf('await this.arrival()'));
+    const bloom = src.slice(src.indexOf('private async bloomKanji'), src.indexOf('private clearKanji'));
+    expect(bloom).toContain('if (!ready) return;');
+  });
+});
+
 describe('which matches open with the ritual (owner, 2026-10-24)', () => {
   it('plays on a practice match and on every campaign level from 9 on', () => {
     expect(RITUAL_FROM_CAMPAIGN_LEVEL).toBe(9);

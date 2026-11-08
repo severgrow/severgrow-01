@@ -160,6 +160,8 @@ class StarterRitual {
   private settleTimer: ReturnType<typeof setInterval> | undefined;
   /** The plain kanji that blooms out of the gathered emblem. Removed the moment the ritual ends. */
   private kanji: HTMLImageElement | null = null;
+  /** The mark decoding in the background (warmKanji); null until the full timeline starts. */
+  private kanjiReady: Promise<boolean> | null = null;
 
   constructor(options: StarterRitualOptions, refs: Refs) {
     this.options = options;
@@ -345,6 +347,8 @@ class StarterRitual {
   }
 
   private async fullTimeline(): Promise<void> {
+    // The kanji blooms several seconds from now: decode it while the deck arrives.
+    this.warmKanji();
     await this.arrival();
     if (this.cancelled || this.skipRequested) return;
 
@@ -860,6 +864,10 @@ class StarterRitual {
    */
   private async bloomKanji(at: Point): Promise<void> {
     if (this.cancelled || this.finished || typeof document === 'undefined' || !document.body) return;
+    // Never a half-drawn mark: a mark that is not decoded within a short beat is simply left out.
+    const ready = await Promise.race([this.kanjiReady ?? Promise.resolve(false), this.sleep(120).then(() => false)]);
+    if (!ready) return;
+    if (this.cancelled || this.finished || this.skipRequested) return;
     const img = document.createElement('img');
     img.className = 'ritual-kanji';
     img.src = plainMarkUrl;
@@ -880,6 +888,15 @@ class StarterRitual {
       { scale: 1, opacity: 1, offset: 0.76, easing: 'cubic-bezier(.4,0,.2,1)' },
       { scale: 1.05, opacity: 0 },
     ], { duration: this.ms(780), easing: 'linear' })]);
+  }
+
+  /** Start decoding the mark once per ritual; resolves true when it can paint at once. */
+  private warmKanji(): void {
+    if (this.kanjiReady || typeof Image === 'undefined') return;
+    const img = new Image();
+    img.src = plainMarkUrl;
+    this.kanjiReady = (typeof img.decode === 'function' ? img.decode() : Promise.resolve())
+      .then(() => true, () => img.complete && img.naturalWidth > 0);
   }
 
   private clearKanji(): void {
