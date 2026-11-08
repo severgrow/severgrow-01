@@ -80,3 +80,14 @@ describe('the Bomb card is shown once (owner, 2026-11-08: "it shows the bomb car
     expect(blast).not.toMatch(/showLiveStrike\([^;]*cards: false/);
   });
 });
+
+describe('a light dip covers the whole screen (owner, 2026-11-08: "only left half of the screen is affected ... cuts off ugly")', () => {
+  it('the impact dim is a full-viewport layer in the game, not a child of the board box', () => {
+    const effects = read('../src/ui/effects.ts');
+    const fn = effects.slice(effects.indexOf('function impactDim('), effects.indexOf('function spark('));
+    expect(fn).not.toContain("$('board-wrap')");
+    expect(fn).toContain("document.getElementById('game')");
+    const css = read('../src/style.css');
+    expect(css).toMatch(/\.impact-dim \{[^}]*position:\s*fixed;[^}]*inset:\s*0;/);
+  });
+});

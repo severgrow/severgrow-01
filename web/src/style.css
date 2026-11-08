@@ -3930,12 +3930,13 @@ svg.board .fx-mote {
 }
 /* Beta 0.8: the light dips under a heavy impact (effects.ts impactDim()): one soft vignette */
 .impact-dim {
-  position: absolute;
+  position: fixed;
   inset: 0;
   pointer-events: none;
   opacity: 0;
   z-index: 3;
-  background: radial-gradient(ellipse 75% 70% at 50% 50%, rgb(14 15 16 / 0.35) 0%, rgb(14 15 16 / 0.85) 100%);
+  /* the whole screen: a soft, even dip with a gentle vignette, never a box edge */
+  background: radial-gradient(ellipse 90% 85% at 50% 50%, rgb(14 15 16 / 0.42) 0%, rgb(14 15 16 / 0.8) 100%);
 }
 /* A snapping vein flashes bright before it goes. */
 .vein.snapping {

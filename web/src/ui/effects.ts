@@ -209,10 +209,12 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
    */
   function impactDim(amount: number, ms: number) {
     if (amount <= 0 || ms <= 0) return;
-    const wrap = $('board-wrap');
+    // The whole screen dims, not the board's box (owner, 2026-11-08: on desktop it stopped at the
+    // board's edge "like a rectangle"): a fixed, full-viewport layer inside the game.
+    const host = document.getElementById('game') ?? document.body;
     const d = document.createElement('div');
     d.className = 'impact-dim';
-    wrap.appendChild(d);
+    host.appendChild(d);
     removeAfter(anim(d, [{ opacity: 0 }, { opacity: amount, offset: 0.18 }, { opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), d, ms + 60);
   }
 
