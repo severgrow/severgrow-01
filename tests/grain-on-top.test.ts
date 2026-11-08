@@ -117,3 +117,18 @@ describe('the film grain stays on top of everything', () => {
     expect(css, 'the re-pin must be observed').toMatch(/new MutationObserver/);
   });
 });
+
+describe('nothing can sit above the grain through the browser top layer (owner, 2026-11-08)', () => {
+  // "make sure that even if we add stuff in future, grain we have is the texture sitting on top".
+  // z-index and DOM order are already pinned above. The browser TOP LAYER (a modal <dialog>, a popover,
+  // an element made full screen) paints above every z-index, so a future one would cover the grain.
+  it('uses no modal dialog, popover, or element-level full screen', () => {
+    const html = readFileSync(join(ROOT, 'web/index.html'), 'utf8');
+    for (const { file, text } of [...sources(), { file: 'index.html', text: html }]) {
+      expect(text, `${file} opens a modal dialog (top layer)`).not.toMatch(/\.showModal\(/);
+      expect(text, `${file} opens a popover (top layer)`).not.toMatch(/\.showPopover\(|<[a-z][^>]*\spopover(=|\s|>)|setAttribute\(.popover./);
+      // only the whole document may go full screen (the grain is inside it)
+      expect(text.replace(/document\.documentElement\.requestFullscreen/g, ''), `${file} makes an element full screen`).not.toMatch(/\.requestFullscreen\(/);
+    }
+  });
+});
