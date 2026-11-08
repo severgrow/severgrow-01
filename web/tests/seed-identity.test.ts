@@ -198,7 +198,7 @@ describe('the settle pays the identity that is actually playing', () => {
     // The wiring that makes the recovery real: without this line nothing moves a proof left behind
     // by a finish card that could not reach the server, until the player wins another game.
     const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
-    expect(main).toMatch(/import \{ requestTrainingTicket, settleQueuedSeedsOnBoot, TRAINING_TICKET_WAIT_MS, warmSeedIdentity, settleSeedProof \} from '\.\/online\/seed-settle\.js';/);
+    expect(main).toMatch(/import \{ requestTrainingTicket, seedIdentityWarm, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof \} from '\.\/online\/seed-settle\.js';/);
     expect(main).toMatch(/void settleQueuedSeedsOnBoot\(\);/);
     expect(main).toMatch(/void warmSeedIdentity\(\);/);
   });
@@ -209,8 +209,17 @@ describe('the settle pays the identity that is actually playing', () => {
     const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
     expect(settle).toMatch(/export const TRAINING_TICKET_WAIT_MS = 8_000;/);
     expect(settle).toMatch(/export const warmSeedIdentity/);
-    expect(main).toContain('TRAINING_TICKET_WAIT_MS');
+    expect(main).toContain('const ticketWaitMs = trainingTicketWaitMs(seedIdentityWarm());');
     expect(main).not.toMatch(/setTimeout\(\(\) => resolve\(null\), 1200\)/);
+  });
+
+  it('only a cold guest mint gets the long wait; a warm identity starts Practice within 3 s (review, 0.84)', async () => {
+    // The long wait covers minting a guest on a cold Edge. Once the boot warm-up has an identity,
+    // the ticket is one request: a tap must not leave the player on a dead button for 8 s.
+    const { trainingTicketWaitMs, TRAINING_TICKET_WAIT_MS, TRAINING_TICKET_WARM_WAIT_MS } = await import('../src/online/seed-settle.js');
+    expect(TRAINING_TICKET_WARM_WAIT_MS).toBe(3_000);
+    expect(trainingTicketWaitMs(true)).toBe(TRAINING_TICKET_WARM_WAIT_MS);
+    expect(trainingTicketWaitMs(false)).toBe(TRAINING_TICKET_WAIT_MS);
   });
 });
 

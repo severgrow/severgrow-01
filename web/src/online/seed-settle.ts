@@ -200,6 +200,24 @@ export const settleQueuedSeedsOnBoot = async (
 export const TRAINING_TICKET_WAIT_MS = 8_000;
 
 /**
+ * The wait once an identity is already on this device (the boot warm-up usually made one): the
+ * ticket is then a single request, so a Practice tap never sits on a dead button for 8 s.
+ */
+export const TRAINING_TICKET_WARM_WAIT_MS = 3_000;
+
+export const trainingTicketWaitMs = (identityWarm: boolean): number =>
+  identityWarm ? TRAINING_TICKET_WARM_WAIT_MS : TRAINING_TICKET_WAIT_MS;
+
+/** True when a Seeds identity is already stored here (no guest mint is needed before a ticket). */
+export const seedIdentityWarm = (connect: SeedConnector = seedConnection): boolean => {
+  try {
+    return !!connect()?.identity.peek();
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Mint (or confirm) a guest identity as soon as the app is up, so the next Practice match can get a
  * training ticket without waiting on guest creation. Silent, fire-and-forget, never blocks paint.
  * Guests are paid Seeds so they are encouraged to sign in and keep them (owner, 2026-11-08).

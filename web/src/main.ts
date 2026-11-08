@@ -293,7 +293,7 @@ import { onlineBuildEnabled } from './online/config.js';
 import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname } from './accounts/menu-key.js';
 import { paintBetaLine } from './feedback/beta-line.js';
 import { queueSeedProof } from './online/seed-rewards.js';
-import { requestTrainingTicket, settleQueuedSeedsOnBoot, TRAINING_TICKET_WAIT_MS, warmSeedIdentity, settleSeedProof } from './online/seed-settle.js';
+import { requestTrainingTicket, seedIdentityWarm, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof } from './online/seed-settle.js';
 import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
 import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
@@ -2340,12 +2340,14 @@ async function startGame(
   // identity's round trip (see TRAINING_TICKET_WAIT_MS).
   let ticketId: string | null = null;
   if (difficulty && onlineBuildEnabled() && !IS_TEST) {
+    // Read before the request starts: 8 s only for a cold guest mint, 3 s once an identity is here.
+    const ticketWaitMs = trainingTicketWaitMs(seedIdentityWarm());
     const ticket = await Promise.race([
       // Issued through the seed module, not the online lobby: a training game started before the
       // hub had mounted (or after its chunk failed to load) used to begin with no ticket at all,
       // which meant no proof and no payment for a game the player had already played.
       requestTrainingTicket(level),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), TRAINING_TICKET_WAIT_MS)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), ticketWaitMs)),
     ]);
     if (generation !== startGameGeneration) return;
     if (ticket) { seed = ticket.seed; ticketId = ticket.id; }
