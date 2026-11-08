@@ -2,6 +2,7 @@
 // `commitMove`: no two moves may be applied on the same revision, and a repeated requestId must
 // return the original outcome without applying again.
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
+import type { AccountCampaignProgressWire } from '../account-campaign-progress.js';
 import type { HeadToHead, MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult, PlayerSummary } from '../protocol.js';
 import type { RetentionRow } from '../retention.js';
 
@@ -225,6 +226,21 @@ export interface Storage {
    * stale or racing request may repeat progress but must not erase it.
    */
   mergeOfflineStats(playerId: string, counters: OfflineCounters, now: number): Promise<OfflineSummary>;
+
+  /**
+   * The account's campaign progress snapshot (migration 0023), or null when none was ever posted.
+   * Never invents a place.
+   */
+  accountCampaignProgressOf(playerId: string): Promise<AccountCampaignProgressWire | null>;
+  /**
+   * Keep the further-ahead of the stored snapshot and `incoming`. Returns the stored row after the
+   * merge. Seeds / Territory / achievements are untouched.
+   */
+  mergeAccountCampaignProgress(
+    playerId: string,
+    incoming: AccountCampaignProgressWire,
+    now: number,
+  ): Promise<AccountCampaignProgressWire>;
 
   createMatch(match: MatchRecord): Promise<{ ok: true } | Fail>;
   /**

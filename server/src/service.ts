@@ -38,6 +38,7 @@ import type {
   SubmitActionRequest,
   SubmitActionResponse,
 } from './protocol.js';
+import { parseAccountCampaignProgress } from './account-campaign-progress.js';
 import { parseOfflineCounters } from './offline.js';
 import { fromEngineResult } from './protocol.js';
 import { actorChanged, gatedRevisionFor, gatedStateFor, turnBoundaryAdvanced } from './turn-boundary.js';
@@ -194,6 +195,26 @@ export class MatchService {
    */
   async putOfflineStats(player: PlayerRecord, body: Record<string, unknown>): Promise<OfflineSummary> {
     return this.storage.mergeOfflineStats(player.id, parseOfflineCounters(body), this.now());
+  }
+
+  /**
+   * The account's campaign progress snapshot (migration 0023), or null when none was posted.
+   * Authenticated player only — the token names the row, never an id from the request.
+   */
+  async accountCampaignProgress(player: PlayerRecord) {
+    return this.storage.accountCampaignProgressOf(player.id);
+  }
+
+  /**
+   * Keep the further-ahead of the stored campaign snapshot and this device's POST. Seeds,
+   * Territory and achievement rewards are never written here.
+   */
+  async putAccountCampaignProgress(player: PlayerRecord, body: Record<string, unknown>) {
+    return this.storage.mergeAccountCampaignProgress(
+      player.id,
+      parseAccountCampaignProgress(body),
+      this.now(),
+    );
   }
 
   /**
@@ -414,12 +435,12 @@ export class MatchService {
   /**
    * Stop a parked search: retire it so no later searcher is matched into it. Calm no-op otherwise.
    *
-   * Not join-rate-limited on purpose. Find resumes share the join budget; if Stop searching reused
+   * Not on the JOIN budget on purpose. Find resumes share the join budget; if Stop searching reused
    * that bucket, a player who re-tapped Find could be stuck in the queue until the waiting window
-   * expired. Cancel only deletes the caller's own one-seat waiting row (or no-ops), and parking
-   * itself stays capped by findOpponent's join limit.
+   * expired. It has a budget of its own (twice Find's by default), so a cancel storm is still capped.
    */
   async cancelSearch(player: PlayerRecord): Promise<{ cancelled: boolean }> {
+    await this.rateLimit(`cancel-search:player:${player.id}`, HOUR_MS, this.config.rateLimits.cancelSearchPerPlayerPerHour);
     return { cancelled: await this.storage.cancelOpenQueueMatch(player.id, this.now()) };
   }
 

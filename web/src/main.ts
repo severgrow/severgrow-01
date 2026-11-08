@@ -4,7 +4,11 @@ import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
 import { mountStartupReveal } from './player/startup.js';
 import { mountAchievementToast } from './player/achievement-toast.js';
+import { BLITZ_CLOCK_EVENT, blitzDecisionOf } from './logic/blitz-clock-event.js';
+import type { BlitzClockSignal } from './logic/blitz-clock-event.js';
 import type { AchievementToastController } from './player/achievement-toast.js';
+import { mountKeepProgress } from './player/keep-progress.js';
+import type { KeepProgressController } from './player/keep-progress.js';
 import { browserStorage } from '../../server/src/client.js';
 // EXPERIMENTAL Blitz (/test/ only): presentation + wiring; its rules live in logic/blitz.ts.
 import type { BlitzPractice } from './blitz/practice.js';
@@ -162,7 +166,6 @@ import {
   isUnlocked,
   nextCampaignLevel,
   parseProgress,
-  reconcileProgress,
   serializeProgress,
   unlockedThrough,
   CAMPAIGN_PROGRESS_KEY,
@@ -184,7 +187,8 @@ import {
   TUTORIAL_LEVEL_COUNT,
 } from './logic/campaign.js';
 import type { CampaignMatchKind } from './logic/campaign.js';
-import { fetchServerFeatures } from './logic/account-progress.js';
+import { fetchServerFeatures, mergeFurtherAheadProgress, readAccountIdentity } from './logic/account-progress.js';
+import { syncAccountCampaignProgress } from './logic/account-campaign-sync.js';
 import {
   cachedAccountClearsForThisDevice,
   fetchAccountHighestLevel,
@@ -3210,9 +3214,15 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
           // A NEW clear changes the account too. Forget the remembered account answer so the NEXT
           // open asks once more; this session keeps the device half, which already contains this win,
           // so the suggestion stays correct without a second request.
-          if (after.completed.length > campaignProgress.completed.length) forgetAccountClears(store);
+          const advanced = after.completed.length > campaignProgress.completed.length;
           campaignProgress = after;
           saveCampaignProgress();
+          if (advanced) {
+            forgetAccountClears(store);
+            keepProgress?.note('level-clear');
+            // Signed-in: push the further-ahead snapshot when the network is up (silent if not).
+            void syncAccountLevel();
+          }
         }
       }
       if (onlineBuildEnabled() && session) {
@@ -3622,6 +3632,7 @@ function currentMatchLabel(): string {
  */
 /** Quiet achievement line; mounted once after startup. Null only until that mount runs. */
 let achievementToasts: AchievementToastController | null = null;
+let keepProgress: KeepProgressController | null = null;
 let campaignLevel: CampaignLevel | null = null;
 /**
  * EXPERIMENTAL Blitz (/test/ only, Practice): the mounted tier, or null when the feature is off.
@@ -3741,6 +3752,15 @@ const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializePro
  * With no cache, the device record paints first and the network answer refines it when it arrives.
  */
 let accountClears: readonly number[] | null = cachedAccountClearsForThisDevice(store);
+// A returning signed-in device may still hold a stale progress record while the cached account
+// answer is already on disk: raise before the first menu paint, not only after the async fetch.
+{
+  const raised = mergeFurtherAheadProgress(campaignProgress, accountClears);
+  if (raised !== campaignProgress) {
+    campaignProgress = raised;
+    saveCampaignProgress();
+  }
+}
 /**
  * Whether this server can check a random campaign deal (owner, 2026-11-01). Remembered on the device,
  * so offline play keeps the last answer; asked once at boot. Until the server says yes, levels 11+
@@ -3771,16 +3791,31 @@ async function syncAccountLevel(): Promise<void> {
     storage: store,
     fetchHighest: fetchAccountHighestLevel,
   });
+  let highest: number | null | undefined;
   if (result.status === 'signed-out') {
     accountClears = null;
+    highest = null;
   } else if (result.status === 'ok') {
     accountClears = result.levels;
-    // The same answer, as the "furthest level" the existing account-place rule reads.
-    const after = reconcileProgress(campaignProgress, result.highest);
+    highest = result.highest;
+    const after = mergeFurtherAheadProgress(campaignProgress, result.levels);
     if (after !== campaignProgress) {
       campaignProgress = after;
       saveCampaignProgress();
     }
+  } else {
+    highest = undefined;
+  }
+  // Further-ahead snapshot sync (migration 0023): pull account progress, merge, push when local wins.
+  // Silent on older servers / failures; never blocks a duel or a level.
+  const synced = await syncAccountCampaignProgress({
+    storage: store,
+    local: campaignProgress,
+    serverHighest: highest ?? (accountClears && accountClears.length > 0 ? accountClears[accountClears.length - 1]! : null),
+  });
+  if (synced.localChanged) {
+    campaignProgress = synced.progress;
+    saveCampaignProgress();
   }
   if (accountClears === beforeClears && campaignProgress === beforeProgress) return;
   // The menu's LEVEL <n> entry and the suggestion are painted from progress; repaint in place so a
@@ -8296,6 +8331,8 @@ function hideGameOver(): void {
   document.body.classList.remove('result');
   syncVeil();
   achievementToasts?.release();
+  // After this task: the caller marks the result dismissed (or leaves the board) right after the hide.
+  window.setTimeout(() => keepProgress?.release(), 0);
 }
 
 /**
@@ -11489,6 +11526,14 @@ void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => un
 // a device with nothing queued makes no request at all.
 void settleQueuedSeedsOnBoot();
 mountStartupReveal();
+const coveredForQuietPrompts = (): boolean => {
+  const over = document.getElementById('gameover');
+  const victory = !!over && !over.hidden;
+  const clock = document.getElementById('blitz-clock');
+  const blitzDecision = document.documentElement.classList.contains('blitz-match')
+    && clock?.dataset.side === 'mine';
+  return victory || blitzDecision;
+};
 achievementToasts = mountAchievementToast({
   playerId: () => {
     try {
@@ -11502,15 +11547,36 @@ achievementToasts = mountAchievementToast({
   storage: () => browserStorage(),
   campaignLevel: () => campaignLevel?.number ?? null,
   clearedThrough: () => Math.max(0, unlockedThrough(campaignProgress) - 1),
-  covered: () => {
-    const over = document.getElementById('gameover');
-    const victory = !!over && !over.hidden;
-    const clock = document.getElementById('blitz-clock');
-    const blitzDecision = document.documentElement.classList.contains('blitz-match')
-      && clock?.dataset.side === 'mine';
-    return victory || blitzDecision;
+  covered: coveredForQuietPrompts,
+  reduceMotion: () => !interfaceMotionAllowed(),
+});
+/** A finished match on the board whose result has not been put away yet (its card may still be coming). */
+const resultPending = (): boolean => {
+  const st = session?.state;
+  return !!st && st.phase === 'GAME_OVER' && !gameOverDismissed && !$('game').hidden;
+};
+keepProgress = mountKeepProgress({
+  storage: () => browserStorage(),
+  kind: () => readAccountIdentity(browserStorage())?.kind ?? null,
+  // A level clear is noted the moment it is won, before the victory card: wait for that card.
+  covered: () => coveredForQuietPrompts() || resultPending(),
+  onSignIn: () => {
+    const btn = document.getElementById('menu-login') as HTMLButtonElement | null;
+    btn?.click();
   },
   reduceMotion: () => !interfaceMotionAllowed(),
 });
+window.addEventListener('futasaku:first-claim', () => keepProgress?.note('first-claim'));
+// When the player's own Blitz decision ends, release the keep-progress line held for it. The clock
+// sends one event per change (the achievement line listens to the same event by itself).
+{
+  let wasBlitzDecision = false;
+  window.addEventListener(BLITZ_CLOCK_EVENT, (event) => {
+    const detail = (event as CustomEvent<BlitzClockSignal>).detail;
+    const mine = !!detail && blitzDecisionOf(detail);
+    if (wasBlitzDecision && !mine) keepProgress?.release();
+    wasBlitzDecision = mine;
+  });
+}
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

@@ -225,3 +225,62 @@ export const reconcileProgress = (
   // (e.g. a gap below a level the account has not cleared), leave the caller's record alone.
   return raised.unlocked > local.unlocked ? raised : local;
 };
+
+/**
+ * How far a record has come, for FURTHER-AHEAD comparison (owner, 2026-11-08). Higher unlocked
+ * wins; at the same place, more completed ids; then an attempt already recorded on the open level.
+ * No invented score — `best` is only consulted as "has this level been tried".
+ */
+export type ProgressRank = {
+  unlocked: number;
+  completedCount: number;
+  attemptedCurrent: 0 | 1;
+};
+
+export const progressRank = (
+  p: CampaignProgress,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): ProgressRank => {
+  const unlocked = unlockedThrough(p, levels);
+  const current = levels.find((level) => level.number === unlocked);
+  return {
+    unlocked,
+    completedCount: p.completed.length,
+    attemptedCurrent: current && p.best[current.id] ? 1 : 0,
+  };
+};
+
+export const compareProgressRank = (a: ProgressRank, b: ProgressRank): number => {
+  if (a.unlocked !== b.unlocked) return a.unlocked - b.unlocked;
+  if (a.completedCount !== b.completedCount) return a.completedCount - b.completedCount;
+  return a.attemptedCurrent - b.attemptedCurrent;
+};
+
+/**
+ * Keep the further-ahead of two records. Equal → return `preferred` (same object), so a tie never
+ * rewrites the caller's storage.
+ */
+export const furtherAheadProgress = (
+  preferred: CampaignProgress,
+  other: CampaignProgress,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): CampaignProgress =>
+  compareProgressRank(progressRank(preferred, levels), progressRank(other, levels)) >= 0
+    ? preferred
+    : other;
+
+/**
+ * Device + optional account snapshot + verified receipt highest → one record.
+ * Raises both sides from receipts first, then keeps the further-ahead of the two.
+ */
+export const mergeAccountProgress = (
+  local: CampaignProgress,
+  accountSnapshot: CampaignProgress | null | undefined,
+  serverHighestLevel: number | null | undefined,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): CampaignProgress => {
+  const raisedLocal = reconcileProgress(local, serverHighestLevel, levels);
+  if (!accountSnapshot) return raisedLocal;
+  const raisedAccount = reconcileProgress(accountSnapshot, serverHighestLevel, levels);
+  return furtherAheadProgress(raisedLocal, raisedAccount, levels);
+};

@@ -28,6 +28,7 @@ const soakConfig = (): ServerConfig => ({
   rateLimits: {
     guestPerIpPerHour: 1_000,
     joinPerPlayerPerHour: 1_000,
+    cancelSearchPerPlayerPerHour: 1_000,
     joinPerIpPerHour: 1_000,
     createPerPlayerPerHour: 1_000,
     createPerIpPerHour: 1_000,

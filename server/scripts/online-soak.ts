@@ -58,6 +58,7 @@ const KNOWN_REASONS = ['strangle', 'double_strangle', 'deck_exhaustion', 'turn_l
 const HIGH_LIMITS: ServerConfig['rateLimits'] = {
   guestPerIpPerHour: 1_000_000,
   joinPerPlayerPerHour: 1_000_000,
+  cancelSearchPerPlayerPerHour: 1_000_000,
   joinPerIpPerHour: 1_000_000,
   createPerPlayerPerHour: 1_000_000,
   createPerIpPerHour: 1_000_000,

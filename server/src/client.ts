@@ -226,6 +226,42 @@ export class DuelClient {
     return this.request<OfflineSummaryResponse>('POST', '/v1/players/me/offline', { token, body: counters });
   }
 
+  /**
+   * The account's campaign progress snapshot (migration 0023), or null when none was posted.
+   * Further-ahead merge lives on the server; Seeds / Territory / achievements are not touched.
+   */
+  async accountCampaignProgress(token: string, options: { signal?: AbortSignal } = {}) {
+    const response = await this.request<{ progress?: unknown }>(
+      'GET',
+      '/v1/players/me/campaign/progress',
+      { token, ...(options.signal ? { signal: options.signal } : {}) },
+    );
+    const progress = response.progress;
+    if (progress === null || progress === undefined) return null;
+    if (!progress || typeof progress !== 'object') return null;
+    const row = progress as { completed?: unknown; best?: unknown };
+    if (!Array.isArray(row.completed)) return null;
+    return {
+      completed: row.completed.filter((id): id is string => typeof id === 'string'),
+      best: row.best && typeof row.best === 'object' && !Array.isArray(row.best)
+        ? row.best as Record<string, { won: boolean; score: number; turns: number }>
+        : {},
+    };
+  }
+
+  /** Post this device's campaign snapshot; the answer is the further-ahead stored row. */
+  async putAccountCampaignProgress(
+    token: string,
+    wire: { completed: readonly string[]; best: Record<string, { won: boolean; score: number; turns: number }> },
+  ) {
+    const response = await this.request<{ progress: { completed: string[]; best: Record<string, { won: boolean; score: number; turns: number }> } }>(
+      'POST',
+      '/v1/players/me/campaign/progress',
+      { token, body: wire },
+    );
+    return response.progress;
+  }
+
   upgrade(token: string, displayName: string): Promise<UpgradeResponse> {
     return this.request<UpgradeResponse>('POST', '/v1/players/me/upgrade', { token, body: { displayName } });
   }

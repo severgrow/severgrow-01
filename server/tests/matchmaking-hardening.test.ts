@@ -163,3 +163,22 @@ describe('expired searches stay unclaimable', () => {
     expect((await h.storage.matchById(parked.match.matchId))?.status).toBe('finished');
   });
 });
+
+describe('Stop searching has a budget of its own (review, 0.84)', () => {
+  it('a cancel storm is limited, on a bucket that never takes from Find', async () => {
+    const h = harness(testConfig({ rateLimits: { ...testConfig().rateLimits, joinPerPlayerPerHour: 1000 } }));
+    const a = await guest(h, 'Storm');
+    let refused = 0;
+    for (let i = 0; i < 400; i += 1) {
+      try {
+        await h.service.cancelSearch(a.player);
+      } catch (error) {
+        expect((error as ApiError).code).toBe('RATE_LIMITED');
+        refused += 1;
+      }
+    }
+    expect(refused).toBeGreaterThan(0);
+    // Find still has its whole budget: the cancels were counted elsewhere.
+    await h.service.findOpponent(a.player);
+  });
+});

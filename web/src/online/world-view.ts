@@ -2456,10 +2456,13 @@ export class WorldView {
     this.growArmed = null;
     this.pendingRequest ??= crypto.randomUUID();
     this.paintSelection();
+    const myId = this.identity.playerId;
+    const firstClaim = !(this.world?.claims.some((claim) => claim.ownerId === myId) ?? false);
     try {
       await this.client.claimWorld(this.identity.token, cellId, this.pendingRequest);
       this.notice('A little place in the world is yours.');
       this.pendingRequest = null;
+      if (firstClaim) window.dispatchEvent(new Event('futasaku:first-claim'));
       await this.refresh(true);
       this.ripple(cellId);
       this.planet?.grown(cellId);

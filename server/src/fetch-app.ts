@@ -7,6 +7,7 @@ import { corsHeadersForRequest } from './cors.js';
 import { ApiError } from './errors.js';
 import type { MatchService } from './service.js';
 import { BOT_VERSIONS } from '../../src/bots/versions.js';
+import { ACCOUNT_CAMPAIGN_PROGRESS_FEATURE } from './account-campaign-progress.js';
 
 /**
  * What this server can do that an older one could not; a page checks before relying on it.
@@ -15,8 +16,13 @@ import { BOT_VERSIONS } from '../../src/bots/versions.js';
  * server/tests/seeds-verify.test.ts pins the two spellings together.
  * Every bot version it can verify is listed too (2026-11-04, bots-v0.11): a page keeps a proof against
  * a newer bot queued until the server it talks to names that version (web/src/online/seed-rewards.ts).
+ * `account-campaign-progress` (owner, 2026-11-08) is the further-ahead campaign snapshot route.
  */
-export const SERVER_FEATURES: readonly string[] = Object.freeze(['campaign-random-deals', ...Object.keys(BOT_VERSIONS)]);
+export const SERVER_FEATURES: readonly string[] = Object.freeze([
+  'campaign-random-deals',
+  ACCOUNT_CAMPAIGN_PROGRESS_FEATURE,
+  ...Object.keys(BOT_VERSIONS),
+]);
 
 export type FetchAppDeps = {
   service: MatchService;
@@ -181,6 +187,25 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return {
         status: 200,
         body: { ok: true, campaign: { highestLevel: await service.campaignHighestLevel(player) }, serverNow: service.serverNow() },
+      };
+    }
+
+    // ACCOUNT CAMPAIGN PROGRESS SNAPSHOT (owner, 2026-11-08). Further-ahead completed ids + best
+    // attempts only — never Seeds, Territory or achievements. GET is null until the first POST.
+    if (method === 'GET' && path === '/v1/players/me/campaign/progress') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      return {
+        status: 200,
+        body: { ok: true, progress: await service.accountCampaignProgress(player), serverNow: service.serverNow() },
+      };
+    }
+
+    if (method === 'POST' && path === '/v1/players/me/campaign/progress') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      const body = asRecord(await readJson(req, config.maxBodyBytes));
+      return {
+        status: 200,
+        body: { ok: true, progress: await service.putAccountCampaignProgress(player, body), serverNow: service.serverNow() },
       };
     }
 

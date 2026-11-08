@@ -233,6 +233,13 @@ describe('the source keeps the efficiency promises', () => {
     expect(read('../../server/src/fetch-app.ts')).toContain('campaignHighestLevel(player)');
   });
 
+  it('raises stale campaign progress from the cache before the first menu paint', () => {
+    const cachedAt = mainSource.indexOf('cachedAccountClearsForThisDevice(store)');
+    const mergeAt = mainSource.indexOf('mergeFurtherAheadProgress(campaignProgress, accountClears)');
+    expect(mergeAt).toBeGreaterThan(cachedAt);
+    expect(mergeAt).toBeLessThan(mainSource.indexOf("else showScreen('menu')"));
+  });
+
   it('is read synchronously at module scope, before the menu’s first paint', () => {
     const cachedAt = mainSource.indexOf('cachedAccountClearsForThisDevice(store)');
     // Boot's first menu paint (and the async account sync) are far below the module-scope read, so
