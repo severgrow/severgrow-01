@@ -140,16 +140,36 @@ export const PROBE_SCRIPT = `(() => {
   }
   var protoAdd = EventTarget.prototype.addEventListener;
   var protoRemove = EventTarget.prototype.removeEventListener;
+  function forget(entry) {
+    var index = entries.indexOf(entry);
+    if (index !== -1) entries.splice(index, 1);
+  }
+  // Capture only the weak record, never the application's callback or renderer.
+  function forgetOnAbort(entry) {
+    return function () { forget(entry); };
+  }
   EventTarget.prototype.addEventListener = function (type, fn, opts) {
-    try { entries.push({ k: keyFor(this, type, opts), r: ref(this) }); } catch (e) {}
-    return protoAdd.apply(this, arguments);
+    var entry;
+    try {
+      var signal = opts && opts.signal;
+      var capture = opts === true || !!(opts && opts.capture);
+      var duplicate = entries.some(e => e.t === String(type) && e.c === capture && e.r.deref() === this && e.f.deref() === fn);
+      if (fn && !(signal && signal.aborted) && !duplicate) {
+        entry = { k: keyFor(this, type, opts), t: String(type), c: capture, r: ref(this), f: ref(fn) };
+        entries.push(entry);
+        // Native EventTarget removes signal-bound listeners without calling the JS remove wrapper.
+        if (signal) protoAdd.call(signal, 'abort', forgetOnAbort(entry), { once: true });
+      }
+    } catch (e) {}
+    try { return protoAdd.apply(this, arguments); }
+    catch (e) { if (entry) forget(entry); throw e; }
   };
   EventTarget.prototype.removeEventListener = function (type, fn, opts) {
     try {
-      var k = keyFor(this, type, opts);
+      var capture = opts === true || !!(opts && opts.capture);
       for (var i = entries.length - 1; i >= 0; i--) {
         var e = entries[i];
-        if (e.k === k && e.r.deref() === this) { entries.splice(i, 1); break; }
+        if (e.t === String(type) && e.c === capture && e.r.deref() === this && e.f.deref() === fn) { entries.splice(i, 1); break; }
       }
     } catch (e2) {}
     return protoRemove.apply(this, arguments);

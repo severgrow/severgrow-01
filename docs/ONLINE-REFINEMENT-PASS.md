@@ -3,7 +3,9 @@
 Baseline: `91b7ce06961dbe5b5232d753b7bd3ead0ca9954f`.
 Branch: `fix/online-experience-refinement`.
 Checkout: `/workspace/futasaku-online-refinement`.
-Owner authorises the finished verified release, including promotion. This candidate is NOT deployed.
+Owner authorises the finished verified release, including promotion.
+Server version 106 is deployed. Website staging is `42fd4f47`; live remains `91b7ce06`.
+See the release investigation below before promoting.
 
 ## What changed
 
@@ -140,6 +142,38 @@ recursively reacting to the storage availability probe. Existing game settings a
   Harmless; the new page handles it.
 - Next (Codex): steps 3–6 below — integrate onto `futa0.5-online` (still at `91b7ce06`), wait for
   exact-SHA CI and /test, then promote and confirm both markers. Do not claim live before that.
+
+## Website release investigation (2026-11-09)
+
+- `/test/` publisher run `42658539967` succeeded for `42fd4f47`; primary release CI
+  `42658540020` passed. The publisher built the root from `91b7ce06` and staging from `42fd4f47`.
+- Extra regression run `42658539884` failed its five-match retained-heap slope guard
+  (337 / 1,523 KB per match; limit 1,024). Promotion is held, not bypassed.
+- An extended 15-match candidate run measured tail slopes 143 / 146 KB per match and final
+  heaps 13.41 / 13.76 MB. The unchanged baseline measured 112 / 117 KB per match and
+  13.35 / 13.43 MB. Both passed the same memory limits. The candidate also encountered one
+  40-second catch-up wait failure at match 9, turn 3. This remains under investigation.
+- Both extended runs exposed false listener drift in the diagnostic probe. Native abort-signal
+  cancellation does not invoke the JavaScript remove wrapper. The probe now handles this and
+  matches removals by callback identity; duplicate registrations and already-aborted signals
+  follow native behaviour. A standalone browser contract reproduced the failure before the fix
+  and passes afterwards. CI runs that contract before the soak and now covers 15 matches with
+  the same thresholds. No gameplay listener cleanup or guard was removed.
+- Metadata reads in the live controller rebuilt a full driver snapshot just to obtain an immutable
+  match ID. A weak session cache avoids that work. Actual-driver microbenchmarks of 500 reads
+  took 361-519 ms before and 0.09-0.76 ms after, with 500 snapshots reduced to at most one.
+  These are metadata-loop measurements, not frame-rate or whole-match speed claims.
+- The corrected-probe 15-match run completed all 60 turns with correct boards and no repeat
+  replay timeout, but FAILED two guards: tail heap slope 1,193 / 94 KB per match and listener
+  drift -3..51 against the existing +/-40 limit. Seat 0's heap jumped from 13.58 MB after match
+  13 to 26.12 MB after match 14, then 23.56 MB after match 15. This is unresolved; do not
+  promote or describe the metadata optimisation as fixing the replay or memory issue.
+- Follow-up `npm run check` completed successfully (exit 0), as did final typechecks, the native
+  listener contract, futa04/futa-test builds and asset-isolation checks. No physical-device
+  verification was available. Follow-up changes are committed locally only while the soak is red;
+  they have not replaced the deployed staging candidate or been pushed to the release branch.
+- The environment still blocks direct site/API access; the saved network-settings draft must
+  be applied, or Cursor must perform staged verification. Do not describe this candidate as live.
 
 ## Safe release order
 

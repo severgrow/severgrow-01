@@ -591,6 +591,21 @@ try {
           `      the page's polls in the last 8s: ${recent.length}; last ${JSON.stringify(recent.slice(-3).map((r) => r.path))}; api revision now ${apiRev.revision} (actor ${apiRev.actor}, my seat ${apiRev.seat})`,
         );
         await watching.page.screenshot({ path: `${OUT}soak-stall-m${m}-t${turn}.png` }).catch(() => undefined);
+        const timeline = await watching.page.evaluate(() => {
+          const hooks = (window as any).__severgrow;
+          return {
+            hidden: document.hidden,
+            visibility: document.visibilityState,
+            animations: document.getAnimations().map(a => ({ state: a.playState, time: String(a.currentTime) })),
+            recentAnimationSteps: hooks?.animLog?.().slice(-80) ?? [],
+            recentRenderCosts: hooks?.renderCosts?.().slice(-20) ?? [],
+          };
+        }).catch(() => null);
+        writeFileSync(`${OUT}soak-stall-m${m}-t${turn}.json`, JSON.stringify({
+          match: m, turn, mode, hook, timeline,
+          server: { revision: apiRev.revision, actor: apiRev.actor, seat: apiRev.seat },
+          recentRequests: recent.map(r => r.path),
+        }, null, 2));
       } else if (turn === 1 || turn % 5 === 0) {
         console.log(`    match ${m} (${mode}) turn ${turn}: seat ${seatOfPlayer[actor]} acted; seat ${seatOfPlayer[watcher]} open`);
       }
