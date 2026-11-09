@@ -110,6 +110,37 @@ recursively reacting to the storage availability probe. Existing game settings a
   The existing configuration draft contains required domains but is not applied. Credentials belong
   in environment settings, never in this file or chat. Exact-SHA GitHub CI must pass before release.
 
+## Server deployment (done 2026-11-09, Claude) — the website is NOT released
+
+- Deployed source: commit `130f95d6823c9d8682ae52c0331cba45bd0f1bc4` (this branch, built on
+  `91b7ce06` = the current `futa0.5-online` and `live`, so no newer server fix was lost; nothing to
+  integrate). `npm run server:build-edge` reproduced the committed bundle byte for byte.
+- `supabase functions deploy duel --project-ref wbfrbeedlvjercrukngn --no-verify-jwt`: "Deployed
+  Functions", `duel` version 106 ACTIVE. `/v1/health?db=1` ok (transaction pooler). No migration.
+- Before deploying: server suites 772 passed; local Postgres integration 28 passed (1 local-only
+  privilege check fails identically without this change).
+- Verified on the LIVE server with throwaway guests (match resigned afterwards), Realtime frames read
+  over the real websocket — 13/13 passed:
+  - authenticated `GET /v1/players/me` works;
+  - an active normal match's `GET /live` returns `live:false, limitMs:30000` before Blitz (= the
+    server's 30 s Blitz clock);
+  - an ordinary heartbeat (`announce` absent) broadcasts nothing;
+  - `announce:true` reaches ONLY the opponent's `player:<id>` topic (`{kind:'presence'}`), not the
+    sender, not a third player;
+  - a non-participant cannot announce into the match, read it (403 NOT_A_PARTICIPANT) or invite
+    (404 CHALLENGE_NOT_FOUND);
+  - the invitation reaches the invited player; acceptance starts Blitz (`live:true, limitMs:30000`)
+    and pings the challenger and the match; a Blitz move pings the match channel.
+- Not verified: the Edge function logs (the Management API `logs.all` endpoint is retired and the
+  replacement did not expose function log tables to this token). Indirect evidence: every expected
+  broadcast arrived during verification and none went to the wrong player.
+- Compatibility note: the presence hint is published on the existing `challenge` broadcast event with
+  payload `{kind:'presence'}`. The CURRENT live page treats any `challenge` frame as "re-read the
+  inbox", so until this frontend ships an opponent's lifecycle presence costs it one inbox read.
+  Harmless; the new page handles it.
+- Next (Codex): steps 3–6 below — integrate onto `futa0.5-online` (still at `91b7ce06`), wait for
+  exact-SHA CI and /test, then promote and confirm both markers. Do not claim live before that.
+
 ## Safe release order
 
 1. Rebuild the server bundle if server sources change: `npm run server:build-edge`.
