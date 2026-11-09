@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [admin-dashboard, online-stale-token-recovery, online-soak-teardown, settings-visual, accounts-email, pwa-viewport-layout]
+        suite: [admin-dashboard, online-stale-token-recovery, online-soak-teardown, online-opponent-discard, online-presence-journey, settings-visual, accounts-email, pwa-viewport-layout]
     env:
       # These suites only use their own in-process API; never touch a live wallet or project.
       VITE_SUPABASE_URL: http://127.0.0.1:9
@@ -39,6 +39,8 @@ jobs:
       # Keep the existing heap/listener limits; short runs confuse cache warmup with a leak.
       SOAK_MATCHES: '15'
       SOAK_TURNS: '4'
+      # Isolate transport recovery from software-GPU timing. Discard/visual suites keep WebGL.
+      JOURNEY_LOW_GPU: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -82,4 +84,6 @@ jobs:
             docs/screens/online/soak-report.json
             docs/screens/online/soak-stall-*.json
             docs/screens/online/soak-stall-*.png
+            /tmp/opponent-discard/
+            /tmp/online-presence-journey/
           retention-days: 7

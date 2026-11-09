@@ -170,8 +170,8 @@ recursively reacting to the storage availability probe. Existing game settings a
   promote or describe the metadata optimisation as fixing the replay or memory issue.
 - Follow-up `npm run check` completed successfully (exit 0), as did final typechecks, the native
   listener contract, futa04/futa-test builds and asset-isolation checks. No physical-device
-  verification was available. Follow-up changes are committed locally only while the soak is red;
-  they have not replaced the deployed staging candidate or been pushed to the release branch.
+  verification was available. Follow-up changes are held on the feature branch while the soak is
+  red; they have not replaced the deployed staging candidate or reached the release branch.
 - The environment still blocks direct site/API access; the saved network-settings draft must
   be applied, or Cursor must perform staged verification. Do not describe this candidate as live.
 
