@@ -774,6 +774,9 @@ export class MatchService {
       (result.match.status !== beforeStatus || result.match.turnStartRevision !== beforeBoundary);
     if (boundaryMoved || result.match.status === 'finished') {
       await safePublish(this.broadcaster, matchId, { revision: result.match.turnStartRevision, status: result.match.status });
+    } else if (!result.replayed && result.match.liveManaged) {
+      // BLITZ: every move is pinged as it lands, so the watcher sees it at once (owner, 2026-11-09).
+      await safePublish(this.broadcaster, matchId, { revision: result.match.revision, status: result.match.status });
     }
     // The commit's own expiry step may have spent a grace before applying the action.
     if (!result.replayed) await this.publishGraceChange(before, result.match);

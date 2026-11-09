@@ -2,6 +2,7 @@
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
+import { measureAtRest } from './ui/at-rest.js';
 import { DRAW_PILE_GIVE, DRAW_PILE_GIVE_MS, drawFrames, thudPile } from './ui/feel.js';
 import { mountStartupReveal } from './player/startup.js';
 import { mountMenuZoomLock } from './player/menu-zoom-lock.js';
@@ -2217,7 +2218,9 @@ const centerTileRect = (): DOMRect | null => {
   if (!session) return null;
   try {
     const hex = document.querySelector<SVGGraphicsElement>('#board .hex-cell[data-key="0,0"] .hex');
-    const rect = hex?.getBoundingClientRect();
+    // Where the tile will REST once the board's entrance has landed, so the ritual emblem goes
+    // straight to its final place and the board rises into it (owner, 2026-11-09).
+    const rect = measureAtRest(document.getElementById('board-wrap'), () => hex?.getBoundingClientRect());
     return rect && rect.width > 1 && rect.height > 1 ? rect : null;
   } catch {
     return null;
@@ -2230,7 +2233,7 @@ const homeTileRect = (seat: Player): DOMRect | null => {
   try {
     const key = coordKey(homeCoord(seat, session.state.config));
     const hex = document.querySelector<SVGGraphicsElement>(`#board .hex-cell[data-key="${key}"] .hex`);
-    const rect = hex?.getBoundingClientRect();
+    const rect = measureAtRest(document.getElementById('board-wrap'), () => hex?.getBoundingClientRect());
     return rect && rect.width > 1 && rect.height > 1 ? rect : null;
   } catch {
     return null;
@@ -5196,6 +5199,8 @@ const busy = () => queue.pending > 0 || pumping;
  * lessons keep their taught pace, and online moves keep the server's reveal rules).
  */
 const playThrough = () => busy() && !isOnlineDuel() && !coach.tutorial && !lessonActive() && myTurn() && playsThrough(queue.steps(), currentStep, HUMAN);
+/** An opponent's step (theirs, not mine) is still being shown. */
+const opponentShowing = () => busy() && !playsThrough(queue.steps(), currentStep, HUMAN);
 /** An animation that must finish (or be skipped) before the player acts: anything but my own move. */
 const blocking = () => busy() && !playThrough();
 const myTurn = () => {
@@ -5406,7 +5411,10 @@ function render() {
     // the step, from the game's own state: whose turn it is and the phase
     const st = session.state;
     const over = st.phase === 'GAME_OVER';
-    const step = over || watching ? null : st.actor !== HUMAN ? 'opp' : st.phase === 'DRAW' ? 'draw' : st.phase === 'DISCARD' ? 'throw' : 'grow';
+    // Still 'opp' while the opponent's move is being SHOWN (owner, 2026-11-09: their thrown card
+    // "lands between the piles"): my Draw step widens and slides the piles, so switching early
+    // moved the Throw pile out from under their card in flight. It turns to Draw once it lands.
+    const step = over || watching ? null : st.actor !== HUMAN || opponentShowing() ? 'opp' : st.phase === 'DRAW' ? 'draw' : st.phase === 'DISCARD' ? 'throw' : 'grow';
     guideMod.update({ step, turn: st.turnNumber, picked: session.sel.card !== null });
   }
   renderCoach(advice);
@@ -6804,6 +6812,28 @@ function centreSideDock(): void {
   if (!tiles || !box || tiles.width === 0 || box.width === 0) return; // not drawn yet: the next render retries
   sideDockStale = false;
   if (root.dataset.quad === '1') {
+    // Measure the board where it will REST: its entrance (lift + scale) is jumped to its end for the
+    // reading and put back at once (same frame, nothing is painted in between). Measuring mid-rise
+    // placed it ~16 px too high, then the correction at the end of the rise made it drop.
+    measureAtRest(document.getElementById('board-wrap'), () => placeDesktopQuarters(root));
+    return;
+  }
+  root.style.removeProperty('--side-dock-shift-y');
+  root.style.removeProperty('--quad-board-x');
+  root.style.removeProperty('--quad-board-y');
+  const current = parseFloat(root.style.getPropertyValue('--side-dock-shift')) || 0;
+  const left = box.left - current; // where the cockpit sits with no shift
+  const room = innerWidth - tiles.right;
+  const want = tiles.right + room / 2 - box.width / 2; // its left edge, centred in the room
+  const shift = Math.min(0, Math.max(want, tiles.right + 24) - left);
+  root.style.setProperty('--side-dock-shift', `${Math.round(shift)}px`);
+}
+/** Desktop quarters: the board's right edge on the middle, equal space above and below; the cockpit
+ *  + hand on the bottom-right quarter's middle (75%, 75%), never off the bottom. */
+function placeDesktopQuarters(root: HTMLElement): void {
+  {
+    const tiles = document.querySelector('#board-wrap .l-base')?.getBoundingClientRect();
+    if (!tiles || tiles.width === 0) return;
     // DESKTOP QUARTERS (owner, 2026-11-08): the cockpit + hand centred on the bottom-right quarter's
     // middle (75% across, 75% down), never off the bottom of the screen and never over the board.
     // The board: its right edge on the screen's middle, the same space above and below it (owner,
@@ -6827,17 +6857,7 @@ function centreSideDock(): void {
     const wantTop = Math.min(innerHeight * 0.75 - dock.height / 2, innerHeight - 12 - dock.height);
     root.style.setProperty('--side-dock-shift', `${Math.round(wantX - restX)}px`);
     root.style.setProperty('--side-dock-shift-y', `${Math.round(Math.max(wantTop, 8) - restTop)}px`);
-    return;
   }
-  root.style.removeProperty('--side-dock-shift-y');
-  root.style.removeProperty('--quad-board-x');
-  root.style.removeProperty('--quad-board-y');
-  const current = parseFloat(root.style.getPropertyValue('--side-dock-shift')) || 0;
-  const left = box.left - current; // where the cockpit sits with no shift
-  const room = innerWidth - tiles.right;
-  const want = tiles.right + room / 2 - box.width / 2; // its left edge, centred in the room
-  const shift = Math.min(0, Math.max(want, tiles.right + 24) - left);
-  root.style.setProperty('--side-dock-shift', `${Math.round(shift)}px`);
 }
 /**
  * The opponent's seat: a real, invisible anchor at the top-right of the map band (their side of

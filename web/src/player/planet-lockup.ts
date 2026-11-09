@@ -6,6 +6,8 @@
 // wordmark's own ink width — measured, so the two always end at the same left and right edge,
 // whatever the font, the screen or the text size. The gap between them is a fixed share of that
 // width. The planet module reads `lockupBox()` and centres its globe on the pair.
+import { measureAtRestWithin } from '../ui/at-rest.js';
+
 const GAP_SHARE = .075;
 /** The home PAINT viewBox, cropped to `#approved-geometry` (x 27..2022, y 59..624). The brush fills the box. */
 export const PAINT_BOX = Object.freeze({ x: 27, y: 59, w: 1995, h: 565 });
@@ -42,7 +44,8 @@ export const menuDiscRadius = (box: { width: number; height: number }, width: nu
 const EDGE = 8;
 
 /** The logo and its wordmark as one box (viewport px), or null when the menu is not laid out. */
-export const lockupBox = (): DOMRect | null => {
+export const lockupBox = (): DOMRect | null => measureAtRestWithin(document.getElementById('menu'), restingLockupBox);
+const restingLockupBox = (): DOMRect | null => {
   const logo = document.getElementById('logo'), title = document.querySelector<HTMLElement>('#menu .title');
   if (!logo || !title) return null;
   const a = logo.getBoundingClientRect(), b = inkBox(title);
@@ -98,7 +101,10 @@ export const mountPlanetLockup = (): void => {
     shift = next;
     inner.style.translate = `0 ${shift.toFixed(1)}px`;
   };
-  const both = () => { fit(); centre(); };
+  // Measured as the menu will REST: its arrival animates the logo and the keys, and a reading taken
+  // mid-arrival (on the way back from Play) left the whole column 14 px low, so the planet, which is
+  // centred on the logo, jumped with it (owner, 2026-11-09).
+  const both = () => measureAtRestWithin(document.getElementById('menu'), () => { fit(); centre(); });
   both();
   window.addEventListener('resize', both, { passive: true });
   void document.fonts?.ready.then(both);

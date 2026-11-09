@@ -89,9 +89,15 @@
     <meta name="theme-color" content="#0e0f10" />
     <meta name="description" content="Futasaku: grow your network, keep it joined to your home, cut your opponent's links." />
     <title>Futasaku</title>
-    <link rel="icon" type="image/png" sizes="16x16" href="./futasaku-favicon-16.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./futasaku-favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="48x48" href="./futasaku-favicon-48.png" />
+    <!-- Tab icon (owner, 2026-11-09): the tree-hex edge to edge, no margin. Cream on a dark browser,
+         FUTASAKU off-black (#0e0f10) on a light one. The light-mode set comes LAST so a browser that
+         ignores `media` still shows a mark that reads on a light tab bar. -->
+    <link rel="icon" type="image/png" sizes="16x16" href="./futasaku-tab-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./futasaku-tab-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="./futasaku-tab-48.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="./futasaku-tab-dark-16.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./futasaku-tab-dark-32.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="48x48" href="./futasaku-tab-dark-48.png" media="(prefers-color-scheme: light)" />
     <!-- The share card. og:image MUST be ABSOLUTE: the Open Graph spec requires it, and real
          scrapers (WhatsApp, iMessage, Slack) drop a relative path rather than resolving it — which
          is how a link preview ends up with no picture, or with a stale one. The `?v=` is a

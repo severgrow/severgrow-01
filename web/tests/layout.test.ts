@@ -300,7 +300,9 @@ describe('desktop quarters: board centred in the left half, cockpit + hand in th
   it('the page places the cockpit on that quarter centre, and keeps it on screen', async () => {
     const { readFileSync } = await import('node:fs');
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    const fn = main.slice(main.indexOf('function centreSideDock('), main.indexOf('function centreSideDock(') + 2200);
+    // the quarters are placed by placeDesktopQuarters (measured at rest), which centreSideDock calls
+    expect(main).toMatch(/measureAtRest\(document\.getElementById\('board-wrap'\), \(\) => placeDesktopQuarters\(root\)\)/);
+    const fn = main.slice(main.indexOf('function placeDesktopQuarters('), main.indexOf('function placeDesktopQuarters(') + 2200);
     expect(fn).toMatch(/innerWidth \* 0\.75/);
     expect(fn).toMatch(/innerHeight \* 0\.75/);
     expect(fn).toContain('--side-dock-shift-y');
@@ -310,7 +312,7 @@ describe('desktop quarters: board centred in the left half, cockpit + hand in th
     // right, so with right edge it touches the middle of the screen"
     const { readFileSync } = await import('node:fs');
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    const fn = main.slice(main.indexOf('function centreSideDock('), main.indexOf('function centreSideDock(') + 3000);
+    const fn = main.slice(main.indexOf('function placeDesktopQuarters('), main.indexOf('function placeDesktopQuarters(') + 3000);
     expect(fn).toMatch(/innerWidth \/ 2 - restRight/);
     expect(fn).toMatch(/innerHeight \/ 2 - restMidY/);
     const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');

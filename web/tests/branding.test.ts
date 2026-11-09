@@ -37,6 +37,22 @@ describe('owner brand pack roles', () => {
     ]) expect(existsSync(join(root, name)), name).toBe(true);
   });
 
+  it('tab icon: edge to edge, cream on a dark browser and off-black on a light one (owner, 2026-11-09)', () => {
+    const html = read('index.html');
+    for (const size of [16, 32, 48]) {
+      expect(html).toContain(`href="./futasaku-tab-${size}.png"`);
+      expect(html).toMatch(new RegExp(`href="./futasaku-tab-dark-${size}\\.png" media="\\(prefers-color-scheme: light\\)"`));
+      for (const name of [`futasaku-tab-${size}.png`, `futasaku-tab-dark-${size}.png`]) {
+        expect(existsSync(join(root, 'public', name)), name).toBe(true);
+        // PNG width/height live at bytes 16..23 of the IHDR chunk
+        const png = readFileSync(join(root, 'public', name));
+        expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([size, size]);
+      }
+    }
+    // the light-mode set comes after the default set, so a browser that ignores `media` still reads
+    expect(html.indexOf('futasaku-tab-dark-16')).toBeGreaterThan(html.indexOf('futasaku-tab-48'));
+  });
+
   it('PAINT and PLAIN SVGs are pure vector (no embedded raster)', () => {
     for (const name of ['src/assets/brand/plain-wordmark.svg', 'src/assets/brand/paint-wordmark.svg', 'src/assets/brand/hex-emblem.svg']) {
       const svg = read(name);

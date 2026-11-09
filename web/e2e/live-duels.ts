@@ -328,6 +328,17 @@ try {
     const slotB = await urgencySlot(b.page);
     check('1: no 24-hour warning while live', !slotA.startsWith('warning') && !slotB.startsWith('warning'), `${slotA} | ${slotB}`);
     const before = (await api.getState(m.guests[0].token, m.matchId)).player.view.turnNumber;
+    // BLITZ: EVERY MOVE IS SEEN AS IT LANDS (owner, 2026-11-09: "if opp draws - i see it"). The mover
+    // draws; the watcher's page reaches the mover's Grow step while the turn is still theirs.
+    {
+      await waitFor(async () => (await myTurn(a)) || (await myTurn(b)), 20_000);
+      const mover = (await myTurn(a)) ? a : b;
+      const watcher = mover === a ? b : a;
+      await waitFor(async () => (await phase(mover)) === 'DRAW', 5_000);
+      await mover.page.locator('#deck').click({ force: true }).catch(() => undefined);
+      const seen = await waitFor(async () => (await phase(watcher)) === 'ACT' && !(await myTurn(watcher)), 8_000);
+      check('1: Blitz: the watcher sees the mover\'s Draw before the turn ends', seen, await phase(watcher));
+    }
     for (let t = 0; t < 3; t++) {
       await waitFor(async () => (await myTurn(a)) || (await myTurn(b)), 20_000);
       const actor = (await myTurn(a)) ? a : b;

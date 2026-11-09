@@ -8,8 +8,11 @@ html.futa04-information:has(#game:not([hidden])) #texture::before {
 }
 html.futa04-information #game::before {
   content:''; position:fixed; inset:-12% -25%; pointer-events:none; z-index:8;
-  background:radial-gradient(ellipse 43% 55% at 50% 48%,rgba(255,219,164,.11),transparent 78%);
-  mix-blend-mode:screen; opacity:0; animation:futasaku-warm-pass 32s ease-in-out infinite;
+  /* Plain alpha, no blend mode (owner, 2026-11-08: during the opponent's moves the background changed
+     "only on the board section ... like a rectangle"). A screen blend can be composited against the
+     board's own layer only, which paints a lighter box exactly the size of the board's frame. */
+  background:radial-gradient(ellipse 43% 55% at 50% 48%,rgba(255,219,164,.075),transparent 78%);
+  opacity:0; animation:futasaku-warm-pass 32s ease-in-out infinite;
 }
 @keyframes futasaku-warm-pass {
   0%,36%,100% { opacity:0; transform:translate3d(-5%,0,0); }
@@ -19,8 +22,10 @@ html.futa04-information #game::before {
 html.futa04-information #game .play { position:relative; isolation:isolate; }
 html.futa04-information #game .play::before {
   content:''; position:absolute; inset:3% 2% 0; pointer-events:none; z-index:0;
-  background:radial-gradient(ellipse 55% 58% at 48% 57%,rgba(0,0,0,.43),rgba(0,0,0,.14) 58%,transparent 84%);
-  transform:translateY(22px); filter:blur(14px);
+  /* Already soft: no blur filter. A blurred layer under the board is re-composited with the board
+     while tiles animate, which can show as a lighter box the size of the board (owner, 2026-11-08). */
+  background:radial-gradient(ellipse 57% 60% at 48% 57%,rgba(0,0,0,.40),rgba(0,0,0,.14) 56%,rgba(0,0,0,.04) 76%,transparent 90%);
+  transform:translateY(22px);
 }
 html.futa04-information #game .board-wrap,
 html.futa04-information #game .dock { z-index:1; }
