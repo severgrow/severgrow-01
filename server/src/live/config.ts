@@ -1,7 +1,7 @@
 // FUTASAKU live duels — server settings. Every value can be tuned with an environment variable /
 // Edge secret of the same name, without a code change. Times are milliseconds.
 //
-// The one most people will tune is LIVE_TURN_MS (the per-turn clock, default 60 s).
+// The one most people will tune is LIVE_TURN_MS (the per-turn clock, default 30 s).
 
 export type LiveConfig = {
   /** Per-turn clock in live mode. */

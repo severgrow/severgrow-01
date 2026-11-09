@@ -166,11 +166,11 @@ export const ONLINE = Object.freeze({
   findOpponentHint: 'Matched with the next player who taps Find opponent.',
   /** Find-opponent states (punchy copy standard). */
   searchTitle: 'Finding an opponent',
-  searchBody: 'You are in the queue. The duel opens the moment someone else joins.',
-  searchParkedTitle: 'Nobody yet',
+  searchBody: "Play while we search. We'll let you know when someone joins.",
+  searchParkedTitle: 'Finding an opponent',
   /** Owner, 2026-11-08: name the practice match and the player's own level, and say a real opponent still connects. */
-  searchParkedBody: (level: number | null) =>
-    `Practice match${level == null ? '' : ` or level ${level}`} while you're waiting. If we find an opponent, you'll be connected.`,
+  searchParkedBody: (_level: number | null) =>
+    "Play while we search. We'll let you know when someone joins.",
   searchPlayComputer: 'Practice match',
   searchPlayLevel: (level: number) => `Level ${level}`,
   searchInviteFriend: 'Invite a friend',
@@ -1176,15 +1176,16 @@ export const LIVE = Object.freeze({
   wantsRematch: 'wants a rematch',
   // The ACCEPT window (owner, 2026-11-06: "in the window asking to confirm send/accept BLITZ say
   // 21seconds, no undo"). The seconds are the server's own limitMs.
-  terms: (secs: number) => `Same match · ${secs} seconds a turn · no undo`,
+  terms: (secs: number) => `${secs} seconds a turn. No undo.`,
   accept: 'Accept',
   notNow: 'Not now',
   // The SENDER's confirmation before the invite leaves the device (owner, 2026-10-26: tapping the
   // bolt must ask first). The seconds come from the server's own `limitMs` (LIVE_TURN_MS, default
-  // 60 s, env-overridable), so the window never promises a number the match is not using.
-  duelQuestion: 'Blitz duel?',
+  // 30 s, env-overridable), so the window never promises a number the match is not using.
+  duelQuestion: 'Blitz duel',
   duelTerms: (secs: number) => `${secs} seconds a turn. No undo.`,
   sendChallenge: 'Send challenge',
+  sendingChallenge: 'Sending challenge',
   notNowFrom: (name: string) => `${name}: Not now`,
   expired: 'No answer',
   live: 'Blitz',
@@ -1198,10 +1199,10 @@ export const LIVE = Object.freeze({
   // time that does not acknowledge the loss.
   leaveConfirm: 'Leave and lose this Blitz duel?',
   // Said BEFORE the situation, on the accept surface (the challenge glass): one short line...
-  leaveWarning: 'Leaving Blitz loses',
+  leaveWarning: 'Leaving loses the match',
   // ...plus the fuller explanation in the same glass window, never a wall of text.
   // Owner, 2026-10-15: the reconnect grace is never explained to players (it still exists).
-  leaveWarningHelp: 'In Blitz, leaving loses the whole match; running out of time ends your turn. Normal 24-hour games are unaffected.',
+  leaveWarningHelp: 'Running out of time ends your turn. Normal 24-hour games are unaffected.',
   // The header strip's "the opponent has dropped" state. The animated dots are added by the UI (the
   // shared `wait-dots` treatment), never baked into this string.
   opponentReconnecting: 'Opponent reconnecting',

@@ -9,7 +9,7 @@ import type { PresenceStatus } from '../../../../server/src/live/types.js';
 export type { ChallengeWire, LiveStatusWire, MyChallengesWire, PresenceStatus };
 
 export type LiveApi = {
-  presence(status: PresenceStatus, matchId: string | null): Promise<void>;
+  presence(status: PresenceStatus, matchId: string | null, announce?: boolean): Promise<void>;
   status(matchId: string): Promise<LiveStatusWire>;
   challenge(matchId: string, kind?: 'live' | 'rematch'): Promise<{ challenge: ChallengeWire; liveMatchId: string | null }>;
   accept(id: string): Promise<{ challenge: ChallengeWire; liveMatchId: string }>;
@@ -53,8 +53,8 @@ export const createLiveApi = (options: { baseUrl: string; token: () => string | 
   };
   const id = (s: string) => encodeURIComponent(s);
   return {
-    presence: async (status, matchId) => {
-      await send('POST', '/v1/players/me/presence', { status, ...(matchId ? { matchId } : {}) });
+    presence: async (status, matchId, announce = false) => {
+      await send('POST', '/v1/players/me/presence', { status, ...(matchId ? { matchId } : {}), ...(announce ? {announce:true} : {}) });
     },
     status: async (matchId) => (await send<{ live: LiveStatusWire }>('GET', `/v1/matches/${id(matchId)}/live`)).live,
     challenge: (matchId, kind = 'live') => send('POST', `/v1/matches/${id(matchId)}/live/challenge`, { kind }),

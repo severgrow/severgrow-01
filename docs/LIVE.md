@@ -1,6 +1,32 @@
-# FUTASAKU live duels (futa-test and the `/futa0.5/` preview)
+# FUTASAKU Blitz - current contract
 
-> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index; this is the reference for live duels.
+The live root and `/test/` use `CHANNEL=futa05`. See [ONLINE.md](ONLINE.md) and
+[RELEASE-FLOW.md](RELEASE-FLOW.md) for the current build and release paths.
+
+- Two participants in the same active online match can request Blitz when the server says both
+  are available. Client appearance is never authority for membership, presence or acceptance.
+- The per-turn limit comes from server configuration, default 30 seconds. The status endpoint
+  reports that limit before acceptance too; confirmation and incoming windows use it directly.
+- The cockpit LED clock replaces the old header timer and home ring. Moves remain optimistic
+  and are sent immediately; rejected moves retain the existing rollback path.
+- A connected player's expired clock completes that turn automatically. An extended absence
+  uses the existing reconnect rules and can lose the match. Explicit Leave forfeits.
+  This refinement changes none of those rules; inspect `server/src/live/service.ts` and its tests
+  for authoritative behaviour rather than the historical wording below.
+- Presence is published on identity/session entry, foreground and socket join, with the existing
+  inexpensive heartbeat retained. An authenticated entry hint goes only to the real opponent.
+  Ordinary heartbeat writes do not broadcast. The hint contains no private game data.
+- One existing player Realtime channel invalidates inbox/eligibility reads. In-flight hints drain
+  another read; reconnect repairs state; hidden pages pause reads. Polling remains the fallback.
+- Blitz windows share finite dark-glass motion, matte buttons, explicit consequences and keyboard
+  focus containment. Private chat uses its existing measured HUD-logo clearance.
+- This pass requires a server-first deployment. Rebuild `supabase/functions/duel/bundle.ts` with
+  `npm run server:build-edge`; no migration is required. Verify the server before publishing web.
+
+## Historical implementation notes
+
+The material below records earlier iterations. Its 45/60-second defaults, header clock, home ring,
+connected-timeout loss and old preview URLs are superseded by the current contract above.
 
 Branch `futa0.5-online` (merged; the live work came from `futa0.5-live`). Not in the locked build, not
 in `main`, `dev` or `futa0.4`. The product build (`CHANNEL=futa04`) never shows any of this.

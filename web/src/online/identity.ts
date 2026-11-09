@@ -4,6 +4,22 @@ import type { KeyValue } from '../../../server/src/client.js';
 import type { OnlineIdentityRecord } from './types.js';
 
 export const IDENTITY_STORAGE_KEY = 'severgrow.duel.identity.v1';
+/** Storage events expose the raw prefixed key; unrelated writes must never trigger a storage probe. */
+export const isIdentityStorageEvent = (key: string | null, prefix: string): boolean =>
+  key === null || key === prefix + IDENTITY_STORAGE_KEY;
+
+// Same-tab storage writes do not emit the browser's storage event. Notify online consumers at
+// the successful write boundary so guest creation/account linking need no discovery timer.
+const identityListeners = new Set<(identity: OnlineIdentityRecord | null) => void>();
+export const subscribeIdentityChanges = (listener: (identity: OnlineIdentityRecord | null) => void) => {
+  identityListeners.add(listener);
+  return () => { identityListeners.delete(listener); };
+};
+const announceIdentity = (identity: OnlineIdentityRecord | null) => {
+  for (const listener of identityListeners) {
+    try { listener(identity); } catch { /* A presentation listener must not fail a stored identity. */ }
+  }
+};
 
 const STORAGE_BLOCKED_MESSAGE =
   'This browser blocked storage. Online matches cannot be kept on this device.';
@@ -104,6 +120,7 @@ export const createIdentityStore = (options: {
         message: STORAGE_BLOCKED_MESSAGE,
       };
     }
+    announceIdentity(identity);
     return { ok: true, identity };
   };
 
@@ -139,6 +156,7 @@ export const createIdentityStore = (options: {
     // (creating a guest) instead of handing back the token the server just refused.
     try {
       storage.remove(IDENTITY_STORAGE_KEY);
+      announceIdentity(null);
     } catch {
       return { ok: false, reason: 'storage_blocked', message: STORAGE_BLOCKED_MESSAGE };
     }

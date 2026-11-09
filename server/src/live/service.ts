@@ -23,7 +23,7 @@ import type { LiveConfig } from './config.js';
 import { ApiError } from '../errors.js';
 import { LiveError } from './errors.js';
 import type { LiveErrorCode } from './errors.js';
-import type { LiveNotifier } from './notifier.js';
+import type { LiveNotifier, ChallengePing } from './notifier.js';
 import { challengeBlock, effectiveStatus, endLive, presenceFresh, presenceWord, startLive } from './rules.js';
 import type { Challenge, ChallengeKind, LiveMatch, LivePlayer, LiveStore, LiveTx, LockedMatch, PresenceStatus } from './types.js';
 import { PRESENCE_STATUSES, liveManaged } from './types.js';
@@ -157,7 +157,7 @@ export class LiveService {
     return p.seat;
   }
 
-  private async ping(playerId: string, payload: { challengeId: string; fromName: string | null; kind: ChallengeKind }): Promise<void> {
+  private async ping(playerId: string, payload: ChallengePing): Promise<void> {
     if (!this.notifier) return;
     try {
       await this.notifier.publish(`player:${playerId}`, payload);
@@ -179,7 +179,7 @@ export class LiveService {
 
   // ---------------------------------------------------------------- presence and the switch
 
-  async presence(player: PlayerRecord, status: unknown, matchId: unknown): Promise<{ status: PresenceStatus }> {
+  async presence(player: PlayerRecord, status: unknown, matchId: unknown, announce: unknown = false): Promise<{ status: PresenceStatus }> {
     if (typeof status !== 'string' || !PRESENCE_STATUSES.includes(status as PresenceStatus)) {
       throw new ApiError('INVALID_REQUEST', 'Unknown presence status.');
     }
@@ -189,6 +189,14 @@ export class LiveService {
       if (await this.storage.participantOf(matchId, player.id).catch(() => null)) mid = matchId;
     }
     await this.live.setPresence(player.id, status as PresenceStatus, mid, this.now());
+    // Only lifecycle events fan out. Ordinary heartbeats retain their existing query cost.
+    // Membership and recipients come from server data, never from a supplied opponent ID.
+    if (announce === true && mid && this.notifier) {
+      try {
+        const participants = await this.storage.participantsOf(mid);
+        await Promise.all(participants.filter(p => p.playerId !== player.id).map(p => this.ping(p.playerId, {kind:'presence'})));
+      } catch { /* Presence is stored; polling recovers a failed notification. */ }
+    }
     return { status: status as PresenceStatus };
   }
 
@@ -512,7 +520,8 @@ export class LiveService {
       status: match.status,
       live: live.liveSince !== null,
       liveSince: live.liveSince,
-      limitMs: live.limitMs,
+      // The confirmation needs the real configured duration before a live session exists.
+      limitMs: live.limitMs ?? this.config.turnMs,
       replayAllowanceMs: this.config.replayAllowanceMs,
       turnDeadlineAt: match.status === 'finished' ? null : match.turnDeadlineAt,
       actor: match.state.actor,
@@ -580,7 +589,7 @@ export class LiveService {
    *   2. a REAL-TIME RECONNECT LADDER: when the turn clock expires for a player whose heartbeat has
    *      gone stale, the grace ladder runs (see below) instead of an instant loss;
    *   3. BOTH-OFFLINE HOLD: a simultaneous drop holds the match instead of starting a ladder;
-   *   4. otherwise the clock simply expiring ends the duel (`timeout`) — the strict real-time rule.
+   *   4. a connected Blitz player whose clock expires has the rest of that turn auto-played.
    *
    * The ladder, per seat, per ABSENCE (migration 0008's `live_reconnect_*` columns):
    *   stage 0 → the deadline is pushed to now + `reconnectGraceMs` (10 s): the grace is ADDED to the
@@ -694,8 +703,8 @@ export class LiveService {
           await tx.saveLive({ ...live, autoplayRev: match.revision });
           return { kind: 'autoplay', rev: match.revision, deadline, seat };
         }
-        // Either the player was connected and let the clock run out, or the ladder is exhausted, or
-        // a simultaneous drop outlasted the hold. In every case: the seat on the clock loses.
+        // The absence ladder is exhausted, or a simultaneous drop outlasted the hold.
+        // The connected-player branch above returned an autoplay decision instead.
         const loser = lm.participants.find((p) => p.seat === seat);
         const winner: Player = seat === 0 ? 1 : 0;
         const result: OnlineGameResult = { winner, reason: 'timeout', scores: scores(match.state) };
@@ -725,7 +734,7 @@ export class LiveService {
   }
 
   /**
-   * Commit the auto-played remainder of a disconnected player's turn through the normal move
+   * Commit the auto-played remainder of a timed-out player's turn through the normal move
    * pipeline (the SAME `commitBatch` a real player uses), measured from the missed deadline so a
    * late check never gifts time. If nothing can be committed the match is LOST (`timeout`) rather
    * than continued: an absent player must not hold a real-time duel open.

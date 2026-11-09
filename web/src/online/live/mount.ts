@@ -10,8 +10,9 @@ import { browserStorage } from '../../../../server/src/client.js';
 import { SOUND_REMOVED, Sound } from '../../ui/sound.js';
 import { RecordedFx } from '../../ui/recorded.js';
 import { duelApiUrl, duelRegion, onlineBuildEnabled } from '../config.js';
-import { getOnlineSession } from '../duel-runtime.js';
-import { IDENTITY_STORAGE_KEY } from '../identity.js';
+import { getOnlineSession, subscribeOnlineSession } from '../duel-runtime.js';
+import { STORAGE_PREFIX } from '../../channel.js';
+import { IDENTITY_STORAGE_KEY, isIdentityStorageEvent, subscribeIdentityChanges } from '../identity.js';
 import { createLiveApi } from './api.js';
 import type { ChallengeWire, LiveApi, LiveStatusWire, MyChallengesWire, PresenceStatus } from './api.js';
 import { createChallengeCenter } from './center.js';
@@ -61,7 +62,8 @@ const gameVisible = (): boolean => {
 };
 
 /** Expose a read-only snapshot for the browser tests (nothing is sent anywhere). */
-type LiveDebug = { status: LiveStatusWire | null; inbox: MyChallengesWire | null; target: ReturnTarget | null; popup: boolean };
+type LiveDebug = { status: LiveStatusWire | null; inbox: MyChallengesWire | null; target: ReturnTarget | null; popup: boolean;
+  presentation: readonly {at:number;kind:PillModel['kind'];matchId:string|null}[] };
 
 let mounted = false;
 
@@ -69,15 +71,20 @@ export const mountLive = (host: LiveHost): void => {
   if (mounted || !onlineBuildEnabled()) return;
   const api = duelApiUrl();
   if (!api) return;
+  mounted = true;
+  let unsubscribe = () => {};
   const start = () => {
     const id = readIdentity();
-    if (!id) {
-      window.setTimeout(start, 5_000); // the identity appears the first time the player opens Online
-      return;
-    }
-    mounted = true;
+    if (!id) return;
+    unsubscribe();
+    window.removeEventListener('storage', storageChanged);
     run(host, createLiveApi({ baseUrl: api, token: () => readIdentity()?.token ?? null, region: duelRegion() }), id.playerId);
   };
+  const storageChanged = (event: StorageEvent) => {
+    if (isIdentityStorageEvent(event.key, STORAGE_PREFIX)) start();
+  };
+  unsubscribe = subscribeIdentityChanges(start);
+  window.addEventListener('storage', storageChanged);
   start();
 };
 
@@ -135,7 +142,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   let lastInbox: MyChallengesWire | null = null;
   const seenOutgoing = new Map<string, string>();
   let center: ChallengeCenter | null = null;
-  center = createChallengeCenter({
+  const makeCenter = (playerId: string) => createChallengeCenter({
     api,
     playerId,
     popup,
@@ -151,6 +158,10 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
       return () => document.removeEventListener('visibilitychange', cb);
     },
     events: {
+      onPing: reason => {
+        if (reason === 'connected') void center?.heartbeatNow().then(() => refresh());
+        else void refresh();
+      },
       onInbox: (inbox) => {
         offset = inbox.serverNow - Date.now();
         lastInbox = inbox;
@@ -168,8 +179,10 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
       },
       onLiveStarted: (matchId, via) => void liveStarted(matchId, via),
       onError: () => undefined,
+      onActionError: () => note(LIVE.failed),
     },
   });
+  center = makeCenter(playerId);
 
   // ---- match screen pieces ----
   // A tap on a ready bolt ASKS first; only Send challenge sends the invite (owner, 2026-10-26).
@@ -203,6 +216,8 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   let status: LiveStatusWire | null = null;
   let statusFor: string | null = null;
   let waiting: ChallengeWire | null = null;
+  let sending = false;
+  let sendGeneration = 0;
   /** Matches that were live on this device (their end never overwrites the saved return target). */
   const liveSeen = new Set<string>();
   let lastEndedAt: number | null = null;
@@ -216,9 +231,14 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   };
 
   const goLive = async (kind: 'live' | 'rematch', matchId = currentMatchId()): Promise<void> => {
-    if (!matchId) return;
+    if (!matchId || sending) return;
+    const attempt = ++sendGeneration;
+    const token = readIdentity()?.token;
+    sending = true;
+    paint();
     try {
       const res = await api.challenge(matchId, kind);
+      if (attempt !== sendGeneration || readIdentity()?.token !== token || currentMatchId() !== matchId) return;
       if (res.liveMatchId) {
         await liveStarted(res.liveMatchId, res.challenge);
         return;
@@ -228,7 +248,9 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
       void center?.pollNow(); // the listener sees it is waiting and checks fast until answered
       haptic(8);
     } catch (e) {
-      note(errorWord((e as { code?: string }).code) ?? LIVE.failed);
+      if (attempt === sendGeneration && readIdentity()?.token === token) note(errorWord((e as { code?: string }).code) ?? LIVE.failed);
+    } finally {
+      if (attempt === sendGeneration) { sending = false; paint(); }
     }
     await refresh();
   };
@@ -300,17 +322,13 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     end.show({ reason: endReason(s), back, rematch });
   };
 
-  /**
-   * The live turn length to show when the wire omits `limitMs` (it always sends it). The ONE
-   * source of truth is the server's `LIVE_TURN_MS` default in `server/src/live/config.ts`.
-   */
-  const limitFallback = 60_000;
-
   const pillModel = (s: LiveStatusWire | null): PillModel => {
     if (!s || s.status !== 'active') return { kind: 'hidden' };
+    if (typeof s.limitMs !== 'number' || !Number.isFinite(s.limitMs) || s.limitMs <= 0) return { kind: 'disabled', label: LIVE.notAvailable };
     if (s.live) return { kind: 'live' };
+    if (sending) return { kind: 'disabled', label: LIVE.sendingChallenge };
     const name = s.opponent.name ?? '';
-    const pending = s.pending;
+    const pending = s.pending ?? (waiting?.matchId === s.matchId && waiting.status === 'pending' && Date.now() < toLocal(waiting.expiresAt) ? waiting : null);
     if (pending && pending.fromMe) {
       waiting = pending;
       const secs = Math.max(0, Math.ceil((toLocal(pending.expiresAt) - Date.now()) / 1000));
@@ -323,9 +341,10 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     if (s.block === 'RATE_LIMITED') return { kind: 'disabled', label: LIVE.rateLimited };
     if (s.block === 'OFFLINE') return { kind: 'away', name };
     if (pending) return { kind: 'hidden' }; // their challenge is on its way to my pop-up
-    return { kind: 'ready', name, secs: Math.round((s.limitMs ?? limitFallback) / 1000) };
+    return { kind: 'ready', name, secs: Math.round(s.limitMs / 1000) };
   };
 
+  const presentation: {at:number;kind:PillModel['kind'];matchId:string|null}[] = [];
   const paint = () => {
     const s = status && status.matchId === currentMatchId() ? status : null;
     const model = pillModel(s);
@@ -333,9 +352,14 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     // arrive: the confirmation stands down rather than showing a decision that is no longer real.
     if (model.kind !== 'ready' && confirm?.isOpen()) confirm.hide();
     pill.render(model);
+    const last = presentation.at(-1);
+    if (last?.kind !== model.kind || last?.matchId !== (s?.matchId ?? null)) {
+      presentation.push({at:Date.now(),kind:model.kind,matchId:s?.matchId??null});
+      if (presentation.length > 12) presentation.shift();
+    }
     setLeave(!!s?.live);
     const root = document.documentElement;
-    if (!s || !s.live) {
+    if (!s || !s.live || typeof s.limitMs !== 'number' || !Number.isFinite(s.limitMs) || s.limitMs <= 0) {
       hud.render(null);
       if (root.dataset.blitzDuel) {
         delete root.dataset.blitzDuel;
@@ -349,7 +373,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     root.dataset.blitzDuel = '1';
     hud.render(null);
     const actor = s.actor;
-    const limit = s.limitMs ?? limitFallback;
+    const limit = s.limitMs;
     const side = actor === s.mySeat ? 'mine' : 'theirs';
     const clock = blitzClock();
     if (s.turnDeadlineAt === null) clock?.hold(side, limit);
@@ -363,10 +387,11 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
 
   // Seconds: ticks under 5 s and screen-reader lines at thresholds only (2 s steps under 10 s).
   const second = () => {
+    if (document.visibilityState !== 'visible') return;
     const s = status;
-    if (s?.live && s.matchId === currentMatchId() && s.turnDeadlineAt !== null) {
+    if (s?.live && typeof s.limitMs === 'number' && s.matchId === currentMatchId() && s.turnDeadlineAt !== null) {
       const left = Math.ceil((toLocal(s.turnDeadlineAt) - Date.now()) / 1000);
-      if (left !== lastSecond && left >= 0 && left <= (s.limitMs ?? limitFallback) / 1000) {
+      if (left !== lastSecond && left >= 0 && left <= s.limitMs / 1000) {
         lastSecond = left;
         const mine = s.actor === s.mySeat;
         if (left <= 5 && left > 0 && mine) {
@@ -382,55 +407,110 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   window.setInterval(second, 250);
 
   // ---- the per-match status poll (1 s while live or waiting, 10 s otherwise; only in a match) ----
-  let inflight = false;
-  const refresh = async (): Promise<void> => {
-    const m = currentMatchId();
-    if (!m) {
-      status = null;
-      statusFor = null;
-      publishOpponentStatus(null, null);
-      paint();
-      return;
-    }
-    if (inflight) return;
-    inflight = true;
-    try {
-      const prev = statusFor === m ? status : null;
-      const next = await api.status(m);
-      publishOpponentStatus(m, next);
-      offset = next.serverNow - Date.now();
-      status = next;
-      statusFor = m;
-      if (next.live) liveSeen.add(m);
-      if (prev && prev.live && !next.live && next.endedAt !== lastEndedAt) {
-        lastEndedAt = next.endedAt;
-        center?.noteLive(null);
-        showEnd(next);
-      } else if (prev && !prev.live && next.live) {
-        center?.noteLive(m);
-      }
-    } catch {
-      publishOpponentStatus(m, null);
-      /* quiet: the next poll tries again */
-    } finally {
-      inflight = false;
-    }
-    paint();
-  };
-  const loop = () => {
+  let inflight: Promise<void> | null = null;
+  let refreshAgain = false;
+  let statusTimer: number | null = null;
+  const scheduleStatus = () => {
+    if (statusTimer !== null) window.clearTimeout(statusTimer);
+    statusTimer = null;
+    if (document.visibilityState !== 'visible' || !currentMatchId() || !readIdentity()) return;
     const fast = !!status?.live || !!waiting || !!status?.pending;
-    // Every check is a paid Edge call: 1 s only while live or waiting, 10 s otherwise, 30 s hidden.
-    const delay = document.visibilityState !== 'visible' ? 30_000 : fast ? 1_000 : 10_000;
-    void refresh().finally(() => window.setTimeout(loop, delay));
+    statusTimer = window.setTimeout(loop, fast ? 1_000 : 10_000);
   };
+  const refresh = async (): Promise<void> => {
+    if (inflight) { refreshAgain = true; return inflight; }
+    inflight = (async () => {
+      do {
+        refreshAgain = false;
+        const m = currentMatchId();
+        const token = readIdentity()?.token;
+        if (!m) {
+          status = null;
+          statusFor = null;
+          publishOpponentStatus(null, null);
+          paint();
+          return;
+        }
+        try {
+          const prev = statusFor === m ? status : null;
+          const next = await api.status(m);
+          if (currentMatchId() !== m || readIdentity()?.token !== token) { refreshAgain = true; continue; }
+          publishOpponentStatus(m, next);
+          offset = next.serverNow - Date.now();
+          status = next;
+          statusFor = m;
+          if (next.live) liveSeen.add(m);
+          if (prev && prev.live && !next.live && next.endedAt !== lastEndedAt) {
+            lastEndedAt = next.endedAt;
+            center?.noteLive(null);
+            showEnd(next);
+          } else if (prev && !prev.live && next.live) {
+            center?.noteLive(m);
+          }
+        } catch {
+          if (currentMatchId() === m && readIdentity()?.token === token) publishOpponentStatus(m, null);
+          /* quiet: the next poll tries again */
+        }
+        paint();
+      } while (refreshAgain);
+    })();
+    try { await inflight; } finally { inflight = null; scheduleStatus(); }
+  };
+  function loop() {
+    statusTimer = null;
+    void refresh();
+  }
   loop();
   center.start();
+
+  let enteredMatch = currentMatchId();
+  const entered = () => {
+    const matchId = currentMatchId();
+    if (matchId === enteredMatch) return;
+    enteredMatch = matchId;
+    sendGeneration++;sending = false;waiting = null;
+    confirm?.hide();
+    if (document.visibilityState !== 'visible') return;
+    // Publish match entry before checking eligibility. Ordinary safety timers stay inexpensive.
+    void center?.heartbeatNow().then(() => refresh());
+    void refresh();
+    void center?.pollNow();
+  };
+  subscribeOnlineSession(session => {
+    // Dispatch entry before board construction can occupy the main thread. A departure waits
+    // for the same task's screen teardown, so an idle menu is not published as an offline game.
+    if (session) entered();
+    else queueMicrotask(entered);
+  });
+  let identityToken = readIdentity()?.token;
+  const identityChanged = () => {
+    const identity = readIdentity();
+    if (identity?.token === identityToken) return;
+    identityToken = identity?.token;
+    sendGeneration++;sending = false;
+    center?.stop();
+    center = identity ? makeCenter(identity.playerId) : null;
+    status = null;statusFor = null;lastInbox = null;waiting = null;
+    seenOutgoing.clear();liveSeen.clear();lastEndedAt = null;
+    confirm?.hide();end.hide();publishOpponentStatus(null,null);paint();
+    center?.start();
+    void refresh();
+  };
+  subscribeIdentityChanges(identityChanged);
+  window.addEventListener('storage', event => {
+    if (isIdentityStorageEvent(event.key, STORAGE_PREFIX)) identityChanged();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void refresh();
+    else if (statusTimer !== null) { window.clearTimeout(statusTimer); statusTimer = null; }
+  });
 
   (window as unknown as { __futasakuLive?: () => LiveDebug }).__futasakuLive = () => ({
     status,
     inbox: lastInbox,
     target: returns.get(),
     popup: popup.isOpen(),
+    presentation: [...presentation],
   });
 };
 

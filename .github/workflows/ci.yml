@@ -229,3 +229,33 @@ jobs:
           name: ${{ matrix.suite }}-screens
           path: ${{ matrix.suite == 'territory-final-polish' && '/tmp/territory-final-polish/' || '/tmp/living-territory/' }}
           retention-days: 7
+
+  online-presence-journey:
+    name: Fresh guest / account online journey
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright-core install --with-deps chromium
+      - name: Verify matchmaking, Realtime invitations, account seats and request rates
+        run: node --import tsx web/e2e/online-presence-journey.ts
+        env:
+          JOURNEY_METRICS: '1'
+      - name: Verify ritual centring through the actual menu
+        run: node --import tsx web/e2e/ritual-centering.ts
+        env:
+          RITUAL_DPR: '2'
+      - name: Keep journey measurements and visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-presence-journey-evidence
+          path: |
+            /tmp/online-presence-journey/
+            /tmp/ritual-centering/
+          retention-days: 7

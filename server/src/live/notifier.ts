@@ -4,7 +4,8 @@
 import { createSupabaseBroadcaster } from '../broadcast-supabase.js';
 import type { MatchPing } from '../broadcast.js';
 
-export type ChallengePing = { challengeId: string; fromName: string | null; kind: 'live' | 'rematch' };
+export type ChallengePing = { challengeId: string; fromName: string | null; kind: 'live' | 'rematch' }
+  | { kind: 'presence' };
 
 export type LiveNotifier = { publish(topic: string, payload: ChallengePing): Promise<void> };
 

@@ -31,6 +31,24 @@ const runToDeadlineConnected = async (h: LiveHarness, matchId: string, players: 
 };
 
 describe('go live', () => {
+  it('reports the configured turn limit before a Blitz challenge exists', async () => {
+    const h=makeLiveHarness({live:{turnMs:37_000}});
+    const {a,matchId}=await h.pair();
+    expect((await h.live.status(a,matchId)).limitMs).toBe(37_000);
+  });
+  it('presence entry hints refresh only the authenticated opponent, ordinary heartbeats stay quiet', async () => {
+    const h = makeLiveHarness();
+    const {a,b,matchId} = await h.pair();
+    await h.live.presence(a,'in_match',matchId,true);
+    expect(h.notifier.published).toEqual([{topic:`player:${b.id}`,payload:{kind:'presence'}}]);
+    await h.live.presence(a,'in_match',matchId);
+    expect(h.notifier.published).toHaveLength(1);
+    const outsider=await h.guest();
+    // A match ID supplied by a nonparticipant must never produce a notification.
+    await h.live.presence(outsider.player,'in_match',matchId,true);
+    expect(h.notifier.published).toHaveLength(1);
+  });
+
   it('challenge + accept switches the SAME match to the live clock with the entry allowance', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();

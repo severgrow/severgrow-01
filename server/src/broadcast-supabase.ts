@@ -40,7 +40,7 @@ export const createSupabaseBroadcaster = (options: SupabaseBroadcasterOptions): 
   const publish = async (matchId: string, ping: MatchPing): Promise<void> => {
     if (!base || !options.key) return;
     try {
-      await doFetch(endpoint, {
+      const response = await doFetch(endpoint, {
         method: 'POST',
         headers: {
           apikey: options.key,
@@ -49,6 +49,7 @@ export const createSupabaseBroadcaster = (options: SupabaseBroadcasterOptions): 
         },
         body: JSON.stringify(broadcastBody(matchId, event, ping)),
       });
+      if (!response.ok) throw new Error(`Realtime broadcast failed (HTTP ${response.status}).`);
     } catch (error) {
       options.onError?.(error);
     }
@@ -58,6 +59,10 @@ export const createSupabaseBroadcaster = (options: SupabaseBroadcasterOptions): 
     async publish(matchId, ping) {
       // Fire and forget: reserve the socket for the move's own response, never the ping.
       inflight = publish(matchId, ping);
+      // Supabase may retire an Edge worker after its response. Keep the already-started
+      // delivery alive without putting the REST round trip on the gameplay response path.
+      const edge = (globalThis as { EdgeRuntime?: { waitUntil(task: Promise<unknown>): void } }).EdgeRuntime;
+      try { edge?.waitUntil(inflight); } catch { /* Non-Edge hosts keep their normal lifecycle. */ }
       // Resolve at once so a commit is never held back by the broadcast round-trip.
     },
     flush: () => inflight,

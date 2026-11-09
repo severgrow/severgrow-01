@@ -3,6 +3,7 @@
 //
 //   PW_CHROMIUM=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npx tsx web/e2e/live-duels.ts
 //   SHOTS=1 ... also writes docs/screens/live/*.png at 390x844.
+import { applyAs, legalActions, matchSetup, stateFromSetup, viewFor } from '../../src/engine/index.js';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
@@ -23,8 +24,9 @@ import { CHROME, openDuel, openSeat } from './helpers/local-duel.js';
 import type { LocalDuel, LocalMatch, SeatSession } from './helpers/local-duel.js';
 
 const PORT = 4231;
+const dist = process.env.FUTA_DIST;
 const SHOTS = process.env.SHOTS === '1';
-const SHOT_DIR = 'docs/screens/live';
+const SHOT_DIR = process.env.LIVE_SHOTS_DIR ?? 'docs/screens/live';
 const ONLY = (process.env.ONLY ?? '').split(',').filter(Boolean);
 const LIVE_TURN_MS = 15_000;
 
@@ -52,6 +54,30 @@ const waitFor = async (cond: () => Promise<boolean> | boolean, timeout = 20_000)
 // ---------------------------------------------------------------- server + build
 
 const memory = new MemoryStorage();
+let nextFixtureSeed: number | null = null;
+const createStoredMatch = memory.createMatch.bind(memory);
+memory.createMatch = async match => {
+  if (nextFixtureSeed !== null) {
+    const setup=matchSetup(nextFixtureSeed,match.rulesVersion);nextFixtureSeed=null;
+    match={...match,seed:setup.seed,config:setup.config,startingPlayer:setup.startingPlayer,state:stateFromSetup(setup)};
+  }
+  return createStoredMatch(match);
+};
+// A persistent draft needs an optional Bloom still available. Otherwise the product's fixed
+// Auto-skip legitimately commits EndAct after the Grow, making a transient draft a bad fixture.
+const persistentDraftFixture = () => {
+  for(let seed=1;seed<=1000;seed++) {
+    const setup=matchSetup(seed,server.rulesVersion);if(setup.startingPlayer!==1)continue;
+    const drawn=applyAs(stateFromSetup(setup),1,{t:'Draw',from:'deck'});
+    const legal=legalActions(viewFor(drawn,1));
+    const bloomCards=new Set(legal.flatMap(a=>a.t==='Bloom'?a.cards:[]));
+    const sprouts=legal.filter(a=>a.t==='Sprout'&&!bloomCards.has(a.card));
+    for(const card of new Set(sprouts.map(a=>a.t==='Sprout'?a.card:-1))) {
+      if(sprouts.filter(a=>a.t==='Sprout'&&a.card===card).every(a=>legalActions(viewFor(applyAs(drawn,1,a),1)).some(next=>next.t==='Bloom')))return {seed,card};
+    }
+  }
+  throw new Error('No persistent-draft fixture found');
+};
 const server = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'], turnTimeoutMs: 24 * 3_600_000 };
 const live = createLiveRuntime({
   storage: memory,
@@ -74,7 +100,7 @@ const apiBase = `http://127.0.0.1:${(apiServer.address() as AddressInfo).port}`;
 console.log(`local live duel API on ${apiBase}`);
 
 await new Promise<void>((resolve, reject) => {
-  const child = spawn(process.execPath, ['./node_modules/vite/bin/vite.js', 'build', '--config', 'web/vite.config.ts'], {
+  const child = spawn(process.execPath, ['./node_modules/vite/bin/vite.js', 'build', '--config', 'web/vite.config.ts', ...(dist ? ['--outDir',dist] : [])], {
     env: {
       ...process.env,
       CHANNEL: 'futa05',
@@ -89,7 +115,7 @@ await new Promise<void>((resolve, reject) => {
   child.stderr?.on('data', (b) => (err += String(b)));
   child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(err))));
 });
-const previewServer = await preview({ configFile: 'web/vite.config.ts', preview: { host: '127.0.0.1', port: PORT, strictPort: true }, logLevel: 'error' });
+const previewServer = await preview({ ...(dist ? {build:{outDir:dist}} : {}), configFile: 'web/vite.config.ts', preview: { host: '127.0.0.1', port: PORT, strictPort: true }, logLevel: 'error' });
 const origin = previewServer.resolvedUrls?.local?.[0]?.replace(/\/$/, '') ?? `http://127.0.0.1:${PORT}`;
 const nodeFetch: FetchLike = (url, init) => fetch(url, init);
 const api = new DuelClient({ baseUrl: apiBase, fetch: nodeFetch });
@@ -223,8 +249,8 @@ const playTurn = async (s: SeatSession): Promise<boolean> => {
     const card = (await s.page.evaluate(`(() => { const d = window.__severgrow.legal().filter(a => a.t === 'Discard')[0]; return d ? d.card : null; })()`)) as number | null;
     if (card === null) break;
     await s.page.locator(`#hand [data-card="${card}"]`).click({ force: true }).catch(() => undefined);
-    await tick(250);
-    await s.page.locator(`#hand [data-card="${card}"]`).click({ force: true }).catch(() => undefined);
+    // Product Throw selects the card, then taps the pile. Tapping the card again deselects it.
+    await s.page.locator('#discard').click({ force: true });
     await waitFor(async () => (await phase(s)) !== 'DISCARD', 3_000);
   }
   return waitFor(async () => !(await myTurn(s)), 8_000);
@@ -282,10 +308,10 @@ const challengeAndAccept = async (a: SeatSession, b: SeatSession, label: string)
   // only number now, so that is what proves the real-time mode is on for both seats.
   const clockOn = (s: SeatSession) =>
     s.page.evaluate(() => {
-      const el = document.querySelector<HTMLElement>('#duel-hud [data-duel-urgency][data-live-clock]');
+      const el = document.querySelector<HTMLElement>('#smart-panel #blitz-clock');
       return !!el && !el.hidden && el.getBoundingClientRect().width > 1;
     });
-  check(`${label}: the real-time clock is in the header (both)`, (await clockOn(a)) && (await clockOn(b)));
+  check(`${label}: the authoritative Blitz clock is in the cockpit (both)`, (await clockOn(a)) && (await clockOn(b)));
 };
 
 const closeAll = async (...s: SeatSession[]) => {
@@ -317,13 +343,13 @@ try {
     await challengeAndAccept(a, b, '1');
     await shot(a, '05-live-hud-seat0');
     await shot(b, '06-live-hud-seat1');
-    check('1: ring drawn around a home', await waitFor(() => vis(a.page, '[data-live="ring"]'), 5_000));
+    check('1: the cockpit clock is visible', await waitFor(() => vis(a.page, '#blitz-clock'), 5_000));
     const ringOk = async (s: SeatSession) => {
       const st = (await dbg(s))?.status;
-      const side = await s.page.evaluate(`document.querySelector('[data-live="ring"]')?.getAttribute('data-side') ?? ''`);
-      return !!st && side === (st.actor === st.mySeat ? 'me' : 'opp');
+      const side = await s.page.evaluate(`document.querySelector('#blitz-clock')?.getAttribute('data-side') ?? ''`);
+      return !!st && side === (st.actor === st.mySeat ? 'mine' : 'theirs');
     };
-    check('1: the ring is around the ACTIVE home on both seats', (await waitFor(() => ringOk(a), 5_000)) && (await waitFor(() => ringOk(b), 5_000)));
+    check('1: the clock identifies the ACTIVE seat on both screens', (await waitFor(() => ringOk(a), 5_000)) && (await waitFor(() => ringOk(b), 5_000)));
     const slotA = await urgencySlot(a.page);
     const slotB = await urgencySlot(b.page);
     check('1: no 24-hour warning while live', !slotA.startsWith('warning') && !slotB.startsWith('warning'), `${slotA} | ${slotB}`);
@@ -385,8 +411,8 @@ try {
   await run('3-draft-return', async () => {
     const m1 = await newMatch();
     // B also has match 2 with a third player, where it is B's turn.
-    let m2 = await newMatch([null, m1.guests[1]]);
-    for (let i = 0; i < 6 && m2.starterSeat !== 1; i++) m2 = await newMatch([null, m1.guests[1]]);
+    const fixture=persistentDraftFixture();nextFixtureSeed=fixture.seed;
+    const m2 = await newMatch([null, m1.guests[1]]);
     const a = await openSeat(duel, m1, 0, { reduceMotion: true, speed: 'skip' });
     await openDuel(a, m1.matchId);
     const b = await openSeat(duel, m2, 1, { reduceMotion: true, speed: 'skip' });
@@ -401,7 +427,7 @@ try {
       const inBloom = {};
       for (const a of legal) if (a.t === 'Bloom') for (const c of a.cards) inBloom[c] = true;
       const out = [];
-      for (const a of legal) if (a.t === 'Sprout' && !inBloom[a.card]) out.push({ card: a.card, key: a.coord.q + ',' + a.coord.r });
+      for (const a of legal) if (a.t === 'Sprout' && a.card === ${fixture.card} && !inBloom[a.card]) out.push({ card: a.card, key: a.coord.q + ',' + a.coord.r });
       return out.slice(0, 4);
     })()`)) as { card: number; key: string }[];
     const tapAt = async (sel: string) => {
@@ -419,7 +445,9 @@ try {
       if ((drafted = await waitFor(() => b.page.evaluate(draftKey) as Promise<boolean>, 2_000))) break;
     }
     check('3: an unsent draft exists in match 2', drafted);
-    const boardBefore = await b.page.evaluate(() => JSON.stringify((window as unknown as { __severgrow: { state: () => { board: unknown } } }).__severgrow.state()?.board));
+    const draftBefore=await b.page.evaluate(mid=>sessionStorage.getItem('severgrow.duel.draft.v1.'+mid),m2.matchId);
+    const revisionBefore=(await api.getState(m2.guests[1].token,m2.matchId)).player.revision;
+    const boardBefore = await b.page.evaluate(() => JSON.stringify((window as any).__severgrow.state()?.board));
     // A challenges B in match 1 (B is in match 2 → presence in_match).
     await waitFor(async () => (await pillState(a)).startsWith('ready'), 20_000);
     // The bolt ASKS first (owner, 2026-10-26): one tap opens the confirm window,
@@ -436,8 +464,10 @@ try {
     check('3: B gets Back to your match', await waitFor(() => vis(b.page, '[data-live="back"]'), 15_000));
     await b.page.locator('[data-live="back"]').click();
     check('3: B is back in match 2', await waitFor(async () => (await currentMatch(b)) === m2.matchId, 15_000));
+    const draftAfter=await b.page.evaluate(mid=>sessionStorage.getItem('severgrow.duel.draft.v1.'+mid),m2.matchId);
+    check('3: return preserves the exact draft without committing it',draftAfter===draftBefore&&(await api.getState(m2.guests[1].token,m2.matchId)).player.revision===revisionBefore);
     check('3: the unsent draft is still stored for match 2', (await b.page.evaluate(draftKey)) as boolean);
-    const boardAfter = await b.page.evaluate(() => JSON.stringify((window as unknown as { __severgrow: { state: () => { board: unknown } } }).__severgrow.state()?.board));
+    const boardAfter = await b.page.evaluate(() => JSON.stringify((window as any).__severgrow.state()?.board));
     check('3: the drafted board is exactly as left', boardAfter === boardBefore);
     await closeAll(a, b);
   });
@@ -449,7 +479,7 @@ try {
     const m2 = await newMatch([null, m.guests[1]]);
     const c = await openSeat(duel, m2, 0, { reduceMotion: true, speed: 'skip' });
     await openDuel(c, m2.matchId);
-    check('4: third player sees "In real time"', await waitFor(async () => (await pillState(c)) === 'disabled:In real time', 15_000), await pillState(c));
+    check('4: third player sees "In Blitz"', await waitFor(async () => (await pillState(c)) === 'disabled:In Blitz', 15_000), await pillState(c));
     await shot(c, '02-pill-in-live-game');
     const res = await fetch(`${apiBase}/v1/matches/${m2.matchId}/live/challenge`, { method: 'POST', headers: { authorization: `Bearer ${m2.guests[0].token}`, 'content-type': 'application/json' }, body: '{}' });
     check('4: the server answers BUSY_LIVE', ((await res.json()) as { code?: string }).code === 'BUSY_LIVE');
@@ -504,16 +534,18 @@ try {
     const sleeper = st.actor === st.mySeat ? a : b;
     const other = sleeper === a ? b : a;
     const seat = st.actor;
-    // The actor lets the whole real-time clock run out. That now LOSES the match outright.
-    check('6: a real-time timeout ends live for both', await waitFor(async () => (await dbg(other))?.status?.endedReason === 'finished' && (await dbg(sleeper))?.status?.live === false, 40_000));
-    await shot(sleeper, '07-timeout-end');
-    const ended = (await api.getState(m.guests[0].token, m.matchId)).player;
-    check('6: the match is finished on the server', ended.status === 'finished');
-    check('6: the runner-out is the loser, reason timeout', ended.result?.reason === 'timeout' && ended.result?.winner === (seat === 0 ? 1 : 0));
-    // Never a hand-back to 24-hour turns: the strict real-time rule replaced the old escape hatch.
-    check('6: NOT returned to a 24-hour clock', (ended.turnDeadlineAt ?? null) === null);
-    // The winner must not sit on the board: the end screen arrives without a poll or a deadline.
-    check('6: the winner reaches the end screen promptly', await waitFor(() => vis(other.page, '[data-live="end"]'), 20_000));
+    // Current Blitz rule: a connected timeout completes the turn, without losing the match.
+    const before=(await api.getState(m.guests[0].token,m.matchId)).player.view.turnNumber;
+    check('6: a connected timeout passes the turn on both screens', await waitFor(async()=>{
+      const left=(await dbg(a))?.status,right=(await dbg(b))?.status;
+      return !!left?.live&&!!right?.live&&left.actor!==seat&&right.actor!==seat;
+    },30_000));
+    await shot(sleeper,'07-timeout-continues');
+    const after=(await api.getState(m.guests[0].token,m.matchId)).player;
+    check('6: the authoritative match remains active',after.status==='active'&&after.result===null);
+    check('6: the timed-out turn was completed',after.view.turnNumber>before);
+    check('6: the short Blitz clock remains active',after.turnDeadlineAt!==null&&after.turnDeadlineAt<Date.now()+60_000);
+    check('6: neither player receives a false end window',!(await vis(other.page,'[data-live="end"]'))&&!(await vis(sleeper.page,'[data-live="end"]')));
     await closeAll(a, b);
   });
 
@@ -561,22 +593,21 @@ try {
     await closeAll(a, b);
   });
 
-  await run('9-dnd', async () => {
-    const m = await newMatch();
-    const { a, b } = await openBoth(m);
-    await waitFor(async () => (await pillState(a)).startsWith('ready'), 20_000);
-    await b.page.evaluate(() => document.getElementById('hud-menu')?.click());
-    await b.page.evaluate(() => document.getElementById('gm-settings')?.click());
-    await waitFor(() => vis(b.page, '#live-allow'), 5_000);
-    await b.page.locator('#live-allow').uncheck({ force: true });
-    check('9: sender sees "Not available"', await waitFor(async () => (await pillState(a)) === 'disabled:Not available', 15_000), await pillState(a));
-    await closeAll(a, b);
+  await run('9-legacy-preference-recovery', async()=>{
+    const m=await newMatch();const {a,b}=await openBoth(m);
+    const player=await service.authenticate(m.guests[1].token);
+    await live.service.setChallengesEnabled(player,false);
+    await b.page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+    check('9: legacy disabled preference is repaired',await waitFor(async()=>(await live.service.myChallenges(player)).challengesEnabled,10_000));
+    check('9: the removed preference has no stale settings control',await b.page.locator('#live-allow').count()===0);
+    check('9: Blitz becomes available again',await waitFor(async()=>(await pillState(a)).startsWith('ready'),15_000));
+    await closeAll(a,b);
   });
 
   await run('10-mid-replay', async () => {
     const m = await newMatch();
-    const a = await openSeat(duel, m, 0, { reduceMotion: false, speed: 'normal' });
-    const b = await openSeat(duel, m, 1, { reduceMotion: false, speed: 'normal' });
+    const a = await openSeat(duel, m, 0, { reduceMotion: false, speed: m.starterSeat === 0 ? 'skip' : 'slow', clock: m.starterSeat !== 0 });
+    const b = await openSeat(duel, m, 1, { reduceMotion: false, speed: m.starterSeat === 1 ? 'skip' : 'slow', clock: m.starterSeat !== 1 });
     await openDuel(a, m.matchId);
     await openDuel(b, m.matchId);
     const actorIsA = m.starterSeat === 0;
@@ -604,23 +635,45 @@ try {
     })()`);
     // The challenge is sent while the actor's turn is still in flight, so it reaches the watcher
     // around the replay of that very turn.
-    const turn = playTurn(actor);
-    await waitFor(async () => (await phase(actor)) === 'DISCARD', 20_000);
-    // The bolt ASKS first (owner, 2026-10-26): one tap opens the confirm window,
-    // the second sends. A tap alone must never start a duel.
-    await challenger.page.locator('[data-live="pill"]').click();
-    await challenger.page.locator('[data-live="confirm-send"]').click();
-    check('10: actor plays a turn', await turn);
+    // Finish the move before opening a modal on the mover: its own scrim deliberately blocks
+    // board input. The previous test deadlocked its discard behind its own send confirmation.
+    // Hold browser time before the turn arrives. Foregrounding below delivers the actual view
+    // through the existing sync path, while its replay's timed steps remain under test control.
+    await watcher.page.clock.pauseAt(new Date());
+    const played = await playTurn(actor);
+    if (!played) console.log('turn diagnostic',JSON.stringify(await actor.page.evaluate(()=>{
+      const h=(window as any).__severgrow;
+      return {phase:h.state()?.phase,busy:h.busy(),online:h.online(),modal:[...document.querySelectorAll<HTMLElement>('.live-glass')].filter(e=>!e.hidden).map(e=>e.dataset.mode)};
+    })));
+    check('10: actor plays a turn',played);
+    await watcher.page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+    check('10: watcher is actively replaying before the challenge',await waitFor(()=>watcher.page.evaluate(()=>(window as any).__severgrow.online()?.revealing===true),15_000));
+    // Dispatch through the actual UI handlers in one task so automation's actionability waits
+    // cannot consume the short opponent animation we are explicitly trying to overlap.
+    await challenger.page.evaluate(()=>{
+      document.querySelector<HTMLButtonElement>('[data-live="pill"]')!.click();
+      document.querySelector<HTMLButtonElement>('[data-live="confirm-send"]')!.click();
+    });
+    await waitFor(async()=>(await pillState(challenger)).startsWith('waiting'),5000);
+    await watcher.page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+    check('10: inbox arrives while replay time is held',await waitFor(()=>watcher.page.evaluate(()=>{
+      const live=(window as any).__futasakuLive?.();
+      return !!(window as any).__severgrow.online()?.revealing&&live?.inbox?.incoming.some((c:any)=>c.status==='pending');
+    }),5000));
+    check('10: pending invitation does not interrupt the held replay',!(await dbg(watcher))?.popup);
+    await watcher.page.clock.runFor(50);
+    await watcher.page.clock.resume();
     check('10: the replay ran on the watcher', await waitFor(() => watcher.page.evaluate('window.__sawReplay') as Promise<boolean>, 15_000));
     check('10: the pop-up appears after the replay', await waitFor(() => vis(watcher.page, '[data-mode="challenge"]'), 25_000));
     check('10: never on top of the running replay', (await watcher.page.evaluate('window.__overlap')) === 0, `held back ${await watcher.page.evaluate('window.__deferred || 0')} frames; replay under an already-open pop-up ${await watcher.page.evaluate('window.__under || 0')} frames`);
+    check('10: the invitation was actually deferred during the replay',(await watcher.page.evaluate('window.__deferred || 0') as number)>0);
     await closeAll(a, b);
   });
   await run('11-widths', async () => {
-    for (const width of [360, 390, 430, 1280]) {
+    for (const [width, height] of [[360,844],[390,844],[844,390],[768,1024],[1280,800]] as const) {
       const m = await newMatch();
-      const a = await openSeat(duel, m, 0, { reduceMotion: true, speed: 'skip', viewport: { width, height: width > 500 ? 800 : 844 }, hasTouch: width < 500, isMobile: width < 500 });
-      const b = await openSeat(duel, m, 1, { reduceMotion: true, speed: 'skip', viewport: { width, height: width > 500 ? 800 : 844 }, hasTouch: width < 500, isMobile: width < 500 });
+      const a = await openSeat(duel, m, 0, { reduceMotion: true, speed: 'skip', viewport: { width, height }, hasTouch: width < 500, isMobile: width < 500 });
+      const b = await openSeat(duel, m, 1, { reduceMotion: true, speed: 'skip', viewport: { width, height }, hasTouch: width < 500, isMobile: width < 500 });
       await openDuel(a, m.matchId);
       await openDuel(b, m.matchId);
       await waitFor(async () => (await pillState(a)).startsWith('ready'), 20_000);
@@ -637,7 +690,7 @@ try {
       const pill = (await a.page.evaluate(`(() => { const r = document.querySelector('[data-live="pill"]').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()`)) as boolean;
       check(`11: ${width}px — pop-up inside the screen, 44px buttons, no sideways scroll`, fit.inside && fit.big && fit.scroll, JSON.stringify(fit));
       check(`11: ${width}px — pill inside the screen`, pill);
-      if (width === 360 || width === 1280) await shot(b, `10-popup-${width}`);
+      await shot(b, `10-popup-${width}x${height}`);
       await closeAll(a, b);
     }
   });

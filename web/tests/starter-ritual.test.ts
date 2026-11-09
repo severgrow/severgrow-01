@@ -171,7 +171,8 @@ describe('the gathered emblem sits on the middle tile (owner, 2026-11-08)', () =
     const fast = exit.indexOf('if (fast)');
     const seat = exit.indexOf('this.seatDeckOnCenter()');
     const measure = exit.indexOf('const deckC = centerOfRect');
-    const bloom = exit.indexOf('await this.bloomKanji(deckC)');
+    const reseat = exit.lastIndexOf('this.seatDeckOnCenter()');
+    const bloom = exit.indexOf('await this.bloomKanji(gatheredC)');
     const pile = exit.indexOf('const toPile');
     // A short fade (reduced motion, or a skip) leaves before any of this. The full exit seats the
     // emblem, measures that point, blooms the kanji, and only then streams the cards to the pile.
@@ -179,6 +180,8 @@ describe('the gathered emblem sits on the middle tile (owner, 2026-11-08)', () =
     expect(seat).toBeGreaterThan(fast);
     expect(measure).toBeGreaterThan(seat);
     expect(bloom).toBeGreaterThan(measure);
+    expect(reseat).toBeGreaterThan(exit.indexOf('await this.playAnimations(['));
+    expect(bloom).toBeGreaterThan(reseat);
     expect(pile).toBeGreaterThan(bloom);
     expect(src).toContain("WORDMARK_URL as plainMarkUrl");
     expect(src).toContain("from './branding.js'");

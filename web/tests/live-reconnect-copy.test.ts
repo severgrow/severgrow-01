@@ -24,10 +24,11 @@ describe('the reconnecting copy', () => {
     // OWNER CHANGED THE RULE (0.82, 2026-11-06): "BLITZ replaces real time"; running out of time now
     // ends the turn (it no longer loses the match). Leaving still forfeits.
     expect(LIVE.leaveConfirm).toBe('Leave and lose this Blitz duel?');
-    expect(LIVE.leaveWarningHelp).toContain('running out of time ends your turn');
+    expect(LIVE.leaveWarningHelp.toLowerCase()).toContain('running out of time ends your turn');
     // The help line explains how a Blitz duel is lost. Owner, 2026-10-15: the reconnect
     // grace still exists but is never explained to players.
-    expect(LIVE.leaveWarningHelp).toContain('loses the whole match');
+    expect(LIVE.leaveWarning).toContain('loses the match');
+    expect(LIVE.leaveWarningHelp.toLowerCase()).not.toContain('leaving'); // no duplicate warning
     expect(LIVE.leaveWarningHelp).not.toMatch(/seconds|reconnect|grace/i);
     expect(LIVE.leaveWarningHelp).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
   });

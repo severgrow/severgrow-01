@@ -263,7 +263,9 @@ try {
   check('chat keys use one native press depth without stacked compression',keyPress.transform==='none'&&Math.abs(Number(keyPress.scale)-.97)<.002);
   await sender.mouse.up();
   check('the phrase glyph gives a finite playful nod',await phraseKey.getAttribute('data-test-finite-nod')==='true');
-  await sender.waitForTimeout(200);
+  // Wait for actual effect cleanup; a fixed 200ms sleep can run before the renderer starts
+  // its 150ms animation on software-rendered CI. The finite-duration assertion above stays.
+  await sender.waitForFunction(()=>document.querySelector('.match-chat-phrase-toggle svg')!.getAnimations().length===0,undefined,{timeout:2000});
   check('the phrase glyph rests without retained animations',await phraseKey.locator('svg').evaluate(e=>e.getAnimations().length===0));
   await sender.keyboard.press('Escape');
   await sender.evaluate(()=>document.documentElement.classList.add('reduce-motion'));

@@ -180,6 +180,8 @@ export type SeatSession = {
 };
 
 export type SeatOptions = {
+  /** Test-controlled browser time, installed before any application timer is captured. */
+  clock?: boolean;
   viewport?: { width: number; height: number };
   hasTouch?: boolean;
   isMobile?: boolean;
@@ -246,6 +248,7 @@ export const openSeat = async (
     },
   );
   const page = await context.newPage();
+  if (options.clock) await page.clock.install();
   if (options.reduceMotion) await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(duel.origin, { waitUntil: 'domcontentloaded' });
   return { seat, guest, context, page, identityKey, sessionKey };

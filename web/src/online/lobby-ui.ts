@@ -6,7 +6,7 @@ import { ONLINE, PLANET, REPLAY } from '../../../src/strings.js';
 import { FEATURES } from '../channel.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
-import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
+import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled } from './config.js';
 import { createLobbyActionGuard, lobbyActionStillCurrent } from './lobby-action.js';
 import { pollDue } from './poll-gate.js';
 import {
@@ -42,7 +42,6 @@ import {
   friendlyJoinError,
   matchPollVerdict,
   inviteLink,
-  isSearchParked,
   isWellFormedInviteCode,
   normalizeInviteCodeInput,
   pageTitleForLobby,
@@ -871,7 +870,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       if (el) el.hidden = mode === 'search';
     }
     const cancel = document.getElementById('online-cancel-match') as HTMLButtonElement | null;
-    if (cancel) cancel.textContent = mode === 'search' ? ONLINE.searchStop : ONLINE.cancelMatch;
+    if (cancel) {
+      cancel.hidden = mode === 'search'; cancel.textContent = ONLINE.cancelMatch;
+      cancel.parentElement?.toggleAttribute('hidden',mode === 'search');
+    }
     const options = document.getElementById('online-search-options');
     if (options && mode !== 'search') options.hidden = true;
   };
@@ -900,15 +902,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   const renderSearch = () => {
     if (!search) return;
-    const parked = isSearchParked(now() - search.startedAt, parkedOfferMs());
-    // Active search shows the animated dots; the parked "Nobody yet" offer is a still state.
-    setWaitingTitle(parked ? ONLINE.searchParkedTitle : ONLINE.searchTitle, !parked);
-    // The line names a level only when the offer has a level key for it.
-    const level = hooks.startOfferedLevel ? offeredLevel() : null;
-    $('online-waiting-body').textContent = parked ? ONLINE.searchParkedBody(level) : ONLINE.searchBody;
+    setWaitingTitle(ONLINE.searchTitle, false);
+    $('online-waiting-body').textContent = ONLINE.searchBody;
     paintSearchOffer();
     const options = document.getElementById('online-search-options');
-    if (options) options.hidden = !parked;
+    if (options) options.hidden = false;
     syncLooking();
   };
 
@@ -992,11 +990,12 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   };
 
   const clearParkedSearch = async (line: string) => {
+    const showingSearch = !waitingEl.hidden && waitingEl.dataset.mode === 'search';
     stopSearch();
     closeMatchedPrompt();
     computerGameActive = false;
     syncLooking();
-    if (!waitingEl.hidden && waitingEl.dataset.mode === 'search') await openHub();
+    if (showingSearch) await openHub();
     notice('online-hub-notice', line);
   };
 
@@ -1053,7 +1052,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     show('waiting');
     setWaitingMode('search');
     renderSearch();
-    notice('online-waiting-notice', ONLINE.searchStatusSr);
+    notice('online-waiting-notice', `${ONLINE.findOpponentLooking}…`);
     flashIdentityReplaced();
     if (!searchTimer) searchTimer = setInterval(() => void pollSearch(), 2000);
     syncLooking();
@@ -1334,7 +1333,18 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     hooks.showMenu();
     refreshTitle();
   });
-  $('online-waiting-back').addEventListener('click', () => void openHub());
+  $('online-waiting-back').addEventListener('click', () => {
+    void (async () => {
+      if (search && waitingEl.dataset.mode === 'search') {
+        const stopped = await cancelSearchAndStop();
+        if (stopped !== 'cleared') {
+          if (stopped === 'kept') notice('online-waiting-notice', ONLINE.errGeneric);
+          return;
+        }
+      }
+      await openHub();
+    })();
+  });
   $('online-join-back').addEventListener('click', () => void openHub());
   /**
    * The world map is reachable from TWO places and its back control is honest about which one: the
@@ -1617,11 +1627,6 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       if (stopped === 'cleared') await createMatch();
       else if (stopped === 'kept') notice('online-waiting-notice', ONLINE.errGeneric);
     })();
-  });
-  // Keep searching: hide the offer and give the queue another full window.
-  document.getElementById('online-search-keep')?.addEventListener('click', () => {
-    if (search) search.startedAt = now();
-    renderSearch();
   });
   // Opponent found while playing the computer: the offline game stays resumable.
   document.getElementById('online-matched-now')?.addEventListener('click', () => {

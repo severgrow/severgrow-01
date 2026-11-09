@@ -54,26 +54,36 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
         } catch {
           return schedule();
         }
+        const attempt = socket;
         socket.addEventListener('open', () => {
+          if (closed || socket !== attempt) return;
           failures = 0;
           send(topic, 'phx_join', { config: { broadcast: { ack: false, self: false }, presence: { enabled: false }, private: false } });
           beat = setInterval(() => send('phoenix', 'heartbeat', {}), 25_000);
         });
         socket.addEventListener('message', (ev) => {
+          if (closed || socket !== attempt) return;
           try {
             const frame = JSON.parse(String(ev.data)) as { topic?: unknown; event?: unknown; payload?: { status?: unknown } };
             // Only a confirmed join counts as "connected" (a socket that opens but cannot join does not).
-            if (frame.topic === topic && frame.event === 'phx_reply' && frame.payload?.status === 'ok') setJoined(true);
-            if (isChallengeFrame(frame, topic)) onPing();
+            if (!isJoined && frame.topic === topic && frame.event === 'phx_reply' && frame.payload?.status === 'ok') {
+              setJoined(true);
+              // Recover changes made before this join (or while disconnected), without waiting
+              // for the slow connected-channel safety poll.
+              onPing('connected');
+            }
+            if (isChallengeFrame(frame, topic)) onPing('notification');
           } catch {
             /* non-JSON frame */
           }
         });
         const down = () => {
+          if (closed || socket !== attempt) return;
           setJoined(false);
           if (beat) clearInterval(beat);
           beat = null;
           socket = null;
+          try { attempt.close(); } catch { /* already disconnected */ }
           schedule();
         };
         socket.addEventListener('close', down);

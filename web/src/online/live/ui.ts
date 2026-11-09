@@ -5,16 +5,45 @@ import { glassBaseCss } from '../../player/glass-surface.js';
 import type { ChallengeWire } from './api.js';
 import type { PopupPort } from './center.js';
 import { WAIT_DOTS_CSS, waitDots } from './wait-dots.js';
+import { enterSurface, exitSurface } from '../../ui/interface-motion.js';
 
-const MOSS = '#8fbf6a';
-const MOSS_INK = '#0d100d';
+const focusReady = new WeakSet<HTMLElement>();
+const showLiveGlass = (panel: HTMLElement, scrim: HTMLElement) => {
+  if (!focusReady.has(panel)) {
+    focusReady.add(panel);
+    panel.tabIndex = -1;
+    panel.addEventListener('keydown', event => {
+      if (event.key !== 'Tab') return;
+      const keys = [...panel.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter(el => el.getClientRects().length > 0);
+      const first = keys[0], last = keys.at(-1);
+      if (!first || !last) { event.preventDefault(); panel.focus(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === panel)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === panel)) { event.preventDefault(); first.focus(); }
+    });
+  }
+  scrim.hidden = panel.hidden = false;
+  panel.style.removeProperty('--live-top');
+  const baseTop = parseFloat(getComputedStyle(panel).top) || 14;
+  const badge = document.getElementById('hud-brand')?.getBoundingClientRect();
+  const menu = document.getElementById('hud-menu')?.getBoundingClientRect();
+  const clear = Math.max(baseTop,badge?.width ? badge.bottom+8 : 0,menu?.width ? menu.bottom+8 : 0);
+  panel.style.setProperty('--live-top',`${clear}px`);
+  enterSurface(scrim, {travel:0,scale:1});
+  enterSurface(panel, {travel:2,scale:1});
+  panel.focus({preventScroll:true});
+};
+const hideLiveGlass = (panel: HTMLElement, scrim: HTMLElement) => {
+  exitSurface(panel, {travel:2,scale:1,onDone:()=>{panel.hidden=true;}});
+  exitSurface(scrim, {travel:0,scale:1,onDone:()=>{scrim.hidden=true;}});
+};
+
 const LAVA = '#e0735c';
 const CREAM = '#f0e9dc';
 
 /**
  * How long an INCOMING real-time challenge stays unarmed (owner, 2026-10-26: a duel started
  * "automatically … no one requested it, no one accepted it"). Accepting is irreversible — it puts a
- * 60-second clock on every move and makes leaving a loss — and the window can surface under a finger
+ * server-configured turn clock and makes leaving a loss — and the window can surface under a finger
  * already travelling toward the board. 600ms is longer than any tap that was in flight when the
  * window appeared, so a stray touch can never accept a duel; a deliberate one loses nothing.
  * Not a motion token: this is an input-safety beat, and it runs even under Reduce motion.
@@ -27,28 +56,31 @@ ${WAIT_DOTS_CSS}
 .live-glass { z-index:90; }
 .live-glass[hidden], .live-scrim[hidden], .live-ring[hidden], .live-vignette[hidden] { display:none !important; }
 .live-scrim { position:fixed; inset:0; z-index:89; background:rgba(4,6,5,.34); touch-action:none; }
-.live-glass[data-mode='challenge'], .live-glass[data-mode='confirm'], .live-glass[data-mode='end'] { left:50%; top:max(14px, env(safe-area-inset-top, 0px)); transform:translateX(-50%);
-  width:min(360px, calc(100vw - 32px)); padding:14px 14px 12px; display:grid; grid-template-columns:44px 1fr; gap:4px 12px; align-items:center;
+.live-glass[data-mode='challenge'], .live-glass[data-mode='confirm'], .live-glass[data-mode='end'] { left:50%; top:var(--live-top,max(14px, env(safe-area-inset-top, 0px))); transform:translateX(-50%);
+  width:min(360px, calc(100vw - 32px)); padding:14px 14px 12px; display:grid; grid-template-columns:28px 1fr; gap:6px 12px; align-items:center;
+  max-height:calc(100dvh - var(--live-top,14px) - max(12px,env(safe-area-inset-bottom,0px))); overflow-y:auto;
   background:rgba(8,10,10,.78); }
 .live-glass[data-mode='note'] { left:50%; top:max(14px, env(safe-area-inset-top, 0px)); transform:translateX(-50%); padding:10px 16px;
   max-width:calc(100vw - 32px); background:rgba(8,10,10,.72); pointer-events:none; letter-spacing:.06em; }
-.live-glass .lg-ring { grid-row:1 / span 3; width:44px; height:44px; }
+.live-glass .lg-ring { grid-row:1 / span 3; width:28px; height:28px; }
 .live-glass .lg-ring circle { fill:none; stroke-width:3; }
 .live-glass .lg-ring .bg { stroke:rgba(214,204,177,.16); }
-.live-glass .lg-ring .fg { stroke:${MOSS}; stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%; }
+.live-glass .lg-ring .fg { stroke:#f2c879; stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%; }
 .live-glass .lg-dot { width:10px; height:10px; border-radius:50%; background:${LAVA}; box-shadow:0 0 10px ${LAVA}; justify-self:center; grid-row:1 / span 3; }
 .live-glass .lg-name { font:700 16px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:${CREAM}; letter-spacing:.04em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.live-glass .lg-what { color:#e2d4b4; letter-spacing:.05em; }
+.live-glass .lg-what { color:#e2d4b4; letter-spacing:.08em; font-size:12px; text-transform:uppercase; }
 .live-glass .lg-terms { color:#b7a98a; font-size:12px; letter-spacing:.08em; }
 /* The real-time forfeit rule, said BEFORE it matters: one short line, then the fuller explanation
    in the same glass window (never a wall of text). */
 .live-glass .lg-warn { grid-column:1 / -1; margin-top:2px; color:#e2d4b4; font-size:12px; letter-spacing:.04em; line-height:1.35; }
 .live-glass .lg-warn .lg-warn-short { display:block; color:#f6d3c8; font-weight:700; letter-spacing:.06em; }
-.live-glass .lg-warn small { display:block; color:#b7a98a; font-size:11px; letter-spacing:.03em; }
+.live-glass .lg-warn small { display:block; color:#b7a98a; font-size:12px; letter-spacing:.03em; line-height:1.4; }
 .live-glass .lg-actions { grid-column:1 / -1; display:flex; gap:8px; margin-top:10px; }
-.live-glass .lg-actions button { flex:1; min-height:44px; min-width:44px; border-radius:10px; font:700 14px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+.live-glass .lg-actions button { flex:1; min-height:44px; min-width:44px; border-radius:10px; font:400 14px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); text-transform:uppercase;
   letter-spacing:.08em; cursor:pointer; border:1px solid rgba(214,204,177,.22); background:rgba(242, 237, 228,.04); color:${CREAM}; }
-.live-glass .lg-actions button.primary { background:${MOSS}; border-color:${MOSS}; color:${MOSS_INK}; }
+.live-glass .lg-actions button.primary { background:rgba(242,237,228,.04); border-color:rgba(242,200,121,.28); color:${CREAM}; box-shadow:inset 0 1px 0 rgba(255,244,214,.06),0 0 12px rgba(242,200,121,.08); }
+.live-glass .lg-actions button:active { box-shadow:inset 0 2px 5px rgba(0,0,0,.45); }
+.live-glass .lg-actions button:disabled { opacity:.5; cursor:default; }
 .live-glass .lg-actions button:focus-visible { outline:2px solid ${CREAM}; outline-offset:2px; }
 /* The real-time BOLT (owner, 2026-10-15): one icon, no words. It now lives in the HUD header,
    IMMEDIATELY to the right of the hamburger (owner, 2026-10-26: it used to sit rightmost in the rail
@@ -291,7 +323,9 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
   panel.append(svg, name, what, terms, warn, actions);
   const titleId = 'live-challenge-title';
   name.id = titleId;
-  panel.setAttribute('aria-labelledby', titleId);
+  what.id = 'live-challenge-mode';terms.id = 'live-challenge-terms';warn.id = 'live-challenge-warning';
+  panel.setAttribute('aria-labelledby', `${titleId} ${what.id}`);
+  panel.setAttribute('aria-describedby', `${terms.id} ${warn.id}`);
   // The game beneath ignores every tap while the window is open.
   for (const type of ['pointerdown', 'pointerup', 'click', 'touchstart']) {
     scrim.addEventListener(type, (e) => {
@@ -347,10 +381,10 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
       name.textContent = c.fromName ?? '';
       what.textContent = c.kind === 'rematch' ? LIVE.wantsRematch : LIVE.wantsToGoLive;
       terms.textContent = LIVE.terms(Math.round(c.limitMs / 1000));
-      scrim.hidden = panel.hidden = false;
+      showLiveGlass(panel, scrim);
       open = true;
       // A STRAY TAP MUST NOT ACCEPT A DUEL WHERE LEAVING FORFEITS THE MATCH (owner, 2026-10-26).
-      // Accepting is the one irreversible choice here — it puts a 60-second clock on every move and
+      // Accepting is the one irreversible choice here — it starts the configured per-turn clock and
       // makes leaving a loss — yet this window can appear under a finger already on its way down
       // (the player was reaching for the board, or for the bolt beside the menu). So the window
       // arrives with both keys inert for one deliberate beat (~600ms, longer than any tap that was
@@ -372,7 +406,7 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
       accept.disabled = false;
       decline.disabled = false;
       panel.removeAttribute('aria-busy');
-      scrim.hidden = panel.hidden = true;
+      hideLiveGlass(panel, scrim);
       current = null;
       handlers = null;
     },
@@ -387,7 +421,7 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
  * only decides whether an invite leaves this device. It carries its own `data-mode='confirm'` so it
  * can never be mistaken for the incoming window.
  *
- * The seconds are the server's own `limitMs` (LIVE_TURN_MS, default 60 s and env-overridable), so
+ * The seconds are the server's own `limitMs` (LIVE_TURN_MS, default 30 s and env-overridable), so
  * the window never promises a clock the match is not using.
  */
 export const createChallengeConfirm = (opts: {
@@ -415,7 +449,7 @@ export const createChallengeConfirm = (opts: {
   const bolt = document.createElementNS(SVGNS, 'path');
   bolt.setAttribute('d', 'M13.4 2.5 5 13.6h6.1l-1.3 7.9 8.6-11.3h-6.2z');
   bolt.setAttribute('fill', 'none');
-  bolt.setAttribute('stroke', MOSS);
+  bolt.setAttribute('stroke', '#f2c879');
   bolt.setAttribute('stroke-width', '1.6');
   bolt.setAttribute('stroke-linejoin', 'round');
   mark.append(bolt);
@@ -436,7 +470,9 @@ export const createChallengeConfirm = (opts: {
   actions.append(notNow, send);
   panel.append(mark, name, what, terms, warn, actions);
   name.id = 'live-confirm-title';
-  panel.setAttribute('aria-labelledby', name.id);
+  what.id = 'live-confirm-mode';terms.id = 'live-confirm-terms';warn.id = 'live-confirm-warning';
+  panel.setAttribute('aria-labelledby', `${name.id} ${what.id}`);
+  panel.setAttribute('aria-describedby', `${terms.id} ${warn.id}`);
   // The game beneath ignores every tap while the window is open, exactly like the incoming one.
   for (const type of ['pointerdown', 'pointerup', 'click', 'touchstart']) {
     scrim.addEventListener(type, (e) => {
@@ -448,7 +484,7 @@ export const createChallengeConfirm = (opts: {
   let open = false;
   const hide = () => {
     open = false;
-    scrim.hidden = panel.hidden = true;
+    hideLiveGlass(panel, scrim);
   };
   send.addEventListener('click', () => {
     if (!open) return;
@@ -473,7 +509,7 @@ export const createChallengeConfirm = (opts: {
       name.textContent = opponent;
       what.textContent = LIVE.duelQuestion;
       terms.textContent = LIVE.duelTerms(secs);
-      scrim.hidden = panel.hidden = false;
+      showLiveGlass(panel, scrim);
       open = true;
       send.focus({ preventScroll: true });
     },
@@ -809,7 +845,7 @@ export const createEndWindow = () => {
   panel.append(dot, title, why, el('div', 'lg-terms'), actions);
   document.body.append(scrim, panel);
   const hide = () => {
-    scrim.hidden = panel.hidden = true;
+    hideLiveGlass(panel, scrim);
   };
   scrim.addEventListener('click', hide);
   return {
@@ -846,7 +882,7 @@ export const createEndWindow = () => {
         });
         actions.append(b);
       }
-      scrim.hidden = panel.hidden = false;
+      showLiveGlass(panel, scrim);
       (actions.lastElementChild as HTMLElement | null)?.focus({ preventScroll: true });
     },
   };

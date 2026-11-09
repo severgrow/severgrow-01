@@ -1,0 +1,92 @@
+{
+  "baseline": "91b7ce06961dbe5b5232d753b7bd3ead0ca9954f",
+  "conditions": "Local authenticated HTTP services, simulated existing Supabase wire, Linux Chromium software GPU, desktop 1440x900 and phone 390x844. One run per arrangement. Each request window warmed for 11s then measured for 60s; totals cover both clients.",
+  "before": [
+    {
+      "accountFirst": true,
+      "accountSends": true,
+      "pairingMs": 4463,
+      "onlineMs": 4532,
+      "firstBoardToBothOnlineMs": 7811,
+      "invitationMs": 36,
+      "invitationAutomationMs": 161,
+      "endMs": 2426,
+      "normalRequestsPerMinute": 37,
+      "blitzRequestsPerMinute": 145
+    },
+    {
+      "accountFirst": true,
+      "accountSends": false,
+      "pairingMs": 3146,
+      "onlineMs": 6213,
+      "firstBoardToBothOnlineMs": 8208,
+      "invitationMs": 26675,
+      "invitationAutomationMs": 26913,
+      "endMs": 2716
+    },
+    {
+      "accountFirst": false,
+      "accountSends": true,
+      "pairingMs": 4484,
+      "onlineMs": 6489,
+      "firstBoardToBothOnlineMs": 8559,
+      "invitationMs": 188,
+      "invitationAutomationMs": 229,
+      "endMs": 263
+    },
+    {
+      "accountFirst": false,
+      "accountSends": false,
+      "pairingMs": 4204,
+      "onlineMs": 6207,
+      "firstBoardToBothOnlineMs": 8561,
+      "invitationMs": 28,
+      "invitationAutomationMs": 85,
+      "endMs": 2541
+    }
+  ],
+  "after": [
+    {
+      "accountFirst": true,
+      "accountSends": true,
+      "pairingMs": 5132,
+      "onlineMs": 979,
+      "firstBoardToBothOnlineMs": 4834,
+      "invitationMs": 43,
+      "invitationAutomationMs": 186,
+      "endMs": 3665,
+      "normalRequestsPerMinute": 37,
+      "blitzRequestsPerMinute": 145
+    },
+    {
+      "accountFirst": true,
+      "accountSends": false,
+      "pairingMs": 2353,
+      "onlineMs": 761,
+      "firstBoardToBothOnlineMs": 2073,
+      "invitationMs": 233,
+      "invitationAutomationMs": 2858,
+      "endMs": 2407
+    },
+    {
+      "accountFirst": false,
+      "accountSends": true,
+      "pairingMs": 4291,
+      "onlineMs": 2003,
+      "firstBoardToBothOnlineMs": 3994,
+      "invitationMs": 63,
+      "invitationAutomationMs": 396,
+      "endMs": 6792
+    },
+    {
+      "accountFirst": false,
+      "accountSends": false,
+      "pairingMs": 5006,
+      "onlineMs": 2424,
+      "firstBoardToBothOnlineMs": 4720,
+      "invitationMs": 27,
+      "invitationAutomationMs": 63,
+      "endMs": 970
+    }
+  ]
+}

@@ -775,7 +775,11 @@ class StarterRitual {
 
     // Beat 2: the stack is whole and its emblem is on the middle tile. The plain kanji comes out of
     // that emblem, grows toward the viewer, and fades — the signal that the game is beginning.
-    await this.bloomKanji(deckC);
+    // The desktop board can finish fitting while the cards gather. Re-measure at the handoff,
+    // after the travelling cards are gone, so the visible emblem and the kanji share that tile.
+    this.seatDeckOnCenter();
+    const gatheredC = centerOfRect(r.deck.getBoundingClientRect());
+    await this.bloomKanji(gatheredC);
     if (this.cancelled || this.finished || this.skipRequested) return;
 
     // Beat 3: every card files into the real draw pile.

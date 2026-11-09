@@ -22,11 +22,7 @@ export const CHAT_CSS = `
 #match-chat-toggle[data-muted='true'] svg {opacity:.45;}
 #match-chat-toggle[data-muted='true']::after {content:'';position:absolute;left:calc(50% - 11px);top:calc(50% - 1px);width:22px;height:2px;border-radius:2px;background:currentColor;transform:rotate(-45deg);box-shadow:0 0 0 2px #111312;pointer-events:none;}
 .match-chat-dot {position:absolute;right:5px;top:6px;width:6px;height:6px;border-radius:50%;background:#e8ddc5;box-shadow:0 0 0 3px rgba(8,10,10,.5);}
-/* The corner logo steps aside while the chat covers the top of the screen (owner, 2026-11-09: "sound
-   button and closing chat button when chat opens is on top of top right logo - extremely ugly and
-   broken"). The measured clearance below stays as a second guard; this makes the clash impossible on
-   any notch, safe area or keyboard. The docked desktop panel sits in its own column: logo stays. */
-html:has(.match-chat:not([data-desktop-docked='true']) .match-chat-panel:not([hidden])) #hud-brand {visibility:hidden;}
+/* Existing measured chat clearance preserves the HUD brand without overlapping panel keys. */
 .match-chat-panel {position:fixed;z-index:65;top:var(--chat-top,56px);left:max(8px,env(safe-area-inset-left));width:min(480px,calc(100vw - 16px - env(safe-area-inset-right) - env(safe-area-inset-left)));height:min(680px,var(--chat-height,calc(100dvh - 72px)));box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;background:var(--dark-glass,rgba(8,10,10,.42));-webkit-backdrop-filter:var(--chat-glass-blur,blur(7.4px) saturate(1.05));backdrop-filter:var(--chat-glass-blur,blur(7.4px) saturate(1.05));border:0;border-radius:12px;box-shadow:0 12px 36px #0004;transform-origin:bottom right;}
 .match-chat[data-desktop-docked='true'] .match-chat-panel{left:var(--chat-left);width:var(--chat-width);height:var(--chat-height);}
 .match-chat-panel[hidden], .match-chat [hidden], #match-chat-toggle[hidden] {display:none!important;}

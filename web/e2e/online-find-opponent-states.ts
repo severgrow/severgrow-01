@@ -3,8 +3,7 @@
 // Builds a local futa05 app (VITE_FIND_OPPONENT=1) against an in-memory MatchService, then drives
 // two independent browser contexts:
 //   * A parks (nobody waiting) and sits on an honest "Finding an opponent" screen;
-//   * after the parked window the offers appear (Practice match / Level 1 / Invite a friend /
-//     Keep searching) — and "Keep searching" hides them again;
+//   * three equal actions are available immediately; Back cancels the authoritative queue;
 //   * B taps Find opponent: it joins A's parked search and BOTH open the live duel;
 //   * A chooses "Practice match" while searching: the offline game runs, "Looking for opponent"
 //     sits on the board, and the search keeps going; when B arrives, A gets the dismissible
@@ -24,7 +23,7 @@ import { openMenuEntry } from './helpers/menu-nav.js';
 
 const API_PORT = 4301;
 const PREVIEW_PORT = 4208;
-const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
+const OUT = (process.env.WAITING_SHOTS_DIR ?? new URL('../../docs/screens/online/', import.meta.url).pathname).replace(/\/?$/, '/');
 const CHROME =
   process.env.PW_CHROMIUM ??
   '/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
@@ -55,7 +54,8 @@ await new Promise<void>((resolve, reject) => {
 });
 
 const apiConfig = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'] };
-const service = new MatchService({ storage: new MemoryStorage(), config: apiConfig });
+const storage = new MemoryStorage();
+const service = new MatchService({ storage, config: apiConfig });
 const apiServer = createHttpServer({ service, config: apiConfig });
 await new Promise<void>((resolve) => apiServer.listen(API_PORT, '127.0.0.1', resolve));
 
@@ -109,6 +109,20 @@ const newPage = async (viewport: { width: number; height: number }) => {
 };
 
 try {
+  // External cancellation must not strand an empty waiting screen. Back must remove the queue.
+  const cancelled = await newPage({ width: 390, height: 844 });
+  await openFind(cancelled);
+  const identity = await cancelled.evaluate(() => JSON.parse(localStorage.getItem('severgrow.duel.identity.v1')!));
+  check('Find creates a server queue entry', !!await storage.openQueueMatchOfPlayer(identity.playerId));
+  await cancelled.locator('#online-waiting-back').click();
+  await cancelled.waitForSelector('#online-hub:not([hidden])');
+  check('Back removes the server queue entry', !await storage.openQueueMatchOfPlayer(identity.playerId));
+  await cancelled.locator('#online-find').click();
+  await cancelled.waitForSelector('#online-waiting:not([hidden])');
+  await service.cancelSearch(await service.authenticate(identity.token));
+  await cancelled.waitForSelector('#online-hub:not([hidden])', { timeout: 10000 });
+  check('external cancellation returns to the hub', await visible(cancelled, 'online-hub'));
+  await cancelled.context().close();
   // ---- A parks and sees an honest searching screen -------------------------------------------
   const vp = { width: 390, height: 844 };
   const a = await newPage(vp);
@@ -117,26 +131,36 @@ try {
   const searchingTitle = await a.textContent('#online-waiting-title');
   check('parks on a searching screen', (await visible(a, 'online-waiting')) === true);
   check('searching title is honest', (searchingTitle ?? '').includes('Finding an opponent'), searchingTitle ?? '');
-  check('the offer is hidden while searching', (await visible(a, 'online-search-options')) === false);
-  check('cancel reads "Stop searching"', (await a.textContent('#online-cancel-match')) === 'Stop searching');
+  check('three actions are immediately available', (await visible(a, 'online-search-options')) === true);
+  check('Back is the only search cancel control', !(await visible(a, 'online-cancel-match')));
   await a.screenshot({ path: `${OUT}find-opponent-searching-390x844.png` });
 
   // The parked offer appears after the parked window (build-shortened in this walk).
   await a.waitForTimeout(2_500);
-  check('parked title is honest', (await a.textContent('#online-waiting-title'))?.includes('Nobody yet') === true);
+  check('parked title is honest', (await a.textContent('#online-waiting-title'))?.includes('Finding an opponent') === true);
   check('three clear offers appear when parked', (await visible(a, 'online-search-options')) === true);
   const offers = await a.evaluate(() =>
-    ['online-search-computer', 'online-search-level', 'online-search-invite', 'online-search-keep'].map((id) => document.getElementById(id)?.textContent ?? ''),
+    ['online-search-computer', 'online-search-level', 'online-search-invite'].map((id) => document.getElementById(id)?.textContent ?? ''),
   );
-  check('offer labels are punchy and exact', offers.join('|') === 'Practice match|Level 1|Invite a friend|Keep searching', offers.join('|'));
+  check('offer labels are punchy and exact', offers.join('|') === 'Practice match|Level 1|Invite a friend', offers.join('|'));
   await a.screenshot({ path: `${OUT}find-opponent-parked-390x844.png` });
 
-  // Keep searching hides the offer again.
-  await a.click('#online-search-keep');
-  await a.waitForTimeout(300);
-  check('keep searching hides the offer', (await visible(a, 'online-search-options')) === false);
-  await a.waitForTimeout(2_000);
-  check('the offer can come back', (await visible(a, 'online-search-options')) === true);
+  check('no redundant keep-searching control', await a.locator('#online-search-keep').count() === 0);
+  for (const [width, height] of [[360,844],[390,844],[844,390],[768,1024],[1280,800]]) {
+    await a.setViewportSize({ width: width!, height: height! });
+    const sizes = await a.locator('#online-search-options button').evaluateAll(els => els.map(el => {
+      const r=el.getBoundingClientRect();return {width:r.width,height:r.height};
+    }));
+    check(`three standard equal actions at ${width}x${height}`, sizes.length===3 && sizes.every(r=>r.height>=44&&Math.abs(r.width-sizes[0]!.width)<1&&Math.abs(r.height-sizes[0]!.height)<1));
+    check(`no horizontal overflow at ${width}x${height}`, await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    for (const id of ['online-search-computer','online-search-level','online-search-invite']) {
+      await a.locator('#'+id).scrollIntoViewIfNeeded();
+      check(`${id} is reachable at ${width}x${height}`,await a.locator('#'+id).isVisible());
+    }
+    await a.screenshot({path:`${OUT}waiting-${width}x${height}.png`});
+  }
+  await a.setViewportSize(vp);
+
 
   // ---- B joins the parked search: both open the live duel -------------------------------------
   const b = await newPage(vp);

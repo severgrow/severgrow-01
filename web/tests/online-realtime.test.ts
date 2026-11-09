@@ -147,6 +147,24 @@ describe('createRealtimeChannel', () => {
 });
 
 describe('createSupabaseBroadcaster', () => {
+  it('registers unfinished delivery with the Edge runtime without delaying the response', async () => {
+    const tasks:Promise<unknown>[]=[];let release!:(response:Response)=>void;
+    vi.stubGlobal('EdgeRuntime',{waitUntil:(task:Promise<unknown>)=>tasks.push(task)});
+    try {
+      const broadcaster=createSupabaseBroadcaster({url:'https://proj.supabase.co',key:'anon',fetch:(()=>new Promise<Response>(resolve=>{release=resolve;})) as typeof fetch});
+      await broadcaster.publish('m1',{revision:1,status:'active'});
+      expect(tasks).toHaveLength(1);let finished=false;void tasks[0]!.then(()=>{finished=true;});
+      await Promise.resolve();expect(finished).toBe(false);
+      release(new Response(null,{status:202}));await tasks[0];expect(finished).toBe(true);
+    } finally {vi.unstubAllGlobals();}
+  });
+
+  it('reports rejected REST delivery as an error without failing the committed request', async () => {
+    const errors:unknown[]=[];
+    const broadcaster=createSupabaseBroadcaster({url:'https://proj.supabase.co',key:'anon',fetch:(async()=>new Response(null,{status:401})) as typeof fetch,onError:error=>errors.push(error)});
+    await broadcaster.publish('m1',{revision:1,status:'active'});await broadcaster.flush();
+    expect(errors).toHaveLength(1);
+  });
   it('posts the ping to the Realtime REST endpoint without blocking the caller', async () => {
     const calls: { url: string; init: { method?: string; headers?: Record<string, string>; body?: string } }[] = [];
     const broadcaster = createSupabaseBroadcaster({

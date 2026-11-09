@@ -94,19 +94,19 @@ describe('parked-search copy (punchy standard)', () => {
 
   // OWNER CHANGED THE OFFER (2026-11-08): a practice match or the current level, not "Play the computer".
   it('offers a practice match or the current level, never calling that match an opponent', () => {
-    expect(ONLINE.searchParkedTitle).toBe('Nobody yet');
+    expect(ONLINE.searchParkedTitle).toBe('Finding an opponent');
     expect(ONLINE.searchPlayComputer).toBe('Practice match');
     expect(ONLINE.searchPlayComputer.toLowerCase()).not.toContain('opponent');
     expect(ONLINE.searchPlayLevel(4)).toBe('Level 4');
     expect(ONLINE.searchParkedBody(4)).toBe(
-      "Practice match or level 4 while you're waiting. If we find an opponent, you'll be connected.",
+      "Play while we search. We'll let you know when someone joins.",
     );
     expect(ONLINE.searchInviteFriend).toBe('Invite a friend');
     expect(ONLINE.searchKeepWaiting).toBe('Keep searching');
     expect(ONLINE.searchLooking).toBe('Looking for opponent');
     // Detail (review, 0.84): with no level key on the offer, the line does not name a level either.
     expect(ONLINE.searchParkedBody(null)).toBe(
-      "Practice match while you're waiting. If we find an opponent, you'll be connected.",
+      "Play while we search. We'll let you know when someone joins.",
     );
     // The matched copy talks about an opponent, never the computer.
     expect(ONLINE.matchedTitle.toLowerCase()).not.toContain('computer');

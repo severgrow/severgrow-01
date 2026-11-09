@@ -296,6 +296,10 @@ export const ONLINE_CSS = `
 .online-card ul { margin: 0 0 0.85rem; padding-left: 1.1rem; }
 .online-card li { margin: 0.35rem 0; }
 .online-notice:empty { display: none; }
+#online-waiting[data-mode='search'] .online-notice {
+  color: var(--instrument-muted, #b7afa0); font-size: var(--instrument-label-size, .6875rem);
+  letter-spacing: var(--instrument-tracking, .08em); text-align: center;
+}
 .online-notice {
   color: #e2c48a;
   min-height: 1.2em;

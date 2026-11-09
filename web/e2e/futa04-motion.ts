@@ -224,7 +224,9 @@ try {
     await p.evaluate(a => (window as any).__severgrow.playFor(a, 0), ca);
     await p.waitForFunction(() => !!document.documentElement.dataset.cutTier, undefined, { timeout: 8000 });
     // count only what the cut itself adds (the replacing Sprout before it may spark)
-    await p.evaluate(() => { const m = (Element.prototype as any).__m; if (m) { m.sparks = 0; m.motes = 0; m.darks = 0; m.flinches = 0; } });
+    // Only the cut emits flinches. Clearing that counter after an asynchronous phase wait can
+    // erase the very animation being measured on a fast runner; the preceding Grow never adds one.
+    await p.evaluate(() => { const m = (Element.prototype as any).__m; if (m) { m.sparks = 0; m.motes = 0; m.darks = 0; } });
     for (let i = 0; i < 200; i++) {
       for (const t of await p.evaluate(() => [...document.querySelectorAll('#captions .float')].map(e => e.textContent))) if (t) floats.add(t);
       if (!await p.evaluate(() => (window as any).__severgrow.busy())) break;
