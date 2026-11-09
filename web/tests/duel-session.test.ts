@@ -199,6 +199,30 @@ describe('OnlineSession turn flow', () => {
     expect(onlinePathsActive()).toBe(false);
   });
 
+  it('presents a confirmed own discard once through the player path, ahead of aftermath', async () => {
+    let state = toActSeat0(21);
+    state = applyAs(state, 0, { t: 'EndAct' });
+    let revision = 1;
+    const fetch = makeFetch(() => state, () => 0, () => revision, n => { revision = n; }, s => { state = s; });
+    let os: OnlineSession | undefined;
+    const early: unknown[] = [];
+    const driver = createOnlineDriver({ client: new DuelClient({baseUrl:'https://api.example',fetch,storage:memoryStore()}),
+      token:'tok',matchId:'m1',initial:payloadFor(state,0,revision),setTimer:()=>1,clearTimer:()=>undefined,
+      onChange:()=>{ if(os){os.refresh();early.push(...os.consumeCatchUp());} },
+    });
+    os = new OnlineSession(driver);
+    const action = os.legal.find(a => a.t === 'Discard')!;
+    const result = await os.play(action);
+    expect(result.ok).toBe(true);
+    expect(early).toEqual([]);
+    if(result.ok){
+      expect(result.played?.steps.filter(s => s.k === 'discard')).toHaveLength(1);
+      expect(result.played?.steps.find(s => s.k === 'discard')).toMatchObject({player:0});
+      expect(result.catchUp.filter(s => s.k === 'discard' && s.player === 0)).toEqual([]);
+    }
+    driver.stop();
+  });
+
   it('BLITZ: a move shows at once and is sent behind it, one at a time and in order (owner, 2026-11-09)', async () => {
     const g = globalThis as { document?: unknown };
     const hadDocument = 'document' in g;

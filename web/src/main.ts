@@ -3459,8 +3459,10 @@ async function humanPlayOnline(a: Action, flightFrom?: DOMRect) {
     if (displayEvent) smartCockpit?.event(displayEvent);
   }
   if (result.catchUp.length) {
-    replaying = true;
-    replaySpeed = 2;
+    // A confirmed local throw and its aftermath use our normal cadence, like offline.
+    // Only an actual catch-up without a local presentation gets the away replay's 2x speed.
+    replaying = !result.played;
+    replaySpeed = result.played ? REPLAY_SPEED : 2;
     queue.push(result.catchUp);
     armRevealWatchdog(result.catchUp);
   }
@@ -4483,12 +4485,16 @@ async function playStep(step: Step, my: number) {
   };
   switch (step.k) {
     case 'draw': {
+      // Measure the departing top before show() exposes the next card (or empties the pile).
+      const sourcePile = step.from === 'deck' ? $('deck') : $('discard');
+      const source = sourcePile.querySelector<HTMLElement>('.pile-card') ?? sourcePile;
+      const sourceRect = source.getBoundingClientRect();
       if (!show()) return;
       if (step.player === HUMAN && step.card) {
         const hp = hapticFor('draw', settings);
         if (hp) vibrate(true, hp as number | number[]);
         const to = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
-        const from = ((step.from === 'deck' ? $('deck') : $('discard')).querySelector<HTMLElement>('.pile-card') ?? (step.from === 'deck' ? $('deck') : $('discard'))).getBoundingClientRect();
+        const from = sourceRect;
         if (to) {
           const r = to.getBoundingClientRect();
           const dx = from.left + from.width / 2 - r.left - r.width / 2;
@@ -4506,20 +4512,19 @@ async function playStep(step: Step, my: number) {
         sound.draw(step.from !== 'deck');
         await wait((IS_FUTA04 ? PINNED.humanDraw : 240) * f, my);
       } else {
-        // The opponent's draw: a card back leaves the Draw pile and settles on their seat. The
+        // The opponent's draw: a card back leaves its actual pile and settles on their seat. The
         // card stays face down; the seat is an anchor placed on layout, so nothing is measured
         // inside a frame. Keep the old deck-to-score cue as a fallback for a page without the
         // flight layer (the material lab).
         const seat = oppSeat();
-        const source = $('deck').querySelector<HTMLElement>('.pile-card') ?? $('deck');
-        const ms = seat ? oppDraw(source, seat, f, !!quickShow) : 0;
+        const ms = seat ? oppDraw(sourceRect, seat, f, !!quickShow) : 0;
         // 0.85: the pile gives as it lets the opponent's card go too (one rule for both seats).
-        if (seat && IS_FUTA04 && m > 0 && !quickShow) $('deck').animate(DRAW_PILE_GIVE, { duration: DRAW_PILE_GIVE_MS * f, easing: EASE.out });
+        if (seat && IS_FUTA04 && m > 0 && !quickShow) sourcePile.animate(DRAW_PILE_GIVE, { duration: DRAW_PILE_GIVE_MS * f, easing: EASE.out });
         if (seat) {
           if (settings.sound) sound.rustle();
           await wait(ms, my);
         } else {
-          flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
+          flyBack(sourcePile, document.querySelector<HTMLElement>('.score.bot')!, f);
           // A live reveal gives it a beat of its own instead of a blink.
           await wait(liveReveal ? 260 * f : quickShow ? quickShow.show.draw : OPP_DRAW_MS * f, my);
         }

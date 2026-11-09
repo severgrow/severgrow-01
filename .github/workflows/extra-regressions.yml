@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [admin-dashboard, online-stale-token-recovery, online-soak-teardown, online-opponent-discard, online-presence-journey, settings-visual, accounts-email, pwa-viewport-layout]
+        suite: [admin-dashboard, online-stale-token-recovery, online-soak-teardown, online-opponent-discard, online-player-throw, online-presence-journey, settings-visual, accounts-email, pwa-viewport-layout]
     env:
       # These suites only use their own in-process API; never touch a live wallet or project.
       VITE_SUPABASE_URL: http://127.0.0.1:9
@@ -61,6 +61,11 @@ jobs:
         run: |
           set -o pipefail
           node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts 2>&1 | tee regression.log
+      - name: Check real touch throws
+        if: matrix.suite == 'online-player-throw'
+        run: |
+          set -o pipefail
+          THROW_GESTURE=swipe node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/online-player-throw.ts 2>&1 | tee -a regression.log
       - name: Annotate failed checks
         if: failure()
         run: |
@@ -85,5 +90,6 @@ jobs:
             docs/screens/online/soak-stall-*.json
             docs/screens/online/soak-stall-*.png
             /tmp/opponent-discard/
+            /tmp/player-throw/
             /tmp/online-presence-journey/
           retention-days: 7

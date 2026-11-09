@@ -15,8 +15,12 @@ try {
     { width: 390, height: 844, mode: 'async' }, { width: 1440, height: 900, mode: 'async' },
     { width: 390, height: 844, mode: 'blitz' }, { width: 1440, height: 900, mode: 'blitz' },
     { width: 390, height: 844, mode: 'reduced' },
+    { width: 390, height: 844, mode: 'async', drawFrom: 'discard' },
+    { width: 1440, height: 900, mode: 'async', drawFrom: 'discard' },
+    { width: 390, height: 844, mode: 'blitz', drawFrom: 'discard' },
+    { width: 1440, height: 900, mode: 'blitz', drawFrom: 'discard' },
   ]) {
-    const { mode, ...viewport } = variant;
+    const { mode, drawFrom = 'deck', ...viewport } = variant;
     if (process.env.DISCARD_MODE && process.env.DISCARD_MODE !== mode) continue;
     const match = await duel.newMatch();
     const actor = match.starterSeat;
@@ -35,10 +39,16 @@ try {
     await seat.page.evaluate(() => {
       const trace: unknown[] = [];
       (window as any).__discardFlight = trace;
+      (window as any).__opponentDraw = [];
       const layer = document.getElementById('enemy-flight')!;
       new MutationObserver(records => {
         for (const record of records) for (const node of record.addedNodes) {
-          if (!(node instanceof HTMLElement) || !node.matches('.flyer.opp:not(.back)')) continue;
+          if (!(node instanceof HTMLElement) || !node.matches('.flyer.opp')) continue;
+          if (node.matches('.back')) {
+            const box = layer.getBoundingClientRect();
+            (window as any).__opponentDraw.push({x: box.x + parseFloat(node.style.left), y: box.y + parseFloat(node.style.top)});
+            continue;
+          }
           const sample = () => {
             const r = node.getBoundingClientRect();
             trace.push({ x: r.x, y: r.y, width: r.width, opacity: Number(getComputedStyle(node).opacity),
@@ -50,10 +60,11 @@ try {
       }).observe(layer, { childList: true });
     });
     const before = await seat.page.locator('#discard-top').getAttribute('data-face-key');
+    const drawOrigin = (await seat.page.locator(`#${drawFrom === 'deck' ? 'deck' : 'discard'} .pile-card`).first().boundingBox())!;
     let thrown: { id: number; suit: unknown; rank: number } | null = null;
     for (const t of ['Draw', 'EndAct', 'Discard']) {
       const view = (await duel.api.getState(match.guests[actor].token, match.matchId)).player;
-      const action = view.legalActions.find(a => a.t === t && (a.t !== 'Draw' || a.from === 'deck')) as Action;
+      const action = view.legalActions.find(a => a.t === t && (a.t !== 'Draw' || a.from === drawFrom)) as Action;
       assert(action, `legal ${t}`);
       if (action.t === 'Discard') thrown = view.view.hand.find(c => c.id === action.card)!;
       await duel.api.submitAction(match.guests[actor].token, match.matchId, {
@@ -79,7 +90,10 @@ try {
     writeFileSync(`${out}/trace-${mode}-${viewport.width}.json`, JSON.stringify({ before, thrown, trace }, null, 2));
     assert(visible.length >= 3, 'opponent card is visible, not just a pile replacement');
     if (mode !== 'reduced') assert(Math.hypot(visible.at(-1)!.x-visible[0]!.x, visible.at(-1)!.y-visible[0]!.y) > 40, 'card travels from opponent hand');
-    assert(visible.some(s => s.pile === before), 'old pile remains under the approaching card');
+    if(drawFrom === 'deck') assert(visible.some(s => s.pile === before), 'old pile remains under the approaching card');
+    const starts = await seat.page.evaluate(() => (window as any).__opponentDraw) as {x:number;y:number}[];
+    assert.equal(starts.length, 1, 'one opponent draw');
+    assert(Math.hypot(starts[0]!.x-drawOrigin.x, starts[0]!.y-drawOrigin.y)<2, `draw starts at the actual ${drawFrom} pile`);
     assert.equal(await seat.page.locator('#discard-top').getAttribute('data-face-key'), `${thrown!.id}:${thrown!.suit}:${thrown!.rank}`);
     assert.equal(await seat.page.locator('.flyer.opp').count(), 0, 'flight cleans up');
     const presence = seat.page.locator('[data-duel-presence]');
@@ -89,7 +103,7 @@ try {
       const boltBox = (await bolt.boundingBox())!;
       assert(labelBox.x >= boltBox.x + boltBox.width + 4, 'presence remains clear of the Blitz button during gameplay');
     }
-    console.log(`PASS ${mode} ${viewport.width}: visible card, old pile preserved, correct arrival and cleanup`);
+    console.log(`PASS ${mode} ${viewport.width} from ${drawFrom}: correct draw origin, throw arrival and cleanup`);
     await seat.context.close();
   }
   if (!process.env.DISCARD_MODE || process.env.DISCARD_MODE === 'offline') {

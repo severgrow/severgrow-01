@@ -97,6 +97,8 @@ export class OnlineSession {
    * 2026-10-25). The finish screen holds while this is true.
    */
   private preparing = false;
+  /** Keep server callbacks from starting our own throw before its local presentation is ready. */
+  private committingTurn = false;
   /**
    * True when the replay now in flight is the LIVE enemy turn this device was waiting for, false
    * for a catch-up after being away. Only the live reveal gets the full, readable pace; an away
@@ -159,9 +161,9 @@ export class OnlineSession {
     return this.boardBlocked;
   }
 
-  /** True while a catch-up's steps are being built (see the field's note: a render runs inside). */
+  /** Keep the finish plate behind steps being prepared, including our confirmed local throw. */
   get isPreparingCatchUp(): boolean {
-    return this.preparing;
+    return this.preparing || this.committingTurn;
   }
 
   /** True when the reveal now in flight is the live enemy turn (not a catch-up after being away). */
@@ -196,6 +198,7 @@ export class OnlineSession {
 
   /** Take catch-up steps since last consume (opponent / own committed turn). */
   consumeCatchUp(): Step[] {
+    if (this.committingTurn) return [];
     const events = [...this.driver.pendingEvents()];
     // The re-entrant call made by `skipCatchUp`'s own emit lands here with an empty buffer. It must
     // NOT touch `preparing`: it is the outer call that is still building the steps.
@@ -328,6 +331,7 @@ export class OnlineSession {
 
   /** Play a UI action (display coords). Draw/Throw are async; mid-turn Grow is local draft. */
   async play(action: Action): Promise<OnlinePlayResult> {
+    if (this.committingTurn) return { ok: false, message: ONLINE.errBusy };
     if (this.revealing) {
       return { ok: false, message: ONLINE.statusRevealWait };
     }
@@ -352,8 +356,14 @@ export class OnlineSession {
       // EndAct leaves the ACT step; the Discard (when a card is left) finishes the turn.
       // Both commit a batch to the server, so the turn boundary is real.
       // Blitz: the moves already shown are still being sent; the throw follows them, in order.
-      await this.blitzSent();
-      const res = await this.driver.throwTurn(engine);
+      const before = this.buildEngineShadow();
+      const beforeDisp = this.cloneState(this.state);
+      this.committingTurn = true;
+      let res: Awaited<ReturnType<OnlineDriver['throwTurn']>>;
+      try {
+        await this.blitzSent();
+        res = await this.driver.throwTurn(engine);
+      } finally { this.committingTurn = false; }
       if (!res.ok) {
         this.refresh();
         return { ok: false, message: res.message ?? ONLINE.errTurnFailed };
@@ -361,7 +371,16 @@ export class OnlineSession {
       this.refresh();
       this.log.push(engine);
       const catchUp = this.consumeCatchUp();
-      return { ok: true, played: null, catchUp, finished: this.finished };
+      const ownDiscard = engine.t === 'Discard'
+        ? buildSteps(before, engine, this.buildEngineShadow(), this.seat)
+          .map(s => mapStepDisplay(s, this.driver)).filter(s => s.k === 'discard')
+        : [];
+      const played: Played | null = ownDiscard.length
+        ? { before: beforeDisp, action, after: this.state, steps: ownDiscard }
+        : null;
+      return { ok: true, played,
+        catchUp: played ? catchUp.filter(s => !(engine.t === 'Discard' && s.k === 'discard' && s.player === 0 && s.card.id === engine.card)) : catchUp,
+        finished: this.finished };
     }
 
     // Mid-turn draft (Grow / Bloom / Bomb / Blast / …)

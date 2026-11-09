@@ -393,11 +393,11 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
    * A lift, a few degrees of tilt and a short hold; never a face. Returns how long it runs.
    * Reduce motion keeps the card still on the seat and only fades it.
    */
-  function oppDraw(from: HTMLElement, seat: HTMLElement, f: number, quick = false): number {
+  function oppDraw(from: HTMLElement | DOMRect, seat: HTMLElement, f: number, quick = false): number {
     const layer = flightLayer();
     if (!layer) return 0;
     clearFlights(layer);
-    const a = from.getBoundingClientRect();
+    const a = 'getBoundingClientRect' in from ? from.getBoundingClientRect() : from;
     const b = seat.getBoundingClientRect();
     const layerRect = layer.getBoundingClientRect();
     const d = document.createElement('div');
