@@ -450,8 +450,8 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const dx = b.left + b.width / 2 - (a.left + a.width / 2);
     const dy = b.top + b.height / 2 - (a.top + a.height / 2);
     const sc = b.height / Math.max(a.height, 1);
-    const reveal = quick ? 70 : 130;
-    const arc = quick ? 150 : 350;
+    const reveal = quick ? 45 : 80;
+    const arc = quick ? 175 : 260;
     const ms = Math.max(1, Math.round((reveal + arc) * Math.max(f, 0.1)));
     const hold = reveal / (reveal + arc);
     const atSeat = 'translate(0, 0)';
@@ -466,7 +466,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
           { transform: atPile, opacity: 0 },
         ]
       : [
-          { transform: 'translate(0, 0) rotate(0deg) scale(0.92)', opacity: 0 },
+          { transform: 'translate(0, 0) rotate(0deg) scale(1)', opacity: 1 },
           { transform: 'translate(0, 0) rotate(-1deg) scale(1)', opacity: 1, offset: hold * 0.7 },
           { transform: 'translate(0, 0) rotate(0deg) scale(1)', opacity: 1, offset: hold },
           { transform: `translate(${(dx * 0.52).toFixed(1)}px, ${(dy * 0.52 - 26).toFixed(1)}px) rotate(3deg) scale(${((1 + sc) / 2).toFixed(3)})`, opacity: 1, offset: hold + (1 - hold) * 0.55 },
@@ -476,8 +476,18 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
         ];
     // The pile top advances the moment the card is SEATED on it, before the last fade: the card
     // that fades away is then the new one, so the old top is never uncovered (owner, 2026-10-20).
-    if (onLand) setTimeout(onLand, motion() === 0 ? ms * .5 : ms * .93);
-    removeAfter(anim(d, frames, { duration: ms, easing: EASE.out, fill: 'forwards' }), d, ms + 60);
+    let landed = false;
+    const land = () => {
+      if (landed || !d.isConnected) return;
+      landed = true;
+      onLand?.();
+    };
+    const landing = setTimeout(land, motion() === 0 ? ms * .5 : ms * .93);
+    const flight = anim(d, frames, { duration: ms, easing: EASE.out, fill: 'forwards' });
+    if (flight) {
+      void flight.finished.then(() => { land(); clearTimeout(landing); }, () => clearTimeout(landing));
+    }
+    removeAfter(flight, d, ms + 60);
     if (card.suit === null) {
       anim(d, [
         { boxShadow: '0 0 0 0 rgba(255,225,167,0)' },

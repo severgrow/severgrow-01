@@ -211,6 +211,7 @@ import {
 } from './logic/tutorial-gate.js';
 import type { TutorialGate } from './logic/tutorial-gate.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
+import { discardArrival } from './ui/discard-arrival.js';
 import {setData,setStyle} from './ui/dom-update.js';
 import type { GlassSurface, IntelGuide, IntelTabId } from './player/glass-surface.js';
 import { intelTips, nearestRule, ruleCards } from './logic/intel-guide.js';
@@ -3977,7 +3978,9 @@ function settleStep(s: Step, animated: boolean) {
   if (s.k === 'draw' && s.card) hiddenCards.delete(s.card.id);
   // The Throw pile advances on the discard's arrival (and the closing sync catches up a skipped
   // flight to the true pile), never on the render that starts the throw.
-  if ((s.k === 'discard' || s.k === 'sync') && session) shownDiscard = [...session.view.discard];
+  if (s.k === 'discard') shownDiscard = discardArrival(shownDiscard, s.card);
+  if (s.k === 'draw' && s.from === 'discard') shownDiscard = shownDiscard.slice(0, -1);
+  if (s.k === 'sync' && session) shownDiscard = [...session.view.discard];
   if (s.k === 'sever' || s.k === 'remove' || s.k === 'megaBomb') {
     // Futa04: cut-off tiles leave no scar / remnant art — board shows live tiles only.
     if (!IS_FUTA04) {
@@ -4818,7 +4821,7 @@ async function playStep(step: Step, my: number) {
       // Exactly once, and idempotent: show()/settleStep writes the same value at the step's end.
       const land = () => {
         if (my !== epoch || !session) return;
-        shownDiscard = [...session.view.discard];
+        shownDiscard = discardArrival(shownDiscard, step.card);
         paintDiscardTop();
       };
       if (step.player === HUMAN) {
