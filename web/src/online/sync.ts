@@ -24,6 +24,12 @@ export const POLL_WAITING_MS = 900;
  * costs nothing; the fast cadences above come back the moment the channel is down.
  */
 export const POLL_PUSHED_MS = 8_000;
+/**
+ * While WAITING for the opponent the safety net stays short even with the channel joined (owner,
+ * 2026-11-09: an async turn took ~15 s to appear and "this should never ever break"). A ping that
+ * is lost on a phone that slept or changed network can never cost more than this.
+ */
+export const POLL_PUSHED_WAITING_MS = 3_000;
 
 /**
  * Why a view was fetched. The driver uses this to tell the LIVE enemy turn (a poll or ping while
@@ -161,7 +167,7 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
 
   const pollMs = (): number => {
     if (!visible) return POLL_HIDDEN_MS;
-    if (pushed) return POLL_PUSHED_MS;
+    if (pushed) return waiting ? POLL_PUSHED_WAITING_MS : POLL_PUSHED_MS;
     return waiting ? POLL_WAITING_MS : POLL_ACTIVE_MS;
   };
 

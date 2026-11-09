@@ -71,6 +71,14 @@ try {
         action, expectedRevision: view.revision, requestId: `discard-${viewport.width}-${t}`,
       });
     }
+    // THE TURN ARRIVES AT ONCE (owner, 2026-11-09: "in async the move wasn't shown straight away to
+    // the other player ... for good 15 seconds. ... this should never ever break in future"). From the
+    // server accepting the throw to the watcher's screen starting to show it: under 3 seconds.
+    const acceptedAt = Date.now();
+    await seat.page.waitForFunction(() => (window as any).__discardFlight.length > 0, undefined, { timeout: 15000 });
+    const arrivedMs = Date.now() - acceptedAt;
+    console.log(`${mode} ${viewport.width}: the opponent's turn reached the screen in ${arrivedMs} ms`);
+    assert(arrivedMs < 3000, `the opponent's finished turn must reach the watcher within 3 s (took ${arrivedMs} ms)`);
     await seat.page.waitForFunction(() => (window as any).__discardFlight.length > 3, undefined, { timeout: 15000 }).catch(async error => {
       console.log(JSON.stringify(await seat.page.evaluate(() => ({
         online: (window as any).__severgrow.online(), trace: (window as any).__discardFlight,

@@ -25,6 +25,7 @@ import {
   POLL_ACTIVE_MS,
   POLL_HIDDEN_MS,
   POLL_PUSHED_MS,
+  POLL_PUSHED_WAITING_MS,
   POLL_WAITING_MS,
   presenceFromPeers,
   presenceLabel,
@@ -450,7 +451,9 @@ describe('sync engine (poll + ping)', () => {
     sync.setWaiting(true);
     expect(timers.at(-1)).toBe(POLL_WAITING_MS);
     connection!(true);
-    expect(timers.at(-1)).toBe(POLL_PUSHED_MS);
+    // waiting for the opponent: never more than 3 s, even with the channel joined
+    expect(timers.at(-1)).toBe(POLL_PUSHED_WAITING_MS);
+    expect(POLL_PUSHED_WAITING_MS).toBeLessThanOrEqual(3000);
     sync.setWaiting(false);
     expect(timers.at(-1)).toBe(POLL_PUSHED_MS);
     connection!(false);
