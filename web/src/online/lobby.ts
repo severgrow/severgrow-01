@@ -200,7 +200,9 @@ export const toLobbyRow = (
     matchId: entry.matchId,
     bucket,
     // "MapleFox #7QK2": the tag tells two players with the same nature name apart.
-    opponentName: entry.opponentName?.trim() ? (entry.opponentTag ? `${entry.opponentName.trim()} #${entry.opponentTag}` : entry.opponentName.trim()) : ONLINE.opponentFallback,
+    // No #tag (owner, 2026-11-09: "in YOUR MATCHES don't show players tags - those are mainly for
+    // internal identification").
+    opponentName: entry.opponentName?.trim() || ONLINE.opponentFallback,
     statusWord: status.word,
     statusIcon: status.icon,
     replayable,

@@ -86,13 +86,17 @@ export const ONLINE_CSS = `
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-align: left;
-  background: color-mix(in srgb, #1c221c 88%, #3a4a32);
-  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  /* CLASSIC DARK GLASS (owner, 2026-11-09: "whole your matches is green we don't like - make smart
+     classic dark glass for it"): the same glass, blur and hairline as the chat and Match Intel. */
+  background: var(--dark-glass, rgba(8, 10, 10, .42));
+  -webkit-backdrop-filter: var(--dark-glass-blur, blur(7.4px) saturate(1.05));
+  backdrop-filter: var(--dark-glass-blur, blur(7.4px) saturate(1.05));
+  border: 1px solid rgb(232 221 197 / .12);
   border-radius: 10px;
   cursor: pointer;
 }
 .online-matches-toggle:focus-visible {
-  outline: 2px solid #c9e4a8;
+  outline: 2px solid #ffe1a7;
   outline-offset: 2px;
 }
 /* The flexing label is the only part allowed to shrink/ellipsise; badge and caret keep their ink
@@ -194,13 +198,17 @@ export const ONLINE_CSS = `
   align-items: center;
   min-height: 48px;
   padding: 0.55rem 0.7rem;
-  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  /* CLASSIC DARK GLASS (owner, 2026-11-09: "whole your matches is green we don't like - make smart
+     classic dark glass for it"): the same glass, blur and hairline as the chat and Match Intel. */
+  background: var(--dark-glass, rgba(8, 10, 10, .42));
+  -webkit-backdrop-filter: var(--dark-glass-blur, blur(7.4px) saturate(1.05));
+  backdrop-filter: var(--dark-glass-blur, blur(7.4px) saturate(1.05));
+  border: 1px solid rgb(232 221 197 / .12);
   border-radius: 10px;
   cursor: pointer;
-  background: color-mix(in srgb, #1c221c 88%, #3a4a32);
 }
 .online-row:focus-visible {
-  outline: 2px solid #c9e4a8;
+  outline: 2px solid #ffe1a7;
   outline-offset: 2px;
 }
 .online-row.warn {
@@ -250,13 +258,15 @@ export const ONLINE_CSS = `
   min-width: 44px;
   padding: 0 1rem;
   border-radius: 10px;
-  background: color-mix(in srgb, #1c221c 88%, #3a4a32);
+  /* The invite code matches the rest of the lobby: dark glass, not green (owner, 2026-11-09). */
+  background: var(--dark-glass, rgba(8, 10, 10, .42));
+  border: 1px solid rgb(232 221 197 / .12);
   cursor: pointer;
   user-select: all;
   -webkit-user-select: all;
 }
 .online-code:focus-visible {
-  outline: 2px solid #c9e4a8;
+  outline: 2px solid #ffe1a7;
   outline-offset: 2px;
 }
 /* inline-flex would otherwise beat the [hidden] attribute (setWaitingMode hides the code). */

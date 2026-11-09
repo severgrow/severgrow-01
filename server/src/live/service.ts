@@ -335,6 +335,10 @@ export class LiveService {
 
   /** A rematch: a fresh match (engine lottery for who starts), created already live. */
   private async acceptRematch(player: PlayerRecord, c: Challenge): Promise<{ challenge: ChallengeWire; liveMatchId: string }> {
+    // ONE GAME PER PAIR (owner, 2026-11-09): two players who already share an open game get no second.
+    const shared = (await this.storage.listMatchesForPlayer(c.fromPlayer))
+      .some((r) => r.match.id !== c.matchId && r.match.status !== 'finished' && r.opponentId === c.toPlayer);
+    if (shared) throw new LiveError('BUSY');
     for (const pid of [c.fromPlayer, c.toPlayer]) {
       const open = (await this.storage.matchesOfPlayer(pid)).filter((m) => m.status !== 'finished').length;
       if (open >= this.server.maxOpenMatchesPerPlayer) throw new LiveError('TOO_MANY_MATCHES');

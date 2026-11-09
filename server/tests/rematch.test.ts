@@ -110,3 +110,44 @@ describe('a mutual rematch for a finished standard duel', () => {
     expect(r2.player.status).toBe('active');
   });
 });
+
+// ONE GAME PER PAIR (owner, 2026-11-09: "2 players can only have 1 game against each other at a
+// time"). Every route that would seat the same two players in a second open game opens the game
+// they already share instead.
+describe('two players have at most one open game against each other', () => {
+  it('joining a second invite from the same player opens the game you already share', async () => {
+    const { service } = harness();
+    const a = await guest(service, 'Alder');
+    const b = await guest(service, 'Birch');
+    const first = await service.createMatch(a.player);
+    await service.joinMatch(b.player, first.match.inviteCode!);
+    const second = await service.createMatch(a.player);
+    const joined = await service.joinMatch(b.player, second.match.inviteCode!);
+    expect(joined.match.matchId).toBe(first.match.matchId);
+    expect(joined.match.status).toBe('active');
+    // The second invite is not consumed: it still waits, for somebody else.
+    expect((await service.getMatch(a.player, second.match.matchId)).status).toBe('waiting');
+  });
+
+  it('a rematch press while the two already share an open game opens that game, never a second', async () => {
+    const { service } = harness();
+    const { a, b, finishedId } = await finishedDuel(service);
+    const other = await service.createMatch(a.player);
+    await service.joinMatch(b.player, other.match.inviteCode!);
+    const pressed = await service.rematch(a.player, finishedId);
+    expect(pressed.match.matchId).toBe(other.match.matchId);
+  });
+
+  it('different opponents are not affected', async () => {
+    const { service } = harness();
+    const a = await guest(service, 'Alder');
+    const b = await guest(service, 'Birch');
+    const c = await guest(service, 'Cedar');
+    const ab = await service.createMatch(a.player);
+    await service.joinMatch(b.player, ab.match.inviteCode!);
+    const ac = await service.createMatch(a.player);
+    const joined = await service.joinMatch(c.player, ac.match.inviteCode!);
+    expect(joined.match.matchId).toBe(ac.match.matchId);
+    expect(joined.match.status).toBe('active');
+  });
+});

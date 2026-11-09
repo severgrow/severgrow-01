@@ -499,6 +499,10 @@ export class MatchService {
 
     const participants = await this.storage.participantsOf(current.id);
     if (participants.length >= 2) throw new ApiError('MATCH_FULL', 'That match already has two players.');
+    // ONE GAME PER PAIR: the player already shares an open game with this host: open that one.
+    const host = participants.find((p) => p.playerId !== player.id)?.playerId ?? null;
+    const shared = host ? await this.openMatchBetween(player.id, host, current.id) : null;
+    if (shared) return { match: await this.summary(shared.match), player: await this.payload(shared.match, shared.seat, []) };
     const seat: Player = participants.some((p) => p.seat === 0) ? 1 : 0;
     const now = this.now();
 
@@ -533,6 +537,12 @@ export class MatchService {
     if (typeof matchId !== 'string' || matchId.length === 0) throw new ApiError('INVALID_REQUEST', 'A match id is required.');
     const finished = await this.requireParticipantFresh(player, matchId);
     if (finished.status !== 'finished') throw new ApiError('MATCH_NOT_FINISHED', 'Finish this match before a rematch.');
+    // ONE GAME PER PAIR: already playing each other in another game? That game is the rematch.
+    const opponent = (await this.storage.participantsOf(matchId)).find((p) => p.playerId !== player.id)?.playerId ?? null;
+    const shared = opponent ? await this.openMatchBetween(player.id, opponent, matchId) : null;
+    if (shared && (await this.storage.rematchOf(matchId))?.id !== shared.match.id) {
+      return { match: await this.summary(shared.match), player: await this.payload(shared.match, shared.seat, []) };
+    }
     for (let attempt = 0; attempt < MAX_INVITE_CODE_ATTEMPTS; attempt++) {
       const existing = await this.storage.rematchOf(matchId);
       if (existing) return this.takeRematchSeat(player, existing);
@@ -550,6 +560,16 @@ export class MatchService {
       }
     }
     throw new ApiError('INTERNAL', 'Could not start the rematch right now. Please try again.');
+  }
+
+  /**
+   * ONE GAME PER PAIR (owner, 2026-11-09: "2 players can only have 1 game against each other at a
+   * time"): the open (waiting or active) game these two already share, other than `except`.
+   */
+  private async openMatchBetween(playerId: string, otherId: string, except: string): Promise<{ match: MatchRecord; seat: Player } | null> {
+    const rows = await this.storage.listMatchesForPlayer(playerId);
+    const row = rows.find((r) => r.match.id !== except && r.match.status !== 'finished' && r.opponentId === otherId);
+    return row ? { match: row.match, seat: row.mySeat } : null;
   }
 
   /** The second press of a rematch: the player's own seat if they have one, otherwise seat 1. */
