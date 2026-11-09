@@ -2,6 +2,7 @@
 // local development and tests. `commitMove` runs entirely synchronously (no await between the
 // checks and the writes), so in Node's single-threaded model it is atomic, exactly like the
 // row lock the Postgres adapter takes.
+import { mergeAccountGuide, type AccountGuideWire } from '../account-guide.js';
 import type { Player } from '../../../src/engine/index.js';
 import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
@@ -74,6 +75,7 @@ export class MemoryStorage implements Storage {
   private readonly offlineByPlayer = new Map<string, Map<string, OfflineCounters>>();
   /** player id → further-ahead campaign progress snapshot (migration 0023). */
   private readonly campaignProgressByPlayer = new Map<string, AccountCampaignProgressWire>();
+  private readonly guideByPlayer = new Map<string, AccountGuideWire>();
 
   /** Synchronous copy boundary for the local chat adapter; no async gap before its write. */
   chatAuthority(id: string): { match: MatchRecord | null; participants: Participant[] } {
@@ -136,6 +138,18 @@ export class MemoryStorage implements Storage {
   async accountCampaignProgressOf(playerId: string): Promise<AccountCampaignProgressWire | null> {
     const stored = this.campaignProgressByPlayer.get(playerId);
     return stored ? copy(stored) : null;
+  }
+
+  async accountGuideOf(playerId: string): Promise<AccountGuideWire | null> {
+    const stored = this.guideByPlayer.get(playerId);
+    return stored ? copy(stored) : null;
+  }
+
+  async mergeAccountGuide(playerId: string, incoming: AccountGuideWire, _now: number): Promise<AccountGuideWire> {
+    const stored = this.guideByPlayer.get(playerId);
+    const kept = stored ? mergeAccountGuide(stored, incoming) : mergeAccountGuide({ seen: [], games: 0 }, incoming);
+    this.guideByPlayer.set(playerId, copy(kept));
+    return copy(kept);
   }
 
   async mergeAccountCampaignProgress(

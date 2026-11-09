@@ -1874,6 +1874,8 @@ let smartCockpit: ReturnType<typeof import('./player/smart-cockpit.js').mountSma
 let lessonBreath: ReturnType<typeof import('./player/lesson-breath.js').mountLessonBreath> | null = null;
 let outcomeLight: OutcomeLight | null = null;
 let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
+/** The in-game guide: "?" in the cockpit, the HOW TO PLAY label, the LED's pointer (player/how-to-guide.ts). */
+let howTo: import('./player/how-to-guide.js').HowToGuide | null = null;
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
 /** The replay button: hidden in the test copy (its code stays). */
 const REPLAY_BUTTON = FEATURES.replay;
@@ -2061,10 +2063,10 @@ async function mountPlayerEnhancements() {
   await Promise.all(loads);
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
     // Fetch independent presentation modules together; keep their mount order unchanged.
-    const [atmosphere,information,cards,glass,help,cockpit,breath] = await Promise.all([
+    const [atmosphere,information,cards,glass,help,cockpit,breath,howToModule,guideAccountModule] = await Promise.all([
       import('./player/atmosphere.js'),import('./player/information.js'),import('./player/cards.js'),
       import('./player/glass-surface.js'),import('./player/help.js'),import('./player/smart-cockpit.js'),
-      import('./player/lesson-breath.js'),
+      import('./player/lesson-breath.js'),import('./player/how-to-guide.js'),import('./logic/account-guide-sync.js'),
     ]);
     outcomeLight = atmosphere.mountAtmosphere();
     information.mountInformation();
@@ -2081,6 +2083,37 @@ async function mountPlayerEnhancements() {
     futa04Help = help.mountHelp({ sheet, onBulb: toggleMatchIntel });
     smartCockpit = cockpit.mountSmartCockpit({
       heldMove: () => session ? heldMoveWord(session.sel, session.view.hand.find((c) => c.id === session!.sel.card)?.suit === null) : null,
+      // The guide's "?" takes the context key only while that key has no real action.
+      guide: { active: () => !!howTo?.keyActive(), tap: () => howTo?.tap(), label: howToModule.GUIDE_KEY_LABEL },
+    });
+    howTo = howToModule.mountHowToGuide({
+      setting: () => settings.guide,
+      // Blitz is 30 seconds a turn: practice Blitz and a Blitz duel both turn the guide fully off.
+      blitz: () => blitzMatch || document.documentElement.dataset.blitzDuel === '1',
+      // The Tutorial, a lesson and the campaign's own first-levels window already teach.
+      busy: () => !!coach.tutorial || !!lessonActive() || onboardingActive() || !!watching,
+      position: () => session && !$('game').hidden && session.state.phase !== 'GAME_OVER'
+        ? { view: session.view, legal: myTurn() && !blocking() ? session.legal : [] } : null,
+      tips: () => (session ? intelTips(session.view).length : 0),
+      lessonsDone: () => currentLevel(campaignProgress).number > 9,
+      openWindow: (win) => {
+        if (!glassSurface) return;
+        if (glassSurface.isOpen()) { glassSurface.close(); intelState = null; }
+        const lit = litTarget(win.lit, [board.rootKey(HUMAN), board.rootKey(BOT)]);
+        glassSurface.tutorial(win.title, 0, lit.selectors, {
+          shape: lit.shape, stepKey: `guide-${win.beat}`, why: win.why, arrow: lit.selectors.length > 0,
+          reduceMotion: settings.reduceMotion, buttons: { previous: false, next: false },
+          ...(win.bloomDemo ? { bloomDemo: true } : {}),
+        });
+      },
+      closeWindow: () => { if (glassSurface?.mode?.() === 'tutorial' && !coach.tutorial) glassSurface.hide(); },
+      prompt: () => smartCockpit?.promptNow(),
+      openIntel: (tab) => openIntel(tab),
+      ledWord: (fn) => smartCockpit?.guideWord(fn),
+      clearLedPrompt: () => smartCockpit?.clearGuidePrompt(),
+      refreshCockpit: () => smartCockpit?.sync(),
+      storage: browserStorage(),
+      account: guideAccountModule.guideAccount(browserStorage()),
     });
     lessonBreath = breath.mountLessonBreath();
     layoutKey = '';
@@ -2329,6 +2362,9 @@ async function startGame(
   blitzStart: { config: CampaignLevel['config']; map: number } | null = null,
 ) {
   let generation = ++startGameGeneration;
+  // One of the player's games (the guide's HOW TO PLAY label shows in the first few). A watched game,
+  // a tutorial replay and a Blitz game are not the player's own learning games.
+  if (!watch && !tutorial && !blitzStart) howTo?.gameStarted();
   // The deal (the owner's card shuffle): a new match, a rematch, a restart.
   if (settings.sound) sound.shuffle();
   // The first lesson board on a cold first visit waits (briefly, capped) for its own art. Repeat
@@ -3339,7 +3375,9 @@ function drainInstallInvite() {
 }
 
 function humanPlay(a: Action, opts: { auto?: boolean; flightFrom?: DOMRect } = {}) {
-  bloomPick = []; // a move is made: nothing stays held toward a Bloom
+  bloomPick = [];
+  // The guide's window closes when the player makes the move it was teaching.
+  howTo?.moved(a.t); // a move is made: nothing stays held toward a Bloom
   // Was this throw made from the picked card? Then the Throw pile is swollen right now, and the
   // swell belongs to the flight, not only to the selection.
   const fromPickedPile = a.t === 'Discard' && !!session && session.pending?.t === 'Discard' && session.pending.card === a.card;
@@ -5374,6 +5412,7 @@ function refreshOnlineTurnReplay(): void {
 
 function render() {
   syncTurnRim();
+  howTo?.update();
   const t0 = performance.now();
   applyLayout();
   // A new layout (or a game screen not drawn yet): place the cockpit once it can be measured.
@@ -11443,6 +11482,8 @@ void import('./online/lobby-ui.js').then(async (m) => {
     openDuel: ({ matchId, token, view: player, liveJoin }) => {
       const api = duelApiUrl();
       if (!api) return;
+      // A fresh duel counts as one of the player's games for the guide (reopening one does not).
+      if (player.revision <= 2 && !player.events?.length) howTo?.gameStarted();
       leaveOnline();
       // An online duel is never a training tier: its finish must not write a carry-over.
       gameDifficulty = null;

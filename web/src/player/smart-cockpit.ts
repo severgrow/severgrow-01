@@ -21,6 +21,8 @@ const ICONS: Record<string, string> = {
   continue: '<path d="m8 5 8 7-8 7"/>',
   confirm: '<path d="m5 12 5 5L19 7"/>',
   neutral: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  // The in-game guide's "?" (player/guide.ts), drawn in the same stroke as every other key glyph.
+  guide: '<path d="M9.2 9.1a2.9 2.9 0 1 1 4 2.68c-.73.32-1.2.97-1.2 1.75v.6"/><circle cx="12" cy="17.6" r=".55" fill="currentColor"/>',
 };
 const svg = (kind: string) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ICONS[kind] ?? ICONS.continue}</svg>`;
 const actionKind = (button: HTMLButtonElement) => button.matches('[data-kind],.bloom-toggle') ? 'bloom'
@@ -690,7 +692,16 @@ html.futa04-information.reduce-motion #board .l-over .target.kind-grow { animati
 `;
 
 /** `heldMove`: the display's word for a held move (GROW 1, BLOOM 3, BOMB), shown instead of CANCEL. */
-export function mountSmartCockpit(options: { heldMove?: () => string | null } = {}) {
+export type CockpitGuide = {
+  /** The guide is on and may take the empty context key ("?"). Read on every sync. */
+  active(): boolean;
+  /** The "?" was tapped. */
+  tap(): void;
+  /** Its accessible name ("How to play"). */
+  label: string;
+};
+
+export function mountSmartCockpit(options: { heldMove?: () => string | null; guide?: CockpitGuide } = {}) {
   const box = document.getElementById('futa04-box')!;
   const actions = document.getElementById('futa04-actions')!;
   const moves = document.getElementById('moves')!;
@@ -1014,6 +1025,8 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     }));
   };
   context.addEventListener('click', () => {
+    // A real context action always wins; the guide's "?" only lives in an empty key.
+    if (current.length === 0 && context.dataset.action === 'guide') { options.guide?.tap(); return; }
     if (current.length === 1) { current[0]!.source.click(); return; }
     if (current.length < 2) return;
     const opening = selector.hidden;
@@ -1086,11 +1099,12 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     }
     if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});
     lastPhase = phase; lastAction = first?.key ?? '';
-    context.innerHTML = svg(first?.icon ?? 'neutral'); context.disabled = !first;
+    const guideKey = !first && !!options.guide?.active();
+    context.innerHTML = svg(first?.icon ?? (guideKey ? 'guide' : 'neutral')); context.disabled = !first && !guideKey;
     // The slot's current action, so CSS can light a key that is the move (e.g. Skip).
-    context.dataset.action = first?.icon ?? '';
+    context.dataset.action = first?.icon ?? (guideKey ? 'guide' : '');
     context.setAttribute('aria-haspopup',current.length > 1 ? 'menu' : 'false');
-    context.setAttribute('aria-label',first ? current.length > 1 ? `${first.label}. ${current.length} actions available` : first.label : phase === 'opp' ? ONLINE.statusTheirTurn : 'No action available');
+    context.setAttribute('aria-label',first ? current.length > 1 ? `${first.label}. ${current.length} actions available` : first.label : guideKey ? options.guide!.label : phase === 'opp' ? ONLINE.statusTheirTurn : 'No action available');
     context.title = context.getAttribute('aria-label') ?? '';
     for (const b of moves.querySelectorAll<HTMLButtonElement>('button')) b.tabIndex = -1;
     refreshMessage();
@@ -1114,5 +1128,10 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     /** A lesson message is on screen: the sign keeps the score and real results only. */
     quiet: (on: boolean) => machine.setQuiet(on),
     /** Hold the score on the sign while a lesson points at it; false lets it go. */
-    holdScore: (on: boolean) => { if (on) machine.holdScore(); else machine.release(); } };
+    holdScore: (on: boolean) => { if (on) machine.holdScore(); else machine.release(); },
+    /** The guide's LED pointer ("TAP ? →") replaces the idle blink while it returns a word. */
+    guideWord: (fn: (() => string | null) | null) => machine.setGuideWord(fn),
+    clearGuidePrompt: () => machine.clearGuidePrompt(),
+    /** Light the next move now, as the idle re-prompt does. */
+    promptNow: () => machine.promptNow() };
 }

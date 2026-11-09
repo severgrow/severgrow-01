@@ -3,6 +3,7 @@
 // return the original outcome without applying again.
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
 import type { AccountCampaignProgressWire } from '../account-campaign-progress.js';
+import type { AccountGuideWire } from '../account-guide.js';
 import type { HeadToHead, MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult, PlayerSummary } from '../protocol.js';
 import type { RetentionRow } from '../retention.js';
 
@@ -241,6 +242,11 @@ export interface Storage {
     incoming: AccountCampaignProgressWire,
     now: number,
   ): Promise<AccountCampaignProgressWire>;
+
+  /** The in-game guide's progress for this account (migration 0024), or null when none was posted. */
+  accountGuideOf(playerId: string): Promise<AccountGuideWire | null>;
+  /** Join `incoming` into the stored row (union of beats, higher count) and return the result. */
+  mergeAccountGuide(playerId: string, incoming: AccountGuideWire, now: number): Promise<AccountGuideWire>;
 
   createMatch(match: MatchRecord): Promise<{ ok: true } | Fail>;
   /**

@@ -26,6 +26,7 @@ describe('settings (saved in the browser)', () => {
       sfxVolume: 80, // v0.7 Step 7: effects volume slider
       musicVolume: 60, // v0.7 Step 7: music volume slider
       bloomHints: true, // tutorial Pro: quiet legal-bloom brackets
+      guide: true, // the in-game guide (owner, 2026-11-09): on for new players
     });
   });
 

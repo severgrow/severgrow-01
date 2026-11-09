@@ -51,6 +51,11 @@ export type Settings = {
   musicVolume: number;
   /** Quiet hand brackets for groups that can legally bloom right now. */
   bloomHints: boolean;
+  /**
+   * THE IN-GAME GUIDE (owner, 2026-11-09): the "?" in the cockpit, the HOW TO PLAY label, the LED's
+   * pointer and the watcher behind them. On for new players; a returning player keeps their choice.
+   */
+  guide: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -76,6 +81,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sfxVolume: 80,
   musicVolume: 60,
   bloomHints: true,
+  guide: true,
 };
 
 export const SETTINGS_KEY = 'severgrow.settings.v1';
@@ -85,7 +91,7 @@ export const SETTINGS_KEY = 'severgrow.settings.v1';
  * essentials"): the four switches in Settings, the bot level (chosen by the level, not in Settings)
  * and the hand order (switched by the game's own Sort key). Hand side lives in player/thumb.ts.
  */
-export const ESSENTIAL_SETTINGS = ['level', 'handSort', 'sound', 'vibration', 'reduceMotion', 'largeText'] as const;
+export const ESSENTIAL_SETTINGS = ['level', 'handSort', 'sound', 'vibration', 'reduceMotion', 'largeText', 'guide'] as const;
 
 /**
  * Settings from a saved string; `systemReduce` is the device's reduce-motion wish. With
@@ -120,7 +126,7 @@ export const parseSettings = (raw: string | null, systemReduce = false, essentia
   // the old device-based "Confirm drawn moves" setting: On carries over as Always
   if (s.confirmDraw === true) out.confirmPolicy = 'always';
   if (CONFIRM_MODES.includes(s.confirmPolicy as ConfirmMode)) out.confirmPolicy = s.confirmPolicy as ConfirmMode;
-  for (const k of ['music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip', 'bloomHints'] as const) {
+  for (const k of ['music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip', 'bloomHints', 'guide'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }
   // SOUND IS A CHOICE (owner, 2026-11-05: off by default). A saved `sound` from before was only the

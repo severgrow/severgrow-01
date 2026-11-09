@@ -39,6 +39,7 @@ import type {
   SubmitActionResponse,
 } from './protocol.js';
 import { parseAccountCampaignProgress } from './account-campaign-progress.js';
+import { parseAccountGuide } from './account-guide.js';
 import { parseOfflineCounters } from './offline.js';
 import { fromEngineResult } from './protocol.js';
 import { actorChanged, gatedRevisionFor, gatedStateFor, turnBoundaryAdvanced } from './turn-boundary.js';
@@ -215,6 +216,16 @@ export class MatchService {
       parseAccountCampaignProgress(body),
       this.now(),
     );
+  }
+
+  /** The in-game guide's progress for this player (migration 0024), or null before the first POST. */
+  async accountGuide(player: PlayerRecord) {
+    return this.storage.accountGuideOf(player.id);
+  }
+
+  /** Join this device's guide progress into the account's (beats only ever added). */
+  async putAccountGuide(player: PlayerRecord, body: Record<string, unknown>) {
+    return this.storage.mergeAccountGuide(player.id, parseAccountGuide(body), this.now());
   }
 
   /**

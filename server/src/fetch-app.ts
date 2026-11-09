@@ -8,6 +8,7 @@ import { ApiError } from './errors.js';
 import type { MatchService } from './service.js';
 import { BOT_VERSIONS } from '../../src/bots/versions.js';
 import { ACCOUNT_CAMPAIGN_PROGRESS_FEATURE } from './account-campaign-progress.js';
+import { ACCOUNT_GUIDE_FEATURE } from './account-guide.js';
 
 /**
  * What this server can do that an older one could not; a page checks before relying on it.
@@ -21,6 +22,7 @@ import { ACCOUNT_CAMPAIGN_PROGRESS_FEATURE } from './account-campaign-progress.j
 export const SERVER_FEATURES: readonly string[] = Object.freeze([
   'campaign-random-deals',
   ACCOUNT_CAMPAIGN_PROGRESS_FEATURE,
+  ACCOUNT_GUIDE_FEATURE,
   ...Object.keys(BOT_VERSIONS),
 ]);
 
@@ -207,6 +209,19 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
         status: 200,
         body: { ok: true, progress: await service.putAccountCampaignProgress(player, body), serverNow: service.serverNow() },
       };
+    }
+
+    // THE IN-GAME GUIDE (owner, 2026-11-09): which teaching windows this account has opened, and how
+    // many games it has started with the guide on. Beats only ever join; GET is null until a POST.
+    if (method === 'GET' && path === '/v1/players/me/guide') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      return { status: 200, body: { ok: true, guide: await service.accountGuide(player), serverNow: service.serverNow() } };
+    }
+
+    if (method === 'POST' && path === '/v1/players/me/guide') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      const body = asRecord(await readJson(req, config.maxBodyBytes));
+      return { status: 200, body: { ok: true, guide: await service.putAccountGuide(player, body), serverNow: service.serverNow() } };
     }
 
     if (method === 'POST' && path === '/v1/players/me/offline') {

@@ -262,6 +262,20 @@ export class DuelClient {
     return response.progress;
   }
 
+  /** The in-game guide's progress for this account, or null (none yet, or an odd answer). */
+  async accountGuide(token: string, options: { signal?: AbortSignal } = {}): Promise<{ seen: string[]; games: number } | null> {
+    const response = await this.request<{ guide?: unknown }>('GET', '/v1/players/me/guide', { token, ...(options.signal ? { signal: options.signal } : {}) });
+    const g = response.guide as { seen?: unknown; games?: unknown } | null | undefined;
+    if (!g || typeof g !== 'object' || !Array.isArray(g.seen)) return null;
+    return { seen: g.seen.filter((b): b is string => typeof b === 'string'), games: typeof g.games === 'number' ? g.games : 0 };
+  }
+
+  /** Post this device's guide progress; the answer is the joined account row. */
+  async putAccountGuide(token: string, wire: { seen: readonly string[]; games: number }): Promise<{ seen: string[]; games: number }> {
+    const response = await this.request<{ guide: { seen: string[]; games: number } }>('POST', '/v1/players/me/guide', { token, body: wire });
+    return response.guide;
+  }
+
   upgrade(token: string, displayName: string): Promise<UpgradeResponse> {
     return this.request<UpgradeResponse>('POST', '/v1/players/me/upgrade', { token, body: { displayName } });
   }

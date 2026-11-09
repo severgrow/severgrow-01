@@ -18,6 +18,7 @@ import { hasGrace, spendGrace } from '../grace.js';
 import { prunableMatches } from '../retention.js';
 import type { RetentionRow } from '../retention.js';
 import type { AccountCampaignProgressWire } from '../account-campaign-progress.js';
+import { mergeAccountGuide, type AccountGuideWire } from '../account-guide.js';
 import { furtherAheadWire } from '../account-campaign-progress.js';
 import type { MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult } from '../protocol.js';
 import type {
@@ -1131,6 +1132,40 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     const completed = Array.isArray(row.completed) ? row.completed.map(String) : [];
     const best = asJson<AccountCampaignProgressWire['best']>(row.best) ?? {};
     return { completed, best };
+  },
+
+  async accountGuideOf(playerId: string): Promise<AccountGuideWire | null> {
+    const result = await pool.query(`select seen, games from account_guide where player_id = $1`, [playerId]);
+    const row = result.rows[0];
+    if (!row) return null;
+    const seen = asJson<unknown>(row.seen);
+    return { seen: Array.isArray(seen) ? seen.map(String) : [], games: Number(row.games) || 0 };
+  },
+
+  async mergeAccountGuide(playerId: string, incoming: AccountGuideWire, now: number): Promise<AccountGuideWire> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const existing = await client.query(`select seen, games from account_guide where player_id = $1 for update`, [playerId]);
+      const row = existing.rows[0];
+      const storedSeen = row ? asJson<unknown>(row.seen) : [];
+      const stored: AccountGuideWire = { seen: Array.isArray(storedSeen) ? storedSeen.map(String) : [], games: row ? Number(row.games) || 0 : 0 };
+      const kept = mergeAccountGuide(stored, incoming);
+      await client.query(
+        `insert into account_guide(player_id, seen, games, updated_at)
+         values ($1, $2::jsonb, $3, $4)
+         on conflict (player_id) do update set seen = excluded.seen, games = excluded.games, updated_at = excluded.updated_at`,
+        // JSON text, like every jsonb write here: a raw array would be sent as a Postgres array literal.
+        [playerId, JSON.stringify(kept.seen), kept.games, now],
+      );
+      await client.query('commit');
+      return kept;
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release?.();
+    }
   },
 
   async mergeAccountCampaignProgress(
