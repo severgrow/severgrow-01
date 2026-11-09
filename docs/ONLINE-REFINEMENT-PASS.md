@@ -4,8 +4,9 @@ Baseline: `91b7ce06961dbe5b5232d753b7bd3ead0ca9954f`.
 Branch: `fix/online-experience-refinement`.
 Checkout: `/workspace/futasaku-online-refinement`.
 Owner authorises the finished verified release, including promotion.
-Server version 106 is deployed. Website staging is `42fd4f47`; live remains `91b7ce06`.
-See the release investigation below before promoting.
+Server version 106 is deployed. Staging candidate `702219a5` passed publication and full release CI.
+The owner approved promotion and `live` now selects `702219a5`; site publication is a separate step.
+See `PRESENCE-DISCARD-FOLLOWUP.md` for the publication record and retained investigation details.
 
 ## What changed
 

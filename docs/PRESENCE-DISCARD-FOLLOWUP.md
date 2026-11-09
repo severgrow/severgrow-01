@@ -1,8 +1,8 @@
 # Online presence and opponent discard follow-up
 
 Branch: `fix/online-experience-refinement`. Builds on the locally held follow-ups to
-staging `42fd4f47`. This does not clear the previous release blockers in
-`ONLINE-REFINEMENT-PASS.md` and is not a live release.
+staging `42fd4f47`. Runtime candidate `702219a5` subsequently passed release CI and staging.
+See the owner-approved publication record below; a selected live ref alone is not deployment.
 
 ## Problems reproduced and corrected
 
@@ -60,12 +60,28 @@ staging `42fd4f47`. This does not clear the previous release blockers in
   Supabase or a physical device. No physical iOS, Android or Mac verification was available.
   No server change, migration or dependency was added.
 
-## Release hold
+## Earlier release hold
 
 The previous 15-match soak failed retained-heap slope and listener-drift guards. These changes
 have not established their cause or cleared them. The environment also blocks the production
 site/API hosts, so hosted staging and production cannot be verified here until settings change.
-Do not promote this branch or describe the fixes as live while these gates remain unresolved.
+These historical local failures remain recorded; passing CI does not establish their root cause.
+
+## Owner-approved publication - 9 November 2026
+
+- The owner explicitly requested promotion after being told about the earlier local soak warnings.
+- Runtime candidate: `702219a5154a81a4a6543b65ed13db9d14d24112`.
+- Full release-branch CI passed: run `42684594031`, including the release browser set.
+- All eight extra regression jobs passed: run `42684593586`, including the 15-match soak.
+- Staging publication passed: run `42684593496`; its resolve/build selected `702219a5` for `/test/`.
+- `npm run promote -- 702219a5154a81a4a6543b65ed13db9d14d24112` moved `live` to that exact
+  candidate. No server change or migration is needed; deployed server version 106 is compatible.
+- This documentation-only update triggers the supported publisher from `futa0.5-online`, which
+  republishes the selected live candidate. Runtime files are identical to `702219a5`; staging's
+  documentation SHA may differ. Both CI gates and the deployment environment policy remain active.
+- Confirm the publisher's resolve/build/deploy result before calling it live. Direct website/API
+  requests remain proxy-blocked here, so publication evidence is GitHub's existing deployment logs,
+  not a fresh hosted browser or physical-device check. Do not claim the local soak issue was fixed.
 
 Local evidence: `/tmp/presence-discard-final-journey.log`, `/tmp/opponent-discard-final-reviewed.log`,
 `/tmp/opponent-discard-offline2.log`, `/tmp/opponent-discard/`,
