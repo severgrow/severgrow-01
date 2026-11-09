@@ -6797,7 +6797,16 @@ let sideDockStale = true;
 document.getElementById('board-wrap')?.addEventListener('animationend', (e) => {
   if ((e as AnimationEvent).animationName === 'v075-board-rise' && document.documentElement.dataset.quad === '1') centreSideDock();
 });
+/** The cockpit's placement, as the CSS reads it. Panels anchored to the cockpit (the match chat)
+ *  re-measure when it changes: a translate does not trigger their ResizeObserver. */
+const cockpitPlacement = (): string => ['--side-dock-shift', '--side-dock-shift-y', '--quad-board-x', '--quad-board-y']
+  .map((n) => document.documentElement.style.getPropertyValue(n)).join('|');
 function centreSideDock(): void {
+  const before = cockpitPlacement();
+  placeCockpit();
+  if (cockpitPlacement() !== before) window.dispatchEvent(new Event('futasaku:cockpit-moved'));
+}
+function placeCockpit(): void {
   const root = document.documentElement;
   if (root.dataset.layout !== 'side') {
     root.style.removeProperty('--side-dock-shift');
@@ -11512,6 +11521,14 @@ void import('./online/lobby-ui.js').then(async (m) => {
         },
       });
       const os = new OnlineSession(driver);
+      // A Blitz move is shown at once and sent behind it; if the server refuses it, say why and
+      // put the board back on the server's truth (the session already dropped the unsent moves).
+      os.blitzError = (message) => {
+        if (getOnlineSession() !== os) return;
+        caption(message, null, 'info');
+        syncSessionFromOnline(true);
+        render();
+      };
       setOnlineSession(os);
       activeMatchChat = mountMatchChat({ host: $('game'), header: $('game').querySelector<HTMLElement>('.hud')!, client, token, matchId, channel: matchChannel, snapshot: () => driver.snapshot() });
       // An online duel is not a campaign match: drop the campaign level so no campaign-only

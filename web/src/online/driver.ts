@@ -52,7 +52,7 @@ export type OnlineDriver = {
    * BLITZ (0.82): commit one mid-turn move (Grow / Bloom / Bomb / Blast) at once, so the opponent sees
    * it the moment it is made. Blitz never drafts, so there is nothing local to send with it.
    */
-  commitNow(action: Action): Promise<{ ok: boolean; message?: string }>;
+  commitNow(action: Action, options?: { rebase?: boolean }): Promise<{ ok: boolean; message?: string }>;
   /** Local draft mid-turn move (Grow / Bloom / …). */
   draftPlay(action: Action): boolean;
   draftUndo(): boolean;
@@ -115,7 +115,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   const isAftermath = (e: Event): boolean =>
     e.t === 'Sever' || e.t === 'Rot' || e.t === 'Strangle' || e.t === 'GameEnd' || e.t === 'Discard';
 
-  const applyView = (next: MatchViewPayload, _serverNow: number, reason: ViewReason = 'refresh') => {
+  const applyView = (next: MatchViewPayload, _serverNow: number, reason: ViewReason = 'refresh', rebase: readonly Action[] = []) => {
     if (player && next.revision > player.revision && next.events.length > 0) {
       // Opponent turns: buffer all public events for catch-up replay.
       // Own Draw: skip (local buildSteps already animates).
@@ -134,6 +134,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     player = next;
     refreshPerspective();
     draft.syncFromServer(next.view, next.revision);
+    for (const a of rebase) if (!draft.play(a)) break;
     draft.persist();
     emit();
   };
@@ -236,7 +237,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   };
 
   /** One action committed to the server at once (Draw, and every Blitz move). */
-  const commitOne = async (action: Action, kind: 'draw' | 'move'): Promise<{ ok: boolean; message?: string }> => {
+  const commitOne = async (action: Action, kind: 'draw' | 'move', rebase = false): Promise<{ ok: boolean; message?: string }> => {
     if (!player || submitting) return { ok: false, message: ONLINE.errBusy };
     submitting = true;
     try {
@@ -259,7 +260,11 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       }
       catchUpMode = 'none';
       try {
-        applyView(outcome.response.player, outcome.response.serverNow);
+        // BLITZ sends the local draft one move at a time (oldest first). The server's new view
+        // replaces the draft, so the moves still waiting to be sent are laid back on top of it in
+        // the SAME update: the board never flickers back while the next one is in flight.
+        const keep = rebase ? draft.actions().slice(1) : [];
+        applyView(outcome.response.player, outcome.response.serverNow, 'refresh', keep);
       } finally {
         catchUpMode = 'all';
       }
@@ -292,8 +297,8 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       return commitOne(action, 'draw');
     },
 
-    async commitNow(action) {
-      return commitOne(action, 'move');
+    async commitNow(action, opts) {
+      return commitOne(action, 'move', !!opts?.rebase);
     },
 
     draftPlay(action) {

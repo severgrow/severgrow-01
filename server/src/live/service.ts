@@ -201,9 +201,16 @@ export class LiveService {
 
   async challenge(player: PlayerRecord, matchId: string, kindRaw: unknown): Promise<{ challenge: ChallengeWire; liveMatchId: string | null }> {
     const kind: ChallengeKind = kindRaw === 'rematch' ? 'rematch' : 'live';
-    const seat = await this.seatIn(player, matchId);
-    await this.tickMatch(matchId);
-    await this.rateLimit(`live:challenge:${player.id}`, HOUR_MS, this.config.challengesPerPlayerPerHour);
+    // Three independent checks in ONE round trip (owner, 2026-11-09: "challenging blitz ... was
+    // slow"). Errors keep their old order: not in the match, then the rate limit.
+    const [seated, , limited] = await Promise.allSettled([
+      this.seatIn(player, matchId),
+      this.tickMatch(matchId),
+      this.rateLimit(`live:challenge:${player.id}`, HOUR_MS, this.config.challengesPerPlayerPerHour),
+    ]);
+    if (seated.status === 'rejected') throw seated.reason;
+    if (limited.status === 'rejected') throw limited.reason;
+    const seat = seated.value;
     const now = this.now();
     const outcome = await this.live.transact(async (tx) => {
       const lm = await tx.match(matchId);
@@ -262,13 +269,13 @@ export class LiveService {
       return { challenge: res.challenge, liveMatchId: res.liveMatchId };
     }
     const c = outcome.challenge;
-    const fromName = await this.nameOf(c.fromPlayer);
-    if (c.status === 'pending') await this.ping(c.toPlayer, { challengeId: c.id, fromName, kind: c.kind });
-    else {
-      await this.ping(c.fromPlayer, { challengeId: c.id, fromName: await this.nameOf(player.id), kind: c.kind });
-      await this.matchPing(matchId);
-    }
-    return { challenge: await this.wire(c, player.id, this.now()), liveMatchId: outcome.liveMatchId };
+    // The other player's ping goes out while the reply is built (it used to wait for it).
+    const pinged = (async () => {
+      if (c.status === 'pending') await this.ping(c.toPlayer, { challengeId: c.id, fromName: player.id === c.fromPlayer ? player.displayName : await this.nameOf(c.fromPlayer), kind: c.kind });
+      else await Promise.all([this.ping(c.fromPlayer, { challengeId: c.id, fromName: player.displayName, kind: c.kind }), this.matchPing(matchId)]);
+    })();
+    const [wire] = await Promise.all([this.wire(c, player.id, this.now()), pinged]);
+    return { challenge: wire, liveMatchId: outcome.liveMatchId };
   }
 
   /** Start live on a locked match for both seats; marks the challenge accepted. */
@@ -309,9 +316,13 @@ export class LiveService {
       if (!lm) throw new LiveError('CHALLENGE_NOT_FOUND');
       return this.acceptInTx(tx, c, lm, now);
     });
-    await this.ping(accepted.fromPlayer, { challengeId, fromName: player.displayName, kind: accepted.kind });
-    await this.matchPing(accepted.matchId);
-    return { challenge: await this.wire(accepted, player.id, this.now()), liveMatchId: accepted.matchId };
+    // Both pings and the reply together, not one after another.
+    const [wire] = await Promise.all([
+      this.wire(accepted, player.id, this.now()),
+      this.ping(accepted.fromPlayer, { challengeId, fromName: player.displayName, kind: accepted.kind }),
+      this.matchPing(accepted.matchId),
+    ]);
+    return { challenge: wire, liveMatchId: accepted.matchId };
   }
 
   /** A rematch: a fresh match (engine lottery for who starts), created already live. */

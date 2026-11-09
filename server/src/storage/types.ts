@@ -335,7 +335,7 @@ export interface Storage {
    * ONE decision point for expiry (P-8): inside a row lock, finish an overdue active match
    * (timeout) or an expired waiting match. Idempotent. Returns the (possibly updated) match.
    */
-  applyExpiry(matchId: string, now: number): Promise<MatchRecord | null>;
+  applyExpiry(matchId: string, now: number, known?: MatchRecord): Promise<MatchRecord | null>;
 
   /** Finish by resign (not an engine action). */
   resignMatch(matchId: string, playerId: string, now: number, result: OnlineGameResult): Promise<MatchRecord | null>;

@@ -70,6 +70,7 @@ describe('the product menu paints its finished column before the module runs', (
 
   it('preloads the two assets the first frame actually uses', () => {
     expect(html).toMatch(/rel="preload"[^>]*futasaku-numerals-700\.woff2/);
-    expect(html).toMatch(/rel="preload"[^>]*paint-wordmark-4x\.webp/);
+    // OWNER CHANGED THE RULE (2026-11-09, experiment): the home menu's mark is the PLAIN one.
+    expect(html).toMatch(/rel="preload"[^>]*plain-wordmark-menu\.svg/);
   });
 });

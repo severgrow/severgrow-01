@@ -932,7 +932,11 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     return rows.map(rowToMove);
   },
 
-  async applyExpiry(matchId: string, now: number): Promise<MatchRecord | null> {
+  async applyExpiry(matchId: string, now: number, known?: MatchRecord): Promise<MatchRecord | null> {
+    // FAST PATH (owner, 2026-11-09: Blitz "responsiveness is really bad"): almost every read finds
+    // nothing to expire. When the caller has just read the row and the decision leaves it as it is,
+    // there is nothing to lock or write, so no transaction (3 database round trips) is opened.
+    if (known && known.id === matchId && expiryDecision(known, now) === known) return copy(known);
     const client = await pool.connect();
     try {
       await client.query('begin');

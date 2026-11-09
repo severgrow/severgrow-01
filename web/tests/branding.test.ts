@@ -117,8 +117,10 @@ describe('owner brand pack roles', () => {
   // OWNER CHANGED THE RULE (2026-11-08: the desktop menu showed the brush grain as rectangles, "should
   // never happen"): the home menu uses a 4x render of the vector, not the SVG. Still never a SOFT
   // upsample: it is rendered from the vector at 4x its largest on-screen size.
-  it('preloads the 4x PAINT render, not a soft raster upsample or the retired primary SVG', () => {
-    expect(read('index.html')).toMatch(/rel="preload" href="\.\/src\/assets\/brand\/paint-wordmark-4x\.webp"/);
+  // OWNER CHANGED THE RULE (2026-11-09, experiment): "replace the paint logo in main menu with the
+  // new plain one". The home menu preloads and shows the PLAIN mark, cropped to the paint box.
+  it('preloads the home PLAIN mark, not a soft raster upsample or the retired primary SVG', () => {
+    expect(read('index.html')).toMatch(/rel="preload" href="\.\/src\/assets\/brand\/plain-wordmark-menu\.svg"/);
     expect(read('index.html')).not.toMatch(/paint-wordmark-shadow-3x\.png/);
     expect(read('index.html')).not.toMatch(/futasaku-primary-logo\.svg/);
   });
@@ -127,8 +129,19 @@ describe('owner brand pack roles', () => {
     const css = branding.slice(branding.indexOf('export const BRANDING_CSS'));
     expect(css).toMatch(/#menu #logo\s*\{[^}]*aspect-ratio:\s*1995\s*\/\s*565/);
     expect(css).toMatch(/image-rendering:\s*auto/);
-    expect(read('src/style.css')).toMatch(/paint-wordmark-4x\.webp/);
+    expect(read('src/style.css')).toMatch(/plain-wordmark-menu\.svg/);
     expect(read('src/player/planet-lockup.ts')).toMatch(/aspect-ratio:\s*1995\s*\/\s*565/);
+  });
+
+  it('the home PLAIN mark is the plain paths in the paint box, one solid fill (experiment, 2026-11-09)', () => {
+    const plain = read('src/assets/brand/plain-wordmark.svg');
+    const menu = read('src/assets/brand/plain-wordmark-menu.svg');
+    expect(menu).toContain('viewBox="27 59 1995 565"'); // the same box the lockup is sized from
+    const paths = (s: string) => s.match(/<path[^>]*>/g) ?? [];
+    expect(paths(menu)).toEqual(paths(plain)); // the very same geometry, only cropped
+    expect(menu).not.toMatch(/clipPath|<filter|<image/); // nothing that can come apart in WebKit
+    expect(branding).toMatch(/container\.replaceChildren\(plainMarkImg\(\)\)/);
+    expect(branding).toContain('img.src = plainMenuUrl;');
   });
 
   it('does not ship the soft 3× PAINT upsample as a live asset', () => {

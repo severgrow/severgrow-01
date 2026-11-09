@@ -199,6 +199,65 @@ describe('OnlineSession turn flow', () => {
     expect(onlinePathsActive()).toBe(false);
   });
 
+  it('BLITZ: a move shows at once and is sent behind it, one at a time and in order (owner, 2026-11-09)', async () => {
+    const g = globalThis as { document?: unknown };
+    const hadDocument = 'document' in g;
+    const oldDocument = g.document;
+    g.document = { documentElement: { dataset: { blitzDuel: '1' } } };
+    try {
+      let serverState = toActSeat0(21);
+      let revision = 1;
+      const seat = 0 as const;
+      const inner = makeFetch(() => serverState, () => seat, () => revision, (n) => { revision = n; }, (s) => { serverState = s; });
+      const sent: string[] = [];
+      const held: (() => void)[] = [];
+      let hold = true;
+      const fetchImpl: FetchLike = async (url, init) => {
+        if (init.method === 'POST' && new URL(url).pathname.endsWith('/actions')) {
+          const body = JSON.parse(init.body!) as { action?: Action; actions?: Action[] };
+          sent.push((body.actions ?? [body.action!]).map((a) => a.t).join('+'));
+          if (hold) await new Promise<void>((r) => held.push(r));
+        }
+        return inner(url, init);
+      };
+      const client = new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore() });
+      const driver = createOnlineDriver({ client, token: 'tok', matchId: 'm1', initial: payloadFor(serverState, seat, revision), setTimer: () => 1, clearTimer: () => undefined });
+      const os = new OnlineSession(driver);
+      setOnlineSession(os);
+      const grow = os.legal.find((a) => a.t === 'Sprout');
+      expect(grow).toBeTruthy();
+      // the move resolves while the server has not answered yet: shown at once
+      const first = await os.play(grow!);
+      expect(first.ok).toBe(true);
+      if (first.ok) expect(first.played).not.toBeNull();
+      expect(sent).toEqual(['Sprout']); // already on its way
+      expect(held.length).toBe(1);
+      expect(os.canUndo).toBe(false); // Blitz has no Undo
+      const second = os.legal.find((a) => a.t === 'Sprout');
+      if (second) {
+        const r2 = await os.play(second);
+        expect(r2.ok).toBe(true);
+        expect(sent).toEqual(['Sprout']); // waits for the first: in order, one at a time
+      }
+      hold = false;
+      held.splice(0).forEach((r) => r());
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(sent).toEqual(second ? ['Sprout', 'Sprout'] : ['Sprout']);
+      expect(driver.draft().actions()).toEqual([]);
+      expect(revision).toBe(second ? 3 : 2);
+      const end = os.legal.find((a) => a.t === 'EndAct');
+      expect(end).toBeTruthy();
+      const thrown = await os.play(end!);
+      expect(thrown.ok).toBe(true);
+      expect(sent.at(-1)).toBe('EndAct'); // the throw carries nothing already sent
+    } finally {
+      if (hadDocument) g.document = oldDocument;
+      else delete g.document;
+      setOnlineSession(null);
+    }
+  });
+
   it('maps seat-1 draft taps through perspective before send', async () => {
     let state = toActSeat1(5);
     let revision = 2;

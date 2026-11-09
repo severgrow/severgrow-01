@@ -10,6 +10,11 @@ import paintUrl from '../assets/brand/paint-wordmark.svg?url';
 // "should never happen"). WebKit can paint the SVG's clipped grain group without its clip; a 4x render
 // of the same vector is just as sharp on a retina screen and cannot come apart. 107 KB (the SVG: 528 KB).
 import paintMenuUrl from '../assets/brand/paint-wordmark-4x.webp?url';
+// EXPERIMENT (owner, 2026-11-09: "replace the paint logo in main menu with the new plain one"): the
+// home menu shows the PLAIN mark, cropped to the paint mark's own box (27 59 1995 565) so the lockup
+// keeps its size and place. One solid fill, no grain group, so nothing can come apart in WebKit.
+// The PAINT render stays shipped (paintMenuUrl) so the experiment is one line to undo.
+import plainMenuUrl from '../assets/brand/plain-wordmark-menu.svg?url';
 import plainUrl from '../assets/brand/plain-wordmark.svg?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
@@ -106,6 +111,7 @@ html.futa04-branding #menu #logo svg {
 }
 /* PAINT on the home menu: a barely-noticeable almost-black drop shadow so it pops a tiny bit. */
 html.futa04-branding #menu #logo img.paint-mark,
+html.futa04-branding #menu #logo img.plain-mark,
 html.futa04-branding #menu #logo svg.paint-mark {
   filter: drop-shadow(0 1px 1.5px rgba(8, 8, 10, .55));
 }
@@ -192,11 +198,27 @@ function paintMarkImg(): HTMLImageElement {
   return img;
 }
 
+/** Home-menu PLAIN mark (the 2026-11-09 experiment), same box and shadow as the paint one. */
+function plainMarkImg(): HTMLImageElement {
+  const img = document.createElement('img');
+  img.className = 'plain-mark';
+  img.src = plainMenuUrl;
+  img.alt = '';
+  img.width = 1995;
+  img.height = 565;
+  img.setAttribute('aria-hidden', 'true');
+  img.decoding = 'async';
+  img.draggable = false;
+  return img;
+}
+/** The paint mark, kept for the experiment's undo. */
+export const homePaintMark = paintMarkImg;
+
 export function drawLogo(_kanji = false) {
   const container = document.getElementById('logo');
   if (!container) return;
-  // Home screen menu ONLY uses PAINT (owner, 2026-11-07).
-  container.replaceChildren(paintMarkImg());
+  // Home screen menu: the PLAIN mark (owner experiment, 2026-11-09; was PAINT since 2026-11-07).
+  container.replaceChildren(plainMarkImg());
 }
 
 export function createHudBrandMark(id = 'futasaku-hud-plain'): SVGSVGElement {

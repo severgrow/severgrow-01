@@ -612,17 +612,22 @@ export class MatchService {
    * removed by the engine's single rule (`hidePrivateEvents`).
    */
   async viewPayload(player: PlayerRecord, matchId: string, sinceRevision = 0): Promise<MatchViewPayload> {
-    const match = await this.requireParticipantFresh(player, matchId);
+    const { match, seat } = await this.requireSeatFresh(player, matchId);
     // A finished match settles on every view (idempotent): the retry is what makes a transient
     // economy failure self-heal. Its report is this player's own award, or nothing.
     const settled = match.status === 'finished' ? await this.safeSettleOnline(match) : null;
     this.assertRulesSupported(match.rulesVersion);
-    const seat = await this.seatOf(player, matchId);
-    await this.storage.touchParticipant(matchId, player.id, this.now());
     const visibleRevision = gatedRevisionFor(match, seat);
-    const moves = await this.storage.movesOf(matchId, sinceRevision);
+    // Independent reads and the presence touch go out TOGETHER: one round trip instead of four
+    // (owner, 2026-11-09: a Blitz view took 1.7 s). Same data, same response.
+    const opponent = this.opponentOf(matchId, seat);
+    const [, moves] = await Promise.all([
+      this.storage.touchParticipant(matchId, player.id, this.now()),
+      this.storage.movesOf(matchId, sinceRevision),
+      opponent,
+    ]);
     const visibleMoves = moves.filter((m) => m.revision <= visibleRevision);
-    return this.payload(match, seat, visibleMoves.flatMap((m) => m.events), settled?.get(player.id) ?? null);
+    return this.payload(match, seat, visibleMoves.flatMap((m) => m.events), settled?.get(player.id) ?? null, opponent);
   }
 
   /**
@@ -731,7 +736,13 @@ export class MatchService {
   // ---- the authoritative action pipeline ----
 
   async submitAction(player: PlayerRecord, matchId: string, request: SubmitActionRequest): Promise<SubmitActionResponse> {
-    await this.rateLimit(`actions:player:${player.id}`, MINUTE_MS, this.config.rateLimits.actionsPerPlayerPerMinute);
+    // The rate limit and the match/seat read are independent: one round trip, not three. The limit
+    // still decides first (a refused caller gets RATE_LIMITED, never a match error).
+    const [limited, seated] = await Promise.allSettled([
+      this.rateLimit(`actions:player:${player.id}`, MINUTE_MS, this.config.rateLimits.actionsPerPlayerPerMinute),
+      this.requireSeat(player, matchId),
+    ]);
+    if (limited.status === 'rejected') throw limited.reason;
 
     const { expectedRevision, requestId } = request ?? {};
     if (!Number.isInteger(expectedRevision) || (expectedRevision as number) < 0) {
@@ -742,9 +753,12 @@ export class MatchService {
     }
 
     const { actions, asBatch } = this.normalizeActions(request);
-    await this.requireParticipant(player, matchId);
-
-    const before = await this.storage.matchById(matchId);
+    if (seated.status === 'rejected') throw seated.reason;
+    // The row read with the seat is the "before" (it used to be read a second time).
+    const before: MatchRecord | null = seated.value.match;
+    // The opponent's name for the response does not depend on the move: start reading it now.
+    const opponent = this.opponentOf(matchId, seated.value.seat);
+    opponent.catch(() => undefined);
     const beforeStatus = before?.status;
     const beforeBoundary = before?.turnStartRevision;
 
@@ -772,23 +786,28 @@ export class MatchService {
     const boundaryMoved =
       !result.replayed &&
       (result.match.status !== beforeStatus || result.match.turnStartRevision !== beforeBoundary);
-    if (boundaryMoved || result.match.status === 'finished') {
-      await safePublish(this.broadcaster, matchId, { revision: result.match.turnStartRevision, status: result.match.status });
-    } else if (!result.replayed && result.match.liveManaged) {
-      // BLITZ: every move is pinged as it lands, so the watcher sees it at once (owner, 2026-11-09).
-      await safePublish(this.broadcaster, matchId, { revision: result.match.revision, status: result.match.status });
-    }
-    // The commit's own expiry step may have spent a grace before applying the action.
-    if (!result.replayed) await this.publishGraceChange(before, result.match);
+    // The other device's ping goes out WHILE this reply is built, not before it (owner, 2026-11-09:
+    // Blitz moves arrived late): the two never depended on each other.
+    const pinged = (async () => {
+      if (boundaryMoved || result.match.status === 'finished') {
+        await safePublish(this.broadcaster, matchId, { revision: result.match.turnStartRevision, status: result.match.status });
+      } else if (!result.replayed && result.match.liveManaged) {
+        // BLITZ: every move is pinged as it lands, so the watcher sees it at once (owner, 2026-11-09).
+        await safePublish(this.broadcaster, matchId, { revision: result.match.revision, status: result.match.status });
+      }
+      // The commit's own expiry step may have spent a grace before applying the action.
+      if (!result.replayed) await this.publishGraceChange(before, result.match);
+    })();
     // Finished engine matches earn Seeds, exactly once per player. A result replay repairs a
     // transient settlement failure without touching the deterministic game state.
     if (result.match.status === 'finished') await this.safeSettleOnline(result.match);
 
     const events = result.moves.flatMap((m) => m.events);
+    const [view] = await Promise.all([this.payload(result.match, result.move.seat, events, null, opponent), pinged]);
     return {
       ok: true,
       replayed: result.replayed,
-      player: await this.payload(result.match, result.move.seat, events),
+      player: view,
       serverNow: this.now(),
     };
   }
@@ -877,6 +896,8 @@ export class MatchService {
     events: readonly Event[],
     /** This seat's settled award for the duel, when the finished view just asked the economy. */
     seeds: { awarded: number; reason: string | null } | null = null,
+    /** The opponent, when the caller already started reading it (in parallel with other reads). */
+    opponent?: Promise<{ opp: Participant | null; oppPlayer: PlayerRecord | null }>,
   ): Promise<MatchViewPayload> {
     const source = gatedStateFor(match, seat);
     const revision = gatedRevisionFor(match, seat);
@@ -886,9 +907,7 @@ export class MatchService {
       source.actor === seat &&
       source.phase !== 'GAME_OVER' &&
       revision === match.revision; // mid-turn opponent never gets legal actions from gated state alone
-    const participants = await this.storage.participantsOf(match.id);
-    const opp = participants.find((p) => p.seat !== seat) ?? null;
-    const oppPlayer = opp ? await this.storage.playerById(opp.playerId) : null;
+    const { opp, oppPlayer } = await (opponent ?? this.opponentOf(match.id, seat));
     return {
       matchId: match.id,
       rulesVersion: match.rulesVersion,
@@ -916,21 +935,37 @@ export class MatchService {
     };
   }
 
-  private async requireParticipant(player: PlayerRecord, matchId: string): Promise<MatchRecord> {
-    const match = await this.storage.matchById(matchId);
+  /** The other seat and its player record (two dependent reads; callers may start it early). */
+  private async opponentOf(matchId: string, seat: Player): Promise<{ opp: Participant | null; oppPlayer: PlayerRecord | null }> {
+    const participants = await this.storage.participantsOf(matchId);
+    const opp = participants.find((p) => p.seat !== seat) ?? null;
+    const oppPlayer = opp ? await this.storage.playerById(opp.playerId) : null;
+    return { opp, oppPlayer };
+  }
+
+  /**
+   * The match and the caller's seat, read TOGETHER (one database round trip, not two: owner,
+   * 2026-11-09, Blitz "responsiveness is really bad"). Same answers and the same errors as before:
+   * an unknown match first, then a caller who is not in it.
+   */
+  private async requireSeat(player: PlayerRecord, matchId: string): Promise<{ match: MatchRecord; seat: Player }> {
+    const [match, participant] = await Promise.all([this.storage.matchById(matchId), this.storage.participantOf(matchId, player.id)]);
     if (!match) throw new ApiError('MATCH_NOT_FOUND', 'Unknown match.');
-    const participant = await this.storage.participantOf(matchId, player.id);
     if (!participant) throw new ApiError('NOT_A_PARTICIPANT', 'You are not in this match.');
-    return match;
+    return { match, seat: participant.seat };
   }
 
   /** Participant check + lazy expiry (same decision point as writes). */
   private async requireParticipantFresh(player: PlayerRecord, matchId: string): Promise<MatchRecord> {
-    const before = await this.requireParticipant(player, matchId);
-    const fresh = await this.storage.applyExpiry(matchId, this.now());
+    return (await this.requireSeatFresh(player, matchId)).match;
+  }
+
+  /** `requireParticipantFresh` plus the caller's seat (a participant never leaves a match). */
+  private async requireSeatFresh(player: PlayerRecord, matchId: string): Promise<{ match: MatchRecord; seat: Player }> {
+    const { match: before, seat } = await this.requireSeat(player, matchId);
+    // The row just read is handed over: when nothing is due, no lock is taken (storage fast path).
+    const fresh = await this.storage.applyExpiry(matchId, this.now(), before);
     if (!fresh) throw new ApiError('MATCH_NOT_FOUND', 'Unknown match.');
-    const participant = await this.storage.participantOf(matchId, player.id);
-    if (!participant) throw new ApiError('NOT_A_PARTICIPANT', 'You are not in this match.');
     await this.publishGraceChange(before, fresh);
     // A poll that discovers a deadline the match already passed must ANNOUNCE the finish on the same
     // ping path a completed turn uses, so the other device learns at once instead of waiting for its
@@ -939,7 +974,7 @@ export class MatchService {
       await safePublish(this.broadcaster, fresh.id, { revision: fresh.revision, status: fresh.status });
       await this.safeSettleOnline(fresh);
     }
-    return fresh;
+    return { match: fresh, seat };
   }
 
   /**

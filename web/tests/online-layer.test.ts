@@ -24,6 +24,8 @@ import {
   noteServerNow,
   POLL_ACTIVE_MS,
   POLL_HIDDEN_MS,
+  POLL_PUSHED_MS,
+  POLL_WAITING_MS,
   presenceFromPeers,
   presenceLabel,
   remainingMs,
@@ -397,6 +399,66 @@ describe('sync engine (poll + ping)', () => {
     await sync.refresh();
     expect(calls.length).toBeGreaterThan(before);
 
+    sync.stop();
+  });
+
+  it('a ping that lands while a fetch is on the wire is never dropped: one more fetch follows (Blitz, owner 2026-11-09)', async () => {
+    const payload = samplePayload({ revision: 1 });
+    let release: (() => void) | null = null;
+    const seen: string[] = [];
+    const fetchImpl: FetchLike = async (url) => {
+      const since = new URL(String(url)).searchParams.get('since') ?? '0';
+      seen.push(since);
+      // the SECOND request (the poll) is held on the wire until the test releases it
+      if (seen.length === 2) await new Promise<void>((r) => { release = r; });
+      const revision = seen.length === 1 ? 1 : seen.length === 2 ? 1 : 2;
+      return { ok: true, status: 200, json: async () => ({ ok: true, player: { ...payload, revision }, serverNow: 1000 }) } as never;
+    };
+    const fake = createFakeChannel();
+    const views: number[] = [];
+    const sync = createSyncEngine({
+      client: new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore() }),
+      token: 'tok', matchId: 'm1', channel: fake.channel, setTimer: () => 1, clearTimer: () => undefined,
+      onView: (p) => views.push(p.revision),
+    });
+    await sync.start();
+    const poll = sync.refresh(); // on the wire, left before the move
+    await new Promise((r) => setTimeout(r, 0));
+    fake.emitPing('m1', { revision: 2, status: 'active' }); // the move lands now
+    release!();
+    await poll;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seen.length).toBe(3); // the ping's own fetch ran after the one in flight
+    expect(views.at(-1)).toBe(2);
+    sync.stop();
+  });
+
+  it('rests the poll while the Realtime topic is joined, and is fast again the moment it drops (owner 2026-11-09)', async () => {
+    const payload = samplePayload({ revision: 1 });
+    const { fetchImpl } = makeFetch({ 'GET /v1/matches/m1/view?since=0': { status: 200, body: { ok: true, player: payload, serverNow: 1 } }, 'GET /v1/matches/m1/view?since=1': { status: 200, body: { ok: true, player: payload, serverNow: 2 } } });
+    const timers: number[] = [];
+    let connection: ((on: boolean) => void) | undefined;
+    let reconnect: (() => void) | undefined;
+    let fetches = 0;
+    const channel = { subscribe: (_m: string, h: { onConnection?: (on: boolean) => void; onReconnect?: () => void }) => { connection = h.onConnection; reconnect = h.onReconnect; return () => undefined; } };
+    const sync = createSyncEngine({
+      client: new DuelClient({ baseUrl: 'https://api.example', fetch: async (u, i) => { fetches++; return fetchImpl(u, i); }, storage: memoryStore() }),
+      token: 'tok', matchId: 'm1', channel: channel as never, isVisible: () => true,
+      setTimer: (_fn, ms) => { timers.push(ms); return timers.length; }, clearTimer: () => undefined,
+    });
+    await sync.start();
+    sync.setWaiting(true);
+    expect(timers.at(-1)).toBe(POLL_WAITING_MS);
+    connection!(true);
+    expect(timers.at(-1)).toBe(POLL_PUSHED_MS);
+    sync.setWaiting(false);
+    expect(timers.at(-1)).toBe(POLL_PUSHED_MS);
+    connection!(false);
+    expect(timers.at(-1)).toBe(POLL_ACTIVE_MS);
+    const before = fetches;
+    reconnect!(); // a rejoin catches up once
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetches).toBe(before + 1);
     sync.stop();
   });
 

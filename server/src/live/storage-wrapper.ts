@@ -30,8 +30,8 @@ export const liveAwareStorage = (inner: Storage, ticker: LiveTicker): Storage =>
     if (result.ok && result.match.status === 'finished' && result.match.liveManaged) await ticker.tickMatch(matchId, now);
   };
   const overrides: Partial<Storage> = {
-    async applyExpiry(matchId: string, now: number) {
-      const m = await inner.applyExpiry(matchId, now);
+    async applyExpiry(matchId: string, now: number, known?: MatchRecord) {
+      const m = await inner.applyExpiry(matchId, now, known);
       if (!overdue(m, now)) return m;
       await ticker.tickMatch(matchId, now);
       return inner.applyExpiry(matchId, now);

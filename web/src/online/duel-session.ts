@@ -149,6 +149,8 @@ export class OnlineSession {
   }
 
   get canUndo(): boolean {
+    // Blitz has no Undo: every move is sent the moment it is made.
+    if (blitzDuelNow()) return false;
     return !this.boardBlocked && this.driver.draft().canUndo();
   }
 
@@ -274,6 +276,12 @@ export class OnlineSession {
    * so a render burst can never turn into a fetch burst.
    */
   async prepareOpponentTurnReplay(): Promise<void> {
+    // BLITZ streams the opponent's every move, and each one is a new revision: a full history
+    // download per move only competed with the live updates (owner, 2026-11-09: Blitz moves
+    // arrived late). In Blitz the check waits for my own turn (the only time it is offered).
+    // An ordinary duel never sees their mid-turn moves, so it is unchanged.
+    const snap = this.driver.snapshot();
+    if (blitzDuelNow() && snap.status === 'active' && snap.view.actor !== snap.seat) return;
     const key = this.replayKey();
     if (this.replayCheck?.key === key || this.replayChecking === key) return;
     this.replayChecking = key;
@@ -343,6 +351,8 @@ export class OnlineSession {
     if (engine.t === 'EndAct' || engine.t === 'Discard') {
       // EndAct leaves the ACT step; the Discard (when a card is left) finishes the turn.
       // Both commit a batch to the server, so the turn boundary is real.
+      // Blitz: the moves already shown are still being sent; the throw follows them, in order.
+      await this.blitzSent();
       const res = await this.driver.throwTurn(engine);
       if (!res.ok) {
         this.refresh();
@@ -352,27 +362,6 @@ export class OnlineSession {
       this.log.push(engine);
       const catchUp = this.consumeCatchUp();
       return { ok: true, played: null, catchUp, finished: this.finished };
-    }
-
-    // BLITZ (owner, 2026-11-06: "the moves should be shown as soon as they're done"): in a Blitz duel
-    // every move is committed at once, like a Draw, so the opponent watches it land. No draft, no Undo.
-    if (blitzDuelNow()) {
-      const before = this.buildEngineShadow();
-      const res = await this.driver.commitNow(engine);
-      if (!res.ok) {
-        this.refresh();
-        return { ok: false, message: res.message ?? ONLINE.errMoveIllegal };
-      }
-      this.refresh();
-      const after = this.buildEngineShadow();
-      const played: Played = {
-        before: this.driver.perspective().toDisplayState(before),
-        action,
-        after: this.state,
-        steps: buildSteps(before, engine, after, this.seat).map((s) => mapStepDisplay(s, this.driver)),
-      };
-      this.log.push(engine);
-      return { ok: true, played, catchUp: this.consumeCatchUp(), finished: this.finished };
     }
 
     // Mid-turn draft (Grow / Bloom / Bomb / Blast / …)
@@ -400,6 +389,7 @@ export class OnlineSession {
     // drops the rest of the turn, so `[winningMove, EndAct]` commits the win and finishes the match
     // for BOTH devices. (That server rule was added for this case; the client half was missing.)
     if (afterEng.phase === 'GAME_OVER') {
+      await this.blitzSent();
       const res = await this.driver.throwTurn({ t: 'EndAct' });
       if (!res.ok) {
         // Nothing was committed. The driver has already dropped a draft it could not send and
@@ -410,12 +400,48 @@ export class OnlineSession {
       this.refresh();
       return { ok: true, played, catchUp: this.consumeCatchUp(), finished: this.finished };
     }
+    // BLITZ (owner, 2026-11-06: "the moves should be shown as soon as they're done"; 2026-11-09:
+    // "responsiveness is really bad"): the move is shown AT ONCE from the local draft, exactly like a
+    // normal turn, and sent to the server straight away in the background, one at a time and in
+    // order, so the opponent watches each one land. No Undo in Blitz.
+    if (blitzDuelNow()) this.sendBlitz();
     return { ok: true, played, catchUp: [], finished: false };
   }
 
+  /** The Blitz moves still being sent (resolves at once when there are none). */
+  private blitzSending: Promise<void> | null = null;
+  private blitzSent(): Promise<void> {
+    return this.blitzSending ?? Promise.resolve();
+  }
+  private sendBlitz(): void {
+    if (this.blitzSending) return; // the running loop picks the new move up
+    this.blitzSending = (async () => {
+      try {
+        for (let guard = 0; guard < 64; guard++) {
+          const next = this.driver.draft().actions()[0];
+          if (!next) return;
+          const res = await this.driver.commitNow(next, { rebase: true });
+          if (!res.ok) {
+            // The server refused what was shown: drop the unsent moves and go back to its truth.
+            this.driver.draft().clear();
+            this.driver.draft().persist();
+            this.refresh();
+            this.blitzError?.(res.message ?? ONLINE.errMoveIllegal);
+            return;
+          }
+          this.refresh();
+        }
+      } finally {
+        this.blitzSending = null;
+      }
+    })();
+  }
+  /** Set by the page: a Blitz move that the server refused after it was shown. */
+  blitzError: ((message: string) => void) | null = null;
+
   undo(): boolean {
     // Undo is an input like any other: it stays shut until the enemy turn has been shown.
-    if (this.boardBlocked) return false;
+    if (this.boardBlocked || blitzDuelNow()) return false;
     if (!this.driver.draftUndo()) return false;
     this.driver.draft().persist();
     this.refresh();

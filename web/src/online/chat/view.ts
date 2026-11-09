@@ -774,6 +774,8 @@ export const mountMatchChat = (o: {
   window.visualViewport?.addEventListener('resize', viewport);
   window.visualViewport?.addEventListener('scroll', viewport);
   window.addEventListener('resize', scheduleViewport);
+  // The desktop cockpit is moved by a translate (main.ts centreSideDock), which no observer sees.
+  window.addEventListener('futasaku:cockpit-moved', scheduleViewport);
   viewport();
   ctl.start();
   return {
@@ -791,6 +793,7 @@ export const mountMatchChat = (o: {
       window.removeEventListener('offline', connectivity);
       window.removeEventListener('focus', resume);
       window.removeEventListener('resize', scheduleViewport);
+      window.removeEventListener('futasaku:cockpit-moved', scheduleViewport);
       cockpitLayout.disconnect();
       placementChanges.disconnect();
       if (layoutFrame !== null) cancelAnimationFrame(layoutFrame);
