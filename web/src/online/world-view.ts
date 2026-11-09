@@ -1256,6 +1256,9 @@ export class WorldView {
   freezeMenuPreview(on: boolean) { if (this.menuPreview) this.planet?.freeze(on); }
 
   close(instant = false) {
+    // A tile selection belongs to this visit. Clear both the retained globe highlight and its
+    // action bar before handing the planet back to the menu; camera memory is independent.
+    if (this.selected !== null) this.deselect();
     // THE PLANET STAYS FOR THE MENU (owner, 2026-11-04): Back flies it out behind the menu. Only an
     // instant close (a match starting, the menu going away) frees its graphics.
     if (instant || !FEATURES.planet) { this.planet?.dispose(); this.planet = null; }

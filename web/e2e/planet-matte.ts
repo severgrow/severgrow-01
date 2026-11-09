@@ -77,6 +77,19 @@ try{
   await p.locator('#levels-back').click();
   if(await p.locator('#play-back').isVisible())await p.locator('#play-back').click();
   await p.locator('#menu-world').click();await settled(p);
+  // Selection belongs to this visit, not the retained globe behind the main menu.
+  const tile=await p.evaluate(()=>(window as any).__severgrow.planet().screenOf('0,0'));
+  assert(tile,'home tile is visible for the selection lifecycle check');
+  if(width!<900)await p.touchscreen.tap(tile.x,tile.y);else await p.mouse.click(tile.x,tile.y);
+  await p.waitForFunction(()=>(window as any).__severgrow.planet().selected==='0,0');
+  assert(await p.locator('#online-world-selection').isVisible(),'selecting a tile opens its actions');
+  await p.locator('#online-world-back').click();
+  await p.locator('#menu-world').waitFor({state:'visible'});
+  assert.equal(await p.evaluate(()=>(window as any).__severgrow.planet().selected),null,'menu planet forgets the selection');
+  await p.locator('#menu-world').click();await settled(p);
+  assert.equal(await p.evaluate(()=>(window as any).__severgrow.planet().selected),null,'reopening starts without a selected tile');
+  assert(!(await p.locator('#online-world-selection').isVisible()),'reopening has no stale tile actions');
+  await p.screenshot({path:`${shots}/planet-reopened-${width}.png`});
   const logos=await p.evaluate(()=>{
    document.documentElement.classList.add('brand-mark');
    return ['hud-brand','online-brand'].filter(id=>{const e=document.getElementById(id);return e&&e.getBoundingClientRect().width>0&&getComputedStyle(e).display!=='none';});
@@ -228,7 +241,7 @@ try{
 
 
   }
-  assert.equal(errors.length,0,errors.join('\n'));console.log(`PASS ${width}×${height}: coherent boot, matte keys, warm chat, one logo, pressed panes, north-up camera with exact release`);
+  assert.equal(errors.length,0,errors.join('\n'));console.log(`PASS ${width}×${height}: coherent boot, matte keys, warm chat, one logo, pressed panes, selection cleared on exit, north-up camera with exact release`);
   await p.close();
  }
  const reduced=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
