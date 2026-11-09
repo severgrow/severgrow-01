@@ -1,9 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DuelClient, type KeyValue } from '../../server/src/client.js';
 import { createIdentityStore, isIdentityStorageEvent, subscribeIdentityChanges } from '../src/online/identity.js';
-import { setOnlineSession, subscribeOnlineSession } from '../src/online/duel-runtime.js';
+import { getOnlineMatchId, setOnlineSession, subscribeOnlineSession } from '../src/online/duel-runtime.js';
 
 describe('online lifecycle notifications', () => {
+  it('reads immutable match identity without rebuilding a game snapshot on every poll', () => {
+    const snapshot = vi.fn(() => ({ matchId: 'first' }));
+    const session = { driver: { snapshot } } as unknown as NonNullable<Parameters<typeof setOnlineSession>[0]>;
+    try {
+      setOnlineSession(session);
+      for (let i = 0; i < 100; i++) expect(getOnlineMatchId()).toBe('first');
+      expect(snapshot).toHaveBeenCalledTimes(1);
+      setOnlineSession(null);
+      expect(getOnlineMatchId()).toBeNull();
+      const second = { driver: { snapshot: () => ({ matchId: 'second' }) } } as typeof session;
+      setOnlineSession(second);
+      expect(getOnlineMatchId()).toBe('second');
+      setOnlineSession(session);
+      expect(getOnlineMatchId()).toBe('first');
+      expect(snapshot).toHaveBeenCalledTimes(1);
+    } finally { setOnlineSession(null); }
+  });
   it('only reacts to its own channel identity or a full storage clear', () => {
     expect(isIdentityStorageEvent('futa05:severgrow.duel.identity.v1','futa05:')).toBe(true);
     expect(isIdentityStorageEvent(null,'futa05:')).toBe(true);

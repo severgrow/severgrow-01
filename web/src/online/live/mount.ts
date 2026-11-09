@@ -10,7 +10,7 @@ import { browserStorage } from '../../../../server/src/client.js';
 import { SOUND_REMOVED, Sound } from '../../ui/sound.js';
 import { RecordedFx } from '../../ui/recorded.js';
 import { duelApiUrl, duelRegion, onlineBuildEnabled } from '../config.js';
-import { getOnlineSession, subscribeOnlineSession } from '../duel-runtime.js';
+import { getOnlineMatchId, getOnlineSession, subscribeOnlineSession } from '../duel-runtime.js';
 import { STORAGE_PREFIX } from '../../channel.js';
 import { IDENTITY_STORAGE_KEY, isIdentityStorageEvent, subscribeIdentityChanges } from '../identity.js';
 import { createLiveApi } from './api.js';
@@ -116,7 +116,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     pointerDown || !!document.querySelector('.drag-source-dim') || !!document.querySelector('#draw-info:not([hidden])');
   const softBusy = () => !!page().busy?.() || !!page().online?.()?.revealing;
   const tutorial = () => !!page().tutorial?.();
-  const currentMatchId = (): string | null => getOnlineSession()?.driver.snapshot().matchId ?? null;
+  const currentMatchId = getOnlineMatchId;
   const presence = (): { status: PresenceStatus; matchId: string | null } => {
     if (tutorial()) return { status: 'tutorial', matchId: null };
     const m = currentMatchId();
