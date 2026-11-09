@@ -222,9 +222,9 @@ describe('the clock glass glows evenly (owner, 2026-11-08: "too much light glow 
 
 describe('the Blitz clock is the same device as the LED display above it (owner, 2026-11-08)', () => {
   // "something makes our led display and the timer counter below look like they're from different
-  // devices". The clock had its own glass (#0b0d0c, no pixel grid) and its own paler inks; the display
-  // has #090c0b glass with a faint pixel grid and the game's light palette (player/light.ts).
-  it('shares the display glass, its pixel grid and its light palette', async () => {
+  // devices". Share smoked glass and inks, but the owner's 9 November correction removes the
+  // dot-matrix background from this seven-segment instrument. Keep the readable time separator.
+  it('shares the display glass and light palette without a dot-matrix background', async () => {
     const { BLITZ_CLOCK_CSS } = await import('../src/blitz/timer.js');
     const { LIGHT_TONES } = await import('../src/player/light.js');
     const { readFileSync } = await import('node:fs');
@@ -232,8 +232,8 @@ describe('the Blitz clock is the same device as the LED display above it (owner,
     const glass = /#smart-led-window \{[^}]*background:(#[0-9a-f]{6})/.exec(cockpit)![1]!;
     expect(BLITZ_CLOCK_CSS).toMatch(new RegExp(`\\.bc-glass \\{[^}]*background:${glass}`));
     const grid = /#smart-led-window::before \{[^}]*background-image:(radial-gradient\([^;]*\));\s*background-size:([^;]*);/.exec(cockpit)!;
-    expect(BLITZ_CLOCK_CSS).toContain(grid[1]!);
-    expect(BLITZ_CLOCK_CSS).toContain(grid[2]!);
+    expect(BLITZ_CLOCK_CSS).not.toContain(grid[1]!);
+    expect(BLITZ_CLOCK_CSS).not.toContain(grid[2]!);
     expect(BLITZ_CLOCK_CSS).toContain(`--bc-ink:${LIGHT_TONES.amber.core}`);
     expect(BLITZ_CLOCK_CSS).toContain(`--bc-ink:${LIGHT_TONES.red.core}`);
   });

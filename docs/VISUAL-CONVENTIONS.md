@@ -16,6 +16,9 @@ Current shared finish, 28 October 2026. Applies to future UI work and to the fiv
   the existing exit. Match chat uses the same duration constants. Do not animate gameplay with these.
 - **Glass:** reuse `--dark-glass` and `--dark-glass-blur`, preserving documented feature-specific
   readability adjustments (such as the weaker match-chat blur). Do not add blur layers for decoration.
+- **Timer:** the seven-segment counter shares the LED's smoked glass and ink palette, with no
+  dot-matrix background. Keep the time separator. The display's reflected light fades across the
+  timer's upper lip; it must not wash over the whole timer face.
 - **Type:** use existing display/UI fonts. Small transcript metadata and quiet status text use
   `--instrument-label-size` (.6875rem), `--instrument-tracking` (.08em) and `--instrument-muted`.
   Keep body text/board digits in their existing hierarchy and support Large Text.

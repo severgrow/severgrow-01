@@ -45,11 +45,10 @@ html.blitz-match #blitz-clock::before {
   background:url('./hardware/display-frame-supplied.webp') center / contain no-repeat; z-index:0;
 }
 /* THE SAME DEVICE AS THE LED DISPLAY ABOVE (owner, 2026-11-08: "make the timer look like from the
-   same physical device as the led display"): the display's own glass colour, its faint pixel grid and
+   same physical device as the led display"): the display's own glass colour and
    the game's light palette (player/light.ts), not a glass and inks of the clock's own. */
 #blitz-clock .bc-glass {
   position:relative; z-index:1; width:100%; height:100%; border-radius:6px; background:#090c0b;
-  background-image:radial-gradient(circle,rgba(166,128,78,.20) .65px,transparent .8px); background-size:2.3px 3.1px; background-position:0 2.6px;
   display:flex; align-items:center; justify-content:center; overflow:hidden;
 }
 /* Seen through dark, slightly scratched plastic (owner, 2026-11-06: "colours less intense, like it's

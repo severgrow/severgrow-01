@@ -321,6 +321,18 @@ html.futa04-information #smart-led-bloom {
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
   pointer-events:none; z-index:0; opacity:var(--light-bloom-op,.286);
 }
+/* The raised display lights the timer's upper lip, not its entire face. Keep the existing
+   horizontal feather and fade the same baked light to zero 12px into the timer. No new layer. */
+html.blitz-match.futa04-information #smart-led-bloom-clip {
+  -webkit-mask-image:
+    linear-gradient(to right,transparent 0,#000 var(--led-bloom-wing,26px),#000 calc(100% - var(--led-bloom-wing,26px)),transparent 100%),
+    linear-gradient(to bottom,#000 calc(50% + var(--control-size,44px) / 2),rgb(0 0 0 / .24) calc(50% + var(--control-size,44px) / 2 + var(--control-gap,6px)),transparent calc(50% + var(--control-size,44px) / 2 + var(--control-gap,6px) + 12px));
+  -webkit-mask-composite:source-in;
+  mask-image:
+    linear-gradient(to right,transparent 0,#000 var(--led-bloom-wing,26px),#000 calc(100% - var(--led-bloom-wing,26px)),transparent 100%),
+    linear-gradient(to bottom,#000 calc(50% + var(--control-size,44px) / 2),rgb(0 0 0 / .24) calc(50% + var(--control-size,44px) / 2 + var(--control-gap,6px)),transparent calc(50% + var(--control-size,44px) / 2 + var(--control-gap,6px) + 12px));
+  mask-composite:intersect;
+}
 /* Scrolling: the sprite is aligned to the strip's own left edge. The clip is offset by its own
    wing on each side, so the alignment inside it is the old alignment plus that wing. */
 html.futa04-information #smart-led-bloom.scrolling {
