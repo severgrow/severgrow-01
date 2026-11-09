@@ -504,6 +504,12 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     if (document.visibilityState === 'visible') void refresh();
     else if (statusTimer !== null) { window.clearTimeout(statusTimer); statusTimer = null; }
   });
+  window.addEventListener('online', () => {
+    if (document.visibilityState !== 'visible') return;
+    void center?.heartbeatNow().then(() => refresh());
+    void center?.pollNow();
+    void refresh();
+  });
 
   (window as unknown as { __futasakuLive?: () => LiveDebug }).__futasakuLive = () => ({
     status,

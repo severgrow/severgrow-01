@@ -17,6 +17,7 @@ import { onlinePerspective } from './perspective.js';
 import type { Perspective } from './perspective.js';
 import { newRequestId, submitWithRetries } from './retries.js';
 import { createSyncEngine } from './sync.js';
+import { subscribeOpponentStatus } from './live/opponent-status.js';
 import type { SyncEngine, ViewReason } from './sync.js';
 import type {
   ConnectionStatus,
@@ -96,6 +97,8 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   let player: MatchViewPayload | null = options.initial ?? null;
   let connection: ConnectionStatus = 'online';
   let presence: PresenceStatus = 'unknown';
+  let authoritativePresence: PresenceStatus = 'unknown';
+  let stopPresence: (() => void) | null = null;
   let notice: string | null = null;
   let pendingEvents: Event[] = [];
   /** See `pendingOrigin()`: how the buffered events arrived. */
@@ -166,6 +169,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       emit();
     },
     onPresence: (p) => {
+      if (authoritativePresence !== 'unknown') return;
       presence = p;
       emit();
     },
@@ -280,10 +284,18 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     kind: 'online',
 
     start() {
+      stopPresence ??= subscribeOpponentStatus(options.matchId, value => {
+        authoritativePresence = value;
+        if (presence === value) return;
+        presence = value;
+        if (player) emit();
+      });
       return sync.start();
     },
 
     stop() {
+      stopPresence?.();
+      stopPresence = null;
       sync.stop();
       draft.persist();
     },

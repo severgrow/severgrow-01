@@ -25,7 +25,8 @@ const send=(topic:string,event:string,payload:unknown)=>{
 };
 const memory=new MemoryStorage(),config={...DEFAULT_SERVER_CONFIG,corsOrigins:['*']};
 const broadcaster={async publish(id:string,payload:unknown){send(id,'ping',payload);}};
-const live=createLiveRuntime({storage:memory,live:new MemoryLiveStore(memory),server:config,
+const liveStore = new MemoryLiveStore(memory);
+const live=createLiveRuntime({storage:memory,live:liveStore,server:config,
  config:{...DEFAULT_LIVE_CONFIG,turnMs:37_000,presencePerPlayerPerMinute:1000,challengesPerPlayerPerHour:1000},broadcaster,
  notifier:{async publish(topic,payload){send(topic,'challenge',payload);}}});
 const service=new MatchService({storage:live.storage,config,broadcaster});
@@ -38,7 +39,10 @@ if(process.env.JOURNEY_SKIP_BUILD!=='1') {
  assert.equal(build.status,0,build.stderr);
 }
 const fixture=await productFixture();
-const browser=await chromium.launch({...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+// Transport-only recovery checks may use the supported WebGL fallback on software-GPU hosts.
+// Default visual/performance journeys retain their original rendering conditions.
+const browser=await chromium.launch({...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--no-sandbox',
+ ...(process.env.JOURNEY_LOW_GPU==='1'?['--disable-webgl']:['--use-angle=swiftshader','--enable-unsafe-swiftshader'])]});
 const results:unknown[]=[];
 let lastTraces:unknown[]=[];
 const status=(p:Page)=>p.evaluate(()=>(window as any).__futasakuLive?.()?.status);
@@ -103,6 +107,29 @@ try {
   console.log('presentation',JSON.stringify(await Promise.all(pages.map(p=>p.evaluate(()=>(window as any).__futasakuLive?.().presentation)))));
   assert.equal((await status(desktop)).matchId,(await status(phone)).matchId,'both clients joined the same authoritative match');
   console.log('ready-times',JSON.stringify(readyTimes));
+  for (const p of pages) {
+    assert.equal(await p.locator('[data-duel-presence]').getAttribute('data-presence'), 'online', 'header uses server presence without a move');
+    assert.equal(await p.locator('.match-chat-presence').getAttribute('data-presence'), 'online', 'chat agrees before any message');
+    const labelBox = await p.locator('[data-duel-presence]').boundingBox();
+    const boltBox = await p.locator('[data-live="pill"]').boundingBox();
+    assert(labelBox && boltBox && labelBox.x >= boltBox.x + boltBox.width + 4, 'presence label clears the Blitz control');
+  }
+  // Model a phone returning after its heartbeat expired. No chat or gameplay action may be
+  // needed to repair either device's indicators. Only test-local guest presence is altered.
+  const phoneId = (await phone.evaluate(() => JSON.parse(localStorage.getItem('severgrow.duel.identity.v1')!).playerId)) as string;
+  const desktopId = (await desktop.evaluate(() => JSON.parse(localStorage.getItem('severgrow.duel.identity.v1')!).playerId)) as string;
+  const matchId = (await status(phone)).matchId;
+  await phone.context().setOffline(true);
+  await liveStore.setPresence(phoneId, 'in_match', matchId, Date.now() - 120000);
+  send(`player:${desktopId}`, 'challenge', { kind: 'presence' });
+  await desktop.waitForFunction(() => (window as any).__futasakuLive?.().status?.opponent.presence === 'offline', undefined, { polling: 100 });
+  await phone.context().setOffline(false);
+  await Promise.all([waitOnline(desktop), waitOnline(phone)]);
+  for (const p of pages) {
+    await p.waitForFunction(() => document.querySelector('.match-chat-presence')?.getAttribute('data-presence') === 'online', undefined, { polling: 100 });
+    assert.equal(await p.locator('[data-duel-presence]').getAttribute('data-presence'), 'online');
+  }
+  console.log('PASS: both indicators recover from expired phone presence without a chat message');
   // Presence eligibility is expected once BOTH participants have entered. Keep the slower
   // client's board-loading interval in the report instead of mislabelling it as presence delay.
   const onlineMs=Math.max(0,Math.max(...readyTimes.map(t=>t.readyAt))-Math.max(...readyTimes.map(t=>t.entryAt))),pairingMs=enteredAt-pairedAt;

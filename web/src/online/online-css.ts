@@ -453,6 +453,8 @@ export const ONLINE_CSS = `
 }
 .duel-hud [data-duel-presence][data-presence="online"]::before { background: #8fbf6a; }
 .duel-hud [data-duel-presence][data-presence="away"]::before { background: #c9a35a; }
+/* The bolt owns the first 44px beside the menu. A real presence label must clear its hit area. */
+html.slim-hud .game > .hud:has(> .live-pill:not([hidden])) + .duel-hud { padding-inline-start: 48px; }
 
 /* The nodes the live module injects into this lane. Raising the specificity with #duel-hud means
    these neutralisations win no matter which stylesheet is injected last.

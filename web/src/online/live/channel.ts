@@ -33,9 +33,12 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
       let socket: Socket | null = null;
       let beat: ReturnType<typeof setInterval> | null = null;
       let retry: ReturnType<typeof setTimeout> | null = null;
+      let deadline: ReturnType<typeof setTimeout> | null = null;
+      let heartbeatRef: string | null = null;
       let failures = 0;
       let closed = false;
       let ref = 0;
+      let joinRef: string | null = null;
       let isJoined = false;
       const setJoined = (on: boolean) => {
         if (on === isJoined) return;
@@ -45,7 +48,9 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
       const send = (t: string, event: string, payload: unknown) => {
         if (socket?.readyState !== 1) return;
         ref += 1;
-        socket.send(JSON.stringify({ topic: t, event, payload, ref: String(ref), join_ref: String(ref) }));
+        if (event === 'phx_join') joinRef = String(ref);
+        socket.send(JSON.stringify({ topic: t, event, payload, ref: String(ref), join_ref: t === 'phoenix' ? null : joinRef }));
+        return String(ref);
       };
       const open = () => {
         if (closed) return;
@@ -55,19 +60,50 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
           return schedule();
         }
         const attempt = socket;
+        const clearDeadline = () => {
+          if (deadline) clearTimeout(deadline);
+          deadline = null;
+        };
+        const down = () => {
+          if (closed || socket !== attempt) return;
+          setJoined(false);
+          clearDeadline();
+          heartbeatRef = null;
+          if (beat) clearInterval(beat);
+          beat = null;
+          socket = null;
+          try { attempt.close(); } catch { /* already disconnected */ }
+          schedule();
+        };
         socket.addEventListener('open', () => {
           if (closed || socket !== attempt) return;
-          failures = 0;
+          clearDeadline();
           send(topic, 'phx_join', { config: { broadcast: { ack: false, self: false }, presence: { enabled: false }, private: false } });
-          beat = setInterval(() => send('phoenix', 'heartbeat', {}), 25_000);
+          deadline = setTimeout(down, 12000);
+          beat = setInterval(() => {
+            if (!isJoined || heartbeatRef) return;
+            heartbeatRef = send('phoenix', 'heartbeat', {}) ?? null;
+            deadline = setTimeout(down, 12000);
+          }, 25_000);
         });
         socket.addEventListener('message', (ev) => {
           if (closed || socket !== attempt) return;
           try {
-            const frame = JSON.parse(String(ev.data)) as { topic?: unknown; event?: unknown; payload?: { status?: unknown } };
+            const frame = JSON.parse(String(ev.data)) as { topic?: unknown; event?: unknown; ref?: unknown; payload?: { status?: unknown } };
+            if (frame.topic === 'phoenix' && frame.event === 'phx_reply' && frame.ref === heartbeatRef && frame.payload?.status === 'ok') {
+              heartbeatRef = null;
+              clearDeadline();
+            }
+            if (frame.topic === topic && (frame.event === 'phx_error' || frame.event === 'phx_close' ||
+                (frame.event === 'phx_reply' && frame.payload?.status === 'error'))) {
+              down();
+              return;
+            }
             // Only a confirmed join counts as "connected" (a socket that opens but cannot join does not).
             if (!isJoined && frame.topic === topic && frame.event === 'phx_reply' && frame.payload?.status === 'ok') {
               setJoined(true);
+              failures = 0;
+              clearDeadline();
               // Recover changes made before this join (or while disconnected), without waiting
               // for the slow connected-channel safety poll.
               onPing('connected');
@@ -77,17 +113,10 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
             /* non-JSON frame */
           }
         });
-        const down = () => {
-          if (closed || socket !== attempt) return;
-          setJoined(false);
-          if (beat) clearInterval(beat);
-          beat = null;
-          socket = null;
-          try { attempt.close(); } catch { /* already disconnected */ }
-          schedule();
-        };
         socket.addEventListener('close', down);
         socket.addEventListener('error', down);
+        // A suspended connection can stay CONNECTING without an open/error event.
+        deadline = setTimeout(down, 12000);
       };
       const schedule = () => {
         if (closed || retry || (failures += 1) > 5) return; // give up quietly: polling carries it
@@ -102,6 +131,7 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
         setJoined(false);
         if (beat) clearInterval(beat);
         if (retry) clearTimeout(retry);
+        if (deadline) clearTimeout(deadline);
         try {
           socket?.close();
         } catch {

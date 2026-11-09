@@ -5,6 +5,8 @@ import type { MatchViewPayload } from '../../server/src/protocol.js';
 import { createOnlineDriver, deadlineTone, deadlineUrgency, duelUiFromSnapshot, presenceWord, turnWord } from '../src/online/index.js';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike, KeyValue } from '../../server/src/client.js';
+import { publishOpponentStatus } from '../src/online/live/opponent-status.js';
+import type { LiveStatusWire } from '../src/online/live/api.js';
 
 const memoryStore = (): KeyValue => {
   const map = new Map<string, string>();
@@ -47,7 +49,7 @@ describe('duel HUD helpers', () => {
 });
 
 describe('duelUiFromSnapshot', () => {
-  it('exposes screen view, Me scores, coach off for seat 1', () => {
+  it('exposes seat 1 view and shares authoritative opponent presence without a move or chat', async () => {
     const state = newGame(9);
     const view = viewFor(state, 1);
     const payload: MatchViewPayload = {
@@ -83,6 +85,17 @@ describe('duelUiFromSnapshot', () => {
       setTimer: () => 1,
       clearTimer: () => undefined,
     });
+    await driver.start();
+    try {
+      for (const [wire, expected] of [['online', 'online'], ['offline', 'away'], ['busy', 'online']] as const) {
+        publishOpponentStatus('m', { matchId: 'm', opponent: { presence: wire } } as LiveStatusWire);
+        expect(driver.snapshot().presence).toBe(expected);
+        expect(duelUiFromSnapshot(driver.snapshot(), false).hud.presence).toBe(expected);
+      }
+      driver.stop();
+      publishOpponentStatus('m', { matchId: 'm', opponent: { presence: 'offline' } } as LiveStatusWire);
+      expect(driver.snapshot().presence).toBe('online');
+    } finally { driver.stop(); publishOpponentStatus(null, null); }
     const ui = duelUiFromSnapshot(driver.snapshot(), driver.draft().canUndo());
     expect(ui.coachOff).toBe(true);
     expect(ui.hiddenDeckHintsOff).toBe(true);
