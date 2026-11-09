@@ -211,7 +211,10 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     if (amount <= 0 || ms <= 0) return;
     // The whole screen dims, not the board's box (owner, 2026-11-08: on desktop it stopped at the
     // board's edge "like a rectangle"): a fixed, full-viewport layer inside the game.
-    const host = document.getElementById('game') ?? document.body;
+    // On the page itself, not inside #game: an installed app gives #game its measured height, which
+    // can stop short of the screen (owner, 2026-11-09: a strip below the deck stayed lit).
+    // z-index 3 at the root is above every screen (1) and below every overlay.
+    const host = document.body;
     const d = document.createElement('div');
     d.className = 'impact-dim';
     host.appendChild(d);

@@ -57,9 +57,16 @@ export const ATMOSPHERE_CSS = `
    they terminate the string and break the build. */
 /* Ink is flat near-black paper: no grain at all. */
 [data-theme='ink'] #futa04-film-grain { display: none; }
-#futa04-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
+/* EDGE TO EDGE, ALWAYS (owner, 2026-11-09: the action light "on desktop still only the board half ...
+   on mobile a black strip at the bottom below the deck - should always flash across the entire
+   background covering everything, on all screen sizes"). These two room layers are their OWN fixed
+   viewport layers, placed right after #texture (same z-index 0, later in the DOM: above the
+   background, below every screen). They used to live INSIDE #texture, whose box an installed app
+   gives its measured height (shorter than the screen on some phones) and whose in-game filter would
+   pin a fixed child to that box. */
+#futa04-board-backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; background: #000; opacity: .235; display: none; }
 body:has(#game:not([hidden])) #futa04-board-backdrop { display: block; }
-#futa04-outcome-light { position:absolute; inset:0; pointer-events:none; opacity:0; display:none; }
+#futa04-outcome-light { position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0; display:none; }
 body:has(#game:not([hidden])) #futa04-outcome-light { display:block; }
 /* The outcome light speaks the same LIGHT vocabulary as the display: the tone is published on
    the root when the result appears, so this is the display's own bloom colour.
@@ -72,8 +79,9 @@ body:has(#game:not([hidden])) #futa04-outcome-light { display:block; }
    picks up the same light. Still one element and one opacity animation; no per-frame work. */
 #futa04-outcome-light[data-tone='good'],
 #futa04-outcome-light[data-tone='bad'] {
-  background:radial-gradient(ellipse 62% 58% at 45% 52%,color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 58%,transparent),transparent 92%),
-             linear-gradient(color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 44%,transparent),color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 44%,transparent));
+  /* One EVEN wash over the whole screen. The pool that used to sit behind the board (45% across)
+     made the light read as "the board half only" once the desktop board moved to the left half. */
+  background:linear-gradient(color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 52%,transparent),color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 52%,transparent));
 }
 #futa04-map-rim { pointer-events: none; }
 #board .hex-cell.normal.futa04-empty { filter: brightness(1.15); }
@@ -120,7 +128,10 @@ export function mountAtmosphere(): OutcomeLight {
   const outcome = document.createElement('div');
   outcome.id = 'futa04-outcome-light';
   outcome.setAttribute('aria-hidden', 'true');
-  document.getElementById('texture')?.append(backdrop,outcome);
+  // Right after the background (see the CSS note): full-screen, above it, below every screen.
+  const texture = document.getElementById('texture');
+  if (texture) texture.after(backdrop, outcome);
+  else document.body.prepend(backdrop, outcome);
   let running: Animation | null = null;
   let lastStart = 0;
   let lastStrength = 0;

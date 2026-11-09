@@ -82,12 +82,35 @@ describe('the Bomb card is shown once (owner, 2026-11-08: "it shows the bomb car
 });
 
 describe('a light dip covers the whole screen (owner, 2026-11-08: "only left half of the screen is affected ... cuts off ugly")', () => {
-  it('the impact dim is a full-viewport layer in the game, not a child of the board box', () => {
+  // OWNER, 2026-11-09: "should always flash ... across the entire background covering everything on
+  // all screen sizes" (a strip below the deck stayed out in the installed app). The dim moved from
+  // #game (which that app sizes to a measured height) to the page itself.
+  it('the impact dim is a full-viewport layer on the page, not a child of the board box or the game', () => {
     const effects = read('../src/ui/effects.ts');
     const fn = effects.slice(effects.indexOf('function impactDim('), effects.indexOf('function spark('));
     expect(fn).not.toContain("$('board-wrap')");
-    expect(fn).toContain("document.getElementById('game')");
+    expect(fn).toContain('const host = document.body;');
     const css = read('../src/style.css');
     expect(css).toMatch(/\.impact-dim \{[^}]*position:\s*fixed;[^}]*inset:\s*0;/);
   });
+
+describe('the action light is the whole room, edge to edge (owner, 2026-11-09)', () => {
+  const atmosphere = read('../src/player/atmosphere.ts');
+  it('the outcome light and the board shade are fixed viewport layers right after the background', () => {
+    expect(atmosphere).toMatch(/#futa04-outcome-light \{ position:fixed; inset:0; z-index:0;/);
+    expect(atmosphere).toMatch(/#futa04-board-backdrop \{ position: fixed; inset: 0; z-index: 0;/);
+    expect(atmosphere).toContain('texture.after(backdrop, outcome)');
+    expect(atmosphere).not.toContain("getElementById('texture')?.append(");
+  });
+  it('the light is one even wash, with no pool behind the board half', () => {
+    const rule = atmosphere.slice(atmosphere.indexOf("#futa04-outcome-light[data-tone='good']"), atmosphere.indexOf('#futa04-map-rim'));
+    expect(rule).not.toMatch(/radial-gradient/);
+    expect(rule).toMatch(/linear-gradient/);
+  });
+  it('the installed app background is never shorter than the screen', () => {
+    const branding = read('../src/player/branding.ts');
+    expect(branding).toMatch(/home-screen-app #texture \{ inset:0; min-height:var\(--futasaku-app-height,100lvh\); \}/);
+    expect(branding).not.toMatch(/home-screen-app :is\(#game,#texture\)/);
+  });
+});
 });

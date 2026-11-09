@@ -45,9 +45,12 @@ html.futa04-branding.home-screen-app #game { padding: 0; }
 html.futa04-branding.home-screen-app #game > .play { padding-bottom: env(safe-area-inset-bottom); }
 html.futa04-branding.home-screen-app,
 html.futa04-branding.home-screen-app body { height:var(--futasaku-app-height,100lvh); }
-html.futa04-branding.home-screen-app :is(#game,#texture) {
+html.futa04-branding.home-screen-app #game {
   height:var(--futasaku-app-height,100lvh); bottom:auto;
 }
+/* The background never stops short of the screen's bottom edge (owner, 2026-11-09: a black strip
+   below the deck): fixed edge to edge, and at least the app's measured height. */
+html.futa04-branding.home-screen-app #texture { inset:0; min-height:var(--futasaku-app-height,100lvh); }
 html.futa04-branding .play { --board-margin: 2px; }
 html.futa04-branding[data-layout='stack'] .board-wrap {
   margin-left: 2px;

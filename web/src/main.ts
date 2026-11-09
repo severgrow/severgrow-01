@@ -6868,9 +6868,17 @@ function placeDesktopQuarters(root: HTMLElement): void {
     if (!dock || dock.width === 0) return;
     const sx = parseFloat(root.style.getPropertyValue('--side-dock-shift')) || 0;
     const sy = parseFloat(root.style.getPropertyValue('--side-dock-shift-y')) || 0;
-    const restX = dock.left - sx + dock.width / 2; // its centre with no shift
+    // Centre what the player SEES (owner, 2026-11-09: "move the hand and cockpit ... so it's actually in
+    // the middle of the right half - right now too hugged to the right side"). On wide screens the
+    // dock's box is wider than its content, which sits at its right: centring the box pushed the
+    // cockpit and hand up to 180 px right of the quarter's middle (measured at 1920 wide).
+    const seen = [...document.querySelectorAll<HTMLElement>('#game .dock .pile-card, #smart-panel, #hand .card')]
+      .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
+    const seenLeft = seen.length ? Math.min(...seen.map((r) => r.left)) : dock.left;
+    const seenRight = seen.length ? Math.max(...seen.map((r) => r.right)) : dock.right;
+    const restX = (seenLeft + seenRight) / 2 - sx; // the visible group's centre with no shift
     const restTop = dock.top - sy;
-    const wantX = Math.max(innerWidth * 0.75, boardRight + 24 + dock.width / 2);
+    const wantX = Math.max(innerWidth * 0.75, boardRight + 24 + (seenRight - seenLeft) / 2);
     const wantTop = Math.min(innerHeight * 0.75 - dock.height / 2, innerHeight - 12 - dock.height);
     root.style.setProperty('--side-dock-shift', `${Math.round(wantX - restX)}px`);
     root.style.setProperty('--side-dock-shift-y', `${Math.round(Math.max(wantTop, 8) - restTop)}px`);
