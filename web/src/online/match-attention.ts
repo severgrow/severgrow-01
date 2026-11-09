@@ -23,10 +23,12 @@ import type { MatchListEntry } from '../../../server/src/protocol.js';
 import { ONLINE } from '../../../src/strings.js';
 
 /** The three payload fields the decision reads (a Pick keeps the tests honest about that). */
-export type AttentionSource = Pick<MatchListEntry, 'status' | 'mySeat' | 'turnPlayer'>;
+export type AttentionSource = Pick<MatchListEntry, 'status' | 'mySeat' | 'turnPlayer'> & Partial<Pick<MatchListEntry, 'rematch'>>;
 
 export const needsMyResponse = (entry: AttentionSource): boolean =>
-  entry.status === 'active' && entry.turnPlayer === entry.mySeat;
+  (entry.status === 'active' && entry.turnPlayer === entry.mySeat)
+  // The opponent pressed Rematch and waits for this player (owner, 2026-11-09).
+  || (entry.status === 'finished' && entry.rematch === 'theirs');
 
 export const countNeedingResponse = (entries: readonly AttentionSource[]): number =>
   entries.reduce((count, entry) => (needsMyResponse(entry) ? count + 1 : count), 0);

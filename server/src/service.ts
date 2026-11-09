@@ -626,6 +626,12 @@ export class MatchService {
         result: match.result,
       });
     }
+    // A waiting rematch on a finished row: who pressed it (one read per finished row, together).
+    await Promise.all(out.filter((e) => e.status === 'finished').map(async (e) => {
+      const re = await this.storage.rematchOf(e.matchId).catch(() => null);
+      if (!re || re.status !== 'waiting') return;
+      e.rematch = (await this.storage.participantOf(re.id, player.id)) ? 'mine' : 'theirs';
+    }));
     // Your turn first, then waiting, then finished (latest activity).
     const rank = (e: MatchListEntry): number => {
       if (e.status === 'active' && e.turnPlayer === e.mySeat) return 0;

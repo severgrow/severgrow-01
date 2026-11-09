@@ -151,3 +151,16 @@ describe('two players have at most one open game against each other', () => {
     expect(joined.match.status).toBe('active');
   });
 });
+
+describe('Your matches tells a player a rematch is waiting for them', () => {
+  it("the opponent's finished row says 'theirs', the presser's says 'mine'", async () => {
+    const { service } = harness();
+    const { a, b, finishedId } = await finishedDuel(service);
+    expect((await service.listMyMatches(b.player)).find((m) => m.matchId === finishedId)?.rematch).toBeUndefined();
+    await service.rematch(a.player, finishedId);
+    expect((await service.listMyMatches(b.player)).find((m) => m.matchId === finishedId)?.rematch).toBe('theirs');
+    expect((await service.listMyMatches(a.player)).find((m) => m.matchId === finishedId)?.rematch).toBe('mine');
+    await service.rematch(b.player, finishedId); // accepted: the rematch is active, no longer waiting
+    expect((await service.listMyMatches(b.player)).find((m) => m.matchId === finishedId)?.rematch).toBeUndefined();
+  });
+});

@@ -211,6 +211,19 @@ export const ONLINE_CSS = `
   outline: 2px solid #ffe1a7;
   outline-offset: 2px;
 }
+.online-row.has-rematch { grid-template-columns: 2rem 1fr auto 44px; }
+/* The finished row's Rematch key: a 44px glass key in the cockpit's language. Gold-lit when the
+   opponent already pressed it and waits for this player. */
+.online-row-rematch {
+  width: 44px; height: 44px; min-width: 44px; padding: 0; margin: -4px 0;
+  display: grid; place-items: center; border-radius: 10px; cursor: pointer;
+  color: var(--control-ivory, #f5edda); background: rgb(14 15 16 / .62);
+  border: 1px solid rgb(232 221 197 / .16); box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
+}
+.online-row-rematch svg { width: 20px; height: 20px; }
+.online-row-rematch:hover { border-color: rgb(232 221 197 / .32); }
+.online-row-rematch:focus-visible { outline: 2px solid #ffe1a7; outline-offset: 2px; }
+.online-row-rematch.is-theirs { color: #ffe1a7; border-color: rgb(255 225 167 / .55); box-shadow: 0 0 14px rgb(255 205 120 / .18); }
 .online-row.warn {
   border-color: color-mix(in srgb, #d4a24a 55%, transparent);
 }

@@ -84,6 +84,8 @@ export type LobbyRow = {
   atRisk: boolean;
   unseenTurn: boolean;
   inviteHint: string | null;
+  /** Finished rows with an opponent: the "challenge again" key, and whether a rematch is waiting. */
+  rematch: 'offer' | 'theirs' | 'mine' | null;
 };
 
 export const parseJoinHash = (hash: string): string | null => {
@@ -174,8 +176,14 @@ export const toLobbyRow = (
   // tapping it does rather than only that it is over. A match that finished with no committed moves
   // (an abandoned waiting room) has nothing to watch, so it keeps the plain word.
   const replayable = bucket === 'finished' && entry.revision > 0;
+  const rematch: LobbyRow['rematch'] = bucket === 'finished' && entry.opponentName?.trim()
+    ? (entry as { rematch?: 'theirs' | 'mine' }).rematch ?? 'offer' : null;
   const status =
-    bucket === 'finished'
+    rematch === 'theirs'
+      ? { word: ONLINE.rowRematchTheirs, icon: 'replay' as const }
+      : rematch === 'mine'
+        ? { word: ONLINE.rowRematchMine, icon: 'hourglass' as const }
+        : bucket === 'finished'
       ? replayable
         ? { word: REPLAY.pastRow, icon: 'replay' as const }
         : { word: ONLINE.statusFinished, icon: 'check' as const }
@@ -212,6 +220,7 @@ export const toLobbyRow = (
     atRisk: graceWord === ONLINE.graceYouUsed,
     unseenTurn: entry.unseenTurn,
     inviteHint: entry.status === 'waiting' ? ONLINE.waitingInviteHint : null,
+    rematch,
   };
 };
 

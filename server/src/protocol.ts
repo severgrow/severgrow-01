@@ -137,6 +137,12 @@ export type MatchListEntry = {
   graceUsed: [number, number];
   gracePeriods: number;
   result: OnlineGameResult | null;
+  /**
+   * Finished rows only: a rematch of this game is waiting (owner, 2026-11-09: "a button next to
+   * finished online matches to challenge this player again"). 'theirs' = the opponent pressed
+   * Rematch and waits for this player; 'mine' = this player pressed and waits. Absent otherwise.
+   */
+  rematch?: 'theirs' | 'mine';
 };
 
 export type CreateMatchResponse = { ok: true; match: MatchSummary; player: MatchViewPayload; serverNow: number };

@@ -217,6 +217,11 @@ export const ONLINE = Object.freeze({
   waitingTitle: 'Waiting for a friend',
   /** A standard duel's mutual rematch: the first to press waits here for the other's press. */
   rematchWaitingTitle: 'Waiting for their rematch',
+  /** Your matches, a finished row (owner, 2026-11-09: "challenge this player again"). */
+  rowRematchTheirs: 'Wants a rematch',
+  rowRematchMine: 'Rematch sent',
+  rowRematchKey: (name: string) => `Rematch ${name}`,
+  rowRematchAccept: (name: string) => `Accept ${name}'s rematch`,
   rematchWaitingBody: 'The new game starts the moment they press Rematch too.',
   waitingBody: 'Send the link. The duel opens when they join.',
   waitingExpiry: 'Invite expires in 48 hours.',

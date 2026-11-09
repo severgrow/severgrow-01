@@ -621,6 +621,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
           row.warnLastTwoHours ? 1 : 0,
           row.graceWord ?? '',
           needsMyResponse(entry) ? 1 : 0,
+          row.rematch ?? '',
         ].join('\u0001'),
       )
       .join('\u0002');
@@ -634,7 +635,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         const li = document.createElement('li');
         li.className = `online-row bucket-${row.bucket}${row.warnLastTwoHours || row.atRisk ? ' warn' : ''}${
           needsResponse ? ' needs-response' : ''
-        }`;
+        }${row.rematch ? ' has-rematch' : ''}`;
         li.tabIndex = 0;
         li.setAttribute('role', 'button');
         li.dataset.matchId = row.matchId;
@@ -655,6 +656,20 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         <span class="online-row-main"><b>${escapeHtml(row.opponentName)}</b>
         <span class="online-row-status">${escapeHtml(row.statusWord)}</span></span>
         <span class="online-row-time">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${warnSmall}</span>`;
+      // CHALLENGE AGAIN (owner, 2026-11-09): a finished row carries its own Rematch key. A press
+      // from either player waits for the other; the second press starts the game for both.
+      if (row.rematch) {
+        const again = document.createElement('button');
+        again.type = 'button';
+        again.className = `online-row-rematch${row.rematch === 'theirs' ? ' is-theirs' : ''}`;
+        again.dataset.rematch = row.rematch;
+        again.setAttribute('aria-label', row.rematch === 'theirs' ? ONLINE.rowRematchAccept(row.opponentName) : ONLINE.rowRematchKey(row.opponentName));
+        again.title = again.getAttribute('aria-label') ?? '';
+        again.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.6-5.7L20 8.7"/><path d="M20 4v4.7h-4.7"/><path d="M20 12a8 8 0 0 1-13.6 5.7L4 15.3"/><path d="M4 20v-4.7h4.7"/></svg>';
+        again.addEventListener('click', (ev) => { ev.stopPropagation(); void rematch(row.matchId); });
+        again.addEventListener('keydown', (ev) => ev.stopPropagation());
+        li.appendChild(again);
+      }
       const open = () => void (row.replayable ? openReplay(row.matchId) : openMatch(row.matchId));
       li.addEventListener('click', open);
       li.addEventListener('keydown', (ev) => {
