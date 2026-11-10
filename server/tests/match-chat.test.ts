@@ -528,6 +528,8 @@ for (const adapter of ['memory', ...(localUrl ? ['postgres'] : [])])
     it('enforces a block in every other match between the pair', async () => {
       const x = await setup();
       await x.client.chatAction(x.a.token, x.id, 'block', { value: true });
+      // OWNER RULE (2026-11-09): one open game per pair, so the "other match" is their NEXT game.
+      await x.service.resign(await x.service.authenticate(x.a.token), x.id);
       const second = await x.service.createMatch(
         await x.service.authenticate(x.a.token),
       );
