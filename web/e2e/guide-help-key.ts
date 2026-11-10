@@ -100,6 +100,14 @@ try {
   await page.waitForTimeout(800);
   assert.equal(await page.evaluate(() => document.documentElement.classList.contains('futasaku-guide-fresh')), false, 'no longer new');
   assert.match(await key.getAttribute('aria-label') ?? '', /Match Intel/, 'the key has its usual name');
+  // The bulb ALONE, on a phone and on a wide desktop cockpit (owner, 2026-11-10: both icons showed).
+  for (const size of [{ width: 390, height: 844 }, { width: 1440, height: 830 }]) {
+    await page.setViewportSize(size);
+    await page.waitForTimeout(400);
+    const icons = await key.evaluate((el) => [...el.querySelectorAll(':scope > .i')].filter((i) => getComputedStyle(i).display !== 'none').length);
+    assert.equal(icons, 1, `${size.width}px: one icon in the key (the bulb), got ${icons}`);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await key.click();
   await page.waitForFunction(glassOpen('intel'), undefined, { timeout: 5000 });
   console.log('regular player: the bulb opens Match Intel');

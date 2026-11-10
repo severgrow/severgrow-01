@@ -36,7 +36,9 @@ export const GUIDE_KEY_LABEL = 'How to play';
 
 const CSS = `
 /* NEW PLAYER: "?" in place of the bulb, a touch brighter, in the key's own metal and glass. Still. */
-#futa04-help-button .guide-q { display: none; }
+/* (id-heavy and !important: the desktop cockpit forces every icon in a key to show, and a regular
+   player must see the bulb ALONE — owner, 2026-11-10: "both bulb and ? ... extremely ugly") */
+html #futa04-help-button > .guide-q { display: none !important; }
 html.futasaku-guide-fresh #futa04-help-button > .guide-q { display: inline-flex !important; }
 html.futasaku-guide-fresh #futa04-help-button > .i:not(.guide-q) { display: none !important; }
 html.futasaku-guide-fresh #futa04-help-button { filter: brightness(1.18); }
