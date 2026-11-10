@@ -144,7 +144,10 @@ describe('the one-time edge light', () => {
 });
 
 describe('a tap on the help key', () => {
-  it('opens the lesson for the action possible right now (the new one first); otherwise Match Intel', () => {
+  // OWNER CHANGED THE RULE (2026-11-10, iPhone: "it just opens match intel"): for a new player the
+  // "?" ("How to play") ALWAYS answers with a lesson — Draw while drawing, Throw while throwing, and
+  // how a match is won on the opponent's turn. Match Intel is the bulb's, for regular players.
+  it('opens the lesson for the action possible right now (the new one first); never Match Intel while new', () => {
     const act = until(5, (v) => v.phase === 'ACT');
     const withBloom = [...act.legal, { t: 'Bloom', cards: [1, 2, 3], hexes: [] } as Action];
     expect(guideTap({ fresh: true, view: act.v, legal: withBloom, seen: none })).toEqual({ kind: 'window', beat: 'bloom' });
@@ -153,8 +156,11 @@ describe('a tap on the help key', () => {
     expect(guideTap({ fresh: true, view: act.v, legal: withBloom, seen: new Set(GUIDE_BEATS) })).toEqual({ kind: 'window', beat: 'bloom' });
     expect(guideTap({ fresh: false, view: act.v, legal: withBloom, seen: none })).toEqual({ kind: 'intel' });
     const { s, v, legal } = deckOnlyDraw(3);
-    expect(guideTap({ fresh: true, view: v, legal, seen: none })).toEqual({ kind: 'intel' }); // Draw: nothing to teach here
-    expect(guideTap({ fresh: true, view: viewFor(s, (1 - s.actor) as 0 | 1), legal: [], seen: none })).toEqual({ kind: 'intel' });
+    expect(guideTap({ fresh: true, view: v, legal, seen: none })).toEqual({ kind: 'window', beat: 'draw' }); // Draw: the Draw lesson
+    expect(guideTap({ fresh: true, view: viewFor(s, (1 - s.actor) as 0 | 1), legal: [], seen: none })).toEqual({ kind: 'window', beat: 'win' });
+    expect(guideTap({ fresh: false, view: v, legal, seen: none })).toEqual({ kind: 'intel' });
+    const discard = until(5, (dv) => dv.phase === 'DISCARD');
+    expect(guideTap({ fresh: true, view: discard.v, legal: discard.legal, seen: none })).toEqual({ kind: 'window', beat: 'throw' });
   });
 });
 

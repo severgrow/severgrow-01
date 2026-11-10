@@ -43,6 +43,15 @@ try {
   assert.equal(await page.evaluate(glassOpen('tutorial')), false, 'no window opens by itself');
   assert.equal(await key.evaluate((el) => el.classList.contains('guide-hint')), false, 'no light on Draw (the display names it)');
   await page.screenshot({ path: `${out}/draw.png` });
+  // OWNER CHANGED THE RULE (2026-11-10, iPhone: "it just opens match intel"): on Draw the "?" opens
+  // the DRAW lesson, never Match Intel, for a new player.
+  await key.click();
+  await page.waitForFunction(glassOpen('tutorial'), undefined, { timeout: 5000 });
+  const drawWords = (await page.locator('#futasaku-glass').innerText()).replace(/\s+/g, ' ');
+  console.log(`draw tap: "${drawWords.slice(0, 50)}"`);
+  assert(/draw/i.test(drawWords), 'the Draw lesson');
+  await key.click();
+  await page.waitForFunction(`!${glassOpen('tutorial')}`, undefined, { timeout: 5000 });
 
   // 2. Draw -> Grow is possible for the first time: one edge light, gone by itself.
   await page.locator('#deck').evaluate((el) => (el as HTMLButtonElement).click());

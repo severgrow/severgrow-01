@@ -1,6 +1,6 @@
 // The quiet help key inside a REAL online duel (owner + agreed design, 2026-11-10). A new guest who
 // opens a friend's duel link: the Match Intel key shows "?" ("How to play"); on the opponent's turn a
-// tap opens Match Intel; on my turn the first time a move is possible the key gets ONE edge light, a tap
+// tap opens how a match is won (never Match Intel while new); on my turn the first time a move is possible the key gets ONE edge light, a tap
 // opens that lesson, and making a move closes it. Nothing opens by itself. Blitz: no "?".
 // Run: node --import tsx web/e2e/online-guide.ts
 import assert from 'node:assert/strict';
@@ -35,9 +35,13 @@ try {
   assert.equal(await key.getAttribute('aria-label'), 'How to play');
   assert.equal(await page.locator('#futasaku-guide-label').count(), 0, 'no label');
   assert(await page.evaluate(glassShut), 'nothing opens by itself');
+  // OWNER CHANGED THE RULE (2026-11-10): a new player's "?" always opens a lesson, never Match
+  // Intel — on the opponent's turn, how a match is won.
   await key.click();
-  await page.waitForFunction(glassOpen('intel'), undefined, { timeout: 5000 });
-  console.log('their turn: "?" opens Match Intel');
+  await page.waitForFunction(glassOpen('tutorial'), undefined, { timeout: 5000 });
+  const winWords = (await page.locator('#futasaku-glass').innerText()).replace(/\s+/g, ' ');
+  console.log(`their turn: "?" opens "${winWords.slice(0, 50)}"`);
+  assert(!/match intel|THE MATCH/i.test(winWords), 'not Match Intel');
   await page.keyboard.press('Escape');
   await page.waitForFunction(glassShut, undefined, { timeout: 5000 });
 

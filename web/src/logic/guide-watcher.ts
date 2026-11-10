@@ -99,14 +99,21 @@ export const guideHintBeat = (s: { fresh: boolean; view: View; legal: readonly A
 export type GuideTap = { kind: 'window'; beat: GuideBeat } | { kind: 'intel' };
 
 /**
- * A new player's tap opens the lesson for the action possible right now — the one they have not
- * opened yet first, else the rarest one — on the real board. Anything else is Match Intel, as always.
+ * A new player's tap ALWAYS opens a lesson on the real board (owner, 2026-11-10: on an iPhone the
+ * "?" in the Draw step "just opens match intel" — wrong for a key called How to play):
+ *   - a Grow / Strengthen / Cut / Bloom / Bomb / Blast possible now: that lesson, the unopened first;
+ *   - otherwise the step itself: Draw (or the Throw-pile draw), Throw, or Skip;
+ *   - the opponent's turn: how a match is won.
+ * A regular player's key is the bulb again, and opens Match Intel.
  */
 export const guideTap = (s: { fresh: boolean; view: View; legal: readonly Action[]; seen: ReadonlySet<string> }): GuideTap => {
   if (!s.fresh) return { kind: 'intel' };
-  const possible = GUIDE_HINT_BEATS.filter((b) => possibleBeats(s.view, s.legal).includes(b));
-  const beat = possible.find((b) => !s.seen.has(b)) ?? possible[0];
-  return beat ? { kind: 'window', beat } : { kind: 'intel' };
+  const now = possibleBeats(s.view, s.legal);
+  const moves = GUIDE_HINT_BEATS.filter((b) => now.includes(b));
+  const move = moves.find((b) => !s.seen.has(b)) ?? moves[0];
+  if (move) return { kind: 'window', beat: move };
+  const step = now.find((b) => b !== 'win');
+  return { kind: 'window', beat: step ?? 'win' };
 };
 
 /** The window for a beat: the existing lesson's title and line, and what to light on THIS board. */
