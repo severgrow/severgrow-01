@@ -1,4 +1,5 @@
 // Authored tutorial and the two controls built on public match information.
+import { asRegularPlayer } from './helpers/regular-player.js';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { servePreview } from './helpers/preview-port.js';
@@ -35,13 +36,15 @@ const resumeHiddenContinue = (p: import('playwright-core').Page) =>
 const waitBoot=(p:import('playwright-core').Page)=>p.waitForFunction(()=>(window as any).__severgrow?.ready?.()===true,undefined,{timeout:20000});
 const base=served.url;
 try {
+  // Match Intel is tested for a regular player (a new player's help key opens a lesson: guide-help-key.ts).
+  await asRegularPlayer(page);
   await page.addInitScript(reduced=>{
     localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({speed:'fast',reduceMotion:reduced,sound:false,music:false,coach:false,eyeCandy:!reduced}));
   },reducedMotion);
   await page.goto(base);
   await page.evaluate(() => {
     for (const key of Object.keys(localStorage)) {
-      if (key.includes('severgrow') && !key.includes('settings')) localStorage.removeItem(key);
+      if (key.includes('severgrow') && !key.includes('settings') && !key.includes('guide.local')) localStorage.removeItem(key);
     }
   });
   await page.reload();

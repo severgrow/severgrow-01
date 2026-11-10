@@ -5,8 +5,8 @@
 // teaching beats are POSSIBLE, which one is the first this player has not been shown, and what the
 // window for it says and lights. No timers, no DOM, no storage. The page (player/guide.ts) asks.
 //
-// Nothing here ever opens by itself: the page only offers the beat ("?" in the cockpit, the LED's
-// "TAP ? →"), and the player decides.
+// Nothing here ever opens by itself: the help key (the bulb) only lights once for a new action, and
+// the player decides whether to tap it.
 import { coordKey, homeCoord } from '../../../src/engine/index.js';
 import type { Action, View } from '../../../src/engine/index.js';
 import type { Lit } from '../lessons/lessons.js';
@@ -25,12 +25,16 @@ export const GUIDE_BEATS: readonly GuideBeat[] = Object.freeze([
   'draw', 'grow', 'throw', 'draw-choice', 'strengthen', 'cut', 'bloom', 'bomb', 'blast', 'skip', 'win',
 ]);
 
-/** How many games show the HOW TO PLAY label (owner, 2026-11-09: "First 3 games"). */
-export const GUIDE_LABEL_GAMES = 3;
+/** How many games a new player keeps the brighter help key (owner + agreed design, 2026-11-10). */
+export const GUIDE_FRESH_GAMES = 3;
 
-/** The LED's pointer at the "?" (it sits directly to the display's right). Six cells, the
- *  display's own width for a step word ("THROW!"), so it never scrolls. */
-export const GUIDE_LED_WORD = 'TAP ?→';
+/**
+ * The actions that earn a one-time edge light on the help key, the first time each is possible
+ * (owner, 2026-11-10: "First time the player can Grow, Cut, Strengthen, Bloom, Bomb or Blast").
+ * Draw and Throw are not here: the display already names them (DRAW! / THROW!).
+ * Order = which one wins when several are new at once: the rarer moment first.
+ */
+export const GUIDE_HINT_BEATS: readonly GuideBeat[] = Object.freeze(['blast', 'bloom', 'bomb', 'cut', 'strengthen', 'grow']);
 
 const tileOwner = (view: View, key: string): 0 | 1 | null => view.board[key]?.owner ?? null;
 
@@ -69,60 +73,40 @@ export const nextGuideBeat = (view: View, legal: readonly Action[], seen: Readon
 export const guideActive = (s: { setting: boolean; blitz: boolean }): boolean => s.setting && !s.blitz;
 
 /**
- * The cockpit's CONTEXT button shows "?" only when it has no real action: the moment a real
- * context action exists (Skip, Clear, Confirm...), the action wins.
+ * THE QUIET HELP KEY (owner + agreed design, 2026-11-10). The bulb is the one help key. While a
+ * player is new it is slightly brighter (same metal/glass, no pulse), and it may light once per new
+ * action. "New" means: the guide is on, not Blitz, within the first GUIDE_FRESH_GAMES games, some
+ * action still has not had its light — and never a signed-in player who already finished a game,
+ * unless they turned the guide back on in Settings (`reenabled`).
  */
-export const contextShowsGuide = (s: { active: boolean; contextHasAction: boolean }): boolean =>
-  s.active && !s.contextHasAction;
+export const guideFresh = (s: {
+  setting: boolean; blitz: boolean; signedIn: boolean; finishedGames: number; gamesStarted: number;
+  hinted: ReadonlySet<string>; reenabled: boolean;
+}): boolean =>
+  guideActive(s)
+  && (s.reenabled || !(s.signedIn && s.finishedGames >= 1))
+  && s.gamesStarted <= GUIDE_FRESH_GAMES
+  && !GUIDE_HINT_BEATS.every((b) => s.hinted.has(b));
 
-/**
- * The HOW TO PLAY label: a player's first games, gone once the lessons are finished — and up the
- * whole time the guide is ON, because it is then the guide's off switch whenever the context key
- * carries a real move (owner, 2026-11-10: "real move keeps it").
- */
-export const showGuideLabel = (s: { active: boolean; gamesStarted: number; lessonsDone: boolean; on?: boolean }): boolean =>
-  s.active && (!!s.on || (!s.lessonsDone && s.gamesStarted <= GUIDE_LABEL_GAMES));
-
-/** The LED's invitation ("TAP ? →"), or null for the display's normal words. Never while on. */
-export const guideLedWord = (s: { active: boolean; beat: GuideBeat | null; on?: boolean }): string | null =>
-  s.active && s.beat && !s.on ? GUIDE_LED_WORD : null;
-
-/**
- * "?" (or the HOW TO PLAY label) is an ON/OFF switch (owner, 2026-11-10: "once how to play is
- * clicked, it'll show the windows first and then highlight always until it's toggled off").
- */
-export type GuideTap = { kind: 'on' } | { kind: 'off' } | { kind: 'none' };
-
-export const guideTap = (s: { active: boolean; on: boolean }): GuideTap =>
-  s.on ? { kind: 'off' } : s.active ? { kind: 'on' } : { kind: 'none' };
-
-/**
- * The beats that stay LIT while the guide is on, in priority order: the step's main move, with a
- * possible Bloom (or Blast) ahead of a plain Grow so it is never hidden behind the Skip key (owner,
- * 2026-11-10: "it's not showing bloom right now since context button is skip"). Skip and "how to
- * win" are taught by their windows but never stay lit.
- */
-const GLOW_ORDER: readonly GuideBeat[] = ['draw', 'bloom', 'blast', 'bomb', 'grow', 'strengthen', 'cut', 'throw'];
-
-/** What the guide does on this position while it is on. */
-export type GuideStep =
-  | { kind: 'window'; beat: GuideBeat }
-  | { kind: 'glow'; beat: GuideBeat; lit: Lit }
-  | { kind: 'none' };
-
-export const guideStep = (s: { on: boolean; view: View; legal: readonly Action[]; seen: ReadonlySet<string> }): GuideStep => {
-  if (!s.on) return { kind: 'none' };
+/** The action that earns the one-time edge light right now, or null. Never on Draw/Throw or their turn. */
+export const guideHintBeat = (s: { fresh: boolean; view: View; legal: readonly Action[]; hinted: ReadonlySet<string> }): GuideBeat | null => {
+  if (!s.fresh) return null;
   const possible = possibleBeats(s.view, s.legal);
-  if (!possible.length) return { kind: 'none' };
-  // "window once": the first kind of move this player has not been shown opens by itself
-  const fresh = possible.find((b) => !s.seen.has(b));
-  if (fresh) return { kind: 'window', beat: fresh };
-  // "then glow": the move to make stays lit
-  const beat = GLOW_ORDER.find((b) => possible.includes(b));
-  if (!beat) return { kind: 'none' };
-  // Strengthen and Cut start, like Grow, by picking a card: the playable cards are what is lit.
-  const lit = litFor(beat === 'strengthen' || beat === 'cut' ? 'grow' : beat, s.view, s.legal);
-  return lit.t === 'none' ? { kind: 'none' } : { kind: 'glow', beat, lit };
+  return GUIDE_HINT_BEATS.find((b) => possible.includes(b) && !s.hinted.has(b)) ?? null;
+};
+
+/** What a tap on the help key does. */
+export type GuideTap = { kind: 'window'; beat: GuideBeat } | { kind: 'intel' };
+
+/**
+ * A new player's tap opens the lesson for the action possible right now — the one they have not
+ * opened yet first, else the rarest one — on the real board. Anything else is Match Intel, as always.
+ */
+export const guideTap = (s: { fresh: boolean; view: View; legal: readonly Action[]; seen: ReadonlySet<string> }): GuideTap => {
+  if (!s.fresh) return { kind: 'intel' };
+  const possible = GUIDE_HINT_BEATS.filter((b) => possibleBeats(s.view, s.legal).includes(b));
+  const beat = possible.find((b) => !s.seen.has(b)) ?? possible[0];
+  return beat ? { kind: 'window', beat } : { kind: 'intel' };
 };
 
 /** The window for a beat: the existing lesson's title and line, and what to light on THIS board. */
@@ -220,7 +204,7 @@ export const guideWindow = (beat: GuideBeat, view: View, legal: readonly Action[
 export type GuideProgress = {
   /** Beats this player has opened. Only ever grows. */
   seen: readonly GuideBeat[];
-  /** Real games started with the guide on (the label shows for the first GUIDE_LABEL_GAMES). */
+  /** Real games started with the guide on (the help key stays brighter for GUIDE_FRESH_GAMES). */
   games: number;
 };
 

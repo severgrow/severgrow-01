@@ -128,7 +128,7 @@ jobs:
           - { suite: futa04-critical, artifact: futa04 }
           - { suite: futa04-information, artifact: futa04 }
           - { suite: futa04-motion, artifact: futa04 }
-          - { suite: guide-steady-light, artifact: futa04 }
+          - { suite: guide-help-key, artifact: futa04 }
           - { suite: lessons-3, artifact: futa05-lessons }
           - { suite: territory-menu, artifact: futa04 }
           - { suite: territory-gestures, artifact: futa04 }

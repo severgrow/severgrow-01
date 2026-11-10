@@ -2084,11 +2084,11 @@ async function mountPlayerEnhancements() {
       onBlockedTap: tutorialTapAnywhere,
       isPaintDragging: () => !!draw.ptr || draw.shape.length > 0,
     });
-    futa04Help = help.mountHelp({ sheet, onBulb: toggleMatchIntel });
+    // The Match Intel key is also the guide's help key: a new player's tap may open the lesson for
+    // the action possible right now (player/how-to-guide.ts); otherwise it is Match Intel as always.
+    futa04Help = help.mountHelp({ sheet, onBulb: () => { if (!howTo?.tap()) toggleMatchIntel(); } });
     smartCockpit = cockpit.mountSmartCockpit({
       heldMove: () => session ? heldMoveWord(session.sel, session.view.hand.find((c) => c.id === session!.sel.card)?.suit === null) : null,
-      // The guide's "?" takes the context key only while that key has no real action.
-      guide: { active: () => !!howTo?.keyActive(), on: () => !!howTo?.isOn(), tap: () => howTo?.tap(), label: howToModule.GUIDE_KEY_LABEL },
     });
     howTo = howToModule.mountHowToGuide({
       setting: () => settings.guide,
@@ -2098,22 +2098,20 @@ async function mountPlayerEnhancements() {
       busy: () => !!coach.tutorial || !!lessonActive() || onboardingActive() || !!watching,
       position: () => session && !$('game').hidden && session.state.phase !== 'GAME_OVER'
         ? { view: session.view, legal: myTurn() && !blocking() ? session.legal : [] } : null,
-      lessonsDone: () => currentLevel(campaignProgress).number > 9,
+      signedIn: () => readAccountIdentity(browserStorage())?.kind === 'account',
+      bulb: () => document.getElementById('futa04-help-button'),
       openWindow: (win) => {
         if (!glassSurface) return;
         if (glassSurface.isOpen()) { glassSurface.close(); intelState = null; }
         const lit = litTarget(win.lit, [board.rootKey(HUMAN), board.rootKey(BOT)]);
         glassSurface.tutorial(win.title, 0, lit.selectors, {
-          shape: lit.shape, stepKey: `guide-${win.beat}`, why: win.why, arrow: lit.selectors.length > 0,
+          shape: lit.shape, outline: true, stepKey: `guide-${win.beat}`, why: win.why, arrow: lit.selectors.length > 0,
           reduceMotion: settings.reduceMotion, buttons: { previous: false, next: false },
           ...(win.bloomDemo ? { bloomDemo: true } : {}),
         });
       },
       closeWindow: () => { if (glassSurface?.mode?.() === 'tutorial' && !coach.tutorial) glassSurface.hide(); },
       litSelectors: (lit) => litTarget(lit, [board.rootKey(HUMAN), board.rootKey(BOT)]).selectors,
-      ledWord: (fn) => smartCockpit?.guideWord(fn),
-      clearLedPrompt: () => smartCockpit?.clearGuidePrompt(),
-      refreshCockpit: () => smartCockpit?.sync(),
       storage: browserStorage(),
       account: guideAccountModule.guideAccount(browserStorage()),
     });
@@ -3378,7 +3376,7 @@ function drainInstallInvite() {
 
 function humanPlay(a: Action, opts: { auto?: boolean; flightFrom?: DOMRect } = {}) {
   bloomPick = [];
-  // The guide's window closes when the player makes the move it was teaching.
+  // An open guide lesson closes when the player makes any move.
   howTo?.moved(a.t); // a move is made: nothing stays held toward a Bloom
   // Was this throw made from the picked card? Then the Throw pile is swollen right now, and the
   // swell belongs to the flight, not only to the selection.
@@ -8462,6 +8460,9 @@ function presentResult(go: HTMLElement, wasHidden: boolean): void {
   // The result covers the board: a finger that was on it is released, as when a sheet opens.
   camera?.release();
   board.releasePress();
+  // A game reached its end on this device (once, as the result first appears): the guide's help key
+  // stops treating a signed-in player as new after their first finished game.
+  if (wasHidden && !watching) howTo?.gameFinished();
   document.body.classList.add('result');
   syncVeil();
   if (!wasHidden) return;
@@ -10945,6 +10946,8 @@ for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]'
       sound.unlock();
       sound.setMusic(settings.music);
     }
+    // Turning the Guide back on makes the player "new" again (player/how-to-guide.ts).
+    if (k === 'guide') howTo?.settingChanged();
     if (k === 'reduceMotion' || k === 'largeText' || k === 'eyeCandy') applyTheme();
     else render();
   });

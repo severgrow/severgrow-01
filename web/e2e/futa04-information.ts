@@ -216,9 +216,7 @@ try {
         columns:close(led.left,undo.left)&&close(context.left,sort.left),
         fixed: [context,undo,tips,sort].every(r=>r.width>=44&&r.height>=44),
         icon: !!document.querySelector('#smart-context svg'),
-        // The guide's HOW TO PLAY label (owner, 2026-11-09) floats ABOVE the two rows in a first game;
-        // it is not one of the cockpit's keys.
-        count: document.querySelectorAll('#smart-panel button:not(#smart-selector button):not(#futasaku-guide-label)').length };
+        count: document.querySelectorAll('#smart-panel button:not(#smart-selector button)').length };
     });
     check(cockpit.top&&cockpit.bottom&&cockpit.width&&cockpit.columns&&cockpit.fixed&&cockpit.icon&&cockpit.count===4,
       `${width}: LED and four fixed buttons align in exactly two rows (${JSON.stringify(cockpit)})`);

@@ -96,6 +96,9 @@ const panels = (data: AdminAnalytics): Node[] => {
         stat('Invite joined', formatNumber(funnel.inviteJoined), pct(funnel.inviteToPlayRate) === '—' ? 'of invites sent' : `${pct(funnel.inviteToPlayRate)} of invites sent`),
         stat('Repeat matches', formatNumber(funnel.repeatMatches), pct(funnel.repeatMatchRate)),
         stat('Rematch played', formatNumber(funnel.rematchPlayed)),
+        stat('Opened a guide lesson', formatNumber(funnel.guideOpened ?? 0)),
+        stat('…then finished a match', formatNumber(funnel.guideOpenedFinished ?? 0), pct(funnel.guideFinishRate ?? null)),
+        stat('No lesson: finished a match', pct(funnel.noGuideFinishRate ?? null)),
       ),
       el('p', {
         class: 'muted small',

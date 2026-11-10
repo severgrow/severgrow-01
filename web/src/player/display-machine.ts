@@ -49,31 +49,6 @@ export class DisplayMachine {
   private idleCycles = 0;
   /** Sticky idle re-prompt: step word keeps blinking until the player acts. */
   private urgency = false;
-  /**
-   * THE IN-GAME GUIDE (owner, 2026-11-09): when it has a new beat to offer, the idle wake shows its
-   * pointer at the "?" ("TAP ? →") INSTEAD of the step-word blink, after the same idle delay. It is
-   * only ever the idle face: a real message, an event, a drag or a lesson always wins over it.
-   */
-  private guideWord: (() => string | null) | null = null;
-  /** The pointer the sign is showing right now, or null. */
-  private guideShown: string | null = null;
-  setGuideWord(fn: (() => string | null) | null) { this.guideWord = fn; }
-  /** The guide's window was opened: drop its pointer and go back to the normal idle rhythm. */
-  clearGuidePrompt() {
-    if (!this.guideShown || this.frame.text !== this.guideShown) { this.guideShown = null; return; }
-    this.guideShown = null;
-    this.urgency = false;
-    this.clearUrgencyPaint();
-    if (!this.active) { this.rest(); this.scheduleIdle(); }
-  }
-  /** Light the next move now, exactly as the idle re-prompt does (the guide's "?" with nothing new). */
-  promptNow() {
-    if (this.active || this.held || this.quiet) return;
-    if (this.urgency && this.frame.alarm) return; // already blinking the next move
-    this.urgency = false;
-    this.guideShown = null;
-    this.scheduleIdle(0, true);
-  }
   /** A drag is holding a word on the sign; timers and idle reminders stay out of the way. */
   private held = false;
   /**
@@ -418,7 +393,7 @@ export class DisplayMachine {
       this.scheduleIdle(8000);
     }, 2000);
   }
-  private scheduleIdle(delay = 2500, skipGuide = false) {
+  private scheduleIdle(delay = 2500) {
     window.clearTimeout(this.idleTimer);
     if (this.active || this.held || this.urgency) return;
     // A LESSON is quiet by design (the window carries the words), but the sign must still come back
@@ -440,15 +415,6 @@ export class DisplayMachine {
           this.rest();
           this.scheduleIdle(8000);
         }, 2000);
-        return;
-      }
-      // The guide's pointer replaces the blink while a new beat is on offer (never in a lesson).
-      const guide = skipGuide || this.quiet ? null : this.guideWord?.() ?? null;
-      if (guide) {
-        this.urgency = true;
-        this.guideShown = guide;
-        this.clearDwellQueue();
-        this.emit({ text: guide, mode: 'amber', pulse: true, compact: true });
         return;
       }
       // Sticky urgency: keep blinking until the player starts the next move (tutorial spirit).

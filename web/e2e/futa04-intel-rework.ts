@@ -2,6 +2,7 @@
 // labels. This suite renders the real panel at four viewports and checks the information design:
 // the scope line (Tips = this match, Rules = the reference), the readout, the ranked tip cards,
 // no horizontal overflow, and a static reduce-motion path. Screenshots land in docs/screens/.
+import { asRegularPlayer } from './helpers/regular-player.js';
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -50,6 +51,7 @@ try {
   for (const [width, height] of [[320, 568], [390, 844], [844, 390], [768, 1024], [1280, 800]] as const) {
     const mobile = width < 600;
     const page = await browser.newPage({ viewport: { width, height }, hasTouch: mobile, isMobile: mobile });
+    await asRegularPlayer(page);
     const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
     await page.addInitScript((save) => {
       localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, autoSkip: false, reduceMotion: true, speed: 'fast' }));
@@ -164,6 +166,7 @@ try {
 
   // A quiet board still looks composed: the fallback is a read of the position, not an empty tab.
   const quietPage = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await asRegularPlayer(quietPage);
   await quietPage.addInitScript((save) => {
     localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, autoSkip: false, reduceMotion: true, speed: 'fast' }));
     localStorage.setItem('main2:severgrow.save.v7', save);
@@ -184,6 +187,7 @@ try {
 
   // Reading the panel itself is a keyboard action too, not only focusing one of its keys.
   const reading = await browser.newPage({viewport:{width:390,height:844}});
+  await asRegularPlayer(reading);
   await reading.addInitScript(save=>{localStorage.setItem('main2:severgrow.save.v7',save);localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,speed:'skip',reduceMotion:true}));},positionSave({state:intentPosition(11)}));
   await reading.goto(served.url);await resumeSavedGame(reading);await openIntel(reading);await tab(reading,'rules');
   await reading.locator('#futasaku-glass .intel-body').focus();
@@ -204,6 +208,7 @@ try {
   const lastSide=allNeighbors(homeCoord(1,almost.config)).map(coordKey).find(k=>k in almost.board)!;
   almost.board[lastSide]=null;
   const finished=await browser.newPage({viewport:{width:390,height:844}});
+  await asRegularPlayer(finished);
   await finished.addInitScript(save=>{localStorage.setItem('main2:severgrow.save.v7',save);localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,speed:'skip',reduceMotion:true}));},positionSave({state:almost}));
   await finished.goto(served.url);await resumeSavedGame(finished);
   const winningGrow=await finished.evaluate(key=>(window as any).__severgrow.legal().find((a:Action)=>a.t==='Sprout'&&`${a.coord.q},${a.coord.r}`===key),lastSide);
@@ -228,6 +233,7 @@ try {
 
   // Motion ON keeps the interface vocabulary: the body arrives with the shared token, not a new one.
   const motionPage = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await asRegularPlayer(motionPage);
   await motionPage.addInitScript((save) => {
     localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, autoSkip: false, reduceMotion: false, speed: 'fast' }));
     localStorage.setItem('main2:severgrow.save.v7', save);

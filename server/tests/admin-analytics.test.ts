@@ -33,6 +33,7 @@ const fact = (over: Partial<AnalyticsPlayerFact> & Pick<AnalyticsPlayerFact, 'pl
   invitesJoined: 0,
   hasClaim: false,
   rematchCount: 0,
+  guideOpened: false,
   activityDays: over.activityDays ?? new Set([utcDay(over.createdAt)]),
   ...over,
 });
@@ -133,6 +134,32 @@ describe('funnel rates among the lookback cohort', () => {
     expect(shaped.funnel.firstClaim).toBe(1);
     expect(shaped.funnel.inviteToPlayRate).toBe(0.5);
     expect(shaped.funnel.repeatMatchRate).toBe(0.5);
+  });
+
+  // Agreed design (2026-11-10): the quiet help key is measurable — opened a guide lesson -> finished a game,
+  // next to the same rate for new players who never opened one.
+  it('splits first finished match by whether the player opened a guide lesson', () => {
+    const shaped = shapeAnalytics(
+      [
+        fact({ playerId: 'g1', createdAt: NOW - DAY, guideOpened: true, finishedMatchCount: 1 }),
+        fact({ playerId: 'g2', createdAt: NOW - DAY, guideOpened: true }),
+        fact({ playerId: 'n1', createdAt: NOW - DAY, finishedMatchCount: 3 }),
+        fact({ playerId: 'n2', createdAt: NOW - DAY }),
+        fact({ playerId: 'n3', createdAt: NOW - DAY }),
+        fact({ playerId: 'old', createdAt: NOW - (ANALYTICS_FUNNEL_LOOKBACK_DAYS + 5) * DAY, guideOpened: true, finishedMatchCount: 1 }),
+      ],
+      NOW,
+    );
+    expect(shaped.funnel.guideOpened).toBe(2);
+    expect(shaped.funnel.guideOpenedFinished).toBe(1);
+    expect(shaped.funnel.guideFinishRate).toBe(0.5);
+    expect(shaped.funnel.noGuideFinishRate).toBeCloseTo(1 / 3);
+  });
+
+  it('no lesson opened yet: the guide rate is empty, not zero', () => {
+    const shaped = shapeAnalytics([fact({ playerId: 'n', createdAt: NOW - DAY })], NOW);
+    expect(shaped.funnel.guideOpened).toBe(0);
+    expect(shaped.funnel.guideFinishRate).toBeNull();
   });
 });
 

@@ -25,6 +25,11 @@ export type TutorialWindowHandlers = {
 };
 export type TutorialFocusOptions = {
   arrow?: boolean;
+  /**
+   * Light the target's own contour (a card's or a tile's outline), as the levels do, instead of the
+   * Tutorial's soft pill. The in-game guide's lessons use it (owner, 2026-11-10: one look for "lit").
+   */
+  outline?: boolean;
   why?: string;
   shape?: FocusShape;
   chapterCount?: number;
@@ -1522,9 +1527,9 @@ export const mountGlassSurface = (onClose: () => void) => {
     lightOff = !!options.noLight;
     if (lightOff) { targetSelector = ''; stopLoop(); smooth = null; }
     else targetSelector = nextSelector;
-    // The Tutorial's focus is always a soft pill. The levels keep the target's own outline.
+    // The Tutorial's focus is a soft pill. The levels and the guide keep the target's own outline.
     targetShape = !targetSelector || options.shape === 'none' ? 'none'
-      : options.lesson && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
+      : (options.lesson || options.outline) && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
     setIfChanged(focus, 'data-lesson', options.lesson ? '1' : '0');
     // One halo per target. If the target is the display, the baked bloom is the light; if the
     // board already lights it (a top-rank tile's glow lives in the l-glow layer, not inside the

@@ -1,5 +1,7 @@
 // The in-game guide's account copy (owner, 2026-11-09: seen windows "follow the account").
-// Signed-in accounts only; silent on an older server (no `account-guide` feature) or any failure:
+// Every Play Online player keeps it, guests too (2026-11-10: so "opened a lesson -> finished a game"
+// can be measured); the identity is read on each call, so one made later is picked up. Silent on an
+// older server (no `account-guide` feature) or any failure:
 // the guide always works from this device's own copy.
 import type { KeyValue } from '../../../server/src/client.js';
 import { DuelClient } from '../../../server/src/client.js';
@@ -11,16 +13,12 @@ import type { GuideProgress } from './guide-watcher.js';
 
 export type GuideAccount = { load(): Promise<GuideProgress | null>; save(p: GuideProgress): Promise<GuideProgress | null> };
 
-/** The account copy for this device's signed-in player, or null when there is none. */
+/** The server copy for this device's Play Online player (guest or account); null with no server. */
 export const guideAccount = (storage: KeyValue | null, deps: {
   client?: Pick<DuelClient, 'accountGuide' | 'putAccountGuide'> | null;
   features?: () => Promise<readonly string[] | null>;
 } = {}): GuideAccount | null => {
-  const token = () => {
-    const id = readAccountIdentity(storage);
-    return id && id.kind === 'account' ? id.token : null;
-  };
-  if (!token()) return null;
+  const token = () => readAccountIdentity(storage)?.token ?? null;
   const base = duelApiUrl();
   const region = duelRegion();
   const client = deps.client !== undefined ? deps.client : base ? new DuelClient({ baseUrl: base, ...(region ? { region } : {}) }) : null;

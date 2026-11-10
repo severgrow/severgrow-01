@@ -268,6 +268,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
           invitesJoined: 0,
           hasClaim: false,
           rematchCount: 0,
+          guideOpened: ((await sources.storage.accountGuideOf(player.id))?.seen.length ?? 0) > 0,
         });
       }
 

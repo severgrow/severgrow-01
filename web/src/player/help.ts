@@ -256,7 +256,10 @@ export const mountHelp = (hooks: HelpHooks) => {
       const progress = document.getElementById('coach-step');
       const step = progress?.textContent?.trim().replace(/^Tip\s+/i, '') || '';
       if (step && progress) progress.textContent = `Tip ${step}`;
-      if (hooks.onBulb) {
+      if (hooks.onBulb && document.documentElement.classList.contains('futasaku-guide-fresh')) {
+        // A new player's help key shows "?" (player/how-to-guide.ts): it is named for what it does.
+        if (trigger.title !== 'How to play') { trigger.title = 'How to play'; trigger.setAttribute('aria-label', 'How to play'); }
+      } else if (hooks.onBulb) {
         trigger.title = 'Match Intel';
         trigger.setAttribute('aria-label','Match Intel: what went on the Throw pile, and match facts');
       } else if (hasTip && !hasCoach) {

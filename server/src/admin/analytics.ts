@@ -28,6 +28,8 @@ export type AnalyticsPlayerFact = {
   hasClaim: boolean;
   /** Finished matches that are rematches of an earlier finished match. */
   rematchCount: number;
+  /** Opened at least one in-game guide lesson (its server copy, `account_guide.seen`, is not empty). */
+  guideOpened: boolean;
 };
 
 export type AdminRetentionCohort = {
@@ -56,6 +58,14 @@ export type AdminAnalyticsFunnel = {
   firstClaimRate: number | null;
   /** ≥2 finished matches / players with ≥1; null when nobody finished a match. */
   repeatMatchRate: number | null;
+  /** New players who opened at least one guide lesson (the "?" help key). */
+  guideOpened: number;
+  /** Of those, how many finished a match. */
+  guideOpenedFinished: number;
+  /** Finished a match / opened a lesson; null when nobody opened one. */
+  guideFinishRate: number | null;
+  /** The same rate for new players who never opened a lesson, to compare; null when there are none. */
+  noGuideFinishRate: number | null;
 };
 
 export type AdminAnalytics = {
@@ -152,6 +162,8 @@ export const shapeAnalytics = (facts: readonly AnalyticsPlayerFact[], now: numbe
   let inviteJoined = 0;
   let rematchPlayed = 0;
   let repeatMatches = 0;
+  let guideOpened = 0;
+  let guideOpenedFinished = 0;
 
   for (const fact of facts) {
     const createdDay = utcDay(fact.createdAt);
@@ -188,6 +200,10 @@ export const shapeAnalytics = (facts: readonly AnalyticsPlayerFact[], now: numbe
       if (fact.invitesSent >= 1) inviteSent += 1;
       if (fact.invitesJoined >= 1) inviteJoined += 1;
       if (fact.rematchCount >= 1) rematchPlayed += 1;
+      if (fact.guideOpened) {
+        guideOpened += 1;
+        if (fact.finishedMatchCount >= 1) guideOpenedFinished += 1;
+      }
     }
   }
 
@@ -230,6 +246,10 @@ export const shapeAnalytics = (facts: readonly AnalyticsPlayerFact[], now: numbe
       firstMatchRate: rateOrNull(firstMatch, funnelNew),
       firstClaimRate: rateOrNull(firstClaim, funnelNew),
       repeatMatchRate: rateOrNull(repeatMatches, firstMatch),
+      guideOpened,
+      guideOpenedFinished,
+      guideFinishRate: rateOrNull(guideOpenedFinished, guideOpened),
+      noGuideFinishRate: rateOrNull(firstMatch - guideOpenedFinished, funnelNew - guideOpened),
     },
     activityDefinition: ANALYTICS_ACTIVITY_DEFINITION,
   };

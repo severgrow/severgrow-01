@@ -368,6 +368,12 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
           where m.open_queue = false and m.live_since is null
             and ${MATCH_VISIBLE('m')}`,
       );
+      // Players who opened at least one guide lesson. A server without migration 0024 has no table:
+      // the guide step then reads as "nobody yet" rather than failing the whole dashboard.
+      const guides = await pool.query(
+        `select g.player_id from account_guide g
+          where jsonb_array_length(g.seen) > 0 and ${PLAYER_OF_NOT_TEST('g.player_id')}`,
+      ).catch(() => ({ rows: [] as Record<string, unknown>[] }));
 
       const facts = new Map<string, AnalyticsPlayerFact>();
       for (const row of players.rows) {
@@ -382,7 +388,12 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
           invitesJoined: 0,
           hasClaim: false,
           rematchCount: 0,
+          guideOpened: false,
         });
+      }
+      for (const row of guides.rows) {
+        const fact = facts.get(str(row.player_id));
+        if (fact) fact.guideOpened = true;
       }
       for (const row of finishes.rows) {
         const fact = facts.get(str(row.player_id));
