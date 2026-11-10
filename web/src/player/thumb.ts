@@ -75,6 +75,10 @@ export const mountThumb = (hooks: { relayout: () => void; reduceMotion: () => bo
     // Essentials (owner, 2026-10-23): no Thumb layout row; Hand side is the group after Comfort.
     box.classList.add('thumb-settings-last');
     box.append(h3, handSide);
+    // The Guide switch (owner, 2026-11-09) is the last game option, after Hand side: on a phone held
+    // sideways the sheet shows only so many rows, and Hand side must stay in view without scrolling.
+    const guideRow = document.getElementById('guide-row');
+    if (guideRow) box.append(guideRow);
     body?.append(box);
   } else {
     box.append(

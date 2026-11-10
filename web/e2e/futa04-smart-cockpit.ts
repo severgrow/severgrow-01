@@ -65,7 +65,9 @@ try {
     check(await page.locator('#smart-led').evaluate(el=>getComputedStyle(el,'::before').backgroundSize)==='contain',`${name}: supplied display art keeps its proportions`);
     check(await page.locator('#deck-count').evaluate(el=>getComputedStyle(el,'::before').backgroundSize)==='contain',`${name}: supplied counter art keeps its proportions`);
     check(!await page.locator('#step-cue').isVisible(),`${name}: routine board prompt removed`);
-    check(await page.locator('#smart-context').isDisabled(),`${name}: neutral context during Draw`);
+    // OWNER CHANGED THE RULE (2026-11-09, in-game guide): with no real context action the key offers
+    // the guide's "?" (Guide on by default); it is never a real action during Draw.
+    check(await page.locator('#smart-context').evaluate(el => (el as HTMLButtonElement).disabled || el.getAttribute('data-action') === 'guide'),`${name}: no real context action during Draw (the guide's "?" or disabled)`);
     check(await page.locator('#tool-undo').isDisabled(),`${name}: Undo visible but unavailable at start`);
     check(await page.locator('#discard.futa04-bloom-draw').count()===0,`${name}: ordinary discard has no combo cue`);
     check(await page.locator('#discard .gd-fx').evaluate(el=>getComputedStyle(el).display)==='none',`${name}: no extra discard draw rectangle`);
@@ -105,7 +107,7 @@ try {
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Throw`);
     check(!await page.locator('#smart-led-cells').evaluate(el=>el.classList.contains('scrolling')),`${name}: short Throw message remains stationary`);
     check((await page.locator('#hand .card').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('190, 68, 47'),`${name}: red card-edge light`);
-    check(await page.locator('#smart-context').isDisabled(),`${name}: context neutral when throwing`);
+    check(await page.locator('#smart-context').evaluate(el => (el as HTMLButtonElement).disabled || el.getAttribute('data-action') === 'guide'),`${name}: no real context action when throwing (the guide's "?" or disabled)`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-throw.png`});
     check(errors.length===0,`${name}: no browser errors: ${errors.join(' | ')}`);
     await page.close();

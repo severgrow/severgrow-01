@@ -666,18 +666,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         again.setAttribute('aria-label', row.rematch === 'theirs' ? ONLINE.rowRematchAccept(row.opponentName) : ONLINE.rowRematchKey(row.opponentName));
         again.title = again.getAttribute('aria-label') ?? '';
         again.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.6-5.7L20 8.7"/><path d="M20 4v4.7h-4.7"/><path d="M20 12a8 8 0 0 1-13.6 5.7L4 15.3"/><path d="M4 20v-4.7h4.7"/></svg>';
-        again.addEventListener('click', (ev) => { ev.stopPropagation(); void rematch(row.matchId); });
-        again.addEventListener('keydown', (ev) => ev.stopPropagation());
         li.appendChild(again);
       }
-      const open = () => void (row.replayable ? openReplay(row.matchId) : openMatch(row.matchId));
-      li.addEventListener('click', open);
-      li.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter' || ev.key === ' ') {
-          ev.preventDefault();
-          open();
-        }
-      });
+      if (row.replayable) li.dataset.replayable = '1';
+      // No listeners per row: the list handles every row's press (wired once, below).
       list.appendChild(li);
       }
       if (focusedId) {
@@ -1560,6 +1552,31 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   $('online-create').addEventListener('click', () => void createMatch());
   // The "Your matches" disclosure. Opening also asks for the freshest list; the render it causes
   // reads `matchesExpanded`, so it cannot shut the panel it just opened.
+  // EVERY ROW'S PRESS, in one place: the list is rebuilt on every change, so per-row listeners would
+  // be re-created each time (the online soak counts them). The Rematch key is a real button inside
+  // the row: its press asks for the rematch; anywhere else on the row opens the game (or replay).
+  {
+    const list = $('online-matches');
+    const rowOf = (target: EventTarget | null): HTMLElement | null =>
+      target instanceof Element ? target.closest<HTMLElement>('li[data-match-id]') : null;
+    const openRow = (li: HTMLElement) => {
+      const id = li.dataset.matchId!;
+      void (li.dataset.replayable === '1' ? openReplay(id) : openMatch(id));
+    };
+    list.addEventListener('click', (ev) => {
+      const li = rowOf(ev.target);
+      if (!li) return;
+      if (ev.target instanceof Element && ev.target.closest('.online-row-rematch')) { void rematch(li.dataset.matchId!); return; }
+      openRow(li);
+    });
+    list.addEventListener('keydown', (ev) => {
+      const li = rowOf(ev.target);
+      // Only the row itself: the Rematch key's own Enter/Space is a native button click.
+      if (!li || ev.target !== li || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+      ev.preventDefault();
+      openRow(li);
+    });
+  }
   $('online-matches-toggle').addEventListener('click', () => {
     const open = !matchesExpanded;
     setMatchesExpanded(open);

@@ -93,7 +93,7 @@ try {
     }
     for (const { id, box } of geometry.controls) {
       assert(box.left >= geometry.panel.left && box.right <= geometry.panel.right, `${id}: fits sheet width`);
-      assert(box.height >= 44 || id === 'sound' || id === 'vibration' || id === 'reduceMotion' || id === 'largeText', `${id}: 44px button target`);
+      assert(box.height >= 44 || id === 'sound' || id === 'vibration' || id === 'reduceMotion' || id === 'largeText' || id === 'guide', `${id}: 44px button target`);
     }
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/settings-${width}x${height}${largeText ? '-large' : ''}.png` });
     // When extra account controls make the sheet scroll, its title and close key must stay above rows.

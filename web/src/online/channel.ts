@@ -275,7 +275,7 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
    * has said nothing for two heartbeats (mobile browsers freeze sockets without closing them), is
    * replaced at once with a fresh retry budget, so the opponent's pings arrive again straight away.
    */
-  (options.wake ?? browserWake)(() => {
+  const onWake = (): void => {
     if (subs.size === 0) return;
     const silent = socket !== null && now() - heardAt > 2 * heartbeatMs;
     if (socket && !silent) return;
@@ -287,7 +287,9 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
     failures = 0;
     reconnectDelay = 500;
     open();
-  });
+  };
+  /** The wake listeners live only while someone listens: a channel nobody uses holds nothing. */
+  let stopWake: (() => void) | null = null;
 
   return {
     subscribe(matchId, handlers) {
@@ -298,6 +300,7 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
         subs.set(matchId, set);
       }
       set.add(handlers);
+      stopWake ??= (options.wake ?? browserWake)(onWake);
       handlers.onConnection?.(joined.has(matchId));
       if (socket?.readyState === OPEN && first) {
         send(topicFor(matchId), 'phx_join', {
@@ -315,6 +318,8 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
           joined.delete(matchId);
           if (socket?.readyState === OPEN) send(topicFor(matchId), 'phx_leave', {});
           if (subs.size === 0) {
+            stopWake?.();
+            stopWake = null;
             if (reconnectTimer !== null) {
               clearTimeout(reconnectTimer);
               reconnectTimer = null;

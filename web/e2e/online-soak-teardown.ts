@@ -498,6 +498,24 @@ try {
   // inbox poll are part of "boot" rather than looking like a per-duel leak later.
   const liveUp = [await waitLiveListener(seat0), await waitLiveListener(seat1)];
   console.log(`live listener mounted at boot: seat0=${liveUp[0]} seat1=${liveUp[1]}`);
+  // The app-level listener's Realtime socket retries with backoff (up to ~30 s) and then gives up,
+  // since this harness has no Realtime server. Its last attempt can be mid-connect at any later
+  // check and read as a duel's leftover socket. Wait until neither seat has opened a socket for 16 s
+  // (longer than its largest backoff) and none is open, so "boot" includes the settled listener.
+  {
+    const settleStart = Date.now();
+    let last = -1;
+    let quietSince = Date.now();
+    while (Date.now() - settleStart < 60_000) {
+      const r = await Promise.all([readResources(seat0.page), readResources(seat1.page)]);
+      const created = r[0].socketsCreated + r[1].socketsCreated;
+      const live = r[0].socketsLive + r[1].socketsLive;
+      if (created !== last || live > 0) { last = created; quietSince = Date.now(); }
+      if (Date.now() - quietSince >= 16_000) break;
+      await sleep(1000);
+    }
+    console.log(`app-level Realtime retries settled after ${Math.round((Date.now() - settleStart) / 1000)} s`);
+  }
   await sleep(400);
   const boot0 = await readResources(seat0.page);
   const boot1 = await readResources(seat1.page);
@@ -508,6 +526,10 @@ try {
   report.checkpoints.push({ label: 'boot', seat0Heap: bootHeap0, seat1Heap: bootHeap1, seat0: boot0, seat1: boot1 });
 
   let totalTurns = 0;
+  // OWNER RULE (2026-11-09): one open game per pair. These two seats play every match, and several
+  // exit routes leave the match unfinished, so the previous one is ended through the server (the
+  // pages have already left it) before the next is created.
+  let previousMatchId: string | null = null;
   const postTeardown: { match: number; exit: string; s0: ResourceSnapshot; s1: ResourceSnapshot }[] = [];
 
   for (let m = 1; m <= MATCHES; m++) {
@@ -515,8 +537,10 @@ try {
     const exit = EXIT_ROUTES[(m - 1) % EXIT_ROUTES.length]!;
     const wantsDraft = m % 4 === 2;
 
+    if (previousMatchId) await duel.api.resign(g0.token, previousMatchId).catch(() => undefined);
     const created = await duel.api.createMatch(g0.token);
     const matchId = created.match.matchId;
+    previousMatchId = matchId;
     await duel.api.joinMatch(g1.token, created.match.inviteCode);
     const seatOfPlayer: [0 | 1, 0 | 1] = [created.player.seat, other(created.player.seat)];
     const tokens: [string, string] = [g0.token, g1.token];

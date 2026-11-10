@@ -189,6 +189,23 @@ describe('the channel wakes with the page (a phone back from sleep, the network 
     expect(sockets[0]!.readyState).toBe(3);
   });
 
+  it('the wake listener is attached only while someone listens', () => {
+    let attached = 0;
+    const channel = createRealtimeChannel({
+      url: 'wss://example.supabase.co/realtime/v1/websocket',
+      socket: (url) => new FakeSocket(url),
+      wake: () => { attached += 1; return () => { attached -= 1; }; },
+    });
+    expect(attached).toBe(0);
+    const off1 = channel.subscribe('match:w4', { onPing: () => undefined, onPresence: () => undefined });
+    const off2 = channel.subscribe('match:w5', { onPing: () => undefined, onPresence: () => undefined });
+    expect(attached).toBe(1);
+    off1();
+    expect(attached).toBe(1);
+    off2();
+    expect(attached).toBe(0);
+  });
+
   it('nobody listening: a wake opens nothing', () => {
     const { sockets, wake } = make(() => 0);
     wake();
