@@ -14,6 +14,13 @@ export const IS_FUTA04 = CHANNEL === 'futa04' || CHANNEL === 'futa-test' || CHAN
  */
 export const IS_TEST_ROUTE = typeof location !== 'undefined' && /^\/test(\/|$)/.test(location.pathname);
 /**
+ * THE IN-GAME GUIDE stays on the staging copy for now (owner, 2026-11-10: "promote, but not the guide
+ * tho, keep the guide we'll improve later"). The live game (futa05 at the root) ships without it; the
+ * /test/ copy, local test servers and the other channels keep it. Pure, so the rule is unit-tested.
+ */
+export const inGameGuideOn = (channel: string, pathname: string, hostname: string): boolean =>
+  channel !== 'futa05' || /^\/test(\/|$)/.test(pathname) || hostname === 'localhost' || hostname === '127.0.0.1';
+/**
  * TEST-ONLY: `?flat-territory` keeps the flat Territory map on a planet build, so the browser suites
  * written for the flat map's own layers (challenge rings, swords, frontier notches) keep proving the
  * logic underneath THE PLANET. No player link carries it.
@@ -42,6 +49,8 @@ export const FEATURES = Object.freeze({
    * copy (`test`, `futa-test`) keeps the menu it is used to, so its e2e keeps working unchanged.
    */
   campaign: CHANNEL === 'futa04' || CHANNEL === 'futa05',
+  /** The in-game guide ("?" help key, lessons on tap): staging and tests only for now (see above). */
+  inGameGuide: typeof location === 'undefined' || inGameGuideOn(CHANNEL, location.pathname, location.hostname),
   /**
    * FUTASAKU BLITZ in Practice (owner, 2026-11-06: "it's still a mode in PRACTICE MATCH ... promote to
    * both live and test"): the whole futa05 game, live root and /test/. The locked futa04 line: never.

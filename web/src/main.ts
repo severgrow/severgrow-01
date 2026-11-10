@@ -2090,7 +2090,11 @@ async function mountPlayerEnhancements() {
     smartCockpit = cockpit.mountSmartCockpit({
       heldMove: () => session ? heldMoveWord(session.sel, session.view.hand.find((c) => c.id === session!.sel.card)?.suit === null) : null,
     });
-    howTo = howToModule.mountHowToGuide({
+    // Off on the live root for now (owner, 2026-11-10): no "?", no lights, no lessons, no Guide row,
+    // no guide traffic. The key is the bulb and opens Match Intel, as before the guide.
+    const guideRow = document.getElementById('guide-row');
+    if (guideRow) guideRow.hidden = !FEATURES.inGameGuide;
+    if (FEATURES.inGameGuide) howTo = howToModule.mountHowToGuide({
       setting: () => settings.guide,
       // Blitz is 30 seconds a turn: practice Blitz and a Blitz duel both turn the guide fully off.
       blitz: () => blitzMatch || document.documentElement.dataset.blitzDuel === '1',
