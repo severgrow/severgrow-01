@@ -224,6 +224,7 @@ export const ONLINE_CSS = `
 .online-row-rematch:hover { border-color: rgb(232 221 197 / .32); }
 .online-row-rematch:focus-visible { outline: 2px solid #ffe1a7; outline-offset: 2px; }
 .online-row-rematch.is-theirs { color: #ffe1a7; border-color: rgb(255 225 167 / .55); box-shadow: 0 0 14px rgb(255 205 120 / .18); }
+.online-row-rematch[data-rematch='mine'] { color: rgb(232 221 197 / .55); border-color: rgb(232 221 197 / .1); }
 .online-row.warn {
   border-color: color-mix(in srgb, #d4a24a 55%, transparent);
 }

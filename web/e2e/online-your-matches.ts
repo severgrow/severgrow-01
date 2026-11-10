@@ -173,12 +173,14 @@ const b = await makeGuest();
 const c = await makeGuest();
 const d = await makeGuest();
 const e = await makeGuest(); // no matches at all: the empty state
+// OWNER RULE (2026-11-09): one open game per pair, so A's second live game is against F, not B again.
+const f = await makeGuest();
 
 const mine = await startActive(a, b); // A to move
 await ensureOwnerToMove(a, b, mine.matchId);
 
-const theirs = await startActive(a, b); // B to move
-await ensureOpponentToMove(a, b, theirs.matchId);
+const theirs = await startActive(a, f); // F to move
+await ensureOpponentToMove(a, f, theirs.matchId);
 
 const waiting = await service.createMatch(a.player); // A owns an invite nobody joined
 
