@@ -27,6 +27,9 @@ import {
   remainingLabel,
   resolvedSheetCopy,
   ringFraction,
+  tileTimeLabel,
+  challengeUrgency,
+  threatenedCell,
   settlementSheetCopy,
   sheetModeFor,
   stakeMarkersFor,
@@ -738,7 +741,7 @@ export class WorldView {
    * the ring paths are: a focused marker must survive the 12 s refresh, and removing a marker takes
    * it off the map in the same frame the data closes the challenge.
    */
-  private readonly markerNodes = new Map<string, { group: SVGGElement; hit: SVGCircleElement }>();
+  private readonly markerNodes = new Map<string, { group: SVGGElement; hit: SVGCircleElement; time: SVGTextElement }>();
   /**
    * THE OTHER PLAYERS' DISPATCH (owner, 2026-10-29): one `<path>` per disputed tile that is not
    * mine, keyed by `others:<cellId>`. No wrapper, no hit disc, no listener — a hollow glyph is one
@@ -2268,6 +2271,8 @@ export class WorldView {
   /** THE PLANET: on /test/ the window's ground is a planet; its taps are this map's taps. */
   private planetMode: 'menu' | 'world' = 'menu';
   private openPlanet(mode: 'menu' | 'world') {
+    // Each opening of the window starts a fresh "fly to the threat once" (see pushPlanet).
+    if (mode !== this.planetMode) this.threatFlown = undefined;
     this.planetMode = mode;
     if (!FEATURES.planet) return;
     if (this.planet) { this.planet.setMode(mode); this.pushPlanet(); return; }
@@ -2287,6 +2292,8 @@ export class WorldView {
       this.pushPlanet();
     });
   }
+  /** The threatened tile already flown to in this opening (undefined: the planet has not opened yet). */
+  private threatFlown: string | null | undefined = undefined;
   private pushPlanet() {
     const world = this.world;
     if (!this.planet) return;
@@ -2294,11 +2301,20 @@ export class WorldView {
     // real read arrives; never hold the menu behind an API request or invent owned/growable land.
     if (!world) { this.planet.update({cells:[],claims:[],me:null,selected:null,home:null}); return; }
     const me = this.identity?.playerId ?? null;
+    const threat = threatenedCell(this.allChallenges, this.challengeNow());
+    // A threat that only became known after the planet opened (a fresh read landing after the
+    // opening flight) still gets one flight to it; the same tile is never flown to twice.
+    if (threat && this.planetMode === 'world' && this.threatFlown !== threat) {
+      const opened = this.threatFlown !== undefined;
+      this.threatFlown = threat;
+      if (opened) this.planet.home(threat);
+    } else if (this.planetMode === 'world' && this.threatFlown === undefined) this.threatFlown = threat;
     this.planet.update({
       cells: world.cells, claims: world.claims, me, selected: this.selected,
       fog: this.fogCells ? [...this.fogCells.keys()] : [],
       disputes: this.disputes.map((dispute) => dispute.cellId),
-      home: homeTile(world.claims, me),
+      // A tile of mine under challenge outranks my biggest land: the opening flight lands on it.
+      home: threat ?? homeTile(world.claims, me),
       growAnywhere: world.growAnywhere === true,
     });
   }
@@ -3317,6 +3333,7 @@ export class WorldView {
       entry.path.style.setProperty('--territory', claim.colour);
       entry.path.setAttribute('stroke-dashoffset', String(1 - ringFraction(challenge, now)));
       entry.path.classList.toggle('low', isLow(challenge, now));
+      entry.path.setAttribute('data-urgency', challengeUrgency(challenge.expiresAt - now));
       entry.path.setAttribute('data-remaining-ms', String(Math.max(0, challenge.expiresAt - now)));
     }
   }
@@ -3373,7 +3390,19 @@ export class WorldView {
         // world revision still lands on its cell after a re-frame (the SVG paints in world units).
         node.group.setAttribute('transform', transform);
         node.group.setAttribute('data-side', marker.side);
-        node.hit.setAttribute('aria-label', marker.label);
+        // THE TIME ON THE TILE (owner, 2026-11-10: "the tile itself must show the remaining time at a
+        // glance"): a pending answer window prints its hours (then minutes) under the swords, in the
+        // timer's colour step. A running duel has no window, so the swords stand alone.
+        const open = this.allChallenges.find((c) => c.id === marker.challengeId);
+        const left = open && open.status === 'pending' ? open.expiresAt - this.challengeNow() : null;
+        const label = left !== null && left > 0 ? tileTimeLabel(left) : '';
+        if (node.time.textContent !== label) node.time.textContent = label;
+        node.group.classList.toggle('has-time', label !== '');
+        const step = label ? challengeUrgency(left!) : '';
+        if ((node.group.getAttribute('data-urgency') ?? '') !== step) {
+          if (step) node.group.setAttribute('data-urgency', step); else node.group.removeAttribute('data-urgency');
+        }
+        node.hit.setAttribute('aria-label', label ? `${marker.label}. ${CHALLENGE.remaining(remainingLabel(left!))}` : marker.label);
         continue;
       }
       theirs.add(marker.key);
@@ -3479,7 +3508,7 @@ export class WorldView {
     if (this.active) void this.refresh(true);
   }
 
-  private makeMarker(marker: ChallengeMarker): { group: SVGGElement; hit: SVGCircleElement } {
+  private makeMarker(marker: ChallengeMarker): { group: SVGGElement; hit: SVGCircleElement; time: SVGTextElement } {
     const group = document.createElementNS(NS, 'g');
     group.classList.add('world-swords');
     group.setAttribute('data-challenge-id', marker.challengeId ?? '');
@@ -3506,8 +3535,15 @@ export class WorldView {
     const blade = document.createElementNS(NS, 'path');
     blade.setAttribute('d', SWORD_PATH);
     glyph.append(blade);
-    group.append(hit, glyph);
-    return { group, hit };
+    // The time left, printed on the ground under the swords (filled in by `paintSwords`).
+    const time = document.createElementNS(NS, 'text');
+    time.setAttribute('aria-hidden', 'true');
+    time.setAttribute('text-anchor', 'middle');
+    time.setAttribute('x', '0');
+    time.setAttribute('y', '7.1');
+    time.classList.add('world-swords-time');
+    group.append(hit, glyph, time);
+    return { group, hit, time };
   }
 
   /**

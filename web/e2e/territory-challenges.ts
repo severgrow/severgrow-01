@@ -267,6 +267,7 @@ const ringData = (page: Page, challengeId: string) => page.evaluate((id) => {
     lineTerritory: line ? getComputedStyle(line).getPropertyValue('--territory').trim() : '',
     animation: style.animationName,
     low: ring.classList.contains('low'),
+    urgency: ring.getAttribute('data-urgency') ?? '',
     commands: (ring.getAttribute('d') ?? '').split('L').length - 1,
     closed: (ring.getAttribute('d') ?? '').trim().endsWith('Z'),
   };
@@ -498,13 +499,15 @@ try {
         low: path.classList.contains('low'),
       };
     }));
-    const chipLow = chipRings.find((ring) => ring.low);
+    // OWNER CHANGED THE RULE (2026-11-10): the ring measures the LAST 12 h. The 6 h-left row has drained
+    // half of it (offset .5) and does not breathe yet (that starts under 3 h).
+    const chipLow = chipRings.find((ring) => Math.abs(ring.offset - 0.5) < 0.02);
     // The list's small ring is the SAME instrument: a closed six-point path, a fractional dash, and
-    // the same .75 offset the 6 h map ring shows.
+    // the same .5 offset the 6 h map ring shows.
     check(`[${tag}] the list carries the same drained ring at chip size`,
       chipRings.length >= 2 && !!chipLow && chipLow.pathLength === '1' && chipLow.commands === 5 &&
-      chipLow.closed && Math.abs(chipLow.offset - 0.75) < 0.02,
-      `${chipRings.length} rings, low offset ${n2(chipLow?.offset ?? -1)}`);
+      chipLow.closed && !chipLow.low,
+      `${chipRings.length} rings, half-drained offset ${n2(chipLow?.offset ?? -1)}`);
     // the list is read; shut the window so the map's own marks are what the next checks touch
     await page.click('#world-panel-close');
 
@@ -521,14 +524,15 @@ try {
         `${incoming.commands} line segments`);
       check(`[${tag}] the ring drains as a fraction of pathLength=1`,
         incoming.pathLength === '1' && outgoing.pathLength === '1');
-      // 22 h left of 24 h → offset ≈ 1 - 22/24 = .083; 6 h left → .75.
-      check(`[${tag}] a 22 h-old challenge has drained ~8% of its ring`,
-        Math.abs(incoming.offset - (1 - 22 / 24)) < 0.02, `offset ${n2(incoming.offset)}`);
-      check(`[${tag}] a challenge under 6 h left has drained ~75% and breathes`,
-        Math.abs(outgoing.offset - 0.75) < 0.02 && outgoing.low && outgoing.animation === 'world-ring-breath',
-        `offset ${n2(outgoing.offset)}, ${outgoing.animation}`);
+      // OWNER CHANGED THE RULE (2026-11-10): the ring is the LAST 12 h. 22 h left → still full
+      // (offset 0); 6 h left → half drained (offset .5), warm, and not breathing yet (under 3 h only).
+      check(`[${tag}] a challenge with more than 12 h left keeps a full ring`,
+        Math.abs(incoming.offset) < 0.02, `offset ${n2(incoming.offset)}`);
+      check(`[${tag}] 6 h left: half of the last-12 h ring is gone, warm, no breath yet`,
+        Math.abs(outgoing.offset - 0.5) < 0.02 && !outgoing.low && outgoing.urgency === 'warm',
+        `offset ${n2(outgoing.offset)}, ${outgoing.urgency}, ${outgoing.animation}`);
       // No new colour: each ring resolves --territory to the same value its own tile carries.
-      check(`[${tag}] the ring uses the tile's own territory colour, not a new one`,
+      check(`[${tag}] the ring wears the tile's own territory colour while there is time (calm)`,
         /rgb/.test(incoming.stroke) && incoming.territory.length > 0 &&
         incoming.territory === incoming.lineTerritory && outgoing.territory === outgoing.lineTerritory,
         `${incoming.territory} / ${outgoing.territory}`);
@@ -544,6 +548,17 @@ try {
     // so the third marker below is the owner's bug, pinned.
     const acceptedSwords = await swordsData(page, rival3);
     const swordCount = await page.evaluate(() => document.querySelectorAll('.world-swords').length);
+    // THE TIME ON THE TILE (owner, 2026-11-10): a pending window prints its time under the swords in
+    // the timer's colour step; a running duel prints nothing.
+    const tileTimes = await page.evaluate(() => [...document.querySelectorAll('.world-swords:not(.world-swords-quiet)')].map((g) => ({
+      text: g.querySelector('.world-swords-time')?.textContent ?? '', urgency: g.getAttribute('data-urgency') ?? '',
+      fill: (() => { const t = g.querySelector('.world-swords-time'); return t ? getComputedStyle(t).fill : ''; })(),
+    })));
+    check(`[${tag}] each pending tile prints its time ("21h" calm, "5h" warm); the duel tile none`,
+      tileTimes.some((t) => /^2[12]h$/.test(t.text) && t.urgency === 'calm') &&
+      tileTimes.some((t) => /^[56]h$/.test(t.text) && t.urgency === 'warm') &&
+      tileTimes.some((t) => t.text === '' && t.urgency === ''),
+      tileTimes.map((t) => `${t.text || '-'}:${t.urgency || '-'}`).join(' '));
     check(`[${tag}] the crossed swords mark the DEFENDER's contested tile`, !!incomingSwords &&
       incomingSwords.side === 'incoming' && incomingSwords.glyphPaths === 1 && incomingSwords.glyphD > 0,
       `${incomingSwords?.side}, ${incomingSwords?.glyphPaths} path(s)`);
@@ -845,8 +860,10 @@ try {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => localStorage.clear());
   await page.addInitScript({ content: 'window.__name = (f) => f;' });
+  // The breath now starts under 3 h (owner, 2026-11-10), so this check's 6 h row is moved to 2 h left.
+  const hot = { ...challenges, outgoing: challenges.outgoing.map((c) => (c.id === 'out-1' ? { ...c, expiresAt: NOW + 2 * HOUR } : c)) };
   await page.route('**/v1/world/challenges*', (route) => route.fulfill({
-    status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, ...challenges, serverNow: NOW }),
+    status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, ...hot, serverNow: NOW }),
   }));
   await page.route('**/v1/world', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE) }));
   await page.route('**/v1/seeds/wallet', (route) => route.fulfill({

@@ -4,6 +4,7 @@ import {
   CHALLENGE_LOW_MS,
   CHALLENGE_RING_MS,
   challengeUrgency,
+  threatenedCell,
   tileTimeLabel,
   SWORDS_HIT_RADIUS,
   challengeForCell,
@@ -86,6 +87,21 @@ describe('the ring tracks the last 12 h', () => {
     expect(isLow(challenge(), TTL - CHALLENGE_LOW_MS)).toBe(true);
     expect(isLow(challenge(), TTL)).toBe(false);
     expect(isLow(challenge({ status: 'accepted' }), 0)).toBe(false);
+  });
+});
+
+// OWNER, 2026-11-10: opening the planet with a tile under challenge turns to THAT tile first.
+describe('the planet opens on the threatened tile', () => {
+  it('picks the soonest incoming pending answer; never my own outgoing one or a closed one', () => {
+    const now = 10 * HOUR;
+    const late = challenge({ id: 'late', cellId: '4,1', fromMe: false, expiresAt: now + 30 * HOUR });
+    const soon = challenge({ id: 'soon', cellId: '2,2', fromMe: false, expiresAt: now + 2 * HOUR });
+    const mine = challenge({ id: 'mine', cellId: '9,9', fromMe: true, expiresAt: now + HOUR });
+    const gone = challenge({ id: 'gone', cellId: '7,7', fromMe: false, expiresAt: now - 1 });
+    const live = challenge({ id: 'live', cellId: '6,6', fromMe: false, status: 'accepted', expiresAt: now + HOUR });
+    expect(threatenedCell([late, mine, soon, gone, live], now)).toBe('2,2');
+    expect(threatenedCell([mine, gone, live], now)).toBeNull();
+    expect(threatenedCell([], now)).toBeNull();
   });
 });
 

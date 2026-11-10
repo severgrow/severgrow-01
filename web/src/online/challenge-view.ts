@@ -40,6 +40,22 @@ export type ChallengeUrgency = 'calm' | 'warm' | 'hot';
 export const challengeUrgency = (leftMs: number): ChallengeUrgency =>
   leftMs > CHALLENGE_RING_MS ? 'calm' : leftMs > CHALLENGE_LOW_MS ? 'warm' : 'hot';
 
+/**
+ * The tile the planet opens on when one of mine waits for an answer (owner, 2026-11-10: "if they
+ * can miss it, they will not come back for it"): the soonest incoming pending window still open.
+ */
+export const threatenedCell = (
+  challenges: readonly Pick<WorldChallengeWire, 'cellId' | 'fromMe' | 'status' | 'expiresAt'>[],
+  now: number,
+): string | null => {
+  let best: { cellId: string; expiresAt: number } | null = null;
+  for (const c of challenges) {
+    if (c.fromMe || c.status !== 'pending' || !(c.expiresAt > now)) continue;
+    if (!best || c.expiresAt < best.expiresAt) best = c;
+  }
+  return best?.cellId ?? null;
+};
+
 /** Under three hours the ring breathes (the hot step), never once the window has closed. */
 export const isLow = (challenge: Pick<WorldChallengeWire, 'expiresAt' | 'status'>, now: number): boolean => {
   if (challenge.status !== 'pending') return false;

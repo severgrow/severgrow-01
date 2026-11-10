@@ -769,6 +769,24 @@ html.reduce-motion .world-selection { animation: none; }
   transition: stroke-dashoffset 12s linear;
 }
 .world-ring.low { animation: world-ring-breath 2.4s ease-in-out infinite; }
+/* THE TIMER'S COLOUR STEP (owner, 2026-11-10: "if they can miss it, they will not come back"): the
+   ring keeps the owner's colour while there is time, turns warm amber in the last 12 h and hot red
+   in the last 3 h (where it also breathes). The time printed on the tile wears the same step. */
+.world-ring[data-urgency='warm'] { stroke: #f2b45a; }
+.world-ring[data-urgency='hot'] { stroke: #ff5a48; }
+/* The swords make room for the time when one is printed: a touch smaller and a touch higher, so the
+   pair sits inside the hex's inradius at every zoom. */
+.world-swords.has-time .world-swords-glyph { transform: translate(0, -1.7px) scale(.76); }
+.world-swords-time {
+  font: 600 3.7px/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace); letter-spacing: .02em;
+  fill: #f8f2e1; pointer-events: none; font-variant-numeric: tabular-nums;
+  /* legible on any tile colour through soft shade, never a drawn outline */
+  filter: drop-shadow(0 0 .5px #0b0f0b) drop-shadow(0 0 1.6px #0b0f0bd0);
+}
+.world-swords[data-urgency='warm'] .world-swords-time { fill: #ffc66b; }
+.world-swords[data-urgency='hot'] .world-swords-time {
+  fill: #ff7a68; filter: drop-shadow(0 0 .5px #0b0f0b) drop-shadow(0 0 1.6px #0b0f0bd0) drop-shadow(0 0 3px #ff3b2e99);
+}
 /* Expiry: the ring drains the last of its length and fades over 400 ms (the design's collapse). */
 .world-ring.done { opacity: 0; transition: stroke-dashoffset 400ms ease, opacity 400ms ease; }
 @keyframes world-ring-breath {

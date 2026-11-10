@@ -668,6 +668,10 @@ html.test-typography-v2 #menu #logo:has(> :is(svg, img)) {
 /* The countdown reads "18h 42m" with a space in it: it must never wrap inside the entry and push
    the label, so the value is one unbreakable run (owner, 2026-11-01 polish pass). */
 #menu .menu-territory-value { white-space: nowrap; }
+/* The answer countdown wears the tile timer's colour step (owner, 2026-11-10): calm keeps the
+   entry's ink, warm amber under 12 h, hot red under 3 h. Colour only: the layout never moves. */
+#menu .menu-territory-tiles[data-urgency='warm'] .menu-territory-value { color: #ffc66b; }
+#menu .menu-territory-tiles[data-urgency='hot'] .menu-territory-value { color: #ff7a68; }
 /* The smallest phones: the label and the two read-outs step down together so even a five-digit
    balance stays inside the entry. Nothing hides, and the button keeps its 44px tap floor. */
 @media (max-width: 340px) {
