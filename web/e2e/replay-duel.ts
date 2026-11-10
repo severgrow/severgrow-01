@@ -458,8 +458,9 @@ try {
   await pageB.waitForSelector('#online-matches .bucket-finished', { timeout: 30_000 });
   const finishedRow = pageB.locator('#online-matches .bucket-finished').first();
   const rowWord = ((await finishedRow.locator('.online-row-status').textContent()) ?? '').trim();
-  check('a finished duel’s row says it opens the replay', /Watch replay/i.test(rowWord), rowWord);
-  await finishedRow.click();
+  // OWNER CHANGED THE RULE (2026-11-10): the row shows the result; the replay is its own key.
+  check('a finished duel’s row shows the result', /^(Won|Lost|Draw)$/.test(rowWord), rowWord);
+  await finishedRow.locator('.online-row-replay').click();
   await waitVisible(pageB, '#replay', 20_000);
   check('a past duel opens its replay from the match list', await pageB.locator('#replay .rp-board > svg').isVisible());
   await pageB.waitForTimeout(900);

@@ -134,12 +134,20 @@ describe('lobby buckets and sort', () => {
     expect(formatWaitingAge(0)).toBe('1m');
   });
 
-  it('a finished duel row says it opens the replay, with the replay icon', () => {
-    const done = toLobbyRow(entry({ matchId: 'f', status: 'finished', turnPlayer: null, turnDeadlineAt: null, revision: 24 }), 0);
-    expect(done.bucket).toBe('finished');
-    expect(done.replayable).toBe(true);
-    expect(done.statusWord).toBe(REPLAY.pastRow);
-    expect(done.statusIcon).toBe('replay');
+  // OWNER CHANGED THE RULE (2026-11-10): "remove 'watch replay' from finished games and put an icon
+  // next to challenge again for it. so it's just name of opp and 2 icons ... it should show the
+  // result of the game as well just 'Won' or 'Lost'".
+  it('a finished duel row says the result; the replay is its own key', () => {
+    const won = toLobbyRow(entry({ matchId: 'f', status: 'finished', turnPlayer: null, turnDeadlineAt: null, revision: 24, mySeat: 0, result: { winner: 0, reason: 'final', scores: [9, 4] } } as never), 0);
+    expect(won.bucket).toBe('finished');
+    expect(won.replayable).toBe(true);
+    expect(won.statusWord).toBe(ONLINE.rowWon);
+    expect(won.statusWord).not.toBe(REPLAY.pastRow);
+    const lost = toLobbyRow(entry({ matchId: 'g', status: 'finished', turnPlayer: null, turnDeadlineAt: null, revision: 24, mySeat: 0, result: { winner: 1, reason: 'resigned', scores: [2, 4] } } as never), 0);
+    expect(lost.statusWord).toBe(ONLINE.rowLost);
+    const draw = toLobbyRow(entry({ matchId: 'h', status: 'finished', turnPlayer: null, turnDeadlineAt: null, revision: 24, mySeat: 1, result: { winner: null, reason: 'final', scores: [5, 5] } } as never), 0);
+    expect(draw.statusWord).toBe(ONLINE.rowDraw);
+    expect([ONLINE.rowWon, ONLINE.rowLost, ONLINE.rowDraw]).toEqual(['Won', 'Lost', 'Draw']);
   });
 
   it('a finished duel with no moves has nothing to watch, so its row says Finished', () => {

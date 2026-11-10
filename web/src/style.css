@@ -675,6 +675,40 @@ html.test-typography-v2 #menu #logo:has(> :is(svg, img)) {
   #menu .menu-territory-side { gap: 4px; font-size: 0.8rem; }
   #menu .menu-territory-label { font-size: 0.95rem; letter-spacing: 0.05em; }
 }
+/* ---------- PLAY ONLINE'S "YOUR MOVE" MARKER (owner, 2026-11-10) ----------
+   "always keep PLAY ONLINE as button but make an icon signalising we have YOUR MOVE to do on the side
+   of the button - similar to how we have tiles and seeds living inside THE PLANET button". The same
+   three-cell grid as the Territory entry: the label stays centred whether the marker is there or
+   not, and the marker is a quiet read-out in that entry's own type, 16px glyph cell and baseline -
+   in the game's gold, because it is the one thing on the menu waiting for the player. Still: no
+   motion, no badge, no count bubble. */
+#menu-online.menu-online-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+}
+.menu-online-entry > .menu-online-side:first-child { grid-area: 1 / 1; }
+.menu-online-label { grid-area: 1 / 2; }
+.menu-online-turns {
+  grid-area: 1 / 3;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--c-gold, #e3b768);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: var(--w-ui-medium, 500);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.menu-online-turns[hidden] { display: none; }
+.menu-online-turn-icon { width: 16px; height: 16px; flex: none; }
+@media (max-width: 340px) {
+  .menu-online-turns { gap: 4px; font-size: 0.8rem; }
+}
 /* ---------- THE CAMPAIGN'S SUGGESTION (owner, 2026-11-02) ----------
    "make slight glow cream around the play and level 1 so its suggestive". A soft cream halo around
    the two keys that lead to the campaign — PLAY and the LEVEL <n> entry — while lessons 1-10 are

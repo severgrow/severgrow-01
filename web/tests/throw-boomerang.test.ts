@@ -76,7 +76,8 @@ describe('one quick flick', () => {
     expect(JSON.stringify(xy(flight(left)[5]!.transform))).not.toBe(JSON.stringify(xy(flight(right)[5]!.transform)));
   });
 
-  it('is caught a touch big on the pile, seats at the pile size, then hands over with a short fade', () => {
+  // OWNER CHANGED THE RULE (2026-11-10): the card covers the old one as it lands - no fade.
+  it('is caught a touch big on the pile, seats at the pile size, and stays fully visible', () => {
     const plan = planBoomerang(from, board, to, true, view);
     const toX = to.left + to.width / 2 - (from.left + from.width / 2);
     const toY = to.top + to.height / 2 - (from.top + from.height / 2);
@@ -87,7 +88,7 @@ describe('one quick flick', () => {
     expect(land.opacity).toBe(1);
     const seat = plan.frames.find((k) => k.offset === BOOMERANG.seatAt)!;
     expect(num(seat.transform, /scale\(([\d.]+)\)/)).toBeCloseTo(pile, 3);
-    expect(plan.frames.at(-1)!.opacity).toBe(0);
+    expect(plan.frames.at(-1)!.opacity).toBe(1);
   });
 
   it('transform + opacity only, interface easings, even clock in effects.ts', () => {

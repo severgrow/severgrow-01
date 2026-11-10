@@ -24,18 +24,19 @@ try {
   await page.waitForFunction(() => !(window as any).__severgrow.busy());
   const context = page.locator('#smart-context');
 
-  // 1. Their turn: "?" is in the context key; the label shows (a first game); "?" opens Match Intel.
+  // OWNER CHANGED THE RULE (2026-11-10): "?" and HOW TO PLAY are ONE SWITCH. While on, each kind of
+  // move opens its window by itself the first time, then the move to make stays lit, until off.
+  // 1. Their turn: "?" is in the context key; the label shows (a first game); "?" switches it ON.
   await page.waitForFunction(() => document.getElementById('smart-context')?.dataset.action === 'guide', undefined, { timeout: 15000 });
   assert(await page.locator('#futasaku-guide-label').isVisible(), 'HOW TO PLAY label shows in a first online game');
   const keyBox = (await context.boundingBox())!;
   assert(keyBox.width >= 44 && keyBox.height >= 44, '"?" is a 44px target');
+  assert.equal(await context.getAttribute('aria-pressed'), 'false', '"?" starts off');
   await context.click();
-  await page.waitForFunction(() => document.getElementById('futasaku-glass')?.dataset.mode === 'intel', undefined, { timeout: 5000 });
-  const tab = await page.locator('#futasaku-glass .intel-tab[aria-selected="true"]').textContent();
-  console.log(`their turn: "?" opened Match Intel on the ${tab?.trim()} tab`);
-  await page.screenshot({ path: `${out}/their-turn-intel.png` });
-  await page.keyboard.press('Escape');
-  await page.waitForFunction(() => document.getElementById('futasaku-glass')?.dataset.mode !== 'intel' || document.getElementById('futasaku-glass')!.hidden, undefined, { timeout: 5000 });
+  await page.waitForFunction(() => document.getElementById('smart-context')?.getAttribute('aria-pressed') === 'true', undefined, { timeout: 5000 });
+  assert.equal(await page.locator('#futasaku-guide-label').getAttribute('aria-pressed'), 'true', 'the label shows pressed too');
+  await page.screenshot({ path: `${out}/guide-on.png` });
+  console.log('their turn: "?" switched the guide on (pressed in)');
 
   // 2. The opponent plays a whole turn through the server.
   for (const t of ['Draw', 'EndAct', 'Discard']) {
@@ -46,23 +47,32 @@ try {
   }
   await page.waitForFunction(() => { const h = (window as any).__severgrow; return h.online()?.myTurn && !h.busy(); }, undefined, { timeout: 15000 });
 
-  // 3. My turn: "?" opens the DRAW lesson window with the Draw pile lit; drawing closes it.
-  await page.waitForFunction(() => document.getElementById('smart-context')?.dataset.action === 'guide', undefined, { timeout: 15000 });
-  await context.click();
-  await page.waitForFunction(() => document.getElementById('futasaku-glass')?.dataset.mode === 'tutorial', undefined, { timeout: 5000 });
+  // 3. My turn: the DRAW window opens BY ITSELF (the guide is on); drawing closes it.
+  await page.waitForFunction(() => document.getElementById('futasaku-glass')?.dataset.mode === 'tutorial', undefined, { timeout: 8000 });
   const words = (await page.locator('#futasaku-glass').innerText()).replace(/\s+/g, ' ');
-  console.log(`my turn: "?" opened the lesson window: ${words.slice(0, 90)}`);
+  console.log(`my turn: the window opened by itself: ${words.slice(0, 90)}`);
   assert(/draw/i.test(words), 'the first beat on my Draw is DRAW');
-  // The LED speaks for my turn (the step word), never the opponent's "WAIT", once the turn has landed.
-  await page.waitForTimeout(1200);
-  const led = (await page.locator('#smart-led').innerText()).trim();
-  console.log(`LED on my turn: ${JSON.stringify(led)}`);
   await page.screenshot({ path: `${out}/my-turn-window.png` });
   await page.locator('#deck .pile-card').first().click({ force: true }); // the pile pulses (never "stable")
   await page.waitForFunction(() => { const g = document.getElementById('futasaku-glass'); return !g || g.hidden || g.dataset.mode !== 'tutorial'; }, undefined, { timeout: 5000 });
   console.log('drawing closed the window');
 
-  // 4. Blitz: the guide is fully off ("?" gone, label gone).
+  // 4. The next step: its own new kind of move (Grow) opens its window by itself, once.
+  await page.waitForFunction(() => { const g = document.getElementById('futasaku-glass'); return !!g && !g.hidden && g.dataset.mode === 'tutorial' && !/^\s*DRAW/i.test(g.innerText); }, undefined, { timeout: 8000 });
+  console.log(`grow step: window "${(await page.locator('#futasaku-glass').innerText()).replace(/\s+/g, ' ').slice(0, 50)}"`);
+  await page.screenshot({ path: `${out}/grow-window.png` });
+
+  // 5. Off: the context key holds a real move now (Skip), so the pressed HOW TO PLAY label is the
+  //    switch; pressing it closes the window and nothing stays lit.
+  assert.notEqual(await context.getAttribute('data-action'), 'guide', 'a real move keeps the context key');
+  assert(await page.locator('#futasaku-guide-label').isVisible(), 'the label stays up as the off switch while on');
+  await page.locator('#futasaku-guide-label').click();
+  await page.waitForFunction(() => { const g = document.getElementById('futasaku-glass'); return !g || g.hidden || g.dataset.mode !== 'tutorial'; }, undefined, { timeout: 5000 });
+  assert.equal(await page.locator('#futasaku-guide-label').getAttribute('aria-pressed'), 'false', 'off: not pressed');
+  assert.equal(await page.locator('[data-guide-lit]').count(), 0, 'off: nothing lit');
+  console.log('switched off: window closed, nothing lit');
+
+  // 6. Blitz: the guide is fully off ("?" gone, label gone).
   const from = createLiveApi({ baseUrl: duel.apiBase, token: () => match.guests[actor].token });
   const to = createLiveApi({ baseUrl: duel.apiBase, token: () => match.guests[me].token });
   await from.presence('in_match', match.matchId); await to.presence('in_match', match.matchId);

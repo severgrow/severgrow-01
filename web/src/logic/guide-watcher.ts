@@ -37,7 +37,8 @@ const tileOwner = (view: View, key: string): 0 | 1 | null => view.board[key]?.ow
 /** Every beat possible for the player to act right now, in GUIDE_BEATS order. Pure. */
 export const possibleBeats = (view: View, legal: readonly Action[]): GuideBeat[] => {
   const me = view.player;
-  if (view.phase === 'GAME_OVER' || view.actor !== me) return [];
+  // No moves yet (the opponent's turn still replaying on screen): nothing to teach, not even "how to win".
+  if (view.phase === 'GAME_OVER' || view.actor !== me || legal.length === 0) return [];
   const has = new Set<GuideBeat>();
   for (const a of legal) {
     switch (a.t) {
@@ -74,30 +75,54 @@ export const guideActive = (s: { setting: boolean; blitz: boolean }): boolean =>
 export const contextShowsGuide = (s: { active: boolean; contextHasAction: boolean }): boolean =>
   s.active && !s.contextHasAction;
 
-/** The HOW TO PLAY label: a player's first games only, and gone once the lessons are finished. */
-export const showGuideLabel = (s: { active: boolean; gamesStarted: number; lessonsDone: boolean }): boolean =>
-  s.active && !s.lessonsDone && s.gamesStarted <= GUIDE_LABEL_GAMES;
+/**
+ * The HOW TO PLAY label: a player's first games, gone once the lessons are finished — and up the
+ * whole time the guide is ON, because it is then the guide's off switch whenever the context key
+ * carries a real move (owner, 2026-11-10: "real move keeps it").
+ */
+export const showGuideLabel = (s: { active: boolean; gamesStarted: number; lessonsDone: boolean; on?: boolean }): boolean =>
+  s.active && (!!s.on || (!s.lessonsDone && s.gamesStarted <= GUIDE_LABEL_GAMES));
 
-/** The LED message, or null for the display's normal idle blink. */
-export const guideLedWord = (s: { active: boolean; beat: GuideBeat | null }): string | null =>
-  s.active && s.beat ? GUIDE_LED_WORD : null;
+/** The LED's invitation ("TAP ? →"), or null for the display's normal words. Never while on. */
+export const guideLedWord = (s: { active: boolean; beat: GuideBeat | null; on?: boolean }): string | null =>
+  s.active && s.beat && !s.on ? GUIDE_LED_WORD : null;
 
-/** What the "?" does right now. */
-export type GuideTap =
+/**
+ * "?" (or the HOW TO PLAY label) is an ON/OFF switch (owner, 2026-11-10: "once how to play is
+ * clicked, it'll show the windows first and then highlight always until it's toggled off").
+ */
+export type GuideTap = { kind: 'on' } | { kind: 'off' } | { kind: 'none' };
+
+export const guideTap = (s: { active: boolean; on: boolean }): GuideTap =>
+  s.on ? { kind: 'off' } : s.active ? { kind: 'on' } : { kind: 'none' };
+
+/**
+ * The beats that stay LIT while the guide is on, in priority order: the step's main move, with a
+ * possible Bloom (or Blast) ahead of a plain Grow so it is never hidden behind the Skip key (owner,
+ * 2026-11-10: "it's not showing bloom right now since context button is skip"). Skip and "how to
+ * win" are taught by their windows but never stay lit.
+ */
+const GLOW_ORDER: readonly GuideBeat[] = ['draw', 'bloom', 'blast', 'bomb', 'grow', 'strengthen', 'cut', 'throw'];
+
+/** What the guide does on this position while it is on. */
+export type GuideStep =
   | { kind: 'window'; beat: GuideBeat }
-  /** Nothing new is possible: light the next move the way the idle re-prompt does. */
-  | { kind: 'glow' }
-  /** The opponent is moving: Match Intel (Tips if there are any, else Rules). */
-  | { kind: 'intel'; tab: 'tips' | 'rules' }
+  | { kind: 'glow'; beat: GuideBeat; lit: Lit }
   | { kind: 'none' };
 
-export const guideTap = (s: {
-  active: boolean; view: View; legal: readonly Action[]; seen: ReadonlySet<string>; tips: number;
-}): GuideTap => {
-  if (!s.active || s.view.phase === 'GAME_OVER') return { kind: 'none' };
-  if (s.view.actor !== s.view.player) return { kind: 'intel', tab: s.tips > 0 ? 'tips' : 'rules' };
-  const beat = nextGuideBeat(s.view, s.legal, s.seen);
-  return beat ? { kind: 'window', beat } : { kind: 'glow' };
+export const guideStep = (s: { on: boolean; view: View; legal: readonly Action[]; seen: ReadonlySet<string> }): GuideStep => {
+  if (!s.on) return { kind: 'none' };
+  const possible = possibleBeats(s.view, s.legal);
+  if (!possible.length) return { kind: 'none' };
+  // "window once": the first kind of move this player has not been shown opens by itself
+  const fresh = possible.find((b) => !s.seen.has(b));
+  if (fresh) return { kind: 'window', beat: fresh };
+  // "then glow": the move to make stays lit
+  const beat = GLOW_ORDER.find((b) => possible.includes(b));
+  if (!beat) return { kind: 'none' };
+  // Strengthen and Cut start, like Grow, by picking a card: the playable cards are what is lit.
+  const lit = litFor(beat === 'strengthen' || beat === 'cut' ? 'grow' : beat, s.view, s.legal);
+  return lit.t === 'none' ? { kind: 'none' } : { kind: 'glow', beat, lit };
 };
 
 /** The window for a beat: the existing lesson's title and line, and what to light on THIS board. */

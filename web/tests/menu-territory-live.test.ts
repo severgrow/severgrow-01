@@ -15,7 +15,7 @@ import type { WorldChallengeWire } from '../../server/src/seeds/types.js';
 import { ONLINE } from '../../src/strings.js';
 import { answerLabel, answerWaiting, territoryReadout } from '../src/online/menu-territory.js';
 import { ANSWER_TICK_MS, mountAnswerClock } from '../src/online/menu-territory-clock.js';
-import { playOnlineLabel } from '../src/online/match-attention.js';
+import { yourMoveCount } from '../src/online/match-attention.js';
 
 const NOW = 1_000_000_000_000;
 
@@ -149,20 +149,22 @@ describe('the entry’s answer clock ticks only while a window is open', () => {
   });
 });
 
-describe('an unfinished duel on my turn says "your move" on the Play online key', () => {
+// OWNER CHANGED THE RULE (2026-11-10): "don't change PLAY ONLINE to YOUR MOVE - always keep PLAY
+// ONLINE as button but make an icon signalising we have YOUR MOVE to do on the side of the button".
+// The key's words never change; a quiet marker with the count sits on its side.
+describe('the Play online key keeps its name; a marker counts the matches waiting for my move', () => {
   it('uses the owner’s words, from the one strings module', () => {
-    expect(ONLINE.yourMove).toBe('your move');
     expect(ONLINE.playOnline).toBe('Play online');
+    expect(ONLINE.menuYourMoveName(2)).toBe('Play online. 2 matches waiting for your move');
+    expect(ONLINE.menuYourMoveName(1)).toBe('Play online. 1 match waiting for your move');
   });
 
-  it('says "your move" only while it is MY turn in an unfinished duel', () => {
-    const label = (entries: MatchListEntry[]) => playOnlineLabel(entries, ONLINE.playOnline, ONLINE.yourMove);
-    expect(label([match()])).toBe('your move');
-    expect(label([match({ turnPlayer: 1 })])).toBe('Play online');
-    expect(label([match({ status: 'finished' })])).toBe('Play online');
-    expect(label([match({ status: 'waiting' })])).toBe('Play online');
-    expect(label([])).toBe('Play online');
-    // One live turn is enough, whatever else is in the list.
-    expect(label([match({ status: 'finished' }), match({ matchId: 'm-2' })])).toBe('your move');
+  it('counts only matches that wait for ME (my turn in an unfinished duel, or a rematch asked of me)', () => {
+    expect(yourMoveCount([match()])).toBe(1);
+    expect(yourMoveCount([match({ turnPlayer: 1 })])).toBe(0);
+    expect(yourMoveCount([match({ status: 'finished' })])).toBe(0);
+    expect(yourMoveCount([match({ status: 'waiting' })])).toBe(0);
+    expect(yourMoveCount([])).toBe(0);
+    expect(yourMoveCount([match({ status: 'finished' }), match({ matchId: 'm-2' }), match({ matchId: 'm-3' })])).toBe(2);
   });
 });

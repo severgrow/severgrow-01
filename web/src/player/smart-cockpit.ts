@@ -107,6 +107,15 @@ html.futa04-information #futa04-box #smart-context:is(:hover,:focus-visible,[ari
    slot — availability never depended on these rules, only on the action being present. */
 html.futa04-information #futa04-box #smart-context:disabled { opacity:.68; cursor:default; }
 html.futa04-information #futa04-box #smart-context:disabled svg { opacity:.45; }
+/* THE GUIDE'S SWITCH, ON (owner, 2026-11-10: "make sure the button ? looks pressed in so it's easy
+   to understand we need to press it again to switch off the guide"): the key sits a pixel lower in a
+   darker well with a gold rim, and the "?" turns gold. Still, no motion. */
+html.futa04-information #futa04-box #smart-context[aria-pressed='true'] { transform:translateY(1px); }
+html.futa04-information #futa04-box #smart-context[aria-pressed='true']::after {
+  content:''; position:absolute; inset:3px; border-radius:8px; pointer-events:none;
+  background:rgb(4 5 6 / .42); box-shadow:inset 0 2px 6px rgb(0 0 0 / .7), inset 0 0 0 1px rgb(255 214 140 / .42);
+}
+html.futa04-information #futa04-box #smart-context[aria-pressed='true'] svg { color:#ffd68c; position:relative; z-index:1; }
 /* 0.6 polish: a disabled key must read unavailable, not merely quieter. The key keeps its face and
    its place (a control cannot vanish and shift the row), but the LABEL goes from the live warm
    ivory to a neutral muted ink at full opacity. Measured from rendered pixels: 3.2:1 on the key
@@ -695,6 +704,8 @@ html.futa04-information.reduce-motion #board .l-over .target.kind-grow { animati
 export type CockpitGuide = {
   /** The guide is on and may take the empty context key ("?"). Read on every sync. */
   active(): boolean;
+  /** The guide's switch is on: "?" is drawn pressed in (tapping again turns it off). */
+  on(): boolean;
   /** The "?" was tapped. */
   tap(): void;
   /** Its accessible name ("How to play"). */
@@ -1104,6 +1115,9 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
     // The slot's current action, so CSS can light a key that is the move (e.g. Skip).
     context.dataset.action = first?.icon ?? (guideKey ? 'guide' : '');
     context.setAttribute('aria-haspopup',current.length > 1 ? 'menu' : 'false');
+    // "?" is a switch (owner, 2026-11-10): pressed in while the guide is on.
+    const pressed = guideKey && !!options.guide?.on();
+    if (guideKey) context.setAttribute('aria-pressed', String(pressed)); else context.removeAttribute('aria-pressed');
     context.setAttribute('aria-label',first ? current.length > 1 ? `${first.label}. ${current.length} actions available` : first.label : guideKey ? options.guide!.label : phase === 'opp' ? ONLINE.statusTheirTurn : 'No action available');
     context.title = context.getAttribute('aria-label') ?? '';
     for (const b of moves.querySelectorAll<HTMLButtonElement>('button')) b.tabIndex = -1;

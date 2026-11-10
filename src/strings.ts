@@ -68,6 +68,9 @@ export const ONLINE = Object.freeze({
    * moment the turn passes or the match ends. One word pair, no badge and no second screen.
    */
   yourMove: 'your move',
+  /** The Play online key's spoken name while matches wait (the visible words never change). */
+  menuYourMoveName: (n: number) => `Play online. ${n} ${n === 1 ? 'match' : 'matches'} waiting for your move`,
+  menuYourMoveTitle: (n: number) => `${n} ${n === 1 ? 'match waits' : 'matches wait'} for your move`,
   playOffline: 'Play offline',
   pageTitleBase: 'FUTASAKU',
   connectionOffline: 'Offline',
@@ -218,10 +221,16 @@ export const ONLINE = Object.freeze({
   /** A standard duel's mutual rematch: the first to press waits here for the other's press. */
   rematchWaitingTitle: 'Waiting for their rematch',
   /** Your matches, a finished row (owner, 2026-11-09: "challenge this player again"). */
-  rowRematchTheirs: 'Wants a rematch',
-  rowRematchMine: 'Rematch sent',
-  rowRematchKey: (name: string) => `Rematch ${name}`,
-  rowRematchAccept: (name: string) => `Accept ${name}'s rematch`,
+  rowRematchKey: (name: string) => `Challenge ${name} again`,
+  rowRematchAccept: (name: string) => `${name} wants a rematch. Challenge ${name} again`,
+  rowReplayKey: (name: string) => `Watch the replay against ${name}`,
+  /** The question before a challenge-again (owner's words, 2026-11-10). */
+  rematchConfirm: (name: string) => `You want to challenge ${name} again?`,
+  rematchConfirmYes: 'Challenge',
+  rematchConfirmNo: 'Not now',
+  rowWon: 'Won',
+  rowLost: 'Lost',
+  rowDraw: 'Draw',
   rematchWaitingBody: 'The new game starts the moment they press Rematch too.',
   waitingBody: 'Send the link. The duel opens when they join.',
   waitingExpiry: 'Invite expires in 48 hours.',

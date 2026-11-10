@@ -196,8 +196,12 @@ export const ONLINE_CSS = `
   grid-template-columns: 2rem 1fr auto;
   gap: 0.55rem;
   align-items: center;
+  /* ONE LINE, ONE HEIGHT (owner, 2026-11-10: "fit everything in 1 row, so the buttons has smaller
+     height than now. but make them all have same size"): every row is 48px, a 44px key plus 2px. */
   min-height: 48px;
-  padding: 0.55rem 0.7rem;
+  height: 48px;
+  box-sizing: border-box;
+  padding: 2px 2px 2px 0.6rem;
   /* CLASSIC DARK GLASS (owner, 2026-11-09: "whole your matches is green we don't like - make smart
      classic dark glass for it"): the same glass, blur and hairline as the chat and Match Intel. */
   background: var(--dark-glass, rgba(8, 10, 10, .42));
@@ -211,27 +215,33 @@ export const ONLINE_CSS = `
   outline: 2px solid #ffe1a7;
   outline-offset: 2px;
 }
-.online-row.has-rematch { grid-template-columns: 2rem 1fr auto 44px; }
-/* The finished row's Rematch key: a 44px glass key in the cockpit's language. Gold-lit when the
-   opponent already pressed it and waits for this player. */
-.online-row-rematch {
-  width: 44px; height: 44px; min-width: 44px; padding: 0; margin: -4px 0;
-  display: grid; place-items: center; border-radius: 10px; cursor: pointer;
+.online-row:not(.is-finished) { padding-right: 0.7rem; }
+/* A finished row is not a key: its two keys are (replay, challenge again). */
+.online-row.is-finished { cursor: default; }
+/* The finished row's keys: two equal 44px glass keys in the cockpit's language, side by side. */
+.online-row-keys { display: flex; gap: 4px; }
+.online-row-key {
+  width: 44px; height: 44px; min-width: 44px; padding: 0;
+  display: grid; place-items: center; border-radius: 8px; cursor: pointer;
   color: var(--control-ivory, #f5edda); background: rgb(14 15 16 / .62);
   border: 1px solid rgb(232 221 197 / .16); box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
 }
-.online-row-rematch svg { width: 20px; height: 20px; }
-.online-row-rematch:hover { border-color: rgb(232 221 197 / .32); }
-.online-row-rematch:focus-visible { outline: 2px solid #ffe1a7; outline-offset: 2px; }
+.online-row-key svg { width: 20px; height: 20px; }
+.online-row-key:hover { border-color: rgb(232 221 197 / .32); }
+.online-row-key:active { box-shadow: inset 0 2px 5px rgb(0 0 0 / .45); }
+.online-row-key:focus-visible { outline: 2px solid #ffe1a7; outline-offset: 2px; }
+/* The opponent already asked: the swords are gold and lit, waiting for this player. */
 .online-row-rematch.is-theirs { color: #ffe1a7; border-color: rgb(255 225 167 / .55); box-shadow: 0 0 14px rgb(255 205 120 / .18); }
+/* Already asked by this player: quieter (a press again just reopens the wait). */
 .online-row-rematch[data-rematch='mine'] { color: rgb(232 221 197 / .55); border-color: rgb(232 221 197 / .1); }
 .online-row.warn {
   border-color: color-mix(in srgb, #d4a24a 55%, transparent);
 }
 .online-row-main {
   display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.6rem;
   min-width: 0;
 }
 .online-row-main b {
@@ -242,14 +252,21 @@ export const ONLINE_CSS = `
 .online-row-status {
   font-size: 0.85rem;
   opacity: 0.8;
+  white-space: nowrap;
+  flex: none;
 }
+/* The result reads at a glance: a win in the game's warm gold, a loss quieter. */
+.online-row-status.result-won { color: #ffe1a7; opacity: 1; }
+.online-row-status.result-lost { opacity: 0.6; }
 .online-row-time {
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-size: 0.85rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.4rem;
+  white-space: nowrap;
 }
 .online-row-time small {
   color: #d4a24a;

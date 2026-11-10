@@ -12,7 +12,7 @@ import { pollDue } from './poll-gate.js';
 import {
   countNeedingResponse,
   needsMyResponse,
-  playOnlineLabel,
+  yourMoveCount,
   yourMatchesButtonName,
   yourMatchesLabel,
 } from './match-attention.js';
@@ -35,6 +35,8 @@ import { cachedTerritory, registerTerritoryReader, rememberTerritory } from './t
 import { seedIcon } from './seed-icon.js';
 import type { SeedFlushResult } from './seed-rewards.js';
 import { settlePendingSeeds } from './seed-settle.js';
+import { SWORD_PATH } from './swords-glyph.js';
+import { askRematch } from './rematch-confirm.js';
 import type { SeedWallet } from '../../../server/src/seeds/types.js';
 
 import {
@@ -103,6 +105,11 @@ export type LobbyUiHooks = {
 };
 
 type OnlineScreen = 'hub' | 'waiting' | 'join' | 'world' | null;
+
+/** The finished row's two keys share one 20px glyph cell. */
+const REPLAY_KEY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.2v3.6h3.6"/><path d="M10.3 9.1 15 12l-4.7 2.9Z" fill="currentColor" stroke="none"/></svg>';
+/** The owner's traced crossed swords (swords-glyph.ts), the same mark as the planet's challenge key. */
+const SWORDS_KEY_SVG = `<svg viewBox="-7.6 -7.6 15.2 15.2" aria-hidden="true"><path d="${SWORD_PATH}" fill="currentColor"/></svg>`;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -486,13 +493,45 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
    * through the SAME "is it my move" predicate as the list's red "!", so the menu can never claim
    * a move the list does not. Written only when it changes, so a poll leaves the key alone.
    */
+  /**
+   * PLAY ONLINE keeps its words (owner, 2026-11-10: "always keep PLAY ONLINE as button but make an
+   * icon signalising we have YOUR MOVE to do on the side of the button - similar to how we have tiles
+   * and seeds living inside THE PLANET button"). Built once: the label in the middle, and on the
+   * right a quiet gold read-out (the turn glyph and the count) shown only while matches wait for me.
+   * Updates touch the count's text and one attribute, never the layout.
+   */
+  let menuMarker: { label: HTMLElement; side: HTMLElement; count: HTMLElement } | null = null;
   const paintMenuOnline = () => {
     if (!menuOnline) return;
-    const label = playOnlineLabel(matches, ONLINE.playOnline, ONLINE.yourMove);
-    if (menuOnline.textContent !== label) menuOnline.textContent = label;
-    // The spoken name keeps the destination: "your move" alone would not say where the key goes.
-    const name = label === ONLINE.yourMove ? `${ONLINE.yourMove}. ${ONLINE.playOnline}` : ONLINE.playOnline;
+    if (!menuMarker || !menuMarker.label.isConnected) {
+      menuOnline.classList.add('menu-online-entry');
+      const balance = document.createElement('span');
+      balance.className = 'menu-online-side';
+      balance.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.className = 'menu-online-label';
+      const side = document.createElement('span');
+      side.className = 'menu-online-side menu-online-turns';
+      side.setAttribute('aria-hidden', 'true');
+      side.hidden = true;
+      // The turn glyph: a small play wedge inside a hex, the board's own shape.
+      side.innerHTML = '<svg class="menu-online-turn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.2 13.9 4.6v6.8L8 14.8 2.1 11.4V4.6Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.6 5.4 10.6 8 6.6 10.6Z" fill="currentColor"/></svg>';
+      const count = document.createElement('span');
+      count.className = 'menu-online-value';
+      side.append(count);
+      menuOnline.replaceChildren(balance, label, side);
+      menuMarker = { label, side, count };
+    }
+    const n = yourMoveCount(matches);
+    if (menuMarker.label.textContent !== ONLINE.playOnline) menuMarker.label.textContent = ONLINE.playOnline;
+    if (menuMarker.side.hidden !== (n === 0)) menuMarker.side.hidden = n === 0;
+    if (menuMarker.count.textContent !== String(n)) menuMarker.count.textContent = String(n);
+    menuOnline.classList.toggle('has-your-move', n > 0);
+    // The spoken name keeps the destination and adds the count.
+    const name = n > 0 ? ONLINE.menuYourMoveName(n) : ONLINE.playOnline;
     if (menuOnline.getAttribute('aria-label') !== name) menuOnline.setAttribute('aria-label', name);
+    const title = n > 0 ? ONLINE.menuYourMoveTitle(n) : '';
+    if (menuOnline.title !== title) menuOnline.title = title;
   };
 
   const fillCopy = () => {
@@ -508,7 +547,12 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const worldBtn = document.getElementById('online-world') as HTMLButtonElement | null;
     // THE PLANET (/test/ only): the same screen under its new name (owner, 2026-11-04).
     const worldName = FEATURES.planet ? PLANET.title : ONLINE.worldTitle;
-    if (worldBtn) worldBtn.textContent = FEATURES.planet ? PLANET.menu : ONLINE.worldMap;
+    if (worldBtn) {
+      worldBtn.textContent = FEATURES.planet ? PLANET.menu : ONLINE.worldMap;
+      // Not on the Play online menu (owner, 2026-11-10: "remove the planet from play online menu"):
+      // THE PLANET has its own entry on the main menu.
+      worldBtn.hidden = true;
+    }
     // The Territory's heading AND its spoken name come from the one string (owner, 2026-10-16:
     // the shared screen is called Territory). It opens from two places - the menu and the hub - and
     // both must name the same screen.
@@ -633,11 +677,16 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       for (const { entry, row } of rows) {
         const needsResponse = needsMyResponse(entry);
         const li = document.createElement('li');
+        const finished = row.bucket === 'finished';
         li.className = `online-row bucket-${row.bucket}${row.warnLastTwoHours || row.atRisk ? ' warn' : ''}${
           needsResponse ? ' needs-response' : ''
-        }${row.rematch ? ' has-rematch' : ''}`;
-        li.tabIndex = 0;
-        li.setAttribute('role', 'button');
+        }${finished ? ' is-finished' : ''}`;
+        // A live row is one key (it opens the game). A finished row is NOT: its two keys are its
+        // actions (owner, 2026-11-10: "just name of opp and 2 icons - replay and challenge again").
+        if (!finished) {
+          li.tabIndex = 0;
+          li.setAttribute('role', 'button');
+        }
         li.dataset.matchId = row.matchId;
         // Grace is shown as a word next to the clock (never colour alone), plus the last-2-hours warn.
         const warnSmall = [
@@ -650,25 +699,41 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         // The "!" is decoration only (aria-hidden): the row's own words say "Your turn", and the
         // disclosure button carries the count in its accessible name.
         li.innerHTML = `<span class="online-row-mark" aria-hidden="true">
-          <span class="online-row-icon" data-icon="${row.statusIcon}"></span>
+          ${finished ? '' : `<span class="online-row-icon" data-icon="${row.statusIcon}"></span>`}
           ${needsResponse ? '<span class="online-row-attention">!</span>' : ''}
         </span>
         <span class="online-row-main"><b>${escapeHtml(row.opponentName)}</b>
-        <span class="online-row-status">${escapeHtml(row.statusWord)}</span></span>
-        <span class="online-row-time">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${warnSmall}</span>`;
-      // CHALLENGE AGAIN (owner, 2026-11-09): a finished row carries its own Rematch key. A press
-      // from either player waits for the other; the second press starts the game for both.
-      if (row.rematch) {
-        const again = document.createElement('button');
-        again.type = 'button';
-        again.className = `online-row-rematch${row.rematch === 'theirs' ? ' is-theirs' : ''}`;
-        again.dataset.rematch = row.rematch;
-        again.setAttribute('aria-label', row.rematch === 'theirs' ? ONLINE.rowRematchAccept(row.opponentName) : ONLINE.rowRematchKey(row.opponentName));
-        again.title = again.getAttribute('aria-label') ?? '';
-        again.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.6-5.7L20 8.7"/><path d="M20 4v4.7h-4.7"/><path d="M20 12a8 8 0 0 1-13.6 5.7L4 15.3"/><path d="M4 20v-4.7h4.7"/></svg>';
-        li.appendChild(again);
-      }
-      if (row.replayable) li.dataset.replayable = '1';
+        <span class="online-row-status${finished ? ` result-${row.statusWord.toLowerCase()}` : ''}">${escapeHtml(row.statusWord)}</span></span>
+        ${finished ? '' : `<span class="online-row-time">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${warnSmall}</span>`}`;
+        if (finished) {
+          const keys = document.createElement('span');
+          keys.className = 'online-row-keys';
+          // WATCH THE REPLAY: its own key (it used to be the whole row and the words "Watch replay").
+          if (row.replayable) {
+            const replay = document.createElement('button');
+            replay.type = 'button';
+            replay.className = 'online-row-key online-row-replay';
+            replay.setAttribute('aria-label', ONLINE.rowReplayKey(row.opponentName));
+            replay.title = replay.getAttribute('aria-label') ?? '';
+            replay.innerHTML = REPLAY_KEY_SVG;
+            keys.append(replay);
+          }
+          // CHALLENGE AGAIN: the crossed swords (owner, 2026-11-10: "make the rematch button swords
+          // and ask to confirm"). A press from either player waits for the other; the second press
+          // starts the game for both. Gold while the opponent already asked.
+          if (row.rematch) {
+            const again = document.createElement('button');
+            again.type = 'button';
+            again.className = `online-row-key online-row-rematch${row.rematch === 'theirs' ? ' is-theirs' : ''}`;
+            again.dataset.rematch = row.rematch;
+            again.dataset.opponent = row.opponentName;
+            again.setAttribute('aria-label', row.rematch === 'theirs' ? ONLINE.rowRematchAccept(row.opponentName) : ONLINE.rowRematchKey(row.opponentName));
+            again.title = again.getAttribute('aria-label') ?? '';
+            again.innerHTML = SWORDS_KEY_SVG;
+            keys.append(again);
+          }
+          li.append(keys);
+        }
       // No listeners per row: the list handles every row's press (wired once, below).
       list.appendChild(li);
       }
@@ -1559,20 +1624,26 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const list = $('online-matches');
     const rowOf = (target: EventTarget | null): HTMLElement | null =>
       target instanceof Element ? target.closest<HTMLElement>('li[data-match-id]') : null;
-    const openRow = (li: HTMLElement) => {
-      const id = li.dataset.matchId!;
-      void (li.dataset.replayable === '1' ? openReplay(id) : openMatch(id));
-    };
+    const openRow = (li: HTMLElement) => { void openMatch(li.dataset.matchId!); };
     list.addEventListener('click', (ev) => {
       const li = rowOf(ev.target);
       if (!li) return;
-      if (ev.target instanceof Element && ev.target.closest('.online-row-rematch')) { void rematch(li.dataset.matchId!); return; }
+      const key = ev.target instanceof Element ? ev.target.closest<HTMLElement>('.online-row-key') : null;
+      if (key?.classList.contains('online-row-replay')) { void openReplay(li.dataset.matchId!); return; }
+      if (key?.classList.contains('online-row-rematch')) {
+        // Ask first (owner, 2026-11-10: 'ask to confirm "You want to challenge RYK again?"').
+        const id = li.dataset.matchId!;
+        void askRematch(key.dataset.opponent ?? ONLINE.opponentFallback, key).then((yes) => { if (yes) void rematch(id); });
+        return;
+      }
+      // A finished row is not a key itself: only its two keys act.
+      if (li.classList.contains('is-finished')) return;
       openRow(li);
     });
     list.addEventListener('keydown', (ev) => {
       const li = rowOf(ev.target);
-      // Only the row itself: the Rematch key's own Enter/Space is a native button click.
-      if (!li || ev.target !== li || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+      // Only a live row itself: a key's own Enter/Space is a native button click.
+      if (!li || ev.target !== li || li.classList.contains('is-finished') || (ev.key !== 'Enter' && ev.key !== ' ')) return;
       ev.preventDefault();
       openRow(li);
     });

@@ -4,7 +4,7 @@ import { applyAs, coordKey, homeCoord, legalActions, newGame, viewFor } from '..
 import type { Action, State, View } from '../../src/engine/index.js';
 import {
   EMPTY_GUIDE_PROGRESS, GUIDE_BEATS, GUIDE_LABEL_GAMES, GUIDE_LED_WORD, GUIDE_TRIMMED_LINES,
-  contextShowsGuide, guideActive, guideLedWord, guideTap, guideWindow, markGuideSeen,
+  contextShowsGuide, guideActive, guideLedWord, guideStep, guideTap, guideWindow, markGuideSeen,
   mergeGuideProgress, nextGuideBeat, parseGuideProgress, possibleBeats, showGuideLabel,
 } from '../src/logic/guide-watcher.js';
 import type { GuideBeat } from '../src/logic/guide-watcher.js';
@@ -88,15 +88,50 @@ describe('which beat lights for which position', () => {
   });
 });
 
-describe('the "?" tap', () => {
-  it('opens the new beat, glows when nothing is new, and opens Match Intel on their turn', () => {
+// OWNER CHANGED THE RULE (2026-11-10): "once how to play is clicked, it'll show the windows first
+// and then highlight always until it's toggled off - make sure the button ? looks pressed in".
+// "?" (and the HOW TO PLAY label) is now an on/off switch; while on, each new kind of move opens
+// its window by itself once, then the next move stays lit (owner: "window once, then glow").
+describe('the "?" switch', () => {
+  it('switches the guide on and off (any turn), and does nothing where the guide never runs', () => {
+    expect(guideTap({ active: true, on: false })).toEqual({ kind: 'on' });
+    expect(guideTap({ active: true, on: true })).toEqual({ kind: 'off' });
+    expect(guideTap({ active: false, on: true })).toEqual({ kind: 'off' });
+    expect(guideTap({ active: false, on: false })).toEqual({ kind: 'none' });
+  });
+});
+
+describe('while the guide is on', () => {
+  it('a kind of move not yet seen opens its window by itself; after that the next move is lit', () => {
+    const { v, legal } = deckOnlyDraw(3);
+    expect(guideStep({ on: true, view: v, legal, seen: none })).toEqual({ kind: 'window', beat: 'draw' });
+    expect(guideStep({ on: true, view: v, legal, seen: new Set(['draw', 'win']) })).toEqual({ kind: 'glow', beat: 'draw', lit: { t: 'deck' } });
+  });
+  it('a possible Bloom is never hidden: its window first, then the Bloom key is what stays lit', () => {
+    const { v, legal } = until(5, (v) => v.phase === 'ACT');
+    const withBloom = [...legal, { t: 'Bloom', cards: [1, 2, 3], hexes: [] } as Action];
+    const seenAll = new Set<string>(GUIDE_BEATS.filter((b) => b !== 'bloom'));
+    expect(guideStep({ on: true, view: v, legal: withBloom, seen: seenAll })).toEqual({ kind: 'window', beat: 'bloom' });
+    seenAll.add('bloom');
+    expect(guideStep({ on: true, view: v, legal: withBloom, seen: seenAll })).toMatchObject({ kind: 'glow', beat: 'bloom', lit: { t: 'bloom' } });
+  });
+  it('Grow lights the playable cards; Skip and "how to win" never stay lit', () => {
+    const act = until(5, (v) => v.phase === 'ACT');
+    const plain = act.legal.filter((a) => a.t !== 'Bloom' && a.t !== 'PlayFruit' && a.t !== 'MegaBomb');
+    const step = guideStep({ on: true, view: act.v, legal: plain, seen: new Set(GUIDE_BEATS) });
+    expect(step).toMatchObject({ kind: 'glow', beat: 'grow' });
+    expect((step as { lit: { t: string } }).lit.t).toBe('cards');
+  });
+  it('nothing while my turn has no moves yet (the opponent\'s turn still replaying on screen)', () => {
+    const { v } = deckOnlyDraw(3);
+    expect(possibleBeats(v, [])).toEqual([]);
+    expect(guideStep({ on: true, view: v, legal: [], seen: none })).toEqual({ kind: 'none' });
+  });
+  it("nothing on the opponent's turn, after the end, or with the guide off", () => {
     const { s, v, legal } = deckOnlyDraw(3);
-    expect(guideTap({ active: true, view: v, legal, seen: none, tips: 0 })).toEqual({ kind: 'window', beat: 'draw' });
-    expect(guideTap({ active: true, view: v, legal, seen: new Set(['draw', 'win']), tips: 0 })).toEqual({ kind: 'glow' });
+    expect(guideStep({ on: false, view: v, legal, seen: none })).toEqual({ kind: 'none' });
     const theirs = viewFor(s, (1 - s.actor) as 0 | 1);
-    expect(guideTap({ active: true, view: theirs, legal: [], seen: none, tips: 2 })).toEqual({ kind: 'intel', tab: 'tips' });
-    expect(guideTap({ active: true, view: theirs, legal: [], seen: none, tips: 0 })).toEqual({ kind: 'intel', tab: 'rules' });
-    expect(guideTap({ active: false, view: v, legal, seen: none, tips: 0 })).toEqual({ kind: 'none' });
+    expect(guideStep({ on: true, view: theirs, legal: [], seen: none })).toEqual({ kind: 'none' });
   });
 });
 
@@ -114,7 +149,13 @@ describe('the setting, Blitz and the context button', () => {
   it('the LED points at "?" only while the guide is on and a beat is new', () => {
     expect(guideLedWord({ active: true, beat: 'grow' })).toBe(GUIDE_LED_WORD);
     expect(guideLedWord({ active: true, beat: null })).toBeNull();
+    // an invitation only: once the guide is on, the display keeps its normal words
+    expect(guideLedWord({ active: true, beat: 'grow', on: true })).toBeNull();
     expect(guideLedWord({ active: false, beat: 'grow' })).toBeNull();
+  });
+  it('the HOW TO PLAY label stays up (as the off switch) the whole time the guide is on', () => {
+    expect(showGuideLabel({ active: true, gamesStarted: 40, lessonsDone: true, on: true })).toBe(true);
+    expect(showGuideLabel({ active: false, gamesStarted: 1, lessonsDone: false, on: true })).toBe(false);
   });
   it('the HOW TO PLAY label shows for the first games only, and not once the lessons are done', () => {
     expect(GUIDE_LABEL_GAMES).toBe(3);

@@ -1,24 +1,30 @@
-// THE IN-GAME GUIDE (owner, 2026-11-09). A brand-new player who opens a friend's duel link learns
-// inside that real game: nothing opens by itself, and their friend never waits.
+// THE IN-GAME GUIDE (owner, 2026-11-09; switch 2026-11-10). A new player learns inside a real game.
 //
 //   - "?" lives in the cockpit's CONTEXT key whenever that key has no real action (smart-cockpit.ts
-//     draws it; a real context action always wins).
-//   - "HOW TO PLAY", a quiet text key above the cockpit's top row, in a player's first games only.
-//   - The LED points at "?" ("TAP ? →") instead of its idle blink while a new beat is possible.
-//   - Tapping either opens the existing lesson window for the beat possible right now, lit on the
-//     real board; with nothing new it lights the next move; on their turn it opens Match Intel.
+//     draws it; a real move keeps the key).
+//   - "HOW TO PLAY", a quiet text key above the cockpit's top row: a player's first games, and the
+//     whole time the guide is on (it is then the off switch while the context key holds a move).
+//   - Both are ONE SWITCH (owner, 2026-11-10: "once how to play is clicked, it'll show the windows
+//     first and then highlight always until it's toggled off - make sure the button ? looks pressed
+//     in"). While on: each kind of move opens its lesson window by itself the first time it is
+//     possible, then the move to make stays lit, until the switch is pressed again.
+//   - The LED invites ("TAP ? →") while the guide is off and something new is possible.
 //
-// The decisions live in logic/guide-watcher.ts (pure, tested). This module only owns its label,
-// its memory (this device + the account) and the calls into the page's hooks. No timers, no loops.
+// The decisions live in logic/guide-watcher.ts (pure, tested). This module owns the label, the
+// switch, its memory (this device + the account for what was seen) and the calls into the page.
+// No timers or loops: the steady light is applied once per render, after the page has drawn.
 import type { Action, View } from '../../../src/engine/index.js';
 import {
-  EMPTY_GUIDE_PROGRESS, guideActive, guideLedWord, guideTap, guideWindow, markGuideSeen,
+  EMPTY_GUIDE_PROGRESS, guideActive, guideLedWord, guideStep, guideTap, guideWindow, markGuideSeen,
   mergeGuideProgress, nextGuideBeat, parseGuideProgress, showGuideLabel,
 } from '../logic/guide-watcher.js';
 import type { GuideBeat, GuideProgress, GuideWindow } from '../logic/guide-watcher.js';
+import type { Lit } from '../lessons/lessons.js';
 import type { KeyValue } from '../../../server/src/client.js';
 
 export const GUIDE_STORAGE_KEY = 'severgrow.guide.v1';
+/** The switch, on this device (separate from the account copy of what was seen). */
+export const GUIDE_ON_KEY = 'severgrow.guide.on.v1';
 export const GUIDE_LABEL_TEXT = 'HOW TO PLAY';
 export const GUIDE_KEY_LABEL = 'How to play';
 
@@ -41,6 +47,18 @@ html #smart-panel > #futasaku-guide-label:is(:hover,[aria-expanded='true']) { op
 html #smart-panel > #futasaku-guide-label:active { opacity:1; }
 html #smart-panel > #futasaku-guide-label:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; opacity:1; }
 html #smart-panel > #futasaku-guide-label[hidden] { display:none; }
+/* ON: the switch reads as pressed in (a darker glass well, gold words), so pressing again is
+   clearly how to turn the guide off. */
+html #smart-panel > #futasaku-guide-label[aria-pressed='true'] { opacity:1; color:#ffe1a7; }
+html #smart-panel > #futasaku-guide-label[aria-pressed='true'] > span {
+  /* the well hugs the words; the 44px tap area around it stays transparent */
+  padding:5px 8px 4px; border-radius:6px; background:rgb(6 7 8 / .6);
+  box-shadow:inset 0 2px 4px rgb(0 0 0 / .6), inset 0 0 0 1px rgb(255 214 140 / .34);
+}
+/* The steady light on the move to make while the guide is on: one still gold outline, no motion,
+   on whatever the move starts from (the Draw pile, the Bloom key, the playable cards). */
+html.futasaku-guide-on [data-guide-lit] { outline:2px solid rgb(255 214 140 / .78); outline-offset:3px; border-radius:10px; }
+html.futasaku-guide-on #hand [data-guide-lit] { outline-offset:2px; }
 @media (prefers-reduced-motion:no-preference) { html #smart-panel > #futasaku-guide-label { transition:opacity 160ms ease; } }
 `;
 
@@ -53,16 +71,13 @@ export type HowToGuideHooks = {
   busy(): boolean;
   /** The player's view and the moves legal right now, or null when no game is on screen. */
   position(): { view: View; legal: readonly Action[] } | null;
-  /** How many Tips Match Intel has for this position. */
-  tips(): number;
   /** The player has finished the lessons (the label then stays away). */
   lessonsDone(): boolean;
   /** Draw the window (the existing lesson glass, lit on the real board). */
   openWindow(win: GuideWindow): void;
   closeWindow(): void;
-  /** Light the next move, as the idle re-prompt does. */
-  prompt(): void;
-  openIntel(tab: 'tips' | 'rules'): void;
+  /** The page elements a lit thing is drawn on (lessons/lesson-view.ts litTarget). */
+  litSelectors(lit: Lit): string[];
   /** The cockpit's LED: install / clear the guide's idle word. */
   ledWord(fn: (() => string | null) | null): void;
   clearLedPrompt(): void;
@@ -90,7 +105,7 @@ export const mountHowToGuide = (hooks: HowToGuideHooks) => {
   label.type = 'button';
   label.hidden = true;
   label.setAttribute('aria-label', GUIDE_KEY_LABEL);
-  label.setAttribute('aria-expanded', 'false');
+  label.setAttribute('aria-pressed', 'false');
   const text = document.createElement('span');
   text.textContent = GUIDE_LABEL_TEXT;
   label.append(text);
@@ -124,6 +139,7 @@ export const mountHowToGuide = (hooks: HowToGuideHooks) => {
   }, () => undefined);
 
   let open: GuideWindow | null = null;
+  let on = (() => { try { return hooks.storage?.get(GUIDE_ON_KEY) === '1'; } catch { return false; } })();
   const seen = () => new Set<string>(progress.seen);
   const active = (): boolean => !hooks.busy() && !!hooks.position() && guideActive({ setting: hooks.setting(), blitz: hooks.blitz() });
   const currentBeat = (): GuideBeat | null => {
@@ -134,29 +150,49 @@ export const mountHowToGuide = (hooks: HowToGuideHooks) => {
   const close = () => {
     if (!open) return;
     open = null;
-    label.setAttribute('aria-expanded', 'false');
     hooks.closeWindow();
   };
 
-  /** "?" or the label was tapped. */
-  const tap = () => {
-    if (open) { close(); return; }
-    const p = hooks.position();
-    if (!p) return;
-    const t = guideTap({ active: active(), view: p.view, legal: p.legal, seen: seen(), tips: hooks.tips() });
-    if (t.kind === 'none') return;
-    if (t.kind === 'intel') { hooks.openIntel(t.tab); return; }
-    if (t.kind === 'glow') { hooks.prompt(); return; }
-    const win = guideWindow(t.beat, p.view, p.legal);
+  /** The steady light: which elements carry it now. Changed only when the lit thing changes. */
+  let litNow: Element[] = [];
+  let litKey = '';
+  const light = (lit: Lit | null) => {
+    const key = lit ? JSON.stringify(lit) : '';
+    if (key === litKey && litNow.every((el) => el.isConnected)) return;
+    for (const el of litNow) el.removeAttribute('data-guide-lit');
+    litKey = key;
+    litNow = lit ? hooks.litSelectors(lit).flatMap((sel) => [...document.querySelectorAll(sel)]) : [];
+    for (const el of litNow) el.setAttribute('data-guide-lit', '');
+  };
+
+  const openBeat = (beat: GuideBeat, p: { view: View; legal: readonly Action[] }) => {
+    const win = guideWindow(beat, p.view, p.legal);
     if (!win) return;
     open = win;
-    label.setAttribute('aria-expanded', 'true');
-    progress = markGuideSeen(progress, t.beat);
+    progress = markGuideSeen(progress, beat);
     write();
     pushAccount();
+    light(null); // the window lights its own target
     hooks.clearLedPrompt();
     hooks.openWindow(win);
+  };
+
+  const setOn = (next: boolean) => {
+    on = next;
+    try { hooks.storage?.set(GUIDE_ON_KEY, next ? '1' : '0'); } catch { /* private mode */ }
+    document.documentElement.classList.toggle('futasaku-guide-on', next);
+    label.setAttribute('aria-pressed', String(next));
+    if (!next) { close(); light(null); }
+    hooks.clearLedPrompt();
     hooks.refreshCockpit();
+    update();
+  };
+
+  /** "?" or the label was tapped: the switch. */
+  const tap = () => {
+    const t = guideTap({ active: active(), on });
+    if (t.kind === 'none') return;
+    setOn(t.kind === 'on');
   };
   label.addEventListener('click', tap);
 
@@ -165,30 +201,49 @@ export const mountHowToGuide = (hooks: HowToGuideHooks) => {
     if (panel && label.parentElement !== panel) panel.append(label);
   };
 
+  /** After the page has drawn (once per render, coalesced): the window to open, or the light. */
+  let paintQueued = false;
+  const paint = () => {
+    paintQueued = false;
+    const p = hooks.position();
+    if (!on || !active() || !p) { light(null); return; }
+    if (open) { light(null); return; }
+    const step = guideStep({ on, view: p.view, legal: p.legal, seen: seen() });
+    if (step.kind === 'window') { openBeat(step.beat, p); return; }
+    light(step.kind === 'glow' ? step.lit : null);
+  };
+
   let wasOn = true;
-  /** Called on every render: the label, the LED's word, and a window that no longer applies. */
+  /** Called on every render: the label, the switch's look, and the light (after the draw). */
   function update() {
     place();
-    const on = active();
+    const act = active();
     // Runs on every render: touch the page only when something changed.
-    const hide = !on || !showGuideLabel({ active: on, gamesStarted: Math.max(1, progress.games), lessonsDone: hooks.lessonsDone() });
+    const hide = !act || !showGuideLabel({ active: act, gamesStarted: Math.max(1, progress.games), lessonsDone: hooks.lessonsDone(), on });
     if (label.hidden !== hide) label.hidden = hide;
-    if (!on) {
+    if (!act) {
       if (open) close();
+      if (litNow.length) light(null);
       if (wasOn) hooks.clearLedPrompt(); // a guide turned off (Settings, a Blitz duel) never leaves its pointer up
     }
-    wasOn = on;
+    wasOn = act;
+    if (on && act && !paintQueued) { paintQueued = true; requestAnimationFrame(paint); }
   }
-  hooks.ledWord(() => guideLedWord({ active: active(), beat: currentBeat() }));
+  document.documentElement.classList.toggle('futasaku-guide-on', on);
+  label.setAttribute('aria-pressed', String(on));
+  hooks.ledWord(() => guideLedWord({ active: active(), beat: currentBeat(), on }));
 
   return {
     update,
     tap,
     /** The context key may show "?" (read by the cockpit on each sync). */
     keyActive: active,
+    /** The switch is on ("?" drawn pressed in). */
+    isOn: () => on,
     /** A move was made: a window that taught it (or any move, for "how to win") closes. */
     moved(t: Action['t']) {
       if (open && open.closesOn.includes(t)) close();
+      light(null); // the move changed the position: the next render lights the next move
     },
     /** A real game started (not Blitz, guide on): counts towards the label's first games. */
     gameStarted() {

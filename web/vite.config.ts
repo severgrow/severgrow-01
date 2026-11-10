@@ -1,9 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import { resolve, sep } from 'node:path';
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import { FEEDBACK, PRIVACY } from '../src/strings.js';
 import { writePrivacyPage } from './src/privacy-page.js';
+import { contentVersion, versionHeadAssets, versionManifestIcons } from './build-asset-versions.js';
 
 // The playable web version. Builds to web/dist with relative paths so it works
 // from any GitHub Pages URL.
@@ -110,6 +111,25 @@ export default defineConfig({
     cpSync(fileURLToPath(new URL('./src/fonts/LICENSE-alegreya-sans.txt', import.meta.url)), resolve(output, 'licenses/LICENSE-alegreya-sans.txt'));
     if (channel === 'test' || channel === 'futa04' || channel === 'futa-test' || channel === 'futa05') {
       for (const name of ['besley', 'fragment-mono']) cpSync(fileURLToPath(new URL(`./src/fonts/v2/LICENSE-${name}.txt`, import.meta.url)), resolve(output, `licenses/LICENSE-${name}.txt`));
+    }
+    // LAST: stamp every icon, the manifest and the share image with their own content fingerprint
+    // (build-asset-versions.ts: a changed icon is a changed address, so no browser keeps an old one).
+    // The manifest first, so its own stamp covers its final (stamped) contents.
+    const hashOf = (file: string): string | null => {
+      const path = resolve(output, file);
+      return file && existsSync(path) ? contentVersion(readFileSync(path)) : null;
+    };
+    const manifestPath = resolve(output, 'manifest.webmanifest');
+    if (existsSync(manifestPath)) {
+      const stamped = versionManifestIcons(JSON.parse(readFileSync(manifestPath, 'utf8')), hashOf);
+      writeFileSync(manifestPath, JSON.stringify(stamped, null, 2) + '\n');
+    }
+    const pages = readdirSync(output).filter((n) => n.endsWith('.html')).map((n) => resolve(output, n));
+    if (existsSync(resolve(output, 'privacy/index.html'))) pages.push(resolve(output, 'privacy/index.html'));
+    for (const page of pages) {
+      const html = readFileSync(page, 'utf8');
+      const stamped = versionHeadAssets(html, hashOf);
+      if (stamped !== html) writeFileSync(page, stamped);
     }
   } }],
   build: {

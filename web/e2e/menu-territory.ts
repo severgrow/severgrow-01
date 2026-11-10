@@ -373,10 +373,16 @@ try {
         await page.waitForTimeout(700);
       };
       const sideText = () => page.evaluate(() => document.getElementById('menu-world-tiles-value')?.textContent ?? '');
-      const onlineText = () => page.evaluate(() => document.getElementById('menu-online')?.textContent ?? '');
+      // OWNER CHANGED THE RULE (2026-11-10): PLAY ONLINE keeps its words; a gold marker on its side
+      // counts the matches waiting for my move (never the words "your move" in place of the name).
+      const onlineText = () => page.evaluate(() => document.querySelector('#menu-online .menu-online-label')?.textContent ?? '');
+      const turns = () => page.evaluate(() => {
+        const side = document.querySelector<HTMLElement>('#menu-online .menu-online-turns');
+        return side && !side.hidden && side.getClientRects().length ? side.textContent ?? '' : null;
+      });
 
       check((await sideText()) === '2', `with no challenge the tile count is back (${await sideText()})`);
-      check((await onlineText()) === ONLINE.yourMove, `a duel on my turn says "your move" (${await onlineText()})`);
+      check((await onlineText()) === ONLINE.playOnline && (await turns()) === '1', `a duel on my turn: the name stays, the marker counts 1 (${await onlineText()} / ${await turns()})`);
 
       // APPEARS: the countdown replaces the count, and nothing else in the entry moves.
       challengeWire = [liveChallenge('pending', 2 * 3_600_000 + 5 * 60_000 + 30_000)];
@@ -433,13 +439,13 @@ try {
       // THE TURN PASSES, THEN THE MATCH ENDS: the generic label comes back.
       matchWire = [liveMatch(1)];
       await refresh();
-      check((await onlineText()) === ONLINE.playOnline, `their turn reverts to the generic label (${await onlineText()})`);
+      check((await onlineText()) === ONLINE.playOnline && (await turns()) === null, `their turn: no marker (${await turns()})`);
       matchWire = [liveMatch(0, 'finished')];
       await refresh();
-      check((await onlineText()) === ONLINE.playOnline, `a finished match reverts too (${await onlineText()})`);
+      check((await onlineText()) === ONLINE.playOnline && (await turns()) === null, `a finished match: no marker (${await turns()})`);
       matchWire = [liveMatch(0)];
       await refresh();
-      check((await onlineText()) === ONLINE.yourMove, `a new turn brings "your move" back (${await onlineText()})`);
+      check((await onlineText()) === ONLINE.playOnline && (await turns()) === '1', `a new turn brings the marker back (${await turns()})`);
 
       // NO OVERLAP: inside PLAY, the live key stays its own 50px row, clear of its neighbours.
       await page.click('#menu-play');
@@ -455,10 +461,12 @@ try {
         return {
           vw: innerWidth, vh: innerHeight,
           online: box(id('menu-online')), campaign: box(id('menu-campaign')), practice: box(id('menu-new')),
-          text: id('menu-online')?.textContent ?? '',
+          text: id('menu-online')?.querySelector('.menu-online-label')?.textContent ?? '',
+          marker: (() => { const m = id('menu-online')?.querySelector<HTMLElement>('.menu-online-turns'); const r = m?.getBoundingClientRect(); const o = id('menu-online')!.getBoundingClientRect(); return m && !m.hidden && r ? { inside: r.left >= o.left && r.right <= o.right && r.top >= o.top && r.bottom <= o.bottom, h: r.height } : null; })(),
         };
       });
-      check(boxes.text === ONLINE.yourMove, `the PLAY entry carries the live word (${boxes.text})`);
+      check(boxes.text === ONLINE.playOnline, `the PLAY entry keeps its name (${boxes.text})`);
+      check(!!boxes.marker && boxes.marker.inside, `the your-move marker sits inside the key (${JSON.stringify(boxes.marker)})`);
       check(boxes.online !== null && boxes.online.h >= 44, `it keeps its tap height (${boxes.online?.h}px)`);
       check(!!boxes.online && boxes.online.x >= -0.5 && boxes.online.right <= boxes.vw + 0.5 && boxes.online.bottom <= boxes.vh + 0.5,
         'it stays fully on screen');

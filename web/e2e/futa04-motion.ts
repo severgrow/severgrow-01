@@ -73,7 +73,9 @@ try {
   const caught = throwFrames.find(f=>f.offset===BOOMERANG.landAt);
   assert(caught,'the pile is handed the card at the catch, before the fade');
   assert.equal(Number(caught!.opacity),1,'the card is still visible when it reaches the pile');
-  assert.equal(Number(throwFrames.at(-1)?.opacity),0,'and fades only over the new pile top');
+  // OWNER CHANGED THE RULE (2026-11-10: "the card that just flew to the discard pile should cover the
+  // prev card as it lands"): no fade at all; the card stays fully visible and simply becomes the pile.
+  assert(throwFrames.every(f=>f.opacity===undefined || Number(f.opacity)===1),'it stays fully visible to the end (it covers the old card)');
   await page.locator('#deck').evaluate(el=>(el as HTMLElement).click()); // existing tap-to-skip path
   await page.waitForFunction(() => !(window as any).__severgrow.busy(),undefined,{timeout:30000});
   assert.equal(await page.locator('.flyer.card').count(),0,'fast-forward removes an interrupted flight');

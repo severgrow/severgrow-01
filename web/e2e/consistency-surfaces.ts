@@ -290,8 +290,8 @@ const SURFACES: { name: string; run: Run }[] = [
   {
     name: 'territory',
     run: async (page) => {
-      await toOnline(page);
-      await page.click('#online-world');
+      // THE PLANET left the Play online menu (owner, 2026-11-10); it opens from the main menu.
+      await page.click('#menu-world');
       await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 12_000 });
       await settle(page, 1600);
     },

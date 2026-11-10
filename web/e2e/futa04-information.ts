@@ -42,7 +42,7 @@ try {
     return { apple:apple.href, width:image.naturalWidth,height:image.naturalHeight,
       name:manifest.name, start:manifest.start_url, scope:manifest.scope, icons };
   });
-  check(appIcon.apple.endsWith('futasaku-icon-180.png') && appIcon.width===180 && appIcon.height===180,
+  check(/futasaku-icon-180\.png\?v=[0-9a-f]{10}$/.test(appIcon.apple) && appIcon.width===180 && appIcon.height===180,
     'iPhone Home Screen loads the new 180px Futasaku artwork');
   check(appIcon.name==='Futasaku' && appIcon.start==='./' && appIcon.scope==='./' && appIcon.icons.length===3 &&
     appIcon.icons.every((icon: {src:string;sizes:string;width:number;height:number})=>icon.src.startsWith('futasaku-icon-') && icon.sizes===`${icon.width}x${icon.height}`) &&

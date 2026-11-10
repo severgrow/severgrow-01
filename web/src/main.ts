@@ -2088,7 +2088,7 @@ async function mountPlayerEnhancements() {
     smartCockpit = cockpit.mountSmartCockpit({
       heldMove: () => session ? heldMoveWord(session.sel, session.view.hand.find((c) => c.id === session!.sel.card)?.suit === null) : null,
       // The guide's "?" takes the context key only while that key has no real action.
-      guide: { active: () => !!howTo?.keyActive(), tap: () => howTo?.tap(), label: howToModule.GUIDE_KEY_LABEL },
+      guide: { active: () => !!howTo?.keyActive(), on: () => !!howTo?.isOn(), tap: () => howTo?.tap(), label: howToModule.GUIDE_KEY_LABEL },
     });
     howTo = howToModule.mountHowToGuide({
       setting: () => settings.guide,
@@ -2098,7 +2098,6 @@ async function mountPlayerEnhancements() {
       busy: () => !!coach.tutorial || !!lessonActive() || onboardingActive() || !!watching,
       position: () => session && !$('game').hidden && session.state.phase !== 'GAME_OVER'
         ? { view: session.view, legal: myTurn() && !blocking() ? session.legal : [] } : null,
-      tips: () => (session ? intelTips(session.view).length : 0),
       lessonsDone: () => currentLevel(campaignProgress).number > 9,
       openWindow: (win) => {
         if (!glassSurface) return;
@@ -2111,8 +2110,7 @@ async function mountPlayerEnhancements() {
         });
       },
       closeWindow: () => { if (glassSurface?.mode?.() === 'tutorial' && !coach.tutorial) glassSurface.hide(); },
-      prompt: () => smartCockpit?.promptNow(),
-      openIntel: (tab) => openIntel(tab),
+      litSelectors: (lit) => litTarget(lit, [board.rootKey(HUMAN), board.rootKey(BOT)]).selectors,
       ledWord: (fn) => smartCockpit?.guideWord(fn),
       clearLedPrompt: () => smartCockpit?.clearGuidePrompt(),
       refreshCockpit: () => smartCockpit?.sync(),

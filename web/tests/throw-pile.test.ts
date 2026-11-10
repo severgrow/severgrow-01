@@ -9,7 +9,8 @@ import { THROW_PILE, throwPileFrames } from '../src/ui/effects.js';
 const effects = readFileSync(fileURLToPath(new URL('../src/ui/effects.ts', import.meta.url)), 'utf8');
 
 describe('a throw settles onto the pile', () => {
-  it('is a hair small when the pile may change, then the pile\'s own size before it fades', () => {
+  // OWNER CHANGED THE RULE (2026-11-10): the card covers the old one as it lands - no fade.
+  it('is a hair small on approach, then the pile\'s own size, and stays fully visible', () => {
     const sc = 0.5;
     const frames = throwPileFrames(10, 20, sc);
     expect(frames[2]?.offset).toBe(THROW_PILE.landAt);
@@ -21,8 +22,9 @@ describe('a throw settles onto the pile', () => {
     expect(seated?.offset).toBe(THROW_PILE.seatedAt);
     expect(seated?.opacity).toBe(1);
     expect(String(seated?.transform)).toContain(`scale(${sc})`);
-    expect(frames[5]?.opacity).toBe(0);
+    expect(frames[5]?.opacity).toBe(1);
     expect(String(frames[5]?.transform)).toContain(`scale(${sc})`);
+    expect(frames.every((k) => k.opacity === 1)).toBe(true);
   });
 
   it('keeps the pile change on the .68 mark and the flight on the shared out curve', () => {

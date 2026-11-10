@@ -12,13 +12,20 @@ describe('the Rematch key on a finished row', () => {
     expect(toLobbyRow({ ...finished, opponentName: null } as never, 0).rematch).toBeNull();
     expect(toLobbyRow({ ...finished, status: 'active', turnPlayer: 1 } as never, 0).rematch).toBeNull();
   });
-  it("the opponent's waiting rematch is called out and counts as needing my response", () => {
+  // OWNER CHANGED THE RULE (2026-11-10): a finished row is the opponent's name, the result, and two
+  // keys (replay, challenge again). The opponent's waiting rematch is the gold challenge key and the
+  // row's "!", not words in place of the result.
+  it("the opponent's waiting rematch counts as needing my response; the row still shows the result", () => {
     const row = toLobbyRow({ ...finished, rematch: 'theirs' } as never, 0);
     expect(row.rematch).toBe('theirs');
-    expect(row.statusWord).toBe(ONLINE.rowRematchTheirs);
+    expect(row.statusWord).toBe(ONLINE.statusFinished); // no result on this fixture
     expect(needsMyResponse({ ...finished, rematch: 'theirs' } as never)).toBe(true);
     expect(needsMyResponse({ ...finished, rematch: 'mine' } as never)).toBe(false);
-    expect(toLobbyRow({ ...finished, rematch: 'mine' } as never, 0).statusWord).toBe(ONLINE.rowRematchMine);
+  });
+  it('challenging again asks first, in the owner\'s words', () => {
+    expect(ONLINE.rematchConfirm('RYK')).toBe('You want to challenge RYK again?');
+    expect(ONLINE.rowRematchKey('RYK')).toBe('Challenge RYK again');
+    expect(ONLINE.rowReplayKey('RYK')).toBe('Watch the replay against RYK');
   });
 });
 

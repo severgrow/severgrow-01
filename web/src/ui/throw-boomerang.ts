@@ -133,7 +133,9 @@ export const planBoomerang = (
   }
   frames[frames.length - 1]!.offset = B.landAt;
   frames.push({ transform: pose(end.x, end.y, 0, pileScale), opacity: 1, offset: B.seatAt, easing: INTERFACE_MOTION.easeOpen });
-  frames.push({ transform: pose(end.x, end.y, 0, pileScale), opacity: 0, offset: 1 });
+  // No fade (owner, 2026-11-10: the card covers the old one as it lands): the pile is already this
+  // card underneath (landMs), and the flyer is removed when the flight ends.
+  frames.push({ transform: pose(end.x, end.y, 0, pileScale), opacity: 1, offset: 1 });
   return { duration: B.total, frames, landMs: Math.round(B.total * B.landAt) };
 };
 

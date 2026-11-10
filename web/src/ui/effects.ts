@@ -51,7 +51,9 @@ export const throwPileFrames = (dx: number, dy: number, sc: number): Keyframe[] 
     { transform: `translate(${dx}px, ${dy}px) scale(${approach})`, opacity: 1, offset: THROW_PILE.landAt },
     { transform: `translate(${dx}px, ${dy}px) scale(${click})`, opacity: 1, offset: THROW_PILE.clickAt },
     { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: 1, offset: THROW_PILE.seatedAt },
-    { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: 0 },
+    // NO FADE (owner, 2026-11-10: "the card that just flew to the discard pile should cover the prev
+    // card as it lands"): the pile is already this card underneath; the flyer simply goes.
+    { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: 1 },
   ];
 };
 
@@ -464,9 +466,9 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
           { transform: atSeat, opacity: 0 },
           { transform: atSeat, opacity: 1, offset: Math.min(0.5, hold * 0.45) },
           { transform: atSeat, opacity: 1, offset: hold },
-          { transform: atPile, opacity: 0, offset: Math.min(0.97, hold + 0.02) },
-          { transform: atPile, opacity: 0.9, offset: Math.min(0.99, hold + 0.08) },
-          { transform: atPile, opacity: 0 },
+          // Reduce motion: no travel - the card leaves the seat and is simply on the pile.
+          { transform: atPile, opacity: 1, offset: Math.min(0.97, hold + 0.02) },
+          { transform: atPile, opacity: 1 },
         ]
       : [
           { transform: 'translate(0, 0) rotate(0deg) scale(1)', opacity: 1 },
@@ -474,22 +476,23 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
           { transform: 'translate(0, 0) rotate(0deg) scale(1)', opacity: 1, offset: hold },
           { transform: `translate(${(dx * 0.52).toFixed(1)}px, ${(dy * 0.52 - 26).toFixed(1)}px) rotate(3deg) scale(${((1 + sc) / 2).toFixed(3)})`, opacity: 1, offset: hold + (1 - hold) * 0.55 },
           { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-1deg) scale(${(sc * 1.04).toFixed(3)})`, opacity: 1, offset: 0.93 },
-          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.97 },
-          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 0 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 1 },
         ];
-    // The pile top advances the moment the card is SEATED on it, before the last fade: the card
-    // that fades away is then the new one, so the old top is never uncovered (owner, 2026-10-20).
+    // THE CARD COVERS THE OLD ONE AS IT LANDS (owner, 2026-11-10). It never fades: when the flight
+    // ends the card sits exactly on the pile, fully visible, and in that same moment the pile becomes
+    // this card and the flyer goes, so nothing underneath is ever uncovered. (It used to fade on the
+    // pile while the pile still showed the old card: the easing runs over the whole flight, so the
+    // fade began ~25% before the clock-timed swap and the old card showed through.)
     let landed = false;
     const land = () => {
       if (landed || !d.isConnected) return;
       landed = true;
       onLand?.();
+      d.remove();
     };
-    const landing = setTimeout(land, motion() === 0 ? ms * .5 : ms * .93);
     const flight = anim(d, frames, { duration: ms, easing: EASE.out, fill: 'forwards' });
-    if (flight) {
-      void flight.finished.then(() => { land(); clearTimeout(landing); }, () => clearTimeout(landing));
-    }
+    if (flight) void flight.finished.then(land, () => undefined);
+    else land();
     removeAfter(flight, d, ms + 60);
     if (card.suit === null) {
       anim(d, [

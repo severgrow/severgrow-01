@@ -4,7 +4,7 @@ import type { MatchListEntry, MatchStatus } from '../../../server/src/protocol.j
 export type { MatchStatus };
 import { formatRemaining } from './clock.js';
 import { PARKED_OFFER_MS, publicAppOrigin } from './config.js';
-import { ONLINE, REPLAY } from '../../../src/strings.js';
+import { ONLINE } from '../../../src/strings.js';
 
 export const WARN_LAST_MS = 2 * 3_600_000; // last 2 hours (P-12)
 
@@ -185,15 +185,15 @@ export const toLobbyRow = (
   const replayable = bucket === 'finished' && entry.revision > 0;
   const rematch: LobbyRow['rematch'] = bucket === 'finished' && entry.opponentName?.trim()
     ? (entry as { rematch?: 'theirs' | 'mine' }).rematch ?? 'offer' : null;
+  // A finished row says the result (owner, 2026-11-10: "just 'Won' or 'Lost'"); its replay and its
+  // challenge-again are the row's own two keys, never words.
+  const result = entry.result;
+  const resultWord = !result ? ONLINE.statusFinished
+    : result.winner === null ? ONLINE.rowDraw
+      : result.winner === entry.mySeat ? ONLINE.rowWon : ONLINE.rowLost;
   const status =
-    rematch === 'theirs'
-      ? { word: ONLINE.rowRematchTheirs, icon: 'replay' as const }
-      : rematch === 'mine'
-        ? { word: ONLINE.rowRematchMine, icon: 'hourglass' as const }
-        : bucket === 'finished'
-      ? replayable
-        ? { word: REPLAY.pastRow, icon: 'replay' as const }
-        : { word: ONLINE.statusFinished, icon: 'check' as const }
+    bucket === 'finished'
+      ? { word: resultWord, icon: 'check' as const }
       : bucket === 'your_turn'
         ? { word: ONLINE.statusYourTurn, icon: 'play' as const }
         : entry.status === 'waiting'
