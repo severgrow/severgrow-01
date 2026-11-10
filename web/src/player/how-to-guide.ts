@@ -153,16 +153,22 @@ export const mountHowToGuide = (hooks: HowToGuideHooks) => {
     if (!hooks.account || pushTimer) return;
     pushTimer = window.setTimeout(() => { pushTimer = 0; pushAccount(); }, GUIDE_SYNC_DELAY_MS);
   };
-  // Join the server's copy once, after boot has settled: a player who opened a lesson on another
-  // phone sees it as seen.
-  if (hooks.account) window.setTimeout(() => void hooks.account?.load().then((remote) => {
-    if (!remote) { if (progress.seen.length || progress.games) pushAccount(); return; }
-    const joined = mergeGuideProgress(progress, parseGuideProgress(remote));
-    const changed = joined.seen.length !== progress.seen.length || joined.games !== progress.games;
-    progress = joined; write();
-    if (changed || joined.seen.length !== remote.seen.length || joined.games !== remote.games) pushAccount();
-    update();
-  }, () => undefined), GUIDE_SYNC_DELAY_MS);
+  // Join the server's copy once — only after a game has started (never at boot: a player who only
+  // visits the menu or Territory causes no guide traffic at all), and a few quiet seconds in. A
+  // player who opened a lesson on another phone then sees it as seen.
+  let joined = false;
+  const joinSoon = () => {
+    if (joined || !hooks.account) return;
+    joined = true;
+    window.setTimeout(() => void hooks.account?.load().then((remote) => {
+      if (!remote) { if (progress.seen.length || progress.games) pushAccount(); return; }
+      const merged = mergeGuideProgress(progress, parseGuideProgress(remote));
+      const changed = merged.seen.length !== progress.seen.length || merged.games !== progress.games;
+      progress = merged; write();
+      if (changed || merged.seen.length !== remote.seen.length || merged.games !== remote.games) pushAccount();
+      update();
+    }, () => undefined), GUIDE_SYNC_DELAY_MS);
+  };
 
   // ---------- the decisions, read from the pure watcher ----------
   const seen = () => new Set<string>(progress.seen);
@@ -277,6 +283,7 @@ export const mountHowToGuide = (hooks: HowToGuideHooks) => {
       if (!guideActive({ setting: hooks.setting(), blitz: hooks.blitz() })) return;
       progress = { ...progress, games: progress.games + 1 };
       write();
+      joinSoon();
       pushSoon();
       update();
     },
