@@ -44,6 +44,7 @@ import {
   inviteLink,
   isWellFormedInviteCode,
   normalizeInviteCodeInput,
+  hubPollMs,
   pageTitleForLobby,
   parseJoinHash,
   shareInviteText,
@@ -233,12 +234,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let matchesSignature = '';
   /** One list request at a time, so a 10s poll can never stack behind a slow network. */
   let reloadInFlight = false;
-  let hubPollTimer: ReturnType<typeof setInterval> | null = null;
-  const HUB_POLL_MS = 10_000;
+  let hubPollTimer: ReturnType<typeof setTimeout> | null = null;
 
   const stopHubPoll = () => {
     if (hubPollTimer) {
-      clearInterval(hubPollTimer);
+      clearTimeout(hubPollTimer);
       hubPollTimer = null;
     }
   };
@@ -768,20 +768,22 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   /**
    * A quiet list refresh while the hub is the visible screen. The red "!" lives on a COLLAPSED
    * button, so it is only useful if it can appear without the player touching anything: an
-   * opponent's Throw (or a friend joining) must light it. Ten seconds is slower than a live duel's
-   * 2s play poll — this is the menu, not the board — and the timer stops with the screen.
+   * opponent's Throw (or a friend joining) must light it. Ten seconds normally; four while the
+   * list is open with a game waiting on the opponent (lobby.ts hubPollMs), so their finished turn
+   * shows on the row without a tap. The timer stops with the screen.
    */
   const startHubPoll = () => {
     stopHubPoll();
-    hubPollTimer = setInterval(() => {
-      if (hub.hidden) {
-        stopHubPoll();
-        return;
-      }
-      // A hidden tab does not need the list: no request, no repaint (poll-gate.ts's rule).
-      if (document.hidden) return;
-      void reloadMatches();
-    }, HUB_POLL_MS);
+    const tick = () => {
+      hubPollTimer = setTimeout(() => {
+        hubPollTimer = null;
+        if (hub.hidden) return;
+        // A hidden tab does not need the list: no request, no repaint (poll-gate.ts's rule).
+        if (!document.hidden) void reloadMatches();
+        tick();
+      }, hubPollMs({ expanded: matchesExpanded, entries: matches }));
+    };
+    tick();
   };
 
   const openHub = async () => {
@@ -1551,6 +1553,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if(menuEl?.hidden === false) void refreshMenu();
     if (waiting) void pollWaiting();
     else if (search) void pollSearch();
+    // Your matches went quiet while hidden: the opponent may have moved. Ask once, now.
+    if (!hub.hidden) void reloadMatches();
   });
   if (menuEl?.hidden === false) { syncMenuWorld(true); void refreshMenu(); }
   $('online-create').addEventListener('click', () => void createMatch());
@@ -1560,6 +1564,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const open = !matchesExpanded;
     setMatchesExpanded(open);
     if (open) void reloadMatches();
+    if (!hub.hidden) startHubPoll(); // the pace follows the panel at once
   });
   document.getElementById('online-find')?.addEventListener('click', () => void findOpponent());
   $('online-join-open').addEventListener('click', () => {

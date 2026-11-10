@@ -124,10 +124,17 @@ export const lobbyBucket = (entry: MatchListEntry): LobbyBucket => {
   return 'waiting';
 };
 
+/** A finished game whose opponent asked for a rematch: it waits on me, so it is listed with the live games. */
+const rematchWaitsOnMe = (e: MatchListEntry): boolean => e.status === 'finished' && e.rematch === 'theirs';
+
 export const sortLobbyEntries = (entries: readonly MatchListEntry[]): MatchListEntry[] => {
-  const rank = (b: LobbyBucket) => (b === 'your_turn' ? 0 : b === 'waiting' ? 1 : 2);
+  const rank = (e: MatchListEntry) => {
+    if (rematchWaitsOnMe(e)) return 0.5; // right after my turns, before games waiting on them
+    const b = lobbyBucket(e);
+    return b === 'your_turn' ? 0 : b === 'waiting' ? 1 : 2;
+  };
   return [...entries].sort((a, b) => {
-    const d = rank(lobbyBucket(a)) - rank(lobbyBucket(b));
+    const d = rank(a) - rank(b);
     if (d !== 0) return d;
     if (lobbyBucket(a) === 'your_turn') {
       const actionable = (e: MatchListEntry) => e.status === 'active' && e.turnPlayer === e.mySeat;
@@ -227,10 +234,18 @@ export const toLobbyRow = (
 /** Finished matches: keep the latest 10 only (plan). */
 export const trimLobbyList = (entries: readonly MatchListEntry[]): MatchListEntry[] => {
   const sorted = sortLobbyEntries(entries);
-  const live = sorted.filter((e) => lobbyBucket(e) !== 'finished');
-  const finished = sorted.filter((e) => lobbyBucket(e) === 'finished').slice(0, 10);
+  const live = sorted.filter((e) => lobbyBucket(e) !== 'finished' || rematchWaitsOnMe(e));
+  const finished = sorted.filter((e) => lobbyBucket(e) === 'finished' && !rematchWaitsOnMe(e)).slice(0, 10);
   return [...live, ...finished];
 };
+
+/** The Your matches refresh while the hub is on screen (ms). */
+export const HUB_POLL_MS = 10_000;
+/** ...and while the list is open with a game waiting on the opponent: their Throw shows within 4 s. */
+export const HUB_POLL_FAST_MS = 4_000;
+
+export const hubPollMs = (s: { expanded: boolean; entries: readonly MatchListEntry[] }): number =>
+  s.expanded && s.entries.some((e) => e.status === 'active' && e.turnPlayer !== e.mySeat) ? HUB_POLL_FAST_MS : HUB_POLL_MS;
 
 export const yourTurnCount = (entries: readonly MatchListEntry[]): number =>
   entries.filter((e) => lobbyBucket(e) === 'your_turn').length;

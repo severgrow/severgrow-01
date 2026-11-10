@@ -1,6 +1,6 @@
 // Your matches: a finished row can challenge the same player again (owner, 2026-11-09).
 import { describe, expect, it } from 'vitest';
-import { toLobbyRow } from '../src/online/lobby.js';
+import { HUB_POLL_FAST_MS, HUB_POLL_MS, hubPollMs, sortLobbyEntries, toLobbyRow, trimLobbyList } from '../src/online/lobby.js';
 import { needsMyResponse } from '../src/online/match-attention.js';
 import { ONLINE } from '../../src/strings.js';
 
@@ -19,5 +19,27 @@ describe('the Rematch key on a finished row', () => {
     expect(needsMyResponse({ ...finished, rematch: 'theirs' } as never)).toBe(true);
     expect(needsMyResponse({ ...finished, rematch: 'mine' } as never)).toBe(false);
     expect(toLobbyRow({ ...finished, rematch: 'mine' } as never, 0).statusWord).toBe(ONLINE.rowRematchMine);
+  });
+});
+
+describe('Your matches keeps up with the opponent', () => {
+  const row = (id: string, over: object) => ({ ...finished, matchId: id, ...over });
+  it('a waiting rematch sorts right after the games where it is my turn, and is never trimmed off', () => {
+    const entries = [
+      row('waiting', { status: 'active', turnPlayer: 1, lastActivityAt: 50 }),
+      ...Array.from({ length: 12 }, (_, i) => row(`old${i}`, { lastActivityAt: 100 + i })),
+      row('rematch', { rematch: 'theirs', lastActivityAt: 1 }),
+      row('mine', { status: 'active', turnPlayer: 0, lastActivityAt: 10 }),
+    ];
+    const ids = trimLobbyList(entries as never).map((e) => e.matchId);
+    expect(ids.slice(0, 3)).toEqual(['mine', 'rematch', 'waiting']);
+    expect(sortLobbyEntries(entries as never).map((e) => e.matchId).slice(0, 2)).toEqual(['mine', 'rematch']);
+  });
+  it('refreshes faster while the list is open and a game waits on the opponent', () => {
+    const theirTurn = [row('a', { status: 'active', turnPlayer: 1 })];
+    expect(hubPollMs({ expanded: true, entries: theirTurn as never })).toBe(HUB_POLL_FAST_MS);
+    expect(hubPollMs({ expanded: false, entries: theirTurn as never })).toBe(HUB_POLL_MS);
+    expect(hubPollMs({ expanded: true, entries: [finished] as never })).toBe(HUB_POLL_MS);
+    expect(HUB_POLL_FAST_MS).toBeLessThanOrEqual(4_000);
   });
 });
