@@ -110,6 +110,24 @@ export type RealtimeChannelOptions = {
   socket?: (url: string) => RealtimeSocket;
   /** Heartbeat period (defaults to 25s, per the Realtime protocol). */
   heartbeatMs?: number;
+  /**
+   * Calls back when the page may have been asleep or offline (tab visible again, network back).
+   * Default: `visibilitychange` (to visible) and `online` on the browser. Returns an unsubscribe.
+   */
+  wake?: (cb: () => void) => () => void;
+  /** Clock for "when did we last hear from the socket" (tests). Default Date.now. */
+  now?: () => number;
+};
+
+/** The browser's wake signals: the page shown again, the network back. */
+const browserWake = (cb: () => void): (() => void) => {
+  const doc = (globalThis as { document?: Document }).document;
+  const win = (globalThis as { window?: Window }).window;
+  if (!doc || !win) return () => undefined;
+  const visible = (): void => { if (!doc.hidden) cb(); };
+  doc.addEventListener('visibilitychange', visible);
+  win.addEventListener('online', cb);
+  return () => { doc.removeEventListener('visibilitychange', visible); win.removeEventListener('online', cb); };
 };
 
 type RealtimeSocket = {
@@ -139,6 +157,10 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
   /** Consecutive failed connection attempts. After a few, Realtime is treated as unavailable. */
   let failures = 0;
   const MAX_ATTEMPTS = 5;
+  const now = options.now ?? (() => Date.now());
+  const heartbeatMs = options.heartbeatMs ?? 25_000;
+  /** When the socket last opened or sent anything (the server answers every heartbeat). */
+  let heardAt = 0;
 
   const send = (topic: string, event: string, payload: unknown): void => {
     if (socket?.readyState !== OPEN) return;
@@ -196,15 +218,18 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
       return;
     }
     socket = next;
+    heardAt = now();
     next.addEventListener('open', () => {
+      heardAt = now();
       reconnectDelay = 500;
       failures = 0;
       joinAll();
       if (heartbeat === null) {
-        heartbeat = setInterval(() => send('phoenix', 'heartbeat', {}), options.heartbeatMs ?? 25_000);
+        heartbeat = setInterval(() => send('phoenix', 'heartbeat', {}), heartbeatMs);
       }
     });
     next.addEventListener('message', (ev) => {
+      if (socket === next) heardAt = now();
       let frame: RealtimeFrame;
       try {
         frame = JSON.parse(String(ev.data)) as RealtimeFrame;
@@ -234,14 +259,35 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
       }
     });
     next.addEventListener('close', () => {
+      if (socket !== next) return; // an old socket replaced on wake
       stopSocket();
       scheduleReconnect();
     });
     next.addEventListener('error', () => {
+      if (socket !== next) return;
       stopSocket();
       scheduleReconnect();
     });
   };
+
+  /**
+   * The page woke (a phone back from sleep, the network back). A socket we gave up on, or one that
+   * has said nothing for two heartbeats (mobile browsers freeze sockets without closing them), is
+   * replaced at once with a fresh retry budget, so the opponent's pings arrive again straight away.
+   */
+  (options.wake ?? browserWake)(() => {
+    if (subs.size === 0) return;
+    const silent = socket !== null && now() - heardAt > 2 * heartbeatMs;
+    if (socket && !silent) return;
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (socket) stopSocket();
+    failures = 0;
+    reconnectDelay = 500;
+    open();
+  });
 
   return {
     subscribe(matchId, handlers) {

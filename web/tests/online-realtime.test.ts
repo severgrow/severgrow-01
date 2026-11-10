@@ -146,6 +146,56 @@ describe('createRealtimeChannel', () => {
   });
 });
 
+describe('the channel wakes with the page (a phone back from sleep, the network back)', () => {
+  const make = (now: () => number) => {
+    const sockets: FakeSocket[] = [];
+    let wake: () => void = () => undefined;
+    const channel = createRealtimeChannel({
+      url: 'wss://example.supabase.co/realtime/v1/websocket',
+      socket: (url) => { const s = new FakeSocket(url); sockets.push(s); return s; },
+      heartbeatMs: 25_000,
+      wake: (cb) => { wake = cb; return () => undefined; },
+      now,
+    });
+    return { sockets, channel, wake: () => wake() };
+  };
+
+  it('after giving up, a wake connects again at once (no waiting, a fresh retry budget)', () => {
+    vi.useFakeTimers();
+    try {
+      const { sockets, channel, wake } = make(() => Date.now());
+      channel.subscribe('match:w1', { onPing: () => undefined, onPresence: () => undefined });
+      for (let i = 0; i < 8; i++) { sockets.at(-1)!.emit('close'); vi.advanceTimersByTime(20_000); }
+      const settled = sockets.length;
+      wake();
+      expect(sockets.length).toBe(settled + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a socket silent for longer than two heartbeats is replaced on wake; a live one is kept', () => {
+    let t = 0;
+    const { sockets, channel, wake } = make(() => t);
+    channel.subscribe('match:w2', { onPing: () => undefined, onPresence: () => undefined });
+    sockets[0]!.emit('open');
+    sockets[0]!.emit('message', { data: JSON.stringify({ topic: 'realtime:match:w2', event: 'phx_reply', payload: { status: 'ok' } }) });
+    t = 10_000;
+    wake();
+    expect(sockets).toHaveLength(1); // heard from recently: kept
+    t = 10_000 + 60_000; // the phone slept: nothing heard for a minute
+    wake();
+    expect(sockets).toHaveLength(2);
+    expect(sockets[0]!.readyState).toBe(3);
+  });
+
+  it('nobody listening: a wake opens nothing', () => {
+    const { sockets, wake } = make(() => 0);
+    wake();
+    expect(sockets).toHaveLength(0);
+  });
+});
+
 describe('createSupabaseBroadcaster', () => {
   it('registers unfinished delivery with the Edge runtime without delaying the response', async () => {
     const tasks:Promise<unknown>[]=[];let release!:(response:Response)=>void;

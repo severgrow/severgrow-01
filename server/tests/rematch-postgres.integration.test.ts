@@ -42,17 +42,18 @@ describe.skipIf(!enabled)('mutual rematch on real Postgres', () => {
     const svc = service();
     // a test database: take any older parked searches out of the queue so only these three meet
     await pool!.query("update matches set open_queue = false where status = 'waiting' and open_queue = true");
-    const [a, b, c] = await Promise.all(['Alder', 'Birch', 'Cedar'].map((n) => svc.createGuest(n)));
-    const [pa, pb, pc] = await Promise.all([a, b, c].map((g) => svc.authenticate(g.token)));
-    const shared = await svc.createMatch(pa!);
-    await svc.joinMatch(pb!, shared.match.inviteCode!);
-    const parked = await svc.findOpponent(pa!);
+    const pa = await svc.authenticate((await svc.createGuest('Alder')).token);
+    const pb = await svc.authenticate((await svc.createGuest('Birch')).token);
+    const pc = await svc.authenticate((await svc.createGuest('Cedar')).token);
+    const shared = await svc.createMatch(pa);
+    await svc.joinMatch(pb, shared.match.inviteCode!);
+    const parked = await svc.findOpponent(pa);
     expect(parked.paired).toBe(false);
-    const bSearch = await svc.findOpponent(pb!);
+    const bSearch = await svc.findOpponent(pb);
     expect(bSearch.paired).toBe(false);
-    const cSearch = await svc.findOpponent(pc!);
+    const cSearch = await svc.findOpponent(pc);
     expect(cSearch.paired).toBe(true);
     // clean up the queue so other suites start empty
-    await svc.cancelSearch(pb!);
+    await svc.cancelSearch(pb);
   });
 });
