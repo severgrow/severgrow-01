@@ -164,3 +164,21 @@ describe('Your matches tells a player a rematch is waiting for them', () => {
     expect((await service.listMyMatches(b.player)).find((m) => m.matchId === finishedId)?.rematch).toBeUndefined();
   });
 });
+
+describe('Find Opponent never pairs two players who already share an open game', () => {
+  it('skips that search and parks instead, while a different searcher is paired', async () => {
+    const { service } = harness();
+    const a = await guest(service, 'Alder');
+    const b = await guest(service, 'Birch');
+    const c = await guest(service, 'Cedar');
+    const shared = await service.createMatch(a.player);
+    await service.joinMatch(b.player, shared.match.inviteCode!);
+    const parked = await service.findOpponent(a.player);
+    expect(parked.paired).toBe(false);
+    const bSearch = await service.findOpponent(b.player);
+    expect(bSearch.paired).toBe(false); // not paired with A again
+    expect(bSearch.match.matchId).not.toBe(parked.match.matchId);
+    const cSearch = await service.findOpponent(c.player);
+    expect(cSearch.paired).toBe(true); // C takes the oldest search
+  });
+});

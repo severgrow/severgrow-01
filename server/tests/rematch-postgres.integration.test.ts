@@ -38,4 +38,21 @@ describe.skipIf(!enabled)('mutual rematch on real Postgres', () => {
     expect((await svc.getMatch(pa, x.match.matchId)).status).toBe('active');
     expect((await svc.rematch(pa, created.match.matchId)).match.matchId).toBe(x.match.matchId);
   });
+  it('Find Opponent never pairs two players who already share an open game', async () => {
+    const svc = service();
+    // a test database: take any older parked searches out of the queue so only these three meet
+    await pool!.query("update matches set open_queue = false where status = 'waiting' and open_queue = true");
+    const [a, b, c] = await Promise.all(['Alder', 'Birch', 'Cedar'].map((n) => svc.createGuest(n)));
+    const [pa, pb, pc] = await Promise.all([a, b, c].map((g) => svc.authenticate(g.token)));
+    const shared = await svc.createMatch(pa!);
+    await svc.joinMatch(pb!, shared.match.inviteCode!);
+    const parked = await svc.findOpponent(pa!);
+    expect(parked.paired).toBe(false);
+    const bSearch = await svc.findOpponent(pb!);
+    expect(bSearch.paired).toBe(false);
+    const cSearch = await svc.findOpponent(pc!);
+    expect(cSearch.paired).toBe(true);
+    // clean up the queue so other suites start empty
+    await svc.cancelSearch(pb!);
+  });
 });

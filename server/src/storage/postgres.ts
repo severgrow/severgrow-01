@@ -691,6 +691,13 @@ export const postgresStorage = (pool: PgPool): Storage => ({
             and m.open_queue = true
             and not exists (select 1 from match_participants p2 where p2.match_id = m.id and p2.player_id = $1)
             and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
+            -- ONE GAME PER PAIR (owner, 2026-11-09): never pair two players who already share an open game.
+            and not exists (
+              select 1 from match_participants mine
+                join match_participants theirs on theirs.match_id = mine.match_id
+                join matches shared on shared.id = mine.match_id
+               where mine.player_id = $1 and theirs.player_id = p.player_id
+                 and shared.status <> 'finished' and shared.id <> m.id)
           order by m.created_at asc
           limit 1
           for update of m skip locked`,

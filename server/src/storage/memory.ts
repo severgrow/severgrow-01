@@ -269,6 +269,12 @@ export class MemoryStorage implements Storage {
       const parts = this.participants.get(match.id) ?? [];
       if (parts.some((p) => p.playerId === input.playerId)) continue;
       if (parts.length !== 1) continue;
+      // ONE GAME PER PAIR (owner, 2026-11-09): never pair two players who already share an open game.
+      const opener = parts[0]!.playerId;
+      const shared = [...this.matches.values()].some((m) => m.id !== match.id && m.status !== 'finished'
+        && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
+        && (this.participants.get(m.id) ?? []).some((p) => p.playerId === opener));
+      if (shared) continue;
       const seat: Player = parts.some((p) => p.seat === 0) ? 1 : 0;
       const next: Participant[] = [
         ...parts,
