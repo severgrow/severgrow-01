@@ -17,6 +17,7 @@ import { browserStorage } from '../../server/src/client.js';
 import type { BlitzPractice } from './blitz/practice.js';
 import { showLiveStrike } from './ui/live-strike.js';
 import { readAppViewport } from './ui/app-viewport.js';
+import { mountRootFlags } from './ui/root-flags.js';
 import { mountMatchChat } from './online/chat/view.js';
 import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
 import { hideLobbySurfaces } from './online/lobby-exit.js';
@@ -260,6 +261,9 @@ if (branding && (window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true)) {
   document.documentElement.classList.add('home-screen-app');
 }
+// Page-wide screen flags stand in for page-wide :has() rules (ui/root-flags.ts: those restyled the
+// whole page for every element added while a game opened).
+mountRootFlags();
 branding?.mountBranding();
 if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
   await import('./ui/design-v2.css');
@@ -8073,18 +8077,23 @@ function renderHand(v: View, advice: Advice | null) {
     // v0.6: a Fruit card glows softly when it has a target now; dimmed, it says why (one line)
     const fs = c.suit === null ? fruitCardState(v, legal, c.id) : null;
     const firstFruit = c.suit === null && cards[i - 1]?.suit !== null && i > 0;
-    b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
-    if (held?.id === c.id) b.classList.add('throw-held');
-    b.disabled = held?.id === c.id;
-    if (i >= BREATH.maxCards) b.classList.add('breath-off');
-    // One of five baked amplitudes (never a custom property: see hand-breath-a* in style.css).
-    else b.classList.add(`breath-a${breathAmpStep(weight)}`);
-    if (IS_FUTA04) {
+    // The card's whole class list, written once and only when it changed: rewriting it on every
+    // render (then adding the breath class back) restyled every card each time, even when nothing
+    // changed (measured on online game entry, 2026-11-10).
+    const cls = [
+      'card', suitClass(c),
+      lifted && 'lifted', playable && 'playable', legal.length > 0 && !playable && 'dim',
+      fs?.ready && myTurn() && 'fruit-ready', firstFruit && 'fruit-gap', coachCards.has(c.id) && 'coach-glow',
+      held?.id === c.id && 'throw-held',
+      // One of five baked amplitudes (never a custom property: see hand-breath-a* in style.css).
+      i >= BREATH.maxCards ? 'breath-off' : `breath-a${breathAmpStep(weight)}`,
       // Picked toward a Bloom, or in the Bloom being painted: the Bloom's own aqua, as on the board.
-      b.classList.toggle('futa04-bloom-pick', IS_FUTA04 && inBloom);
-      b.classList.toggle('futa04-bloom-card', bloomCards.has(c.id) && !inBloom);
-      b.classList.toggle('futa04-throw-picked', session!.pending?.t === 'Discard' && session!.pending.card === c.id);
-    }
+      IS_FUTA04 && inBloom && 'futa04-bloom-pick',
+      IS_FUTA04 && bloomCards.has(c.id) && !inBloom && 'futa04-bloom-card',
+      IS_FUTA04 && session!.pending?.t === 'Discard' && session!.pending.card === c.id && 'futa04-throw-picked',
+    ].filter(Boolean).join(' ');
+    if (b.className !== cls) b.className = cls;
+    b.disabled = held?.id === c.id;
     if (fs?.reason && myTurn()) b.title = fs.reason;
     else b.removeAttribute('title');
     if (thumbLayout) {

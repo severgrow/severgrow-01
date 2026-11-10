@@ -1,8 +1,8 @@
 // Approved player layout and guidance; no Lab panel or Watch tools.
 export const PLAYER_CSS = `
 /* The game rests on darker felt; the menu keeps its own backdrop. */
-html.futa04-information:has(#game:not([hidden])) #texture { filter:brightness(.92); }
-html.futa04-information:has(#game:not([hidden])) #texture::before {
+html.futa04-information.has-game:not(#no-has) #texture { filter:brightness(.92); }
+html.futa04-information.has-game:not(#no-has) #texture::before {
   display:block; opacity:.20;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .66  0 0 0 0 .64  0 0 0 0 .59  0 0 0 .52 -.21'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }

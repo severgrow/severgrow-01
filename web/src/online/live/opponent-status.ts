@@ -12,6 +12,8 @@ export const publishOpponentStatus = (
     ? 'unknown'
     : wire.opponent.presence === 'offline' ? 'away' : 'online';
   current = matchId ? { matchId, status } : null;
+  // The same reading again (every 1-10 s) changes nothing: listeners repaint, so stay silent.
+  if (previous?.matchId === current?.matchId && previous?.status === current?.status) return;
   for (const id of new Set([previous?.matchId, current?.matchId])) {
     if (!id) continue;
     const value = current?.matchId === id ? current.status : 'unknown';

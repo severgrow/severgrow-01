@@ -146,8 +146,9 @@ export class OnlineSession {
     if (this.boardBlocked) return []; // never act on a board that is still replaying
     const snap = this.driver.snapshot();
     if (snap.view.actor !== snap.seat || snap.status !== 'active') return [];
-    // Legal in engine space → map to display (screen) coords for the UI.
-    return snap.legal.map((a) => this.driver.perspective().mapActionToScreen(a));
+    // Legal in display (screen) coords: the driver maps them once per position and keeps the result
+    // (tests/online-snapshot-cache.test.ts), instead of re-mapping on every read.
+    return snap.screenLegal;
   }
 
   get canUndo(): boolean {

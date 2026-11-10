@@ -21,6 +21,8 @@ import { DRIFT_PX_PER_MS, DRIFT_Y_SHARE, onSpaceClaim, onSpaceFree, spaceDrift, 
 
 /** One slide of the stars between two redraws (ms): ~20 s at the menu's own pace. */
 export const SLIDE_MS = 20_000;
+/** A screen change redraws the stars once the page is idle, at the latest after this (ms). */
+export const SETTLE_MAX_MS = 1500;
 /** The far star layer moves this share of the near one (the shader's own parallax). */
 const FAR = .35;
 
@@ -119,6 +121,25 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
     for (const a of anims) a.cancel();
     anims = []; started = 0;
     if (pendingDraw) { window.clearTimeout(pendingDraw); pendingDraw = 0; }
+    cancelSettled();
+  };
+  // OUT OF THE WAY OF A SCREEN CHANGE (measured 2026-11-10). Opening a game used to redraw the stars
+  // in the same moment the board was built: the shader at a canvas larger than the screen and a copy
+  // that waits for the graphics card. On a phone or computer without a fast GPU that froze the page
+  // for seconds right as the game appeared. The previous stars stay up (35% behind the board), and
+  // the game's own layer is drawn once the page has gone quiet.
+  let settled = 0;
+  const cancelSettled = () => {
+    if (!settled) return;
+    const w = window as Window & { cancelIdleCallback?: (id: number) => void };
+    if (typeof w.cancelIdleCallback === 'function') w.cancelIdleCallback(settled); else window.clearTimeout(settled);
+    settled = 0;
+  };
+  const whenSettled = (fn: () => void) => {
+    cancelSettled();
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    const run = () => { settled = 0; fn(); };
+    settled = typeof w.requestIdleCallback === 'function' ? w.requestIdleCallback(run, { timeout: SETTLE_MAX_MS }) : window.setTimeout(run, 400);
   };
   const slideOnce = () => {
     for (const a of anims) a.cancel();
@@ -147,7 +168,17 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
       return;
     }
     const key = `${innerWidth}x${innerHeight}x${devicePixelRatio}`;
-    if (key !== size || !redraws || inGame !== (!!game && !game.hidden)) { halt(); size = key; paint(); slideOnce(); return; }
+    const screenChanged = inGame !== (!!game && !game.hidden);
+    const sizeChanged = key !== size;
+    if (sizeChanged || !redraws || screenChanged) {
+      halt(); size = key;
+      // The first drawing and a new window size draw now; a screen change waits for a quiet moment.
+      if (screenChanged && redraws && !sizeChanged) {
+        whenSettled(() => { if (seen() && !document.hidden && !renderer.lost) { halt(); paint(); slideOnce(); } });
+        return;
+      }
+      paint(); slideOnce(); return;
+    }
     if (!anims.length) slideOnce();
     else for (const a of anims) { if (held) a.pause(); else if (a.playState === 'paused') a.play(); }
   };

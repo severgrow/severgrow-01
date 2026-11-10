@@ -115,7 +115,7 @@ html.v075 #game:not([hidden]) #board-wrap {
 /* ---- D. GAME OVER INTO SPACE -------------------------------------------------------------------
    The board eases back a little into the stars; the result sits over open space, not over a wash. */
 html.v075 #game #board-wrap { transition: scale var(--dur-consequence) var(--ease-standard), opacity var(--dur-consequence) var(--ease-standard); }
-html.v075 body:has(#gameover:not([hidden])) #game #board-wrap { scale: .93; opacity: .55; }
+html.v075 body.has-gameover:not(#no-has) #game #board-wrap { scale: .93; opacity: .55; }
 html.v075.futasaku-product #gameover { background: transparent; }
 
 /* Reduce motion: no rise, no easing back; the states simply are. */

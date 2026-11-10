@@ -165,15 +165,19 @@ export const mountHowToGuide = (hooks: HowToGuideHooks) => {
     if (panel && label.parentElement !== panel) panel.append(label);
   };
 
+  let wasOn = true;
   /** Called on every render: the label, the LED's word, and a window that no longer applies. */
   function update() {
     place();
     const on = active();
-    label.hidden = !showGuideLabel({ active: on, gamesStarted: Math.max(1, progress.games), lessonsDone: hooks.lessonsDone() });
+    // Runs on every render: touch the page only when something changed.
+    const hide = !on || !showGuideLabel({ active: on, gamesStarted: Math.max(1, progress.games), lessonsDone: hooks.lessonsDone() });
+    if (label.hidden !== hide) label.hidden = hide;
     if (!on) {
       if (open) close();
-      hooks.clearLedPrompt(); // a guide turned off (Settings, a Blitz duel) never leaves its pointer up
+      if (wasOn) hooks.clearLedPrompt(); // a guide turned off (Settings, a Blitz duel) never leaves its pointer up
     }
+    wasOn = on;
   }
   hooks.ledWord(() => guideLedWord({ active: active(), beat: currentBeat() }));
 

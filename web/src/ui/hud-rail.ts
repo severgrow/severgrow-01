@@ -22,11 +22,17 @@ const CSS = `
    44 (row) - 56 (board zone top) + 2 (gap) = -10px. The bottom row is anchored to the bottom edge,
    so it does not move. Gated on the rail really carrying a visible control: with an empty rail (a
    phone, where full screen does not exist) nothing moves and the tools keep the true board corners.
-   A browser without :has() simply skips the rule — the floor, never a regression. */
-:root:has(#hud-rail > *:not([hidden])) .corner-tools { top:calc(var(--hud-rail-top, 44px) - 10px); }
+   The rail itself says so with a class on the root (below). It used to be a root-level has() rule
+   on "any visible child of the rail": that "any element" made EVERY element added anywhere on
+   the page (each board tile, each SVG piece) re-check the root and restyle the whole document;
+   measured 2026-11-10, ~100 full restyles while an online game opened (tests/hud-rail.test.ts). */
+:root.hud-rail-busy:not(#no-has) .corner-tools { top:calc(var(--hud-rail-top, 44px) - 10px); }
 `;
 
 let rail: HTMLElement | null = null;
+
+/** True when the rail carries a control that is not hidden. */
+export const railBusy = (el: HTMLElement): boolean => [...el.children].some((c) => !(c as HTMLElement).hidden);
 
 /** The rail, created once (in the game screen's container, so it shows only with the game). */
 export const hudRail = (): HTMLElement => {
@@ -45,6 +51,10 @@ export const hudRail = (): HTMLElement => {
     root.setProperty('--hud-rail-right', `${Math.max(0, Math.round(innerWidth - brand.right))}px`);
     root.setProperty('--hud-rail-top', `${Math.round(brand.bottom + 4)}px`);
   };
+  // The root class that stands in for :has(): set only when the rail holds a visible control.
+  const busy = () => document.documentElement.classList.toggle('hud-rail-busy', railBusy(rail!));
+  new MutationObserver(busy).observe(rail, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+  busy();
   const brandEl = document.getElementById('hud-brand');
   if (brandEl && typeof ResizeObserver === 'function') new ResizeObserver(place).observe(brandEl);
   window.addEventListener('resize', place);

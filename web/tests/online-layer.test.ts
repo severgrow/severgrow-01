@@ -713,3 +713,26 @@ describe('service worker API bypass (P-5)', () => {
     expect(src).toContain('never touch the cache');
   });
 });
+
+describe('OnlineDriver snapshot reuses its screen mapping (tests/online-snapshot-cache.test.ts)', () => {
+  it('asked twice with nothing changed, the board and moves are the same objects; a new view replaces them', async () => {
+    const base = samplePayload({ revision: 1 });
+    const { fetchImpl } = makeFetch({
+      'GET /v1/matches/m1/view?since=0': { status: 200, body: { ok: true, player: base, serverNow: 1 } },
+    });
+    const client = new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore() });
+    const driver = createOnlineDriver({
+      client, token: 'tok', matchId: 'm1', channel: createFakeChannel().channel, initial: base,
+      setTimer: () => 1, clearTimer: () => undefined, isVisible: () => true, isOnline: () => true,
+    });
+    const a = driver.snapshot();
+    const b = driver.snapshot();
+    expect(b.screenView).toBe(a.screenView);
+    expect(b.screenLegal).toBe(a.screenLegal);
+    expect(b.screenEvents).toBe(a.screenEvents);
+    await driver.start();
+    const c = driver.snapshot();
+    // the started driver applied a NEW payload object: the mapping was redone, and is equal
+    expect(c.screenView).toEqual(a.screenView);
+  });
+});

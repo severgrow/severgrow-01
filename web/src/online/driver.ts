@@ -187,16 +187,42 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     return { seeds: { awarded: reported.awarded, reason: reported.reason ?? null } };
   };
 
+  /** One shared "no moves" list, so an opponent's turn keeps hitting the screen-mapping cache. */
+  const NO_ACTIONS: Action[] = [];
+  const screenMemo: {
+    view: unknown; viewPerspective: unknown; screenView: View | null;
+    legal: unknown; legalPerspective: unknown; screenLegal: Action[] | null;
+    events: unknown; eventsPerspective: unknown; screenEvents: MatchDriverSnapshot['screenEvents'] | null;
+  } = { view: undefined, viewPerspective: undefined, screenView: null, legal: undefined, legalPerspective: undefined, screenLegal: null, events: undefined, eventsPerspective: undefined, screenEvents: null };
+
   const snapshot = (): MatchDriverSnapshot => {
     if (!player) {
       throw new Error('OnlineDriver has no view yet.');
     }
     const clock: ClockState = sync.clock();
     const view: View = draft.hasDraft() ? draft.view() : player.view;
-    const legal: Action[] = draft.hasDraft() || player.actor === player.seat ? draft.legal() : [];
-    const screenView = perspective.toScreenView(view);
-    const screenLegal = legal.map((a) => perspective.mapActionToScreen(a));
-    const screenEvents = player.events.map((e) => perspective.mapEventToScreen(e));
+    const legal: Action[] = draft.hasDraft() || player.actor === player.seat ? draft.legal() : NO_ACTIONS;
+    // Each mapping is redone only when its input or the perspective is a different object (the
+    // draft and the server view are replaced, never edited): a render asks for the snapshot many
+    // times (tests/online-snapshot-cache.test.ts).
+    if (screenMemo.view !== view || screenMemo.viewPerspective !== perspective) {
+      screenMemo.view = view;
+      screenMemo.viewPerspective = perspective;
+      screenMemo.screenView = perspective.toScreenView(view);
+    }
+    if (screenMemo.legal !== legal || screenMemo.legalPerspective !== perspective) {
+      screenMemo.legal = legal;
+      screenMemo.legalPerspective = perspective;
+      screenMemo.screenLegal = legal.map((a) => perspective.mapActionToScreen(a));
+    }
+    if (screenMemo.events !== player.events || screenMemo.eventsPerspective !== perspective) {
+      screenMemo.events = player.events;
+      screenMemo.eventsPerspective = perspective;
+      screenMemo.screenEvents = player.events.map((e) => perspective.mapEventToScreen(e));
+    }
+    const screenView = screenMemo.screenView!;
+    const screenLegal = screenMemo.screenLegal!;
+    const screenEvents = screenMemo.screenEvents!;
     return {
       kind: 'online',
       matchId: player.matchId,

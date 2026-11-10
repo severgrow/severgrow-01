@@ -59,7 +59,8 @@ describe('Bloom has its own colour', () => {
     // edge light are more specific, and both overrode a class-only rule — so a selected Bloom was
     // painted cream/green and looked like any other playable card. 2026-10-24.
     expect(info).toMatch(/html\.futa04-information #hand \.card\.futa04-bloom-pick \{\s*border-color: #8fd3c9;/);
-    expect(main).toMatch(/b\.classList\.toggle\('futa04-bloom-pick', IS_FUTA04 && inBloom\);/);
+    // The card's class list is now built once per render (main.ts renderHand); the rule is the same.
+    expect(main).toMatch(/IS_FUTA04 && inBloom && 'futa04-bloom-pick',/);
   });
   it('no generic Grow edge light repaints a picked card green', () => {
     for (const source of [info, cockpit]) {

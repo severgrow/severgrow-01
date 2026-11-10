@@ -49,7 +49,7 @@ export const ATMOSPHERE_CSS = `
 @media (min-resolution: 2dppx) { #futa04-film-grain { background-size: 512px 512px; } }
 @media (min-resolution: 3dppx) { #futa04-film-grain { background-size: 341.33px 341.33px; } }
 /* ONE OPACITY EVERYWHERE (owner, 2026-10-16). There used to be a stronger in-match value
-   (body:has(#game:not([hidden])) #futa04-film-grain { opacity: ... }) so the flecks stayed
+   (body.has-game:not(#no-has) #futa04-film-grain { opacity: ... }) so the flecks stayed
    readable on the board. The owner asked for a single uniform value instead, so that rule is
    DELETED rather than left at the same number - one value, one place, nothing to drift. Do not
    reintroduce a per-screen bump. Lineage: .16 -> .141 -> .124 -> .085.
@@ -65,9 +65,9 @@ export const ATMOSPHERE_CSS = `
    gives its measured height (shorter than the screen on some phones) and whose in-game filter would
    pin a fixed child to that box. */
 #futa04-board-backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; background: #000; opacity: .235; display: none; }
-body:has(#game:not([hidden])) #futa04-board-backdrop { display: block; }
+body.has-game:not(#no-has) #futa04-board-backdrop { display: block; }
 #futa04-outcome-light { position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0; display:none; }
-body:has(#game:not([hidden])) #futa04-outcome-light { display:block; }
+body.has-game:not(#no-has) #futa04-outcome-light { display:block; }
 /* The outcome light speaks the same LIGHT vocabulary as the display: the tone is published on
    the root when the result appears, so this is the display's own bloom colour.
    ONE ROOM (owner, 2026-10-20: "when colour of background behind the map changes colour it

@@ -73,8 +73,8 @@ html.futa04-branding #hud-brand {
   user-select: none;
 }
 html.futa04-branding:not(.brand-mark) #hud-brand { display: none; }
-html.futa04-branding:has(:is(#online-world-screen,#online-hub,#online-waiting,#online-join):not([hidden]):not([aria-hidden="true"])) #hud-brand { display:none !important; }
-html.futa04-branding:has(#install-prompt:not([hidden])) #hud-brand { display: none; }
+html.futa04-branding.has-online-screen:not(#no-has):not(.no-has) #hud-brand { display:none !important; }
+html.futa04-branding.has-install-prompt:not(#no-has) #hud-brand { display: none; }
 html.futa04-branding #hud-menu { position: relative; top: 0; }
 html.futa04-branding #go-brand {
   display: block;

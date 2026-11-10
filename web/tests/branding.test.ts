@@ -110,8 +110,12 @@ describe('owner brand pack roles', () => {
 
   it('the badge stands down while the install invitation is open', () => {
     const css = branding.slice(branding.indexOf('export const BRANDING_CSS'));
+    // The page-wide :has() became a page flag set from the same element (ui/root-flags.ts: that rule
+    // restyled the whole page for every element added while a game opened). Same answer, same priority.
     expect(css)
-      .toMatch(/:has\(#install-prompt:not\(\[hidden\]\)\)\s*#hud-brand\s*\{\s*display:\s*none/);
+      .toMatch(/\.has-install-prompt:not\(#no-has\)\s*#hud-brand\s*\{\s*display:\s*none/);
+    const flags = readFileSync(new URL('../src/ui/root-flags.ts', import.meta.url), 'utf8');
+    expect(flags).toMatch(/'has-install-prompt': \(\) => shown\('install-prompt'\)/);
   });
 
   // OWNER CHANGED THE RULE (2026-11-08: the desktop menu showed the brush grain as rectangles, "should
