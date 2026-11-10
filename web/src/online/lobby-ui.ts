@@ -1463,7 +1463,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
    * waiting. `now` is the lobby's injectable clock, so a test can drive it; the deadline itself is
    * the server's, corrected once per read (`noteServerNow`).
    */
-  const answerClock = mountAnswerClock((text) => territoryUI.answer(text), now);
+  const answerClock = mountAnswerClock((text, urgency) => territoryUI.answer(text, urgency), now);
   let menuPass: Promise<void> | null = null;
 
   /**
@@ -1504,7 +1504,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       // clock ticks against. An unread list answers null, which stops the tick (never a guess).
       const clock = challenges ? noteServerNow(emptyClock(), challenges.serverNow, now()) : null;
       const answer = clock ? answerWaiting(challenges, correctedNow(clock, now())) : null;
-      answerClock.set(answer ? answer.expiresAt : null);
+      answerClock.set(answer ? answer.expiresAt : null, answer?.count ?? 1);
       if (duels) {
         duelList = duels.matches;
         duelServerNow = duels.serverNow;

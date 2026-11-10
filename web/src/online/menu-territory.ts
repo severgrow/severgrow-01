@@ -24,6 +24,7 @@ import { formatRemaining } from './clock.js';
 import { groupDigits } from '../logic/format.js';
 import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { CHALLENGE } from './challenge-copy.js';
+import { challengeUrgency, type ChallengeUrgency } from './challenge-view.js';
 
 /**
  * The pair the entry shows, plus the world's own size for the spoken line. The WORDS are the
@@ -89,14 +90,16 @@ export type TerritoryCountsUI = {
    * countdown, or null to go back to the tile count. The entry's LABEL and the Seeds half never
    * move, and a tick writes one text node, nothing more (owner, 2026-11-01).
    */
-  answer(text: string | null): void;
+  answer(text: string | null, urgency?: ChallengeUrgency | null): void;
 };
 
 /**
  * A pending challenge still inside its answer window: what the entry counts down instead of the
  * tile count. Its id keeps two overlapping windows from being confused for one another.
  */
-export type TerritoryAnswer = Readonly<{ challengeId: string; expiresAt: number }>;
+export type TerritoryAnswer = Readonly<{ challengeId: string; expiresAt: number;
+  /** How many incoming challenges are waiting for an answer (the entry reads "2 · 3h 10m"). */
+  count: number }>;
 
 /**
  * THE ONE THING THAT OUTRANKS THE TILE COUNT (owner, 2026-11-01: "when a challenge needs THEIR
@@ -113,14 +116,16 @@ export const answerWaiting = (
   now: number,
 ): TerritoryAnswer | null => {
   if (!payload) return null;
-  let soonest: TerritoryAnswer | null = null;
+  let soonest: { challengeId: string; expiresAt: number } | null = null;
+  let count = 0;
   for (const challenge of payload.incoming) {
     if (!challenge || challenge.fromMe === true || challenge.status !== 'pending') continue;
     const { id, expiresAt } = challenge;
     if (typeof id !== 'string' || !Number.isFinite(expiresAt) || expiresAt <= now) continue;
+    count += 1;
     if (!soonest || expiresAt < soonest.expiresAt) soonest = { challengeId: id, expiresAt };
   }
-  return soonest;
+  return soonest ? { ...soonest, count } : null;
 };
 
 /**
@@ -128,8 +133,12 @@ export const answerWaiting = (
  * an absolute deadline on the SERVER's clock, or null when the window has closed. It never adds a
  * word ("left" / "to answer"), so the entry cannot show anything but the time itself.
  */
-export const answerLabel = (deadline: number | null, now: number): string | null =>
-  deadline !== null && deadline > now ? formatRemaining(deadline - now) : null;
+export const answerLabel = (deadline: number | null, now: number, count = 1): string | null =>
+  deadline !== null && deadline > now ? `${count > 1 ? `${count} · ` : ''}${formatRemaining(deadline - now)}` : null;
+
+/** The countdown's colour step, the tile's own (calm / warm / hot), or null with no live window. */
+export const answerUrgency = (deadline: number | null, now: number): ChallengeUrgency | null =>
+  deadline !== null && deadline > now ? challengeUrgency(deadline - now) : null;
 
 /**
  * The right-hand read-out at `now`: the compact time left to answer, or the player's tile count.
@@ -140,7 +149,7 @@ export const territoryReadout = (
   tiles: number,
   answer: TerritoryAnswer | null,
   now: number,
-): string => answerLabel(answer?.expiresAt ?? null, now) ?? String(tiles);
+): string => answerLabel(answer?.expiresAt ?? null, now, answer?.count ?? 1) ?? String(tiles);
 
 /** Reduced motion is a designed static state: the numbers simply arrive, with no settle. */
 const reducedMotion = (): boolean => {
@@ -233,7 +242,10 @@ export const installTerritoryCountUI = (doc: Document = document): TerritoryCoun
         settle(tiles);
       }
     },
-    answer(text) {
+    answer(text, urgency = null) {
+      // The countdown wears the tile's colour step (calm / warm / hot); the tile count wears none.
+      const step = text === null ? null : urgency;
+      if (step) { if (tiles.dataset.urgency !== step) tiles.dataset.urgency = step; } else delete tiles.dataset.urgency;
       if (text === answerText) return;
       const wasAnswering = answerText !== null;
       answerText = text;

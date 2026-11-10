@@ -26,8 +26,9 @@ export type TutorialWindowHandlers = {
 export type TutorialFocusOptions = {
   arrow?: boolean;
   /**
-   * Light the target's own contour (a card's or a tile's outline), as the levels do, instead of the
-   * Tutorial's soft pill. The in-game guide's lessons use it (owner, 2026-11-10: one look for "lit").
+   * Light the target exactly as the levels do (its own contour, the levels' corner, a still halo)
+   * instead of the Tutorial's soft pill. The in-game guide's lessons use it (owner, 2026-11-10:
+   * one look for "lit").
    */
   outline?: boolean;
   why?: string;
@@ -553,20 +554,25 @@ html.futa04-lesson .sheet { z-index: 51; }
 #tutorial-focus[data-tier='guide'] .focus-dim { fill:rgba(0,0,0,.15); }
 #tutorial-focus[data-tier='whisper'] .focus-dim { fill:rgba(0,0,0,0); }
 #tutorial-focus[data-tier='whisper'] .focus-hole { fill:transparent; }
-#tutorial-focus[data-tier='whisper'] .focus-glow-soft { fill:color-mix(in srgb,var(--light-core,#e9d8c5) 10%,transparent); }
-#tutorial-focus[data-tier='whisper'] .focus-glow { fill:color-mix(in srgb,var(--light-core,#e9d8c5) 14%,transparent); filter:drop-shadow(0 0 10px var(--light-bloom,rgba(233,216,173,.38))); }
-#tutorial-focus[data-lesson='1'] .focus-glow { fill:color-mix(in srgb,var(--light-core,#e9d8c5) 16%,transparent); }
-#tutorial-focus[data-lesson='1'] .focus-pointer-body { transform:scale(1.6); transform-origin:10px 1px; stroke:rgba(20,16,10,.85); stroke-width:1.6px; paint-order:stroke; }
-/* Contour-free highlight: soft cream fill only — no stroke/ring outline. The ink is the
-   published LIGHT tone, so the pointer and the display speak the same colour at low alpha. */
-#tutorial-focus .focus-glow { fill:color-mix(in srgb,var(--light-core,#e9d8c5) 10%,transparent); stroke:none; stroke-width:0;
-  filter:drop-shadow(0 0 12px var(--light-bloom,rgba(233,216,173,.55))); }
-#tutorial-focus .focus-glow-soft { fill:color-mix(in srgb,var(--light-core,#e9d8c5) 18%,transparent); stroke:none; filter:drop-shadow(0 0 16px var(--light-bloom,rgba(233,216,173,.42))); }
+#tutorial-focus[data-tier='whisper'] .focus-glow { filter:drop-shadow(0 0 10px rgba(242,237,224,.38)); }
+/* The pointer is made of the same light as the glow (owner, 2026-11-10: no flat 2D outlines): no
+   dark rim — its own colour rounds its corners, a soft drop gives it depth, and a warm halo makes it
+   glow like the thing it points at. */
+#tutorial-focus[data-lesson='1'] .focus-pointer-body { transform:scale(1.6); transform-origin:10px 1px; }
+/* ONE LOOK FOR "LIT" (owner, 2026-11-10: "draw pile had a contour around when highlighted ...
+   make sure it's consistent", levels 1-9 included). The light is the Draw pile's own: a soft
+   cool-white glow hugging the target's edge (information.ts: 0 0 12px 2px rgba(242,237,224,.42)).
+   Never a fill over the card, tile or key, so the thing itself is never washed out. */
+/* The light is the target's own shape, filled and blurred BEHIND it (the inside is masked away):
+   it starts at the very edge with no gap, falls off softly, and never draws a line or rounds the
+   shape — the target's own crisp edge stays the strongest edge on screen. */
+#tutorial-focus .focus-glow { fill:rgba(242,237,224,.5); stroke:none; stroke-width:0; filter:blur(4px); }
+#tutorial-focus .focus-glow-soft { fill:rgba(242,237,224,.2); stroke:none; stroke-width:0; filter:blur(11px); }
 /* ONE halo per target. When the target is the display, its own baked bloom IS the highlight;
    when the board already lights it (a top-rank tile's glow), the lesson does not stack a second.
    The paths stay in the DOM (only their ink is cleared), so the pointer's geometry is unchanged. */
 #tutorial-focus[data-light-target='display'] :is(.focus-glow,.focus-glow-soft),
-#tutorial-focus[data-light-target='lit'] :is(.focus-glow,.focus-glow-soft) { fill:transparent; filter:none; }
+#tutorial-focus[data-light-target='lit'] :is(.focus-glow,.focus-glow-soft) { fill:transparent; stroke:none; filter:none; }
 #tutorial-focus .focus-lift { transform-box:fill-box; transform-origin:center; }
 /* Steady opacity pulse only — never scale (scale + live target breathe looked broken). */
 #tutorial-focus[data-pulse='1'] .focus-lift { animation:tutorial-glow-pulse 1.6s ease-in-out infinite; }
@@ -575,7 +581,9 @@ html.futa04-lesson .sheet { z-index: 51; }
   50% { opacity:.72; }
 }
 #tutorial-focus .focus-pointer { filter:drop-shadow(0 1px 3px rgba(0,0,0,.4)) drop-shadow(0 0 8px var(--light-bloom,rgba(233,216,173,.32))); transform-origin:10px 4px; }
-#tutorial-focus .focus-pointer-body { fill:color-mix(in srgb,var(--light-core,#f2ede4) 35%,#f2ede4 65%); stroke:none; }
+#tutorial-focus .focus-pointer-body { fill:color-mix(in srgb,var(--light-core,#f2ede4) 35%,#f2ede4 65%);
+  stroke:color-mix(in srgb,var(--light-core,#f2ede4) 35%,#f2ede4 65%); stroke-width:2.4px; stroke-linejoin:round;
+  filter:drop-shadow(0 1px 1.5px rgba(8,6,4,.6)) drop-shadow(0 0 6px rgba(242,237,224,.5)); }
 #tutorial-focus[data-bob='1'] .focus-pointer { animation:tutorial-pointer-tap 1.1s ease-in-out infinite; }
 #tutorial-focus[data-bob='hard'] .focus-pointer { animation:tutorial-pointer-tap-hard .85s ease-in-out infinite; }
 @keyframes tutorial-pointer-tap { 0%,100% { transform:translate(0,0); } 45% { transform:translate(var(--bob-x,0px),var(--bob-y,7px)); } }
@@ -687,7 +695,9 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 type Pt = { x: number; y: number };
 type Tracked = { cx: number; cy: number; hole: string; ring: string; soft: string; w: number; h: number; left: number; top: number; right: number; bottom: number; exact?: boolean;
   /** The lesson shapes: one outline per target, in screen pixels (absent: the pill). */
-  polys?: Pt[][] };
+  polys?: Pt[][];
+  /** Each outline's own corner radius (a card's, a key's, a pile's), so the glow follows the shape exactly. */
+  radii?: number[] };
 
 const FOCUS_RX = 10;
 const FOCUS_PAD_X = 8;
@@ -829,25 +839,16 @@ const cardOutline = (el: Element): Pt[] | null => {
   const cx = r.left + r.width / 2;
   const cy = r.top + r.height / 2;
   const cos = Math.cos(a); const sin = Math.sin(a);
+  // The card's LIVE size: a lit card breathes (lesson-breath scales it), and the glow must hug the
+  // edge it has right now, never the resting one. The turned box's width gives the scale.
+  const turnedW = w * Math.abs(cos) + ht * Math.abs(sin);
+  const k = turnedW > 0 ? r.width / turnedW : 1;
   return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
-    const x = (sx! * w) / 2; const y = (sy! * ht) / 2;
+    const x = (sx! * w * k) / 2; const y = (sy! * ht * k) / 2;
     return { x: cx + x * cos - y * sin, y: cy + x * sin + y * cos };
   });
 };
 
-const polyCentre = (pts: readonly Pt[]): Pt => ({
-  x: pts.reduce((a, p) => a + p.x, 0) / pts.length,
-  y: pts.reduce((a, p) => a + p.y, 0) / pts.length,
-});
-/** The outline pushed out by `pad` pixels from its centre (the soft halo around it). */
-const grownPoly = (pts: readonly Pt[], pad: number): Pt[] => {
-  const c = polyCentre(pts);
-  return pts.map((p) => {
-    const dx = p.x - c.x; const dy = p.y - c.y;
-    const len = Math.hypot(dx, dy) || 1;
-    return { x: p.x + (dx / len) * pad, y: p.y + (dy / len) * pad };
-  });
-};
 /** The levels' one corner: every glow (hex, card, pile, button) has the same rounded corner. */
 const LESSON_CORNER = 9;
 /** An outline as a path whose every corner is rounded by the same radius (shorter on tiny edges). */
@@ -868,24 +869,51 @@ const roundedPath = (pts: readonly Pt[], r = LESSON_CORNER): string => {
 };
 
 /** Tracked geometry for outlines: the bounds (for the pointer) plus each outline. */
-const geometryFromPolys = (polys: Pt[][]): Tracked => {
+const geometryFromPolys = (polys: Pt[][], radii?: number[]): Tracked => {
   const all = polys.flat();
   const left = Math.min(...all.map((p) => p.x)); const right = Math.max(...all.map((p) => p.x));
   const top = Math.min(...all.map((p) => p.y)); const bottom = Math.max(...all.map((p) => p.y));
   return {
     cx: (left + right) / 2, cy: (top + bottom) / 2, hole: '', ring: '', soft: '',
-    w: right - left, h: bottom - top, left, top, right, bottom, exact: true, polys,
+    w: right - left, h: bottom - top, left, top, right, bottom, exact: true, polys, ...(radii ? { radii } : {}),
   };
 };
 
-/** The pill (Tutorial), or the target's own outline (levels: 'hex', 'card'). */
+/** An element's own corner radius in px (the top-left one; a % radius read against its width). */
+const cornerOf = (el: Element): number => {
+  const raw = getComputedStyle(el).borderTopLeftRadius;
+  const v = parseFloat(raw) || 0;
+  return raw.trim().endsWith('%') ? (v / 100) * ((el as HTMLElement).offsetWidth || rectOf(el).width) : v;
+};
+/** A hex tile's corners are sharp: the glow follows the drawn hex exactly. */
+const HEX_CORNER = 0;
+
+/** The pill (Tutorial), or the target's own outline (levels and the guide: every shape). */
 const measureTarget = (selector: string, _shape: FocusShape, exactTarget = false): Tracked | null => {
   if (!selector || _shape === 'none') return null;
   if (_shape === 'hex' || _shape === 'card') {
-    const polys = [...document.querySelectorAll(selector)]
-      .map((n) => (_shape === 'hex' ? (n.classList.contains('hex-cell') ? hexOutline(n) : null) ?? cardOutline(n) : cardOutline(n)))
-      .filter((p): p is Pt[] => !!p);
-    if (polys.length) return geometryFromPolys(polys);
+    const polys: Pt[][] = []; const radii: number[] = [];
+    for (const n of document.querySelectorAll(selector)) {
+      const hex = _shape === 'hex' && n.classList.contains('hex-cell') ? hexOutline(n) : null;
+      const poly = hex ?? cardOutline(n);
+      if (!poly) continue;
+      polys.push(poly); radii.push(hex ? HEX_CORNER : cornerOf(n));
+    }
+    if (polys.length) return geometryFromPolys(polys, radii);
+  }
+  // The levels and the guide: a pile, a key or the display glows on its OWN box with its OWN corner
+  // (one outline each), never a padded pill around it.
+  if (exactTarget) {
+    const polys: Pt[][] = []; const radii: number[] = [];
+    for (const raw of document.querySelectorAll(selector)) {
+      const el = focusMeasureEl(raw);
+      const b = layoutBounds(el);
+      if (!b) continue;
+      polys.push([{ x: b.left, y: b.top }, { x: b.right, y: b.top }, { x: b.right, y: b.bottom }, { x: b.left, y: b.bottom }]);
+      radii.push(cornerOf(el));
+    }
+    if (polys.length) return geometryFromPolys(polys, radii);
+    return null;
   }
   // The levels light exactly their one target (never both piles at once).
   const nodes = [...document.querySelectorAll(exactTarget ? selector : expandFocusSelector(selector))];
@@ -1271,7 +1299,9 @@ export const mountGlassSurface = (onClose: () => void) => {
     focus.innerHTML = cutoutMask(
       `<rect class="focus-hole" fill="black"/>`,
     )
-      + `<g class="focus-lift"><rect class="focus-glow-soft"/><rect class="focus-glow"/></g>`
+      + `<defs><mask id="tutorial-glow-out" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">`
+      + `<rect x="0" y="0" width="100%" height="100%" fill="white"/><rect class="focus-glow-cut" fill="black"/></mask></defs>`
+      + `<g class="focus-lift" mask="url(#tutorial-glow-out)"><rect class="focus-glow-soft"/><rect class="focus-glow"/></g>`
       + `<g class="focus-pointer-root" hidden>${POINTER_ARROW}</g>`;
     focusScene = 'tracked';
   };
@@ -1299,24 +1329,35 @@ export const mountGlassSurface = (onClose: () => void) => {
       const scene = `poly:${n}` as const;
       if (focusScene !== scene) {
         const each = (cls: string) => Array.from({ length: n }, () => `<path class="${cls}"/>`).join('');
+        // The glow sits on the exact outline and is cut away inside it, so it reads like the Draw
+        // pile's own box-shadow: light around the thing, never over it.
         focus.innerHTML = cutoutMask(each('focus-hole" fill="black'))
-          + `<g class="focus-lift">${each('focus-glow-soft')}${each('focus-glow')}</g>`
+          + `<defs><mask id="tutorial-glow-out" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">`
+          + `<rect x="0" y="0" width="100%" height="100%" fill="white"/>${each('focus-glow-cut" fill="black')}</mask></defs>`
+          + `<g class="focus-lift" mask="url(#tutorial-glow-out)">${each('focus-glow-soft')}${each('focus-glow')}</g>`
           + `<g class="focus-pointer-root" hidden>${POINTER_ARROW}</g>`;
         focusScene = scene;
       }
       const holes = focus.querySelectorAll('.focus-hole');
       const softs = focus.querySelectorAll('.focus-glow-soft');
       const rings = focus.querySelectorAll('.focus-glow');
+      const cuts = focus.querySelectorAll('.focus-glow-cut');
       tracked.polys.forEach((poly, i) => {
-        setIfChanged(holes[i] ?? null, 'd', roundedPath(grownPoly(poly, 4)));
-        setIfChanged(softs[i] ?? null, 'd', roundedPath(grownPoly(poly, 6)));
-        setIfChanged(rings[i] ?? null, 'd', roundedPath(grownPoly(poly, 2)));
+        // ONE edge for everything: the dim stops at the target's own outline and the light starts
+        // there, so it wraps the thing from behind with no gap and never redraws its shape
+        // (owner, 2026-11-10). A hex keeps its sharp corners (radius 0); cards and keys their own.
+        const exact = roundedPath(poly, tracked.radii?.[i] ?? LESSON_CORNER);
+        setIfChanged(holes[i] ?? null, 'd', exact);
+        setIfChanged(softs[i] ?? null, 'd', exact);
+        setIfChanged(rings[i] ?? null, 'd', exact);
+        setIfChanged(cuts[i] ?? null, 'd', exact);
       });
     } else {
       ensureTrackedScene();
       applyRectAttrs(focus.querySelector('.focus-hole'), tracked, true);
       applyRectAttrs(focus.querySelector('.focus-glow-soft'), tracked, true);
       applyRectAttrs(focus.querySelector('.focus-glow'), tracked, true);
+      applyRectAttrs(focus.querySelector('.focus-glow-cut'), tracked, true);
     }
     const panelBox = panel.getBoundingClientRect();
     const livePanel = !panel.hidden && panelBox.height > 8;
@@ -1527,10 +1568,12 @@ export const mountGlassSurface = (onClose: () => void) => {
     lightOff = !!options.noLight;
     if (lightOff) { targetSelector = ''; stopLoop(); smooth = null; }
     else targetSelector = nextSelector;
-    // The Tutorial's focus is a soft pill. The levels and the guide keep the target's own outline.
+    // The Tutorial's focus is a soft pill. The levels and the guide draw the SAME light: the target's
+    // own outline (a card, a tile, a pile's or key's exact box), one corner, a still halo.
+    const levelLook = !!options.lesson || !!options.outline;
     targetShape = !targetSelector || options.shape === 'none' ? 'none'
-      : (options.lesson || options.outline) && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
-    setIfChanged(focus, 'data-lesson', options.lesson ? '1' : '0');
+      : levelLook && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
+    setIfChanged(focus, 'data-lesson', levelLook ? '1' : '0');
     // One halo per target. If the target is the display, the baked bloom is the light; if the
     // board already lights it (a top-rank tile's glow lives in the l-glow layer, not inside the
     // hex cell), do not stack the lesson's halo on top. Measured once per step, never per frame.
@@ -1545,7 +1588,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     setIfChanged(focus, 'data-light-target', lightTarget);
     focusTier = options.tier ?? 'spotlight';
     setIfChanged(focus, 'data-tier', focusTier);
-    lessonFocus = !!options.lesson;
+    lessonFocus = levelLook;
     panel.dataset.mode = 'tutorial';
     if (options.lesson) panel.dataset.lesson = '1';
     else delete panel.dataset.lesson;

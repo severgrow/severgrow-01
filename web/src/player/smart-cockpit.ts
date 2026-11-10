@@ -242,7 +242,7 @@ html.futa04-information #smart-led-window.scrolling #smart-led-hot {
 @keyframes idle-urgency-throw {
   0%,100% {
     scale:1;
-    box-shadow:0 0 0 1px rgba(222,110,83,.40),0 1px 3px rgba(190,68,47,.26),0 5px 12px rgba(20,11,10,.28);
+    box-shadow:0 0 3px rgba(222,110,83,.40),0 1px 3px rgba(190,68,47,.26),0 5px 12px rgba(20,11,10,.28);
   }
   50% {
     scale:1.04;
@@ -513,9 +513,9 @@ html.futa04-information .dock #futa04-box :is(#deck,#discard) .pile-meta .pile-c
 /* Match the illustrated card's printed corners instead of the legacy card silhouette. */
 html.futa04-information.futa04-card-art-ready #hand .card:has(>.futa04-card-art) { border-radius:calc(var(--cw) * .075); }
 html.futa04-information.futa04-card-art-ready #hand .card > .futa04-card-art { border-radius:inherit; }
-html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick) { box-shadow:0 0 0 1px rgba(119,194,115,.4),0 0 6px 1px rgba(88,171,86,.43),0 5px 12px rgba(5,16,9,.30); }
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53),0 5px 12px rgba(20,11,10,.34); }
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53) !important; }
+html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick) { box-shadow:0 0 3px rgba(119,194,115,.4),0 0 6px 1px rgba(88,171,86,.43),0 5px 12px rgba(5,16,9,.30); }
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { box-shadow:0 0 3px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53),0 5px 12px rgba(20,11,10,.34); }
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { box-shadow:0 0 3px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53) !important; }
 html.futa04-information #discard .gd-halo { inset:0; border-radius:6px; }
 /* Both legal draw choices glow softly: a cool white light around the actual card, no outline box
    (owner, 2026-10-22: "remove the contour thing, make the glow a tiny bit brighter and make it

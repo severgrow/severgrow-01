@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MatchListEntry } from '../../server/src/protocol.js';
 import type { WorldChallengeWire } from '../../server/src/seeds/types.js';
 import { ONLINE } from '../../src/strings.js';
-import { answerLabel, answerWaiting, territoryReadout } from '../src/online/menu-territory.js';
+import { answerLabel, answerUrgency, answerWaiting, territoryReadout } from '../src/online/menu-territory.js';
 import { ANSWER_TICK_MS, mountAnswerClock } from '../src/online/menu-territory-clock.js';
 import { yourMoveCount } from '../src/online/match-attention.js';
 
@@ -72,7 +72,7 @@ describe('a pending challenge replaces the TILE COUNT with the time left to answ
 
   it('returns the incoming pending challenge and its deadline', () => {
     const answer = answerWaiting({ incoming: [challenge()] }, NOW);
-    expect(answer).toEqual({ challengeId: 'ch-1', expiresAt: NOW + 2 * 3_600_000 + 5 * 60_000 });
+    expect(answer).toEqual({ challengeId: 'ch-1', expiresAt: NOW + 2 * 3_600_000 + 5 * 60_000, count: 1 });
   });
 
   it('never counts down an ACCEPTED or RESOLVED challenge — those are back to tiles', () => {
@@ -97,6 +97,26 @@ describe('a pending challenge replaces the TILE COUNT with the time left to answ
       expect(text).not.toMatch(/left|answer|tile/i);
     }
     expect(answerLabel(NOW + 23 * 60_000 + 59_000, NOW)).toBe('23m');
+  });
+
+  // OWNER, 2026-11-10 ("challenge timer is unmistakable"): with more than one tile waiting for an
+  // answer the entry says how many, beside the SOONEST time; and the time wears the tile's colour.
+  it('with two or more waiting, reads "2 · 3h 10m" (the count, then the soonest window)', () => {
+    const a = challenge({ id: 'a', expiresAt: NOW + 3 * 3_600_000 + 10 * 60_000 });
+    const b = challenge({ id: 'b', expiresAt: NOW + 20 * 3_600_000 });
+    const closed = challenge({ id: 'c', expiresAt: NOW });
+    const answer = answerWaiting({ incoming: [b, a, closed] }, NOW);
+    expect(answer).toEqual({ challengeId: 'a', expiresAt: a.expiresAt, count: 2 });
+    expect(territoryReadout(5, answer, NOW)).toBe('2 · 3h 10m');
+    expect(answerLabel(a.expiresAt, NOW, 1)).toBe('3h 10m');
+  });
+
+  it('colours the countdown like the tile: calm, warm under 12 h, hot under 3 h', () => {
+    expect(answerUrgency(NOW + 20 * 3_600_000, NOW)).toBe('calm');
+    expect(answerUrgency(NOW + 5 * 3_600_000, NOW)).toBe('warm');
+    expect(answerUrgency(NOW + 2 * 3_600_000, NOW)).toBe('hot');
+    expect(answerUrgency(null, NOW)).toBeNull();
+    expect(answerUrgency(NOW, NOW)).toBeNull();
   });
 
   it('goes back to the tile count when nothing waits or the window has closed', () => {

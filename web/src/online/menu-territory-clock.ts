@@ -12,7 +12,8 @@
 // The module is mounted by `installOnlineLobby` beside `installTerritoryCountUI`, so the entry's
 // paint path and its clock stay separate: this file owns the timer, the entry owns the DOM, and
 // both read the countdown's one rule (`answerLabel` in `menu-territory.ts`).
-import { answerLabel } from './menu-territory.js';
+import { answerLabel, answerUrgency } from './menu-territory.js';
+import type { ChallengeUrgency } from './challenge-view.js';
 
 /** A one-second check: the visible label only ever changes on a minute boundary (or at zero). */
 export const ANSWER_TICK_MS = 1_000;
@@ -22,7 +23,7 @@ export type AnswerClock = {
    * Point the clock at an absolute deadline on the SERVER's clock, or null when no answer is
    * waiting. Null stops the interval and hands the read-out back to the tile count at once.
    */
-  set(deadline: number | null): void;
+  set(deadline: number | null, count?: number): void;
   /** Stop ticking and give the read-out back to the tile count (sign-out, a failed read). */
   stop(): void;
 };
@@ -33,16 +34,17 @@ export type AnswerClock = {
  * unit-tested without a browser clock (see `web/tests/menu-territory-live.test.ts`).
  */
 export const mountAnswerClock = (
-  paint: (text: string | null) => void,
+  paint: (text: string | null, urgency?: ChallengeUrgency | null) => void,
   now: () => number = () => Date.now(),
   tickMs: number = ANSWER_TICK_MS,
 ): AnswerClock => {
   let deadline: number | null = null;
+  let waitingCount = 1;
   let timer: ReturnType<typeof setInterval> | null = null;
   /** The last label written, so an unchanged minute does not touch the DOM at all. */
   let written: string | null = null;
 
-  const label = (): string | null => answerLabel(deadline, now());
+  const label = (): string | null => answerLabel(deadline, now(), waitingCount);
 
   const clear = () => {
     if (timer === null) return;
@@ -54,7 +56,7 @@ export const mountAnswerClock = (
     const next = label();
     if (next === written) return;
     written = next;
-    paint(next);
+    paint(next, answerUrgency(deadline, now()));
   };
 
   const tick = () => {
@@ -70,8 +72,9 @@ export const mountAnswerClock = (
   };
 
   return {
-    set(next) {
+    set(next, count = 1) {
       deadline = next;
+      waitingCount = count;
       if (next === null) {
         clear();
         write();

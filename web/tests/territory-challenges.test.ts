@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { WorldChallengeWire } from '../../server/src/seeds/types.js';
 import {
   CHALLENGE_LOW_MS,
+  CHALLENGE_RING_MS,
+  challengeUrgency,
+  tileTimeLabel,
   SWORDS_HIT_RADIUS,
   challengeForCell,
   challengeMarkerFor,
@@ -47,10 +50,15 @@ const challenge = (over: Partial<WorldChallengeWire> = {}): WorldChallengeWire =
   ...over,
 });
 
-describe('the 48 h ring', () => {
-  it('is full at send, half way through and empty at the deadline', () => {
+// OWNER CHANGED THE RULE (2026-11-10, "challenge timer is unmistakable"): the ring measures the LAST
+// 12 h, not the whole 48 h window (it barely moved for a day), the tile colours its timer calm /
+// warm / hot, and the breath starts at the hot step (under 3 h). Rewritten from the 48 h-ring pins.
+describe('the ring tracks the last 12 h', () => {
+  it('is full while more than 12 h are left, half at 6 h, empty at the deadline', () => {
     expect(ringFraction(challenge(), 0)).toBe(1);
-    expect(ringFraction(challenge(), TTL / 2)).toBe(0.5);
+    expect(ringFraction(challenge(), TTL - 13 * HOUR)).toBe(1);
+    expect(ringFraction(challenge(), TTL - CHALLENGE_RING_MS)).toBe(1);
+    expect(ringFraction(challenge(), TTL - 6 * HOUR)).toBe(0.5);
     expect(ringFraction(challenge(), TTL)).toBe(0);
     // A late read never goes below nothing (the ring has already collapsed).
     expect(ringFraction(challenge(), TTL + HOUR)).toBe(0);
@@ -62,11 +70,35 @@ describe('the 48 h ring', () => {
     expect(ringFraction(challenge({ createdAt: TTL, expiresAt: TTL }), 0)).toBe(0);
   });
 
-  it('starts breathing under six hours, never while expired', () => {
+  it('colours calm above 12 h, warm down to 3 h, hot under 3 h', () => {
+    expect(challengeUrgency(13 * HOUR)).toBe('calm');
+    expect(challengeUrgency(12 * HOUR + 1)).toBe('calm');
+    expect(challengeUrgency(12 * HOUR)).toBe('warm');
+    expect(challengeUrgency(3 * HOUR + 1)).toBe('warm');
+    expect(challengeUrgency(3 * HOUR)).toBe('hot');
+    expect(challengeUrgency(1)).toBe('hot');
+    expect(challengeUrgency(0)).toBe('hot');
+  });
+
+  it('starts breathing at the hot step (under 3 h), never while expired', () => {
+    expect(CHALLENGE_LOW_MS).toBe(3 * HOUR);
     expect(isLow(challenge(), TTL - CHALLENGE_LOW_MS - 1)).toBe(false);
     expect(isLow(challenge(), TTL - CHALLENGE_LOW_MS)).toBe(true);
     expect(isLow(challenge(), TTL)).toBe(false);
     expect(isLow(challenge({ status: 'accepted' }), 0)).toBe(false);
+  });
+});
+
+describe('the time printed on the tile', () => {
+  it('reads whole hours, then minutes in the last hour — floored, never more than is left', () => {
+    expect(tileTimeLabel(48 * HOUR)).toBe('48h');
+    expect(tileTimeLabel(18 * HOUR + 59 * 60_000)).toBe('18h');
+    expect(tileTimeLabel(HOUR)).toBe('1h');
+    expect(tileTimeLabel(HOUR - 1)).toBe('59m');
+    expect(tileTimeLabel(42 * 60_000)).toBe('42m');
+    expect(tileTimeLabel(30_000)).toBe('0m');
+    expect(tileTimeLabel(0)).toBe('0m');
+    expect(tileTimeLabel(-5)).toBe('0m');
   });
 });
 

@@ -29,6 +29,8 @@ export const GUIDE_STORAGE_KEY = 'severgrow.guide.v1';
 export const GUIDE_LOCAL_KEY = 'severgrow.guide.local.v1';
 /** How long the one-time edge light stays (owner: "for 1.5 seconds"). */
 export const GUIDE_HINT_MS = 1500;
+/** How long the guide waits before it talks to the server (boot and a game start stay quiet). */
+export const GUIDE_SYNC_DELAY_MS = 4000;
 /** The key's names: "How to play" while new, "Tips" (its usual name) afterwards. */
 export const GUIDE_KEY_LABEL = 'How to play';
 
@@ -39,26 +41,31 @@ html.futasaku-guide-fresh #futa04-help-button > .guide-q { display: inline-flex 
 html.futasaku-guide-fresh #futa04-help-button > .i:not(.guide-q) { display: none !important; }
 html.futasaku-guide-fresh #futa04-help-button { filter: brightness(1.18); }
 html.futasaku-guide-fresh #futa04-help-button .guide-q { color: #fff3dc; }
-/* THE ONE-TIME EDGE LIGHT: a soft gold rim that rises and settles once, 1.5 s, then it is gone. */
+/* THE ONE-TIME EDGE LIGHT: a soft light that rises and settles once, 1.5 s, then it is gone. */
 #futa04-help-button.guide-hint { position: relative; }
 /* (the cockpit hides every key's ::after - information.ts - so this one id-heavy rule wins while lit) */
 html #futa04-box #futa04-actions > #futa04-help-button.guide-hint::after,
 #futa04-help-button.guide-hint::after {
   display: block; content: ''; position: absolute; inset: -2px; border-radius: inherit; pointer-events: none;
-  box-shadow: 0 0 0 1.5px rgb(255 214 140 / .85), 0 0 14px 2px rgb(255 205 120 / .45);
+  /* light only, never a drawn rim — and the SAME light as every highlight in the game (the Draw
+     pile's own cool cream), so "lit" always means one thing (owner, 2026-11-10) */
+  box-shadow: 0 0 12px 2px rgb(242 237 224 / .46), 0 0 24px 4px rgb(242 237 224 / .16);
   opacity: 0; animation: guide-hint-edge ${GUIDE_HINT_MS}ms ease-in-out 1 both;
 }
 @keyframes guide-hint-edge { 0% { opacity: 0; } 25%, 70% { opacity: 1; } 100% { opacity: 0; } }
 /* Reduce motion: the same light, still (on for the 1.5 s, then off). */
 .reduce-motion #futa04-box #futa04-actions > #futa04-help-button.guide-hint::after { animation: none; opacity: 1; }
 @media (prefers-reduced-motion: reduce) { html #futa04-box #futa04-actions > #futa04-help-button.guide-hint::after { animation: none; opacity: 1; } }
-/* LESSON OPEN: the key reads as pressed in (a darker well, gold rim, gold "?"), so a second press
-   is plainly how to put the lesson away (owner, 2026-11-10). */
+/* LESSON OPEN: the key reads as pressed in — a darker, sunken well and a softly lit gold "?" — so a
+   second press is plainly how to put the lesson away (owner, 2026-11-10). Depth and light only:
+   no drawn ring or outline anywhere (owner: "that 2d line contour should not be there"). */
 html #futa04-box #futa04-actions > #futa04-help-button[aria-pressed='true'] {
   filter: none; background: rgb(6 7 8 / .72);
-  box-shadow: inset 0 2px 5px rgb(0 0 0 / .7), inset 0 0 0 1px rgb(255 214 140 / .42);
+  box-shadow: inset 0 3px 7px rgb(0 0 0 / .75), inset 0 -1px 2px rgb(242 237 224 / .04);
 }
-html #futa04-box #futa04-actions > #futa04-help-button[aria-pressed='true'] .guide-q { color: #ffe1a7; transform: translateY(1px); }
+html #futa04-box #futa04-actions > #futa04-help-button[aria-pressed='true'] .guide-q {
+  color: #ffe1a7; transform: translateY(1px); filter: drop-shadow(0 0 4px rgb(255 205 120 / .55));
+}
 `;
 
 /** "?" drawn in the bulb's own stroke, size and weight. */
@@ -136,15 +143,24 @@ export const mountHowToGuide = (hooks: HowToGuideHooks) => {
       if (dirty) { dirty = false; pushAccount(); }
     });
   };
-  // Join the server's copy once: a player who opened a lesson on another phone sees it as seen.
-  void hooks.account?.load().then((remote) => {
+  // The server copy is bookkeeping, never urgent: a write waits a few quiet seconds (and merges with
+  // any other in that window), so the guide never adds a request at the moment a board opens and
+  // the duel's own requests are racing for the line (online-presence-journey measures exactly that).
+  let pushTimer = 0;
+  const pushSoon = () => {
+    if (!hooks.account || pushTimer) return;
+    pushTimer = window.setTimeout(() => { pushTimer = 0; pushAccount(); }, GUIDE_SYNC_DELAY_MS);
+  };
+  // Join the server's copy once, after boot has settled: a player who opened a lesson on another
+  // phone sees it as seen.
+  if (hooks.account) window.setTimeout(() => void hooks.account?.load().then((remote) => {
     if (!remote) { if (progress.seen.length || progress.games) pushAccount(); return; }
     const joined = mergeGuideProgress(progress, parseGuideProgress(remote));
     const changed = joined.seen.length !== progress.seen.length || joined.games !== progress.games;
     progress = joined; write();
     if (changed || joined.seen.length !== remote.seen.length || joined.games !== remote.games) pushAccount();
     update();
-  }, () => undefined);
+  }, () => undefined), GUIDE_SYNC_DELAY_MS);
 
   // ---------- the decisions, read from the pure watcher ----------
   const seen = () => new Set<string>(progress.seen);
@@ -190,7 +206,7 @@ export const mountHowToGuide = (hooks: HowToGuideHooks) => {
     keep = hooks.litSelectors(win.lit);
     progress = markGuideSeen(progress, beat);
     write();
-    pushAccount();
+    pushSoon();
     hooks.openWindow(win);
     hooks.bulb()?.setAttribute('aria-pressed', 'true');
     document.addEventListener('pointerdown', onPointerDown, true);
@@ -259,7 +275,7 @@ export const mountHowToGuide = (hooks: HowToGuideHooks) => {
       if (!guideActive({ setting: hooks.setting(), blitz: hooks.blitz() })) return;
       progress = { ...progress, games: progress.games + 1 };
       write();
-      pushAccount();
+      pushSoon();
       update();
     },
     /** A game reached its end on this device. */

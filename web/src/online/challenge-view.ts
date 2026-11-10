@@ -5,7 +5,14 @@ import { CHALLENGE } from './challenge-copy.js';
  * The challenge layer's pure arithmetic and state machine. Kept out of `world-view.ts` so the ring's
  * drain, the low-time threshold and the sheet's one-primary state are asserted without a browser.
  */
-export const CHALLENGE_LOW_MS = 6 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+/**
+ * The hot step: under 3 h the timer turns red and the ring breathes (owner, 2026-11-10: "challenge
+ * timer is unmistakable"; was 6 h).
+ */
+export const CHALLENGE_LOW_MS = 3 * HOUR_MS;
+/** The warm step: from 12 h the timer turns from calm to warm amber, and the ring starts to drain. */
+export const CHALLENGE_RING_MS = 12 * HOUR_MS;
 
 /**
  * How many chips the Territory rail shows at once. Past this the rail says "+N MORE" rather than
@@ -13,7 +20,11 @@ export const CHALLENGE_LOW_MS = 6 * 60 * 60 * 1000;
  */
 export const CHALLENGE_RAIL_MAX = 8;
 
-/** How much of this row's answer window is LEFT, 1 → 0. A new challenge spans 48 h; an older row keeps the span it was given. Nothing but a pending challenge has a ring. */
+/**
+ * How much of the ring is LEFT, 1 → 0. It measures the LAST 12 h of the answer window: full while
+ * more is left, then a visible drain to the deadline (owner, 2026-11-10: a 48 h ring barely moved
+ * for a whole day). Nothing but a pending challenge has a ring.
+ */
 export const ringFraction = (
   challenge: Pick<WorldChallengeWire, 'createdAt' | 'expiresAt' | 'status'>,
   now: number,
@@ -21,14 +32,29 @@ export const ringFraction = (
   if (challenge.status !== 'pending') return 0;
   const span = challenge.expiresAt - challenge.createdAt;
   if (!(span > 0)) return 0;
-  return Math.max(0, Math.min(1, (challenge.expiresAt - now) / span));
+  return Math.max(0, Math.min(1, (challenge.expiresAt - now) / Math.min(span, CHALLENGE_RING_MS)));
 };
 
-/** Under six hours the ring starts its slow breath (the design's one new motion). */
+/** The timer's colour step: calm above 12 h, warm down to 3 h, hot under 3 h. */
+export type ChallengeUrgency = 'calm' | 'warm' | 'hot';
+export const challengeUrgency = (leftMs: number): ChallengeUrgency =>
+  leftMs > CHALLENGE_RING_MS ? 'calm' : leftMs > CHALLENGE_LOW_MS ? 'warm' : 'hot';
+
+/** Under three hours the ring breathes (the hot step), never once the window has closed. */
 export const isLow = (challenge: Pick<WorldChallengeWire, 'expiresAt' | 'status'>, now: number): boolean => {
   if (challenge.status !== 'pending') return false;
   const left = challenge.expiresAt - now;
   return left > 0 && left <= CHALLENGE_LOW_MS;
+};
+
+/**
+ * The time printed ON the tile, in the map's LED digits: "18h", then "42m" in the last hour.
+ * Floored like every countdown here, so it never claims time that is not left.
+ */
+export const tileTimeLabel = (ms: number): string => {
+  if (!(ms > 0)) return '0m';
+  const minutes = Math.floor(ms / 60_000);
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`;
 };
 
 /** "43 min", "22 h", "3 d" — the one time label used on the map, the sheet and the list.

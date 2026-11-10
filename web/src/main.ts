@@ -2105,7 +2105,8 @@ async function mountPlayerEnhancements() {
         if (glassSurface.isOpen()) { glassSurface.close(); intelState = null; }
         const lit = litTarget(win.lit, [board.rootKey(HUMAN), board.rootKey(BOT)]);
         glassSurface.tutorial(win.title, 0, lit.selectors, {
-          shape: lit.shape, outline: true, stepKey: `guide-${win.beat}`, why: win.why, arrow: lit.selectors.length > 0,
+          // the levels' own light at their lighter "guide" dim: asked-for help, the board stays readable
+          shape: lit.shape, outline: true, tier: 'guide', stepKey: `guide-${win.beat}`, why: win.why, arrow: lit.selectors.length > 0,
           reduceMotion: settings.reduceMotion, buttons: { previous: false, next: false },
           ...(win.bloomDemo ? { bloomDemo: true } : {}),
         });

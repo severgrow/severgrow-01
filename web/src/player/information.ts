@@ -411,7 +411,7 @@ html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #moves > :
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) {
   opacity: .88;
   outline-color: rgba(223,105,77,.35) !important;
-  box-shadow: 0 0 0 1px rgba(222,110,83,.29), 0 0 9px 1px rgba(186,66,47,.24), 0 5px 15px rgba(20,11,10,.34);
+  box-shadow: 0 0 3px rgba(222,110,83,.29), 0 0 9px 1px rgba(186,66,47,.24), 0 5px 15px rgba(20,11,10,.34);
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
 /* The lesson's suggested card is lifted out of the fan: still, one clean shadow, no green edge.
@@ -426,7 +426,7 @@ html.futa04-information #hand .card.tutorial-target-card {
     0 0 20px rgba(233,216,173,.14) !important;
 }
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked {
-  opacity: 1; box-shadow: 0 0 0 1px rgba(222,110,83,.35), 0 0 11px 1px rgba(186,66,47,.26) !important;
+  opacity: 1; box-shadow: 0 0 3px rgba(222,110,83,.35), 0 0 11px 1px rgba(186,66,47,.26) !important;
 }
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #hand .card { animation: none !important; }
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #moves .futa04-combination { animation: none !important; }
