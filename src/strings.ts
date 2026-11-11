@@ -462,10 +462,21 @@ export const RESULT = Object.freeze({
   /** The quiet way out of an offline result. (An online result uses `ONLINE.menuButton`.) */
   backToMenu: 'Back to menu',
   /**
-   * Under the Seeds payout (owner, 2026-10-30): the one way from the result to Territory. It
-   * belongs WITH the payout, so it is only on a card that shows a payout line.
+   * THE FOUR KEYS (owner brief, 2026-11-11). The card leads with the one forward action, and the
+   * result's details live one tap away in their own window: this is that window's key.
    */
   growTiles: 'Grow tiles on the planet',
+  details: 'Result',
+  /**
+   * THE PLANET PANE on the card: the resting hint, and its one-off states. The owner's words
+   * (2026-11-11: "Tap a tile") — the richer owner/value line belongs to the tile bar, not to the
+   * resting hint. The word for the currency is NOT here (src/strings.ts stays free of it); the pane
+   * takes those lines from web/src/online/seed-icon.ts, beside every other Seeds line.
+   */
+  planetHint: 'Tap a tile',
+  planetLoading: 'Finding your place in the world…',
+  planetUnavailable: 'The world could not load right now.',
+  planetRetry: 'Try again',
 });
 
 /**

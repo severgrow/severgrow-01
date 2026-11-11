@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { SEEDS_INTRO } from '../src/online/seed-icon.js';
+import { PLANET_TEACH } from '../src/online/seed-icon.js';
 import { FINAL_LESSON } from '../src/lessons/final.js';
 import { settledSeedsMessage } from '../src/ui/seed-reveal.js';
 
@@ -72,15 +72,16 @@ function reveals(): string {
   return read('../src/ui/seed-reveal.ts');
 }
 
-describe('the won card explains Seeds and Territory', () => {
-  it('in two lines, with an Open Territory key in place of the second key', () => {
-    expect(SEEDS_INTRO.earned).toBe('Seeds are earned by winning.');
-    expect(SEEDS_INTRO.spend).toBe('Spend 100 to claim a tile of Territory on the world map.');
-    expect(SEEDS_INTRO.open).toBe('Open Territory');
-    expect(html).toContain('<p id="go-territory" class="go-territory" hidden>');
-    expect(html).toContain('<button id="go-territory-open" class="btn ghost" type="button" hidden>');
-    expect(main).toMatch(/const territoryIntro = !!taught && taught\.level === FINAL_LESSON\.level && won/);
-    expect(main).toMatch(/other\.hidden = lead === 'back-to-campaign' \|\| lead === 'back-to-tutorial' \|\| territoryIntro;/);
-    expect(main).toMatch(/bind\('go-territory-open', \(\) => \{\n  hideGameOver\(\);\n  showScreen\('menu'\);\n  onlineLobbyCtl\?\.openWorld\('menu'\);/);
+describe('the won level 10 card explains THE PLANET in situ', () => {
+  it('keeps the two-line explanation on the card, over the live map (owner brief, 2026-11-11)', () => {
+    expect(PLANET_TEACH.title).toBe('THE PLANET');
+    expect(PLANET_TEACH.lines).toHaveLength(2);
+    expect(PLANET_TEACH.lines.join(' ')).toMatch(/season/);
+    expect(PLANET_TEACH.lines.join(' ')).toMatch(/prizes/);
+    expect(html).toContain('<div id="go-world-teach" class="go-world-teach" hidden></div>');
+    expect(main).toMatch(/syncEndgamePlanet\(planetCard, !!taught && taught\.level === FINAL_LESSON\.level && won\);/);
+    // The separate lesson window is gone: it covered the map it was describing.
+    expect(html).not.toContain('go-territory');
+    expect(main).not.toMatch(/go-territory|PLANET_INTRO|planetIntro/);
   });
 });
