@@ -135,7 +135,8 @@ td:nth-child(3) { font-family: var(--mono); white-space: nowrap; }
 
 /* Wide screens: the phone on the left, the controls beside it. */
 @media (min-width: 1300px) {
-  #pane-board, #pane-cards { grid-template-columns: auto minmax(280px, 1fr); align-items: start; }
-  #pane-board .phone-wrap, #pane-cards .phone-wrap { grid-row: 1 / span 6; }
-  #pane-cards .card-gallery, #pane-cards > h2 { grid-column: 2; }
+  #pane-board { grid-template-columns: auto minmax(280px, 1fr); align-items: start; }
+  #pane-board .phone-wrap { grid-row: 1 / span 6; }
 }
+.pane-cards { display: grid; gap: 8px; }
+.pane-cards[hidden], .generator[hidden] { display: none; }

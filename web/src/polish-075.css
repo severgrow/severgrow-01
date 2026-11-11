@@ -53,7 +53,8 @@ html.v075 #menu .menu-territory-label { font-size: inherit !important; letter-sp
 /* Menu keys wear no frame (owner, 2026-11-11: "for all menu buttons also get rid of contour frame -
    leave only on the suggested glowed button"). The 1px stays transparent so no key moves. */
 html.v075 :is(#menu,#play-menu,#levels,#campaign,#online-hub,#online-waiting,#online-join,#sheet-menu)
-  :is(.btn:not(.link):not(.suggest), .difficulty-tile, .campaign-tile:not([data-state='current'])) {
+  :is(.btn:not(.link):not(.suggest), .difficulty-tile, .campaign-tile:not([data-state='current'])),
+html.v075 :is(.world-challenge-primary, .world-challenge-secondary, .world-invitation-primary, .world-invitation-secondary):not(.link):not(.suggest) {
   border-color: transparent !important;
 }
 html.v075 :is(#menu,#play-menu) .btn.suggest::before,

@@ -121,7 +121,9 @@ try {
   check((await page.locator('#slot-ground').getAttribute('data-status')) === 'done', 'the reopened pack has the uploaded ground');
   // the reopened pack drawn by the game's own SkinBoardView: every file it asked for was there
   await page.getByRole('tab', { name: 'Board' }).click();
-  await page.waitForTimeout(2500);
+  // the board picks its tier once it is on screen (slower on CI machines): wait for it, not a clock
+  await page.waitForFunction(() => !!(window as never as { __artLab: { overlay: { view: { assets: { tier: string | null } } | null } } }).__artLab.overlay.view?.assets.tier, undefined, { timeout: 30_000 });
+  await page.waitForTimeout(800);
   const missing = await page.evaluate(() => {
     const v = (window as never as { __artLab: { overlay: { view: { assets: { bad: Set<string>; tier: string | null } } | null } } }).__artLab.overlay.view;
     return v ? { bad: [...v.assets.bad], tier: v.assets.tier } : null;

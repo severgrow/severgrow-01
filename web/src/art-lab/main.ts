@@ -127,21 +127,26 @@ const generator = h('div', { class: 'generator', 'aria-label': 'Real games by bo
 );
 scrub.addEventListener('input', () => go(moves[Number(scrub.value)] ?? 0, false));
 
+// Board and Cards share ONE live area: the phone frame never moves in the page (moving an iframe
+// reloads the game inside it); only the controls beside it change with the tab.
 const boardPane = h('div', { class: 'pane', id: 'pane-board', role: 'tabpanel' });
-const cardsPane = h('div', { class: 'pane', id: 'pane-cards', role: 'tabpanel', hidden: true });
+const cardsPane = h('div', { class: 'pane-cards', id: 'pane-cards' });
 const planetPane = h('div', { class: 'pane', id: 'pane-planet', role: 'tabpanel', hidden: true });
 const specPane = h('div', { class: 'pane', id: 'pane-spec', role: 'tabpanel', hidden: true });
-Object.assign(panes, { board: boardPane, cards: cardsPane, planet: planetPane, spec: specPane });
+Object.assign(panes, { board: boardPane, planet: planetPane, spec: specPane });
+boardPane.append(phoneWrap, viewTools, generator, cardsPane);
 const showTab = (id: string) => {
-  for (const [k, p] of Object.entries(panes)) p.hidden = k !== id;
+  const live = id === 'board' || id === 'cards';
+  for (const [k, p] of Object.entries(panes)) p.hidden = k === 'board' ? !live : k !== id;
+  generator.hidden = id !== 'board';
+  cardsPane.hidden = id !== 'cards';
   for (const b of tabs.querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.tab === id));
-  // the phone frame serves Board and Cards; it moves to the open one
-  if (id === 'board') boardPane.prepend(phoneWrap, viewTools, generator);
-  if (id === 'cards') cardsPane.prepend(phoneWrap, viewTools);
   if (id === 'planet') planet.show();
   else planet.hide();
   stage.dataset.tab = id;
   requestAnimationFrame(fitPhone);
+  // a board built while its tab was hidden measures itself once it shows (it picks its tier then)
+  if (id === 'board' || id === 'cards') requestAnimationFrame(() => dispatchEvent(new Event('resize')));
 };
 for (const [id, label] of [['board', 'Board'], ['cards', 'Cards'], ['planet', 'Planet'], ['spec', 'Spec sheet']] as const) {
   tabs.append(h('button', { type: 'button', role: 'tab', 'data-tab': id, onclick: () => showTab(id), text: label }));
@@ -150,7 +155,7 @@ const cardGallery = h('div', { class: 'card-gallery' });
 cardsPane.append(h('h2', { text: 'Every card face' }), cardGallery);
 const planet = mountPlanet(planetPane, () => (comparing ? today : art));
 mountSpec(specPane);
-stage.append(tabs, boardPane, cardsPane, planetPane, specPane);
+stage.append(tabs, boardPane, planetPane, specPane);
 
 // colour-blindness views (Machado 2009, full strength): can players still tell the two sides apart?
 const filters = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

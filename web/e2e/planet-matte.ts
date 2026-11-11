@@ -44,7 +44,12 @@ try{
   assert.deepEqual(boot.animations,[1000],'one coherent ~1s first reveal');
   await p.waitForTimeout(1200);
   const keys=await p.evaluate(fn=>['menu-play','menu-world','menu-settings'].map(id=>(0,eval)(`(${fn})`)(document.getElementById(id))),material.toString());
-  assert.deepEqual(keys[0],keys[1],'PLAY has the same material as THE PLANET');assert.deepEqual(keys[1],keys[2],'Settings shares the same key');
+  // OWNER CHANGED THE RULE (2026-11-11: "for all menu buttons also get rid of contour frame - leave only
+  // on the suggested glowed button"): the same material everywhere; only PLAY (suggested) keeps its line.
+  const noEdge=(k:unknown[])=>k.filter((_,i)=>i!==1);
+  assert.deepEqual(noEdge(keys[0]!),noEdge(keys[1]!),'PLAY has the same material as THE PLANET');assert.deepEqual(keys[1],keys[2],'Settings shares the same key');
+  assert.equal(keys[1]![1],'rgba(0, 0, 0, 0)','THE PLANET wears no frame');
+  assert.notEqual(keys[0]![1],'rgba(0, 0, 0, 0)','the suggested PLAY keeps its line');
   assert(String(keys[0]![6]).includes('blur('),'matte menu keys restore the shared backdrop blur');
   const halos=await p.evaluate(()=>['menu-play','menu-world'].map(id=>getComputedStyle(document.getElementById(id)!).boxShadow));
   assert.notEqual(halos[0],halos[1],'PLAY uses the existing quiet recommendation glow');
@@ -64,13 +69,14 @@ try{
   await p.screenshot({path:`${shots}/menu-${width}.png`});
   await p.locator('#menu-play').click();
   const playKeys=await p.evaluate(fn=>['menu-campaign','menu-new'].map(id=>(0,eval)(`(${fn})`)(document.getElementById(id))),material.toString());
-  assert.deepEqual(playKeys[0],playKeys[1],'LEVEL and PRACTICE MATCH share the same material');
+  assert.deepEqual(noEdge(playKeys[0]!),noEdge(playKeys[1]!),'LEVEL and PRACTICE MATCH share the same material');
+  assert.equal(playKeys[1]![1],'rgba(0, 0, 0, 0)','PRACTICE MATCH wears no frame (only the suggested LEVEL keeps its line)');
   await p.screenshot({path:`${shots}/play-${width}.png`});
   await p.waitForFunction(()=>getComputedStyle(document.getElementById('play-menu')!).opacity==='1'&&!document.querySelector('.planet-canvas'));
   await p.screenshot({path:`${shots}/play-rest-${width}.png`});
   await p.locator('#menu-new').click();
   const difficulties=await p.locator('.difficulty-tile').evaluateAll((els,fn)=>els.map(el=>(0,eval)(`(${fn})`)(el)),material.toString());
-  for(const key of difficulties)assert.deepEqual(key,keys[0],'difficulty uses the same material');
+  for(const key of difficulties){assert.deepEqual(noEdge(key),noEdge(keys[0]!),'difficulty uses the same material');assert.equal(key[1],'rgba(0, 0, 0, 0)','difficulty keys wear no frame');}
   await p.screenshot({path:`${shots}/difficulty-${width}.png`});
   await p.waitForFunction(()=>getComputedStyle(document.getElementById('levels')!).opacity==='1');
   await p.screenshot({path:`${shots}/difficulty-rest-${width}.png`});
