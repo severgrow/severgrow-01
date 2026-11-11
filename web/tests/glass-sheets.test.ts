@@ -105,7 +105,9 @@ describe('the install invitation is a dialog on the glass, not a bottom sheet (o
   });
 
   it('the page behind it is veiled harder than a sheet is, because it opens over a finished game', () => {
-    expect(block).toMatch(/backdrop-filter: blur\(20px\) brightness\(0\.5\) saturate\(0\.9\);/);
+    // Owner, 2026-11-11: "blur the background behind it way more" — one shared, much deeper veil.
+    expect(block).toMatch(/backdrop-filter: var\(--invite-veil\);/);
+    expect(css).toMatch(/--invite-veil: blur\(44px\) brightness\(0\.34\) saturate\(0\.6\);/);
   });
 
   it('a short screen tightens the rhythm rather than turning the plate into a scroller', () => {

@@ -87,7 +87,7 @@ describe('keep-progress opens only at the end of a game, over a blurred screen (
   });
   it('is a centred dialog over a blurred scrim, not a strip at the bottom', () => {
     expect(src).toMatch(/#keep-progress \{[^}]*position: fixed; inset: 0;/);
-    expect(src).toMatch(/#keep-progress::before \{[^}]*backdrop-filter: blur\(/);
+    expect(src).toMatch(/#keep-progress::before \{[^}]*backdrop-filter: var\(--invite-veil, blur\(44px\)/);
     expect(src).not.toMatch(/setTimeout\(hide, KEEP_PROGRESS_DWELL_MS\)/);
   });
 });

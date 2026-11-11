@@ -5877,7 +5877,10 @@ function lessonDecide(e: Event): boolean {
     }
     return false;
   }
-  const answer = tapAnswer(session.state, session.sel.card, tap, guided ? beat?.lit ?? null : null, locked, !!lessonPlacing());
+  // The Throw pile throws the waiting card; with none waiting it would do nothing, so say why.
+  const throwsNothing = tap.t === 'discard' && session.state.phase === 'DISCARD'
+    && !throwPileAction(session.state.phase, session.pending, session.legal);
+  const answer = throwsNothing ? LESSON.pickFirst : tapAnswer(session.state, session.sel.card, tap, guided ? beat?.lit ?? null : null, locked, !!lessonPlacing());
   if (!answer) return false;
   lessonSay(answer, x, y);
   lessonWrongTap();
