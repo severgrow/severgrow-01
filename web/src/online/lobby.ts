@@ -297,3 +297,20 @@ export const matchStatusLabel = (status: MatchStatus): string => {
   if (status === 'active') return ONLINE.statusActive;
   return ONLINE.statusFinished;
 };
+
+/**
+ * The game a parked search was CONTINUED into (owner, 2026-11-11): when the other searcher already
+ * shares an open game with this player, the server ends this search and touches that game. So the
+ * waiting page, seeing its search end, opens the active game touched since the search began (on the
+ * server's clock), or null when there is none (then it goes home as before).
+ */
+export const continuedMatchAfterSearch = (
+  matches: readonly { matchId: string; status: string; lastActivityAt: number }[],
+  searchStartedServerMs: number,
+  parkedMatchId: string,
+): string | null => {
+  const hit = matches
+    .filter((m) => m.status === 'active' && m.matchId !== parkedMatchId && m.lastActivityAt >= searchStartedServerMs - 1_000)
+    .sort((a, b) => b.lastActivityAt - a.lastActivityAt)[0];
+  return hit?.matchId ?? null;
+};

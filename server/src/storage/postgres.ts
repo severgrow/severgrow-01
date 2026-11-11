@@ -729,6 +729,37 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         return { ok: true, match, seat, paired: true };
       }
 
+      // 3b. CONTINUE (owner, 2026-11-11): the oldest searcher waiting already shares an open game
+      // with this player. Retire that search (scoped delete, status guard) and hand back their
+      // existing game, touched so the other page finds it at the top of its list.
+      const cont = await client.query(
+        `select m.id as parked_id, shared.id as shared_id, mine.seat as my_seat
+           from matches m
+           join match_participants p on p.match_id = m.id
+           join match_participants theirs on theirs.player_id = p.player_id
+           join match_participants mine on mine.match_id = theirs.match_id and mine.player_id = $1
+           join matches shared on shared.id = theirs.match_id
+          where m.status = 'waiting' and m.open_queue = true
+            and p.player_id <> $1
+            and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
+            and shared.status <> 'finished' and shared.id <> m.id
+          order by m.created_at asc, shared.updated_at desc
+          limit 1
+          for update of m skip locked`,
+        [input.playerId],
+      );
+      if (cont.rows[0]) {
+        const parkedId = asString(cont.rows[0].parked_id);
+        const sharedId = asString(cont.rows[0].shared_id);
+        await client.query("delete from matches where id = $1 and status = 'waiting'", [parkedId]);
+        const touched = await client.query('update matches set updated_at = $2 where id = $1 returning *', [sharedId, input.now]);
+        await client.query('commit');
+        if (touched.rows[0]) {
+          return { ok: true, match: rowToMatch(touched.rows[0]), seat: asNumber(cont.rows[0].my_seat) === 1 ? 1 : 0, paired: true, continued: true };
+        }
+        return { ok: false, code: 'MATCH_FULL', reason: 'The shared game moved on; try again.' };
+      }
+
       // 4. Nobody is waiting: park the player's search.
       try {
         await client.query(INSERT_MATCH_SQL, matchInsertValues({ ...input.parked, openQueue: true }));

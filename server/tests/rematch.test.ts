@@ -165,20 +165,39 @@ describe('Your matches tells a player a rematch is waiting for them', () => {
   });
 });
 
-describe('Find Opponent never pairs two players who already share an open game', () => {
-  it('skips that search and parks instead, while a different searcher is paired', async () => {
+// OWNER CHANGED THE RULE (2026-11-11: "find an opponent pressed on 2 devices does not connect"): two
+// players who already share an open game are no longer left waiting for each other forever. The
+// second searcher goes straight into their EXISTING game (one game per pair still holds) and the
+// first one's search ends, so their page opens that game too. A fresh opponent still comes first.
+describe('Find Opponent with someone you already have a game with continues that game', () => {
+  it('sends the second searcher into the shared game and ends the first search', async () => {
+    const { service } = harness();
+    const a = await guest(service, 'Alder');
+    const b = await guest(service, 'Birch');
+    const shared = await service.createMatch(a.player);
+    await service.joinMatch(b.player, shared.match.inviteCode!);
+    const parked = await service.findOpponent(a.player);
+    expect(parked.paired).toBe(false);
+    const bSearch = await service.findOpponent(b.player);
+    expect(bSearch.paired).toBe(true);
+    expect(bSearch.match.matchId).toBe(shared.match.matchId); // their one game, not a second one
+    // A's search is over (no longer in the queue), and the shared game is the freshest in A's list
+    await expect(service.getMatch(a.player, parked.match.matchId)).rejects.toThrow();
+    const listed = (await service.listMyMatches(a.player)).filter((m) => m.status !== 'finished');
+    expect(listed.map((m) => m.matchId)).toEqual([shared.match.matchId]);
+  });
+
+  it('a fresh opponent waiting in the queue still comes first', async () => {
     const { service } = harness();
     const a = await guest(service, 'Alder');
     const b = await guest(service, 'Birch');
     const c = await guest(service, 'Cedar');
     const shared = await service.createMatch(a.player);
     await service.joinMatch(b.player, shared.match.inviteCode!);
-    const parked = await service.findOpponent(a.player);
-    expect(parked.paired).toBe(false);
+    await service.findOpponent(a.player); // A waits (shares a game with B)
+    const cParked = await service.findOpponent(c.player);
+    expect(cParked.paired).toBe(true); // C and A have no game: they are paired at once
     const bSearch = await service.findOpponent(b.player);
-    expect(bSearch.paired).toBe(false); // not paired with A again
-    expect(bSearch.match.matchId).not.toBe(parked.match.matchId);
-    const cSearch = await service.findOpponent(c.player);
-    expect(cSearch.paired).toBe(true); // C takes the oldest search
+    expect(bSearch.paired).toBe(false); // nobody else waiting: B parks
   });
 });

@@ -295,6 +295,30 @@ export class MemoryStorage implements Storage {
       return { ok: true, match: copy(activated), seat, paired: true };
     }
 
+    // 3b. CONTINUE (owner, 2026-11-11): the only searcher waiting is someone this player already
+    // shares an open game with. Never a second game for the pair, and never two people waiting for
+    // each other forever: retire that search and hand back their existing game, freshly touched so
+    // the other page (whose search just ended) finds it at the top of its list.
+    for (const match of waiting) {
+      const parts = this.participants.get(match.id) ?? [];
+      if (parts.length !== 1 || parts.some((p) => p.playerId === input.playerId)) continue;
+      const opener = parts[0]!.playerId;
+      const shared = [...this.matches.values()]
+        .filter((m) => m.id !== match.id && m.status !== 'finished'
+          && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
+          && (this.participants.get(m.id) ?? []).some((p) => p.playerId === opener))
+        .sort((x, y) => y.updatedAt - x.updatedAt)[0];
+      if (!shared) continue;
+      this.matches.delete(match.id);
+      this.inviteIndex.delete(match.inviteCode);
+      this.participants.delete(match.id);
+      this.moves.delete(match.id);
+      const touched: MatchRecord = { ...shared, updatedAt: input.now };
+      this.matches.set(shared.id, copy(touched));
+      const seat = (this.participants.get(shared.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
+      return { ok: true, match: copy(touched), seat, paired: true, continued: true };
+    }
+
     // 4. Nobody is waiting: park the player's search.
     if (this.inviteIndex.has(input.parked.inviteCode)) {
       return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };

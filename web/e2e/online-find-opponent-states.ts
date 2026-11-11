@@ -131,7 +131,9 @@ try {
   const searchingTitle = await a.textContent('#online-waiting-title');
   check('parks on a searching screen', (await visible(a, 'online-waiting')) === true);
   check('searching title is honest', (searchingTitle ?? '').includes('Finding an opponent'), searchingTitle ?? '');
-  check('three actions are immediately available', (await visible(a, 'online-search-options')) === true);
+  // OWNER'S RULE (2026-11-08, restored 2026-11-11 after a 2026-11-09 pass dropped it): the offer
+  // waits PARKED_OFFER_MS (5 s; this walk's build shortens it) — the search gets a fair chance first.
+  check('no offer before the parked window', (await visible(a, 'online-search-options')) === false);
   check('Back is the only search cancel control', !(await visible(a, 'online-cancel-match')));
   await a.screenshot({ path: `${OUT}find-opponent-searching-390x844.png` });
 

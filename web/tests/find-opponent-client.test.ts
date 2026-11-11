@@ -149,3 +149,19 @@ describe('parked-search copy (punchy standard)', () => {
     expect(ONLINE.worldInviteBody.length).toBeGreaterThan(8);
   });
 });
+
+// OWNER, 2026-11-11 ("find an opponent pressed on 2 devices does not connect"): when the other
+// searcher already shares a game with this player, the server ends THIS search and continues that
+// game. The waiting page then opens the game that was touched since its search began.
+import { continuedMatchAfterSearch } from '../src/online/lobby';
+describe('the waiting page finds the game its search was continued into', () => {
+  const row = (matchId: string, status: string, lastActivityAt: number) => ({ matchId, status, lastActivityAt }) as never;
+  it('picks the active game touched since the search began, newest first', () => {
+    const list = [row('old', 'active', 100), row('cont', 'active', 5_000), row('done', 'finished', 9_000), row('park', 'waiting', 6_000)];
+    expect(continuedMatchAfterSearch(list, 4_000, 'park')).toBe('cont');
+  });
+  it('nothing touched since the search began: no game (the page goes home as before)', () => {
+    expect(continuedMatchAfterSearch([row('old', 'active', 100)], 4_000, 'park')).toBeNull();
+    expect(continuedMatchAfterSearch([], 4_000, 'park')).toBeNull();
+  });
+});

@@ -131,7 +131,9 @@ export type Fail = { ok: false; code: string; reason: string };
  * repeated tap is idempotent and never creates a second entry).
  */
 export type OpenQueueSeat =
-  | { ok: true; match: MatchRecord; seat: Player; paired: boolean }
+  | { ok: true; match: MatchRecord; seat: Player; paired: boolean;
+      /** The searcher met someone they already share an open game with: `match` is THAT game. */
+      continued?: boolean }
   | Fail;
 
 /** What the rules layer decided for one submitted action, computed inside the atomic section. */
@@ -265,7 +267,11 @@ export interface Storage {
    *   2. else the oldest `waiting` open-queue match with one free seat (FIFO) — the player is
    *      seated in the free seat and the match is activated in the same step, so two simultaneous
    *      searchers can never both claim it or both end up waiting;
-   *   3. else `parked` is inserted and the player is seated in seat 0.
+   *   3. else, when the only waiting searcher already shares an open game with the player (owner,
+   *      2026-11-11: one game per pair must not leave them waiting for each other forever), that
+   *      search is retired, the shared game's `updatedAt` is set to now, and it is returned with
+   *      `paired: true, continued: true`;
+   *   4. else `parked` is inserted and the player is seated in seat 0.
    *
    * `maxOpenMatches` is the per-player cap on unfinished matches; a player at the cap is refused
    * (case 2 and 3) rather than silently parked or matched. `expiresAt` on `parked` is the

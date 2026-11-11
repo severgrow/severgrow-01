@@ -6,7 +6,7 @@ import { ONLINE, PLANET, REPLAY } from '../../../src/strings.js';
 import { FEATURES } from '../channel.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
-import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled } from './config.js';
+import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
 import { createLobbyActionGuard, lobbyActionStillCurrent } from './lobby-action.js';
 import { pollDue } from './poll-gate.js';
 import {
@@ -44,6 +44,8 @@ import {
   friendlyJoinError,
   matchPollVerdict,
   inviteLink,
+  continuedMatchAfterSearch,
+  isSearchParked,
   isWellFormedInviteCode,
   normalizeInviteCodeInput,
   hubPollMs,
@@ -974,13 +976,21 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
   };
 
+  let offerTimer: ReturnType<typeof setTimeout> | null = null;
   const renderSearch = () => {
     if (!search) return;
     setWaitingTitle(ONLINE.searchTitle, false);
     $('online-waiting-body').textContent = ONLINE.searchBody;
     paintSearchOffer();
+    // OWNER'S RULE (2026-11-08): the offer (Practice match / Level / Invite a friend) waits 5 s, so
+    // the search gets a fair chance before the player is steered away from it.
     const options = document.getElementById('online-search-options');
-    if (options) options.hidden = false;
+    const waited = now() - search.startedAt;
+    const parked = isSearchParked(waited, parkedOfferMs());
+    if (options) options.hidden = !parked;
+    // One redraw when the window ends (the 2 s poll does not repaint this screen).
+    if (offerTimer) { clearTimeout(offerTimer); offerTimer = null; }
+    if (!parked) offerTimer = setTimeout(() => { offerTimer = null; renderSearch(); }, parkedOfferMs() - waited + 20);
     syncLooking();
   };
 
@@ -993,6 +1003,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   const stopSearch = () => {
     stopSearchTimer();
+    if (offerTimer) { clearTimeout(offerTimer); offerTimer = null; }
     search = null;
     setWaitingMode('invite');
     syncLooking();
@@ -1073,6 +1084,32 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     notice('online-hub-notice', line);
   };
 
+  /**
+   * The search ended without this player stopping it: the other searcher may already share an open
+   * game with them, and the server continued THAT game (owner, 2026-11-11). Open it, exactly as a
+   * fresh pairing opens (a practice game in progress gets the "opponent found" prompt). False when
+   * there is no such game, so the caller goes home as before.
+   */
+  const openContinuedGame = async (current: { token: string; matchId: string; startedAt: number }): Promise<boolean> => {
+    try {
+      const list = await client.listMatches(current.token);
+      const id = continuedMatchAfterSearch(list.matches, current.startedAt + serverOffset, current.matchId);
+      if (!id || search?.matchId !== current.matchId) return false;
+      const res = await client.openView(current.token, id);
+      if (res.player.status !== 'active') return false;
+      const wasComputer = computerGameActive;
+      stopSearch();
+      computerGameActive = false;
+      syncLooking();
+      void reloadMatches();
+      if (wasComputer) openMatchedPrompt(current.token, res.player);
+      else launchDuel(current.token, res.player, false);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const pollSearch = async () => {
     if (!search) return;
     // Same gate as the waiting screen: a hidden tab asks nothing and a stuck request is not stacked.
@@ -1096,6 +1133,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
           return;
         }
         case 'cleared':
+          if (await openContinuedGame(current)) return;
           await clearParkedSearch(ONLINE.searchCancelled);
           return;
         default:
@@ -1105,6 +1143,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       if (search?.matchId !== current.matchId) return;
       const code = error instanceof DuelError ? error.code : null;
       if (matchPollVerdict(null, code) === 'cleared') {
+        if (await openContinuedGame(current)) return;
         await clearParkedSearch(ONLINE.searchCancelled);
         return;
       }
