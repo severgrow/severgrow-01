@@ -4,6 +4,7 @@
 import { chromium } from 'playwright-core';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import { servePreview } from './helpers/preview-port.js';
+import { pressContext } from './helpers/context-key.js';
 
 const OUT = process.env.FILM_DIR ?? '/tmp/boomerang-film';
 const { server, url: BASE } = await servePreview(4299, { logLevel: 'silent' });
@@ -16,7 +17,7 @@ try {
   await page.waitForSelector('#deck.ready');
   await page.evaluate(() => document.getElementById('deck')!.click());
   await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'ACT' && !(window as any).__severgrow.busy());
-  await page.locator('#smart-context').click();
+  await pressContext(page, 'skip');
   await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'DISCARD' && !(window as any).__severgrow.busy());
   const st = await page.evaluate(() => (window as any).__severgrow.state());
   const action = legalActions(viewFor(st, 0)).find((a) => a.t === 'Discard')!;

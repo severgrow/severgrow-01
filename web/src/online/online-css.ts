@@ -91,7 +91,8 @@ export const ONLINE_CSS = `
   background: var(--dark-glass, rgba(8, 10, 10, .42));
   -webkit-backdrop-filter: var(--dark-glass-blur, blur(7.4px) saturate(1.05));
   backdrop-filter: var(--dark-glass-blur, blur(7.4px) saturate(1.05));
-  border: 1px solid rgb(232 221 197 / .12);
+  /* No frame (owner, 2026-11-11: "for all menu buttons also get rid of contour frame"). */
+  border: 1px solid transparent;
   border-radius: 10px;
   cursor: pointer;
 }
@@ -264,10 +265,10 @@ export const ONLINE_CSS = `
   width: 44px; height: 44px; min-width: 44px; padding: 0;
   display: grid; place-items: center; border-radius: 8px; cursor: pointer;
   color: var(--control-ivory, #f5edda); background: rgb(14 15 16 / .62);
-  border: 1px solid rgb(232 221 197 / .16); box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
+  border: 1px solid transparent; box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
 }
 .online-row-key svg { width: 20px; height: 20px; }
-.online-row-key:hover { border-color: rgb(232 221 197 / .32); }
+.online-row-key:hover { background: rgb(28 29 30 / .7); }
 .online-row-key:active { box-shadow: inset 0 2px 5px rgb(0 0 0 / .45); }
 .online-row-key:focus-visible { outline: 2px solid #ffe1a7; outline-offset: 2px; }
 /* The opponent already asked: the swords are gold and lit, waiting for this player. */

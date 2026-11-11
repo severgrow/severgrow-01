@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [admin-dashboard, online-stale-token-recovery, online-soak-teardown, online-opponent-discard, online-guide, online-rematch-key, online-find-shared-pair, your-matches-grid, online-player-throw, online-presence-journey, settings-visual, accounts-email, pwa-viewport-layout]
+        suite: [admin-dashboard, online-stale-token-recovery, online-soak-teardown, online-opponent-discard, online-rematch-key, online-find-shared-pair, your-matches-grid, online-player-throw, online-presence-journey, settings-visual, accounts-email, pwa-viewport-layout]
     env:
       # These suites only use their own in-process API; never touch a live wallet or project.
       VITE_SUPABASE_URL: http://127.0.0.1:9

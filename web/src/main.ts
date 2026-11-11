@@ -247,7 +247,6 @@ import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import { glintSeedStone, setSeedStoneStrength } from './ui/seedstone.js';
 import { duelSeedsMessage, paintSeedReward, seedReward } from './ui/seed-reveal.js';
-let DesignView: typeof BoardView = BoardView;
 // BOTH boot modules start downloading together. They used to be two top-level awaits in a row, so
 // the second request did not even begin until the first had arrived: two round trips on the critical
 // path before the menu's first layout (measured 2026-11-02 on a throttled phone). Starting the
@@ -265,10 +264,6 @@ if (branding && (window.matchMedia('(display-mode: standalone)').matches ||
 // whole page for every element added while a game opened).
 mountRootFlags();
 branding?.mountBranding();
-if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
-  await import('./ui/design-v2.css');
-  DesignView = (await import('./ui/designBoard.js')).DesignBoardView;
-}
 const defaultArt = defaultArtLoad ? await defaultArtLoad : null;
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
@@ -319,9 +314,6 @@ const HUMAN: Player = 0;
 const BOT: Player = 1;
 if (IS_FUTA04) setFixedBoardOrient('flat');
 const BOOT_PARAMS = new URLSearchParams(location.search);
-// the test copy's DESIGN version (Lab -> DESIGN): the same game, drawn with the V2 illustrated skin
-const DESIGN_MODE = IS_TEST && BOOT_PARAMS.get('design') === '1';
-if (DESIGN_MODE) document.documentElement.classList.add('design-v2');
 
 // ---------- small helpers ----------
 
@@ -578,7 +570,7 @@ if (typeof window !== 'undefined') {
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
 const boardSvg = $('board') as unknown as SVGSVGElement;
 const board = defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)
-  : DESIGN_MODE ? new DesignView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
+  : new BoardView(boardSvg, boardHandlers);
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const publishTurnRim = mountTurnRim(document.body);
@@ -1879,7 +1871,7 @@ let lessonBreath: ReturnType<typeof import('./player/lesson-breath.js').mountLes
 let outcomeLight: OutcomeLight | null = null;
 let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
 /** The in-game guide: "?" in the cockpit, the HOW TO PLAY label, the LED's pointer (player/how-to-guide.ts). */
-let howTo: import('./player/how-to-guide.js').HowToGuide | null = null;
+let turnGuide: import('./player/turn-guide.js').TurnGuide | null = null;
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
 /** The replay button: hidden in the test copy (its code stays). */
 const REPLAY_BUTTON = FEATURES.replay;
@@ -2067,10 +2059,10 @@ async function mountPlayerEnhancements() {
   await Promise.all(loads);
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
     // Fetch independent presentation modules together; keep their mount order unchanged.
-    const [atmosphere,information,cards,glass,help,cockpit,breath,howToModule,guideAccountModule] = await Promise.all([
+    const [atmosphere,information,cards,glass,help,cockpit,breath,turnGuideModule] = await Promise.all([
       import('./player/atmosphere.js'),import('./player/information.js'),import('./player/cards.js'),
       import('./player/glass-surface.js'),import('./player/help.js'),import('./player/smart-cockpit.js'),
-      import('./player/lesson-breath.js'),import('./player/how-to-guide.js'),import('./logic/account-guide-sync.js'),
+      import('./player/lesson-breath.js'),import('./player/turn-guide.js'),
     ]);
     outcomeLight = atmosphere.mountAtmosphere();
     information.mountInformation();
@@ -2084,41 +2076,30 @@ async function mountPlayerEnhancements() {
       onBlockedTap: tutorialTapAnywhere,
       isPaintDragging: () => !!draw.ptr || draw.shape.length > 0,
     });
-    // The Match Intel key is also the guide's help key: a new player's tap may open the lesson for
-    // the action possible right now (player/how-to-guide.ts); otherwise it is Match Intel as always.
-    futa04Help = help.mountHelp({ sheet, onBulb: () => { if (!howTo?.tap()) toggleMatchIntel(); } });
-    smartCockpit = cockpit.mountSmartCockpit({
-      heldMove: () => session ? heldMoveWord(session.sel, session.view.hand.find((c) => c.id === session!.sel.card)?.suit === null) : null,
-    });
-    // Off on the live root for now (owner, 2026-11-10): no "?", no lights, no lessons, no Guide row,
-    // no guide traffic. The key is the bulb and opens Match Intel, as before the guide.
-    const guideRow = document.getElementById('guide-row');
-    if (guideRow) guideRow.hidden = !FEATURES.inGameGuide;
-    if (FEATURES.inGameGuide) howTo = howToModule.mountHowToGuide({
-      setting: () => settings.guide,
-      // Blitz is 30 seconds a turn: practice Blitz and a Blitz duel both turn the guide fully off.
-      blitz: () => blitzMatch || document.documentElement.dataset.blitzDuel === '1',
-      // The Tutorial, a lesson and the campaign's own first-levels window already teach.
-      busy: () => !!coach.tutorial || !!lessonActive() || onboardingActive() || !!watching,
+    // The bulb is Match Intel, always (owner, 2026-11-11: "match intel stays match intel").
+    futa04Help = help.mountHelp({ sheet, onBulb: () => toggleMatchIntel() });
+    // THE TURN GUIDE (owner, 2026-11-11): "?" in the context key for everyone, every turn; pressed, it
+    // lights the rest of the turn one step at a time with the levels' glow — no window, no words.
+    turnGuide = turnGuideModule.mountTurnGuide({
       position: () => session && !$('game').hidden && session.state.phase !== 'GAME_OVER'
         ? { view: session.view, legal: myTurn() && !blocking() ? session.legal : [] } : null,
-      signedIn: () => readAccountIdentity(browserStorage())?.kind === 'account',
-      bulb: () => document.getElementById('futa04-help-button'),
-      openWindow: (win) => {
+      selectedCard: () => session?.sel?.card ?? null,
+      // The Tutorial and the levels light their own way; a replay has no moves to guide.
+      busy: () => !!coach.tutorial || !!lessonActive() || onboardingActive() || !!watching,
+      light: (selectors) => {
         if (!glassSurface) return;
-        if (glassSurface.isOpen()) { glassSurface.close(); intelState = null; }
-        const lit = litTarget(win.lit, [board.rootKey(HUMAN), board.rootKey(BOT)]);
-        glassSurface.tutorial(win.title, 0, lit.selectors, {
-          // the levels' own light at their lighter "guide" dim: asked-for help, the board stays readable
-          shape: lit.shape, outline: true, tier: 'guide', stepKey: `guide-${win.beat}`, why: win.why, arrow: lit.selectors.length > 0,
-          reduceMotion: settings.reduceMotion, buttons: { previous: false, next: false },
-          ...(win.bloomDemo ? { bloomDemo: true } : {}),
+        if (!selectors.length) { if (glassSurface.mode?.() === 'tutorial' && !coach.tutorial && !lessonActive()) glassSurface.hide(); return; }
+        if (glassSurface.isOpen() && glassSurface.mode?.() === 'intel') { glassSurface.close(); intelState = null; }
+        glassSurface.tutorial('', 0, selectors, {
+          shape: 'hex', outline: true, inCockpit: true, tier: 'guide', stepKey: `turn-guide:${selectors.join(',')}`,
+          reduceMotion: settings.reduceMotion, arrow: false,
         });
       },
-      closeWindow: () => { if (glassSurface?.mode?.() === 'tutorial' && !coach.tutorial) glassSurface.hide(); },
-      litSelectors: (lit) => litTarget(lit, [board.rootKey(HUMAN), board.rootKey(BOT)]).selectors,
-      storage: browserStorage(),
-      account: guideAccountModule.guideAccount(browserStorage()),
+      changed: () => { if (session) render(); },
+    });
+    smartCockpit = cockpit.mountSmartCockpit({
+      heldMove: () => session ? heldMoveWord(session.sel, session.view.hand.find((c) => c.id === session!.sel.card)?.suit === null) : null,
+      guide: { available: () => !!turnGuide?.available(), on: () => !!turnGuide?.on(), toggle: () => turnGuide?.toggle(), label: turnGuideModule.TURN_GUIDE_LABEL },
     });
     lessonBreath = breath.mountLessonBreath();
     layoutKey = '';
@@ -2369,7 +2350,7 @@ async function startGame(
   let generation = ++startGameGeneration;
   // One of the player's games (the guide's HOW TO PLAY label shows in the first few). A watched game,
   // a tutorial replay and a Blitz game are not the player's own learning games.
-  if (!watch && !tutorial && !blitzStart) howTo?.gameStarted();
+  turnGuide?.reset();
   // The deal (the owner's card shuffle): a new match, a rematch, a restart.
   if (settings.sound) sound.shuffle();
   // The first lesson board on a cold first visit waits (briefly, capped) for its own art. Repeat
@@ -3381,8 +3362,7 @@ function drainInstallInvite() {
 
 function humanPlay(a: Action, opts: { auto?: boolean; flightFrom?: DOMRect } = {}) {
   bloomPick = [];
-  // An open guide lesson closes when the player makes any move.
-  howTo?.moved(a.t); // a move is made: nothing stays held toward a Bloom
+
   // Was this throw made from the picked card? Then the Throw pile is swollen right now, and the
   // swell belongs to the flight, not only to the selection.
   const fromPickedPile = a.t === 'Discard' && !!session && session.pending?.t === 'Discard' && session.pending.card === a.card;
@@ -5417,7 +5397,7 @@ function refreshOnlineTurnReplay(): void {
 
 function render() {
   syncTurnRim();
-  howTo?.update();
+  turnGuide?.update();
   const t0 = performance.now();
   applyLayout();
   // A new layout (or a game screen not drawn yet): place the cockpit once it can be measured.
@@ -8467,7 +8447,7 @@ function presentResult(go: HTMLElement, wasHidden: boolean): void {
   board.releasePress();
   // A game reached its end on this device (once, as the result first appears): the guide's help key
   // stops treating a signed-in player as new after their first finished game.
-  if (wasHidden && !watching) howTo?.gameFinished();
+  if (wasHidden) turnGuide?.reset();
   document.body.classList.add('result');
   syncVeil();
   if (!wasHidden) return;
@@ -10952,7 +10932,6 @@ for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]'
       sound.setMusic(settings.music);
     }
     // Turning the Guide back on makes the player "new" again (player/how-to-guide.ts).
-    if (k === 'guide') howTo?.settingChanged();
     if (k === 'reduceMotion' || k === 'largeText' || k === 'eyeCandy') applyTheme();
     else render();
   });
@@ -11498,7 +11477,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
       const api = duelApiUrl();
       if (!api) return;
       // A fresh duel counts as one of the player's games for the guide (reopening one does not).
-      if (player.revision <= 2 && !player.events?.length) howTo?.gameStarted();
+      if (player.revision <= 2 && !player.events?.length) turnGuide?.reset();
       leaveOnline();
       // An online duel is never a training tier: its finish must not write a carry-over.
       gameDifficulty = null;

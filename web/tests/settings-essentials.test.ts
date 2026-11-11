@@ -35,10 +35,11 @@ const essentialSheet = (() => {
 })();
 
 describe('the Futasaku Settings sheet holds the essentials only', () => {
-  // OWNER ADDED A SWITCH (2026-11-09): "Guide" turns the in-game guide on or off.
-  it('its own switches are Sound, Vibration, Reduce motion, Large text and Guide', () => {
+  // OWNER CHANGED THE RULE (2026-11-11): the guide is the "?" in the context key, for everyone, so
+  // its Settings switch is gone.
+  it('its own switches are Sound, Vibration, Reduce motion and Large text', () => {
     const keys = [...essentialSheet.matchAll(/data-setting="([a-zA-Z]+)"/g)].map((m) => m[1]);
-    expect(keys).toEqual(['sound', 'vibration', 'reduceMotion', 'largeText', 'guide']);
+    expect(keys).toEqual(['sound', 'vibration', 'reduceMotion', 'largeText']);
   });
 
   it('colours, music, the playing options, the folded groups, the link code and the Lab are classic-only', () => {

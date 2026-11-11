@@ -50,6 +50,12 @@ html.v075 #levels .level-grid button.difficulty-tile:not(.link) {
   letter-spacing: .14em !important;
 }
 html.v075 #menu .menu-territory-label { font-size: inherit !important; letter-spacing: inherit !important; }
+/* Menu keys wear no frame (owner, 2026-11-11: "for all menu buttons also get rid of contour frame -
+   leave only on the suggested glowed button"). The 1px stays transparent so no key moves. */
+html.v075 :is(#menu,#play-menu,#levels,#campaign,#online-hub,#online-waiting,#online-join,#sheet-menu)
+  :is(.btn:not(.link):not(.suggest), .difficulty-tile, .campaign-tile:not([data-state='current'])) {
+  border-color: transparent !important;
+}
 html.v075 :is(#menu,#play-menu) .btn.suggest::before,
 html.v075 :is(#menu,#play-menu) .btn.suggest::after { content: none !important; }
 html.v075 :is(#menu,#play-menu) .btn.suggest,

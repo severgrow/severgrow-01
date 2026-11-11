@@ -21,6 +21,8 @@ const ICONS: Record<string, string> = {
   continue: '<path d="m8 5 8 7-8 7"/>',
   confirm: '<path d="m5 12 5 5L19 7"/>',
   neutral: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  // The turn guide's "?" (player/turn-guide.ts), drawn in the same stroke as every other key glyph.
+  guide: '<path d="M9.2 9.1a2.9 2.9 0 1 1 4 2.68c-.73.32-1.2.97-1.2 1.75v.6"/><circle cx="12" cy="17.6" r=".55" fill="currentColor"/>',
 };
 const svg = (kind: string) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ICONS[kind] ?? ICONS.continue}</svg>`;
 const actionKind = (button: HTMLButtonElement) => button.matches('[data-kind],.bloom-toggle') ? 'bloom'
@@ -113,6 +115,14 @@ html.futa04-information #futa04-box #smart-context:disabled svg { opacity:.45; }
 html.futa04-information .dock #futa04-box #futa04-actions > .hand-slot:disabled { opacity:1; color:#66635b; }
 html.futa04-information .dock #futa04-box #futa04-actions > .hand-slot:disabled :is(svg,.i) { opacity:1; }
 html.futa04-information #futa04-box #smart-context:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
+/* THE TURN GUIDE IS ON: "?" reads as pressed in — a darker, sunken key and a softly lit gold "?" —
+   on the key itself or in its small menu. Depth and light only, never a drawn ring (owner, 2026-11-11). */
+html.futa04-information #futa04-box :is(#smart-context, #smart-selector button)[aria-pressed='true'] {
+  background:rgb(6 7 8 / .72); box-shadow:inset 0 3px 7px rgb(0 0 0 / .75), inset 0 -1px 2px rgb(242 237 224 / .04);
+}
+html.futa04-information #futa04-box :is(#smart-context, #smart-selector button)[aria-pressed='true'] svg {
+  color:#ffe1a7; transform:translateY(1px); filter:drop-shadow(0 0 4px rgb(255 205 120 / .55));
+}
 html.futa04-information #futa04-box #smart-led {
   grid-column:1 / 3; grid-row:1; width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
   padding:8px 6px; box-sizing:border-box; border:0; border-radius:12px;
@@ -395,7 +405,10 @@ html.futa04-information #smart-selector button {
   color:var(--control-ivory); touch-action:manipulation; box-shadow:var(--hardware-edge);
 }
 html.futa04-information #smart-selector button:first-child { background:rgba(196,150,88,.10); }
-html.futa04-information #smart-selector button:is(:hover,:focus-visible) { background:rgba(196,150,88,.2); outline:1px solid var(--control-amber); }
+/* No drawn contour on hover (owner, 2026-11-11: "no contours ... ever, except where specifically
+   planned"): the key's surface brightens. A keyboard focus keeps its ring (accessibility). */
+html.futa04-information #smart-selector button:hover { background:rgba(196,150,88,.2); }
+html.futa04-information #smart-selector button:focus-visible { background:rgba(196,150,88,.2); outline:2px solid #ffe1a7; outline-offset:2px; }
 html.futa04-information #smart-selector button svg { width:19px; height:19px; }
 html.futa04-information #smart-selector .futa04-combination { display:flex; flex-wrap:nowrap; gap:1px; max-width:40px; }
 html.futa04-information #smart-selector .futa04-mini-card { width:9px !important; min-width:9px !important; height:18px !important; padding:0 !important; border-radius:2px; }
@@ -690,7 +703,16 @@ html.futa04-information.reduce-motion #board .l-over .target.kind-grow { animati
 `;
 
 /** `heldMove`: the display's word for a held move (GROW 1, BLOOM 3, BOMB), shown instead of CANCEL. */
-export function mountSmartCockpit(options: { heldMove?: () => string | null } = {}) {
+/** The turn guide as the cockpit sees it: a "?" item in the context key (or its small menu). */
+export type CockpitGuide = { available(): boolean; on(): boolean; toggle(): void; label: string };
+
+export function mountSmartCockpit(options: { heldMove?: () => string | null; guide?: CockpitGuide } = {}) {
+  // THE "?" LIVES IN THE CONTEXT KEY (owner, 2026-11-11): alone, it is the key; next to a move (Skip,
+  // Bloom...) the key keeps the move and "?" joins it in the key's small menu. A detached button is
+  // its source, so it rides the same item list, menu and keyboard handling as every other action.
+  const guideSource = document.createElement('button');
+  guideSource.type = 'button';
+  guideSource.addEventListener('click', () => options.guide?.toggle());
   const box = document.getElementById('futa04-box')!;
   const actions = document.getElementById('futa04-actions')!;
   const moves = document.getElementById('moves')!;
@@ -990,22 +1012,25 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     }
     const camera = document.querySelector<HTMLButtonElement>('.cam-whole');
     if (camera && !camera.hidden) items.push(camera);
+    if (options.guide?.available()) items.push(guideSource);
     if (document.getElementById('confirm')?.hidden === false) {
       items.push(document.getElementById('confirm-play') as HTMLButtonElement,document.getElementById('confirm-cancel') as HTMLButtonElement);
     }
     return items.filter(button => !button.closest('[hidden]') || button.closest('.bloom-options'))
       .map((button,index) => {
-        const kind = button.matches('.cam-whole') ? button.textContent?.trim() === 'Back to play' ? 'back' : 'whole'
+        const kind = button === guideSource ? 'guide' : button.matches('.cam-whole') ? button.textContent?.trim() === 'Back to play' ? 'back' : 'whole'
           : button.id === 'tool-skip' ? 'skip' : button.id === 'confirm-play' ? 'confirm' : button.id === 'confirm-cancel' ? 'cancel' : actionKind(button);
-        const label = button.getAttribute('aria-label') || button.title || button.textContent?.trim() || kind;
+        const label = button === guideSource ? options.guide!.label : button.getAttribute('aria-label') || button.title || button.textContent?.trim() || kind;
         const key = `${kind}:${button.dataset.kind ?? ''}:${label}`;
-        return { key,label,icon:kind,priority:(button.id === 'tool-skip' ? -2 : priority[kind] ?? 9)+index/100,source:button };
+        // "?" always comes last: the key keeps any real move and "?" waits in the menu beside it.
+        return { key,label,icon:kind,priority:(button === guideSource ? 99 : button.id === 'tool-skip' ? -2 : priority[kind] ?? 9)+index/100,source:button };
       }).sort((a,b)=>a.priority-b.priority);
   };
   const renderSelector = () => {
     selector.replaceChildren(...current.map(item => {
       const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role','menuitem');
       b.dataset.action = item.key; b.setAttribute('aria-label',item.label); b.title = item.label;
+      if (item.icon === 'guide') b.setAttribute('aria-pressed', String(!!options.guide?.on()));
       const combination = item.icon === 'bloom' ? item.source.querySelector('.futa04-combination') : null;
       if (combination) b.append(combination.cloneNode(true)); else b.innerHTML = svg(item.icon);
       const label = document.createElement('span'); label.className = 'smart-action-label'; label.textContent = item.label; b.append(label);
@@ -1073,7 +1098,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     syncBloom();
     const next = collect();
     const phase = document.documentElement.dataset.step ?? '';
-    const key = `${phase}:${next.map(a=>a.key).join('|')}`;
+    const key = `${phase}:${next.map(a=>a.key).join('|')}:${options.guide?.on() ? 'lit' : ''}`;
     current = next;
     if (key !== signature) { close(); signature = key; renderSelector(); }
     const first = current[0];
@@ -1089,6 +1114,8 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null } = 
     context.innerHTML = svg(first?.icon ?? 'neutral'); context.disabled = !first;
     // The slot's current action, so CSS can light a key that is the move (e.g. Skip).
     context.dataset.action = first?.icon ?? '';
+    // "?" on the key itself reads as pressed in while the guide lights this turn.
+    if (first?.icon === 'guide') context.setAttribute('aria-pressed', String(!!options.guide?.on())); else context.removeAttribute('aria-pressed');
     context.setAttribute('aria-haspopup',current.length > 1 ? 'menu' : 'false');
     context.setAttribute('aria-label',first ? current.length > 1 ? `${first.label}. ${current.length} actions available` : first.label : phase === 'opp' ? ONLINE.statusTheirTurn : 'No action available');
     context.title = context.getAttribute('aria-label') ?? '';

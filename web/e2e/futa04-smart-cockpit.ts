@@ -9,6 +9,7 @@ import type { State, Tile } from '../../src/engine/index.js';
 import { hexCenter } from './drawing.js';
 import { positionSave } from './position.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
+import { contextKinds, pressContext } from './helpers/context-key.js';
 
 // The page is served on a FREE port (helpers/preview-port.ts) so this suite can run in two
 // worktrees at once without fighting over a hardcoded number.
@@ -65,7 +66,8 @@ try {
     check(await page.locator('#smart-led').evaluate(el=>getComputedStyle(el,'::before').backgroundSize)==='contain',`${name}: supplied display art keeps its proportions`);
     check(await page.locator('#deck-count').evaluate(el=>getComputedStyle(el,'::before').backgroundSize)==='contain',`${name}: supplied counter art keeps its proportions`);
     check(!await page.locator('#step-cue').isVisible(),`${name}: routine board prompt removed`);
-    check(await page.locator('#smart-context').isDisabled(),`${name}: neutral context during Draw`);
+    // OWNER CHANGED THE RULE (2026-11-11): "?" lives in the context key every turn (was: neutral during Draw).
+    check(JSON.stringify(await contextKinds(page))==='["guide"]',`${name}: "?" alone in the context key during Draw`);
     check(await page.locator('#tool-undo').isDisabled(),`${name}: Undo visible but unavailable at start`);
     check(await page.locator('#discard.futa04-bloom-draw').count()===0,`${name}: ordinary discard has no combo cue`);
     check(await page.locator('#discard .gd-fx').evaluate(el=>getComputedStyle(el).display)==='none',`${name}: no extra discard draw rectangle`);
@@ -97,15 +99,15 @@ try {
     await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Grow`);
     check((await page.locator('#hand .card.playable').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('88, 171, 86'),`${name}: green card-edge light`);
-    check(!await page.locator('#smart-context').isDisabled(),`${name}: Skip in context slot`);
+    check(JSON.stringify(await contextKinds(page))==='["skip","guide"]',`${name}: Skip leads the context key, "?" beside it in the menu`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-grow.png`});
-    await page.locator('#smart-context').click(); await waitPhase(page,'DISCARD');
+    await pressContext(page,'skip'); await waitPhase(page,'DISCARD');
     aligned(await rects(page),`${name} Throw`);
     await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Throw`);
     check(!await page.locator('#smart-led-cells').evaluate(el=>el.classList.contains('scrolling')),`${name}: short Throw message remains stationary`);
     check((await page.locator('#hand .card').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('190, 68, 47'),`${name}: red card-edge light`);
-    check(await page.locator('#smart-context').isDisabled(),`${name}: context neutral when throwing`);
+    check(JSON.stringify(await contextKinds(page))==='["guide"]',`${name}: only "?" in the context key when throwing`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-throw.png`});
     check(errors.length===0,`${name}: no browser errors: ${errors.join(' | ')}`);
     await page.close();
@@ -326,7 +328,7 @@ try {
   await skipBloom.waitForFunction(()=>!(window as any).__severgrow.busy());
   check(await skipBloom.locator('#smart-bloom').isVisible(),'Grow: Bloom remains optional after Sprout');
   // skip? ends optional Bloom (context slot mirrors the Skip control); then pick + tap the pile.
-  await skipBloom.locator('#smart-context').click();
+  await pressContext(skipBloom,'skip');
   check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase==='DISCARD'),'Bloom skip: skip? enters Throw');
   const throwCard=await skipBloom.locator('#hand [data-card]').first().getAttribute('data-card');
   await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
@@ -345,11 +347,11 @@ try {
   if(board) { await cameraPage.mouse.move(board.x+board.width/2,board.y+board.height/2); await cameraPage.mouse.wheel(0,-600); }
   await cameraPage.waitForFunction(()=>!(document.querySelector('.cam-whole') as HTMLButtonElement).hidden);
   check(!await cameraPage.locator('.cam-whole').isVisible(),'Camera: no extra top-screen button');
-  check(await cameraPage.locator('#smart-context').getAttribute('aria-label')==='Whole map','Camera: Whole map enters the context slot after manual zoom');
-  await cameraPage.locator('#smart-context').click();
-  check(await cameraPage.locator('#smart-context').getAttribute('aria-label')==='Back to play','Camera: Back to play replaces Whole map in the same slot');
-  await cameraPage.locator('#smart-context').click();
-  check(await cameraPage.locator('#smart-context').getAttribute('aria-label')!=='Back to play','Camera: context action restores play framing');
+  check((await contextKinds(cameraPage))[0]==='whole','Camera: Whole map enters the context slot after manual zoom');
+  await pressContext(cameraPage,'whole');
+  check((await contextKinds(cameraPage))[0]==='back','Camera: Back to play replaces Whole map in the same slot');
+  await pressContext(cameraPage,'back');
+  check(!(await contextKinds(cameraPage)).includes('back'),'Camera: context action restores play framing');
   await cameraPage.close();
   console.log(`${checks} smart cockpit checks passed; screenshots: ${dir}`);
 } finally { await browser.close(); if(server) await new Promise<void>(resolve=>server.httpServer.close(()=>resolve())); }

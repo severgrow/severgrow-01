@@ -11,6 +11,7 @@ import { PINNED } from '../src/logic/motion.js';
 import { BOOMERANG } from '../src/ui/throw-boomerang.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { pressContext } from './helpers/context-key.js';
 
 // A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
 const { server, url: BASE } = await servePreview(4199, { logLevel: 'silent' });
@@ -39,7 +40,7 @@ try {
   const first = String(draw.frames?.[0]?.translate ?? '');
   assert(first.includes('px') && first !== '0 0','draw starts at the actual pile, not already in hand');
   await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'ACT' && !(window as any).__severgrow.busy());
-  await page.locator('#smart-context').click();
+  await pressContext(page,'skip');
   await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'DISCARD' && !(window as any).__severgrow.busy());
   const before = await page.evaluate(() => (window as any).__severgrow.state());
   const throwAction = legalActions(viewFor(before,0)).find(action=>action.t==='Discard');
@@ -92,7 +93,7 @@ try {
     const top = document.getElementById('discard-top');
     return top?.dataset.faceKey ? Number(top.dataset.faceKey.split(':')[0]) : null;
   });
-  await page.locator('#smart-context').click();
+  await pressContext(page,'skip');
   await page.waitForFunction(() => (window as any).__severgrow.state().phase==='DISCARD' && !(window as any).__severgrow.busy());
   const throwB = await page.evaluate(() => (window as any).__severgrow.state());
   const throwB2 = legalActions(viewFor(throwB,0)).find(action=>action.t==='Discard')!;

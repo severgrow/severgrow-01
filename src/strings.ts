@@ -1366,7 +1366,6 @@ export const SETTINGS = Object.freeze({
   reduceMotion: 'Reduce motion',
   largeText: 'Large text',
   /** The in-game guide's switch (owner, 2026-11-09). */
-  guide: 'Guide',
   eyeCandy: 'Decorative effects',
   speed: 'Speed',
   effects: 'Effects',

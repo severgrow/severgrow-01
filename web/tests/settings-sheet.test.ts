@@ -37,7 +37,8 @@ const copyKeys = [...section.matchAll(/data-copy="([^"]+)"/g)].map((m) => m[1]!)
 describe('Settings sheet: essentials on the surface, everything else in two groups', () => {
   it('the Coach switch is gone (its advice is always on), every other setting stays', () => {
     expect(settingIds).toEqual([
-      'autoSkip', 'eyeCandy', 'guide', 'largeText', 'music',
+      // OWNER CHANGED THE RULE (2026-11-11): no Guide switch (the "?" is in the context key).
+      'autoSkip', 'eyeCandy', 'largeText', 'music',
       'placementList', 'reduceMotion', 'sound', 'vibration', 'weakPulse', 'weakSpots',
     ]);
     expect(section, 'no Coach row may come back').not.toContain('data-setting="coach"');

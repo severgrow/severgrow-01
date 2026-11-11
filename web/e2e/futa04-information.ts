@@ -2,7 +2,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { servePreview } from './helpers/preview-port.js';
-import { asRegularPlayer } from './helpers/regular-player.js';
 import { apply } from '../../src/engine/index.js';
 
 const external = process.env.FUTA04_URL;
@@ -79,7 +78,6 @@ try {
   for (const [width, height, large, left] of [[360,640,false,false],[390,664,true,true],[390,844,false,false],[430,932,true,false],[768,1024,false,false],[1440,900,false,false]] as const) {
     const page = await browser.newPage({ viewport: { width, height }, hasTouch: width < 800, isMobile: width < 600, ignoreHTTPSErrors: true });
     // Match Intel is the bulb's, for a regular player (a new player's "?" opens a lesson: guide-help-key.ts).
-    await asRegularPlayer(page);
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(({ large, left }) => {

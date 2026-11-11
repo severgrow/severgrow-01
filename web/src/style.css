@@ -80,7 +80,7 @@ body {
 /* After the startup gate lifts, keep charcoal on the live shell. `--c-bg` stays soil for boards
    and panels; without this, the later `html { background: var(--c-bg) }` beats
    `#first-ground`'s zero-specificity `:where(.space-first)` and a soil strip flashes at reveal
-   (docs/IOS-FLASH-AUDIT-0.83.md H5; owner, 2026-11-07). No `:where()` — specificity must win. */
+   (docs/history/IOS-FLASH-AUDIT-0.83.md H5; owner, 2026-11-07). No `:where()` — specificity must win. */
 html.space-first,
 html.space-first body {
   background: #0e0f10;
@@ -2500,7 +2500,7 @@ html.futasaku-product .install-prompt-scrim {
     padding: 2px 0 6px;
   }
   #sheet-menu .gm-scores {
-    grid-template-columns: auto 1px auto;
+    grid-template-columns: auto auto;
     column-gap: 12px;
   }
   #sheet-menu .gm-scores b {
