@@ -8195,8 +8195,9 @@ body.result .corner-tools {
   /* THE ONE RHYTHM (owner, 2026-11-11: "make the margin between you lost, score, and game info and
      then planet equal spaces between each other"). ONE value governs every gap between the tiers
      A (the outcome title) -> B (the score) -> C (the game info line) -> D (the planet window):
-     the card's own column gap, the summary column's gap, and the grid row-gap of the wide spread.
-     Nothing else in this block sets a vertical margin between those tiers, so they cannot drift. */
+     the card's own column gap and the summary column's gap (and, in the landscape phone's two
+     pages, the grid's row-gap, so the one value governs that shape too). Nothing else in this block
+     sets a vertical margin between those tiers, so they cannot drift. */
   --go-tier-gap: 12px;
   display: flex;
   flex-direction: column;
@@ -8477,10 +8478,10 @@ body.result .corner-tools {
   #gameover .go-world-teach-lines { font-size: 0.63rem; }
 }
 
-/* LANDSCAPE PHONE / SHORT WINDOW: one plate, two pages. The LEFT page is the planet and it grows to
-   the whole page height; the RIGHT page holds the read-out CENTRED in the band above the keys and
-   the 2x2 keys anchored to its bottom (the thumb's corner). The plate fills the viewport exactly as
-   the portrait one does.
+/* LANDSCAPE PHONE / SHORT WINDOW: one plate, two pages. The LEFT page is the planet and it takes the
+   band above the keys; the RIGHT page holds the read-out CENTRED in that same band and the 2x2 keys
+   anchored to its bottom (the thumb's corner). The plate fills the viewport exactly as the portrait
+   one does.
    OWNER CORRECTION, 2026-11-11: "landscape mobile - you lost 0 - 25 in the centre not on top - we
    need to be smarter here". The read-out used to be pinned to the top of the right page, which left
    a dead band between the words and the keys; it now centres in the space ABOVE the keys. */

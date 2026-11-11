@@ -1,7 +1,15 @@
 // THE FINISH SCREEN MUST NEVER SCROLL (owner direction, 2026-10-16) — measured, not eyeballed.
 //
-//   CHANNEL=futa04 npm run web:build && npx tsx web/e2e/finish-fit.ts
+//   CHANNEL=futa05 VITE_DUEL_API_URL=http://127.0.0.1:9/functions/v1/duel \
+//     VITE_SUPABASE_URL=http://127.0.0.1:9 VITE_SUPABASE_ANON_KEY=local npm run web:build
+//   MODES=classic npx tsx web/e2e/finish-fit.ts
 //   PW_CHROMIUM=/path/to/chrome npx tsx web/e2e/finish-fit.ts
+//
+// THE PLANET ANATOMY NEEDS A `futa05` BUILD: `ENDGAME_PLANET = FEATURES.planet && onlineBuildEnabled()`
+// (main.ts), and `FEATURES.planet` is the 0.5 line's only. A `futa04` build is the classic card, so
+// the planet assertions below would be skipped — the build in this header is the one that shoots
+// docs/screens/finish/endgame-planet-*.png. (The API base points at a closed port: every call in
+// this suite is stubbed, and a refused connection resolves instantly.)
 //
 // The owner: "end of screen menu should be always in every mode way shorter and show all on one
 // screen with no scrolling". One screen shared by three modes, so all three are driven here:
@@ -10,10 +18,14 @@
 //   campaign  a campaign level, alone
 //   online    a real duel on the local API (the match is resigned, so the finish screen is real)
 //
-// For each mode, at 360x640 (the tightest real phone) and 390x844, it asserts on the MEASUREMENT:
-// the card and the screen behind it both have no overflow, every visible control is inside the
-// viewport, and nothing widens the page. It also records exactly which lines and buttons each mode
-// shows, writes docs/screens/finish/*.png, and fails if the shot could not be taken.
+// For each mode, at 320x568 / 360x640 / 390x844 (phones), 1280x800 / 1440x900 (desktop, which since
+// the owner's 2026-11-11 review is the SAME phone card CENTRED — never a two-page spread) and
+// 844x390 (landscape phone, planet beside the read-out), it asserts on the MEASUREMENT: the card
+// and the screen behind it both have no overflow, every visible control is inside the viewport,
+// nothing widens the page, the desktop column is a phone-measured column with equal air either
+// side, and in landscape the read-out's centre sits on the planet's. It also records exactly which
+// lines and buttons each mode shows, writes docs/screens/finish/*.png, and fails if the shot could
+// not be taken.
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
@@ -122,9 +134,8 @@ const MEASURE = `(() => {
       return s ? { zoom: +s.zoom.toFixed(2), tilePx: +s.tilePx.toFixed(1), disc: Math.round(s.disc.r), frame: s.frame } : null;
     })(),
     // THE TIER RHYTHM, measured from the four tiers the owner named: A the outcome title, B the
-    // score, C the game-info line, D the planet window. Sorted by their top edge (the wide spread
-    // puts the window ABOVE the words), then each neighbouring pair's gap, so one number describes
-    // the rhythm on every shape.
+    // score, C the game-info line, D the planet window. Sorted by their top edge, then each
+    // neighbouring pair's gap, so one number describes the rhythm on every shape.
     tierGaps: (() => {
       const tiers = [
         { at: 'A', el: id('go-title') },
@@ -133,9 +144,10 @@ const MEASURE = `(() => {
         { at: 'D', el: pane },
       ].filter((t) => t.el && shown(t.el)).map((t) => ({ at: t.at, r: t.el.getBoundingClientRect() }));
       // THE RHYTHM IS A VERTICAL RELATIONSHIP (owner, 2026-11-11). A tier counts only if it sits in
-      // the SAME PAGE as the outcome title: on a phone that is all four (A->B->C->D); in the wide
-      // two-page spread the planet is the left page and the window is not stacked under the words at
-      // all, so the rhythm there is A->B->C. Sorting the un-related side-by-side pairs produced a
+      // the SAME PAGE as the outcome title: on every stacked shape (all phones AND both desktop
+      // sizes since the spread was deleted) that is all four, A->B->C->D; in the landscape phone's
+      // two pages the planet is the LEFT page and the window is not stacked under the words at all,
+      // so the rhythm there is A->B->C. Sorting the un-related side-by-side pairs produced a
       // meaningless number (a title "gapped" from the window by -479px), which is what this anchor
       // removes: the title's column defines the page the rhythm lives in.
       const title = tiers.find((t) => t.at === 'A');
