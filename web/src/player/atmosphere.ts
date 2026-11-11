@@ -174,11 +174,27 @@ export function mountAtmosphere(): OutcomeLight {
   const board = document.querySelector<SVGSVGElement>('#board');
   if (!board) return mounted;
   let signature = '';
+  /** The last finished rim picture and where it goes. */
+  let placed: { href: string; x: number; y: number; w: number; h: number } | null = null;
+  const attach = (p: NonNullable<typeof placed>) => {
+    const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+    image.id = 'futa04-map-rim';
+    image.setAttribute('aria-hidden', 'true');
+    image.setAttribute('x', String(p.x)); image.setAttribute('y', String(p.y));
+    image.setAttribute('width', String(p.w)); image.setAttribute('height', String(p.h));
+    image.setAttribute('href', p.href);
+    board.querySelector('#futa04-map-rim')?.remove();
+    board.insertBefore(image, board.querySelector('.l-base'));
+  };
   const rim = () => {
     const paths = [...board.querySelectorAll<SVGPathElement>('.l-base .hex-cell > .hex')];
     if (!paths.length) return;
     const shape = paths.map(path => path.getAttribute('d') ?? '').join(' ');
-    if (shape === signature && board.querySelector('#futa04-map-rim')) return;
+    if (shape === signature) {
+      // same map, new board children (setup): put the finished picture back, no second bake
+      if (!board.querySelector('#futa04-map-rim') && placed) attach(placed);
+      return;
+    }
     const boxes = paths.map(path => path.getBBox());
     const pad = 48;
     const x = Math.min(...boxes.map(box => box.x)) - pad;
@@ -188,10 +204,13 @@ export function mountAtmosphere(): OutcomeLight {
     const scale = Math.min(1, 1024 / Math.max(w, h));
     const mask = document.createElement('canvas');
     mask.width = Math.ceil(w * scale); mask.height = Math.ceil(h * scale);
-    const m = mask.getContext('2d');
+    // CPU canvases (willReadFrequently): the bake ends in a read-back, and a GPU canvas would make
+    // that read-back finish the blur on the main thread first (measured 2026-11-11: up to 1.9 s of
+    // frozen page at board entry on software graphics; a stutter on slow phones).
+    const m = mask.getContext('2d', { willReadFrequently: true });
     const baked = document.createElement('canvas');
     baked.width = mask.width; baked.height = mask.height;
-    const b = baked.getContext('2d');
+    const b = baked.getContext('2d', { willReadFrequently: true });
     if (!m || !b) return;
     m.scale(scale, scale); m.translate(-x, -y);
     m.fillStyle = m.strokeStyle = '#fff'; m.lineWidth = 2;
@@ -232,15 +251,18 @@ export function mountAtmosphere(): OutcomeLight {
     fade(0, 0, 0, feather); b.fillRect(0, 0, baked.width, feather);
     fade(0, baked.height, 0, baked.height - feather); b.fillRect(0, baked.height - feather, baked.width, feather);
     b.globalCompositeOperation = 'source-over';
-    const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-    image.id = 'futa04-map-rim';
-    image.setAttribute('aria-hidden', 'true');
-    image.setAttribute('x', String(x)); image.setAttribute('y', String(y));
-    image.setAttribute('width', String(w)); image.setAttribute('height', String(h));
-    image.setAttribute('href', baked.toDataURL());
-    board.querySelector('#futa04-map-rim')?.remove();
-    board.insertBefore(image, board.querySelector('.l-base'));
     signature = shape;
+    const place = (href: string) => {
+      // a newer shape was baked meanwhile: this picture is out of date
+      if (signature !== shape) { if (href.startsWith('blob:')) URL.revokeObjectURL(href); return; }
+      if (placed?.href.startsWith('blob:')) URL.revokeObjectURL(placed.href);
+      placed = { href, x, y, w, h };
+      attach(placed);
+    };
+    // The picture is encoded off the main thread (toBlob); the rim fades in a moment later instead
+    // of freezing the board's first frame.
+    if (typeof baked.toBlob === 'function') baked.toBlob((blob) => place(blob ? URL.createObjectURL(blob) : baked.toDataURL()));
+    else place(baked.toDataURL());
   };
   // Setup replaces the SVG children. Moves only update later layers, never rebake the rim.
   new MutationObserver(rim).observe(board, { childList: true });

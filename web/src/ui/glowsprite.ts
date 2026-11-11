@@ -19,7 +19,8 @@ export const glowSprite = (color: string, blur: number, shape: ThemeStyle['tileS
     const extent = S + blurUnits * 3;
     const c = document.createElement('canvas');
     c.width = c.height = Math.ceil(extent * 2 * RES);
-    const g = c.getContext('2d');
+    // a CPU canvas: baked once and read back (a GPU one would stall that read on slow phones)
+    const g = c.getContext('2d', { willReadFrequently: true });
     if (g) {
       const path = new Path2D(hexPath('0,0', S * 0.995, shape));
       g.setTransform(RES, 0, 0, RES, c.width / 2, c.height / 2);

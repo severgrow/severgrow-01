@@ -20,7 +20,9 @@ export const noiseTile = (): string => {
   try {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
-    const x = c.getContext('2d');
+    // a CPU canvas: it is only ever read back, and a GPU one costs a graphics start-up on that first
+    // read (measured 2026-11-11: 1.3 s of frozen page at board entry on software graphics)
+    const x = c.getContext('2d', { willReadFrequently: true });
     if (!x) return noiseUrl;
     const img = x.createImageData(64, 64);
     let seed = 20261002;
