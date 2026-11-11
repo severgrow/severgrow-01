@@ -331,3 +331,18 @@ Treat WebGL fallback, cleanup and device limitations as part of the experience. 
   navigation cancels stale completion, reduced motion is instant, and readiness has a bounded fallback.
 
 Player-facing punctuation: use a plain hyphen, never an em dash. Preserve text supplied by players.
+
+## 0.84 final polish — 11 November 2026
+
+- **Menu keys wear no frame.** Every menu key (main menu, Play, Practice, levels, campaign, Play
+  online, waiting, join, pause, the Your matches bar and its row keys) keeps the matte key material
+  but no line. The ONE suggested key keeps its line and its quiet glow, so the eye lands on it.
+  The 1px border stays as `transparent` so no key moves. Rule: `polish-075.css`, "Menu keys wear
+  no frame". Focus rings are untouched.
+- **One highlight look.** The turn guide ("?") and levels 1–9 use the same exact-shape glow from
+  behind (`glass-surface.ts` `tutorial()`, `tier:'guide'`): no stroke, no gap, never reshaping the
+  tile, card, pile or key it lights.
+- **The context key may hold a small menu.** "?" lives in the cockpit's context key on the
+  player's own turn. A real move (Skip, Whole map, Bloom recipe…) keeps the key; "?" waits beside
+  it in `#smart-selector`. No other new buttons for the guide, and no window.
+- **Screenshots never go in git.** `docs/screens/` is ignored; share pictures outside the repo.
