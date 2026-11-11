@@ -215,8 +215,9 @@ try {
       const led=rect('smart-led'),context=rect('smart-context'),undo=rect('tool-undo'),tips=rect('futa04-help-button'),sort=rect('hand-sort');
       const close=(a:number,b:number)=>Math.abs(a-b)<1;
       return { top:close(led.top,context.top),bottom:close(undo.top,tips.top)&&close(tips.top,sort.top),
-        width:close(led.width,undo.width+tips.width+(tips.left-undo.right)),
-        columns:close(led.left,undo.left)&&close(context.left,sort.left),
+        // The bottom row follows the tools' side (owner, 2026-11-11): the outer keys may be either way round.
+        width:close(led.width,Math.min(undo.left,sort.left)===undo.left?undo.width+tips.width+(tips.left-undo.right):sort.width+tips.width+(tips.left-sort.right)),
+        columns:close(led.left,Math.min(undo.left,sort.left))&&close(context.left,Math.max(undo.left,sort.left)),
         fixed: [context,undo,tips,sort].every(r=>r.width>=44&&r.height>=44),
         icon: !!document.querySelector('#smart-context svg'),
         count: document.querySelectorAll('#smart-panel button:not(#smart-selector button)').length };
