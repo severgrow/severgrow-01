@@ -388,6 +388,23 @@ export const mountAccounts = async (): Promise<void> => {
     tryTap();
   };
 
+  // The verified session of a sign-in in progress, for THIS tab only (sessionStorage) and only for
+  // a few minutes: it is what lets a reload mid-hand-over finish the sign-in on the first try.
+  const RESUME_KEY = 'futasaku.auth.resume.v1';
+  const RESUME_MAX_AGE_MS = 5 * 60 * 1000;
+  type Resume = { access: string; returnTo: ReturnTo; at: number };
+  const saveResume = (r: Resume) => { try { sessionStorage.setItem(RESUME_KEY, JSON.stringify(r)); } catch { /* blocked */ } };
+  const dropResume = () => { try { sessionStorage.removeItem(RESUME_KEY); } catch { /* blocked */ } };
+  const readResume = (): Resume | null => {
+    try {
+      const r = JSON.parse(sessionStorage.getItem(RESUME_KEY) ?? 'null') as Partial<Resume> | null;
+      if (!r || typeof r.access !== 'string' || typeof r.at !== 'number') return null;
+      if (Date.now() - r.at > RESUME_MAX_AGE_MS) { dropResume(); return null; }
+      const returnTo: ReturnTo = r.returnTo === 'online' || r.returnTo === 'settings' ? r.returnTo : 'menu';
+      return { access: r.access, returnTo, at: r.at };
+    } catch { return null; }
+  };
+
   const completeSignIn = async (access: string, provider: 'google' | 'email', returnTo: ReturnTo, active:()=>boolean = ()=>true): Promise<void> => {
     const checkActive=()=>{if(!active())throw new Error('account-cancelled');};
     checkActive();
@@ -403,8 +420,20 @@ export const mountAccounts = async (): Promise<void> => {
     }
     const guestHadMatches = before ? await hasMatches(before.token) : null;
     checkActive();
-    const res = await apiPost(`/v1/auth/${provider}`, {accessToken:access}, before?.token ?? null);
+    // FIRST TRY ALWAYS WORKS (owner, 2026-11-11: "sometimes ... I need to log in second time"): a
+    // cold server can fail the Google hand-over once (the player is back from Google, with no form
+    // to retry from). Retry it one time, a moment later, before giving up.
+    const handOver = () => apiPost(`/v1/auth/${provider}`, {accessToken:access}, before?.token ?? null)
+      .catch(() => ({ ok: false, status: 0, json: {} as Record<string, unknown> }));
+    let res = await handOver();
     checkActive();
+    // Google only: the email form already keeps its code for a visible retry (accounts-email.ts).
+    if (provider === 'google' && !res.ok && res.status !== 401) {
+      await new Promise((r) => setTimeout(r, 1500));
+      checkActive();
+      res = await handOver();
+      checkActive();
+    }
     const identity = res.ok ? identityFromSignIn(res.json) : null;
     if (!identity) throw new Error(res.status === 401 ? 'account-session-expired' : 'account-exchange-failed');
     // Do not reload onto a forgotten identity if browser storage is blocked.
@@ -414,10 +443,23 @@ export const mountAccounts = async (): Promise<void> => {
     kv?.set(WELCOME_KEY,'1');
     if (res.json.outcome === 'created' || res.json.outcome === 'linked' || (before?.kind === 'guest' && before.playerId === identity.playerId)) setNicknamePrompt(kv,identity.playerId);
     setFlash(kv,{kind:'signed-in',text:signInMessage({outcome:res.json.outcome,name:shownName(identity)??'',beforePlayerId:before?.playerId??null,afterPlayerId:identity.playerId,guestHadMatches}),returnTo});
+    dropResume();
     // Keep the verified session for a failed exchange's retry. Close it only after success.
     void authJson(`${supa.url}/auth/v1/logout?scope=local`,{method:'POST',headers:{apikey:supa.key,authorization:`Bearer ${access}`}}).catch(()=>undefined);
     location.reload();
   };
+
+  // ---- 0. a sign-in interrupted by a reload: finish it (see saveResume) ----
+  const resumed = readResume();
+  if (resumed && !readCallback(location.search, location.hash)) {
+    try {
+      await completeSignIn(resumed.access, 'google', resumed.returnTo);
+      return;
+    } catch {
+      dropResume();
+      setFlash(kv, { kind: 'failed', text: navigator.onLine ? ACCOUNT.failed : ACCOUNT.offline, returnTo: resumed.returnTo });
+    }
+  }
 
   // ---- 1. coming back from Google (?code=…) ----
   const callback = readCallback(location.search, location.hash);
@@ -447,11 +489,16 @@ export const mountAccounts = async (): Promise<void> => {
             const body = ex.ok ? null : String(ex.status);
             fail(ACCOUNT.failed, { stage: 'token-exchange', status: ex.status, body: body?.slice(0, 300) });
           } else {
+            // The code is single-use and already spent: keep the verified session for this tab, so
+            // a reload in the middle of the hand-over (an app update swapping in its files) resumes
+            // the sign-in instead of forgetting it.
+            saveResume({ access, returnTo: pending.returnTo, at: Date.now() });
             await completeSignIn(access, 'google', pending.returnTo);
             return;
           }
         }
       } catch {
+        dropResume();
         fail(navigator.onLine ? ACCOUNT.failed : ACCOUNT.offline);
       }
     }

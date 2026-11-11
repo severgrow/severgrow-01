@@ -172,6 +172,41 @@ const listText = async (page: Page) => {
 };
 
 try {
+  // ---- 5b. FIRST TRY ALWAYS WORKS (owner, 2026-11-11: "sometimes when logging through Google it's
+  // not logged in straight away and I need to log in second time"). Two ways the first try was lost:
+  //   (a) our server's hand-over fails once (a cold start): the page retries it by itself;
+  //   (b) the page reloads in the middle of the hand-over (an app update swapping in its new files):
+  //       the reloaded page resumes the sign-in instead of forgetting it.
+  for (const how of ['server fails once', 'reload mid-hand-over'] as const) {
+    const d = await device(browser);
+    await openMenuEntry(d.page, 'menu-online');
+    await waitFor(() => d.page.locator('#acct-welcome').isVisible());
+    await d.page.click('[data-acct="welcome-guest"]');
+    await hubOpen(d.page);
+    await dismissFirstCard(d.page);
+    await waitFor(async () => (await identity(d.page)) !== null);
+    fake.nextUser = how === 'server fails once' ? 'bob' : 'carol';
+    let calls = 0;
+    await d.page.route('**/v1/auth/google', async (route) => {
+      calls += 1;
+      if (calls === 1) {
+        if (how === 'server fails once') return route.fulfill({ status: 503, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"ok":false}' });
+        await route.abort();
+        await d.page.evaluate('location.reload()').catch(() => undefined);
+        return;
+      }
+      return route.continue();
+    });
+    await d.page.click('[data-acct="hub-google"]');
+    const signed = await waitFor(async () => (await identity(d.page))?.kind === 'account', 25_000);
+    check(`first try (${how}): signed in without a second tap`, signed, `${calls} hand-over call(s)`);
+    check(`first try (${how}): the menu key no longer says LOG IN`, await waitFor(async () => {
+      const key = d.page.locator('#menu-login');
+      return !(await key.isVisible().catch(() => false)) || !/log in/i.test((await key.innerText().catch(() => '')) ?? '');
+    }, 10_000));
+    await d.context.close();
+  }
+
   // ---- 1. a new player: the welcome, then guest play ----
   const d1 = await device(browser);
   await waitFor(() => d1.page.evaluate("document.body.classList.contains('acct-on')") as Promise<boolean>);
