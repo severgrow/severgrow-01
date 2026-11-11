@@ -1021,57 +1021,121 @@
     </section>
 
     <!-- ===== Finish screen (one card, shared by every mode: offline, campaign and online) ===== -->
-    <!-- Owner direction (2026-10-16): the card is SHORTER and never scrolls on a phone, in every
-         mode. The rule it follows: the outcome, the final score, the ONE reason and a way forward
-         are always on the card; every detail line and every extra action is marked `data-go-extra`
-         and lives behind the single "More" disclosure below (main.ts drives it). A mode marks an
-         extra as unavailable with `data-go-available="0"` (e.g. no big cut to replay), so the
-         disclosure hides itself when there is nothing behind it. -->
-    <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden data-ix-surface>
+    <!-- Owner brief (2026-11-11): the END SCREEN grew a planet. The card keeps the outcome, the
+         final score and the Seeds payout, and the RED band — the old reason + stamp + button column —
+         becomes a LIVE view of THE PLANET: the Planet page's own map, owner lines and grow key,
+         without its MENU row (no ranking, challenges, achievements, colour or chat). Four half-width
+         keys sit under it in two rows: the one forward action, RESULT, WATCH REPLAY, BACK TO MENU.
+         RESULT opens the dark-glass window that holds the final board and every detail line, so the
+         card itself stays one phone screen and never scrolls.
+
+         Lessons 1-9 (and the locked futa04 line) keep the older card: `data-anatomy="classic"` on
+         the section is set by main.ts, the detail lines stay behind the single "More" disclosure,
+         and the planet pane is not mounted at all. The markup is shared, so the two anatomies can
+         never drift apart in their words. -->
+    <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden data-ix-surface data-anatomy="classic">
       <div class="go-card">
         <div class="go-summary">
         <!-- The context kicker (owner brief, 2026-10-22): LEVEL 12 above a loss. A campaign win
              keeps its pinned sentence in #go-title and splits it visually; this line is empty then. -->
         <p id="go-context" class="go-context" hidden></p>
         <h2 id="go-title" class="go-title"></h2>
-        <p id="go-sub" class="go-sub"></p>
         <p id="go-learned" class="go-learned" hidden></p>
-        <!-- Level 10 only (owner, 2026-10-24): what Seeds and Territory are, in two lines. -->
-        <p id="go-territory" class="go-territory" hidden><span id="go-territory-earned"></span><span id="go-territory-spend"></span></p>
-        <p id="go-seeds" class="muted small" hidden></p>
-        <!-- The one way from the result to Territory (owner, 2026-10-30). It belongs WITH the Seeds
-             payout, so main.ts shows it only while that line is on the card, and only where the
-             Territory route exists (the level-10 intro card already carries its own key). -->
-        <button id="go-territory-grow" class="btn ghost go-territory-grow" type="button" hidden></button>
+        <!-- ONE NOTE ROW (owner feedback, 2026-11-11: "kicker + title + score + the next-level/Seeds
+             note" — the text block is a read-out, not a headline). The unlock note and the payout
+             share one line: `display: contents` on a classic card keeps them exactly as they were. -->
+        <div class="go-note">
+          <p id="go-sub" class="go-sub"></p>
+          <p id="go-seeds" class="muted small" hidden></p>
+        </div>
         <p id="go-score" class="go-score num"></p>
         <p id="go-reason" class="muted"></p>
         <!-- THE DOUBLE HARVEST (surprise, 2026-10-29): one small stamp of the final position, the two
              joined networks in their own inks and the sides where they strangle each other. It is the
              final board, so it shows on every finished match whose board is known (owner, 2026-10-30).
-             The one-line match summary that sat beside it was removed (owner, 2026-10-30). -->
+             On the planet card it moves into RESULT at a larger size (main.ts paints both). -->
         <div id="go-verdict" class="go-verdict" hidden>
           <figure id="go-harvest" class="go-harvest" hidden></figure>
         </div>
         </div>
+        <!-- THE PLANET IS A PAGE OF THE CARD, NOT A LINE OF IT: it is a SIBLING of the read-out so
+             it can take all the height the four keys leave (owner feedback: the globe fills the frame).
+             The PLANET, IN THE CARD (owner brief, 2026-11-11). The surface is the stage the shared
+             planet renderer mounts into; the head, the bar and the note are its own chrome, on ONE
+             gutter. Level 10's teaching lives INSIDE the window (owner feedback: the explainer must
+             read as part of the planet, not as a separate card under it). -->
+        <div id="go-world" class="go-world" hidden>
+          <div id="go-world-surface" class="go-world-surface">
+            <div class="go-world-head">
+              <span id="go-world-title" class="go-world-title"></span>
+              <span id="go-world-wallet" class="go-world-wallet" aria-live="polite" hidden></span>
+            </div>
+            <div class="go-world-bar" id="go-world-bar" hidden>
+              <span id="go-world-line" class="go-world-line"></span>
+              <button id="go-world-grow" class="go-world-grow" type="button" hidden></button>
+            </div>
+            <div id="go-world-teach" class="go-world-teach" hidden></div>
+            <p id="go-world-note" class="go-world-note" role="status" aria-live="polite" hidden></p>
+          </div>
+        </div>
         <p id="go-break" class="muted small" data-go-extra hidden></p>
         <p id="go-moves" class="muted small" data-go-extra hidden></p>
         <ul id="go-highlights" class="highlights" data-go-extra hidden></ul>
+        <!-- FOUR KEYS, TWO ROWS OF TWO (owner feedback, 2026-11-11). Each row is its own grid with
+             `grid-auto-flow: column; grid-auto-columns: 1fr` — the pause panel's own trick — so a row
+             with ONE key fills the width and a row with two splits it: no orphaned half key, ever. -->
         <div class="go-buttons">
-          <button id="go-rematch" class="btn primary big" type="button">Play again</button>
-          <button id="go-other" class="btn ghost" type="button"></button>
-          <!-- The replay of the whole match (owner brief, 2026-10-25): one tap, every mode.
-               The icon is the game's own line icon (ui/icons.ts), never a generic glyph. -->
-          <button id="go-replay" class="btn ghost go-replay" type="button" hidden><span class="i" data-icon="replay" aria-hidden="true"></span><span id="go-replay-label">Watch replay</span></button>
-          <button id="go-territory-open" class="btn ghost" type="button" hidden>Open Territory</button>
-          <!-- "See the board" stays on the card (not behind the disclosure): it is how a player looks
-               at the final position, and it is also the documented way to put the card away. -->
+          <div class="go-key-row">
+            <button id="go-rematch" class="btn primary big" type="button">Play again</button>
+            <button id="go-result" class="btn ghost" type="button" hidden>Result</button>
+          </div>
+          <div class="go-key-row">
+            <!-- The replay of the whole match (owner brief, 2026-10-25): one tap, every mode.
+                 The icon is the game's own line icon (ui/icons.ts), never a generic glyph. -->
+            <button id="go-replay" class="btn ghost go-replay" type="button" hidden><span class="i" data-icon="replay" aria-hidden="true"></span><span id="go-replay-label">Watch replay</span></button>
+            <button id="go-menu" class="btn link" type="button">Back to menu</button>
+          </div>
+          <!-- CLASSIC ONLY from here down: the old column's remaining ways out and extras. -->
+          <!-- "See the board" puts the card away and shows the final position (the board's own
+               "Results" key brings it back). The planet card dropped it (owner brief, 2026-11-11). -->
           <button id="go-board" class="btn ghost" type="button" aria-label="See the board">Board</button>
+          <button id="go-other" class="btn ghost" type="button" hidden></button>
           <button id="go-more" class="btn link" type="button" aria-expanded="false">More</button>
           <button id="go-share" class="btn ghost" type="button" data-go-extra hidden>Share</button>
           <button id="go-cut" class="btn ghost" type="button" data-go-extra hidden>Replay the biggest cut</button>
-          <button id="go-menu" class="btn link" type="button">Back to menu</button>
           <p id="go-stats" class="muted small stats-line" data-go-extra hidden></p>
         </div>
+        <!-- /go-buttons -->
+      </div>
+
+      <!-- ===== RESULT: the dark-glass window behind the card's second key ===== -->
+      <!-- The final board, the reason, the breakdown, the three biggest moments and the record line,
+           so the card can stay about the outcome and the world. It sits INSIDE the finish dialog
+           (z-index above the card) because the shared sheet layer is underneath it, and it keeps the
+           app's own material: dark glass, one close key, Escape, and focus back to RESULT. -->
+      <div id="go-result-pane" class="go-result" hidden>
+        <div id="go-result-scrim" class="go-result-scrim" aria-hidden="true"></div>
+        <section id="go-result-sheet" class="go-result-sheet" role="dialog" aria-modal="true" aria-labelledby="go-result-title" tabindex="-1">
+          <header class="go-result-head">
+            <h2 id="go-result-title">Result</h2>
+            <button id="go-result-close" class="icon-only" type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
+          </header>
+          <div class="go-result-body">
+            <p id="go-result-outcome" class="go-result-outcome"></p>
+            <p id="go-result-score" class="go-result-score num"></p>
+            <p id="go-result-reason" class="go-result-reason"></p>
+            <figure id="go-result-board" class="go-result-board" hidden></figure>
+            <p id="go-result-break" class="go-result-line"></p>
+            <p id="go-result-moves" class="go-result-line"></p>
+            <ul id="go-result-highlights" class="highlights"></ul>
+            <p id="go-result-stats" class="go-result-line"></p>
+            <div class="go-result-keys">
+              <button id="go-result-share" class="btn ghost" type="button">Share</button>
+              <button id="go-result-cut" class="btn ghost" type="button" hidden>Replay the biggest cut</button>
+              <button id="go-result-difficulty" class="btn ghost" type="button" hidden>Change difficulty</button>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
 

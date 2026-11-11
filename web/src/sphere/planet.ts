@@ -28,6 +28,8 @@ import { PlanetRenderer, EYE, discRadius, projection, type Frame } from './rende
 const TILE_AT_ZOOM_1 = (n: number) => (Math.atan(2) / n) * (Math.sqrt(EYE * EYE - 1) / (EYE - 1));
 /** The tile size the planet opens at and flies to: the flat map's own comfortable size. */
 const OPEN_TILE_PX = 44;
+/** The size this window opens at: its own ask, else the product's comfortable 44px. */
+const openTile = (hooks: PlanetHooks) => Math.max(12, hooks.openTilePx ?? OPEN_TILE_PX);
 /** Below this a tap is too coarse to choose a tile, so it flies in instead. */
 const TAP_TILE_PX = 30;
 const MAX_TILE_PX = 84;
@@ -36,6 +38,13 @@ const MIN_ZOOM = .92;
  *  "Make the live territory in background of main menu be the planet ... the starting position of
  *  when you open the planet"). */
 const MENU_ZOOM = .78;
+/**
+ * THE GLOBE IN A WINDOW (owner feedback, 2026-11-11: "the globe should fill that frame"). `discRadius`
+ * is linear in the zoom and in the frame's shorter side, so this ONE number makes the planet's
+ * diameter ~1.05× the frame's shorter side at every frame shape: the limb is just inside the window,
+ * and the planet reads as a world rather than as a wall of tiles or a stamp in the middle.
+ */
+const GLOBE_ZOOM = 1.28;
 const OUT_MS = 900;
 const FLY_MS = 620;
 const INTRO_MS = 1150;
@@ -59,6 +68,14 @@ export type PlanetHooks = {
   unavailable: string;
   /** Where the planet starts: behind the menu (dim, whole) or in the Territory window. */
   mode?: PlanetMode;
+  /**
+   * THE TILE SIZE THE WINDOW OPENS AT, in CSS px (default 44, the flat map's comfortable size).
+   * A smaller window asks for a smaller tile so MORE of the world is in it: the finish card's pane
+   * is under 200px tall, and at 44px it framed barely three tiles — a smudge, not a place. Anything
+   * under `TAP_TILE_PX` keeps the built-in "too small to hit: the tap flies in first" rule, so a
+   * compact pane stays honest rather than guessing which tile a finger meant.
+   */
+  openTilePx?: number;
   /** The Territory window's panel, in viewport px: the planet's frame while in the window. */
   panel?: () => DOMRect | null;
   /**
@@ -69,6 +86,21 @@ export type PlanetHooks = {
   enclose?: () => DOMRect | null;
   /** A tap landed on one of the twelve black pentagons: nothing can grow there. */
   onBlocked?: () => void;
+  /**
+   * THE PLANET IN A WINDOW THAT IS NOT THE SCREEN (owner brief, 2026-11-11: the finish card's planet
+   * view). When this returns a box, the canvas lives INSIDE the stage at that box's place and size
+   * instead of being one fixed sheet over the whole screen: the same projection, the same input and
+   * the same data, framed to the pane. Null keeps the full-screen sheet every other caller uses.
+   */
+  contained?: () => DOMRect | null;
+  /**
+   * FRAME THE WHOLE PLANET, not your land (owner feedback, 2026-11-11: "the globe should fill that
+   * frame rather than sit small in the middle of it"). The finish card's window is a window onto the
+   * world, so it opens on the globe — the same pose as the menu's backdrop — and a tap that lands on
+   * a tile too small to hit flies in to it AND chooses it (`pickTiny`), so one tap is still one
+   * gesture. Every other caller keeps its land-first framing.
+   */
+  globe?: boolean;
 };
 /**
  * WHERE THE MENU'S PLANET WAS (owner, 2026-11-04: "the animation of rotating the sphere goes back to
@@ -106,8 +138,15 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   let raf = 0, lastFrame = 0, driftTimer=0;
   // THE CANVAS IS ONE FIXED SHEET OVER THE WHOLE SCREEN, behind the menu and in the window alike; only
   // the FRAME the planet is drawn into moves (see `projection`). `view` is the canvas in viewport px.
+  // In a CONTAINED pane (the finish card) the canvas is the pane's own box instead; `view` is still
+  // read in viewport px, because taps and the surface queries arrive in client coordinates.
   let view = { left: 0, top: 0, width: 1, height: 1 };
-  const viewOf = () => ({ left: 0, top: 0, width: Math.max(1, window.innerWidth), height: Math.max(1, window.innerHeight) });
+  const viewOf = () => {
+    const box = hooks.contained?.();
+    return box && box.width > 0 && box.height > 0
+      ? { left: box.left, top: box.top, width: box.width, height: box.height }
+      : { left: 0, top: 0, width: Math.max(1, window.innerWidth), height: Math.max(1, window.innerHeight) };
+  };
   const full = (): Frame => ({ x: 0, y: 0, width: view.width, height: view.height });
   let ground: Ground | null = null, input: PlanetInput | null = null, signature = '';
   let selected: number | null = null, pulseUntil = 0;
@@ -353,15 +392,24 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       ask();
       return;
     }
+    // THE GLOBE IN ITS WINDOW (owner feedback, 2026-11-11): the whole planet, on the menu's own pose,
+    // a breath smaller than its rest so it settles into the frame instead of being simply there.
+    if (hooks.globe) {
+      const rest = clampZoom(GLOBE_ZOOM);
+      if (!posed) { q = menuPose(); zoom = targetZoom = rest * .86; frameNow = frameTarget(); cropNow = cropTarget(); light = 1; posed = true; }
+      if (!motion()) { zoom = targetZoom = rest; ask(); return; }
+      flyTo(q, rest, 760, easeOut);
+      return;
+    }
     const target = northUpDrag(homeQuat(sphere, map, input?.home ?? '0,0'),north,0,0,1);
-    const open = clampZoom(zoomFor(OPEN_TILE_PX));
+    const open = clampZoom(zoomFor(openTile(hooks)));
     if (!motion()) { q = target; zoom = targetZoom = open; frameNow = frameTarget(); cropNow = cropTarget(); light = 1; posed = true; ask(); return; }
     // FROM WHEREVER IT IS, down to your biggest land (owner, 2026-11-04). Opened from the menu the
     // planet is already on screen, turned however far its slow spin took it: the flight starts from
     // that exact pose, size and frame, so the first frame is the menu's last. Opened elsewhere (the
     // hub), it starts from the menu's pose in the window.
     if (!posed) { q = menuMemory ?? menuPose(); zoom = targetZoom = MENU_ZOOM; frameNow = frameTarget(); cropNow = cropTarget(); light = MENU_LIGHT; posed = true; }
-    flyTo(target, open, INTRO_MS, easeInOut, OPEN_TILE_PX);
+    flyTo(target, open, INTRO_MS, easeInOut, openTile(hooks));
   };
   const fail = (text: string) => { fallback.textContent = text; fallback.hidden = false; canvas.hidden = true;announcePaint(); };
   const initialise = () => {
@@ -462,12 +510,18 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (double) {
       if (index === null) return;
       const closer = clampZoom(zoom * 1.8);
-      flyToCell(index, closer > zoom * 1.02 ? closer : clampZoom(zoomFor(OPEN_TILE_PX)));
+      flyToCell(index, closer > zoom * 1.02 ? closer : clampZoom(zoomFor(openTile(hooks))));
       return;
     }
     if (index === null) { hooks.onTile(null); return; }
-    // Tiles too small to hit reliably: the tap brings you closer instead of guessing.
-    if (tilePx() < TAP_TILE_PX) { flyToCell(index, clampZoom(zoomFor(OPEN_TILE_PX))); return; }
+    // Tiles too small to hit reliably: the tap brings you closer instead of guessing. In a GLOBE
+    // window (the finish card) the tap ALSO chooses the tile it flew to — one tap, one gesture, and
+    // the bar is already answering by the time the camera lands.
+    if (tilePx() < TAP_TILE_PX) {
+      flyToCell(index, clampZoom(zoomFor(openTile(hooks))));
+      if (hooks.globe) hooks.onTile(tileForCell(map, index));
+      return;
+    }
     // EVERY hexagon is a tile you can tap (owner, 2026-11-04: "ALL can be taped"); only the twelve
     // pentagons are not ground.
     if (ground && ground.kind[index]! === KIND.pentagon) { hooks.onTile(null); hooks.onBlocked?.(); return; }
@@ -569,8 +623,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       const ring = document.createElement('span');
       ring.className = 'planet-grown';
       ring.setAttribute('aria-hidden', 'true');
-      ring.style.left = `${at.x.toFixed(1)}px`;
-      ring.style.top = `${at.y.toFixed(1)}px`;
+      // Viewport px in the full-screen sheet (its origin is 0,0); pane px in a contained pane, whose
+      // canvas sits at the pane's own origin.
+      ring.style.left = `${(at.x - view.left).toFixed(1)}px`;
+      ring.style.top = `${(at.y - view.top).toFixed(1)}px`;
       ring.style.setProperty('--tile', `${Math.max(12, tilePx()).toFixed(1)}px`);
       canvas.after(ring);
       const done = () => ring.remove();
@@ -580,7 +636,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     home(id: string | null) {
       const index = id ? map.cellOf.get(id) : undefined;
       if (index === undefined || !renderer) return;
-      flyTo(homeQuat(sphere, map, id!), Math.max(zoom, clampZoom(zoomFor(OPEN_TILE_PX))));
+      // A GLOBE WINDOW re-frames on your land at the globe's own size (never the 44px-close framing
+      // the Territory page uses), so a later world read cannot zoom the card's planet in.
+      if (hooks.globe) { flyTo(menuPose(), clampZoom(GLOBE_ZOOM)); return; }
+      flyTo(homeQuat(sphere, map, id!), Math.max(zoom, clampZoom(zoomFor(openTile(hooks)))));
     },
     dispose() {
       if (disposed) return;

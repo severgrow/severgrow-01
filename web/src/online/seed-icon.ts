@@ -11,31 +11,24 @@ export const seedBalanceLabel = (balance: number): string => `${balance} SEEDS`;
  */
 export const SEEDS_WORD = 'Seeds';
 
-/** The tutorial's last finish card (owner, 2026-10-24): level 10 pays 100 Seeds, and the card says,
- *  in two lines, what Seeds and Territory are, then offers the way there. Kept here with the
- *  currency's name, not in src/strings.ts, where "seed" is reserved (the retired seed mode). */
-export const SEEDS_INTRO = Object.freeze({
-  earned: `${SEEDS_WORD} are earned by winning.`,
-  spend: 'Spend 100 to claim a tile of Territory on the world map.',
-  open: 'Open Territory',
-});
-
 /**
- * THE PLANET'S INTRODUCTION over the won level 10 card (owner, 2026-11-04: "the planet is a seasonal
- * map where you spend your seeds to grow tiles. the players occupying the most tiles at the end of
- * planet get prizes ... but phrased way better"). Three short lines: what it is, what Seeds do there,
- * why land matters. Kept here with the currency's name (src/strings.ts reserves "seed").
+ * THE PLANET IN SITU (owner brief, 2026-11-11): the level-10 lesson window is retired, because the
+ * finish card now shows the planet itself and a window over it would hide the thing it describes.
+ * The teaching stays — two short lines under the map, on the won level 10 card only, which is the
+ * one moment the player has just been handed Seeds and needs to know what they are for.
  */
-export const PLANET_INTRO = Object.freeze({
-  eyebrow: 'Lessons complete',
+export const PLANET_TEACH = Object.freeze({
   title: 'THE PLANET',
   lines: Object.freeze([
     'One world, shared by every player, played in seasons.',
-    `Spend your ${SEEDS_WORD} to grow tiles anywhere on it.`,
-    'Hold the most land when the season ends to win prizes.',
+    `Spend ${SEEDS_WORD} to grow tiles. Most land when the season ends wins prizes.`,
   ]),
-  open: 'Open The Planet',
-  later: 'Later',
+});
+
+/** The finish card's planet pane: its two honest outcomes from one grown tile. */
+export const PLANET_PANE = Object.freeze({
+  grown: 'A little place in the world is yours.',
+  growFailed: `That tile may have changed. The map has refreshed; no ${SEEDS_WORD} were taken.`,
 });
 
 /**

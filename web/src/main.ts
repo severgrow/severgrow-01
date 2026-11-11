@@ -133,8 +133,6 @@ import {
 } from './lessons/lessons.js';
 import type { Beat, Lesson } from './lessons/lessons.js';
 import { FINAL_LESSON } from './lessons/final.js';
-import { PLANET_INTRO, SEEDS_INTRO } from './online/seed-icon.js';
-import { mountPlanetIntro, type PlanetIntro } from './player/planet-intro.js';
 import { lessonOpponentAction } from './lessons/opponent.js';
 import { tapAnswer } from './lessons/answer.js';
 import { litTarget, litTargetAndQuiet, tapOf } from './lessons/lesson-view.js';
@@ -281,7 +279,7 @@ import type { NoteEvent, Notes } from './logic/playnotes.js';
 import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
 // The finish card's leading action per mode (online rematch / next level / try again), decided in
 // one pure place so the whole matrix is unit-tested (owner direction, 2026-10-16).
-import { finishLead, territoryLinkVisible } from './logic/finish-actions.js';
+import { finishLead } from './logic/finish-actions.js';
 import type { Beats } from './logic/emptyturn.js';
 // The product menu shows the world map only when this build really has an online endpoint to read
 // it from (the same predicate the lobby uses), so the entry can never open a dead screen.
@@ -291,6 +289,9 @@ import { paintBetaLine } from './feedback/beta-line.js';
 import { queueSeedProof } from './online/seed-rewards.js';
 import { requestTrainingTicket, settleQueuedSeedsOnBoot, TRAINING_TICKET_WAIT_MS, warmSeedIdentity, settleSeedProof } from './online/seed-settle.js';
 import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
+// THE PLANET ON THE FINISH CARD (owner brief, 2026-11-11): the pane itself is built by the lobby
+// (it owns the client and the identity), and this module only paints its one-off teaching band.
+import { type EndgamePlanet } from './online/endgame-planet.js';
 import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { installStaleBuildReload } from './logic/stale-build.js';
@@ -1800,7 +1801,6 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   finalShown = false;
   lastDeckSeen = -1;
   goCounted = false;
-  planetIntroAsked = false;
   goSeedSettled = false;
   goSeedSlot = false;
   goSeedShown = null;
@@ -8111,26 +8111,19 @@ function setGoExtrasOpen(open: boolean) {
 }
 
 /**
- * The finish card's one way to Territory (owner, 2026-10-30), with the payout. The rule is pure
- * (`territoryLinkVisible`); this owns the DOM's own evidence for it: the Seeds line is the payout,
- * and `goTerritoryIntro` marks the level-10 card that already carries its own "Open Territory" key.
+ * THE PLANET REPLACED THE OLD "GROW TILES" KEY (owner brief, 2026-11-11): the finish card now shows
+ * the world itself, with the Planet page's own grow key inside it, so a separate key to Territory
+ * would be a second door to the same room. Its one job here is the WALLET: when a payout lands
+ * after the card is already up, the pane's balance must be the server's, not the old one.
  */
-let goTerritoryIntro = false;
-function syncTerritoryGrow(): void {
-  const btn = document.getElementById('go-territory-grow');
-  if (!btn) return;
-  if (btn.textContent !== RESULT.growTiles) btn.textContent = RESULT.growTiles;
-  const seeds = document.getElementById('go-seeds');
-  const payout = !!seeds && !seeds.hidden && (seeds.textContent ?? '').trim() !== '';
-  const reachable = FEATURES.campaign && onlineBuildEnabled() && !!onlineLobbyCtl && !goTerritoryIntro;
-  btn.hidden = !territoryLinkVisible({ payout, reachable });
+function syncEndgameWallet(): void {
+  if (endgamePlanet) endgamePlanet.refresh();
 }
 
 /** Paints the shared Seeds line empty: a mode that pays no Seeds (a duel) shows no line at all. */
 function clearGoSeeds(): void {
   goSeedShown = null;
   paintSeedReward($('go-seeds'), { kind: 'none' }, { animate: false });
-  syncTerritoryGrow();
 }
 
 /**
@@ -8143,12 +8136,8 @@ function clearGoSeeds(): void {
 function paintGoSeeds(): void {
   // The card re-renders (a resize, a late history fetch, the board toggle). Repainting the same
   // line would rebuild the row and snap a running count to its end, so the message is the guard:
-  // unchanged means "already on the card", and only a real change paints again. The Territory key
-  // is still synced on that path: its visibility depends on the line being there at all.
-  if (goSeedShown === seedRewardMessage) {
-    syncTerritoryGrow();
-    return;
-  }
+  // unchanged means "already on the card", and only a real change paints again.
+  if (goSeedShown === seedRewardMessage) return;
   goSeedShown = seedRewardMessage;
   const view = seedReward(seedRewardMessage);
   const fresh = view.kind === 'award' && !goSeedSettled;
@@ -8158,7 +8147,8 @@ function paintGoSeeds(): void {
     scale: Math.max(timeScale(), 0.35),
     tick: (step, last) => { if (settings.sound) sound.seedTick(step, last); },
   });
-  syncTerritoryGrow();
+  // A real change means the wallet may have moved (an award settling after the card appeared).
+  syncEndgameWallet();
 }
 
 /**
@@ -8269,21 +8259,127 @@ function presentResult(go: HTMLElement, wasHidden: boolean): void {
   }
 }
 /** One exit for every path that puts the result away, so the board always comes back to life. */
-/** The Planet's lesson window over the won level 10 card (web/src/player/planet-intro.ts). */
-let planetIntro: PlanetIntro | null = null, planetIntroAsked = false;
-function planetIntroOf(): PlanetIntro {
-  planetIntro ??= mountPlanetIntro($('gameover'), {
-    onOpen: () => {
-      hideGameOver();
-      showScreen('menu');
-      onlineLobbyCtl?.openWorld('menu');
-    },
-    returnFocus: () => document.getElementById('go-territory-open'),
-  });
-  return planetIntro;
+/** The planet card belongs to builds that own THE PLANET (0.5) and can actually read the world. */
+const ENDGAME_PLANET = FEATURES.planet && onlineBuildEnabled();
+/** The live pane on the current card; built by the lobby, disposed with the card. */
+let endgamePlanet: EndgamePlanet | null = null;
+/** The RESULT window is up (the planet's paint loop is frozen while it is). */
+let finishResultOpen = false;
+
+/**
+ * THE RESULT WINDOW'S DATA (owner brief, 2026-11-11). The card shows the outcome, the score, the
+ * Seeds and the world; every detail line and the final board live one tap away. Storing the numbers
+ * instead of copying the card's DOM keeps ONE source per line (no duplicate ids, no clones) and lets
+ * the window repaint after a late history fetch without touching the card.
+ */
+type FinishResult = {
+  outcome: string;
+  score: [number, number];
+  reason: string;
+  breakdown: string;
+  moves: string;
+  stats: string;
+  highlights: { title: string; by: Player | null; value: number; text: string }[];
+  harvest: HarvestFigure | null;
+  share: boolean;
+  cut: boolean;
+  difficulty: boolean;
+};
+let finishResult: FinishResult | null = null;
+
+/** Paint one list of highlights into the card's or the result's own list (same row shape). */
+function paintHighlightList(list: HTMLElement, highlights: FinishResult['highlights']): void {
+  list.replaceChildren(
+    ...highlights.map((h) => {
+      const li = document.createElement('li');
+      li.className = h.by === HUMAN ? 'you' : h.by === BOT ? 'bot' : '';
+      li.innerHTML = `<span class="h-value num">${h.value}</span><span class="h-title">${h.title}</span><span class="h-text">${h.text}</span>`;
+      return li;
+    }),
+  );
 }
+
+/** Open RESULT: the final board, the reason and the record line, on the app's dark glass. */
+function openFinishResult(): void {
+  const pane = $('go-result-pane');
+  if (!pane.hidden || !finishResult) return;
+  const m = finishResult;
+  $('go-result-outcome').textContent = m.outcome;
+  $('go-result-score').innerHTML =
+    `<span class="you">${m.score[0]}</span><span class="dash">–</span><span class="bot">${m.score[1]}</span>`;
+  $('go-result-reason').textContent = m.reason;
+  $('go-result-break').textContent = m.breakdown;
+  $('go-result-moves').textContent = m.moves;
+  $('go-result-stats').textContent = m.stats;
+  $('go-result-break').hidden = !m.breakdown;
+  $('go-result-moves').hidden = !m.moves;
+  $('go-result-stats').hidden = !m.stats;
+  paintHighlightList($('go-result-highlights'), m.highlights);
+  const board = $('go-result-board');
+  board.innerHTML = m.harvest ? harvestSvg(m.harvest) : '';
+  board.hidden = !m.harvest;
+  const cut = $('go-result-cut') as HTMLButtonElement;
+  cut.hidden = !m.cut;
+  ($('go-result-share') as HTMLButtonElement).hidden = !m.share;
+  ($('go-result-difficulty') as HTMLButtonElement).hidden = !m.difficulty;
+  const sheet = $('go-result-sheet');
+  pane.hidden = false;
+  finishResultOpen = true;
+  // The planet's own loop stops: nothing behind the glass may keep drawing.
+  endgamePlanet?.freeze(true);
+  $('go-result').setAttribute('aria-expanded', 'true');
+  resetSurface(sheet);
+  enterSurface(sheet, { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE });
+  $('go-result-close').focus({ preventScroll: true });
+}
+
+/** Close RESULT and give the key back. `instant` skips the exit (the card is going away). */
+function closeFinishResult(instant = false): void {
+  const pane = $('go-result-pane');
+  if (pane.hidden) return;
+  finishResultOpen = false;
+  $('go-result').setAttribute('aria-expanded', 'false');
+  const finish = () => {
+    pane.hidden = true;
+    endgamePlanet?.freeze(false);
+  };
+  const sheet = $('go-result-sheet');
+  if (instant) {
+    resetSurface(sheet);
+    finish();
+    return;
+  }
+  const leave = exitSurface(sheet, { travel: Math.round(INTERFACE_MOTION.travel * 1.5), scale: 0.99, onDone: finish });
+  if (!leave) finish();
+  if (!$('gameover').hidden) $('go-result').focus({ preventScroll: true });
+}
+
+/**
+ * MOUNT / POINT THE PLANET PANE for the card that is on screen. Mounted once per card (the pane is a
+ * WebGL canvas and a network read, not a decoration); a re-render of the same card does nothing.
+ * `teach` is level 10's in-situ explanation, in the window's own foot.
+ */
+function syncEndgamePlanet(show: boolean, teach: boolean): void {
+  const host = document.getElementById('go-world');
+  if (!host) return;
+  host.hidden = !show;
+  if (!show) {
+    endgamePlanet?.dispose();
+    endgamePlanet = null;
+    return;
+  }
+  if (!endgamePlanet) {
+    endgamePlanet = onlineLobbyCtl?.mountEndgamePlanet(host, () => campaignLevel?.number ?? null) ?? null;
+    endgamePlanet?.open();
+  }
+  // Painted after the open, so a cached map cannot reset the foot mid-way.
+  endgamePlanet?.teach(teach);
+}
+
 function hideGameOver(): void {
-  planetIntro?.hide();
+  closeFinishResult(true);
+  endgamePlanet?.dispose();
+  endgamePlanet = null;
   const go = $('gameover');
   if (!go.hidden) {
     go.hidden = true;
@@ -8534,6 +8630,13 @@ function checkResultHold(): void {
 function paintVerdict(figure: HarvestFigure | null): void {
   const box = document.getElementById('go-verdict');
   const fig = document.getElementById('go-harvest');
+  // The RESULT window's own, larger copy. One painter for both, so the stamp can never disagree
+  // with itself (the classic card keeps its small one; the planet card shows the big one).
+  const board = document.getElementById('go-result-board');
+  if (board) {
+    board.innerHTML = figure ? harvestSvg(figure) : '';
+    board.hidden = !figure;
+  }
   if (!box || !fig) return;
   if (figure) {
     fig.innerHTML = harvestSvg(figure);
@@ -8598,8 +8701,6 @@ function renderGameOver() {
     // "seeds pending or shit like that"). No payload carries that award yet, so this is silence in
     // practice — and it must be, because a daily cap pays 0 and a resignation pays nothing, so any
     // number the client worked out for itself would be a guess. See `duelSeedsMessage`.
-    goTerritoryIntro = false;
-    $('go-territory').hidden = true;
     clearGoSeeds();
     const snapshot = os.driver.snapshot();
     seedRewardMessage = duelSeedsMessage(snapshot.seeds ?? null);
@@ -8637,14 +8738,7 @@ function renderGameOver() {
     $('go-break').textContent = info.breakdown;
     $('go-moves').textContent = info.moves ?? '';
     setGoExtra('go-moves', !!info.moves);
-    $('go-highlights').replaceChildren(
-      ...info.highlights.map((h) => {
-        const li = document.createElement('li');
-        li.className = h.by === HUMAN ? 'you' : h.by === BOT ? 'bot' : '';
-        li.innerHTML = `<span class="h-value num">${h.value}</span><span class="h-title">${h.title}</span><span class="h-text">${h.text}</span>`;
-        return li;
-      }),
-    );
+    paintHighlightList($('go-highlights'), info.highlights);
     // The record line counts offline games only — never leak it onto a server match.
     $('go-stats').textContent = '';
     setGoExtra('go-stats', false);
@@ -8653,19 +8747,39 @@ function renderGameOver() {
     // It DOES have a replay of the whole match (owner brief, 2026-10-25), whenever at least one
     // move was committed — so the one entry sits on the card beside the ways forward.
     setReplayAvailable(snapshot.revision > 0);
-    // The owner's ask: a REAL rematch leads the finish screen, ahead of the old "back out" that
-    // used to sit in this slot. Back to matches and Menu stay, as secondary ways out
-    // (`bind('go-rematch')` starts the rematch; `bind('go-other')` is Back to matches).
+    // THE FOUR KEYS (owner brief, 2026-11-11): the rematch still leads; the result's details and
+    // the final board sit behind RESULT; the fourth key is the way back to the matches on a duel.
+    // A locked-line card (no planet) keeps its old column and its Back to matches in `go-other`.
+    const anatomy = ENDGAME_PLANET ? 'planet' : 'classic';
+    $('go-board').hidden = anatomy === 'planet';
     $('go-rematch').textContent = ONLINE.rematch;
     $('go-rematch').setAttribute('aria-label', ONLINE.rematch);
     const other = $('go-other');
-    other.hidden = false;
+    other.hidden = anatomy === 'planet';
     other.textContent = ONLINE.backToMatches;
     other.setAttribute('aria-label', ONLINE.backToMatches);
-    $('go-menu').textContent = ONLINE.menuButton;
-    $('go-menu').setAttribute('aria-label', ONLINE.menuButton);
+    const menuKey = $('go-menu');
+    menuKey.textContent = anatomy === 'planet' ? ONLINE.backToMatches : ONLINE.menuButton;
+    menuKey.setAttribute('aria-label', menuKey.textContent);
+    menuKey.dataset.target = anatomy === 'planet' ? 'matches' : 'menu';
     $('go-share').textContent = RESULT.share;
     go.className = `gameover ${won ? 'won' : draw ? 'draw' : 'lost'}`;
+    go.dataset.anatomy = anatomy;
+    $('go-result').hidden = anatomy !== 'planet';
+    finishResult = {
+      outcome: info.title,
+      score: [info.scores[0], info.scores[1]],
+      reason: info.reason,
+      breakdown: info.breakdown,
+      moves: info.moves ?? '',
+      stats: '',
+      highlights: info.highlights,
+      harvest,
+      share: true,
+      cut: false,
+      difficulty: false,
+    };
+    syncEndgamePlanet(anatomy === 'planet', false);
     // A fresh finish starts folded: the card shows the result and the ways forward, nothing else.
     if (wasHidden) setGoExtrasOpen(false);
     else syncGoExtras();
@@ -8755,47 +8869,29 @@ function renderGameOver() {
   }
   // The owner's rule (2026-10-16): after a WON campaign level the first button is "Next level" — the
   // next level starts straight away, with no walk back to the list to pick it. The last built level
-  // has no next, so that same button becomes the honest way out (the level list) rather than a dead
-  // one. A loss and a plain offline game keep the retry/again words they always had. Which one leads
-  // is decided in one pure place (`finishLead`), and the next level is read from the level DATA.
+  // has no next, and a replay behind the place unlocks nothing, so that slot becomes PLAY AGAIN
+  // (owner brief, 2026-11-11 removed "Back to levels": the player only plays their latest level).
+  // Which one leads is decided in one pure place (`finishLead`); the next level is the level DATA's.
   const lead = finishLead({ online: false, campaign: !!campaign, won, hasNext: !!next, tutorial, replay });
   const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel
-    : lead === 'back-to-campaign' ? CAMPAIGN.back
     : lead === 'back-to-tutorial' ? TUTORIAL_REPLAY.back
     : won ? 'Play again' : 'Try again';
   $('go-rematch').textContent = leadWord;
   $('go-rematch').setAttribute('aria-label', leadWord);
   // Lessons 1-9 pay no Seeds: no Seeds line at all on their finish card. Level 10 pays 100 once, and
-  // its won card says what Seeds and Territory are, with the way there (owner, 2026-10-24).
+  // its won card now explains THE PLANET over the live map (owner brief, 2026-11-11).
   if (taught && taught.level !== FINAL_LESSON.level) seedRewardMessage = '';
-  const territoryIntro = !!taught && taught.level === FINAL_LESSON.level && won && onlineBuildEnabled() && !!onlineLobbyCtl;
-  // The intro card already carries its own "Open Territory" key, so the payout's own key steps
-  // aside there instead of offering the same destination twice (owner, 2026-10-30).
-  goTerritoryIntro = territoryIntro;
   paintGoSeeds();
-  $('go-territory-earned').textContent = SEEDS_INTRO.earned;
-  $('go-territory-spend').textContent = SEEDS_INTRO.spend;
-  // THE PLANET'S OWN WINDOW (owner, 2026-11-04): where the Territory is THE PLANET, a lesson window
-  // over this card introduces it, so the card's two inline lines step aside; the card keeps its key
-  // to the Planet for a player who chose Later.
-  const planetWindow = territoryIntro && FEATURES.planet;
-  $('go-territory').hidden = !territoryIntro || planetWindow;
-  $('go-territory-open').textContent = planetWindow ? PLANET_INTRO.open : SEEDS_INTRO.open;
-  $('go-territory-open').hidden = !territoryIntro;
-  // Once per finished game: a later repaint of this card (the Seeds receipt arriving) never reopens it.
-  if (planetWindow && !planetIntroAsked) { planetIntroAsked = true; planetIntroOf().show(); }
-  syncTerritoryGrow();
   const other = $('go-other');
-  // On the last level, on a replay and in the Tutorial the primary already IS the way back to the
-  // list/Tutorial: one action, not two that do the same thing (the online rematch keeps its own
-  // secondary, untouched). On the tutorial's last card, Open Territory takes the second place
-  // (the card never grows a row).
-  other.hidden = lead === 'back-to-campaign' || lead === 'back-to-tutorial' || territoryIntro;
-  const otherWord = campaign ? CAMPAIGN.back : 'Change difficulty';
+  // The old "Back to levels" is gone for good. On a classic card the only second way out left is a
+  // practice match's Change difficulty; the planet card carries it inside RESULT instead.
+  const otherWord = 'Change difficulty';
+  other.hidden = !!campaign || ENDGAME_PLANET;
   other.textContent = otherWord;
   other.setAttribute('aria-label', otherWord);
   $('go-menu').textContent = RESULT.backToMenu;
   $('go-menu').setAttribute('aria-label', RESULT.backToMenu);
+  $('go-menu').dataset.target = 'menu';
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
   // overhaul item 20: the final score counts up once, calmly (not with Reduce motion or Speed Off)
@@ -8841,17 +8937,37 @@ function renderGameOver() {
   const moves = moveSummary(st.history ?? [], HUMAN);
   $('go-moves').textContent = moves ?? '';
   setGoExtra('go-moves', !!moves);
-  $('go-break').textContent = RESULT.breakdown(breakdownPart(st, HUMAN), breakdownPart(st, BOT));
-  $('go-stats').textContent = statsLine(stats);
+  const breakdown = RESULT.breakdown(breakdownPart(st, HUMAN), breakdownPart(st, BOT));
+  $('go-break').textContent = breakdown;
+  const record = statsLine(stats);
+  $('go-stats').textContent = record;
   setGoExtra('go-stats', true);
-  $('go-highlights').replaceChildren(
-    ...gameHighlights(st.history ?? [], HUMAN).map((h) => {
-      const li = document.createElement('li');
-      li.className = h.by === HUMAN ? 'you' : h.by === BOT ? 'bot' : '';
-      li.innerHTML = `<span class="h-value num">${h.value}</span><span class="h-title">${h.title}</span><span class="h-text">${h.text}</span>`;
-      return li;
-    }),
-  );
+  const highlights = gameHighlights(st.history ?? [], HUMAN);
+  paintHighlightList($('go-highlights'), highlights);
+  // THE PLANET CARD (owner brief, 2026-11-11): every offline match from level 10 on, practice and
+  // duels show the living world and the four keys; lessons 1-9 (and the locked futa04 line) keep the
+  // classic card, which is why the anatomy is decided per card and not per build alone.
+  const planetCard = ENDGAME_PLANET && !(taught && taught.level !== FINAL_LESSON.level);
+    // "See the board" belongs to the classic card; the planet card shows the position in RESULT.
+    $('go-board').hidden = planetCard;
+    go.dataset.anatomy = planetCard ? 'planet' : 'classic';
+    $('go-result').hidden = !planetCard;
+  const reason = taught ? '' : resultReason(r, HUMAN);
+  finishResult = {
+    outcome: $('go-title').textContent ?? '',
+    score: [r.scores[HUMAN], r.scores[BOT]],
+    reason,
+    breakdown,
+    moves: moves ?? '',
+    stats: record,
+    highlights,
+    harvest: offlineVerdict(st),
+    share: true,
+    cut: !!session?.biggestCut,
+    difficulty: !campaign,
+  };
+  // Level 10's teaching, under the live map: the planet explains itself where it is used.
+  syncEndgamePlanet(planetCard, !!taught && taught.level === FINAL_LESSON.level && won);
   // A fresh finish starts folded (see the online branch): the card shows the result and the ways
   // forward, and the details wait behind "More" — that is what keeps it on one phone screen.
   if (wasHidden) setGoExtrasOpen(false);
@@ -10120,17 +10236,9 @@ function tearDownOnlineDuel(): void {
 bind('go-other', () => {
   flushInstallInvite();
   hideGameOver();
-  if (isOnlineDuel()) {
-    // "Back to matches": the same one teardown, then the hub. Hiding #game is the same guard the
-    // rematch uses — a stray resize render must never paint the finished board's overlay here.
-    tearDownOnlineDuel();
-    $('game').hidden = true;
-    void onlineLobbyCtl?.openHub();
-    return;
-  }
-  // A tutorial replay never enters campaign progression; its card's own way out is the Tutorial.
-  if (tutorialReplay) return showScreen('menu');
-  showScreen(campaignLevel ? 'campaign' : 'levels');
+  // Classic practice only: the difficulty list. The campaign's "Back to levels" is gone (owner
+  // brief, 2026-11-11), so a campaign card can never reach here.
+  showScreen('levels');
 });
 bind('menu-continue', () => continueGame());
 bind('menu-tutorial', () => {
@@ -10585,11 +10693,10 @@ bind('go-rematch', () => {
   if (campaignLevel && wonNow) {
     const next = campaignReplay ? null : nextCampaignLevel(campaignLevel.number);
     if (next) return startCampaignLevel(next);
-    hideGameOver();
-    resultAdvance = false;
-    return showScreen('campaign');
   }
-  // A campaign retry restarts the SAME level from its fixed seed (never a random one).
+  // A campaign retry — and now also the last built level and a replay of an older one (owner brief,
+  // 2026-11-11: no "Back to levels" on the card, so the same level is played again instead) — restarts
+  // the SAME level from its fixed seed (never a random one).
   if (campaignLevel) return startCampaignLevel(campaignLevel);
   // EXPERIMENTAL Blitz: "Try again"/"Play again" opens the NEXT Blitz match — a new random board,
   // and the ladder's level as it stands after the game just finished (two losses -> bot 8).
@@ -10601,36 +10708,38 @@ bind('go-rematch', () => {
   }
   startGame(randomSeed(), gameLevel);
 });
-// The finish card's ONE disclosure: every detail line and every extra action is behind it.
+// The finish card's ONE disclosure (classic cards only; the planet card's details live in RESULT).
 bind('go-more', () => setGoExtrasOpen(!goExtrasOpen));
 bind('go-board', () => {
+  // CLASSIC CARDS ONLY (the planet card hides this key and shows the board in RESULT).
   gameOverDismissed = true;
   hideGameOver();
   render();
 });
 bind('go-menu', () => {
+  const toMatches = $('go-menu').dataset.target === 'matches';
   hideGameOver();
   // Leaving a duel must tear the session down, exactly like Back to matches (the match stays
-  // resumable on the server).
-  if (isOnlineDuel()) tearDownOnlineDuel();
+  // resumable on the server). On the planet card the fourth key IS Back to matches (owner brief,
+  // 2026-11-11); the locked-line card keeps its old Back to menu.
+  if (isOnlineDuel()) {
+    tearDownOnlineDuel();
+    $('game').hidden = true;
+    if (toMatches) { void onlineLobbyCtl?.openHub(); return; }
+  }
   showScreen('menu');
 });
-bind('go-territory-open', () => {
-  hideGameOver();
-  showScreen('menu');
-  onlineLobbyCtl?.openWorld('menu');
-});
+// THE RESULT WINDOW (owner brief, 2026-11-11): the details, the final board and the quiet extras.
+bind('go-result', () => openFinishResult());
+bind('go-result-close', () => closeFinishResult());
+bind('go-result-scrim', () => closeFinishResult());
 // The replay of the whole match (owner brief, 2026-10-25): one tap on the finish card, any mode.
 bind('go-replay', () => void openReplayForFinish());
-bind('go-territory-grow', () => {
-  hideGameOver();
-  showScreen('menu');
-  onlineLobbyCtl?.openWorld('menu');
-});
-// Overhaul item 20: replay the game's biggest cut (from the board just before it), then come back here
-bind('go-cut', () => {
+/** Overhaul item 20: replay the game's biggest cut (from the board just before it), then come back. */
+function replayBiggestCut(): void {
   const p = session?.biggestCut;
   if (!session || !p || busy()) return;
+  closeFinishResult(true);
   gameOverDismissed = true;
   reopenGameOver = true;
   replaying = true;
@@ -10644,13 +10753,15 @@ bind('go-cut', () => {
   queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);
   render();
   void pump();
-});
+}
+bind('go-cut', replayBiggestCut);
+bind('go-result-cut', replayBiggestCut);
 // Overhaul item 20: a picture of the result for the share sheet (or saved); nothing is uploaded.
 // ONLINE builds the card from the online display state, so the button can never be a silent no-op.
-bind('go-share', () => {
-  const onSaved = (r: string) => {
-    if (r === 'saved') $('go-share').textContent = ONLINE.shareSaved;
-  };
+const onShareSaved = (r: string) => {
+  if (r === 'saved') $('go-share').textContent = ONLINE.shareSaved;
+};
+function shareFinishResult(): void {
   const os = isOnlineDuel() ? getOnlineSession() : null;
   if (os) {
     const info = os.finishInfo();
@@ -10666,7 +10777,7 @@ bind('go-share', () => {
       radius: os.state.config.boardRadius,
       cells: os.state.config.board?.cells,
       me: HUMAN,
-    }).then(onSaved);
+    }).then(onShareSaved);
     return;
   }
   const st = session?.state;
@@ -10682,8 +10793,28 @@ bind('go-share', () => {
     radius: st.config.boardRadius,
     cells: st.config.board?.cells,
     me: HUMAN,
-  }).then(onSaved);
+  }).then(onShareSaved);
+}
+bind('go-share', shareFinishResult);
+bind('go-result-share', shareFinishResult);
+// The classic card's practice way out; the planet card carries the same key inside RESULT.
+// RESULT keeps the keyboard while it is up: Escape closes it, Tab cycles inside its plate.
+$('go-result-pane').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeFinishResult();
+    return;
+  }
+  if (e.key !== 'Tab' || !finishResultOpen) return;
+  const keys = [...$('go-result-sheet').querySelectorAll<HTMLElement>('button:not([hidden])')];
+  if (!keys.length) return;
+  const first = keys[0]!, last = keys[keys.length - 1]!;
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 });
+// The classic card's practice way out; the planet card carries the same key inside RESULT.
+bind('go-result-difficulty', () => $('go-other').click());
 
 bind('coach-show', () => {
   // "Show me where": an arrow points at each thing to tap, one step at a time.
@@ -10758,7 +10889,8 @@ const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRigh
 document.addEventListener('keydown', (e) => {
   if (e.isComposing || e.keyCode === 229) return;
   if (e.key === 'Escape') {
-    if (openSheet) sheet(null);
+    if (finishResultOpen) closeFinishResult();
+    else if (openSheet) sheet(null);
     // Esc skips an animation, but never the enemy's turn: that is the Skip control's job alone.
     else if (onlineReveal()) revealWaitNotice();
     else if (busy()) fastForward();
@@ -11179,8 +11311,10 @@ if (SHOW_MENU_TAGLINE) {
 type OnlineLobbyCtl = {
   openHub(): Promise<void>;
   rematch(finishedMatchId?: string | null): Promise<void>;
-  /** The Territory map (the menu's own entry); the finish card of level 10 opens it too. */
+  /** The Territory map (the menu's own entry); the finish card's planet pane calls its own mount. */
   openWorld(from: 'hub' | 'menu'): void;
+  /** THE PLANET ON THE FINISH CARD: built by the lobby, which owns the client and the identity. */
+  mountEndgamePlanet(host: HTMLElement, level: () => number | null): EndgamePlanet | null;
   /** Leave the lobby for a match: the one transition every entry point uses. */
   leaveForMatch(): void;
 };

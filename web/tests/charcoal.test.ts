@@ -19,7 +19,7 @@ describe('charcoal', () => {
   });
 
   it('no solid ground is near-black any more', () => {
-    const files = ['../index.html', '../src/style.css', '../src/player/space-backdrop.ts', '../src/online/challenge-handoff.ts', '../src/online/world-planet.ts', '../src/player/planet-intro.ts'];
+    const files = ['../index.html', '../src/style.css', '../src/player/space-backdrop.ts', '../src/online/challenge-handoff.ts', '../src/online/world-planet.ts', '../src/online/endgame-planet.ts'];
     for (const f of files) {
       const src = read(f);
       for (const hex of ['#030404', '#050606', '#050708', '#07090a']) expect(src.includes(hex), `${f} still uses ${hex}`).toBe(false);

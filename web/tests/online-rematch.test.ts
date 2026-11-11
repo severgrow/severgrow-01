@@ -16,7 +16,7 @@ const html = read('../index.html');
 const mainSource = read('../src/main.ts');
 const goButtons = html.slice(
   html.indexOf('<div class="go-buttons">'),
-  html.indexOf('</div>', html.indexOf('<div class="go-buttons">')),
+  html.indexOf('<!-- /go-buttons -->'),
 );
 
 describe('online finish screen: Rematch leads', () => {
@@ -26,9 +26,14 @@ describe('online finish screen: Rematch leads', () => {
     expect(goButtons).toMatch(/<button id="go-rematch"[^>]*class="[^"]*\bprimary\b/);
   });
 
-  it('keeps Back to matches and Menu as secondary affordances, not gone', () => {
+  it('keeps the way back to the matches as the fourth key, not gone', () => {
+    // Owner brief (2026-11-11): the fourth key is BACK TO MATCHES on a duel, BACK TO MENU elsewhere.
+    // The DOM keeps ONE fourth key (`go-menu`); main.ts chooses its words and its route per card.
+    expect(goButtons.indexOf('id="go-menu"')).toBeGreaterThan(goButtons.indexOf('id="go-rematch"'));
+    expect(mainSource).toMatch(/menuKey\.textContent = anatomy === 'planet' \? ONLINE\.backToMatches : ONLINE\.menuButton;/);
+    expect(mainSource).toMatch(/menuKey\.dataset\.target = anatomy === 'planet' \? 'matches' : 'menu';/);
+    // The classic online card keeps its own Back to matches row, so no player loses the exit.
     expect(goButtons.indexOf('id="go-other"')).toBeGreaterThan(goButtons.indexOf('id="go-rematch"'));
-    expect(goButtons.indexOf('id="go-menu"')).toBeGreaterThan(goButtons.indexOf('id="go-other"'));
     // The primary slot's copy is the Rematch word; the back-out and menu words sit in the others.
     expect(ONLINE.rematch).toBe('Rematch');
     expect(ONLINE.backToMatches).toBe('Back to matches');

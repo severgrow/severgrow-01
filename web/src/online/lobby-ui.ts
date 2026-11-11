@@ -24,6 +24,7 @@ import { mountChallengeHandoff } from './challenge-handoff.js';
 import { WorldView } from './world-view.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { mountWorldSource } from './living-world-source.js';
+import { mountEndgamePlanet as mountEndgamePlanetPane } from './endgame-planet.js';
 import { mountLivingTerritory } from './living-territory.js';
 import { requestPlayerProfile } from '../accounts/profile-request.js';
 import { installTerritoryCountUI, answerWaiting, territoryCounts } from './menu-territory.js';
@@ -116,6 +117,13 @@ export type OnlineLobbyController = {
    */
   openWorld(from: 'hub' | 'menu'): void;
   /**
+   * THE PLANET ON THE FINISH CARD (owner brief, 2026-11-11). The pane is built beside the lobby's
+   * own WorldView so it shares the SAME client, identity and cached map: the finish card must never
+   * be a second, disagreeing viewer of the world. Null where the planet is not part of this build
+   * (the locked futa04 line keeps its classic card) or where the world cannot be mounted.
+   */
+  mountEndgamePlanet(host: HTMLElement, level: () => number | null): import('./endgame-planet.js').EndgamePlanet | null;
+  /**
    * Leave the lobby for a match: the one transition every entry point uses (a match row, a friend
    * joining, a join code, a Territory challenge). Tears the Territory view down and gives the
    * visible lobby screen the interface's own exit beat before `#game` is shown. `showScreen` hides
@@ -146,6 +154,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       enabled: false,
       openHub: async () => undefined,
       openWorld: () => undefined,
+      mountEndgamePlanet: () => null,
       leaveForMatch: () => undefined,
       handleBootHash: async () => undefined,
       refreshTitle: () => undefined,
@@ -1626,7 +1635,26 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     ($('online-join-code') as HTMLInputElement).focus();
   };
 
-  return { enabled: true, openHub, openWorld, leaveForMatch, handleBootHash, refreshTitle, openMatch, rematch, trainingSeedTicket, syncSeedRewards };
+  /**
+   * THE PLANET ON THE FINISH CARD. Built from this lobby's own client, identity and cached world, so
+   * there is exactly ONE viewer of the world on this page. `level` is the campaign place for the
+   * owner line's LEVEL word (never a second source of truth).
+   */
+  const mountEndgamePlanet = (host: HTMLElement, level: () => number | null) =>
+    mountEndgamePlanetPane(host, {
+      client,
+      identity: async () => {
+        const id = await ensureIdentity();
+        return id ? { token: id.token, playerId: id.playerId, kind: id.kind } : null;
+      },
+      cachedWorld: () => worldSource.peek(),
+      level,
+    });
+
+  return {
+    enabled: true, openHub, openWorld, mountEndgamePlanet, leaveForMatch, handleBootHash, refreshTitle,
+    openMatch, rematch, trainingSeedTicket, syncSeedRewards,
+  };
 };
 
 const escapeHtml = (s: string) =>

@@ -30,10 +30,12 @@ const OUT = new URL('../../docs/screens/finish/', import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 4301);
 /** MODES=classic,campaign,online — the online part rebuilds the dist, so it can be left out. */
 const MODES = (process.env.MODES ?? 'classic,campaign,online').split(',').map((s) => s.trim());
-const VIEWPORTS = [
+const VIEWPORTS = ([
+  { key: '320x568', width: 320, height: 568 },
   { key: '360x640', width: 360, height: 640 },
   { key: '390x844', width: 390, height: 844 },
-] as const;
+  { key: '1280x800', width: 1280, height: 800 },
+] as const).filter((vp) => !process.env.FIT_VIEWPORTS || process.env.FIT_VIEWPORTS.split(',').includes(vp.key));
 
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
@@ -46,7 +48,7 @@ mkdirSync(OUT, { recursive: true });
 /** Every line and button the finish card owns, in document order (what a mode chooses to show). */
 const PARTS = [
   'go-title', 'go-sub', 'go-score', 'go-reason', 'go-break', 'go-moves', 'go-highlights', 'go-stats',
-  'go-rematch', 'go-other', 'go-more', 'go-share', 'go-board', 'go-cut', 'go-menu',
+  'go-rematch', 'go-result', 'go-replay', 'go-more', 'go-share', 'go-cut', 'go-menu', 'go-world',
 ] as const;
 
 /**
@@ -66,6 +68,9 @@ const MEASURE = `(() => {
     return r.top >= -1 && r.bottom <= window.innerHeight + 1 && r.left >= -1 && r.right <= window.innerWidth + 1;
   };
   const controls = [...document.querySelectorAll('#gameover .go-buttons .btn')].filter(shown);
+  const pane = id('go-world');
+  const rows = [...document.querySelectorAll('#gameover .go-key-row')].filter(shown);
+  const keyBox = (el) => { const r = el.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.x) }; };
   return {
     card: card ? { ...box(card), scrollH: card.scrollHeight, clientH: card.clientHeight, overflow: card.scrollHeight - card.clientHeight } : null,
     screen: screen ? { scrollH: screen.scrollHeight, clientH: screen.clientHeight, overflow: screen.scrollHeight - screen.clientHeight } : null,
@@ -73,8 +78,19 @@ const MEASURE = `(() => {
     viewport: { w: window.innerWidth, h: window.innerHeight },
     visibleParts: parts.filter((p) => shown(id(p))),
     hiddenParts: parts.filter((p) => !shown(id(p))),
-    buttons: controls.map((b) => ({ id: b.id, label: (b.textContent || '').trim(), inside: inside(b) })),
+    buttons: controls.map((b) => ({ id: b.id, label: (b.textContent || '').trim(), ...keyBox(b), inside: inside(b) })),
     primary: controls.filter((b) => b.classList.contains('primary')).map((b) => b.id),
+    rows: rows.map((row) => [...row.querySelectorAll('.btn')].filter(shown).map((b) => b.id)),
+    anatomy: screen.dataset.anatomy || 'classic',
+    planet: pane && shown(pane) ? keyBox(pane) : null,
+    summaryH: (() => { const s = card && card.querySelector('.go-summary'); const r = s ? s.getBoundingClientRect() : null; return r ? Math.round(r.height) : 0; })(),
+    keysH: (() => { const s = document.querySelector('#gameover .go-buttons'); const r = s ? s.getBoundingClientRect() : null; return r ? Math.round(r.height) : 0; })(),
+    cardDisplay: card ? getComputedStyle(card).display : '',
+    cardDir: card ? getComputedStyle(card).flexDirection : '',
+    cardHeight: card ? getComputedStyle(card).height : '',
+    kids: card ? [...card.children].map((c) => (c.className || c.id) + ':' + Math.round(c.getBoundingClientRect().height) + ':' + getComputedStyle(c).display) : [],
+    summaryFlex: (() => { const s = card && card.querySelector('.go-summary'); return s ? getComputedStyle(s).flex : ''; })(),
+    canvas: !!document.querySelector('#go-world-surface > .planet-canvas'),
     highlights: document.querySelectorAll('#go-highlights li').length,
     clipped: controls.filter((b) => !inside(b)).map((b) => b.id),
     title: (id('go-title') || {}).textContent || '',
@@ -88,8 +104,19 @@ const measure = (page: Page) => page.evaluate(MEASURE) as Promise<{
   pageWide: boolean;
   visibleParts: string[];
   hiddenParts: string[];
-  buttons: { id: string; label: string; inside: boolean }[];
+  buttons: { id: string; label: string; inside: boolean; w: number; h: number }[];
   primary: string[];
+  rows: string[][];
+  anatomy: string;
+  planet: { w: number; h: number } | null;
+  summaryH: number;
+  keysH: number;
+  cardDisplay: string;
+  cardDir: string;
+  cardHeight: string;
+  kids: string[];
+  summaryFlex: string;
+  canvas: boolean;
   highlights: number;
   clipped: string[];
   title: string;
@@ -278,21 +305,76 @@ const bootScreen = async (browser: Browser, vp: { width: number; height: number 
 const report = async (mode: string, vp: string, page: Page, errors: string[], expectLead?: string) => {
   const m = await measure(page);
   const leadLabel = m.buttons.find((b) => b.id === 'go-rematch')?.label ?? '';
-  console.log(`\n--- ${mode} ${vp}: "${m.title}" · ${m.reason}`);
+  const planet = m.anatomy === 'planet';
+  console.log(`\n--- ${mode} ${vp}: "${m.title}" · ${m.reason} · anatomy ${m.anatomy}`);
   console.log(`    visible: ${m.visibleParts.join(' ') || '(none)'}`);
   console.log(`    hidden : ${m.hiddenParts.join(' ') || '(none)'}`);
-  console.log(`    buttons: ${m.buttons.map((b) => `${b.label}${b.id === 'go-menu' ? '(link)' : ''}`).join(' | ')}`);
+  console.log(`    buttons: ${m.buttons.map((b) => `${b.label} ${b.w}x${b.h}`).join(' | ')}`);
+  if (planet && m.card && m.planet) {
+    const share = Math.round((m.planet.h / m.card.h) * 100);
+    console.log(`    MEASURED: card ${m.card.h}px · planet window ${m.planet.h}px (${share}%) · planet ${m.planet.w}px wide`);
+    console.log(`    layout  : card ${m.cardDisplay}/${m.cardDir} ${m.cardHeight} · summary ${m.summaryH}px (${m.summaryFlex}) · keys ${m.keysH}px`);
+    console.log(`    children: ${m.kids.join(' | ')}`);
+  }
+  if (planet) console.log(`    rows   : ${m.rows.map((r) => r.join('+')).join(' / ')}`);
   console.log(`    card overflow ${m.card?.overflow}px (${m.card?.h}px tall), screen overflow ${m.screen?.overflow}px`);
   check(`${mode} ${vp}: the finish card does not scroll`, (m.card?.overflow ?? 1) <= 0, `overflow ${m.card?.overflow}px`);
   check(`${mode} ${vp}: the screen behind it does not scroll either`, (m.screen?.overflow ?? 1) <= 0, `overflow ${m.screen?.overflow}px`);
   check(`${mode} ${vp}: the page does not widen`, !m.pageWide);
   check(`${mode} ${vp}: every visible button is inside the viewport`, m.clipped.length === 0, m.clipped.join(' | '));
   check(`${mode} ${vp}: exactly one leading (cream) button`, m.primary.length === 1, m.primary.join(' | '));
-  check(`${mode} ${vp}: the outcome, the score and the reason are all legible`, !!m.title && m.visibleParts.includes('go-score') && m.visibleParts.includes('go-reason'), m.title);
+  // On the planet card the reason lives in RESULT, one tap away; the card itself carries the title,
+  // the score and the window. The classic card still shows its reason inline.
+  check(
+    `${mode} ${vp}: the outcome, the score and the reason are all legible`,
+    !!m.title && m.visibleParts.includes('go-score')
+      && (m.visibleParts.includes('go-reason') || (planet && m.visibleParts.includes('go-result'))),
+    m.title,
+  );
+  if (planet) {
+    // THE PLANET IS THE HERO (owner feedback, 2026-11-11): it takes the freed space on every shape,
+    // and the four keys never leave an orphaned half slot.
+    check(`${mode} ${vp}: the planet window is the card's hero`, (m.planet?.h ?? 1) / (m.card?.h ?? 1) >= 0.45,
+      `${m.planet?.h}px of ${m.card?.h}px`);
+    check(`${mode} ${vp}: the shared planet renderer is mounted`, m.canvas);
+    check(`${mode} ${vp}: four keys in two half-width rows`,
+      JSON.stringify(m.rows) === JSON.stringify([['go-rematch', 'go-result'], ['go-replay', 'go-menu']]),
+      JSON.stringify(m.rows));
+    const halves = m.buttons.filter((b) => ['go-rematch', 'go-result', 'go-replay', 'go-menu'].includes(b.id));
+    const widths = new Set(halves.map((b) => b.w));
+    check(`${mode} ${vp}: the four keys are equal halves`, widths.size === 1 && [...widths][0]! >= 120, [...widths].join(','));
+    check(`${mode} ${vp}: every key is the one 46px height`, m.buttons.every((b) => b.h === 46), m.buttons.map((b) => `${b.id}:${b.h}`).join(' '));
+  }
   if (expectLead) check(`${mode} ${vp}: the leading button reads "${expectLead}"`, leadLabel === expectLead, leadLabel);
   check(`${mode} ${vp}: no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '));
   await page.screenshot({ path: `${OUT}finish-${mode}-${vp}.png` });
   console.log(`    shot: docs/screens/finish/finish-${mode}-${vp}.png`);
+  if (planet) {
+    await page.screenshot({ path: `${OUT}endgame-planet-${vp}.png` });
+    console.log(`    shot: docs/screens/finish/endgame-planet-${vp}.png`);
+    // RESULT: the dark-glass window with the final board, on its own key.
+    await page.locator('#go-result').click({ timeout: 5_000 }).catch(() => undefined);
+    await page.waitForSelector('#go-result-pane:not([hidden])', { timeout: 5_000 }).catch(() => undefined);
+    await page.waitForTimeout(320);
+    if (vp === '390x844') {
+      await page.screenshot({ path: `${OUT}endgame-result-390x844.png` });
+      console.log(`    shot: docs/screens/finish/endgame-result-390x844.png`);
+    }
+    const result = await page.evaluate(`(() => {
+      const id = (x) => document.getElementById(x);
+      const shown = (el) => !!el && el.getClientRects().length > 0;
+      const sheet = id('go-result-sheet');
+      return {
+        focused: document.activeElement ? document.activeElement.id : '',
+        board: shown(id('go-result-board')) && !!id('go-result-board').querySelector('svg'),
+        overflow: sheet ? sheet.scrollHeight - sheet.clientHeight : null,
+      };
+    })()`) as { focused: string; board: boolean; overflow: number | null };
+    check(`${mode} ${vp}: RESULT takes focus and shows the final board`, result.focused === 'go-result-close' && result.board, result.focused);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#go-result-pane', { state: 'hidden', timeout: 5_000 }).catch(() => undefined);
+    await page.waitForTimeout(200);
+  }
   return m;
 };
 
