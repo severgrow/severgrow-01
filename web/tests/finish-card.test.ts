@@ -280,8 +280,8 @@ describe('the Territory key under the payout (owner, 2026-10-30)', () => {
   });
 
   it('reads exactly the product sentence, from src/strings.ts', () => {
-    expect(RESULT.growTiles).toBe('Grow tiles in Territory');
-    expect(html).not.toContain('>Grow tiles in Territory<');
+    expect(RESULT.growTiles).toBe('Grow tiles on the planet'); // OWNER CHANGED THE WORDS (2026-11-11): "on the planet"
+    expect(html).not.toContain('>Grow tiles on the planet<');
     expect(mainSource).toMatch(/btn\.textContent = RESULT\.growTiles/);
     expect(mainSource).toMatch(/bind\('go-territory-grow'/);
   });

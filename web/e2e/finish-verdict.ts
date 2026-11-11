@@ -330,7 +330,7 @@ try {
     `key ${base.territoryGrow ?? '(none)'} · payout ${base.seedsText ?? '(none)'}`,
   );
   if (base.territoryGrow !== null) {
-    check('the Territory key reads the product sentence', base.territoryGrow === 'Grow tiles in Territory', base.territoryGrow);
+    check('the Territory key reads the product sentence', base.territoryGrow === 'Grow tiles on the planet', base.territoryGrow);
   }
 
   // ---------- the three sizes ----------
@@ -411,7 +411,7 @@ try {
   check('the Territory key is on the card with the payout', (territory.control) === territory.seeds, `key ${territory.control} · payout ${territory.seeds}`);
   if (territory.control) {
     check('the Territory key is a real 44px target', territory.height >= 44, `${territory.height}px`);
-    check('the Territory key reads the product sentence', territory.label === 'Grow tiles in Territory', territory.label ?? '');
+    check('the Territory key reads the product sentence', territory.label === 'Grow tiles on the planet', territory.label ?? '');
     await page.click('#go-territory-grow');
     const world = await page
       .waitForSelector('#online-world-screen:not([hidden])', { timeout: 15_000 })

@@ -465,7 +465,7 @@ export const RESULT = Object.freeze({
    * Under the Seeds payout (owner, 2026-10-30): the one way from the result to Territory. It
    * belongs WITH the payout, so it is only on a card that shows a payout line.
    */
-  growTiles: 'Grow tiles in Territory',
+  growTiles: 'Grow tiles on the planet',
 });
 
 /**
