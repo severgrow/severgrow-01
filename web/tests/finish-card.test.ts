@@ -324,8 +324,11 @@ describe('THE PLANET on the card (owner brief, 2026-11-11)', () => {
   });
 
   it('offers exactly one action: grow a free tile, two presses, the Planet page\'s wording', () => {
+    // THE RESTING HINT IS THE OWNER'S TWO WORDS (owner feedback, 2026-11-11: "Tap a tile"). The
+    // richer owner/value line still belongs to the tile bar once a tile is picked.
+    expect(RESULT.planetHint).toBe('Tap a tile');
+    expect(barFor({ kind: 'none' }, false)).toEqual({ line: 'Tap a tile', spoken: 'Tap a tile', key: null });
     // Pure matrix: no selection, your tile, a rival's tile, a guest, too few Seeds, out of reach.
-    expect(barFor({ kind: 'none' }, false).key).toBeNull();
     expect(barFor({ kind: 'held', line: 'RYK · YOURS', spoken: 'RYK #TAG · YOURS' }, false)).toEqual({
       line: 'RYK · YOURS', spoken: 'RYK #TAG · YOURS', key: null,
     });

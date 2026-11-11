@@ -451,11 +451,12 @@ export const RESULT = Object.freeze({
    */
   details: 'Result',
   /**
-   * THE PLANET PANE on the card: the hint while nothing is selected, and its one-off states. The
-   * word for the currency is NOT here (src/strings.ts stays free of it); the pane takes those lines
-   * from web/src/online/seed-icon.ts, beside every other Seeds line.
+   * THE PLANET PANE on the card: the resting hint, and its one-off states. The owner's words
+   * (2026-11-11: "Tap a tile") — the richer owner/value line belongs to the tile bar, not to the
+   * resting hint. The word for the currency is NOT here (src/strings.ts stays free of it); the pane
+   * takes those lines from web/src/online/seed-icon.ts, beside every other Seeds line.
    */
-  planetHint: 'Tap a lit tile to grow it',
+  planetHint: 'Tap a tile',
   planetLoading: 'Finding your place in the world…',
   planetUnavailable: 'The world could not load right now.',
   planetRetry: 'Try again',
