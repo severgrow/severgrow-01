@@ -60,6 +60,11 @@ html.futa04-information #futa04-box #futa04-actions { display:contents !importan
 html.futa04-information #futa04-box #futa04-actions > :nth-child(1) { grid-column:1; grid-row:2; }
 html.futa04-information #futa04-box #futa04-actions > :nth-child(2) { grid-column:2; grid-row:2; }
 html.futa04-information #futa04-box #futa04-actions > :nth-child(3) { grid-column:3; grid-row:2; }
+/* Tools on the left (the default since 2026-11-11): the bottom row is mirrored too, so the replay
+   key sits on the outside right and Sort on the left (owner: "replay is on right not left").
+   The Left hand option keeps the old order. */
+html.futa04-information[data-cockpit='left'] #futa04-box #futa04-actions > :nth-child(1) { grid-column:3; }
+html.futa04-information[data-cockpit='left'] #futa04-box #futa04-actions > :nth-child(3) { grid-column:1; }
 html.futa04-information #futa04-box #futa04-actions > .hand-slot[hidden] { display:grid !important; visibility:visible !important; }
 html.futa04-information .dock #futa04-box :is(#smart-context,#futa04-actions > .hand-slot) {
   width:var(--control-size) !important; height:var(--control-size) !important;
