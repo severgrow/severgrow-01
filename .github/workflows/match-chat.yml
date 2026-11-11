@@ -35,7 +35,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx vitest run server/tests/match-chat*.test.ts web/tests/match-chat.test.ts web/tests/online-realtime.test.ts
-      - run: npx playwright-core install --with-deps chromium
+      - run: bash scripts/install-browser.sh chromium
       - name: Select pinned browser
         run: node --input-type=module -e 'import {chromium} from "playwright-core"; console.log("PW_CHROMIUM=" + chromium.executablePath())' >> "$GITHUB_ENV"
       - run: node --import tsx web/e2e/match-chat.ts

@@ -48,7 +48,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright-core install --with-deps chromium
+      - run: bash scripts/install-browser.sh chromium
       - name: Select the pinned browser
         run: node --input-type=module -e 'import {chromium} from "playwright-core"; console.log("PW_CHROMIUM=" + chromium.executablePath())' >> "$GITHUB_ENV"
       - name: Build the installed-app viewport fixture

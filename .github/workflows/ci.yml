@@ -154,8 +154,8 @@ jobs:
       - name: Install the browser this suite drives
         run: |
           case "${{ matrix.suite }}" in
-            *-ios) npx playwright-core install --with-deps webkit ;;
-            *) npx playwright-core install --with-deps chromium ;;
+            *-ios) bash scripts/install-browser.sh webkit ;;
+            *) bash scripts/install-browser.sh chromium ;;
           esac
       - name: Restore the shared ${{ matrix.artifact }} build
         uses: actions/download-artifact@v4
@@ -215,8 +215,8 @@ jobs:
       - name: Install the browser this suite drives
         run: |
           case "${{ matrix.suite }}" in
-            *-ios) npx playwright-core install --with-deps webkit ;;
-            *) npx playwright-core install --with-deps chromium ;;
+            *-ios) bash scripts/install-browser.sh webkit ;;
+            *) bash scripts/install-browser.sh chromium ;;
           esac
       - name: Restore the shared ${{ matrix.artifact }} build
         uses: actions/download-artifact@v4
@@ -244,7 +244,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx playwright-core install --with-deps chromium
+      - run: bash scripts/install-browser.sh chromium
       - name: Verify matchmaking, Realtime invitations, account seats and request rates
         run: node --import tsx web/e2e/online-presence-journey.ts
         env:
