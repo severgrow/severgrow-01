@@ -23,6 +23,7 @@ import type { DuelClient } from '../../../server/src/client.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet } from '../../../server/src/seeds/types.js';
 import { ONLINE, PLANET, RESULT } from '../../../src/strings.js';
+import { INTERFACE_MOTION, interfaceMotionAllowed } from '../ui/interface-motion.js';
 import { isPlanetCell, worldNeighbours } from '../../../server/src/world.js';
 import type { Planet, PlanetInput } from '../sphere/planet.js';
 import { PLANET_PANE, PLANET_TEACH, SEEDS_WORD, seedBalanceLabel, seedIcon } from './seed-icon.js';
@@ -53,6 +54,8 @@ export type EndgamePlanet = {
   teach: (on: boolean) => void;
   /** Stop the planet's own paint loop while a window covers it (the result window). */
   freeze: (on: boolean) => void;
+  /** The card is closing: stop the loop NOW, then fade the surface and sink it 6px. */
+  leave: () => void;
   dispose: () => void;
 };
 
@@ -117,6 +120,18 @@ const CSS = `
 .go-world-surface {
   position: relative; overflow: hidden; isolation: isolate; height: 100%;
   border-radius: 12px; background: #0e0f10;
+  /* THE WINDOW'S LIGHT (owner brief, 2026-11-11: "i like the frame on top and fade out on bottom
+     on the view - lean into it"). ONE PAIR of scrims, mirrored, in the product's own charcoal:
+       --go-sheen-top  a short fall from the frame's top edge, so the head sits in its own darker
+                       band and the rounded frame reads as a LIT aperture; weaker than the foot,
+                       because the frame's edge already carries the rest;
+       --go-sheen-foot the tile bar's ground, deeper and reaching a touch further up, so the hint
+                       and the bar always land on darkness and never on a bright tile.
+     Every child (head, teach, note, bar) reads these two, so the light cannot drift between them.
+     Both are gradient BACKGROUNDS: nothing here animates them (a gradient change is a repaint). */
+  --go-scrim: #0b0d0c;
+  --go-sheen-top: linear-gradient(to bottom, #0b0d0cf2 0%, #0b0d0c9c 58%, #0b0d0c00 100%);
+  --go-sheen-foot: linear-gradient(to top, #0b0d0cf7 0%, #0b0d0cf2 34%, #0b0d0c99 68%, #0b0d0c00 100%);
 }
 /* The planet's canvas is the pane, not the screen (planet.ts \`contained\`). */
 .go-world-surface > .planet-canvas {
@@ -154,8 +169,8 @@ const CSS = `
 .go-world-teach {
   position: absolute; z-index: 3; inset: auto 0 0 0;
   display: grid; gap: 3px;
-  padding: 14px var(--go-gutter, 14px) 10px;
-  background: linear-gradient(to top, #0b0d0cf2 55%, #0b0d0c00);
+  padding: 16px var(--go-gutter, 14px) 10px;
+  background: var(--go-sheen-foot);
   pointer-events: none;
 }
 .go-world-teach[hidden] { display: none; }
@@ -192,23 +207,27 @@ const CSS = `
 .go-world-bar {
   position: absolute; z-index: 3; inset: auto 0 0 0;
   display: flex; align-items: center; gap: 10px; justify-content: space-between;
-  padding: 14px var(--go-gutter, 14px) 9px;
-  background: linear-gradient(to top, #0b0d0ceb 42%, #0b0d0c00);
+  padding: 16px var(--go-gutter, 14px) 9px;
+  background: var(--go-sheen-foot);
 }
 .go-world-bar[hidden] { display: none; }
 .go-world-line {
   min-width: 0; font-family: var(--font-ui); font-size: .56rem; line-height: 1.25;
   letter-spacing: .12em; text-transform: uppercase; color: #e8ddc5d9;
 }
+/* NO FRAME (house rule, 2026-11-11): the grow key is a tonal plate on the window's dark foot.
+   Its press is a step up in tone and its focus is the shared outer ring — never a contour. */
 .go-world-grow {
   flex: none; min-height: 34px; padding: 0 11px; border-radius: 9px;
-  border: 1px solid color-mix(in srgb, var(--fu-cream) 34%, transparent);
-  background: color-mix(in srgb, var(--fu-cream) 12%, transparent);
+  border: 0;
+  background: color-mix(in srgb, var(--fu-cream) 14%, transparent);
   color: var(--fu-cream); font-family: var(--font-ui); font-size: .6rem;
   letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
 }
 .go-world-grow[hidden] { display: none; }
 .go-world-grow[data-armed='1'] { background: var(--fu-cream); color: var(--fu-ink); }
+.go-world-grow:active { background: color-mix(in srgb, var(--fu-cream) 24%, transparent); }
+.go-world-grow[data-armed='1']:active { background: color-mix(in srgb, var(--fu-cream) 86%, transparent); }
 .go-world-grow:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
 .go-world-grow[aria-busy='true'] { opacity: .6; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
@@ -223,6 +242,57 @@ const ensureCss = (): void => {
   style.id = 'go-world-css';
   style.textContent = CSS;
   document.head.append(style);
+};
+
+/**
+ * THE WINDOW'S MOTION (owner brief, 2026-11-11: "make a smooth animation for all transitions when
+ * it's showing up, when closing, etc ... cheap to render and snappy").
+ *
+ * Every beat here touches `opacity` and `translate` ONLY — both compositor properties, so no frame
+ * of any of these transitions re-rasterises the planet. Nothing animates width, height, top, left,
+ * filter, backdrop-filter or box-shadow, and this pass adds no rAF loop of its own: the only loop in
+ * the window is the planet's own, which stops when the window or the tab is hidden.
+ *
+ * The tokens are the product's: `INTERFACE_MOTION` durations and easings, and
+ * `interfaceMotionAllowed()` so Reduce motion / Speed off is instant and provably so (no animation
+ * is created at all in that case — the element is simply set to its resting state).
+ */
+const MOTION = {
+  /** The window's own arrival: short and low. */
+  windowMs: INTERFACE_MOTION.open + 70,
+  /** How far the window rises: 7px (the brief's ceiling is 8). */
+  rise: 7,
+  /** Its head and scrims follow this far behind the surface — the sheets' own stagger language. */
+  stagger: 50,
+  /** The exit: quicker than the arrival, and it sinks instead of rising. */
+  exitMs: INTERFACE_MOTION.close,
+  sink: 6,
+  /** The head band and the foot: one short breath. */
+  bandMs: INTERFACE_MOTION.open,
+  bandTravel: 5,
+} as const;
+
+/** Fade + translate a band in. Opacity-only when `travel` is 0 (a scrim). */
+const bandIn = (el: HTMLElement | null, travel: number = MOTION.bandTravel, delay = 0): void => {
+  if (!el) return;
+  for (const a of el.getAnimations()) { try { a.cancel(); } catch { /* already gone */ } }
+  if (!interfaceMotionAllowed()) { el.style.removeProperty('opacity'); el.style.removeProperty('translate'); return; }
+  el.animate(
+    [
+      { opacity: 0, translate: travel ? `0 ${travel}px` : '0 0' },
+      { opacity: 1, translate: '0 0' },
+    ],
+    { duration: MOTION.bandMs, delay, easing: INTERFACE_MOTION.easeOpen, fill: 'both' },
+  );
+};
+
+/** Fade a band out. Opacity only: a scrim that slides would drag its gradient over the ground. */
+const bandOut = (el: HTMLElement | null, onDone?: () => void): void => {
+  if (!el) return;
+  const finish = (): void => { el.style.removeProperty('opacity'); el.style.removeProperty('translate'); onDone?.(); };
+  if (!interfaceMotionAllowed()) { finish(); return; }
+  const a = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: MOTION.exitMs, easing: INTERFACE_MOTION.easeClose, fill: 'both' });
+  a.finished.then(finish, finish);
 };
 
 /**
@@ -283,12 +353,12 @@ const nodesOf = (host: HTMLElement) => {
   note.setAttribute('role', 'status');
   note.setAttribute('aria-live', 'polite');
   const teach = make<HTMLElement>('.go-world-teach', 'div', 'go-world-teach');
-  return { host, surface, title, wallet, bar, line, key, note, teach };
+  return { host, surface, head: headEl, title, wallet, bar, line, key, note, teach };
 };
 
 export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): EndgamePlanet => {
   ensureCss();
-  const { surface, title, wallet, bar, line, key, note, teach } = nodesOf(host);
+  const { surface, head, title, wallet, bar, line, key, note, teach } = nodesOf(host);
   title.textContent = PLANET.title;
   let world: World | null = null;
   let walletNow: SeedWallet | null = null;
@@ -315,6 +385,15 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
     deps.onBalance?.(walletNow.balance);
   };
 
+  /** THE WALLET'S ONE BEAT after a grow: a short settle on the chip, the card's own seed language. */
+  const beatWallet = (): void => {
+    if (!interfaceMotionAllowed()) return;
+    wallet.animate(
+      [{ opacity: 0.45, translate: '0 1px' }, { opacity: 1, translate: '0 0' }],
+      { duration: 240, easing: INTERFACE_MOTION.easeOpen },
+    );
+  };
+
   const tileOf = (cellId: string | null): PaneTile => {
     if (!cellId || !world) return { kind: 'none' };
     const claim = world.claims.find((candidate) => candidate.cellId === cellId);
@@ -336,6 +415,24 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
     };
   };
 
+  /**
+   * THE FOOT, WITH ITS OWN MOTION (owner brief, 2026-11-11: "THE FOOT / TILE BAR ... must fade/rise
+   * in from the bottom edge on first appearance and fade out on deselect. Never re-animate on a word
+   * change for the same tile").
+   *
+   * `visible` is the foot's REAL state, so a repaint of the same foot writes text and nothing else: a
+   * 12 s world poll (or the same tile re-read) can never make the bar flicker. Only a hidden→shown or
+   * shown→hidden edge animates, and only opacity + translate.
+   */
+  const showFoot = (el: HTMLElement): void => {
+    el.hidden = false;
+    bandIn(el, MOTION.bandTravel);
+  };
+  const hideFoot = (el: HTMLElement): void => {
+    if (el.hidden) return;
+    bandOut(el, () => { el.hidden = true; });
+  };
+
   const paintBar = (): void => {
     const state = barFor(tileOf(selected), armed !== null && armed === selected);
     const label = state.key ? growKeyLabel(state.key) : '';
@@ -343,8 +440,9 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
     // own the window's foot until the player picks a tile; from then on the foot is the tile's own
     // line and its one key, on the same gutter — one foot, never two stacked strips.
     const explaining = teachShown && !selected;
+    if (explaining) { hideFoot(bar); }
+    else if (bar.hidden) { showFoot(bar); }
     teach.hidden = !explaining;
-    bar.hidden = explaining;
     line.textContent = state.line;
     line.title = state.spoken;
     key.hidden = state.key === null || busy;
@@ -475,7 +573,7 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
       planet?.grown(cellId);
       const map = await deps.client.worldMap().catch(() => null);
       const wallet = await deps.client.seedWallet(id.token).catch(() => null);
-      if (!disposed) applyRead(map, wallet);
+      if (!disposed) { applyRead(map, wallet); beatWallet(); }
     } catch {
       note.textContent = PLANET_PANE.growFailed;
       note.hidden = false;
@@ -505,6 +603,12 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
     open() {
       if (disposed) return;
       host.hidden = false;
+      // THE WINDOW'S ARRIVAL (owner brief, 2026-11-11): the surface rises 7px and fades in, and its
+      // head and its scrims land a beat behind it — the sheets' own stagger, on opacity + translate
+      // only. The canvas is NOT scaled: scaling a WebGL surface is a repaint, not a composite.
+      bandIn(surface, MOTION.rise);
+      bandIn(head, 0, MOTION.stagger);
+      bandIn(bar, MOTION.bandTravel, MOTION.stagger * 2);
       // The cached map makes the first frame real: your land is there before the network answers.
       const cached = deps.cachedWorld?.() ?? null;
       if (cached && !world) {
@@ -525,19 +629,44 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
       read();
     },
     teach(on: boolean) {
+      // THE HEAD BAND'S OWN EDGE (owner brief, 2026-11-11): the explainer fades and lifts <= 6px in,
+      // and fades out before it is cleared. Opacity + translate only; Reduce motion is instant.
+      const was = teachShown;
       teachShown = on;
-      if (on) paintPlanetTeach(teach, true);
-      else { teach.hidden = true; teach.replaceChildren(); }
+      if (on && !was) {
+        paintPlanetTeach(teach, true);
+        bandIn(teach, MOTION.bandTravel);
+      } else if (!on && was) {
+        bandOut(teach, () => teach.replaceChildren());
+      } else if (!on) {
+        teach.hidden = true;
+        teach.replaceChildren();
+      }
       paintBar();
     },
     freeze(on: boolean) {
       frozen = on;
       planet?.freeze(on);
     },
+    leave() {
+      if (disposed) return;
+      // THE LOOP STOPS BEFORE THE FADE: `freeze(true)` cancels the planet's rAF and releases the
+      // sky, so not one frame is drawn while the surface leaves. Then the surface fades and sinks.
+      planet?.freeze(true);
+      bandOut(surface, () => {
+        // The band is a WAAPI fade on opacity only; the node is thrown away at the end of it.
+        host.hidden = true;
+        disposed = true;
+        planet?.dispose();
+        planet = null;
+      });
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
       readAt = 0;
+      // THE WINDOW'S EXIT: the canvas stops its own loop FIRST (the rAF is cancelled inside
+      // `dispose`, before any frame of the fade), so nothing is drawn offscreen while it leaves.
       planet?.dispose();
       planet = null;
       host.hidden = true;

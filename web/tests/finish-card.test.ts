@@ -126,8 +126,9 @@ describe('the card is one screen: the result leads, the rest waits behind RESULT
     expect(mainSource).toMatch(/function openFinishResult\(\): void \{/);
     expect(mainSource).toMatch(/endgamePlanet\?\.freeze\(true\);/);
     expect(mainSource).toMatch(/endgamePlanet\?\.freeze\(false\);/);
-    // A classic card keeps its reason on the card; a planet card shows it in RESULT.
-    expect(mainSource).toMatch(/const planetCard = ENDGAME_PLANET && !\(taught && taught\.level !== FINAL_LESSON\.level\);/);
+    // A classic card keeps its reason on the card; a planet card shows it in RESULT. The anatomy is
+    // decided once, in the header block, because the header, the pane and the keys all read it.
+    expect(mainSource).toMatch(/const planetCard = ENDGAME_PLANET && !\(taughtEarly && taughtEarly\.level !== FINAL_LESSON\.level\);/);
     expect(mainSource).toMatch(/go\.dataset\.anatomy = planetCard \? 'planet' : 'classic';/);
   });
 
@@ -154,9 +155,10 @@ describe('the card is one screen: the result leads, the rest waits behind RESULT
     const css = read('../src/style.css');
     expect(css).toMatch(/#gameover\[data-anatomy='planet'\] \.go-key-row \{\n  display: grid;\n  grid-auto-flow: column;\n  grid-auto-columns: 1fr;/);
     expect(css).toMatch(/#gameover\[data-anatomy='planet'\] \.go-key-row:not\(:has\(> \.btn:not\(\[hidden\]\)\)\) \{ display: none; \}/);
-    // The lead key is the only filled one; the rest are the same quiet cream-22 frame.
-    expect(css).toMatch(/#gameover\[data-anatomy='planet'\] \.go-buttons \.btn \{[\s\S]*?border: 1px solid var\(--fu-cream-22\);/);
-    expect(css).toMatch(/#gameover\[data-anatomy='planet'\] \.go-buttons \.btn\.primary \{\n  min-height: 46px;\n  background: var\(--fu-cream\);/);
+    // The lead key is the only FILLED one; the rest are the same quiet tonal plate, and NO key
+    // carries a contour (owner house rule, 2026-11-11: tone, never a border).
+    expect(css).toMatch(/#gameover\[data-anatomy='planet'\] \.go-buttons \.btn \{[\s\S]*?border: 0;\n  background: color-mix\(in srgb, var\(--fu-cream\) 7%, transparent\);/);
+    expect(css).toMatch(/#gameover\[data-anatomy='planet'\] \.go-buttons \.btn\.primary \{\n  min-height: 46px;\n  border: 0;\n  background: var\(--fu-cream\);/);
     // The campaign card never offers a level list, and a classic card only offers Change difficulty.
     expect(mainSource).toMatch(/other\.hidden = !!campaign \|\| ENDGAME_PLANET;/);
     expect(mainSource).toMatch(/const otherWord = 'Change difficulty';/);

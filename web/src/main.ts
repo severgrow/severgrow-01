@@ -778,6 +778,8 @@ const SCREEN_HEAD: Record<'menu' | 'levels' | 'campaign', string> = {
 
 /** A full plate does not grow from 99.6% — that is invisible at its size (owner, 2026-11-02). */
 const PLATE_SCALE = 0.985;
+/** The finish card's exit sink: 6px, the ceiling the owner's motion brief allows for a leaving window. */
+const MOTION_SINK = 6;
 
 /**
  * Arrive a whole screen on the shared beat: the body travels, then its own head follows one stagger
@@ -1188,7 +1190,9 @@ function syncVeil() {
  *   - the main menu: the big logo (#logo);
  *   - a match or a submenu (and any sheet opened over either): the crisp corner badge
  *     (#hud-brand), which is app-level and above the veils so pausing can never blur it;
- *   - the finish plate: its own centred cap (#go-brand), the corner standing down;
+ *   - the finish plate: its own mark (#go-brand), INSIDE the card at its top-left corner (owner
+ *     feedback, 2026-11-11: "brand mark goes top-left, like in the game"), so the corner stands
+ *     down and the plate never shows two marks;
  *   - the online hub / waiting / join screens: their existing header mark (#online-brand).
  * A sheet opened from the MAIN MENU changes nothing: the menu's big logo is still the screen's mark
  * (the sheet only veils it), so the badge does not appear and the screen never shows two.
@@ -8378,18 +8382,30 @@ function syncEndgamePlanet(show: boolean, teach: boolean): void {
 
 function hideGameOver(): void {
   closeFinishResult(true);
-  endgamePlanet?.dispose();
-  endgamePlanet = null;
   const go = $('gameover');
-  if (!go.hidden) {
-    go.hidden = true;
-    resetSurface(go);
+  const wasShown = !go.hidden;
+  // THE WINDOW'S EXIT (owner brief, 2026-11-11): the planet stops its OWN loop first (the fade that
+  // follows must not be painted by a canvas nobody will see), then the surface fades and sinks 6px
+  // on the product's exit beat, and the card goes with it.
+  const pane = endgamePlanet;
+  endgamePlanet = null;
+  pane?.leave();
+  if (wasShown) {
     const card = go.querySelector<HTMLElement>('.go-card');
-    if (card) {
-      resetSurface(card);
-      card.classList.remove('seed-slot');
-    }
+    if (card) card.classList.remove('seed-slot');
     goSeedSlot = false;
+    const finish = () => {
+      go.hidden = true;
+      resetSurface(go);
+      if (card) resetSurface(card);
+      document.body.classList.remove('result');
+      syncVeil();
+      achievementToasts?.release();
+    };
+    const leave = exitSurface(go, { travel: MOTION_SINK, onDone: finish });
+    // Motion off: the surface calls back at once, so this is the instant path it always was.
+    if (!leave) finish();
+    return;
   }
   document.body.classList.remove('result');
   syncVeil();
@@ -8817,6 +8833,13 @@ function renderGameOver() {
   // built level — read from the level data, never a hardcoded count, so a worker adding levels
   // needs no change here).
   const next = campaign && won && !tutorial && !replay ? nextCampaignLevel(campaign.number) : null;
+  // THE PLANET CARD (owner brief, 2026-11-11): decided here because the header, the pane and the
+  // keys all depend on it, and a lesson 1-9 card keeps the classic column.
+  const taughtEarly = lessonActive();
+  const planetCard = ENDGAME_PLANET && !(taughtEarly && taughtEarly.level !== FINAL_LESSON.level);
+  // "See the board" belongs to the classic card alone: the planet card shows the final position in
+  // RESULT instead (owner brief: Board left the key row).
+  $('go-board').hidden = planetCard;
   $('go-title').textContent = won
     ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.won
     : resultTitle(r, HUMAN);
@@ -8829,9 +8852,15 @@ function renderGameOver() {
   // Tutorial, where the win's title is the lesson's own and the line says where the card returns to.
   const context = document.getElementById('go-context');
   if (context) {
-    const label = tutorial
+    let label = tutorial
       ? `${TUTORIAL_REPLAY.title} · ${CAMPAIGN.levelLabel(campaign.number)}`
       : campaign && !won ? CAMPAIGN.levelLabel(campaign.number) : '';
+    // THE PLANET CARD'S TOP ROW (owner feedback, 2026-11-11: "brand mark and the level kicker on one
+    // top row (mark left, LEVEL 65 right)"). The level moves OUT of the title and into that cell, so
+    // the outcome word stands alone as the card's one big line — one level line, never two.
+    if (planetCard && campaign && won) {
+      label = $('go-title').querySelector('.go-kicker')?.textContent ?? CAMPAIGN.levelLabel(campaign.number);
+    }
     context.textContent = label;
     context.hidden = label === '';
   }
@@ -8946,12 +8975,10 @@ function renderGameOver() {
   paintHighlightList($('go-highlights'), highlights);
   // THE PLANET CARD (owner brief, 2026-11-11): every offline match from level 10 on, practice and
   // duels show the living world and the four keys; lessons 1-9 (and the locked futa04 line) keep the
-  // classic card, which is why the anatomy is decided per card and not per build alone.
-  const planetCard = ENDGAME_PLANET && !(taught && taught.level !== FINAL_LESSON.level);
-    // "See the board" belongs to the classic card; the planet card shows the position in RESULT.
-    $('go-board').hidden = planetCard;
-    go.dataset.anatomy = planetCard ? 'planet' : 'classic';
-    $('go-result').hidden = !planetCard;
+  // classic card, which is why the anatomy is decided per card and not per build alone. `planetCard`
+  // and `go-board` are already settled above, in the header block.
+  go.dataset.anatomy = planetCard ? 'planet' : 'classic';
+  $('go-result').hidden = !planetCard;
   const reason = taught ? '' : resultReason(r, HUMAN);
   finishResult = {
     outcome: $('go-title').textContent ?? '',

@@ -3346,13 +3346,15 @@ html:has(#sheet-profile:not([hidden])) #menu .menu-inner { opacity: .28; }
   gap: 8px;
   margin-top: 14px;
 }
-/* Same button system as the menu: quiet cream frame for the rest, and one cream fill (Play again). */
+/* Same button system as the menu: a quiet TONAL plate for the rest, and one cream fill (Play
+   again). NO FRAME (house rule, 2026-11-11: "no border contour frames on buttons please - never"):
+   a key earns its shape from its fill or its tonal step against the surface, never a 1px outline. */
 .gameover .go-buttons .btn {
   min-height: 48px;
   padding: 0 20px;
-  border: 1px solid var(--fu-cream-28);
+  border: 0;
   border-radius: 14px;
-  background: transparent;
+  background: color-mix(in srgb, var(--fu-cream) 7%, transparent);
   box-shadow: none;
   color: var(--fu-cream);
   font-family: var(--font-ui);
@@ -3360,8 +3362,8 @@ html:has(#sheet-profile:not([hidden])) #menu .menu-inner { opacity: .28; }
   letter-spacing: 0.02em;
 }
 .gameover .go-buttons .btn.primary {
+  border: 0;
   background: var(--fu-cream);
-  border-color: var(--fu-cream);
   color: var(--fu-ink);
   box-shadow: none;
 }
@@ -3383,7 +3385,7 @@ html:has(#sheet-profile:not([hidden])) #menu .menu-inner { opacity: .28; }
    card on one phone screen. */
 .gameover .go-buttons .btn.link {
   min-height: 34px;
-  border-color: transparent;
+  border: 0;
   background: transparent;
   box-shadow: none;
   text-decoration: underline;
@@ -8051,9 +8053,10 @@ body.result .corner-tools {
 #gameover .go-buttons .btn.link:hover {
   color: var(--fu-cream);
 }
+/* NO FRAME (house rule, 2026-11-11): a quiet key is a TONAL plate, never an outlined one. */
 #gameover .go-buttons .btn.ghost {
-  background: transparent;
-  border-color: var(--fu-cream-22);
+  border: 0;
+  background: color-mix(in srgb, var(--fu-cream) 7%, transparent);
 }
 
 /* Landscape phones and short desktop windows: the result becomes a two-page spread on one plate —
@@ -8175,87 +8178,173 @@ body.result .corner-tools {
    wallet, the hint and the explainer) sits on exactly that line. One optical axis, no exceptions.
    ====================================================================================== */
 
-/* THE CARD IS THE SCREEN: the planet needs the height, so the plate takes it. */
+/* THE CARD IS THE SCREEN (owner correction, 2026-11-11: "make sure the whole screen uses entire
+   height of the current display ... the plate is the screen, not a floating card with margins").
+   The screen is a grid whose single item STRETCHES, so the plate takes the dynamic viewport minus
+   only the safe areas and one deliberate 6/8px inset — never a max-height that leaves it short. */
 #gameover[data-anatomy='planet'] {
+  /* The plate's own inset is a TOKEN, so its height can be derived from it below: the viewport minus
+     exactly the air the plate leaves around itself (and the safe areas, whatever they are). */
+  --go-inset-top: 6px;
+  --go-inset-bottom: 8px;
   place-items: center;
-  padding: max(8px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+  padding: max(var(--go-inset-top), env(safe-area-inset-top)) 10px max(var(--go-inset-bottom), env(safe-area-inset-bottom));
 }
 #gameover[data-anatomy='planet'] .go-card {
   --go-gutter: 14px;
+  /* THE ONE RHYTHM (owner, 2026-11-11: "make the margin between you lost, score, and game info and
+     then planet equal spaces between each other"). ONE value governs every gap between the tiers
+     A (the outcome title) -> B (the score) -> C (the game info line) -> D (the planet window):
+     the card's own column gap, the summary column's gap, and the grid row-gap of the wide spread.
+     Nothing else in this block sets a vertical margin between those tiers, so they cannot drift. */
+  --go-tier-gap: 12px;
   display: flex;
   flex-direction: column;
+  gap: var(--go-tier-gap);
   box-sizing: border-box;
   width: min(440px, 100%);
-  height: calc(100dvh - 18px);
+  /* THE PLATE IS THE SCREEN (owner correction, 2026-11-11). Its height is the DYNAMIC viewport minus
+     only its own inset and the safe areas — never `height: 100%` of a content-sized grid row (that
+     resolves against the content, which is how the card came out 22px short of the window), and
+     never a `max-height` that leaves it short at a common size. */
+  height: calc(100dvh - max(var(--go-inset-top), env(safe-area-inset-top)) - max(var(--go-inset-bottom), env(safe-area-inset-bottom)));
+  /* The plate IS the screen: the legacy card's own height cap (and its scroll) are for the classic
+     line only, where the words must fit a floating panel. */
+  max-height: none;
   padding: 14px var(--go-gutter) 12px;
   text-align: left;
   overflow: hidden;
 }
-/* THE READ-OUT (owner feedback: "the text block above the planet must occupy as little vertical
-   space as possible"). Kicker, title, one note line, one compact score — four tight lines, and it
-   takes only the height they need: every remaining pixel of the card goes to the window below. */
+/* THE READ-OUT (owner feedback, 2026-11-11: "top is cramped with logo, you lost, the score etc.",
+   corrected in the same brief: "logo on top right corner not left, just like in game. centered you
+   lost/you win and score closer to it centered").
+
+   One CENTRED optical column, and a corner mark that floats clear of it:
+
+                        [mark]
+                 LEVEL 65            <- kicker, centred
+                 COMPLETE            <- the outcome, centred
+                  18 – 1             <- the score, tight under the title
+             NEXT LEVEL UNLOCKED    <- one quiet note
+
+   The block is a single centred column (kicker / title / score / note), and the mark is the card's
+   own copy of the in-game corner badge, pinned top-right on the card's gutter. The lockup is
+   centred inside the band the planet leaves, so the air above and below it is symmetrical — no
+   element floats in the middle of the card by accident. */
+#gameover[data-anatomy='planet'] .go-card { position: relative; }
 #gameover[data-anatomy='planet'] .go-summary {
+  /* THE READ-OUT NEVER GROWS (owner correction, 2026-11-11: "the planet window stretching to take
+     all the height the header and keys do not need"). The lockup takes only the height its tiers
+     need; every remaining pixel of the plate is the window's. Its tiers are one column on the SAME
+     rhythm as the card (see --go-tier-gap), so a hidden tier leaves no gap behind it. */
   flex: 0 0 auto;
-  display: block;
-}
-#gameover[data-anatomy='planet'] .go-context {
-  margin: 0 0 5px;
-  font-size: 0.58rem;
-  letter-spacing: 0.22em;
-}
-#gameover[data-anatomy='planet'] .go-title {
-  margin: 0;
-  font-size: clamp(1.6rem, 7.4vw, 2.05rem);
-  line-height: 1;
-}
-#gameover[data-anatomy='planet'] .go-title .go-kicker {
-  margin-bottom: 5px;
-  font-size: 0.58rem;
-  letter-spacing: 0.22em;
-}
-#gameover[data-anatomy='planet'] .go-learned {
-  margin: 6px 0 0;
-  font-size: 0.72rem;
-  line-height: 1.3;
-}
-/* ONE NOTE ROW: what the win unlocked, and what it paid, on one baseline — never two rows. */
-.go-note { display: contents; }
-#gameover[data-anatomy='planet'] .go-note {
+  min-height: 0;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 7px 0 0;
-  min-height: 14px;
+  flex-direction: column;
+  align-items: center;
+  /* Starts at its own top edge: with a content-sized band, centring only added half-leading above
+     and below, and that is what made the outcome->score rhythm (12px) differ from score->window
+     (37px). One rhythm, measured. */
+  justify-content: flex-start;
+  gap: var(--go-tier-gap);
+  text-align: center;
 }
-#gameover[data-anatomy='planet'] .go-note .go-sub {
+/* NO CENTRED CAP AND NO TOP-LEFT MARK: the corner badge, top-right, on the card's gutter. */
+#gameover[data-anatomy='planet'] #go-brand {
+  position: absolute;
+  top: 14px;
+  right: var(--go-gutter);
+  left: auto;
   margin: 0;
-  min-width: 0;
+  opacity: .8;
+  pointer-events: none;
+}
+/* TIER 1: the level, centred above the outcome. */
+#gameover[data-anatomy='planet'] .go-context {
+  order: 1;
+  /* The kicker is part of the title lockup, NOT a tier: the column gap already put one rhythm step
+     between it and the title, so this pulls that single gap back to the lockup's own 4px. */
+  margin: 0 0 calc(4px - var(--go-tier-gap));
+  padding-left: 0;
   font-size: 0.56rem;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.22em;
+  white-space: nowrap;
   color: var(--fu-cream-55);
 }
-#gameover[data-anatomy='planet'] .go-note #go-seeds {
+/* TIER 2: the outcome — the one big word, centred, with real air above it. */
+#gameover[data-anatomy='planet'] .go-title {
+  order: 2;
   margin: 0;
-  flex: none;
-  min-height: 0;
+  font-size: clamp(1.75rem, 8vw, 2.15rem);
+  line-height: 0.95;
+  text-align: center;
 }
-/* THE SCORE IS A READ-OUT, NOT A HEADLINE (owner feedback: "shrink it hard ... 1.4-1.6rem, tabular
-   numerals, one compact line close under the title"). */
+#gameover[data-anatomy='planet'] .go-title .go-kicker {
+  display: none; /* the level is its own centred line (the context cell) */
+}
+/* TIER 3: the score — a compact read-out, centred and TIGHT to the title (they read as one unit). */
 #gameover[data-anatomy='planet'] .go-score {
-  margin: 5px 0 0;
-  gap: 7px;
-  font-size: clamp(1.4rem, 4.6vw, 1.6rem);
+  order: 3;
+  margin: 0;
+  gap: 6px;
+  justify-content: center;
+  font-size: clamp(1.4rem, 4.4vw, 1.6rem);
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-#gameover[data-anatomy='planet'] .go-score .dash { font-size: 0.8em; }
-
-/* THE WINDOW: all the freed space, edge to edge inside the card's gutter, one radius, no frame. */
-#gameover[data-anatomy='planet'] #go-world {
-  flex: 1 1 auto;
+#gameover[data-anatomy='planet'] .go-score .dash { font-size: 0.72em; }
+/* TIER 4: the quiet note, centred under the unit. */
+#gameover[data-anatomy='planet'] .go-note {
+  order: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+/* A TIER WITH NOTHING TO SAY TAKES NO RHYTHM STEP (owner, 2026-11-11: "a hidden tier must not leave
+   a double gap"). The note is the game-info tier: when neither its unlock line nor the award is on
+   the card it is not a tier at all, so the column does not put a gap around an empty box. */
+#gameover[data-anatomy='planet'] .go-note:not(:has(> :not([hidden]))) { display: none; }
+#gameover[data-anatomy='planet'] .go-note .go-sub {
+  margin: 0;
+  font-size: 0.55rem;
+  letter-spacing: 0.16em;
+  color: var(--fu-cream-55);
+  text-align: center;
+}
+#gameover[data-anatomy='planet'] .go-note #go-seeds {
+  margin: 0;
   min-height: 0;
-  margin: 11px 0 0;
+}
+#gameover[data-anatomy='planet'] .go-learned {
+  order: 5;
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  text-align: center;
+}
+/* ONE NOTE ROW: what the win unlocked, and what it paid, on one baseline — never two rows.
+   `display: contents` keeps a classic card's two paragraphs exactly as they were. */
+.go-note { display: contents; }
+
+/* THE WINDOW: all the freed space, cut into the plate. It BLEEDS past the card's padding on the
+   sides and keeps the card's own gutter as its inner inset, so the window's chrome (its name, the
+   wallet, the hint) sits on exactly the vertical axis of the title and the score above it — one
+   optical axis for the whole card. The card clips it, so the plate's own corner shapes the window:
+   one corner family, no double frame, no gap that would make it a thumbnail. */
+#gameover[data-anatomy='planet'] #go-world {
+  /* THE PLANET TAKES THE REMAINDER (owner correction, 2026-11-11: "the planet window stretching to
+     take all the height the header and keys do not need ... on a taller phone the player gets MORE
+     planet, not more padding"). It is the plate's one growing child, so the keys are always the last
+     thing at the thumb and nothing floats in the middle with a gap under it. */
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  /* C -> D: the card's own column gap IS this margin, so the window's top edge lands one rhythm step
+     under the game-info tier. The horizontal bleed past the gutter is what makes it a window cut into
+     the plate rather than an inset thumbnail. */
+  margin: 0 calc(-1 * var(--go-gutter));
   display: block;
 }
 #gameover[data-anatomy='planet'] #go-world[hidden] { display: none; }
@@ -8285,7 +8374,9 @@ body.result .corner-tools {
   grid-template-columns: minmax(0, 1fr);
   grid-auto-flow: row;
   gap: 7px;
-  margin-top: 10px;
+  /* No margin: the plate's column gap places the keys one rhythm step under the window, which is
+     also what anchors them to the thumb when the planet has taken every spare pixel. */
+  margin-top: 0;
 }
 #gameover[data-anatomy='planet'] .go-key-row {
   display: grid;
@@ -8294,13 +8385,20 @@ body.result .corner-tools {
   gap: 7px;
 }
 #gameover[data-anatomy='planet'] .go-key-row:not(:has(> .btn:not([hidden]))) { display: none; }
+/* THE LEAD KEY IS THE RIGHT-HAND KEY OF THE FIRST ROW (owner, 2026-11-11: "'try again' or 'next
+   level' should be on the right not on the left"). The DOM keeps the lead FIRST — its handlers, its
+   focus order and every suite that looks for `#go-rematch` as the first control are untouched — and
+   the GRID puts it in column 2 while RESULT takes column 1. Layout order, not DOM order. */
+#gameover[data-anatomy='planet'] .go-key-row:first-of-type > #go-result { grid-column: 1; }
+#gameover[data-anatomy='planet'] .go-key-row:first-of-type > #go-rematch { grid-column: 2; }
 #gameover[data-anatomy='planet'] .go-buttons .btn {
   width: 100%;
   min-height: 46px;
   padding: 0 8px;
   border-radius: 10px;
-  border: 1px solid var(--fu-cream-22);
-  background: transparent;
+  /* NO FRAME (house rule, 2026-11-11): the key is a low tonal plate on the card's glass. */
+  border: 0;
+  background: color-mix(in srgb, var(--fu-cream) 7%, transparent);
   box-shadow: none;
   justify-content: center;
   text-align: center;
@@ -8314,24 +8412,29 @@ body.result .corner-tools {
 /* The lead key is the only filled one. */
 #gameover[data-anatomy='planet'] .go-buttons .btn.primary {
   min-height: 46px;
+  border: 0;
   background: var(--fu-cream);
-  border-color: var(--fu-cream);
   color: var(--fu-ink);
   font-size: 0.78rem;
   letter-spacing: 0.1em;
 }
-/* The way out is a framed key here, not an underlined word: it is one of the four. */
+/* The way out is a tonal key here, not an underlined word: it is one of the four. Its press and its
+   focus are tone and the shared ring, never a contour. */
 #gameover[data-anatomy='planet'] .go-buttons .btn.link {
   min-height: 46px;
   padding: 0 8px;
-  border: 1px solid var(--fu-cream-22);
+  border: 0;
   border-radius: 10px;
-  background: transparent;
+  background: color-mix(in srgb, var(--fu-cream) 7%, transparent);
   color: var(--fu-cream);
   font-size: 0.74rem;
   letter-spacing: 0.1em;
   text-decoration: none;
 }
+#gameover[data-anatomy='planet'] .go-buttons .btn:active {
+  background: color-mix(in srgb, var(--fu-cream) 13%, transparent);
+}
+#gameover[data-anatomy='planet'] .go-buttons .btn.primary:active { background: color-mix(in srgb, var(--fu-cream) 86%, transparent); }
 #gameover[data-anatomy='planet'] .go-buttons .btn:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
 
 /* CLASSIC CARDS keep their single column, in exactly the order they always had (the row wrappers
@@ -8350,55 +8453,125 @@ body.result .corner-tools {
 /* THE SHORT PHONE (320x568, 360x640): the plate takes less air and the keys lose two pixels of
    height, never a target. The planet keeps everything that is left. */
 @media (max-height: 660px) {
+  #gameover[data-anatomy='planet'] {
+    --go-inset-top: 6px;
+    --go-inset-bottom: 6px;
+  }
   #gameover[data-anatomy='planet'] .go-card {
     --go-gutter: 13px;
-    height: calc(100dvh - 12px);
     padding: 11px var(--go-gutter) 10px;
   }
+  /* The rhythm is the same value, tightened once for the short plate: no tier regains a margin of
+     its own here, so A->B, B->C and C->D stay equal at 320x568 and 360x640. */
+  #gameover[data-anatomy='planet'] .go-card { --go-tier-gap: 10px; }
   #gameover[data-anatomy='planet'] .go-title { font-size: clamp(1.45rem, 7vw, 1.85rem); }
-  #gameover[data-anatomy='planet'] .go-note { margin-top: 5px; }
-  #gameover[data-anatomy='planet'] .go-score { margin-top: 4px; font-size: 1.4rem; }
-  #gameover[data-anatomy='planet'] #go-world { margin-top: 9px; }
-  #gameover[data-anatomy='planet'] .go-buttons { margin-top: 8px; gap: 6px; }
+  #gameover[data-anatomy='planet'] .go-score { font-size: 1.4rem; }
+  #gameover[data-anatomy='planet'] .go-buttons { gap: 6px; }
   #gameover[data-anatomy='planet'] .go-key-row { gap: 6px; }
   #gameover[data-anatomy='planet'] .go-buttons .btn,
   #gameover[data-anatomy='planet'] .go-buttons .btn.primary,
-  #gameover[data-anatomy='planet'] .go-buttons .btn.link { min-height: 44px; }
+  #gameover[data-anatomy='planet'] .go-buttons .btn.link { min-height: 46px; }
   #gameover .go-world-teach {
     padding: 11px var(--go-gutter, 13px) 9px;
   }
   #gameover .go-world-teach-lines { font-size: 0.63rem; }
 }
 
-/* LANDSCAPE / DESKTOP (short windows): one plate, two pages — the planet on the left with the
-   outcome under it, the keys on the right. One screen, no scroll, the planet still the largest
-   single element. */
+/* LANDSCAPE PHONE / SHORT WINDOW: one plate, two pages. The LEFT page is the planet and it grows to
+   the whole page height; the RIGHT page holds the read-out at its top and the 2x2 keys anchored to
+   its bottom (the thumb's corner). The plate fills the viewport exactly as the portrait one does. */
 @media (max-height: 560px) and (min-width: 560px) {
-  #gameover[data-anatomy='planet'] { padding: 8px 10px; }
+  #gameover[data-anatomy='planet'] {
+    --go-inset-top: 6px;
+    --go-inset-bottom: 6px;
+  }
   #gameover[data-anatomy='planet'] .go-card {
     display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
     grid-template-rows: minmax(0, 1fr) auto;
     column-gap: 18px;
-    row-gap: 8px;
-    width: min(720px, 100%);
-    height: calc(100dvh - 16px);
+    row-gap: var(--go-tier-gap);
+    /* STRETCH, because the shared legacy spread sets `align-items: start` for the classic card's
+       stacked words — a grid item that is not stretched sizes to its content, and the window's
+       100%-tall surface then measured 0px here (that is what ate the globe in landscape). */
+    align-items: stretch;
+    align-content: stretch;
+    width: min(760px, 100%);
+    max-height: none;
     padding: 12px var(--go-gutter) 12px;
+  }
+  /* THE PLANET IS THE LEFT PAGE. */
+  #gameover[data-anatomy='planet'] #go-world {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    margin: 0;
+    height: auto;
+    min-height: 0;
+  }
+  /* THE READ-OUT IS THE TOP OF THE RIGHT PAGE. */
+  #gameover[data-anatomy='planet'] .go-summary {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    flex: 0 0 auto;
+    justify-content: start;
+    align-items: center;
+    text-align: center;
+  }
+  #gameover[data-anatomy='planet'] .go-title { font-size: clamp(1.5rem, 5.2vw, 1.9rem); text-align: center; }
+  /* THE KEYS ARE ANCHORED TO THE BOTTOM OF THAT PAGE (the thumb), never centred in it. */
+  #gameover[data-anatomy='planet'] .go-buttons {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+    margin-top: 0;
+  }
+  /* The corner mark stays the card's TOP-RIGHT corner in the spread too (owner: like in game). */
+  #gameover[data-anatomy='planet'] #go-brand { top: 12px; }
+}
+
+/* DESKTOP (wide screens, tall enough for the spread): the same two pages at a larger size — the
+   planet page grows, the read-out sits at the top of the right page and the keys at its bottom. */
+@media (min-width: 760px) and (min-aspect-ratio: 1/1) and (min-height: 561px) {
+  #gameover[data-anatomy='planet'] {
+    --go-inset-top: 6px;
+    --go-inset-bottom: 8px;
+    padding-inline: 16px;
+  }
+  #gameover[data-anatomy='planet'] .go-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    column-gap: 28px;
+    row-gap: var(--go-tier-gap);
+    align-items: stretch;
+    align-content: stretch;
+    width: min(1040px, 100%);
+    max-height: none;
+    padding: 18px var(--go-gutter) 16px;
   }
   #gameover[data-anatomy='planet'] #go-world {
     grid-column: 1;
-    grid-row: 1;
+    grid-row: 1 / -1;
     margin: 0;
+    height: auto;
     min-height: 0;
   }
   #gameover[data-anatomy='planet'] .go-summary {
-    grid-column: 1;
-    grid-row: 2;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    flex: 0 0 auto;
+    justify-content: start;
+    align-items: center;
+    text-align: center;
   }
+  #gameover[data-anatomy='planet'] .go-title { text-align: center; }
+  #gameover[data-anatomy='planet'] #go-brand { top: 14px; }
   #gameover[data-anatomy='planet'] .go-buttons {
     grid-column: 2;
-    grid-row: 1 / span 2;
-    align-self: center;
+    grid-row: 2;
+    align-self: end;
     margin-top: 0;
   }
 }
@@ -8517,13 +8690,17 @@ body.result .corner-tools {
   width: 100%;
   min-height: 44px;
   padding: 0 10px;
+  border: 0;
   border-radius: 10px;
+  background: color-mix(in srgb, var(--fu-cream) 7%, transparent);
   justify-content: center;
   font-family: var(--font-ui);
   font-size: 0.7rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+.go-result-keys .btn:active { background: color-mix(in srgb, var(--fu-cream) 13%, transparent); }
+.go-result-keys .btn:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
 @media (max-height: 660px) {
   .go-result-sheet { padding: 2px 12px 10px; }
   .go-result-board { width: min(128px, 44%); }

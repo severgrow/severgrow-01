@@ -38,13 +38,6 @@ const MIN_ZOOM = .92;
  *  "Make the live territory in background of main menu be the planet ... the starting position of
  *  when you open the planet"). */
 const MENU_ZOOM = .78;
-/**
- * THE GLOBE IN A WINDOW (owner feedback, 2026-11-11: "the globe should fill that frame"). `discRadius`
- * is linear in the zoom and in the frame's shorter side, so this ONE number makes the planet's
- * diameter ~1.05× the frame's shorter side at every frame shape: the limb is just inside the window,
- * and the planet reads as a world rather than as a wall of tiles or a stamp in the middle.
- */
-const GLOBE_ZOOM = 1.28;
 const OUT_MS = 900;
 const FLY_MS = 620;
 const INTRO_MS = 1150;
@@ -392,15 +385,11 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       ask();
       return;
     }
-    // THE GLOBE IN ITS WINDOW (owner feedback, 2026-11-11): the whole planet, on the menu's own pose,
-    // a breath smaller than its rest so it settles into the frame instead of being simply there.
-    if (hooks.globe) {
-      const rest = clampZoom(GLOBE_ZOOM);
-      if (!posed) { q = menuPose(); zoom = targetZoom = rest * .86; frameNow = frameTarget(); cropNow = cropTarget(); light = 1; posed = true; }
-      if (!motion()) { zoom = targetZoom = rest; ask(); return; }
-      flyTo(q, rest, 760, easeOut);
-      return;
-    }
+    // THE PLANET PAGE'S OWN FRAMING (owner feedback, 2026-11-11: "same setup and layout as the
+    // planet page" and "the globe should fill that frame rather than sit small in the middle of it").
+    // It opens on the player's largest holding at the card's own tile size, so the window is full of
+    // world and colour — the planet's silhouette is what the SPACE pass shows around it, and a card
+    // that opens on the whole globe instead would read as a dark ball with a small lit patch.
     const target = northUpDrag(homeQuat(sphere, map, input?.home ?? '0,0'),north,0,0,1);
     const open = clampZoom(zoomFor(openTile(hooks)));
     if (!motion()) { q = target; zoom = targetZoom = open; frameNow = frameTarget(); cropNow = cropTarget(); light = 1; posed = true; ask(); return; }
@@ -638,7 +627,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       if (index === undefined || !renderer) return;
       // A GLOBE WINDOW re-frames on your land at the globe's own size (never the 44px-close framing
       // the Territory page uses), so a later world read cannot zoom the card's planet in.
-      if (hooks.globe) { flyTo(menuPose(), clampZoom(GLOBE_ZOOM)); return; }
+      if (hooks.globe) { flyTo(menuPose(), clampZoom(zoomFor(openTile(hooks)))); return; }
       flyTo(homeQuat(sphere, map, id!), Math.max(zoom, clampZoom(zoomFor(openTile(hooks)))));
     },
     dispose() {

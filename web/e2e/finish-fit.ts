@@ -21,6 +21,7 @@ import { preview } from 'vite';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { CAMPAIGN_LEVELS, nextCampaignLevel } from '../../src/campaign/index.js';
+import { WORLD_CELLS } from '../../server/src/world.js';
 import { CAMPAIGN, RESULT } from '../../src/strings.js';
 import { lessonFor } from '../src/lessons/lessons.js';
 import { CHROME, openDuel, openSeat, startLocalDuel } from './helpers/local-duel.js';
@@ -35,6 +36,8 @@ const VIEWPORTS = ([
   { key: '360x640', width: 360, height: 640 },
   { key: '390x844', width: 390, height: 844 },
   { key: '1280x800', width: 1280, height: 800 },
+  // A landscape phone: the two-column spread on the smallest height the product supports.
+  { key: '844x390', width: 844, height: 390 },
 ] as const).filter((vp) => !process.env.FIT_VIEWPORTS || process.env.FIT_VIEWPORTS.split(',').includes(vp.key));
 
 let failed = 0;
@@ -78,7 +81,18 @@ const MEASURE = `(() => {
     viewport: { w: window.innerWidth, h: window.innerHeight },
     visibleParts: parts.filter((p) => shown(id(p))),
     hiddenParts: parts.filter((p) => !shown(id(p))),
-    buttons: controls.map((b) => ({ id: b.id, label: (b.textContent || '').trim(), ...keyBox(b), inside: inside(b) })),
+    buttons: controls.map((b) => {
+      const r = b.getBoundingClientRect();
+      const row = b.closest('.go-key-row');
+      return {
+        id: b.id, label: (b.textContent || '').trim(), ...keyBox(b), inside: inside(b),
+        top: Math.round(r.top), left: Math.round(r.left), right: Math.round(r.right),
+        // Which ROW WRAPPER the key sits in (1 = the lead's row) and its own grid column, so the
+        // suite can assert the CELL the owner asked for, not just that four keys exist.
+        rowIndex: row ? [...document.querySelectorAll('#gameover .go-key-row')].indexOf(row) + 1 : 0,
+        column: getComputedStyle(b).gridColumnStart,
+      };
+    }),
     primary: controls.filter((b) => b.classList.contains('primary')).map((b) => b.id),
     rows: rows.map((row) => [...row.querySelectorAll('.btn')].filter(shown).map((b) => b.id)),
     anatomy: screen.dataset.anatomy || 'classic',
@@ -91,6 +105,48 @@ const MEASURE = `(() => {
     kids: card ? [...card.children].map((c) => (c.className || c.id) + ':' + Math.round(c.getBoundingClientRect().height) + ':' + getComputedStyle(c).display) : [],
     summaryFlex: (() => { const s = card && card.querySelector('.go-summary'); return s ? getComputedStyle(s).flex : ''; })(),
     canvas: !!document.querySelector('#go-world-surface > .planet-canvas'),
+    worldStyle: (() => {
+      if (!pane) return null;
+      const s = getComputedStyle(pane);
+      const c = card ? getComputedStyle(card) : null;
+      return { flex: s.flex, grow: s.flexGrow, basis: s.flexBasis, h: s.height, mh: s.maxHeight, align: s.alignSelf, gap: c ? c.gap : '', justify: c ? c.justifyContent : '', cardH: c ? c.height : '' };
+    })(),
+    planetSnap: (() => {
+      const s = (window.__goPlanetSnap && window.__goPlanetSnap()) || null;
+      return s ? { zoom: +s.zoom.toFixed(2), tilePx: +s.tilePx.toFixed(1), disc: Math.round(s.disc.r), frame: s.frame } : null;
+    })(),
+    // THE TIER RHYTHM, measured from the four tiers the owner named: A the outcome title, B the
+    // score, C the game-info line, D the planet window. Sorted by their top edge (the wide spread
+    // puts the window ABOVE the words), then each neighbouring pair's gap, so one number describes
+    // the rhythm on every shape.
+    tierGaps: (() => {
+      const tiers = [
+        { at: 'A', el: id('go-title') },
+        { at: 'B', el: id('go-score') },
+        { at: 'C', el: id('go-note') },
+        { at: 'D', el: pane },
+      ].filter((t) => t.el && shown(t.el)).map((t) => ({ at: t.at, r: t.el.getBoundingClientRect() }));
+      // THE RHYTHM IS A VERTICAL RELATIONSHIP (owner, 2026-11-11). A tier counts only if it sits in
+      // the SAME PAGE as the outcome title: on a phone that is all four (A->B->C->D); in the wide
+      // two-page spread the planet is the left page and the window is not stacked under the words at
+      // all, so the rhythm there is A->B->C. Sorting the un-related side-by-side pairs produced a
+      // meaningless number (a title "gapped" from the window by -479px), which is what this anchor
+      // removes: the title's column defines the page the rhythm lives in.
+      const title = tiers.find((t) => t.at === 'A');
+      if (!title) return { order: '', gaps: [] };
+      const page = tiers.filter((t) => Math.min(title.r.right, t.r.right) - Math.max(title.r.left, t.r.left) > 1);
+      const boxes = page.sort((a, b) => a.r.top - b.r.top);
+      const gaps = [];
+      for (let i = 1; i < boxes.length; i++) {
+        gaps.push({ pair: boxes[i - 1].at + boxes[i].at, px: Math.round(boxes[i].r.top - boxes[i - 1].r.bottom) });
+      }
+      return { order: boxes.map((b) => b.at).join(''), gaps };
+    })(),
+    viewportH: window.innerHeight,
+    gridRows: card ? getComputedStyle(card).gridTemplateRows : '',
+    paneRect: pane ? { top: Math.round(pane.getBoundingClientRect().top), h: Math.round(pane.getBoundingClientRect().height), disp: getComputedStyle(pane).display, grid: getComputedStyle(pane).gridRowStart + '/' + getComputedStyle(pane).gridRowEnd, align: getComputedStyle(pane).alignSelf, cardAlign: card ? getComputedStyle(card).alignItems : '', pos: getComputedStyle(pane).position, contain: getComputedStyle(pane).contain, ar: getComputedStyle(pane).aspectRatio } : null,
+    cardTop: card ? Math.round(card.getBoundingClientRect().top) : 0,
+    titleTop: id('go-title') ? Math.round(id('go-title').getBoundingClientRect().top) : 0,
     highlights: document.querySelectorAll('#go-highlights li').length,
     clipped: controls.filter((b) => !inside(b)).map((b) => b.id),
     title: (id('go-title') || {}).textContent || '',
@@ -104,17 +160,25 @@ const measure = (page: Page) => page.evaluate(MEASURE) as Promise<{
   pageWide: boolean;
   visibleParts: string[];
   hiddenParts: string[];
-  buttons: { id: string; label: string; inside: boolean; w: number; h: number }[];
+  buttons: { id: string; label: string; inside: boolean; w: number; h: number; top: number; left: number; right: number; rowIndex: number; column: string }[];
   primary: string[];
   rows: string[][];
   anatomy: string;
   planet: { w: number; h: number } | null;
   summaryH: number;
   keysH: number;
+  viewport: { w: number; h: number };
   cardDisplay: string;
   cardDir: string;
   cardHeight: string;
   kids: string[];
+  tierGaps: { order: string; gaps: { pair: string; px: number }[] };
+  viewportH: number;
+  cardTop: number;
+  titleTop: number;
+  gridRows: string;
+  paneRect: { top: number; h: number; disp: string; grid: string; align: string; cardAlign: string; pos: string; contain: string; ar: string } | null;
+  worldStyle: { flex: string; grow: string; basis: string; h: string; mh: string; align: string; gap: string; justify: string; cardH: string } | null;
   summaryFlex: string;
   canvas: boolean;
   highlights: number;
@@ -200,6 +264,12 @@ const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
 const waitFinish = async (page: Page) => {
   await page.waitForSelector('#gameover:not([hidden])', { timeout: 30_000 });
   await page.waitForFunction('(() => { const h = window.__severgrow; return !h.busy(); })()', undefined, { timeout: 30_000 });
+  // THE HERO'S FIRST FRAME. The window is the card's largest element, so acceptance shots (and the
+  // measurements taken beside them) wait for it to have PAINTED, exactly as a player sees it: its
+  // canvas carries `data-planet-ready` after its first real frame. A card with no planet (a lesson,
+  // a locked line) simply resolves at once.
+  await page.waitForSelector('#go-world-surface > .planet-canvas[data-planet-ready="true"]', { timeout: 8_000 })
+    .catch(() => undefined);
   await page.waitForTimeout(450);
   await dismissInstall(page);
 };
@@ -259,6 +329,47 @@ type SeedMeasure = {
 const seedMeasure = (page: Page) => page.evaluate(MEASURE_SEEDS) as Promise<SeedMeasure>;
 
 /**
+ * THE WORLD, STUBBED (owner feedback, 2026-11-11: the card's hero is THE PLANET, so the acceptance
+ * shots must show a real world). The finish card reads the same public world the Planet page does;
+ * without these routes the classic fixture would photograph an empty window and "prove" the hero is
+ * blank. The holding is a REALISTIC one — a cluster of a returning player's tiles — because a card
+ * with one tile would be a fixture, not a screen. Nothing here touches a network or an account.
+ */
+const FINISH_WORLD = {
+  ok: true,
+  world: {
+    version: 1, revision: 5, cost: 100, growAnywhere: true, cells: WORLD_CELLS,
+    claims: [
+      '0,0', '1,0', '0,1', '-1,1', '-1,0', '2,0', '1,1', '0,2', '-2,2', '1,-1', '2,-1', '0,-1', '-1,2', '-2,3',
+    ].map((cellId, index) => ({
+      cellId,
+      ownerId: index < 9 ? 'stub' : 'other',
+      ownerName: index < 9 ? 'You' : 'WillowBirch',
+      ownerTag: index < 9 ? '1001' : '1002',
+      ownerLevel: index < 9 ? 22 : null,
+      colour: index < 9 ? 'hsl(150 32% 52%)' : 'hsl(30 34% 49%)',
+      claimedAt: Date.now() - index * 60_000,
+    })),
+  },
+};
+
+const stubWorld = async (page: Page): Promise<void> => {
+  await page.route('**/v1/world', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FINISH_WORLD) }));
+  await page.route('**/v1/world/challenges*', (r) => r.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, incoming: [], outgoing: [], serverNow: Date.now() }),
+  }));
+  await page.route('**/v1/seeds/wallet', (r) => r.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, wallet: { balance: 148, lifetimeEarned: 250, lifetimeSpent: 0, worldInvitationSeen: true } }),
+  }));
+  await page.route('**/v1/guests*', (r) => r.fulfill({
+    status: 201, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, token: 'stub-token', player: { id: 'stub', kind: 'guest', displayName: 'StubGuest' }, serverNow: Date.now() }),
+  }));
+};
+
+/**
  * Dismiss the install invitation if it is on screen. It is a timed sheet that may open OVER the
  * finish card (by design — it counts the games this device has played), and it takes pointer events
  * while it is up. A player closes it; so does this, with the sheet's own control.
@@ -299,6 +410,36 @@ const bootScreen = async (browser: Browser, vp: { width: number; height: number 
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await seedSettings(page, { sound: false, music: false, coach: false, speed: moving ? 'normal' : 'skip', reduceMotion: !moving, autoSkip: false, confirmPolicy: 'always' });
+  await stubWorld(page);
+  // THE WINDOW'S BEATS ARE RECORDED, NOT SAMPLED. The arrival is ~150ms on a card that takes longer
+  // than that to appear, so a `getAnimations()` read taken after Playwright's round trip found the
+  // beat already FINISHED — and the old check reported an empty list, which looked like "no arrival"
+  // when the arrival had in fact played (owner report, 2026-11-11). Wrapping `animate()` before the
+  // app boots records every beat the window creates, with its own properties and duration, whether it
+  // is still running or not. Under Reduce motion the list must stay EMPTY: that is the proof that
+  // nothing was created at all.
+  await page.addInitScript(() => {
+    const original = Element.prototype.animate;
+    const log: { cls: string; props: string[]; ms: number }[] = [];
+    (window as unknown as { __goAnim: typeof log }).__goAnim = log;
+    Element.prototype.animate = function (this: Element, keyframes: unknown, options?: unknown) {
+      const animation = original.call(this, keyframes as Keyframe[], options as KeyframeAnimationOptions);
+      try {
+        const inWindow = this.closest('#go-world') !== null;
+        if (inWindow) {
+          const frames = Array.isArray(keyframes) ? keyframes : [keyframes];
+          const props = new Set<string>();
+          for (const frame of frames) for (const key of Object.keys(frame as Record<string, unknown>)) props.add(key);
+          log.push({
+            cls: this.className,
+            props: [...props],
+            ms: Math.round(Number((options as KeyframeAnimationOptions | undefined)?.duration ?? 0) || 0),
+          });
+        }
+      } catch { /* a probe must never break the page */ }
+      return animation;
+    } as typeof Element.prototype.animate;
+  });
   return { context, page, errors };
 };
 
@@ -313,10 +454,13 @@ const report = async (mode: string, vp: string, page: Page, errors: string[], ex
   if (planet && m.card && m.planet) {
     const share = Math.round((m.planet.h / m.card.h) * 100);
     console.log(`    MEASURED: card ${m.card.h}px · planet window ${m.planet.h}px (${share}%) · planet ${m.planet.w}px wide`);
-    console.log(`    layout  : card ${m.cardDisplay}/${m.cardDir} ${m.cardHeight} · summary ${m.summaryH}px (${m.summaryFlex}) · keys ${m.keysH}px`);
+    console.log(`    layout  : card ${m.cardDisplay}/${m.cardDir} ${m.cardHeight} · summary ${m.summaryH}px (${m.summaryFlex}) · keys ${m.keysH}px · top ${m.cardTop} -> title ${m.titleTop}`);
     console.log(`    children: ${m.kids.join(' | ')}`);
+    console.log(`    world   : ${JSON.stringify(m.worldStyle)}`);
   }
   if (planet) console.log(`    rows   : ${m.rows.map((r) => r.join('+')).join(' / ')}`);
+  if (planet) console.log(`    grid   : rows ${m.gridRows} · pane ${JSON.stringify(m.paneRect)}`);
+  if (planet) console.log(`    tiers  : ${m.tierGaps.order} -> ${m.tierGaps.gaps.map((g) => `${g.pair}=${g.px}px`).join(' · ')}`);
   console.log(`    card overflow ${m.card?.overflow}px (${m.card?.h}px tall), screen overflow ${m.screen?.overflow}px`);
   check(`${mode} ${vp}: the finish card does not scroll`, (m.card?.overflow ?? 1) <= 0, `overflow ${m.card?.overflow}px`);
   check(`${mode} ${vp}: the screen behind it does not scroll either`, (m.screen?.overflow ?? 1) <= 0, `overflow ${m.screen?.overflow}px`);
@@ -332,14 +476,51 @@ const report = async (mode: string, vp: string, page: Page, errors: string[], ex
     m.title,
   );
   if (planet) {
-    // THE PLANET IS THE HERO (owner feedback, 2026-11-11): it takes the freed space on every shape,
-    // and the four keys never leave an orphaned half slot.
-    check(`${mode} ${vp}: the planet window is the card's hero`, (m.planet?.h ?? 1) / (m.card?.h ?? 1) >= 0.45,
+    // THE LEAD KEY IS THE RIGHT-HAND KEY OF THE FIRST ROW (owner, 2026-11-11). Visual order, measured
+    // from the cells: RESULT on the left of row 1, the cream lead on the right of it, the replay and
+    // the way out split across row 2. The DOM still puts the lead first, so focus order is unchanged.
+    const byId = (want: string) => m.buttons.find((b) => b.id === want);
+    const lead = byId('go-rematch')!;
+    const result = byId('go-result');
+    const replay = byId('go-replay');
+    const menu = byId('go-menu');
+    console.log(`    cells  : ${m.buttons.map((b) => `${b.id}@r${b.rowIndex}c${b.column}(${b.left}-${b.right})`).join(' ')}`);
+    check(`${mode} ${vp}: the lead key is the RIGHT-hand key of the first row`,
+      !!result && lead.rowIndex === 1 && result.rowIndex === 1 && lead.left > result.left && lead.right > result.right,
+      `lead r${lead.rowIndex} ${lead.left}-${lead.right} · result ${result ? `${result.left}-${result.right}` : 'none'}`);
+    check(`${mode} ${vp}: the second row is the replay and the way out`,
+      !!replay && !!menu && replay.rowIndex === 2 && menu.rowIndex === 2 && replay.left < menu.left,
+      `${replay?.rowIndex}/${menu?.rowIndex} ${replay?.left}-${menu?.left}`);
+    // THE PLATE IS THE SCREEN (owner correction, 2026-11-11: "make sure the whole screen uses entire
+    // height of the current display ... the plate is the screen, not a floating card with margins").
+    // The card must reach the viewport's own height, minus only the deliberate inset (<= 16px).
+    check(`${mode} ${vp}: the plate fills the screen's height`, Math.abs((m.card?.h ?? 0) - m.viewportH) <= 16,
+      `card ${m.card?.h}px vs viewport ${m.viewportH}px`);
+    // THE ONE RHYTHM (owner, same day): A->B->C->D, one value, within 2px of each other.
+    const gaps = m.tierGaps.gaps.map((g) => g.px);
+    check(`${mode} ${vp}: the header tiers are one equal rhythm`,
+      gaps.length >= 2 && gaps.every((g) => g > 0) && Math.max(...gaps) - Math.min(...gaps) <= 2,
+      m.tierGaps.gaps.map((g) => `${g.pair}=${g.px}`).join(' '));
+    // On a phone the stack is the full rhythm the owner named (A->B->C->D). In the wide spread the
+    // planet is its own page, so the stacked rhythm there is A->B->C — and that is what is asserted.
+    const phone = vp === '320x568' || vp === '360x640' || vp === '390x844';
+    check(`${mode} ${vp}: ${phone ? 'all three' : 'the stacked'} tier gaps are measured`,
+      gaps.length === (phone ? 3 : 2), m.tierGaps.gaps.map((g) => g.pair).join(','));
+    check(`${mode} ${vp}: the rhythm is the declared token (12px desktop, 10px short phone)`,
+      gaps.every((g) => g === (vp === '320x568' || vp === '360x640' || vp === '844x390' ? 10 : 12)),
+      gaps.join(','));
+    // THE PLANET IS THE HERO (owner, 2026-11-11): it takes the freed space on every shape, and the
+    // four keys never leave an orphaned half slot.
+    check(`${mode} ${vp}: the planet window is the card's hero`, (m.planet?.h ?? 1) / (m.card?.h ?? 1) >= 0.5,
       `${m.planet?.h}px of ${m.card?.h}px`);
+    planetHeights[vp] = m.planet?.h ?? 0;
     check(`${mode} ${vp}: the shared planet renderer is mounted`, m.canvas);
-    check(`${mode} ${vp}: four keys in two half-width rows`,
-      JSON.stringify(m.rows) === JSON.stringify([['go-rematch', 'go-result'], ['go-replay', 'go-menu']]),
-      JSON.stringify(m.rows));
+    // Row MEMBERSHIP by rendered position (the DOM order is deliberately not the visual order).
+    const row1 = m.buttons.filter((b) => b.rowIndex === 1).sort((a, b) => a.left - b.left).map((b) => b.id);
+    const row2 = m.buttons.filter((b) => b.rowIndex === 2).sort((a, b) => a.left - b.left).map((b) => b.id);
+    check(`${mode} ${vp}: four keys, two rows of two — RESULT | LEAD`,
+      JSON.stringify([row1, row2]) === JSON.stringify([['go-result', 'go-rematch'], ['go-replay', 'go-menu']]),
+      JSON.stringify([row1, row2]));
     const halves = m.buttons.filter((b) => ['go-rematch', 'go-result', 'go-replay', 'go-menu'].includes(b.id));
     const widths = new Set(halves.map((b) => b.w));
     check(`${mode} ${vp}: the four keys are equal halves`, widths.size === 1 && [...widths][0]! >= 120, [...widths].join(','));
@@ -383,6 +564,8 @@ const server = await preview({ configFile: 'web/vite.config.ts', preview: { host
 const origin = server.resolvedUrls?.local?.[0]?.replace(/\/$/, '') ?? `http://127.0.0.1:${PORT}`;
 const browser = await chromium.launch({ executablePath: CHROME });
 const seen: Record<string, string[]> = {};
+/** Planet window height per viewport, so the last assertion can prove it GROWS with the screen. */
+const planetHeights: Record<string, number> = {};
 
 try {
   for (const vp of VIEWPORTS) {
@@ -393,6 +576,15 @@ try {
       await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
       const ended = await toGameOver(page);
       check(`classic ${vp.key}: the game reached its end`, ended === 'ended', ended);
+      // THE WINDOW'S ARRIVAL (owner motion brief, 2026-11-11): measured the instant the card shows,
+      // before the finish card's own settle wait. The surface must be fading and rising (opacity +
+      // translate, <= 8px), on a short beat — and nothing may animate a layout property.
+      await page.waitForSelector('#gameover:not([hidden])', { timeout: 30_000 });
+      // This fixture boots with Reduce motion ON, so the window's arrival is INSTANT and provable:
+      // the recorder must hold NO beat for it at all (the element is simply set to its rest state).
+      const arrival = await page.evaluate('(() => (window.__goAnim || []))()') as { cls: string; props: string[]; ms: number }[];
+      console.log(`    window arrival (reduce motion): ${JSON.stringify(arrival)}`);
+      check(`classic ${vp.key}: Reduce motion makes the window instant`, arrival.length === 0, JSON.stringify(arrival));
       await waitFinish(page);
       // A plain offline game keeps its own two words: "Play again" on a win, "Try again" on a loss.
       const classicWon = (await page.textContent('#go-title')) === RESULT.won;
@@ -486,12 +678,33 @@ try {
   if (MODES.includes('classic')) {
     for (const moving of [true, false]) {
       const label = moving ? 'moving' : 'static';
-      const vp = VIEWPORTS[0]!; // 360x640: the tightest real phone, the one the rule is about
+      // 360x640: the tightest real phone whose shots the docs carry for this reveal.
+      const vp = VIEWPORTS.find((v) => v.key === '360x640') ?? VIEWPORTS[0]!;
       const { context, page, errors } = await bootScreen(browser, vp, moving);
       await page.goto(`${origin}/?seed=219682080`);
       await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
       const ended = await toGameOver(page);
       check(`seeds ${label}: the game reached its end`, ended === 'ended', ended);
+      // THE MOVING CARD'S ARRIVAL (owner motion brief, 2026-11-11), measured on the live surface the
+      // instant the card appears: a short opacity + translate beat, and nothing else.
+      if (moving) {
+        await page.waitForSelector('#gameover:not([hidden])', { timeout: 30_000 });
+        // THE RECORD, NOT A SAMPLE (owner, 2026-11-11). The arrival is a ~150ms beat on a card that
+        // takes longer than that to paint, so reading `getAnimations()` after the selector wait
+        // found it already finished and reported [] — "no arrival" — although it had played. The
+        // recorder installed in `bootScreen` keeps every beat the window creates, so this asserts
+        // the beat EXISTS with the right properties and duration, whether or not it is still running.
+        const created = await page.evaluate('(() => (window.__goAnim || []))()') as { cls: string; props: string[]; ms: number }[];
+        const surface = created.filter((a) => a.cls.includes('go-world-surface'));
+        console.log(`    window arrival (moving): ${JSON.stringify(created)}`);
+        check('seeds moving: the window fades and rises in on arrival',
+          surface.some((a) => a.props.includes('opacity') && a.props.includes('translate') && a.ms > 0 && a.ms <= 300),
+          JSON.stringify(surface));
+        const banned = ['width', 'height', 'top', 'left', 'filter', 'backdropFilter', 'boxShadow'];
+        check('seeds moving: nothing animates a layout or paint property',
+          created.every((a) => a.props.every((p) => !banned.includes(p))),
+          JSON.stringify(created.map((a) => a.props)));
+      }
       await waitFinish(page);
       check(`seeds ${label}: nothing is on the reward line before a reward lands`, (await seedLine(page)) === '');
       // Exactly the paint path a win takes, so this measures the real thing, not a copy of it.
@@ -565,5 +778,14 @@ if (MODES.includes('online')) {
 // which is the very button `enterCampaign()` backs.
 
 void seen;
+// THE PLANET GROWS WITH THE SCREEN (owner, 2026-11-11: "on a taller phone the player gets MORE
+// planet, not more padding"). Portrait heights are compared in the order they were measured; the
+// landscape spread has its own shape, so it is held to the same >= 50% share but not to this order.
+const portrait = ['320x568', '360x640', '390x844'].filter((k) => planetHeights[k] !== undefined);
+check(
+  'the planet window grows with the viewport height',
+  portrait.length < 2 || portrait.every((k, i) => i === 0 || planetHeights[k]! > planetHeights[portrait[i - 1]!]!),
+  portrait.map((k) => `${k}:${planetHeights[k]}px`).join(' '),
+);
 console.log(`\n${failed === 0 ? 'ALL PASS' : `${failed} FAILED`} — shots in docs/screens/finish/`);
 process.exit(failed === 0 ? 0 : 1);
