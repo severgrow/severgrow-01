@@ -149,35 +149,20 @@ export const ONLINE_CSS = `
   flex-direction: column;
   gap: 0.55rem;
 }
-/* The row's mark slot: the status icon, with the same red "!" set into its corner when this match
-   waits for the player's move. The badge is decoration; the row's word ("Your turn") is the
-   signal every player can read, and the border tint is a third, quiet reinforcement. */
-.online-row-mark {
-  position: relative;
-  width: 2rem;
-  min-height: 2rem;
-  display: grid;
-  place-items: center;
-}
+/* WAITS FOR YOU: a small alert dot in the row's left margin, beside the name. It never takes a column,
+   so every name starts on the same line; the state word ("Your turn") is the signal everyone reads. */
 .online-row-attention {
   position: absolute;
-  inset-inline-start: -3px;
-  top: -5px;
-  box-sizing: border-box;
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
+  inset-inline-start: 5px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
   border-radius: 50%;
   background: var(--c-alert, #ff6b4a);
-  color: var(--c-alertInk, #18191a);
-  font-size: 0.72rem;
-  font-weight: 800;
-  line-height: 1;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--c-alert, #ff6b4a) 55%, transparent);
 }
-.online-row.needs-response {
-  border-color: color-mix(in srgb, var(--c-alert, #ff6b4a) 50%, transparent);
-}
+
 @media (prefers-reduced-motion: reduce) {
   .online-matches-caret { transition: none; }
 }
@@ -192,22 +177,29 @@ export const ONLINE_CSS = `
   gap: 0.55rem;
 }
 .online-row {
+  /* THE GRID (owner, 2026-11-11: "divide this whole games submenu in a grid ... ultra clean
+     intentional and stylish"). Three columns on every row, whatever it holds:
+       name (takes the rest) | state (fixed, so Won / Lost / Your turn start on one line) |
+       the right slot (fixed: two 44px keys, or the clock, right-aligned).
+     ONE LINE, ONE HEIGHT (owner, 2026-11-10): every row is 48px, a 44px key plus 2px. */
+  --row-state: 5.6rem;
+  --row-slot: 92px;
+  position: relative;
   display: grid;
-  grid-template-columns: 2rem 1fr auto;
-  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) var(--row-state) var(--row-slot);
+  column-gap: 10px;
   align-items: center;
-  /* ONE LINE, ONE HEIGHT (owner, 2026-11-10: "fit everything in 1 row, so the buttons has smaller
-     height than now. but make them all have same size"): every row is 48px, a 44px key plus 2px. */
   min-height: 48px;
   height: 48px;
   box-sizing: border-box;
-  padding: 2px 2px 2px 0.6rem;
-  /* CLASSIC DARK GLASS (owner, 2026-11-09: "whole your matches is green we don't like - make smart
-     classic dark glass for it"): the same glass, blur and hairline as the chat and Match Intel. */
+  padding: 2px 2px 2px 16px;
+  /* CLASSIC DARK GLASS (owner, 2026-11-09): the same glass, blur and hairline as the chat and Intel. */
   background: var(--dark-glass, rgba(8, 10, 10, .42));
   -webkit-backdrop-filter: var(--dark-glass-blur, blur(7.4px) saturate(1.05));
   backdrop-filter: var(--dark-glass-blur, blur(7.4px) saturate(1.05));
-  border: 1px solid rgb(232 221 197 / .12);
+  /* NO FRAME (owner, 2026-11-11: "around each game, don't do contour framing ... no frame"): the
+     glass alone sets each row apart; the red dot and the amber clock carry the signals. */
+  border: 0;
   border-radius: 10px;
   cursor: pointer;
 }
@@ -215,11 +207,59 @@ export const ONLINE_CSS = `
   outline: 2px solid #ffe1a7;
   outline-offset: 2px;
 }
-.online-row:not(.is-finished) { padding-right: 0.7rem; }
 /* A finished row is not a key: its two keys are (replay, challenge again). */
 .online-row.is-finished { cursor: default; }
-/* The finished row's keys: two equal 44px glass keys in the cockpit's language, side by side. */
-.online-row-keys { display: flex; gap: 4px; }
+/* YOUR TURN is the one framed row (owner, 2026-11-11: "frame only amber when its our turn"): a
+   warm amber edge with a soft glow, on the row that asks something of the player right now. */
+.online-row.is-yours {
+  box-shadow: inset 0 0 0 1px rgb(255 205 120 / .55), 0 0 14px 1px rgb(255 190 100 / .24);
+}
+
+.online-row-name {
+  min-width: 0;
+  display: block;
+}
+.online-row-name b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  letter-spacing: .01em;
+  color: var(--control-ivory, #f5edda);
+}
+/* The state column: one word, one place, one weight. Colour says how much it matters to you. */
+.online-row-status {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.8rem;
+  letter-spacing: .04em;
+  color: rgb(232 221 197 / .5);
+}
+.online-row-status.state-yours, .online-row-status.result-won { color: #ffe1a7; }
+.online-row-status.state-theirs { color: rgb(232 221 197 / .62); }
+.online-row-status.result-lost, .online-row-status.result-finished { color: rgb(232 221 197 / .42); }
+.online-row-status.result-draw { color: rgb(232 221 197 / .7); }
+/* The right slot: a clock sits in it right-aligned, on the keys' inner edge. */
+.online-row-time {
+  justify-self: end;
+  padding-right: 12px;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  color: rgb(232 221 197 / .62);
+}
+.online-row-time.is-warn { color: #e0ad55; }
+.online-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+/* The finished row's keys: always two 44px slots (replay, then challenge again), so the swords sit
+   in the same place on every row even when a game has nothing to replay. */
+.online-row-keys { display: grid; grid-template-columns: 44px 44px; gap: 4px; justify-self: end; }
+.online-row-key-gap { width: 44px; height: 44px; }
 .online-row-key {
   width: 44px; height: 44px; min-width: 44px; padding: 0;
   display: grid; place-items: center; border-radius: 8px; cursor: pointer;
@@ -234,45 +274,6 @@ export const ONLINE_CSS = `
 .online-row-rematch.is-theirs { color: #ffe1a7; border-color: rgb(255 225 167 / .55); box-shadow: 0 0 14px rgb(255 205 120 / .18); }
 /* Already asked by this player: quieter (a press again just reopens the wait). */
 .online-row-rematch[data-rematch='mine'] { color: rgb(232 221 197 / .55); border-color: rgb(232 221 197 / .1); }
-.online-row.warn {
-  border-color: color-mix(in srgb, #d4a24a 55%, transparent);
-}
-.online-row-main {
-  display: flex;
-  flex-direction: row;
-  align-items: baseline;
-  gap: 0.6rem;
-  min-width: 0;
-}
-.online-row-main b {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.online-row-status {
-  font-size: 0.85rem;
-  opacity: 0.8;
-  white-space: nowrap;
-  flex: none;
-}
-/* The result reads at a glance: a win in the game's warm gold, a loss quieter. */
-.online-row-status.result-won { color: #ffe1a7; opacity: 1; }
-.online-row-status.result-lost { opacity: 0.6; }
-.online-row-time {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-size: 0.85rem;
-  display: flex;
-  flex-direction: row;
-  align-items: baseline;
-  gap: 0.4rem;
-  white-space: nowrap;
-}
-.online-row-time small {
-  color: #d4a24a;
-  font-size: 0.72rem;
-  max-width: 7.5rem;
-}
 .online-code {
   font-size: 1.15rem;
   letter-spacing: 0.22em;

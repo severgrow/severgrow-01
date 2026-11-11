@@ -246,6 +246,8 @@ export const ONLINE = Object.freeze({
   starterOpponentSr: 'Your opponent moves first in this match.',
   statusYourTurn: 'Your turn',
   statusTheirTurn: "Opponent's turn",
+  /** Your matches' state column: the same meaning in a word that fits the grid (owner, 2026-11-11). */
+  rowTheirTurn: 'Their turn',
   /**
    * The turn word while the opponent's finished turn is being replayed. It is NOT "Opponent's
    * turn": that is the exact confusion the two-phone playtest reported (both phones reading the

@@ -313,7 +313,8 @@ try {
   const theirsRow = await rowState(page, theirs.matchId);
   const waitingRow = await rowState(page, waiting.match.matchId);
   check('my-turn row: badged, says "Your turn" in words', !!mineRow && mineRow.badge && mineRow.needsResponse && mineRow.status === 'Your turn', JSON.stringify(mineRow));
-  check('opponent-turn row: NOT badged, says "Opponent\'s turn"', !!theirsRow && !theirsRow.badge && !theirsRow.needsResponse && theirsRow.status === "Opponent's turn", JSON.stringify(theirsRow));
+  // OWNER CHANGED THE RULE (2026-11-11, the grid): the row's state column reads "Their turn".
+  check('opponent-turn row: NOT badged, says "Their turn"', !!theirsRow && !theirsRow.badge && !theirsRow.needsResponse && theirsRow.status === 'Their turn', JSON.stringify(theirsRow));
   check('waiting-for-opponent row: NOT badged, says "Waiting"', !!waitingRow && !waitingRow.badge && waitingRow.status === 'Waiting', JSON.stringify(waitingRow));
   await settle(page);
   await shot(page, 'expanded-badge-390x844.png');
@@ -372,9 +373,11 @@ try {
     `--c-danger ${badgeColours.dangerToken}`,
   );
   check(
-    'both badges are red discs with dark ink (not cream, not a bright fill)',
+    // OWNER CHANGED THE RULE (2026-11-11, the grid): the row's mark is a plain red dot (no "!"
+    // ink inside it); the Your matches button keeps its red disc with dark "!" ink.
+    'the button badge is a red disc with dark ink; the row mark is a red dot',
     luminance(badgeColours.buttonBadge) > 120 && luminance(badgeColours.buttonInk) < 60 &&
-      luminance(badgeColours.rowBadge) > 120 && luminance(badgeColours.rowInk) < 60 &&
+      luminance(badgeColours.rowBadge) > 120 &&
       badgeColours.buttonRadius === '50%' && badgeColours.rowRadius === '50%',
     `button fill ${badgeColours.buttonBadge} ink ${badgeColours.buttonInk} · row fill ${badgeColours.rowBadge} ink ${badgeColours.rowInk}`,
   );
@@ -441,7 +444,7 @@ try {
   const cTheirRow = await rowState(none, cTheirs.matchId);
   const cWaitingRow = await rowState(none, cWaiting.match.matchId);
   check('not-my-turn guest: no row badges', noneState.rowBadges === 0, `${noneState.rowBadges}`);
-  check('not-my-turn guest: the opponent-turn row is unbadged', !!cTheirRow && !cTheirRow.badge && cTheirRow.status === "Opponent's turn", JSON.stringify(cTheirRow));
+  check('not-my-turn guest: the opponent-turn row is unbadged', !!cTheirRow && !cTheirRow.badge && cTheirRow.status === 'Their turn', JSON.stringify(cTheirRow));
   check('not-my-turn guest: the waiting row is unbadged', !!cWaitingRow && !cWaitingRow.badge && cWaitingRow.status === 'Waiting', JSON.stringify(cWaitingRow));
   await settle(none);
   await shot(none, 'expanded-no-badge-390x844.png');

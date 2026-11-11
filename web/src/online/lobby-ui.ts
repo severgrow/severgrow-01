@@ -682,7 +682,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         const finished = row.bucket === 'finished';
         li.className = `online-row bucket-${row.bucket}${row.warnLastTwoHours || row.atRisk ? ' warn' : ''}${
           needsResponse ? ' needs-response' : ''
-        }${finished ? ' is-finished' : ''}`;
+        }${finished ? ' is-finished' : ''}${row.statusWord === ONLINE.statusYourTurn ? ' is-yours' : ''}`;
         // A live row is one key (it opens the game). A finished row is NOT: its two keys are its
         // actions (owner, 2026-11-10: "just name of opp and 2 icons - replay and challenge again").
         if (!finished) {
@@ -690,23 +690,18 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
           li.setAttribute('role', 'button');
         }
         li.dataset.matchId = row.matchId;
-        // Grace is shown as a word next to the clock (never colour alone), plus the last-2-hours warn.
-        const warnSmall = [
-          row.graceWord ? escapeHtml(row.graceWord) : '',
-          row.warnLastTwoHours ? escapeHtml(ONLINE.warnLastTwoHours) : '',
-        ]
-          .filter(Boolean)
-          .map((t) => `<small>${t}</small>`)
-          .join('');
-        // The "!" is decoration only (aria-hidden): the row's own words say "Your turn", and the
-        // disclosure button carries the count in its accessible name.
-        li.innerHTML = `<span class="online-row-mark" aria-hidden="true">
-          ${finished ? '' : `<span class="online-row-icon" data-icon="${row.statusIcon}"></span>`}
-          ${needsResponse ? '<span class="online-row-attention">!</span>' : ''}
-        </span>
-        <span class="online-row-main"><b>${escapeHtml(row.opponentName)}</b>
-        <span class="online-row-status${finished ? ` result-${row.statusWord.toLowerCase()}` : ''}">${escapeHtml(row.statusWord)}</span></span>
-        ${finished ? '' : `<span class="online-row-time">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${warnSmall}</span>`}`;
+        // THE GRID (owner, 2026-11-11: "Won or lost should always be in same line, have its own space
+        // ... divide this whole games submenu in a grid ... ultra clean"): every row is the same three
+        // columns — name | state | a fixed right slot (the clock, or the two keys) — so names, states,
+        // times and keys line up from the first row to the last. Grace is not shown (owner: "Opponent
+        // used their grace - shouldn't be shown"); the last two hours tint the clock and the frame,
+        // and are spoken to a screen reader.
+        const stateWord = row.statusWord === ONLINE.statusTheirTurn ? ONLINE.rowTheirTurn : row.statusWord;
+        const stateClass = finished ? `result-${row.statusWord.toLowerCase()}`
+          : row.statusWord === ONLINE.statusYourTurn ? 'state-yours' : 'state-theirs';
+        li.innerHTML = `<span class="online-row-name">${needsResponse ? '<span class="online-row-attention" aria-hidden="true"></span>' : ''}<b>${escapeHtml(row.opponentName)}</b></span>
+        <span class="online-row-status ${stateClass}">${escapeHtml(stateWord)}</span>
+        ${finished ? '' : `<span class="online-row-time${row.warnLastTwoHours ? ' is-warn' : ''}">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${row.warnLastTwoHours ? `<small class="online-sr">${escapeHtml(ONLINE.warnLastTwoHours)}</small>` : ''}</span>`}`;
         if (finished) {
           const keys = document.createElement('span');
           keys.className = 'online-row-keys';
@@ -719,6 +714,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
             replay.title = replay.getAttribute('aria-label') ?? '';
             replay.innerHTML = REPLAY_KEY_SVG;
             keys.append(replay);
+          } else {
+            const gap = document.createElement('span');
+            gap.className = 'online-row-key-gap';
+            keys.append(gap);
           }
           // CHALLENGE AGAIN: the crossed swords (owner, 2026-11-10: "make the rematch button swords
           // and ask to confirm"). A press from either player waits for the other; the second press
@@ -733,6 +732,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
             again.title = again.getAttribute('aria-label') ?? '';
             again.innerHTML = SWORDS_KEY_SVG;
             keys.append(again);
+          } else {
+            const gap = document.createElement('span');
+            gap.className = 'online-row-key-gap';
+            keys.append(gap);
           }
           li.append(keys);
         }
