@@ -49,6 +49,10 @@ const ROWS = [
   '#sheet-menu .gm-acts',
   '#sheet-menu .gm-leads',
   '#sheet-menu .gm-tools',
+  // THE FINISH CARD'S FOUR KEYS (owner brief, 2026-11-11): two rows of two, and each row can lose a
+  // child (`WATCH REPLAY` is hidden in Blitz, and on a card with no replay at all) — so the row must
+  // derive its columns from what is visible, never reserve a second track.
+  "#gameover[data-anatomy='planet'] .go-key-row",
 ];
 
 describe('rows that can lose a child to [hidden]', () => {
@@ -77,6 +81,10 @@ describe('rows that can lose a child to [hidden]', () => {
   it('the finish card keeps its explicit spans for the full-width keys', () => {
     // `.go-buttons` is a deliberate two-column row whose non-link keys span BOTH columns; only its
     // links pair up. That is a designed layout, not an orphan, and it is measured by the e2e.
-    expect(bodyFor('#gameover .go-buttons > .btn:not(.link)')).toContain('grid-column: 1 / -1');
+    // The rule is scoped to the CLASSIC card since 2026-11-11: the planet card's keys are two
+    // `.go-key-row` grids instead (where a row with one key fills the line by construction).
+    expect(bodyFor("#gameover[data-anatomy='classic'] .go-buttons .btn:not(.link)")).toContain('grid-column: 1 / -1');
+    // A lone quiet key takes the width of the one it lost, so it is never a half key.
+    expect(bodyFor("#gameover[data-anatomy='classic'] .go-buttons:has(#go-more[hidden]) #go-menu")).toContain('grid-column: 1 / -1');
   });
 });

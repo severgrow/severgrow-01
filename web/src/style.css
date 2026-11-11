@@ -8478,8 +8478,12 @@ body.result .corner-tools {
 }
 
 /* LANDSCAPE PHONE / SHORT WINDOW: one plate, two pages. The LEFT page is the planet and it grows to
-   the whole page height; the RIGHT page holds the read-out at its top and the 2x2 keys anchored to
-   its bottom (the thumb's corner). The plate fills the viewport exactly as the portrait one does. */
+   the whole page height; the RIGHT page holds the read-out CENTRED in the band above the keys and
+   the 2x2 keys anchored to its bottom (the thumb's corner). The plate fills the viewport exactly as
+   the portrait one does.
+   OWNER CORRECTION, 2026-11-11: "landscape mobile - you lost 0 - 25 in the centre not on top - we
+   need to be smarter here". The read-out used to be pinned to the top of the right page, which left
+   a dead band between the words and the keys; it now centres in the space ABOVE the keys. */
 @media (max-height: 560px) and (min-width: 560px) {
   #gameover[data-anatomy='planet'] {
     --go-inset-top: 6px;
@@ -8500,21 +8504,25 @@ body.result .corner-tools {
     max-height: none;
     padding: 12px var(--go-gutter) 12px;
   }
-  /* THE PLANET IS THE LEFT PAGE. */
+  /* THE PLANET IS THE LEFT PAGE, AND IT IS THE PAGE THE READ-OUT IS CENTRED IN (owner correction,
+     2026-11-11: the words "in the centre not on top"). The window takes the row above the keys, so
+     the globe's middle and the read-out's middle land on ONE horizontal band; the short foot the
+     keys leave under it is the plate's own foot, not a floating card's margin. */
   #gameover[data-anatomy='planet'] #go-world {
     grid-column: 1;
-    grid-row: 1 / -1;
+    grid-row: 1;
     margin: 0;
     height: auto;
     min-height: 0;
   }
-  /* THE READ-OUT IS THE TOP OF THE RIGHT PAGE. */
+  /* THE READ-OUT IS CENTRED IN THE RIGHT PAGE'S BAND ABOVE THE KEYS (row 1), never pinned to its
+     top edge: the group is centred as a block, and its tiers keep the one rhythm. */
   #gameover[data-anatomy='planet'] .go-summary {
     grid-column: 2;
     grid-row: 1;
-    align-self: start;
+    align-self: center;
     flex: 0 0 auto;
-    justify-content: start;
+    justify-content: center;
     align-items: center;
     text-align: center;
   }
@@ -8530,51 +8538,12 @@ body.result .corner-tools {
   #gameover[data-anatomy='planet'] #go-brand { top: 12px; }
 }
 
-/* DESKTOP (wide screens, tall enough for the spread): the same two pages at a larger size — the
-   planet page grows, the read-out sits at the top of the right page and the keys at its bottom. */
-@media (min-width: 760px) and (min-aspect-ratio: 1/1) and (min-height: 561px) {
-  #gameover[data-anatomy='planet'] {
-    --go-inset-top: 6px;
-    --go-inset-bottom: 8px;
-    padding-inline: 16px;
-  }
-  #gameover[data-anatomy='planet'] .go-card {
-    display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-    column-gap: 28px;
-    row-gap: var(--go-tier-gap);
-    align-items: stretch;
-    align-content: stretch;
-    width: min(1040px, 100%);
-    max-height: none;
-    padding: 18px var(--go-gutter) 16px;
-  }
-  #gameover[data-anatomy='planet'] #go-world {
-    grid-column: 1;
-    grid-row: 1 / -1;
-    margin: 0;
-    height: auto;
-    min-height: 0;
-  }
-  #gameover[data-anatomy='planet'] .go-summary {
-    grid-column: 2;
-    grid-row: 1;
-    align-self: start;
-    flex: 0 0 auto;
-    justify-content: start;
-    align-items: center;
-    text-align: center;
-  }
-  #gameover[data-anatomy='planet'] .go-title { text-align: center; }
-  #gameover[data-anatomy='planet'] #go-brand { top: 14px; }
-  #gameover[data-anatomy='planet'] .go-buttons {
-    grid-column: 2;
-    grid-row: 2;
-    align-self: end;
-    margin-top: 0;
-  }
-}
+/* NO WIDE/DESKTOP SPREAD (owner review, 2026-11-11: "on your screenshot desktop looks terrible -
+   fix - dont worry about negative space on right and left, have the whole screen in the middle like
+   on mobile"). The rejected two-page rule (`min(1040px, 100%)`, planet page left / words right) is
+   DELETED, not overridden. A wide screen is the phone card, centred: one column capped at the
+   phone's own measure (440px), full viewport height, planet growing, keys at the bottom, and the
+   air either side. There is no second column at any width, and no rule below this one restores it. */
 
 /* ---------- RESULT: the dark-glass window behind the card's second key ---------- */
 /* It sits inside the finish dialog, above the card, because the shared sheet layer is underneath

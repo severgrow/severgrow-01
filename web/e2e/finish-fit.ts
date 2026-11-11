@@ -35,8 +35,14 @@ const VIEWPORTS = ([
   { key: '320x568', width: 320, height: 568 },
   { key: '360x640', width: 360, height: 640 },
   { key: '390x844', width: 390, height: 844 },
+  // DESKTOP IS THE PHONE CARD, CENTRED (owner review, 2026-11-11): "on your screenshot desktop looks
+  // terrible - fix - dont worry about negative space on right and left, have the whole screen in the
+  // middle like on mobile". Two desktop sizes, so the same centred column is proven at both and the
+  // taller one is proven to give the planet MORE room (never a second column, never a max-width spread).
   { key: '1280x800', width: 1280, height: 800 },
-  // A landscape phone: the two-column spread on the smallest height the product supports.
+  { key: '1440x900', width: 1440, height: 900 },
+  // A landscape phone: the planet page beside the read-out and the keys (a single centred column
+  // would waste the width here), with the read-out centred above the keys.
   { key: '844x390', width: 844, height: 390 },
 ] as const).filter((vp) => !process.env.FIT_VIEWPORTS || process.env.FIT_VIEWPORTS.split(',').includes(vp.key));
 
@@ -147,6 +153,23 @@ const MEASURE = `(() => {
     paneRect: pane ? { top: Math.round(pane.getBoundingClientRect().top), h: Math.round(pane.getBoundingClientRect().height), disp: getComputedStyle(pane).display, grid: getComputedStyle(pane).gridRowStart + '/' + getComputedStyle(pane).gridRowEnd, align: getComputedStyle(pane).alignSelf, cardAlign: card ? getComputedStyle(card).alignItems : '', pos: getComputedStyle(pane).position, contain: getComputedStyle(pane).contain, ar: getComputedStyle(pane).aspectRatio } : null,
     cardTop: card ? Math.round(card.getBoundingClientRect().top) : 0,
     titleTop: id('go-title') ? Math.round(id('go-title').getBoundingClientRect().top) : 0,
+    // THE COLUMN AND THE COMPOSITION, measured from boxes (owner review, 2026-11-11).
+    //   column  the card's own width and the air it leaves either side, so a WIDE screen can be
+    //           proven to be the phone card CENTRED (equal margins, a phone's measure) rather than a
+    //           stretched two-page spread.
+    //   centre  the vertical middles of the read-out group and of the planet's window, and the
+    //           signed difference between them (read-out minus planet). In landscape the two sit
+    //           side by side, so this is the number that says they are optically on one band.
+    column: card ? (() => { const r = card.getBoundingClientRect(); return { w: Math.round(r.width), left: Math.round(r.left), right: Math.round(window.innerWidth - r.right) }; })() : null,
+    centre: (() => {
+      const s = card && card.querySelector('.go-summary');
+      const sr = s && shown(s) ? s.getBoundingClientRect() : null;
+      const pr = pane && shown(pane) ? pane.getBoundingClientRect() : null;
+      if (!sr || !pr) return null;
+      const sc = sr.top + sr.height / 2, pc = pr.top + pr.height / 2;
+      return { summary: Math.round(sc), planet: Math.round(pc), delta: Math.round(sc - pc) };
+    })(),
+    summaryRect: (() => { const s = card && card.querySelector('.go-summary'); const r = s && shown(s) ? s.getBoundingClientRect() : null; return r ? { top: Math.round(r.top), bottom: Math.round(r.bottom), h: Math.round(r.height) } : null; })(),
     highlights: document.querySelectorAll('#go-highlights li').length,
     clipped: controls.filter((b) => !inside(b)).map((b) => b.id),
     title: (id('go-title') || {}).textContent || '',
@@ -176,6 +199,9 @@ const measure = (page: Page) => page.evaluate(MEASURE) as Promise<{
   viewportH: number;
   cardTop: number;
   titleTop: number;
+  column: { w: number; left: number; right: number } | null;
+  centre: { summary: number; planet: number; delta: number } | null;
+  summaryRect: { top: number; bottom: number; h: number } | null;
   gridRows: string;
   paneRect: { top: number; h: number; disp: string; grid: string; align: string; cardAlign: string; pos: string; contain: string; ar: string } | null;
   worldStyle: { flex: string; grow: string; basis: string; h: string; mh: string; align: string; gap: string; justify: string; cardH: string } | null;
@@ -461,6 +487,8 @@ const report = async (mode: string, vp: string, page: Page, errors: string[], ex
   if (planet) console.log(`    rows   : ${m.rows.map((r) => r.join('+')).join(' / ')}`);
   if (planet) console.log(`    grid   : rows ${m.gridRows} · pane ${JSON.stringify(m.paneRect)}`);
   if (planet) console.log(`    tiers  : ${m.tierGaps.order} -> ${m.tierGaps.gaps.map((g) => `${g.pair}=${g.px}px`).join(' · ')}`);
+  if (planet && m.column) console.log(`    column : ${m.column.w}px wide, ${m.column.left}px air left / ${m.column.right}px air right`);
+  if (planet && m.centre) console.log(`    centre : read-out ${m.centre.summary}px · planet ${m.centre.planet}px · delta ${m.centre.delta}px`);
   console.log(`    card overflow ${m.card?.overflow}px (${m.card?.h}px tall), screen overflow ${m.screen?.overflow}px`);
   check(`${mode} ${vp}: the finish card does not scroll`, (m.card?.overflow ?? 1) <= 0, `overflow ${m.card?.overflow}px`);
   check(`${mode} ${vp}: the screen behind it does not scroll either`, (m.screen?.overflow ?? 1) <= 0, `overflow ${m.screen?.overflow}px`);
@@ -501,14 +529,44 @@ const report = async (mode: string, vp: string, page: Page, errors: string[], ex
     check(`${mode} ${vp}: the header tiers are one equal rhythm`,
       gaps.length >= 2 && gaps.every((g) => g > 0) && Math.max(...gaps) - Math.min(...gaps) <= 2,
       m.tierGaps.gaps.map((g) => `${g.pair}=${g.px}`).join(' '));
-    // On a phone the stack is the full rhythm the owner named (A->B->C->D). In the wide spread the
-    // planet is its own page, so the stacked rhythm there is A->B->C — and that is what is asserted.
-    const phone = vp === '320x568' || vp === '360x640' || vp === '390x844';
-    check(`${mode} ${vp}: ${phone ? 'all three' : 'the stacked'} tier gaps are measured`,
-      gaps.length === (phone ? 3 : 2), m.tierGaps.gaps.map((g) => g.pair).join(','));
-    check(`${mode} ${vp}: the rhythm is the declared token (12px desktop, 10px short phone)`,
+    // EVERY shape but the landscape phone is ONE STACKED COLUMN, so the full rhythm the owner named
+    // (A->B->C->D) is measured there. In landscape the planet sits BESIDE the read-out, so the
+    // stacked rhythm is A->B->C. Since the desktop spread was deleted, the desktop sizes are stacked
+    // too — they used to be the exception and must no longer be.
+    const landscape = vp === '844x390';
+    check(`${mode} ${vp}: ${landscape ? 'the stacked' : 'all three'} tier gaps are measured`,
+      gaps.length === (landscape ? 2 : 3), m.tierGaps.gaps.map((g) => g.pair).join(','));
+    check(`${mode} ${vp}: the rhythm is the declared token (12px, 10px on a short plate)`,
       gaps.every((g) => g === (vp === '320x568' || vp === '360x640' || vp === '844x390' ? 10 : 12)),
       gaps.join(','));
+    // DESKTOP IS THE PHONE CARD, CENTRED (owner review, 2026-11-11). No two-page spread: the card is
+    // one phone-measured column, CENTRED, with the negative space the owner explicitly accepted on
+    // either side. Asserted on the boxes, not on the CSS text: a phone's measure (<= 440px), equal
+    // margins either side (<= 1px), and a column — never a grid with a second page.
+    if ((m.viewport?.w ?? 0) >= 760 && !landscape) {
+      check(`${mode} ${vp}: the card is a phone-measured column, not a spread`,
+        (m.column?.w ?? 0) <= 440, `column ${m.column?.w}px`);
+      check(`${mode} ${vp}: that column is CENTRED with equal air either side`,
+        Math.abs((m.column?.left ?? 0) - (m.column?.right ?? 1)) <= 1,
+        `air ${m.column?.left}px left / ${m.column?.right}px right`);
+      check(`${mode} ${vp}: the card is one column, never a grid`,
+        m.cardDisplay === 'flex' && m.cardDir === 'column', `${m.cardDisplay}/${m.cardDir}`);
+    }
+    // LANDSCAPE COMPOSITION (owner correction, 2026-11-11: "you lost 0 - 25 in the centre not on
+    // top"). The read-out centres in the band above the keys, and its middle sits on the planet's
+    // own middle band — measured, not eyeballed (~24px of tolerance).
+    if (landscape) {
+      // "In the space above the keys" is measured as AIR: the gap between the card's top edge and
+      // the read-out equals the gap between the read-out and the keys (a pinned-to-the-top read-out
+      // leaves ~140px of dead air under it and fails here).
+      const keysTop = Math.min(...m.buttons.map((b) => b.top));
+      const above = (m.summaryRect?.top ?? 0) - m.cardTop;
+      const below = keysTop - (m.summaryRect?.bottom ?? 0);
+      check(`${mode} ${vp}: the read-out centres in the band above the keys (equal air either side)`,
+        Math.abs(above - below) <= 14, `${above}px air above / ${below}px below · keys top ${keysTop}px`);
+      check(`${mode} ${vp}: the read-out and the planet sit on one horizontal band`,
+        Math.abs(m.centre?.delta ?? 999) <= 24, `delta ${m.centre?.delta}px (read-out ${m.centre?.summary}px, planet ${m.centre?.planet}px)`);
+    }
     // THE PLANET IS THE HERO (owner, 2026-11-11): it takes the freed space on every shape, and the
     // four keys never leave an orphaned half slot.
     check(`${mode} ${vp}: the planet window is the card's hero`, (m.planet?.h ?? 1) / (m.card?.h ?? 1) >= 0.5,
@@ -779,13 +837,21 @@ if (MODES.includes('online')) {
 
 void seen;
 // THE PLANET GROWS WITH THE SCREEN (owner, 2026-11-11: "on a taller phone the player gets MORE
-// planet, not more padding"). Portrait heights are compared in the order they were measured; the
-// landscape spread has its own shape, so it is held to the same >= 50% share but not to this order.
+// planet, not more padding"). Portrait phone heights are compared in the order they were measured;
+// the landscape phone has its own shape, so it is held to the same >= 50% share but not to this
+// order. The desktop sizes are the SAME centred column, so a taller desktop must give the planet
+// MORE room too — that is what proves it is the phone card and not a fixed spread.
 const portrait = ['320x568', '360x640', '390x844'].filter((k) => planetHeights[k] !== undefined);
 check(
   'the planet window grows with the viewport height',
   portrait.length < 2 || portrait.every((k, i) => i === 0 || planetHeights[k]! > planetHeights[portrait[i - 1]!]!),
   portrait.map((k) => `${k}:${planetHeights[k]}px`).join(' '),
+);
+const desk = ['1280x800', '1440x900'].filter((k) => planetHeights[k] !== undefined);
+check(
+  'a taller desktop gives the centred column MORE planet',
+  desk.length < 2 || planetHeights[desk[1]!]! > planetHeights[desk[0]!]!,
+  desk.map((k) => `${k}:${planetHeights[k]}px`).join(' '),
 );
 console.log(`\n${failed === 0 ? 'ALL PASS' : `${failed} FAILED`} — shots in docs/screens/finish/`);
 process.exit(failed === 0 ? 0 : 1);
