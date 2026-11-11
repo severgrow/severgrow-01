@@ -61,7 +61,7 @@ For UI changes also run the relevant browser suite (`node --import tsx web/e2e/<
 (+ `-ios` on WebKit), and by hand `territory-smooth` for frame times. Commit after each green milestone.
 
 Never commit screenshots or build output. Suites write pictures to `docs/screens/` (ignored by git);
-share pictures with the owner outside the repo. Old pictures: tag `archive/docs-screens-0.84`.
+share pictures with the owner outside the repo. Old pictures: branch `archive/docs-screens-0.84`.
 
 ## Code layout (read before adding a feature)
 

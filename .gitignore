@@ -38,5 +38,5 @@ web/dist-tutorial-names/
 # Build outputs made by browser suites (never commit)
 web/dist-live/
 web/dist-campaign/
-# Screenshots from browser suites: kept out of git (owner, 0.84). Old ones: tag archive/docs-screens-0.84
+# Screenshots from browser suites: kept out of git (owner, 0.84). Old ones: branch archive/docs-screens-0.84
 docs/screens/
