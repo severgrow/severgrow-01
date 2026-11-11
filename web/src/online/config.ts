@@ -17,7 +17,9 @@ export const duelApiUrlFrom = (env: Record<string, string | undefined> | undefin
 };
 
 /** Deployed duel API base URL, or null when this build has no online endpoint. */
-export const duelApiUrl = (): string | null => duelApiUrlFrom(buildEnv());
+export const duelApiUrl = (): string | null => (artFrame() ? null : duelApiUrlFrom(buildEnv()));
+/** The Art Lab's phone frame plays offline only (no guests, no presence, no traffic to the server). */
+const artFrame = () => typeof location !== 'undefined' && /(^|[?&])artlab=1(&|$)/.test(location.search);
 
 export const onlineBuildEnabled = (): boolean => duelApiUrl() !== null;
 

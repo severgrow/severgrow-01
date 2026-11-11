@@ -14,6 +14,11 @@ export const IS_FUTA04 = CHANNEL === 'futa04' || CHANNEL === 'futa-test' || CHAN
  */
 export const IS_TEST_ROUTE = typeof location !== 'undefined' && /^\/test(\/|$)/.test(location.pathname);
 /**
+ * The game inside the Art Lab's phone frame (futasaku.com/art loads `../?artlab=1&seed=N`): its own
+ * storage (it never touches a player's saves or progress) and no server (online/config.ts).
+ */
+export const IS_ART_FRAME = typeof location !== 'undefined' && /(^|[?&])artlab=1(&|$)/.test(location.search);
+/**
  * TEST-ONLY: `?flat-territory` keeps the flat Territory map on a planet build, so the browser suites
  * written for the flat map's own layers (challenge rings, swords, frontier notches) keep proving the
  * logic underneath THE PLANET. No player link carries it.
@@ -72,7 +77,7 @@ const isPreviewHost = typeof location !== 'undefined' && (
  */
 export const IS_PREVIEW_3 = typeof location !== 'undefined' && /^\/3(\/|$)/.test(location.pathname);
 export const STORAGE_PREFIX = CHANNEL === 'futa-test' ? 'futa-test:'
-  : CHANNEL === 'futa05' ? (IS_TEST_ROUTE ? 'futa05-test:' : IS_PREVIEW_3 ? 'futa05-3:' : 'futa05:')
+  : CHANNEL === 'futa05' ? (IS_ART_FRAME ? 'futa05-art:' : IS_TEST_ROUTE ? 'futa05-test:' : IS_PREVIEW_3 ? 'futa05-3:' : 'futa05:')
   : CHANNEL === 'test' ? 'test:'
   : IS_FUTA04 ? (isPreviewHost ? 'futa04:' : 'main2:')
   : '';

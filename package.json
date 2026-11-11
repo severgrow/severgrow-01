@@ -13,7 +13,7 @@
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run test",
     "web:dev": "vite --config web/vite.config.ts",
-    "web:build": "vite build --config web/vite.config.ts",
+    "web:build": "vite build --config web/vite.config.ts && node scripts/build-art-lab.mjs",
     "admin:dev": "vite --config admin/vite.config.ts",
     "admin:build": "vite build --config admin/vite.config.ts",
     "admin:preview": "vite preview --config admin/vite.config.ts",

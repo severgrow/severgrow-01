@@ -154,6 +154,8 @@ export class BoardView {
   private glowKeys: Set<string> | null = null;
   protected tileEls = new Map<string, SVGGElement>();
   private tileSignatures = new Map<string,string>();
+  /** The next render draws every tile again (a subclass's art arrived after tiles were drawn). */
+  protected redrawTiles() { this.tileSignatures.clear(); }
   private contourSignature = '';
   private glowSignature = '';
   private richSignature = '';

@@ -82,6 +82,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request, url = new URL(req.url);
   if (isDuelApi(url)) return; // network only — never touch the cache
   if (req.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
+  // The Art Lab (/art/, /test/art/) is a separate tool: never cached, never served from here.
+  if (/\/art\//.test(url.pathname)) return;
   if (req.mode === 'navigate') {
     e.waitUntil(purge());
     e.respondWith(navigate(e));

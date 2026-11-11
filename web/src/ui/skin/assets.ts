@@ -13,6 +13,20 @@ import type { SkinDef, Tier } from './types.js';
 type Manifest = { version?: string; tiers: Record<Tier, string[]>; hash?: Partial<Record<Tier, Record<string, string>>> };
 const manifests = new Map<string, Promise<Manifest | null>>();
 
+/**
+ * Skins whose files are already in memory (the Art Lab: uploads as blob: URLs). Their manifest and
+ * file addresses come from here, so nothing is fetched from the site. The game never registers one.
+ */
+const virtual = new Map<string, Record<Tier, Map<string, string>>>();
+export const provideSkinFiles = (root: string, urls: Record<Tier, Map<string, string>>) => {
+  virtual.set(root, urls);
+  manifests.set(root, Promise.resolve({ tiers: { lo: [...urls.lo.keys()], hi: [...urls.hi.keys()] } }));
+};
+export const forgetSkinFiles = (root: string) => {
+  virtual.delete(root);
+  manifests.delete(root);
+};
+
 const loadManifest = (root: string) => {
   let m = manifests.get(root);
   if (!m) {
@@ -99,6 +113,8 @@ export class SkinAssets {
     return this.net(path);
   }
   private net(path: string) {
+    const mem = virtual.get(this.skin.root)?.[this.tier ?? 'lo']?.get(path);
+    if (mem) return mem;
     const v = this.hashes[path];
     return `${this.skin.root}/${this.tier}/${path}${v ? `?v=${v}` : ''}`;
   }

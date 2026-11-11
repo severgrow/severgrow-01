@@ -136,6 +136,8 @@ jobs:
           - { suite: sphere-test, artifact: futa05-sphere }
           - { suite: sphere-test-ios, artifact: futa05-sphere }
           - { suite: planet-matte, artifact: futa05-sphere }
+          - { suite: art-lab, artifact: futa05-sphere }
+          - { suite: art-lab-ios, artifact: futa05-sphere }
     # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
     # Playwright 1.56.1 refuses it ("Playwright does not support chromium on ubuntu26.04-x64"),
     # which failed EVERY browser job at `playwright-core install` before a single test ran. Pin the

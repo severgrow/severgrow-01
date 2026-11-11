@@ -150,6 +150,29 @@ ${derivatives ? `  vec2 grad = vec2(dFdx(e), dFdy(e));
   gl_FragColor = vec4(colour, 1.0);
 }`;
 
+/**
+ * THE ART LAB'S TEXTURED PLANET (lab only; the game never passes `textures`, so its shader is the one
+ * above, unchanged). One picture per tile kind in a 3×2 atlas (void, fog, land / owned, mine,
+ * pentagon), projected on the planet from three sides so it needs no seams or unwrapping; owned
+ * ground keeps its owner's colour by tinting the picture.
+ */
+const texturedFragment = (derivatives: boolean) => groundFragment(derivatives)
+  .replace('uniform float uPulse; uniform float uPixel;', 'uniform float uPulse; uniform float uPixel; uniform sampler2D uAtlas; uniform vec3 uStrA; uniform vec3 uStrB; uniform float uRepeat;')
+  .replace('  vec3 c = vColour;\n', `  vec3 c = vColour;
+  {
+    vec2 cell = vec2(mod(kind, 3.0), floor(kind / 3.0));
+    vec3 an = abs(normalize(vLocal)); an /= (an.x + an.y + an.z);
+    vec2 sc = vec2(3.0, 2.0);
+    vec3 t = texture2D(uAtlas, (cell + .03 + fract(vLocal.yz * uRepeat) * .94) / sc).rgb * an.x
+           + texture2D(uAtlas, (cell + .03 + fract(vLocal.xz * uRepeat) * .94) / sc).rgb * an.y
+           + texture2D(uAtlas, (cell + .03 + fract(vLocal.xy * uRepeat) * .94) / sc).rgb * an.z;
+    float str = kind < .5 ? uStrA.x : kind < 1.5 ? uStrA.y : kind < 2.5 ? uStrA.z : kind < 3.5 ? uStrB.x : kind < 4.5 ? uStrB.y : uStrB.z;
+    float lum = max(dot(vColour, vec3(.3, .59, .11)), .06);
+    vec3 tinted = kind > 2.5 && kind < 4.5 ? t * vColour / lum * .55 : t;
+    c = mix(c, tinted, str);
+  }
+`);
+
 /** Owned ground (anyone's) stands as a raised slab. */
 const owned = (kind: number) => kind === KIND.owned || kind === KIND.mine;
 
@@ -178,13 +201,16 @@ export class PlanetRenderer {
   private cssWidth = 1;
   private cssHeight = 1;
   private derivatives: boolean;
-  constructor(readonly canvas: HTMLCanvasElement, readonly sphere: Sphere,north:V3=[0,1,0]) {
+  private atlas: WebGLTexture | null = null;
+  private strengths = [0, 0, 0, 0, 0, 0];
+  private repeat = 6;
+  constructor(readonly canvas: HTMLCanvasElement, readonly sphere: Sphere,north:V3=[0,1,0], opts: { textures?: boolean } = {}) {
     const gl = canvas.getContext('webgl', { alpha: false, antialias: true, depth: false, powerPreference: 'low-power', preserveDrawingBuffer: false });
     if (!gl) throw Error('WebGL unavailable');
     this.gl = gl;
     this.derivatives = !!gl.getExtension('OES_standard_derivatives');
-    this.ground = this.program(GROUND_VERTEX, groundFragment(this.derivatives));
-    for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel']) this.u[name] = gl.getUniformLocation(this.ground, name);
+    this.ground = this.program(GROUND_VERTEX, opts.textures ? texturedFragment(this.derivatives) : groundFragment(this.derivatives));
+    for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel', ...(opts.textures ? ['uAtlas', 'uStrA', 'uStrB', 'uRepeat'] : [])]) this.u[name] = gl.getUniformLocation(this.ground, name);
     this.triangle = this.buffer(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]));
     this.space = spacePass(gl, (v, f) => this.program(v, f), this.triangle);
     // Fans: centre, corner i, corner i+1 for every side of every tile. A cell's `w` packs its seed
@@ -228,6 +254,19 @@ export class PlanetRenderer {
     gl.bindBuffer(target, b); gl.bufferData(target, data, usage ?? gl.STATIC_DRAW);
     this.buffers.push(b);
     return b;
+  }
+  /** The Art Lab's pictures per tile kind (a 3×2 atlas) and how strongly each shows (0-1); textured planets only. */
+  setTextures(atlas: TexImageSource, strengths: readonly number[], repeat = 6) {
+    const gl = this.gl;
+    if (!this.atlas) this.atlas = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.atlas);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.strengths = [...strengths];
+    this.repeat = repeat;
   }
   /** Repaint every tile's look from fresh Territory data (only when the data actually changed). */
   setGround(ground: Ground, selected: number | null, kin: readonly number[]) {
@@ -297,6 +336,15 @@ export class PlanetRenderer {
     gl.uniform1f(this.u.uFocal!, at.f);
     gl.uniform2f(this.u.uShift!, at.ox, at.oy);
     gl.uniform1f(this.u.uPulse!, pulse);
+    if (this.u.uAtlas && this.atlas) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.atlas);
+      gl.uniform1i(this.u.uAtlas, 0);
+      const st = this.strengths;
+      gl.uniform3f(this.u.uStrA!, st[0]!, st[1]!, st[2]!);
+      gl.uniform3f(this.u.uStrB!, st[3]!, st[4]!, st[5]!);
+      gl.uniform1f(this.u.uRepeat!, this.repeat);
+    }
     // Without derivatives, one pixel of the side ramp is estimated from the tile's size on screen.
     gl.uniform1f(this.u.uPixel!, 1 / Math.max(4, at.radius * this.pixel * (Math.PI / 5) / this.sphere.frequency));
     const position = gl.getAttribLocation(this.ground, 'aPosition'), look = gl.getAttribLocation(this.ground, 'aLook'), stamp = gl.getAttribLocation(this.ground, 'aStamp');
@@ -318,6 +366,7 @@ export class PlanetRenderer {
     if (this.disposed) return;
     this.disposed = true;
     for (const b of this.buffers) this.gl.deleteBuffer(b);
+    if (this.atlas) this.gl.deleteTexture(this.atlas);
     this.gl.deleteProgram(this.space.program);
     this.gl.deleteProgram(this.ground);
     if (release) this.gl.getExtension('WEBGL_lose_context')?.loseContext();
