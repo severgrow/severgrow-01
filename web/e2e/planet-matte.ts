@@ -143,8 +143,10 @@ try{
   await p.locator('.world-challenge-chip[data-challenge-id="matte-challenge"]').click();
   await p.waitForFunction(()=>document.querySelector('.world-challenge-sheet:not([hidden]) .world-challenge-card')?.getAttribute('data-ix-state')==='open');
   const lead='.world-challenge-sheet:not([hidden]) .world-challenge-primary',secondary='.world-challenge-sheet:not([hidden]) .world-challenge-secondary';
-  assert.deepEqual(await compactSurface(lead),expected,'real challenge action uses the menu matte/glass family');
-  assert.deepEqual(await compactSurface(secondary),expected,'secondary challenge action shares the same key material');
+  // the challenge keys match the menu keys exactly, which now wear no frame (owner, 2026-11-11)
+  const frameless=[...expected];frameless[1]=keys[1]![1];
+  assert.deepEqual(await compactSurface(lead),frameless,'real challenge action uses the menu matte/glass family');
+  assert.deepEqual(await compactSurface(secondary),frameless,'secondary challenge action shares the same key material');
   assert((await p.locator(lead).boundingBox())!.height>=44,'challenge keeps its mobile target');
   await p.screenshot({path:`${shots}/challenge-${width}.png`});
   // Force the actual compositor failure: a close animation whose finished promise never resolves.
