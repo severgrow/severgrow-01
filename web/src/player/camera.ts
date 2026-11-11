@@ -10,7 +10,9 @@
 
 /** Camera settings: the smallest tile (x DEFAULT_TILE), the largest, the margin (hexes) round
  *  the tiles, the move's length (ms) and how long a peek through an edge arrow lasts. */
-export const CAMERA = { minFactor: 1.0, maxFactor: 1.4, margin: 2, ms: 300, peekMs: 2500 } as const;
+import { measureAtRest } from '../ui/at-rest.js';
+
+export const CAMERA = { minFactor: 1.0, maxFactor: 1.4, margin: 2, ms: 300, peekMs: 2500, restLift: 24 } as const;
 
 const S = 30;
 const HEXW = Math.sqrt(3) * S; // centre to centre, board units
@@ -121,9 +123,39 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   let boxRect: DOMRect | null = null;
   const box = (): DOMRect => {
     if (boxRect) return boxRect;
-    boxRect = svg.getBoundingClientRect();
+    // At REST: the board's entrance (v075-board-rise) scales the wrap while it lands, and a frame
+    // decided on that smaller box was the one the map kept through the start ritual, then glided
+    // away from (owner, 2026-11-11: the board "sits higher during the ritual and then drops").
+    boxRect = measureAtRest(wrap, () => svg.getBoundingClientRect());
     queueMicrotask(() => { boxRect = null; });
     return boxRect;
+  };
+  /**
+   * The map as DRAWN: the live game bends its board like a small planet (geom.ts setBoardBulge), so
+   * the edge tiles sit inside the flat outline the board's viewBox is cut to. Framing that flat
+   * outline left an empty strip down each side; framing the drawn rim (plus its 1px light) lets the
+   * board fill the width (owner, 2026-11-11: "make the margins on sides of the map even smaller").
+   * Boards without the rim (the 0.4 line) keep their own box.
+   */
+  let drawnFor = '';
+  let drawnRect: Rect | null = null;
+  const fr = (): Rect | null => {
+    if (!base) return null;
+    const key = `${base.x},${base.y},${base.w},${base.h}`;
+    if (drawnFor === key && drawnRect) return drawnRect;
+    const rim = svg.querySelector<SVGGraphicsElement>('.planet-turn-line');
+    let r: Rect = base;
+    try {
+      const bb = rim?.getBBox();
+      if (bb && bb.width > 1 && bb.height > 1) {
+        // 3 units at the sides (the rim's light); 8 above and below so a tall map never meets the header.
+        const padX = 3, padY = 8;
+        r = { x: bb.x - padX, y: bb.y - padY, w: bb.width + 2 * padX, h: bb.height + 2 * padY };
+      }
+    } catch { /* not rendered yet: the flat outline */ }
+    // Cached only once the rim exists; until then the flat outline stands in.
+    if (r !== base) { drawnFor = key; drawnRect = r; }
+    return r;
   };
   /** The map runs on under the cards (phones): the part of the board's box behind the dock (px). */
   const under = () => parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
@@ -140,16 +172,18 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     const wh = winPx() / s; // the window above the cards: the framing happens there
     let x = cx - w / 2;
     let y = cy - wh / 2;
-    if (base) {
+    const m = fr();
+    if (m) {
       // never show past the map's edges when it is bigger than the window; centre it when smaller
-      x = w >= base.w ? base.x + (base.w - w) / 2 : Math.min(base.x + base.w - w, Math.max(base.x, x));
-      // Normal play: a short map sits on the bottom, just above the cards.
+      x = w >= m.w ? m.x + (m.w - w) / 2 : Math.min(m.x + m.w - w, Math.max(m.x, x));
+      // Normal play: a short map rests a little above the cards (CAMERA.restLift px of air: the
+      // height it had through the start ritual, which the owner chose to keep).
       // Tutorial: centre it so glass→board and board→hand gaps stay equal.
-      if (wh >= base.h) {
+      if (wh >= m.h) {
         const tutorial = document.documentElement.classList.contains('futa04-tutorial');
-        y = tutorial ? base.y + (base.h - wh) / 2 : base.y + base.h - wh;
+        y = tutorial ? m.y + (m.h - wh) / 2 : Math.min(m.y, m.y + m.h - wh + CAMERA.restLift / s);
       } else {
-        y = Math.min(base.y + base.h - wh, Math.max(base.y, y));
+        y = Math.min(m.y + m.h - wh, Math.max(m.y, y));
       }
     }
     return { x, y, w, h };
@@ -162,12 +196,13 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
 
   /** Where the camera should be now. */
   const target = (): { rect: Rect; tile: number; whole: boolean } | null => {
-    if (!base || !input || box().width === 0) return null;
+    const map = fr();
+    if (!base || !map || !input || box().width === 0) return null;
     const minT = input.defaultTile * CAMERA.minFactor;
     const maxT = input.defaultTile * CAMERA.maxFactor;
-    const tW = fitTile(base);
-    const cx = base.x + base.w / 2;
-    const cy = base.y + base.h / 2;
+    const tW = fitTile(map);
+    const cx = map.x + map.w / 2;
+    const cy = map.y + map.h / 2;
     // The desktop tutorial must show both homes and their focus halos at once.
     // Ordinary matches keep the normal network-following camera.
     if (document.documentElement.classList.contains('futa04-tutorial') &&
@@ -245,7 +280,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     hooks.changed();
   };
   /** The whole map is in the window. */
-  const whole = () => !!view && !!base && view.w >= base.w - 0.5 && winOf(view).h >= base.h - 0.5;
+  const whole = () => { const m = fr(); return !!view && !!m && view.w >= m.w - 0.5 && winOf(view).h >= m.h - 0.5; };
   const syncWholeAction = (available: boolean) => {
     const hidden = !available;
     const label = wholeOn ? 'Back to play' : 'Whole map';
@@ -352,6 +387,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   new MutationObserver(() => {
     if (svg.getAttribute('viewBox') === mine) return;
     base = read();
+    drawnFor = '';
     view = null;
     culled = false;
     if (input) frame(true);
@@ -375,7 +411,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     if (!base || !input) return write(r);
     // never deeper than 3x MAX_TILE; never further out than the whole map
     const maxT = input.defaultTile * CAMERA.maxFactor * 2;
-    const tW = fitTile(base);
+    const tW = fitTile(fr() ?? base);
     let t = HEXW * (box().width / r.w);
     t = Math.min(maxT, Math.max(Math.min(tW, input.defaultTile), t));
     const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };

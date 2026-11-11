@@ -107,6 +107,12 @@ try {
     })),`${name}: counter shells keep the 34×18px coded footprint through Draw transitions`);
     await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Grow`);
+    if (mobile && height >= 800) {
+      // Owner, 2026-11-11: smaller side margins — the camera frames the board's DRAWN rim, so on a tall
+      // phone the map reaches within a few px of both screen edges.
+      const rim = await page.evaluate(() => { const r = document.querySelector('#board .planet-turn-line')?.getBoundingClientRect(); return r ? { l: r.left, r: innerWidth - r.right } : null; });
+      if (rim) check(rim.l <= 8 && rim.r <= 8 && rim.l >= 0 && rim.r >= 0, `${name}: the map fills the width (${JSON.stringify(rim)})`);
+    }
     check((await page.locator('#hand .card.playable').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('88, 171, 86'),`${name}: green card-edge light`);
     check(JSON.stringify(await contextKinds(page))==='["skip","guide"]',`${name}: Skip leads the context key, "?" beside it in the menu`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-grow.png`});
