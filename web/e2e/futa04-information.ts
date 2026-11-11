@@ -128,7 +128,9 @@ try {
       const undo = getComputedStyle(buttons[0]!);
       return { icon: !!hint.querySelector('svg path') && !hint.textContent?.trim(),
         aligned: boxes.every(box => Math.abs(box.top + box.height / 2 - boxes[0]!.top - boxes[0]!.height / 2) < 1 && Math.abs(box.height-boxes[0]!.height) < 1),
-        separate: boxes.every((box, i) => !i || box.left >= boxes[i-1]!.right + 3),
+        // In screen order: the row follows the tools' side (owner, 2026-11-11), so its DOM order is not
+        // always left to right.
+        separate: [...boxes].sort((a, b) => a.left - b.left).every((box, i, row) => !i || box.left >= row[i-1]!.right + 3),
         fits: boxes.every(box => box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight),
         // 0.6 changed what "matching" means for a DISABLED key: it keeps the trio's chrome (border,
         // face) and its place in the row, but its ink is deliberately muted so it reads unavailable.
