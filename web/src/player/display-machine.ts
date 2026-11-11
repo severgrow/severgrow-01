@@ -1,6 +1,8 @@
 import type { DisplayEvent } from './display-readout.js';
 import { PINNED } from '../logic/motion.js';
-import { FlavourDeck } from './led-flavour.js';
+import { FlavourDeck, rivalCapFor } from './led-flavour.js';
+import { ArtDeck, artDuration } from './led-art.js';
+import type { LedArt } from './led-art.js';
 import type { LedMotif, LedTone } from './led-cells.js';
 
 export type DisplayFrame = {
@@ -46,6 +48,7 @@ export class DisplayMachine {
   private epoch = 0;
   private eventCount = 0;
   private flavour = new FlavourDeck();
+  private art = new ArtDeck();
   private idleCycles = 0;
   /** Sticky idle re-prompt: step word keeps blinking until the player acts. */
   private urgency = false;
@@ -287,6 +290,16 @@ export class DisplayMachine {
     this.frame = { ...this.frame, alarm: false, pulse: false };
     this.show(this.frame);
   }
+  /** The sign opens up with the player's finished games (lines a game; the 点 from a few games). */
+  setPersonality(gamesPlayed: number) {
+    this.flavour.setRivalCap(rivalCapFor(gamesPlayed));
+    this.art.setGames(gamesPlayed);
+  }
+  private pickArt(event: DisplayEvent): LedArt | null {
+    if (!event.anim?.length || this.reduced()) return null;
+    const key = event.key ?? `${event.message}:${this.eventCount}`;
+    return event.anim.find(art => this.art.take(art, key)) ?? null;
+  }
   event(event: DisplayEvent) {
     if (this.scoreHeld) return;
     if (this.quiet && event.priority < 30) return;
@@ -310,25 +323,32 @@ export class DisplayMachine {
     // The fact lands first and holds for its full duration. A flavour line may only follow it.
     const motif = event.flavour?.pool.motif;
     const factHold = gate + duration;
-    if (reaction && motif) {
+    const art = this.pickArt(event);
+    // After the fact: a picture (if one was earned), then a line (if one was drawn). A picture
+    // replaces the line's own small motif, never the line.
+    const line = (after: () => void) => {
+      if (!reaction) { after(); return; }
+      this.emit({ text: reaction, mode: tone, compact: true });
+      this.timer = window.setTimeout(() => { if (id === this.epoch) after(); }, this.dwellMs());
+    };
+    const end = () => this.finish(id);
+    if (art) {
+      this.timer = window.setTimeout(() => {
+        if (id !== this.epoch) return;
+        this.emit({ text: '', mode: tone, motif: art });
+        this.timer = window.setTimeout(() => { if (id === this.epoch) line(end); }, Math.max(this.dwellMs(), artDuration(art)));
+      }, factHold);
+    } else if (reaction && motif) {
       this.timer = window.setTimeout(() => {
         if (id !== this.epoch) return;
         // Prior fact has dwelled ≥1s; these paints are immediate and each hold ≥1s.
         this.emit({ text: '', mode: tone, motif });
-        this.timer = window.setTimeout(() => {
-          if (id !== this.epoch) return;
-          this.emit({ text: reaction, mode: tone, compact: true });
-          this.timer = window.setTimeout(() => this.finish(id), this.dwellMs());
-        }, this.dwellMs());
+        this.timer = window.setTimeout(() => { if (id === this.epoch) line(end); }, this.dwellMs());
       }, factHold);
     } else if (reaction) {
-      this.timer = window.setTimeout(() => {
-        if (id !== this.epoch) return;
-        this.emit({ text: reaction, mode: tone, compact: true });
-        this.timer = window.setTimeout(() => this.finish(id), this.dwellMs());
-      }, factHold);
+      this.timer = window.setTimeout(() => { if (id === this.epoch) line(end); }, factHold);
     } else {
-      this.timer = window.setTimeout(() => this.finish(id), factHold);
+      this.timer = window.setTimeout(end, factHold);
     }
   }
   hint(text: string) { if (this.quiet) return; this.event({ message: text, priority: 20, duration: 1050, mode: 'amber' }); }
@@ -460,6 +480,7 @@ export class DisplayMachine {
     this.pendingStep = null;
     this.eventCount = 0;
     this.flavour.reset();
+    this.art.reset();
     this.idleCycles = 0;
     this.instruction = text;
     this.scoreText = `${you}:${opp}`;

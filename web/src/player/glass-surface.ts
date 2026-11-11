@@ -498,6 +498,12 @@ html.futa04-lesson .sheet { z-index: 51; }
    four lines with room to spare (at 12.5px its second line had 0.4px left, and a rounding
    difference pushed the end of the sentence past the four-line clamp). */
 @media (max-width: 340px) { #lesson-plate .lesson-copy { font-size: 12px; } }
+/* Desktop: the box, its words and its example cards scale together (--plate-scale, set with the
+   box's width in main.ts placeLessonPlate; 1 on phones, so phones are unchanged). */
+html[data-layout='side'] #lesson-plate { padding: calc(9px * var(--plate-scale,1)) calc(14px * var(--plate-scale,1)) calc(10px * var(--plate-scale,1)); border-radius: calc(14px * var(--plate-scale,1)); }
+html[data-layout='side'] #lesson-plate .lesson-copy { font-size: calc(12.5px * var(--plate-scale,1)); }
+html[data-layout='side'].large-text #lesson-plate .lesson-copy { font-size: calc(15px * var(--plate-scale,1)); }
+html[data-layout='side'] #lesson-plate .lesson-example-card { zoom: var(--plate-scale,1); }
 .large-text #lesson-plate .lesson-copy { font-size: 15px; line-height: 1.4; }
 /* The Bloom lesson's static example: three tiny faces per row, inside the SAME caption box.
    No new overlay, no animation, no border of its own; it is sized to stay legible at 360 px. */
@@ -550,8 +556,12 @@ html.futa04-lesson .sheet { z-index: 51; }
 #tutorial-focus .focus-dim { fill:rgba(0,0,0,.22); }
 /* The levels: a NEW idea gets the strong dim; a guide is much lighter; a whisper has no dim at
    all and only pulses the target. Level 1 starts a little stronger than the rest. */
-#tutorial-focus[data-tier='spotlight'][data-lesson='1'] .focus-dim { fill:rgba(0,0,0,.45); }
+/* OWNER, 2026-11-11: in levels 1-9 the rest of the screen goes clearly darker when the next move is
+   lit (about half as visible as before: .45 -> .72 for a new idea, .15 -> .55 for a guide step).
+   When and how it dims is unchanged; the "?" turn guide outside the levels keeps its light dim. */
+#tutorial-focus[data-tier='spotlight'][data-lesson='1'] .focus-dim { fill:rgba(0,0,0,.72); }
 #tutorial-focus[data-tier='guide'] .focus-dim { fill:rgba(0,0,0,.15); }
+#tutorial-focus[data-tier='guide'][data-lesson='1'] .focus-dim { fill:rgba(0,0,0,.55); }
 #tutorial-focus[data-tier='whisper'] .focus-dim { fill:rgba(0,0,0,0); }
 #tutorial-focus[data-tier='whisper'] .focus-hole { fill:transparent; }
 #tutorial-focus[data-tier='whisper'] .focus-glow { filter:drop-shadow(0 0 10px rgba(242,237,224,.38)); }

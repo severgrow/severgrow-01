@@ -55,9 +55,9 @@ export const KEEP_PROGRESS_CSS = `
 #keep-progress[hidden] { display: none; }
 #keep-progress::before {
   content: ''; position: absolute; inset: 0;
-  background: color-mix(in srgb, #0e0f10 38%, transparent);
-  -webkit-backdrop-filter: blur(20px) brightness(0.5) saturate(0.9);
-  backdrop-filter: blur(20px) brightness(0.5) saturate(0.9);
+  background: color-mix(in srgb, #0e0f10 var(--invite-shade, 58%), transparent);
+  -webkit-backdrop-filter: var(--invite-veil, blur(44px) brightness(0.34) saturate(0.6));
+  backdrop-filter: var(--invite-veil, blur(44px) brightness(0.34) saturate(0.6));
 }
 #keep-progress .keep-progress-card {
   position: relative; box-sizing: border-box;

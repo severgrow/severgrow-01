@@ -1831,6 +1831,8 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   lastBoard = null;
   showScreen('game');
   smartCockpit?.reset(v.score,v.opponentScore);
+  // The sign opens up as the player plays more games (capped): led-flavour rivalCapFor, led-art.
+  smartCockpit?.personality(stats.played);
   outcomeLight?.reset();
   // EXPERIMENTAL Blitz: a new match (or a resume) starts its clock clean; a non-Blitz match hides it.
   blitz?.beginMatch();
@@ -1872,7 +1874,7 @@ let outcomeLight: OutcomeLight | null = null;
 let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
 /** The in-game guide: "?" in the cockpit, the HOW TO PLAY label, the LED's pointer (player/how-to-guide.ts). */
 let turnGuide: import('./player/turn-guide.js').TurnGuide | null = null;
-let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
+let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; cockpit: () => 'left' | 'right'; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
 /** The replay button: hidden in the test copy (its code stays). */
 const REPLAY_BUTTON = FEATURES.replay;
 /** The test copy: the weak-spot corner icons are gone (their signals live on the map and the tile card). */
@@ -3193,7 +3195,11 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
     clearTimeout(lessonHelloTimer);
     lessonHelloTimer = 0;
   }
-  let displayEvent = IS_FUTA04 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN) : null;
+  // The sign is the OPPONENT in offline free play (owner, 2026-11-11); online and the teaching levels stay neutral.
+  const voice = !isOnlineDuel() && !coach.tutorial && !lessonActive() && !watching ? 'rival' : 'neutral';
+  // Pictures (explosion, snake, 点) are for real games: never in the teaching levels or a replay.
+  const signArt = !coach.tutorial && !lessonActive() && !watching;
+  let displayEvent = IS_FUTA04 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN,voice,signArt) : null;
   if (displayEvent?.flavour && coach.tutorial && coach.tutorial.chapter<5) {
     const {flavour: _flavour,...quiet}=displayEvent;
     displayEvent=quiet;
@@ -3471,7 +3477,7 @@ async function humanPlayOnline(a: Action, flightFrom?: DOMRect) {
   syncSessionFromOnline(true);
   if (result.played) {
     // Mid-turn / Draw: animate locally; do not run the bot scheduler.
-    let displayEvent = IS_FUTA04 ? displayEventForPlay(result.played.before, result.played.after, result.played.steps, HUMAN) : null;
+    let displayEvent = IS_FUTA04 ? displayEventForPlay(result.played.before, result.played.after, result.played.steps, HUMAN, 'neutral', true) : null;
     log.unshift(describe(result.played.before, result.played.action, result.played.after, HUMAN));
     markMoment(result.played.steps, result.played.before);
     if (a.t === 'Discard' && result.played.steps.some((step) => step.k === 'discard' && step.player === HUMAN)) {
@@ -6003,7 +6009,7 @@ const PLATE_MARGIN = 8;
 const PLATE_GAP = 6;
 const PLATE_MAX_WIDTH = 420;
 /** Controls the caption must never sit on, whatever the light is doing. */
-const PLATE_KEEP_CLEAR = ['#hud', '#hud-menu', '#deck', '#discard', '#hand', '#smart-led', '#smart-bloom-button', '#moves', '#smart-context', '#dock'] as const;
+const PLATE_KEEP_CLEAR = ['#hud', '#hud-menu', '#hud-window', '#hud-brand', '#deck', '#discard', '#hand', '#smart-led', '#smart-bloom-button', '#moves', '#smart-context', '#dock'] as const;
 
 function hideLessonPlate() {
   const plate = document.getElementById('lesson-plate') as PlateEl | null;
@@ -6073,7 +6079,11 @@ function placeLessonPlate() {
   const vw = innerWidth;
   const vh = innerHeight;
   const sideLayout = document.documentElement.dataset.layout === 'side';
-  const width = Math.round(Math.max(0, Math.min(PLATE_MAX_WIDTH, vw - 2 * PLATE_MARGIN)));
+  // Desktop (owner, 2026-11-11: "make the lesson windows be bigger, adjusting to any screen"): the box
+  // and its words grow with the window in the side layout (1x at 1280x800, up to 1.8x); phones keep 1x.
+  const scale = sideLayout ? Math.max(1, Math.min(1.8, Math.min(vw / 1280, vh / 800) * 1.25)) : 1;
+  plate.style.setProperty('--plate-scale', scale.toFixed(3));
+  const width = Math.round(Math.max(0, Math.min(PLATE_MAX_WIDTH * scale, vw - 2 * PLATE_MARGIN)));
   plate.style.width = `${width}px`;
   const h = Math.ceil(plate.offsetHeight);
 
@@ -6137,6 +6147,25 @@ function placeLessonPlate() {
         : covered < best.hexes
           || (covered === best.hexes && (y < best.y || (y === best.y && dx < Math.abs(best.x + width / 2 - vw / 2))));
       if (better) best = { x, y, hexes: covered, dist };
+    }
+  }
+  // Desktop (owner, 2026-11-11: "Make it centered with the hand and cockpit - the window with
+  // lessons. And make it centred vertically as well so it's above the cockpit"): the plate's home is
+  // the middle of the cockpit and hand's column, half-way down the free space above the cockpit.
+  // It takes that home whenever the search's hard rules allow it there (never over the light or a
+  // control, and no more unlit hexes than the search's own best).
+  if (sideLayout) {
+    const group = ['#futa04-box', '#hand'].map((sel) => plateBox(document.querySelector(sel))).filter((b): b is Spot => !!b);
+    if (group.length) {
+      const gl = Math.min(...group.map((b) => b.l)), gr = Math.max(...group.map((b) => b.r));
+      const cockpitTop = Math.min(...group.map((b) => b.t));
+      const hx = clamp(Math.round((gl + gr) / 2 - width / 2), PLATE_MARGIN, xMax);
+      const hy = clamp(Math.round(topMin + (cockpitTop - PLATE_GAP - topMin - h) / 2), topMin, Math.max(topMin, cockpitTop - PLATE_GAP - h));
+      const r = { l: hx, t: hy, r: hx + width, b: hy + h };
+      const covered = hexes.reduce((n, sp) => n + (boxesOverlap(r, sp) ? 1 : 0), 0);
+      if (!lit.some((sp) => boxesOverlap(r, sp)) && !controls.some((sp) => boxesOverlap(r, sp)) && (!best || covered <= best.hexes)) {
+        best = { x: hx, y: hy, hexes: covered, dist: 0 };
+      }
     }
   }
   // No free gap at all: never cover the lit target, even if that means sitting over a control or
@@ -6787,28 +6816,46 @@ function alignDrawPiles() {
   const box = document.getElementById('futa04-box');
   const piles = box?.querySelector<HTMLElement>(':scope > .piles');
   if (!box || !piles) return;
-  if (document.documentElement.dataset.step !== 'draw' || document.documentElement.dataset.thumb === 'left') {
+  if (document.documentElement.dataset.step !== 'draw') {
     drawPileAnchorKey = '';
     piles.style.setProperty('--futa04-draw-shift', '0px');
     return;
   }
   const anchorKey = `${layoutKey}|${session?.state.turnNumber ?? 0}`;
   if (drawPileAnchorKey === anchorKey) return;
-  const handCard = document.querySelector<HTMLElement>('#hand .card');
+  const handCards = [...document.querySelectorAll<HTMLElement>('#hand .card')];
   const actions = document.getElementById('smart-panel') ?? document.getElementById('futa04-actions');
-  if (!handCard) return;
+  if (!handCards.length) return;
   // offsetLeft is layout geometry, so the calculation stays steady while the group animates.
   const baseLeft = box.getBoundingClientRect().left + piles.offsetLeft;
   // Hand sorting uses a FLIP animation on the individual card's `translate`.
   // Its screen rect includes that temporary travel, while the piles must align
   // with the card's resting slot throughout the sort.
-  const travelX = parseFloat(getComputedStyle(handCard).translate);
-  const restingLeft = handCard.getBoundingClientRect().left - (Number.isFinite(travelX) ? travelX : 0);
+  const resting = handCards.map((card) => {
+    const travelX = parseFloat(getComputedStyle(card).translate);
+    const r = card.getBoundingClientRect();
+    const t = Number.isFinite(travelX) ? travelX : 0;
+    return { left: r.left - t, right: r.right - t };
+  });
+  const pileWidth = Math.max(0, ...Array.from(piles.children, el => (el as HTMLElement).offsetWidth));
+  if (document.documentElement.dataset.cockpit === 'left') {
+    // Piles on the RIGHT (the default since 2026-11-11): the mirror of the rule below. The throw
+    // pile's right edge comes to the hand's rightmost card, never over the tools on the left.
+    const restingRight = Math.max(...resting.map(r => r.right));
+    const desired = restingRight - (baseLeft + piles.offsetWidth);
+    const contentLeft = piles.offsetLeft + Math.min(...Array.from(piles.children, el => (el as HTMLElement).offsetLeft));
+    const toolsRight = actions ? actions.offsetLeft + actions.offsetWidth : 0;
+    const room = Math.max(0, contentLeft - pileWidth * .21 - toolsRight - 8);
+    piles.style.setProperty('--futa04-draw-shift', `${-Math.round(Math.max(0, Math.min(-desired, room)))}px`);
+    drawPileAnchorKey = anchorKey;
+    return;
+  }
+  // The LEFTMOST card on screen (a left-hand fan is mirrored, so it is not always the first).
+  const restingLeft = Math.min(...resting.map(r => r.left));
   const desired = restingLeft - baseLeft;
   // Keep this limit in the cockpit's layout coordinates: its entrance transform can make
   // screen rectangles disagree while the sheet settles. Reserve the ready pile's 1.16 scale
   // plus its 1.035 breath too; offsetWidth alone never includes that visual overflow.
-  const pileWidth = Math.max(0, ...Array.from(piles.children, el => (el as HTMLElement).offsetWidth));
   // Grid tracks also transition from Grow's 108px slot to Draw's 128px slot. The custom
   // property is the settled target, so the first Draw frame cannot cache the smaller width.
   const drawSlot = parseFloat(getComputedStyle(box).getPropertyValue('--box-piles')) || piles.offsetWidth;
@@ -6903,7 +6950,16 @@ function placeDesktopQuarters(root: HTMLElement): void {
     const restX = (seenLeft + seenRight) / 2 - sx; // the visible group's centre with no shift
     const restTop = dock.top - sy;
     const wantX = Math.max(innerWidth * 0.75, boardRight + 24 + (seenRight - seenLeft) / 2);
-    const wantTop = Math.min(innerHeight * 0.75 - dock.height / 2, innerHeight - 12 - dock.height);
+    // THE HAND'S BOTTOM LINE ON THE BOARD'S (owner, 2026-11-11: "on desktop, make the bottom line of hand
+    // be in line with bottom line of the board"): the lowest card edge sits level with the board's lowest
+    // tile edge, never off the bottom of the screen and never above the top.
+    const cards = [...document.querySelectorAll<HTMLElement>('#hand .card')].map((el) => el.getBoundingClientRect()).filter((r) => r.height > 0);
+    const boardBottom = tiles.top - by + boardY + tiles.height;
+    const handBottomRest = cards.length ? Math.max(...cards.map((r) => r.bottom)) - sy : dock.bottom - sy;
+    const handGap = handBottomRest - restTop; // dock top to the hand's bottom line
+    const wantTop = cards.length
+      ? Math.min(boardBottom - handGap, innerHeight - 12 - dock.height)
+      : Math.min(innerHeight * 0.75 - dock.height / 2, innerHeight - 12 - dock.height);
     root.style.setProperty('--side-dock-shift', `${Math.round(wantX - restX)}px`);
     root.style.setProperty('--side-dock-shift-y', `${Math.round(Math.max(wantTop, 8) - restTop)}px`);
   }
@@ -6973,6 +7029,8 @@ function applyLayout() {
   if (branding) Object.assign(l, branding.polishLayout(l, { w, h, ...safeArea() }, radius));
   const thumbWas = thumbLayout;
   thumbLayout = l.thumb ?? null;
+  // The cockpit's side on every screen (phone, sideways, desktop): player/thumb.ts cockpit().
+  document.documentElement.dataset.cockpit = thumbMod?.cockpit() ?? 'left';
   if (thumbLayout) {
     document.documentElement.dataset.thumb = thumbLayout.side;
     const r = document.documentElement.style;
@@ -11526,7 +11584,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
             // live turn AND a catch-up after being away, and never true for the player's own
             // aftermath, which keeps its current, silent-online behaviour).
             if (IS_FUTA04 && replayedByOpponent(pending, os.seat)) {
-              const displayEvent = displayEventForPlay(beforeState, os.state, catchUp, HUMAN);
+              const displayEvent = displayEventForPlay(beforeState, os.state, catchUp, HUMAN, 'neutral', true);
               const cue = outcomeCue(catchUp, HUMAN);
               if (cue) outcomeSteps.set(cue.step, cue);
               if (displayEvent) {

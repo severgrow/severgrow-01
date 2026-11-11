@@ -1309,7 +1309,8 @@ try {
     {
       const { page, errors, info } = await openWith({});
       check(info.tier === 'spotlight', `L1 first Draw is SPOTLIGHT (${info.tier})`);
-      check(!info.hidden && /0\.45\)/.test(info.fill), `SPOTLIGHT dim is the strong L1 dim (${info.fill})`);
+      // OWNER CHANGED THE RULE (2026-11-11): the levels dim clearly darker (.45 -> .72, guide .15 -> .55).
+      check(!info.hidden && /0\.72\)/.test(info.fill), `SPOTLIGHT dim is the strong L1 dim (${info.fill})`);
       check(info.lesson?.beat?.say === LESSON.tapDraw, 'and the display says what to do');
       check(info.plateHidden, 'and the box is empty: nothing to explain');
       assert.deepEqual(errors, []);
@@ -1318,7 +1319,7 @@ try {
     {
       const { page, errors, info } = await openWith({ draw: 1 });
       check(info.tier === 'guide', `second Draw is GUIDE (${info.tier})`);
-      check(/0\.15\)/.test(info.fill), `GUIDE dim is light (${info.fill})`);
+      check(/0\.55\)/.test(info.fill), `GUIDE dim is the levels' darker guide dim (${info.fill})`);
       check(info.lesson?.beat?.say === LESSON.tapDraw && !info.lesson?.beat?.line, 'and the action stays, with no box sentence');
       assert.deepEqual(errors, []);
       await page.close();

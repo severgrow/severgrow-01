@@ -50,6 +50,8 @@ try {
     const top = m.board.t, bottom = h - m.board.b;
     check(`${w}x${h}: the board has the same air above and below`, Math.abs(top - bottom) <= 4 && top >= 8 && top <= 32, `${Math.round(top)} / ${Math.round(bottom)}px`);
     check(`${w}x${h}: the hand keeps clear of the bottom edge`, h - m.handBottom >= 12, `${Math.round(h - m.handBottom)}px`);
+    // OWNER, 2026-11-11: the hand's bottom line is level with the board's bottom line.
+    if (m.layout === 'side') check(`${w}x${h}: the hand's bottom line is level with the board's`, Math.abs(m.handBottom - m.board.b) <= 3, `${Math.round(m.handBottom)} / ${Math.round(m.board.b)}px`);
     const roomL = m.box.l - m.board.r, roomR = w - m.box.r;
     if (m.board.r + 24 + m.box.w < w) check(`${w}x${h}: the cockpit is centred in the space right of the board`, Math.abs(roomL - roomR) <= 4, `${Math.round(roomL)} / ${Math.round(roomR)}px`);
     else check(`${w}x${h}: no room to centre: the cockpit stays where it was`, roomR <= 4, `${Math.round(roomR)}px`);

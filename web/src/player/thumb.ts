@@ -173,6 +173,12 @@ export const mountThumb = (hooks: { relayout: () => void; reduceMotion: () => bo
   document.addEventListener('visibilitychange', arm);
 
   return {
+    /**
+     * Where the cockpit's tools sit, on every screen (owner, 2026-11-11: "use the swapped position of
+     * buttons and piles. So throw and discard pile on the right and cockpit tools on the left ... for
+     * left handed option use the opposite of that"): right hand -> tools left, left hand -> tools right.
+     */
+    cockpit: (): 'left' | 'right' => (prefs.side === 'left' ? 'right' : 'left'),
     /** the hand side for a viewport, or null: the normal layout */
     side: (w: number, h: number): 'right' | 'left' | null => (prefs.thumb && isPhonePortrait(w, h) ? prefs.side : null),
     /** the tip to show when idle (null: not now: not my turn, an animation, painting a Bloom) */

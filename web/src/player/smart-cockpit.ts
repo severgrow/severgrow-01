@@ -1,6 +1,7 @@
 import { ONLINE } from '../../../src/strings.js';
 /** Futasaku 0.4 cockpit presentation. Game-owned buttons remain the action source. */
-import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeSpan, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage, ledToken } from './led-cells.js';
+import './led-art.js'; // registers the sign's pictures (explosion, snake, 点)
+import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeSpan, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledMotifOnce, ledStaticMessage, ledToken } from './led-cells.js';
 import type { LedTone } from './led-cells.js';
 import { publishDisplayLight, LIGHT_CAPS } from './light.js';
 import { DisplayMachine } from './display-machine.js';
@@ -52,7 +53,7 @@ html.futa04-information #futa04-box > #smart-panel {
   gap:var(--control-gap); width:var(--box-tools); height:calc(2 * var(--control-size) + var(--control-gap));
   position:relative; z-index:5; box-sizing:border-box;
 }
-html.futa04-information[data-thumb='left'] #futa04-box > #smart-panel { grid-column:1; justify-self:start; }
+html.futa04-information[data-cockpit='left'] #futa04-box > #smart-panel { grid-column:1; justify-self:start; }
 body.paused #smart-panel { visibility:hidden; }
 body.paused #smart-bloom { visibility:hidden; }
 html.futa04-information #futa04-box #futa04-actions { display:contents !important; position:static !important; width:auto !important; height:auto !important; }
@@ -885,7 +886,10 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
         const hotCtx = hot.getContext('2d');
         const bloomCtx = bloomEl.getContext('2d');
         let index = 0;
+        // A picture (led-art.ts) plays once and stops on its last frame; the small motifs loop.
+        const once = ledMotifOnce(frame.motif);
         const paint = () => {
+          if (once && index >= frames.length) { window.clearInterval(motifTimer); motifTimer = 0; motifPaint = null; return; }
           const at = index++ % frames.length;
           drawLedCells(cells,frames[at]!,false,mode);
           const hotFrame = hotFrames[at];
@@ -1138,6 +1142,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
       else machine.release();
     },
     reset: (you=0,opp=0) => machine.reset(phaseMessage(),you,opp),
+    personality: (gamesPlayed: number) => machine.setPersonality(gamesPlayed),
     /** A lesson message is on screen: the sign keeps the score and real results only. */
     quiet: (on: boolean) => machine.setQuiet(on),
     /** Hold the score on the sign while a lesson points at it; false lets it go. */

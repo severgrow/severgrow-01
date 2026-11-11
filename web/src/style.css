@@ -11,6 +11,11 @@
   --dark-glass-blur: blur(9px) saturate(1.05);
   /* What a panel's backdrop does to the screen behind it: blurred, darkened, a touch less colour. */
   --veil: blur(7px) brightness(0.58) saturate(0.85);
+  /* The invitations (install / its own window, keep your progress): the game behind them is only a
+     soft dark light, never readable shapes (owner, 2026-11-11: "blur the background behind it way
+     more, now it looks messy with everything behind it"). Shared by both. */
+  --invite-veil: blur(44px) brightness(0.34) saturate(0.6);
+  --invite-shade: 58%;
   --c-bg: #18191a;
   --c-surface: #232425;
   --c-text: #eeebe4;
@@ -8502,9 +8507,9 @@ html.futasaku-product #install-prompt {
 /* A deeper blur and a darker shade than a sheet's own scrim: this is the one invitation that opens
    over a finished game, so the glass has to be the only thing in focus. */
 html.futasaku-product #install-prompt > .install-prompt-scrim {
-  background: color-mix(in srgb, var(--c-bg) 38%, transparent);
-  -webkit-backdrop-filter: blur(20px) brightness(0.5) saturate(0.9);
-  backdrop-filter: blur(20px) brightness(0.5) saturate(0.9);
+  background: color-mix(in srgb, var(--c-bg) var(--invite-shade), transparent);
+  -webkit-backdrop-filter: var(--invite-veil);
+  backdrop-filter: var(--invite-veil);
 }
 html.futasaku-product #install-prompt > .install-sheet.sheet {
   /* STATIC, not fixed: the container grid centres this card, so no viewport anchoring from the

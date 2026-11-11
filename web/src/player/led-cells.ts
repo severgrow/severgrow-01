@@ -52,6 +52,8 @@ const GLYPHS: Record<string, string> = {
   '✦':'00100/00100/11111/01110/11111/00100/00100',
   '点':'00100/00100/01110/01010/01110/10101/01010',
 };
+/** Every character the sign can draw (a space is a gap). */
+export const GLYPH_CHARS: ReadonlySet<string> = new Set(Object.keys(GLYPHS));
 
 export type LedTone = 'amber' | 'red' | 'green' | 'ivory' | 'pink' | 'cyan' | 'score';
 
@@ -73,14 +75,23 @@ export const SCORE_SEPARATOR_INK: LightTone = 'amber';
  */
 export const SCORE_INK_YOU: LightTone = 'green';
 export const SCORE_INK_OPP: LightTone = 'red';
-export type LedMotif = 'stars' | 'heart' | 'shock' | 'scatter' | 'eyes';
-export const ledMotifFrames = (motif: LedMotif): readonly string[] => ({
+export type LedMotif = 'stars' | 'heart' | 'shock' | 'scatter' | 'eyes' | 'blast' | 'snake' | 'kanji';
+/** Pixel-art motifs (player/led-art.ts): whole-window pictures on the glass's own dot grid,
+ *  each dot with its own colour, played once (no loop). A frame is ART_MARK + rows joined by '/',
+ *  one character per dot: '.' is dark, and a letter is a tone (see ART_TONES). */
+export const ART_MARK = '\u0001';
+export const ART_TONES: Record<string, LedTone> = { a: 'amber', r: 'red', g: 'green', i: 'ivory', p: 'pink', c: 'cyan' };
+const ART_MOTIFS = new Map<string, readonly string[]>();
+export const registerArtMotif = (motif: LedMotif, frames: readonly string[]) => { ART_MOTIFS.set(motif, frames); };
+export const ledMotifFrames = (motif: LedMotif): readonly string[] => ART_MOTIFS.get(motif) ?? ({
   stars:['• ✦ •','✦ • ✦','• ✦ •','✦ ✦','• ✦ •'],
   heart:['•','♥','♥','•'],
   shock:['•','• •','✦ • ✦','• •','•'],
   scatter:['•••','• •','•  •','• •','•••'],
   eyes:['• •','• •','••','• •'],
-})[motif];
+} as Record<string, readonly string[]>)[motif] ?? ['•'];
+/** Pixel-art motifs play once and hold their last frame; the small motifs loop. */
+export const ledMotifOnce = (motif: LedMotif) => ART_MOTIFS.has(motif);
 /* The glyph inks live in the LIGHT contract (player/light.ts) so the dots and the light
    they cast can never drift into two palettes. */
 const INK = LED_INK;
@@ -205,6 +216,17 @@ export function ledLayout(message: string, repeat = false, mode: LedTone = 'ambe
   const rowStep = 3.1 * s;
   const originY = 3.15 * s;
   const cellH = 26 * s;
+  if (message.startsWith(ART_MARK)) {
+    // A picture: one dot per character on the same 2.3 x 3.1 grid as the glass's unlit dots.
+    const rows = message.slice(1).split('/');
+    const cols = Math.max(0, ...rows.map(row => row.length));
+    const dots: LedDot[] = [];
+    rows.forEach((row, y) => { for (let x = 0; x < row.length; x++) {
+      const tone = ART_TONES[row[x]!];
+      if (tone && y < 8) dots.push({ x: x * dotX + 1.1 * s, y: y * rowStep + originY, r: s, tone: tone as LightTone });
+    } });
+    return { width: Math.max(1, (cols - 1) * dotX + 2.2 * s), height: cellH, scale: s, dots };
+  }
   const period = `${message}${SEPARATOR}`;
   // Three copies is the legacy marquee strip; with a span we build only the copies that can be
   // seen (one period plus the window), so the bitmap stops growing with the message.

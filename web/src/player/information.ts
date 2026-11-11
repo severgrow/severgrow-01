@@ -292,12 +292,15 @@ html.futa04-information .dock #futa04-box #futa04-actions > .hand-slot {
 }
 html.futa04-information .dock #futa04-box #futa04-actions > .hand-slot::after { display: none; }
 html.futa04-information .dock #futa04-box #futa04-help-button[hidden] { display: grid; visibility: hidden; pointer-events: none; }
-html.futa04-information[data-thumb='left'] .dock #futa04-box { grid-template-columns: var(--box-tools) minmax(0,1fr) var(--box-piles); }
-html.futa04-information[data-thumb='left'] .dock #futa04-box > .piles { grid-column: 3; }
-html.futa04-information[data-thumb='left'] .dock #futa04-box > .moves { grid-column: 1 / 3; grid-template-columns: var(--box-tools) minmax(0,1fr); }
-html.futa04-information[data-thumb='left'] .dock #futa04-box #moves > .kind { grid-column: 2; }
-html.futa04-information[data-thumb='left'] .dock #futa04-box #moves > :is(.futa04-skip,.cancel,.empty-continue,.primary:not(.kind)) { grid-column: 1; justify-self: end; }
-html.futa04-information[data-thumb='left'] .dock #futa04-box #futa04-actions { grid-column: 1; justify-content: flex-start; }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box { grid-template-columns: var(--box-tools) minmax(0,1fr) var(--box-piles); }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box > .piles { grid-column: 3; }
+html.futa04-information[data-cockpit='left'][data-step='draw'] .dock #futa04-box > .piles { justify-content: flex-end; }
+/* On the right edge the ready pile grows inward, never past the glass. */
+html.futa04-information[data-cockpit='left'] .dock #futa04-box > .piles > .pile { transform-origin: right bottom; }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box > .moves { grid-column: 1 / 3; grid-template-columns: var(--box-tools) minmax(0,1fr); }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box #moves > .kind { grid-column: 2; }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box #moves > :is(.futa04-skip,.cancel,.empty-continue,.primary:not(.kind)) { grid-column: 1; justify-self: end; }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box #futa04-actions { grid-column: 1; justify-content: flex-start; }
 html.futa04-information .dock #futa04-box #futa04-actions .i { width: 20px; height: 20px; }
 html.futa04-information .dock #futa04-box .futa04-combination {
   display: flex; justify-content: center; flex-wrap: wrap; gap: 3px; max-width: 100%;
@@ -317,7 +320,7 @@ html.futa04-information .dock #futa04-box #moves .bloom-options {
   width: max-content; min-width: 0; max-width: min(280px, calc(100% - var(--box-piles) - 12px));
   max-height: min(45dvh,320px); z-index: 8; padding: 8px; box-sizing: border-box;
 }
-html.futa04-information[data-thumb='left'] .dock #futa04-box #moves .bloom-options {
+html.futa04-information[data-cockpit='left'] .dock #futa04-box #moves .bloom-options {
   left: 6px;
 }
 html.futa04-information #board .badge.weak { display: none !important; }
