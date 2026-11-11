@@ -265,6 +265,6 @@ containment and never moves the camera or picks distant land from empty sea.
 
 Territory ranking now uses the largest side-connected component, not total ownership. Profiles show
 CONNECTED TILES and TOTAL TILES. Existing navigation targets a real tile in the largest holding.
-See [implementation, test evidence, measured density limits and Cursor's server deployment](TERRITORY-FINAL-POLISH.md).
+See [implementation, test evidence, measured density limits and Cursor's server deployment](history/TERRITORY-FINAL-POLISH.md).
 This pass needs no migration or backfill; the owner assigned the Edge deployment to Cursor. The
 web remains compatible with the current server until that deployment. Grain stays above all layers.

@@ -11,16 +11,16 @@ untouched.
 
 | Question | Document |
 | --- | --- |
-| Current status · verification | [`ONLINE-SHIP-STATUS.md`](ONLINE-SHIP-STATUS.md) (dated verification snapshot) and [`ONLINE-POLISH.md`](ONLINE-POLISH.md) (latest pass) |
+| Current status · verification | [`ONLINE-SHIP-STATUS.md`](history/ONLINE-SHIP-STATUS.md) (dated verification snapshot) and [`ONLINE-POLISH.md`](ONLINE-POLISH.md) (latest pass) |
 | Deploy, secrets, keep-alive cron, rate limits | [`DEPLOY-ONLINE.md`](DEPLOY-ONLINE.md) |
 | The wire contract | [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md) |
 | Backend: endpoints, storage, security, what is left | [`BACKEND.md`](BACKEND.md) |
 | Live duels (challenge → real time) | [`LIVE.md`](LIVE.md) |
 | Find opponent · parked search · timeout grace | [`FIND-OPPONENT.md`](FIND-OPPONENT.md) |
 | Invites (link-first, 4-character codes) | [`INVITE-FLOW.md`](INVITE-FLOW.md) |
-| Finish-screen parity with offline | [`ONLINE-VS-OFFLINE-FINISH.md`](ONLINE-VS-OFFLINE-FINISH.md) |
-| Two-phone playtest script | [`PLAYTEST-0.5.md`](PLAYTEST-0.5.md) |
-| Online vs offline differential audit | [`ONLINE-VS-OFFLINE.md`](ONLINE-VS-OFFLINE.md) |
+| Finish-screen parity with offline | [`ONLINE-VS-OFFLINE-FINISH.md`](history/ONLINE-VS-OFFLINE-FINISH.md) |
+| Two-phone playtest script | [`PLAYTEST-0.5.md`](history/PLAYTEST-0.5.md) |
+| Online vs offline differential audit | [`ONLINE-VS-OFFLINE.md`](history/ONLINE-VS-OFFLINE.md) |
 | Turn-word / gate smoothness evidence | [`ONLINE-SMOOTHNESS.md`](ONLINE-SMOOTHNESS.md) |
 
 ## What is current (verified)
@@ -75,11 +75,11 @@ untouched.
 
 These carry a short note at the top for anything that has since changed — the history is intact:
 
-[`ONLINE-REPORT.md`](ONLINE-REPORT.md) (2026-10-12) ·
+[`ONLINE-REPORT.md`](history/ONLINE-REPORT.md) (2026-10-12) ·
 [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md) (2026-10-12) ·
 [`ONLINE-SIMULATION.md`](ONLINE-SIMULATION.md) (2026-10-13) ·
 [`ONLINE-SOAK-200.md`](ONLINE-SOAK-200.md) (2026-10-13) ·
 [`ONLINE-DEVICE-MATRIX.md`](ONLINE-DEVICE-MATRIX.md) (2026-10-13) ·
-[`ONLINE-VS-OFFLINE.md`](ONLINE-VS-OFFLINE.md) (2026-10-13) ·
-[`ONLINE-VS-OFFLINE-FINISH.md`](ONLINE-VS-OFFLINE-FINISH.md) (2026-10-13, the fix pass) ·
-[`CONSOLIDATION.md`](CONSOLIDATION.md) (2026-10-13).
+[`ONLINE-VS-OFFLINE.md`](history/ONLINE-VS-OFFLINE.md) (2026-10-13) ·
+[`ONLINE-VS-OFFLINE-FINISH.md`](history/ONLINE-VS-OFFLINE-FINISH.md) (2026-10-13, the fix pass) ·
+[`CONSOLIDATION.md`](history/CONSOLIDATION.md) (2026-10-13).

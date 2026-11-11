@@ -14,7 +14,7 @@ Read **[AGENTS.md](AGENTS.md)** before changing anything. It is the authoritativ
 | Code layout and extension patterns | [Architecture](docs/ARCHITECTURE.md) |
 | Materials, controls, motion and accessibility | [Visual conventions](docs/VISUAL-CONVENTIONS.md) |
 | CI, staging, promotion and rollback | [Release flow](docs/RELEASE-FLOW.md) |
-| Verified 0.81 foundation and performance evidence | [Foundation](docs/FOUNDATION-0.81.md) |
+| Verified 0.81 foundation and performance evidence | [Foundation](docs/history/FOUNDATION-0.81.md) |
 | Online client and server | [Online](docs/ONLINE.md), [backend](docs/BACKEND.md) |
 | Planet rendering and interaction | [Planet](docs/PLANET.md) |
 | Levels 1-10 and onboarding | [Lesson scripts](docs/LESSON-SCRIPTS.md), [campaign](docs/CAMPAIGN.md) |

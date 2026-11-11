@@ -34,3 +34,9 @@ web/dist-sweep/
 # The tutorial-names suite's own futa04 build (web/e2e/tutorial-names.ts). Same rule as the
 # siblings above: generated, never committed.
 web/dist-tutorial-names/
+
+# Build outputs made by browser suites (never commit)
+web/dist-live/
+web/dist-campaign/
+# Screenshots from browser suites: kept out of git (owner, 0.84). Old ones: tag archive/docs-screens-0.84
+docs/screens/

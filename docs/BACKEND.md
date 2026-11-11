@@ -4,7 +4,7 @@
 
 > **Status pointer:** start at [`ONLINE.md`](ONLINE.md) for the current online-duels status. This
 > document describes the backend as built; the dated verification snapshots are
-> [`ONLINE-SHIP-STATUS.md`](ONLINE-SHIP-STATUS.md) and [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md).
+> [`ONLINE-SHIP-STATUS.md`](history/ONLINE-SHIP-STATUS.md) and [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md).
 
 Status: **built and shipped** — the online duel screens and backend are live on `/futa0.5/`.
 `web/src/online/` holds the client layer (identity, sync, draft, OnlineDriver); the backend runs
@@ -494,7 +494,7 @@ break it.
 | `server/tests/rate-limit-nat.test.ts` | NAT/shared-IP regression: two players behind one IP create + join; a single IP still blocked above the new ceiling; per-player limits trip independently of IP; distinct forwarded IPs get distinct buckets; `cf-connecting-ip` beats a spoofed `x-forwarded-for`; cron sweep uses its dedicated bucket; the new **create** cap per player and per IP |
 | `server/tests/cancel-waiting-match.test.ts` | cancel a waiting invite: owner-only, waiting-only, idempotent, and the cancelled code no longer joins (service + real HTTP) |
 | `web/tests/lobby.test.ts` | lobby helpers; a **regression** drives the real service to the open-duel cap and asserts `TOO_MANY_MATCHES` maps to the specific `ONLINE.errTooMany` line (so the client mapping can never silently diverge from the server code again) |
-| `docs/ONLINE-REPORT.md` | Phase 8 final report (P-1…P-21) |
+| `docs/history/ONLINE-REPORT.md` | Phase 8 final report (P-1…P-21) |
 
 `vitest.config.ts` loads `.env` when it exists, so the real-database suites **run** locally; in CI
 there is no `.env`, so they skip and are pinned separately by `npm run server:db-test` and
@@ -514,7 +514,7 @@ Built since the original phases (so no longer "unfinished"):
 
 - **Live database run** — verified against the real project; see
   [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md) and
-  [`ONLINE-SHIP-STATUS.md`](ONLINE-SHIP-STATUS.md).
+  [`ONLINE-SHIP-STATUS.md`](history/ONLINE-SHIP-STATUS.md).
 - **Live transport** — a Supabase Realtime **broadcast ping** on turn completion, with polling as
   the safety net (below).
 - **Client UI** — the lobby and duel screen (and the live-duel pop-up) are wired to `DuelClient`;

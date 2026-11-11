@@ -54,7 +54,7 @@ So, for now:
 
 - **Don't add new module-level state to `main.ts`.** Keep a feature's state inside its own module.
 - **Don't grow `main.ts` with feature code** — use the mount pattern above.
-- The plan to split it safely is in `docs/HYGIENE-PASS-2026-10-26.md` ("Deferred").
+- The plan to split it safely is in `docs/history/HYGIENE-PASS-2026-10-26.md` ("Deferred").
 
 ## Styles
 
@@ -100,7 +100,7 @@ intermediate board writes. The product cockpit does not consume the legacy `.cor
 Match Intel's paired counts and move attribution are relative to `view.player`. Its public model
 never shows the other seat's private deck draw. The online adapter already normalises seats, but
 direct model callers must be safe too. Compatibility copy conversion must exclude player content.
-`docs/FOUNDATION-0.81.md` records the source checkpoint, evidence, visual guard and restore path.
+`docs/history/FOUNDATION-0.81.md` records the source checkpoint, evidence, visual guard and restore path.
 
 ## Working in parallel
 

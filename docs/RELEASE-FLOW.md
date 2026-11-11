@@ -64,7 +64,7 @@ and its own service-worker cache (`futa05test-`), so it can never purge the live
 migrates or deletes live `futa05:` or `/3/`'s `futa05-3:` saves. Experimental campaign results do
 not upload account progress or reward proofs. Normal online entries still use the same backend;
 Sphere Test is a separate mock surface without economy/ownership calls. See
-[FIRST-EXPERIENCE-TEST.md](FIRST-EXPERIENCE-TEST.md) and [SPHERE-TEST.md](SPHERE-TEST.md).
+[FIRST-EXPERIENCE-TEST.md](FIRST-EXPERIENCE-TEST.md) and [SPHERE-TEST.md](history/SPHERE-TEST.md).
 Do not promote these experiments.
 
 **It shares the live server.** /test/ is the web page only. Server code (`server/`, the Supabase `duel`

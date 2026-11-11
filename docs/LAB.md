@@ -84,4 +84,4 @@ game waits for you to play its moves. Watched games don't count in your stats.
   `panel.ts` the sheet, `panzoom.ts`). Engine: `config.board` (a set of hexes with rock, gold
   and homes) and `config.reshuffleDiscard`. Both default to off, which is the normal game.
 - Smoke run: `CHANNEL=test npm run web:build && npx tsx web/e2e/lab-smoke.ts`.
-- Known failing tests: `docs/LAB-KNOWN-BREAKAGE.md`.
+- Known failing tests: `docs/history/LAB-KNOWN-BREAKAGE.md`.

@@ -1,7 +1,7 @@
 # FUTASAKU 0.5 — Online Duels plan (Phase 0)
 
 **Branch:** `futa0.5-online` (from `futa0.5-supabase-verify`, plus one merge of `futa0.4` tutorial polish).  
-**Status:** Phase 0–8 green (2026-10-12). Online duels complete on this branch: shared-board play, hardening proofs, Find Opponent (flagged), preview build workflow, final report in `docs/ONLINE-REPORT.md`. Hosting: **Supabase Edge Functions**.  
+**Status:** Phase 0–8 green (2026-10-12). Online duels complete on this branch: shared-board play, hardening proofs, Find Opponent (flagged), preview build workflow, final report in `docs/history/ONLINE-REPORT.md`. Hosting: **Supabase Edge Functions**.  
 **Rules:** the browser and the server keep using the **same** `src/engine/`. No rule changes. Test channel only. The game is always called **FUTASAKU**.
 
 This document is in plain English for the owner. Code details live in the phase commits.
@@ -131,7 +131,7 @@ Phase 0 does **not** heavily edit `web/src/main.ts` (another agent owns tutorial
 | P-20 | Two devices one player | 2, 6 | Second gets clean 409; recover by refetch. |
 | P-21 | Supabase default grants | 2, 6 | Every new table: RLS + revoke anon/authenticated; migration 0002 `alter default privileges … revoke`; tests as anon/authenticated DENIED; advisors clean; no tables in `supabase_realtime` publication; document in `BACKEND.md`. |
 
-*(The shipped final status is `docs/ONLINE-SHIP-STATUS.md` §4, which marks each problem handled / tested / not handled and why.)*
+*(The shipped final status is `docs/history/ONLINE-SHIP-STATUS.md` §4, which marks each problem handled / tested / not handled and why.)*
 
 ---
 

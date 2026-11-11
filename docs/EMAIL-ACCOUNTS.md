@@ -68,7 +68,7 @@ re-verifying the consumed OTP, recovery, nickname, small layout, and old-server 
 
 Verification: full check passed 3,553 tests (1 expected failure, 66 optional skips); final focused checks 62,
 email browser checks 18, Google/nickname checks 33, and both production builds passed. The full audit
-and physical-device limitations are in [REVIEW-2026-10-31.md](REVIEW-2026-10-31.md).
+and physical-device limitations are in [REVIEW-2026-10-31.md](history/REVIEW-2026-10-31.md).
 
 ## Activation handoff — 31 October quiet polish
 

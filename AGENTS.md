@@ -60,6 +60,9 @@ For UI changes also run the relevant browser suite (`node --import tsx web/e2e/<
 `territory-menu` (keys, tile bar, achievements), `territory-challenges`, `territory-gestures`
 (+ `-ios` on WebKit), and by hand `territory-smooth` for frame times. Commit after each green milestone.
 
+Never commit screenshots or build output. Suites write pictures to `docs/screens/` (ignored by git);
+share pictures with the owner outside the repo. Old pictures: tag `archive/docs-screens-0.84`.
+
 ## Code layout (read before adding a feature)
 
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) maps the folders and the patterns to copy. In short:
