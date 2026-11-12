@@ -93,6 +93,12 @@ export type LevelConfig = {
    */
   counterWeight?: number;
   /**
+   * Card tracking (rivals): leave out of the imagined opponent hands one card of each number showing on
+   * the board (every tile's strength is the number of the card that grew it). Level 9 does not, so its
+   * imagined hands still hold cards that were already played.
+   */
+  trackPlayed?: boolean;
+  /**
    * Endgame: once the draw pile holds this many cards or fewer, the danger and pressure terms fade
    * out in proportion (a threat the opponent has no turns left to carry out is not a threat).
    */
@@ -196,6 +202,24 @@ const bestFollowUp = (v: View, weights: Weights, c: LevelConfig): number => {
 const unseenCards = (v: View): Card[] => {
   const seen = new Set([...v.hand, ...v.discard].map((c) => c.id));
   return createCards(v.config).filter((c) => !seen.has(c.id));
+};
+
+/**
+ * The unseen cards minus one card of each number showing on the board, so an imagined hand does not
+ * hold a card that is already a tile. Public information only (tile strengths). Deterministic: the
+ * lowest-id card of that number goes first.
+ */
+const unseenTracked = (v: View): Card[] => {
+  const pool = unseenCards(v);
+  const showing = new Map<number, number>();
+  for (const t of Object.values(v.board)) if (t && !t.root) showing.set(t.strength, (showing.get(t.strength) ?? 0) + 1);
+  const out: Card[] = [];
+  for (const c of [...pool].sort((a, b) => a.id - b.id)) {
+    const n = c.suit === null ? 0 : (showing.get(c.rank) ?? 0);
+    if (n > 0) showing.set(c.rank, n - 1);
+    else out.push(c);
+  }
+  return out;
 };
 
 /** The opponent's view at the start of their next growing step, with an imagined hand. */
@@ -430,7 +454,7 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
 
   // Look one move further inside its own turn, and (level 9) at the opponent's reply.
   if ((c.lookahead > 0 || c.searchIterations > 0) && v.phase === 'ACT' && ranked[0]!.score < WEIGHTS.win / 2) {
-    const unseen = c.searchIterations > 0 ? unseenCards(v) : [];
+    const unseen = c.searchIterations > 0 ? (c.trackPlayed ? unseenTracked(v) : unseenCards(v)) : [];
     const handSize = v.opponentHandCount + 1; // after their draw
     const value = new Map<Scored, number>();
     // the Lab's boards only: fewer candidates and imagined hands (iteration caps, never time)
