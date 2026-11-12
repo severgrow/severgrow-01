@@ -9,7 +9,7 @@ declare const __CHANNEL__: string;
 const IS_FUTA04 = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05');
 import { FRUIT } from '../../../src/strings.js';
 import { ParticleBudget } from '../logic/juice.js';
-import { EASE, MOTION, PINNED } from '../logic/motion.js';
+import { EASE, MOTION, PINNED, oppDealMs } from '../logic/motion.js';
 import { planBoomerang } from './throw-boomerang.js';
 import { dustSpecks } from '../logic/impact.js';
 
@@ -416,7 +416,11 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const dy = b.top + b.height / 2 - (a.top + a.height / 2);
     const sc = b.height / Math.max(a.height, 1);
     const atSeat = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${sc.toFixed(3)})`;
-    const ms = Math.max(1, Math.round((quick ? 130 : 280) * Math.max(f, 0.1)));
+    // ONE beat for every path (live reveal, async catch-up, in-game replay). A replay plays at 60%
+    // of live speed (x1.67), and that used to stretch this 280 ms deal to ~467 ms and hold the
+    // hand-over to the player's turn; PINNED.oppDeal is a wall-clock CEILING after every speed scale
+    // (owner, 2026-11-12: "fast and snappy", never slower than the player's own draw).
+    const ms = oppDealMs(f, quick);
     const frames: Keyframe[] = motion() === 0
       ? [
           { transform: atSeat, opacity: 0 },

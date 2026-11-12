@@ -3,7 +3,8 @@
 // A new raw duration or curve has nowhere legal to go: this test fails if one appears.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { EASE, EASE_SPECIAL, MOTION, PINNED, TEMPO, motionAllowed } from '../src/logic/motion.js';
+import { EASE, EASE_SPECIAL, MOTION, PINNED, TEMPO, motionAllowed, oppDealMs } from '../src/logic/motion.js';
+import { REPLAY_SPEED, replayDurationScale } from '../src/logic/opponent.js';
 
 const source = readFileSync(new URL('../src/logic/motion.ts', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
@@ -39,6 +40,27 @@ describe('motion tokens', () => {
     expect(PINNED.throwFlight).toBeLessThan(PINNED.throw);
   });
 
+  // OWNER DIRECTION (2026-11-12): the card dealt to the opponent at the end of a replayed turn was
+  // too slow (a replay plays at 60% of live speed, which stretched 280 ms to ~467 ms). The deal now
+  // has a wall-clock CEILING, and it may never be slower than the player's own draw.
+  it('a card dealt to the opponent is never slower than my own draw (owner, 2026-11-12)', () => {
+    expect(PINNED.oppDeal).toBeLessThanOrEqual(PINNED.humanDraw);
+    expect(PINNED.oppDeal).toBeGreaterThan(0);
+    // Live, async and replay all use the same faster beat (owner: "the same faster beat").
+    expect(oppDealMs(1, false)).toBe(PINNED.oppDeal);
+    expect(oppDealMs(1, true)).toBe(130);
+    // The in-game replay scales the clock by 1/0.6 = 1.667: 280 -> 467 before, the ceiling after.
+    expect(Math.round(280 * replayDurationScale(REPLAY_SPEED))).toBe(467);
+    expect(oppDealMs(replayDurationScale(REPLAY_SPEED), false)).toBe(PINNED.oppDeal);
+    // Slow speed x replay is the worst case: still the same short beat, never the 747 ms it was.
+    expect(oppDealMs(1.6 * replayDurationScale(REPLAY_SPEED), false)).toBe(PINNED.oppDeal);
+    // Fast speed keeps its own quicker beat, and Speed Off stays instant.
+    expect(oppDealMs(0.5, false)).toBe(140);
+    expect(oppDealMs(0, false)).toBe(28);
+    // The ceiling can never be exceeded by any scale.
+    for (const f of [0.1, 0.5, 1, 1.6, 2, 4]) expect(oppDealMs(f, false)).toBeLessThanOrEqual(PINNED.oppDeal);
+  });
+
   it('pins the choreography that must never drift', () => {
     expect(PINNED).toEqual({
       humanDraw: 312,
@@ -48,6 +70,8 @@ describe('motion tokens', () => {
       // 500 for the one-flick throw ("quick - but satisfying, not annoying"); OWNER CHANGED IT AGAIN
       // (2026-11-12): "lighter - snappy" and it "can be quicker" -> 420.
       boomerang: 420,
+      // OWNER ADDED THE VALUE (2026-11-12): the wall-clock ceiling for the opponent's dealt card.
+      oppDeal: 240,
       liveReveal: 600,
       displayDwell: 1000,
       lessonDwell: 2000,

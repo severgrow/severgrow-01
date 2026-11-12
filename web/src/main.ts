@@ -4206,10 +4206,17 @@ let pumpWanted = false;
 let currentStep: Step | null = null;
 /** True while the in-game replay holds the display sign (released on the same drain). */
 let replaySignHeld = false;
-/** Steps that are an enemy ACTION: the in-game replay separates these with a quiet beat. */
+/**
+ * Steps that are an enemy ACTION: the in-game replay separates these with a quiet beat.
+ *
+ * A DRAW is deliberately NOT one (owner, 2026-11-12: the card dealt to the opponent at the end of a
+ * replayed turn took too long and held up the hand-over). A draw is housekeeping, not something to
+ * read: the quiet beat before it bought nothing and cost 160 ms at the very moment input reopens.
+ * The deal keeps its own short beat (PINNED.oppDeal).
+ */
 const replayActionStep = (s: Step): boolean =>
   s.k === 'grow' || s.k === 'sever' || s.k === 'remove' || s.k === 'strengthen'
-  || s.k === 'fruit' || s.k === 'megaBomb' || s.k === 'discard' || s.k === 'draw';
+  || s.k === 'fruit' || s.k === 'megaBomb' || s.k === 'discard';
 async function pump() {
   if (pumping) {
     pumpWanted = true;
