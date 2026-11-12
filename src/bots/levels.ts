@@ -141,13 +141,20 @@ export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
 const PLANNER: LevelConfig = { ...LEVEL_CONFIGS[9], fullSearch: true };
 
 /**
- * The rivals' knobs. Tuned with `src/sim/rivals.ts` (docs/RIVALS.md): each at least matches the
+ * The rivals' knobs. Tuned with `src/sim/rivals.ts` (docs/CAMPAIGN-71-100.md, section G): each at least matches the
  * full-strength level 9 on campaign boards, two clearly beat it, and each style shows in the numbers.
  */
 export const RIVAL_CONFIGS: Record<Rival, LevelConfig> = {
-  10: { ...PLANNER, style: 'fortress', styleWeight: 0.8, dangerWeight: 1.0, pressureWeight: 0.2 },
-  11: { ...PLANNER, style: 'siege', styleWeight: 0.9, dangerWeight: 0.45, pressureWeight: 0.45 },
-  12: { ...PLANNER, style: 'patient', styleWeight: 1, holdChance: 0.12, holdMargin: 4, fruitPatience: 4, candidates: 8, searchIterations: 8, replyWeight: 0.4 },
+  // Measured 2026-11-12 against full-search level 9 on campaign boards 25-70, seats swapped, deals the
+  // tuning never saw (src/sim/rivals.ts; docs/CAMPAIGN-71-100.md, "Rivals: what was measured"):
+  //   10 Ironwood       55% over 350 games (54/56/54) — the one rival clearly above level 9;
+  //   11 Strangler Fig  51% over 150 (more of its wins are Strangles: 14 against 11);
+  //   12 Night Bloom    51% over 150 (keeps its Bomb cards for the last turns: 66 late against 35).
+  // The endgame fade and level 9's own danger/pressure weights are what helped; deeper search
+  // (counterWeight) and card tracking (trackPlayed) did not, so neither is switched on.
+  10: { ...PLANNER, style: 'fortress', styleWeight: 0.8, dangerWeight: 0.6, pressureWeight: 0.3, endgame: 12 },
+  11: { ...PLANNER, style: 'siege', styleWeight: 0.6, dangerWeight: 0.6, pressureWeight: 0.3, endgame: 12 },
+  12: { ...PLANNER, style: 'patient', styleWeight: 1, holdChance: 0.12, holdMargin: 4, fruitPatience: 4, candidates: 8, searchIterations: 8, replyWeight: 0.4, dangerWeight: 0.6, pressureWeight: 0.3, endgame: 12 },
 };
 
 /** Any bot's knobs: a ladder level or a rival. */

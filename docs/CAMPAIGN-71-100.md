@@ -189,3 +189,58 @@ bundle, `CAMPAIGN_LEVEL_REWARD_MAX` and the 80/90/100 bonuses ship **server firs
 3. Tier 2 fixes to 11–70.
 4. Merge the 0.85 base (merge, not rebase), then rewards, server guards, Practice/Blitz rotation.
 5. Deploy order: server and Edge bundle first, then the page.
+
+---
+
+## G. Rivals: what was measured (2026-11-12)
+
+Tool: `src/sim/rivals.ts` — a rival against **full-search level 9** (`9full`: the campaign's level 9
+without the authored-board caps) on campaign boards 25–70, one deal per game, seats alternating. Batches
+of 100–150 games; the final numbers are on deals the tuning never saw. At 100 games the noise is about
+±5 points, so single batches above 55% were not trusted until repeated.
+
+| Finding | Evidence |
+| --- | --- |
+| The authored-board caps cost level 9 nothing | full search vs capped: 48% over 100 |
+| Deeper search (look at my answer to their reply) does not help | Night Bloom with it: 59% on one batch, then 46/49/43% on three fresh ones |
+| Leaving played cards out of imagined hands does not help | level 9 with it vs without: 48% over 150 |
+| What helps: an endgame fade of danger/pressure, and level 9's own danger weights | Ironwood 54%, 56%, 54% (350 games) |
+
+**Final configs (`RIVAL_CONFIGS`)** and where they stand against full level 9:
+
+| Rival | Wins | Style shows as |
+| --- | --- | --- |
+| 10 Ironwood (fortress) | **55%** over 350 | the one rival clearly above level 9 |
+| 11 Strangler Fig (siege) | 51% over 150 (Cursor: 48% over 50) | more Strangle wins (14 against 11) |
+| 12 Night Bloom (patient) | 51% over 150 (Cursor: 58% over 50) | Bomb cards kept for the last turns (66 late against 35) |
+
+Owner bar (2026-11-12): 52% over 50 games. Ironwood clears it on every batch; Fig and Bloom are at
+level 9's strength (48–58% on single batches, ~51% pooled) with a clearly different way of playing.
+Speed on this machine: 75–115 ms a move for 10/11, 115–160 ms for 12 (about 1.5x level 9), inside the
+approved ~1 s on a mid-range phone. The rivals' choices are pinned by `tests/bots/levels-frozen.test.ts`;
+changing a rival needs a new bot version, because campaign proofs replay against it.
+
+## H. Uneven boards: the lever that actually works (2026-11-12)
+
+The first draft of chapter IX was inert: bot-favoured boards read 47% bot-vs-bot, the same as even
+boards (Cursor's sweep, 1,800 games). The instrument plays the SAME bot in both seats, so only geometry
+can move it — and a lever test showed it does, just not the way the boards were drawn:
+
+| Test board (bot 9 vs bot 9, 60 games) | Bot's seat wins |
+| --- | --- |
+| open | 47.5% |
+| stone in the player's home zone (3 open neighbours) | **38% — helps the player** (a compact home is hard to cut) |
+| 7 gold two steps from the bot | 57% |
+| player's exits two steps out walled, two left open | **65%** |
+| bot's exits walled (a fortress) | 37% — hurts the bot |
+
+Games end with about 6–7 tiles each: they are fights, not land grabs, so territory and a few gold barely
+matter. What decides an uneven board is **how freely each side gets out of its corner**: the player's
+seven exits are the hexes two steps from its home. Gold on one of those exits helps the player; an exit
+that opens into wide ground is worth more than one that opens onto an edge.
+
+Recipe used for every bot-favoured board: close both edge exits, leave two exits open (the minimum
+without a single-hex chokepoint), keep gold off them, give the bot a gold hex or two near its home.
+Measured at 150 games each: 82 56%, 83 59%, 85 59% (harsh), 87 56%, 88 61%, 89 60% (harsh), 90 67%
+(harsh), 94 56%, 99 55%; 86 (player-favoured) 44%. Level 79 could not be made bot-favoured honestly
+inside the bridges idea and is now an even board (measured 50%).

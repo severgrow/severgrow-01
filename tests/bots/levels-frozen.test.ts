@@ -9,8 +9,8 @@
 import { describe, expect, it } from 'vitest';
 import { apply, newMatch, viewFor } from '../../src/engine/index.js';
 import type { RulesConfig, View } from '../../src/engine/index.js';
-import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
-import type { Level } from '../../src/bots/levels.js';
+import { RIVAL_CONFIGS, botSeed, chooseLevelAction } from '../../src/bots/levels.js';
+import type { BotLevel } from '../../src/bots/levels.js';
 import { campaignLevelByNumber } from '../../src/campaign/index.js';
 import { stateHash } from '../hash.js';
 
@@ -33,7 +33,7 @@ const SETS: Array<{ name: string; views: View[] }> = [
   { name: 'campaign 70', views: positions(96070, board(70), 2, 30) },
 ];
 
-const choices = (level: Level, views: readonly View[]) =>
+const choices = (level: BotLevel, views: readonly View[]) =>
   views.map((v, i) => chooseLevelAction(v, level, botSeed(v.turnNumber * 31 + i, level, v.turnNumber, i)));
 
 // Recorded on bots-v0.10 (before bots 10-12). Order: levels 1..9.
@@ -51,4 +51,27 @@ describe('bots 1-9 are frozen (byte-identical to bots-v0.10)', () => {
       expect(got).toEqual(FROZEN[set.name]);
     }, 120_000);
   }
+});
+
+// The rivals (bots-v0.11) are pinned the same way once tuned: a campaign proof on levels 74-100 is
+// replayed against them, so a change to what they choose needs a new bot version, not a new hash.
+// Recorded 2026-11-12 on the tuned RIVAL_CONFIGS. Order: 10, 11, 12.
+const RIVALS_FROZEN: Record<string, readonly string[]> = {
+  'campaign 40': ['8085bb334df2a11e', '60d49a82d8cdee4d', 'c78bbf984f083a0e'],
+  'campaign 70': ['ca9e0c788c55660e', 'ae89520f8449ffa5', '764ae28ad559a4eb'],
+};
+
+describe('the rivals are frozen too (bots-v0.11)', () => {
+  for (const set of SETS.filter((x) => x.name !== 'classic')) {
+    it(`${set.name}: rivals 10-12 make the same choices`, () => {
+      const got = ([10, 11, 12] as const).map((l) => stateHash(choices(l, set.views.slice(0, 16))).slice(0, 16));
+      if (process.env.PRINT_FROZEN) console.log(`RIVALS ${set.name} ${JSON.stringify(got)}`);
+      expect(got).toEqual(RIVALS_FROZEN[set.name]);
+    }, 120_000);
+  }
+
+  it('the three rivals have three different ways of playing', () => {
+    expect(new Set([10, 11, 12].map((l) => RIVAL_CONFIGS[l as 10].style))).toEqual(new Set(['fortress', 'siege', 'patient']));
+    for (const l of [10, 11, 12] as const) expect(RIVAL_CONFIGS[l].fullSearch, String(l)).toBe(true);
+  });
 });

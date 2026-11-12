@@ -2,7 +2,7 @@
 //
 // Plays a rival (bot 10, 11 or 12) against a reference on campaign boards, seats swapped, and prints
 // one JSON line: wins, how the games ended, and the style signals each rival must show
-// (docs/RIVALS.md). The reference `9full` is level 9 searching authored boards as fully as the
+// (docs/CAMPAIGN-71-100.md, section G). The reference `9full` is level 9 searching authored boards as fully as the
 // classic board (the campaign's own level 9 is throttled there; a rival must match the full one).
 //
 // Boards rotate over the late campaign (levels 25-70), one deal per game, seats swapped per deal.

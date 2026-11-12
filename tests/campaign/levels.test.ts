@@ -148,11 +148,12 @@ describe('campaign levels: the definition is well formed', () => {
       // Chapter VIII (2026-11-12): rivers. The centre is stone, so the counts are odd as often as even.
       [71, 3], [72, 5], [73, 5], [74, 5], [75, 7],
       [76, 3], [77, 9], [78, 5], [79, 4], [80, 9],
-      // Chapter IX (2026-11-12): uneven ground. Light stone; the unfairness is in WHERE it sits.
-      [81, 7], [82, 3], [83, 4], [84, 0], [85, 4],
-      [86, 2], [87, 3], [88, 4], [89, 4], [90, 5],
+      // Chapter IX (2026-11-12): uneven ground. Light stone; the unfairness is in WHERE it sits: the
+      // bot-favoured boards close the player's exits two steps from home (measured, CAMPAIGN-71-100 C).
+      [81, 7], [82, 5], [83, 5], [84, 0], [85, 5],
+      [86, 2], [87, 5], [88, 6], [89, 6], [90, 7],
       // Chapter X (2026-11-12): callbacks with the late tools.
-      [91, 0], [92, 5], [93, 5], [94, 1], [95, 7],
+      [91, 0], [92, 5], [93, 5], [94, 4], [95, 7],
       [96, 7], [97, 7], [98, 5], [99, 9], [100, 9],
     ]);
   });

@@ -171,7 +171,7 @@ export const CHAPTER_8_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['0,-3', '-1,0', '1,0', '0,3'],
   ), 'Fords only at the far edges: the long way, both ways.'),
 
-  // Three fords, two on the bot's half: it crosses easily, you cross into its ground.
+  // Three fords, two of them on the bot's half. Measured even (bot 9 vs bot 9): the extra ford cuts both ways.
   //      # . . .
   //     . . . B .
   //    . $ . . . .
@@ -182,7 +182,7 @@ export const CHAPTER_8_LEVELS: readonly CampaignLevel[] = Object.freeze([
   final(8, 79, 'c8-79', 'Broken Bridge', 97079, 10, board(
     ['0,-3', '0,0', '0,1', '0,2'],
     ['-1,-1', '1,1', '0,3'],
-  ), 'Two of three fords sit on the bot\'s half: the first unfair crossing.', { uneven: 'bot' }),
+  ), 'Three fords, two on the bot\'s half: you cross into its ground, it crosses into yours.'),
 
   // The finale: both rivers, four gold fords, gold on each islet.
   //      # . . .
@@ -217,31 +217,31 @@ export const CHAPTER_9_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['2,0', '1,1', '2,1', '0,2', '1,2'],
   ), 'One flank stone, the other gold; fair, but both of you race the same side.'),
 
-  // Gold two steps from the bot's home; the player's half is open with one more lane.
+  // The player's two edge exits are stone, so it leaves home through the middle; gold waits near the bot.
   //      . $ . .
   //     . . . B .
   //    . . . . . $
   //   $ # . . . . .
-  //    . . . # . .
+  //    # . . # . .
   //     . A . # .
-  //      . . . .
+  //      . . # .
   final(9, 82, 'c9-82', 'Downhill', 97082, 9, board(
-    ['-2,0', '0,1', '0,2'],
+    ['-2,0', '-3,1', '0,1', '0,2', '-1,3'],
     ['1,-3', '3,-1', '-3,0'],
   ), 'The bot has gold near its door; you have the extra lane.', { uneven: 'bot' }),
 
-  // Strangler Fig (bot 11) arrives. Stone two steps from your home narrows your way out.
+  // Strangler Fig (bot 11) arrives. Stone two steps out closes five of the player's seven exits; the gold is the bot's.
   //      . . . .
   //     . . . B .
   //    . . $ . . .
-  //   . # # $ . $ .
-  //    . . . # . .
+  //   . # # . $ $ .
+  //    # . . # . .
   //     . A . # .
   //      . . . .
   final(9, 83, 'c9-83', 'Pinched', 97083, 11, board(
-    ['-2,0', '-1,0', '0,1', '0,2'],
-    ['0,-1', '0,0', '2,0'],
-  ), 'Your way out is pinched at two steps; its home is wide open (bot 11 debut).', { uneven: 'bot' }),
+    ['-2,0', '-1,0', '-3,1', '0,1', '0,2'],
+    ['0,-1', '1,0', '2,0'],
+  ), 'Your way out is pinched to two exits; its home is wide open (bot 11 debut).', { uneven: 'bot' }),
 
   // The breather: no stone, five gold, perfectly even.
   //      . . . .
@@ -256,18 +256,18 @@ export const CHAPTER_9_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['0,-1', '3,-1', '0,0', '-3,1', '0,1'],
   ), 'Breather: open, symmetric, gold-led.', { breather: true }),
 
-  // A stone shelf over the player's home, and the gold on the bot's side. Harsh by design.
+  // An arc of stone two steps from the player's home leaves two narrow exits; the gold is on the bot's side. Harsh by design.
   //      $ . . .
   //     . . . B .
-  //    . . . . . $
-  //   $ # # . . . .
-  //    . . . # # .
-  //     . A . . .
-  //      . . . .
+  //    . . $ . . $
+  //   . . # . $ $ .
+  //    # . . # . .
+  //     . A . # .
+  //      . . # .
   final(9, 85, 'c9-85', 'High Ground', 97085, 11, board(
-    ['-2,0', '-1,0', '0,1', '1,1'],
-    ['0,-3', '3,-1', '-3,0'],
-  ), 'A shelf over your home; the gold lies behind the bot.', { uneven: 'bot', harsh: true }),
+    ['-1,0', '-3,1', '0,1', '0,2', '-1,3'],
+    ['0,-3', '0,-1', '3,-1', '1,0', '2,0'],
+  ), 'An arc of stone around your home; the gold lies behind the bot.', { uneven: 'bot', harsh: true }),
 
   // Unfair the other way: gold near the player, a short wall in front of the bot. It will come for you.
   //      . . . .
@@ -282,56 +282,56 @@ export const CHAPTER_9_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['-3,0', '0,0', '0,1', '-1,3'],
   ), 'The gold is yours; the bot comes for your home.', { uneven: 'player' }),
 
-  // A three-stone shelf across the player's flank; the gold sits beyond it.
+  // A three-stone shelf across the player's flank, its edge exits closed; the gold sits beyond the shelf and near the bot.
   //      . . . .
   //     . . . B .
   //    . . . . . .
-  //   . # # # $ . .
-  //    . . . . $ .
-  //     . A . . $
+  //   . # # # $ $ .
+  //    # . . . $ .
+  //     . A . # $
   //      . . . .
   final(9, 87, 'c9-87', 'Long Shelf', 97087, 11, board(
-    ['-2,0', '-1,0', '0,0'],
-    ['1,0', '1,1', '1,2'],
+    ['-2,0', '-1,0', '0,0', '-3,1', '0,2'],
+    ['1,0', '2,0', '1,1', '1,2'],
   ), 'One long shelf on your flank, gold on its far side.', { uneven: 'bot' }),
 
-  // A four-stone ridge leaves a narrow pass on your side and a wide one on the bot's.
+  // A ridge across the board; the player's edge exits are stone, the wide pass is the bot's.
   //      . . . .
   //     . . . B .
   //    . $ . . . .
-  //   . # # # # . .
-  //    . . . . $ $
-  //     . A . . .
+  //   . # # # # $ .
+  //    # . . . $ $
+  //     . A . # .
   //      . . . .
   final(9, 88, 'c9-88', 'Ridgeline', 97088, 11, board(
-    ['-2,0', '-1,0', '0,0', '1,0'],
-    ['-1,-1', '1,1', '2,1'],
+    ['-2,0', '-1,0', '0,0', '1,0', '-3,1', '0,2'],
+    ['-1,-1', '2,0', '1,1', '2,1'],
   ), 'A ridge across the board; the wide pass is on the bot\'s side.', { uneven: 'bot' }),
 
-  // The one board with stone in the player's home zone (three stones, three open neighbours kept).
+  // Stone in the player's home zone (three stones, three open neighbours kept) AND two of its exits closed: a squeezed home alone favours its owner (it is compact), so the exits carry the unfairness.
   //      . . . .
   //     . . . B .
   //    . . $ . . .
-  //   . . . $ . $ .
-  //    # # . . . .
-  //     # A # . .
+  //   . . . $ $ $ .
+  //    # # . # . .
+  //     # A # # .
   //      . . . .
   final(9, 89, 'c9-89', 'One Door', 97089, 11, board(
-    ['-3,1', '-2,1', '-3,2', '-1,2'],
-    ['0,-1', '0,0', '2,0'],
+    ['-3,1', '-2,1', '0,1', '-3,2', '-1,2', '0,2'],
+    ['0,-1', '0,0', '1,0', '2,0'],
   ), 'Stone beside your home: one real door out. Survive the opening.', { uneven: 'bot', harsh: true, homeZoneStone: true }),
 
-  // The finale: the gold and the short route are the bot's.
+  // The finale: the player's exits pinched, the gold and the short route the bot's.
   //      # $ . .
   //     . . . B .
   //    . . $ . . $
-  //   . # . # . . .
-  //    . . . . # .
+  //   . # . # $ $ .
+  //    # . . # # .
   //     . A . . .
   //      . . # .
   final(9, 90, 'c9-90', 'Underdog', 97090, 11, board(
-    ['0,-3', '-2,0', '0,0', '1,1', '-1,3'],
-    ['1,-3', '0,-1', '3,-1'],
+    ['0,-3', '-2,0', '0,0', '-3,1', '0,1', '1,1', '-1,3'],
+    ['1,-3', '0,-1', '3,-1', '1,0', '2,0'],
   ), 'Chapter finale: everything favours the bot; win anyway.', { uneven: 'bot', harsh: true }),
 ]);
 
@@ -380,17 +380,17 @@ export const CHAPTER_10_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['0,-2', '3,-1', '-3,1', '0,2'],
   ), 'Breather: a gentle river with four fords.', { breather: true }),
 
-  // A callback to Gold Country: most of the gold lies on the bot's half.
+  // A callback to Gold Country: most of the gold lies near the bot, and the player's edge exits are stone.
   //      $ $ . .
   //     . . . B .
   //    . . $ . . $
-  //   . . . # $ . .
-  //    . . . $ . .
-  //     . A . . .
-  //      . . . .
+  //   . . . # $ $ .
+  //    # . . $ . .
+  //     . A . # .
+  //      . . # .
   final(10, 94, 'c10-94', 'Gold Country, Again', 97094, 12, board(
-    ['0,0'],
-    ['0,-3', '1,-3', '0,-1', '3,-1', '1,0', '0,1'],
+    ['0,0', '-3,1', '0,2', '-1,3'],
+    ['0,-3', '1,-3', '0,-1', '3,-1', '1,0', '2,0', '0,1'],
   ), 'Gold-led and uneven: the richer side is the bot\'s.', { uneven: 'bot' }),
 
   // A callback to Narrow Paths: a river broken into short walls, two-step crossings.
@@ -445,17 +445,17 @@ export const CHAPTER_10_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['1,-3', '3,-1', '-3,1', '-1,3'],
   ), 'A river crossed only at its two far ends, against the defender.'),
 
-  // Strangler Fig on its best ground: stone walls the bot's home, leaving it short lanes toward yours.
-  //      # # . .
-  //     # . . B .
-  //    . # . . . .
-  //   $ . . $ $ . #
-  //    . . . . # #
-  //     . A . # #
+  // Strangler Fig on its best ground: stone walls five of the player's seven exits, so the bot's lanes run straight at your home.
   //      . . . .
+  //     . . . B .
+  //    # . $ . . .
+  //   # . # . $ $ #
+  //    # . . # . #
+  //     . A . # .
+  //      . . # .
   final(10, 99, 'c10-99', 'Overgrown', 97099, 11, board(
-    ['0,-3', '1,-3', '-1,-2', '-1,-1', '3,0', '1,1', '2,1', '0,2', '1,2'],
-    ['-3,0', '0,0', '1,0'],
+    ['-2,-1', '-3,0', '-1,0', '3,0', '-3,1', '0,1', '2,1', '0,2', '-1,3'],
+    ['0,-1', '1,0', '2,0'],
   ), 'Short lanes run from the bot to your home.', { uneven: 'bot' }),
 
   // The campaign finale: both rivers, crossed only beside the stone centre; all four fords are gold.
