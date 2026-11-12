@@ -7,7 +7,7 @@
 // Territory's own `select`. The heavy geometry and WebGL load lazily, the first time the window opens.
 import type { Planet, PlanetInput, PlanetMode } from '../sphere/planet.js';
 import { PLANET } from '../../../src/strings.js';
-import { worldNeighbours } from '../../../server/src/world.js';
+import { isPlanetCell, worldNeighbours } from '../../../server/src/world.js';
 import { lockupBox } from '../player/planet-lockup.js';
 
 const CSS = `
@@ -74,27 +74,46 @@ const CSS = `
 .world-grid > .planet-fallback[hidden], .world-grid > .planet-canvas[hidden] { display: none; }
 `;
 
-type Claim = { cellId: string; ownerId: string; colour: string; claimedAt?: number };
+/**
+ * A claimed tile as the selection rule reads it. `strength` is the tile's strength where the world
+ * read carries one (the engine's own 1–9 value); the public world claim does not today, so an absent
+ * strength counts as 1 and the remaining tie-breaks stay deterministic.
+ */
+type Claim = { cellId: string; ownerId: string; colour?: string; claimedAt?: number; strength?: number };
 const axial = (id: string) => { const [q, r] = id.split(',').map(Number); return { q: q!, r: r! }; };
+const strengthOf = (claim: Claim | undefined): number =>
+  claim && typeof claim.strength === 'number' && Number.isFinite(claim.strength) ? claim.strength : 1;
+
+/** Roughly how far from the busiest area a player with no land should be invited to grow. */
+const OPEN_AWAY_MIN = 10;
+const OPEN_AWAY_MAX = 12;
+const OPEN_AWAY_IDEAL = 11;
 
 /**
- * The tile to open on (owner, 2026-11-04: "always smoothly takes you to your biggest territory"): the
- * middle of the player's LARGEST connected holding, by the planet's own adjacency. Ties go to the
- * holding with the oldest tile, so the answer never flips between visits. A player with no land
- * opens on the world's centre.
+ * The middle of the player's LARGEST connected holding, by the planet's own adjacency.
+ *
+ * The owner's tie-break (2026-11-12): equal SIZE goes to the cluster with the higher total strength;
+ * after that the holding with the oldest tile wins, so the answer can never flip between reads or
+ * between two orders of the same payload. Pure and order-independent: `focusCell` is the rule, this
+ * is only the "always a cell" wrapper for the Planet page.
  */
-export const homeTile = (claims: readonly Claim[], me: string | null): string => {
-  const mine = claims.filter((claim) => claim.ownerId === me);
-  if (!mine.length) return '0,0';
+const biggestClusterTile = (mine: readonly Claim[]): string => {
   const own = new Map(mine.map((claim) => [claim.cellId, claim]));
   const left = new Set(own.keys());
-  let best: string[] = [], bestOldest = Infinity;
+  let best: string[] = [], bestStrength = -Infinity, bestOldest = Infinity;
   for (const claim of mine) {
     if (!left.delete(claim.cellId)) continue;
     const group = [claim.cellId];
     for (let i = 0; i < group.length; i++) for (const id of worldNeighbours(group[i]!)) if (left.delete(id)) group.push(id);
-    const oldest = Math.min(...group.map((id) => (own.get(id) as { claimedAt?: number } | undefined)?.claimedAt ?? Infinity));
-    if (group.length > best.length || (group.length === best.length && oldest < bestOldest)) { best = group; bestOldest = oldest; }
+    const strength = group.reduce((sum, id) => sum + strengthOf(own.get(id)), 0);
+    const oldest = Math.min(...group.map((id) => own.get(id)?.claimedAt ?? Infinity));
+    if (group.length > best.length
+      || (group.length === best.length && strength > bestStrength)
+      || (group.length === best.length && strength === bestStrength && oldest < bestOldest)) {
+      best = group;
+      bestStrength = strength;
+      bestOldest = oldest;
+    }
   }
   const points = best.map(axial);
   const q = points.reduce((sum, p) => sum + p.q, 0) / points.length, r = points.reduce((sum, p) => sum + p.r, 0) / points.length;
@@ -104,6 +123,90 @@ export const homeTile = (claims: readonly Claim[], me: string | null): string =>
   best.forEach((id, i) => { const d = distance(points[i]!); if (d < near - 1e-9 || (Math.abs(d - near) <= 1e-9 && id < home)) { home = id; near = d; } });
   return home;
 };
+
+/**
+ * WHERE THE BUSIEST AREA IS: the claimed tile with the most claimed neighbours (its own tile
+ * included, so a cell inside a dense blob wins over a lone one). Other players count too — the
+ * player with no land should be invited near the world's life, beside nobody in particular.
+ */
+const busiestCell = (claims: readonly Claim[]): string => {
+  const owned = new Set(claims.map((claim) => claim.cellId));
+  const score = new Map<string, number>();
+  for (const claim of claims) {
+    score.set(claim.cellId, worldNeighbours(claim.cellId).filter((id) => owned.has(id)).length);
+  }
+  let best = claims[0]!.cellId, bestScore = -1;
+  // Ties are settled by id, so two orders of the same payload answer the same.
+  for (const claim of claims) {
+    const value = score.get(claim.cellId) ?? 0;
+    if (value > bestScore || (value === bestScore && claim.cellId < best)) { best = claim.cellId; bestScore = value; }
+  }
+  return best;
+};
+
+/**
+ * FREE GROUND FOR A PLAYER WITH NONE. The owner (2026-11-12): open roughly 10–12 tiles from the
+ * busiest area, on a free tile they could actually grow, so the grow invitation points somewhere
+ * sensible rather than at the world's arbitrary centre (which may be somebody's land).
+ *
+ * A breadth-first walk of the planet's own adjacency from the busiest cell: it visits every tile
+ * nearer than the search limit, so "distance" means what the player sees (tiles walked), not flat
+ * arithmetic that would cut across a pentagon. A free tile untaken by anyone is growable under the
+ * planet's rule (`isPlanetCell`); pentagons are never ground.
+ */
+const freeGroundCell = (claims: readonly Claim[]): string | null => {
+  const taken = new Set(claims.map((claim) => claim.cellId));
+  const start = busiestCell(claims);
+  const seen = new Set([start]);
+  let frontier = [start];
+  const free = new Map<number, string[]>();
+  const limit = OPEN_AWAY_MAX + 8;
+  for (let d = 1; d <= limit && frontier.length; d++) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const neighbour of worldNeighbours(id)) {
+        if (seen.has(neighbour)) continue;
+        seen.add(neighbour);
+        next.push(neighbour);
+        if (!taken.has(neighbour) && isPlanetCell(neighbour)) {
+          const list = free.get(d);
+          if (list) list.push(neighbour); else free.set(d, [neighbour]);
+        }
+      }
+    }
+    frontier = next;
+  }
+  // The window the owner named first 11, then its two neighbours; anything else only if that ring
+  // of land is all taken, ordered by how close it is to the ideal distance.
+  const rank = (d: number) => (d === OPEN_AWAY_IDEAL ? 0 : d >= OPEN_AWAY_MIN && d <= OPEN_AWAY_MAX ? 1 + Math.abs(d - OPEN_AWAY_IDEAL) : 10 + Math.abs(d - OPEN_AWAY_IDEAL));
+  let best: string | null = null, bestRank = Infinity;
+  for (const [d, ids] of free) {
+    for (const id of ids) {
+      const r = rank(d);
+      if (r < bestRank || (r === bestRank && best !== null && id < best)) { best = id; bestRank = r; }
+    }
+  }
+  return best;
+};
+
+/**
+ * THE WHOLE SELECTION RULE, pure (no DOM, no clock), so every case is a unit test: the player's
+ * biggest cluster (ties by total strength), free ground 10–12 from the busiest area when they own
+ * nothing, and null for an empty map (the caller then falls back to the centre).
+ */
+export const focusCell = (claims: readonly Claim[], me: string | null): string | null => {
+  const mine = me === null ? [] : claims.filter((claim) => claim.ownerId === me);
+  if (mine.length) return biggestClusterTile(mine);
+  if (!claims.length) return null;
+  return freeGroundCell(claims);
+};
+
+/**
+ * The tile the Planet page opens on: `focusCell`, with the world's centre as the only fallback (an
+ * empty map has nothing to frame). Owner, 2026-11-04: "always smoothly takes you to your biggest
+ * territory".
+ */
+export const homeTile = (claims: readonly Claim[], me: string | null): string => focusCell(claims, me) ?? '0,0';
 
 let current: Planet | null = null;
 /** The test hook (`__severgrow.planet()`): null while the flat map is in use. */

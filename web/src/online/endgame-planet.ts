@@ -27,7 +27,9 @@ import { INTERFACE_MOTION, interfaceMotionAllowed } from '../ui/interface-motion
 import { isPlanetCell, worldNeighbours } from '../../../server/src/world.js';
 import type { Planet, PlanetInput } from '../sphere/planet.js';
 import { PLANET_PANE, PLANET_TEACH, SEEDS_WORD, seedBalanceLabel, seedIcon } from './seed-icon.js';
-import { homeTile } from './world-planet.js';
+import { isIdentityStorageEvent, subscribeIdentityChanges } from './identity.js';
+import { STORAGE_PREFIX } from '../channel.js';
+import { focusCell } from './world-planet.js';
 import { ownerLine, ownerSpokenLine } from './world-selection.js';
 
 type Identity = { token: string; playerId: string; kind: string };
@@ -62,11 +64,16 @@ export type EndgamePlanet = {
 /**
  * WHAT THE BAR SAYS for the selected tile. Pure, so the whole matrix is a unit test instead of a
  * source-text guess. `armed` is the second press of the grow's two-press safety.
+ *
+ * `signin` is the GUEST's key (owner, 2026-11-12: "'SIGN IN TO GROW' in the bottom left of planet
+ * view, should be a button, that opens a window of login on top of the screen, after loging in
+ * player is still able to grow a tile on planet"). The Planet page offers the same key on the same
+ * situation; this pane now does too, and it opens the product's ONE login (`#menu-login`).
  */
 export type PaneBar = {
   line: string;
   spoken: string;
-  key: 'grow' | 'confirm' | 'retry' | null;
+  key: 'grow' | 'confirm' | 'retry' | 'signin' | null;
 };
 
 export type PaneTile =
@@ -79,7 +86,9 @@ export const barFor = (tile: PaneTile, armed: boolean): PaneBar => {
   if (tile.kind === 'none') return { line: RESULT.planetHint, spoken: RESULT.planetHint, key: null };
   if (tile.kind === 'pentagon') return { line: PLANET.pentagon, spoken: PLANET.pentagon, key: null };
   if (tile.kind === 'held') return { line: tile.line, spoken: tile.spoken, key: null };
-  if (!tile.account) return { line: ONLINE.worldSignInToGrow, spoken: ONLINE.worldSignInToGrow, key: null };
+  // A GUEST GETS A KEY, NOT AN INSTRUCTION (owner, 2026-11-12): the same words, with the Planet
+  // page's own sign-in key beside them, so the player can act on the sentence they just read.
+  if (!tile.account) return { line: ONLINE.worldSignInToGrow, spoken: ONLINE.worldSignInToGrow, key: 'signin' };
   if (tile.balance !== null && tile.balance < tile.cost) {
     const line = ONLINE.worldUnclaimedShort(tile.cost, SEEDS_WORD);
     return { line, spoken: line, key: null };
@@ -95,8 +104,11 @@ export const barFor = (tile: PaneTile, armed: boolean): PaneBar => {
 };
 
 /** The text on the bar's one key (the Planet page's own words). */
-export const growKeyLabel = (key: 'grow' | 'confirm' | 'retry'): string =>
-  key === 'confirm' ? ONLINE.worldGrowConfirm : key === 'retry' ? RESULT.planetRetry : ONLINE.worldGrowKey;
+export const growKeyLabel = (key: 'grow' | 'confirm' | 'retry' | 'signin'): string =>
+  key === 'confirm' ? ONLINE.worldGrowConfirm
+    : key === 'retry' ? RESULT.planetRetry
+      : key === 'signin' ? ONLINE.worldSignInKey
+        : ONLINE.worldGrowKey;
 
 /** A free tile this server would accept: anywhere the server says, else beside your own land. */
 export const canGrowAt = (
@@ -110,6 +122,13 @@ export const canGrowAt = (
   const mine = new Set(world.claims.filter((claim) => claim.ownerId === me).map((claim) => claim.cellId));
   return worldNeighbours(cellId).some((id) => mine.has(id));
 };
+
+/** The window's own tile size: your land as a PLACE, not a smudge (owner, 2026-11-12). The card's
+ *  pane is a tall band, and at the Territory page's 44 px the cluster covered a quarter of it and sat
+ *  in the middle of empty ground. 76 px reads as a place while leaving enough world around the edges
+ *  to say where on the planet you are; it is still above the 30 px tap threshold, so a tap on a tile
+ *  is a tap on that tile. */
+const PANE_TILE_PX = 76;
 
 const CSS = `
 /* THE WINDOW AND ITS ONE GUTTER (owner feedback, 2026-11-11: "one optical axis ... the wallet chip
@@ -216,9 +235,11 @@ const CSS = `
   letter-spacing: .12em; text-transform: uppercase; color: #e8ddc5d9;
 }
 /* NO FRAME (house rule, 2026-11-11): the grow key is a tonal plate on the window's dark foot.
-   Its press is a step up in tone and its focus is the shared outer ring — never a contour. */
+   Its press is a step up in tone and its focus is the shared outer ring — never a contour.
+   44px tall (house rule: a real touch target). The sign-in key is the same plate, because it is
+   the same one key the foot offers (owner, 2026-11-12: a guest must be able to PRESS it). */
 .go-world-grow {
-  flex: none; min-height: 34px; padding: 0 11px; border-radius: 9px;
+  flex: none; min-height: 44px; padding: 0 13px; border-radius: 10px;
   border: 0;
   background: color-mix(in srgb, var(--fu-cream) 14%, transparent);
   color: var(--fu-cream); font-family: var(--font-ui); font-size: .6rem;
@@ -460,7 +481,9 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
       claims,
       me,
       selected,
-      home: homeTile(claims, me),
+      // NO WORLD, NO HOME: the opening flight waits for the map, so the window can never start on
+      // the world's centre and then jump (owner report, 2026-11-12: "not ALWAYS showing my cluster").
+      home: world ? focusCell(claims, me) : null,
       growAnywhere: world?.growAnywhere === true,
     } as PlanetInput);
   };
@@ -488,9 +511,12 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
         mode: 'world',
         panel: box,
         contained: box,
-        // The card's window is a window onto the WORLD (owner feedback, 2026-11-11): the globe fills
-        // the frame, and one tap that lands on a tile too small to hit flies in and chooses it.
-        globe: true,
+        // YOUR LAND, TIGHT (owner, 2026-11-12: "it's not ALWAYS showing my cluster" and the cluster
+        // should "fill a good part of the pane"). The window opens on the player's biggest cluster at
+        // its own close tile size; a tap that lands on a tile too small to hit still flies in AND
+        // chooses it, so one tap is one gesture.
+        pickTiny: true,
+        openTilePx: PANE_TILE_PX,
       });
       if (frozen) planet.freeze(true);
       pushPlanet();
@@ -529,7 +555,7 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
       world = map.world;
       if (selected && !selectedKnown()) selected = null;
       const shown = world;
-      if (shown) planet?.home(homeTile(shown.claims, me));
+      if (shown) planet?.home(focusCell(shown.claims, me), PANE_TILE_PX);
     }
     if (nextWallet) walletNow = nextWallet;
     if (!world) {
@@ -585,11 +611,26 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
     }
   };
 
+  /**
+   * THE ONE LOGIN (owner, 2026-11-12): the same entry the Planet page uses — the product's own
+   * account key, which opens the email sign-in sheet OVER whatever is on screen (the finish card
+   * stays exactly where it is; the sheet is a sibling of it, above it). No second login UI is built
+   * here, and the pane never guesses how signing in works.
+   */
+  const signIn = (): void => {
+    // The product's own precedent for "is there a login entry?" is the key's existence
+    // (`canSignIn`, web/src/main.ts) — so this asks exactly that, and never invents a second
+    // answer. The markup ships the key on every build; a build without accounts leaves it hidden,
+    // and a click on a hidden key is a no-op (there is nothing to sign in to).
+    (document.getElementById('menu-login') as HTMLButtonElement | null)?.click();
+  };
+
   key.addEventListener('click', () => {
     if (busy || !selected || !world) return;
     const state = barFor(tileOf(selected), armed === selected);
     if (state.key === null) return;
     if (state.key === 'retry') { read(); return; }
+    if (state.key === 'signin') { signIn(); return; }
     if (state.key === 'grow') {
       // THE PLANET PAGE'S OWN TWO-PRESS SAFETY: the first tap asks, the second grows.
       armed = selected;
@@ -598,6 +639,28 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
     }
     void grow(selected);
   });
+
+  /**
+   * SIGNING IN MUST LAND IN THIS PANE (owner, 2026-11-12: "after loging in player is still able to
+   * grow a tile on planet please"). The accounts module owns the login; this only listens to the
+   * SAME identity-change signal the Planet page and the live layer use — the module's
+   * `futasaku:identity` event, its in-tab listener, and another tab's storage write — then re-reads
+   * the world and the wallet. Never polled: a card is a moment, not a dashboard.
+   */
+  const identityChanged = (): void => {
+    if (disposed || host.hidden) return;
+    read();
+  };
+  const offIdentity = subscribeIdentityChanges(identityChanged);
+  window.addEventListener('futasaku:identity', identityChanged);
+  const onStorage = (event: StorageEvent): void => { if (isIdentityStorageEvent(event.key, STORAGE_PREFIX)) identityChanged(); };
+  window.addEventListener('storage', onStorage);
+  /** The card is gone: not one listener outlives it (a later sign-in must never wake a dead pane). */
+  const releaseListeners = (): void => {
+    offIdentity();
+    window.removeEventListener('futasaku:identity', identityChanged);
+    window.removeEventListener('storage', onStorage);
+  };
 
   return {
     open() {
@@ -657,6 +720,7 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
         // The band is a WAAPI fade on opacity only; the node is thrown away at the end of it.
         host.hidden = true;
         disposed = true;
+        releaseListeners();
         planet?.dispose();
         planet = null;
       });
@@ -665,6 +729,7 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
       if (disposed) return;
       disposed = true;
       readAt = 0;
+      releaseListeners();
       // THE WINDOW'S EXIT: the canvas stops its own loop FIRST (the rAF is cancelled inside
       // `dispose`, before any frame of the fade), so nothing is drawn offscreen while it leaves.
       planet?.dispose();

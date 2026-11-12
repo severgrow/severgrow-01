@@ -171,6 +171,24 @@ export class SpaceRenderer {
     this.pass.draw(w, h, [w / 2, h / 2], NO_PLANET, drift, this.pixel, which === 'far' ? [0, 1, 0] : [0, 0, 1]);
     return this.canvas;
   }
+  /**
+   * THE WHOLE SKY at `drift`: deep space, both parallax star layers and the still grain — the
+   * shader's own three layers, with no planet. The share card uses this so its sky IS the game's
+   * sky (one shader, one set of values), never a second star field invented somewhere else.
+   * `pixel` defaults to the device's (capped at 2); pass 1 for a 1:1 image with no resampling.
+   */
+  sky(width: number, height: number, drift: readonly [number, number], pixel = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 2)) {
+    const gl = this.gl;
+    this.pixel = pixel;
+    const w = Math.max(1, Math.round(width * this.pixel)), h = Math.max(1, Math.round(height * this.pixel));
+    if (this.canvas.width !== w || this.canvas.height !== h) { this.canvas.width = w; this.canvas.height = h; }
+    this.frames++;
+    gl.viewport(0, 0, w, h);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    this.pass.draw(w, h, [w / 2, h / 2], NO_PLANET, drift, this.pixel, [1, 1, 1]);
+    return this.canvas;
+  }
   get lost() { return this.gl.isContextLost(); }
   dispose() {
     this.gl.deleteBuffer(this.triangle);

@@ -11076,6 +11076,9 @@ function shareFinishResult(): void {
       radius: os.state.config.boardRadius,
       cells: os.state.config.board?.cells,
       me: HUMAN,
+      // The card's two names (owner, 2026-11-12): the opponent's real display name, and the
+      // product's own word for this side.
+      names: [ONLINE.scoreYou, info.opponentName ?? ONLINE.opponentFallback],
     }).then(onShareSaved);
     return;
   }
@@ -11092,6 +11095,8 @@ function shareFinishResult(): void {
     radius: st.config.boardRadius,
     cells: st.config.board?.cells,
     me: HUMAN,
+    // Offline: the two sides in the product's own words (no invented player name).
+    names: [ONLINE.scoreYou, OPP.label],
   }).then(onShareSaved);
 }
 bind('go-share', shareFinishResult);

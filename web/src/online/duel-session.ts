@@ -48,6 +48,8 @@ export type FinishInfo = {
   reason: string;
   /** The small context line under the title — never a repeat of the reason. */
   sub: string;
+  /** The opponent's display name, for the share card's two names (null when the match has none). */
+  opponentName: string | null;
   scores: [number, number];
   breakdown: string;
   /** Already mapped to display seats (0 = me), ready for the shared highlight list. */
@@ -507,7 +509,7 @@ export class OnlineSession {
     const sub = snap.opponentName ? ONLINE.finishSubOpponent(snap.opponentName) : ONLINE.finishSubFallback;
     const breakdown = RESULT.breakdown(breakdownPart(this.state, 0), breakdownPart(this.state, 1));
     const r = snap.result;
-    if (!r) return { title: ONLINE.finishedFallback, reason: '', sub, scores, breakdown, highlights: [], moves: null, harvest: null };
+    if (!r) return { title: ONLINE.finishedFallback, reason: '', sub, opponentName: snap.opponentName, scores, breakdown, highlights: [], moves: null, harvest: null };
     const history = this.historyEvents;
     const highlights = gameHighlights(history, snap.seat).map((h) => ({
       ...h,
@@ -519,6 +521,7 @@ export class OnlineSession {
       title: resultTitle(r, snap.seat),
       reason: resultReason(r, snap.seat),
       sub,
+      opponentName: snap.opponentName,
       scores,
       breakdown,
       highlights,

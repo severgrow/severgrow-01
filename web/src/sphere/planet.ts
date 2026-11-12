@@ -103,13 +103,13 @@ export type PlanetHooks = {
    */
   contained?: () => DOMRect | null;
   /**
-   * FRAME THE WHOLE PLANET, not your land (owner feedback, 2026-11-11: "the globe should fill that
-   * frame rather than sit small in the middle of it"). The finish card's window is a window onto the
-   * world, so it opens on the globe — the same pose as the menu's backdrop — and a tap that lands on
-   * a tile too small to hit flies in to it AND chooses it (`pickTiny`), so one tap is still one
-   * gesture. Every other caller keeps its land-first framing.
+   * A TAP ON A TILE TOO SMALL TO HIT FLIES IN **AND** CHOOSES IT (owner feedback, 2026-11-11: the
+   * finish card's window is a window onto the world, and one tap is one gesture). It never changes
+   * where the window OPENS: that is always the player's own land (`home`), however the world read
+   * was timed (owner report, 2026-11-12: "right now its not ALWAYS showing my cluster innit" — the
+   * old `globe` hook also re-framed every arriving world read onto the whole planet).
    */
-  globe?: boolean;
+  pickTiny?: boolean;
 };
 /**
  * WHERE THE MENU'S PLANET WAS (owner, 2026-11-04: "the animation of rotating the sphere goes back to
@@ -416,10 +416,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       return;
     }
     // THE PLANET PAGE'S OWN FRAMING (owner feedback, 2026-11-11: "same setup and layout as the
-    // planet page" and "the globe should fill that frame rather than sit small in the middle of it").
-    // It opens on the player's largest holding at the card's own tile size, so the window is full of
-    // world and colour — the planet's silhouette is what the SPACE pass shows around it, and a card
-    // that opens on the whole globe instead would read as a dark ball with a small lit patch.
+    // planet page"). It opens on the player's largest holding at the window's own tile size — the
+    // finish card asks for a tight one, so the window is full of your land rather than a small patch
+    // in the middle of the globe. `home` is never allowed to be a whole-planet pose (owner report,
+    // 2026-11-12); the opening flight and every later world read land on the same cell.
     const target = northUpDrag(homeQuat(sphere, map, input?.home ?? '0,0'),north,0,0,1);
     const open = clampZoom(zoomFor(openTile(hooks)));
     if (!motion()) { q = target; zoom = targetZoom = open; frameNow = frameTarget(); cropNow = cropTarget(); light = 1; posed = true; ask(); return; }
@@ -538,7 +538,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     // the bar is already answering by the time the camera lands.
     if (tilePx() < TAP_TILE_PX) {
       flyToCell(index, clampZoom(zoomFor(openTile(hooks))));
-      if (hooks.globe) hooks.onTile(tileForCell(map, index));
+      if (hooks.pickTiny) hooks.onTile(tileForCell(map, index));
       return;
     }
     // EVERY hexagon is a tile you can tap (owner, 2026-11-04: "ALL can be taped"); only the twelve
@@ -605,7 +605,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
         renderer?.setSelection(selected, kinOf(selected));
       }
       if (newSelection && index !== null && motion()) pulseUntil = performance.now() + 420;
-      if (!introduced && renderer) intro();
+      if (!introduced && renderer && next.home) intro();
       if (newGround || newSelection) ask();
     },
     /**
@@ -655,13 +655,18 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       ring.addEventListener('animationend', (e) => { if (e.target === ring) done(); });
       window.setTimeout(done, 2000);
     },
-    home(id: string | null) {
+    /**
+     * Frame flat tile `id` (e.g. the player's own land). `tilePx` asks for an EXACT tile size: the
+     * finish card's window reframes on the arriving world read, and it must land on your land at its
+     * own tight size whether it read the map before or after the surface mounted (owner report,
+     * 2026-11-12: the pane sometimes showed the whole globe instead of the cluster). Without it the
+     * zoom only ever grows, so a player who zoomed in is never yanked back out.
+     */
+    home(id: string | null, tilePx?: number) {
       const index = id ? map.cellOf.get(id) : undefined;
       if (index === undefined || !renderer) return;
-      // A GLOBE WINDOW re-frames on your land at the globe's own size (never the 44px-close framing
-      // the Territory page uses), so a later world read cannot zoom the card's planet in.
-      if (hooks.globe) { flyTo(menuPose(), clampZoom(zoomFor(openTile(hooks)))); return; }
-      flyTo(homeQuat(sphere, map, id!), Math.max(zoom, clampZoom(zoomFor(openTile(hooks)))));
+      const exact = tilePx !== undefined ? clampZoom(zoomFor(tilePx)) : Math.max(zoom, clampZoom(zoomFor(openTile(hooks))));
+      flyTo(homeQuat(sphere, map, id!), exact);
     },
     dispose() {
       if (disposed) return;
