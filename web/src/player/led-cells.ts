@@ -130,6 +130,23 @@ export const ledMarqueeSpan = (message: string, windowWidth: number) =>
 
 /** Readable static shorthand for the physical window when motion is reduced. The full copy stays in the live region. */
 export function ledStaticMessage(message: string) {
+  const shorthand = ledShorthand(message);
+  if (shorthand !== null) return shorthand;
+  // No designed shorthand and no marquee (Reduce Motion): the first word, cut to the glass.
+  return message.split(' ')[0]!.slice(0,5);
+}
+
+/**
+ * A compact readout with motion ON (owner, 2026-11-12: "whenever display is showing a word that doesn't
+ * fit in the display - it always scrolls"): the designed shorthand when there is one, otherwise the
+ * WHOLE message, which the marquee scrolls when it is wider than the glass. A word is never cut.
+ */
+export function ledCompactMessage(message: string): string {
+  return ledShorthand(message) ?? message;
+}
+
+/** The designed short forms (WIN, FINAL, 30:12, B+4 …), or null when a message has none. */
+function ledShorthand(message: string): string | null {
   if (/^\d+:\d+$/.test(message)) return message;
   if (message === 'YOU WIN') return 'WIN';
   if (message === 'OPP WINS') return 'LOSS';
@@ -165,7 +182,7 @@ export function ledStaticMessage(message: string) {
   const cut = /^CUT-(\d+)$/.exec(message);
   if (cut) return cut[1]!.length < 2 ? `CUT-${cut[1]}` : `C-${cut[1]}`;
   if (message.length <= 5) return message;
-  return message.split(' ')[0]!.slice(0,5);
+  return null;
 }
 
 /**

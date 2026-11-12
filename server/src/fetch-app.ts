@@ -21,6 +21,8 @@ import { ACCOUNT_GUIDE_FEATURE } from './account-guide.js';
  */
 export const SERVER_FEATURES: readonly string[] = Object.freeze([
   'campaign-random-deals',
+  // A proof check in slices with a signed resume token (seeds/verify.ts stepOfflineMatch, 2026-11-12).
+  'sliced-proofs',
   ACCOUNT_CAMPAIGN_PROGRESS_FEATURE,
   ACCOUNT_GUIDE_FEATURE,
   ...Object.keys(BOT_VERSIONS),

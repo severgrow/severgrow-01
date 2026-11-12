@@ -1,7 +1,7 @@
 import { ONLINE } from '../../../src/strings.js';
 /** Futasaku 0.4 cockpit presentation. Game-owned buttons remain the action source. */
 import './led-art.js'; // registers the sign's pictures (explosion, snake, 点)
-import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeSpan, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledMotifOnce, ledStaticMessage, ledToken } from './led-cells.js';
+import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeSpan, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledMotifOnce, ledStaticMessage, ledCompactMessage, ledToken } from './led-cells.js';
 import type { LedTone } from './led-cells.js';
 import { publishDisplayLight, LIGHT_CAPS } from './light.js';
 import { BLITZ_CLOCK_EVENT } from '../logic/blitz-clock-event.js';
@@ -886,7 +886,9 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
       const reduced = reduceNow();
       // A recognised caption/banner gets its short token even with motion on; other copy keeps its scroll.
       const token = ledToken(value);
-      const shown = token ?? (reduced || frame.compact ? ledStaticMessage(value) : value);
+      // A word that does not fit SCROLLS (owner, 2026-11-12): with motion on, a compact readout keeps its
+      // designed shorthand or shows the whole message, and the marquee below runs on width alone.
+      const shown = token ?? (reduced ? ledStaticMessage(value) : frame.compact ? ledCompactMessage(value) : value);
       const scrolling = animated && !frame.motif && mode !== 'score' && ledMessageWidth(shown) > windowEl.clientWidth - 2;
       if (frame.motif) {
         const frames = ledMotifFrames(frame.motif);

@@ -129,6 +129,25 @@ export const createWorldEconomyRouter = (deps: {
       const body = await bodyOf(req);
       if (!Array.isArray(body.actions) || typeof body.botVersion !== 'string') throw new ApiError('INVALID_REQUEST', 'A match replay is required.');
       const actions = body.actions as Action[];
+      // SLICED CHECKS (2026-11-12): a page that says `resumable` is checked in slices and gets 202 with
+      // a `resume` token until the proof is done; it sends the same proof back with that token. A page
+      // that does not say so is checked whole, exactly as before.
+      const resumable = body.resumable === true;
+      const token = typeof body.resume === 'string' ? body.resume : null;
+      if (resumable) {
+        let step;
+        if (path === '/v1/seeds/campaign') {
+          if (typeof body.levelId !== 'string') throw new ApiError('INVALID_REQUEST', 'A Campaign level is required.');
+          if (body.dealSeed !== undefined && !isDealSeed(body.dealSeed)) throw new ApiError('INVALID_REQUEST', 'That deal is not valid.');
+          step = await economy.campaignStep(player, body.levelId, actions, body.botVersion,
+            body.dealSeed === undefined ? undefined : body.dealSeed, token);
+        } else {
+          if (typeof body.ticketId !== 'string') throw new ApiError('INVALID_REQUEST', 'A Training ticket is required.');
+          step = await economy.trainingStep(player, body.ticketId, actions, body.botVersion, token);
+        }
+        if (step.kind === 'resume') return { status: 202, body: { ok: true, resume: step.resume } };
+        return ok(200, { reward: step.reward });
+      }
       if (path === '/v1/seeds/campaign') {
         if (typeof body.levelId !== 'string') throw new ApiError('INVALID_REQUEST', 'A Campaign level is required.');
         // A random deal's seed (owner, 2026-11-01). Optional: a fixed-deal proof simply omits it.

@@ -21,8 +21,15 @@ describe('the finish card shows the planet only when the player can grow there (
     expect(finishWindowFor({ won: false, teach: true, balance: 500, hasBoard: true })).toBe('board');
   });
 
-  it('with no final board to show, the card keeps the planet as before', () => {
-    expect(finishWindowFor({ won: false, balance: 0, hasBoard: false })).toBe('planet');
+  it('a loss or a draw NEVER shows the planet, even with no final board figure (owner, 2026-11-12)', () => {
+    expect(finishWindowFor({ won: false, balance: 0, hasBoard: false })).toBe('board');
+    expect(finishWindowFor({ won: false, balance: 5000, hasBoard: false })).toBe('board');
+    expect(finishWindowFor({ won: false, balance: 5000, hasBoard: true, teach: true })).toBe('board');
+  });
+
+  it('a win with no final board figure keeps the planet only with a tile\'s price', () => {
+    expect(finishWindowFor({ won: true, balance: 100, hasBoard: false })).toBe('planet');
+    expect(finishWindowFor({ won: true, balance: 99, hasBoard: false })).toBe('board');
   });
 
   it('the price is the economy\'s tile cost', () => {

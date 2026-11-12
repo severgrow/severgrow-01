@@ -19,29 +19,52 @@ export type VerifiedOffline = {
 };
 const MAX_ACTIONS = 1600;
 
+/** How a sliced check is budgeted: a clock (ms) and how much of it one slice may spend. */
+export type VerifyBudget = { clock: () => number; budget: number };
+
+export type VerifyStep =
+  | { kind: 'done'; verified: VerifiedOffline | null }
+  /** `at` bot moves are proven; the next slice starts there. */
+  | { kind: 'paused'; at: number };
+
 /**
  * Replays human actions against the *actual deterministic bot*, never a browser result flag.
  * No client-supplied opening state, board, hand, difficulty or outcome is accepted.
+ *
+ * SLICED (2026-11-12): `from` bot moves were already proven by an earlier slice (a signed resume
+ * token, seeds/resume-token.ts), so they are applied without being recomputed; then bot moves are
+ * recomputed and compared until the budget is spent, and the step PAUSES at a bot-move boundary.
+ * With no budget it runs to the end, exactly as it always did.
  */
-export const verifyOfflineMatch = (
+export const stepOfflineMatch = (
   opening: State,
   botLevel: number,
   proof: OfflineProof,
-): VerifiedOffline | null => {
-  if (!Array.isArray(proof.actions) || proof.actions.length < 3 || proof.actions.length > MAX_ACTIONS) return null;
+  from = 0,
+  budget: VerifyBudget | null = null,
+): VerifyStep => {
+  const none: VerifyStep = { kind: 'done', verified: null };
+  if (!Array.isArray(proof.actions) || proof.actions.length < 3 || proof.actions.length > MAX_ACTIONS) return none;
   const bot = botFor(proof.botVersion);
   // 1-9 or a rival (10-12). Whether THIS version has that bot is the version's call: bots-v0.10
   // throws on a rival, which lands in the catch below as "not verified".
-  if (!bot || !isBotLevel(botLevel)) return null;
+  if (!bot || !isBotLevel(botLevel)) return none;
+  const deadline = budget ? budget.clock() + budget.budget : Infinity;
   let state = opening;
   const human = { throwDraws: 0, blooms: 0, grows: 0 };
+  let botMoves = 0;
   try {
-    for (const action of proof.actions) {
-      if (state.phase === 'GAME_OVER') return null;
+    for (let i = 0; i < proof.actions.length; i++) {
+      const action = proof.actions[i]!;
+      if (state.phase === 'GAME_OVER') return none;
       if (state.actor === 1) {
-        const expected = bot(viewFor(state, 1), botLevel,
-          botSeed(state.seed, botLevel, state.turnNumber, state.history?.length ?? 0));
-        if (JSON.stringify(action) !== JSON.stringify(expected)) return null;
+        if (botMoves >= from) {
+          if (budget && botMoves > from && budget.clock() > deadline) return { kind: 'paused', at: botMoves };
+          const expected = bot(viewFor(state, 1), botLevel,
+            botSeed(state.seed, botLevel, state.turnNumber, state.history?.length ?? 0));
+          if (JSON.stringify(action) !== JSON.stringify(expected)) return none;
+        }
+        botMoves += 1;
       } else {
         if (action.t === 'Draw' && action.from === 'discard') human.throwDraws += 1;
         else if (action.t === 'Bloom') human.blooms += 1;
@@ -50,17 +73,88 @@ export const verifyOfflineMatch = (
       state = apply(state, action);
     }
   } catch {
-    return null;
+    return none;
   }
-  if (state.phase !== 'GAME_OVER' || !state.result) return null;
+  // A token can only name bot moves this proof has: one that claims more is not a proof.
+  if (from > botMoves) return none;
+  if (state.phase !== 'GAME_OVER' || !state.result) return none;
   return {
-    winner: state.result.winner,
-    actionCount: proof.actions.length,
-    turns: state.turnNumber,
-    human,
-    result: state.result,
+    kind: 'done',
+    verified: {
+      winner: state.result.winner,
+      actionCount: proof.actions.length,
+      turns: state.turnNumber,
+      human,
+      result: state.result,
+    },
   };
 };
+
+export const verifyOfflineMatch = (opening: State, botLevel: number, proof: OfflineProof): VerifiedOffline | null => {
+  const step = stepOfflineMatch(opening, botLevel, proof);
+  return step.kind === 'done' ? step.verified : null;
+};
+
+/**
+ * Every opening a campaign proof may have been played on, in the order they are tried: today's
+ * (or, for a random deal, today's board dealt with that seed), the alternate line's, then each one
+ * the level shipped with before a fix. Null for an unknown level or an invalid deal.
+ */
+const campaignCandidates = (levelId: string, dealSeed?: number): { botLevel: number; openings: State[] } | null => {
+  const level = campaignLevelById(levelId);
+  if (!level) return null;
+  if (dealSeed !== undefined) {
+    if (!dealsRandomly(level) || !isDealSeed(dealSeed)) return null;
+    return {
+      botLevel: level.botLevel,
+      openings: [campaignDeal(level, dealSeed), ...(RETIRED_OPENINGS[level.id] ?? []).map((retired) => newMatch(dealSeed, retired.config))],
+    };
+  }
+  const alternate = ALTERNATE_OPENINGS[level.id];
+  return {
+    botLevel: level.botLevel,
+    openings: [
+      campaignOpening(level),
+      ...(alternate ? [newMatch(level.seed, { ...level.config, ...alternate })] : []),
+      ...(RETIRED_OPENINGS[level.id] ?? []).map((retired) => newMatch(retired.seed, retired.config)),
+    ],
+  };
+};
+
+export type ProofStep =
+  | { kind: 'done'; verified: VerifiedOffline | null }
+  | { kind: 'paused'; opening: number; at: number };
+
+/** Steps through `openings` from a resume point: the first that verifies wins; a pause names its opening. */
+const stepOpenings = (
+  openings: readonly State[], botLevel: number, proof: OfflineProof,
+  resume: { opening: number; at: number } | null, budget: VerifyBudget | null,
+): ProofStep => {
+  const start = resume?.opening ?? 0;
+  if (!Number.isSafeInteger(start) || start < 0 || start >= Math.max(1, openings.length)) return { kind: 'done', verified: null };
+  for (let i = start; i < openings.length; i++) {
+    const step = stepOfflineMatch(openings[i]!, botLevel, proof, i === start ? resume?.at ?? 0 : 0, budget);
+    if (step.kind === 'paused') return { kind: 'paused', opening: i, at: step.at };
+    if (step.verified) return step;
+  }
+  return { kind: 'done', verified: null };
+};
+
+/** A campaign proof, one slice at a time (see `stepOfflineMatch`). */
+export const stepCampaignProof = (
+  levelId: string, actions: readonly Action[], botVersion: string, dealSeed: number | undefined,
+  resume: { opening: number; at: number } | null, budget: VerifyBudget | null,
+): ProofStep => {
+  const candidates = campaignCandidates(levelId, dealSeed);
+  if (!candidates) return { kind: 'done', verified: null };
+  return stepOpenings(candidates.openings, candidates.botLevel, { actions, botVersion }, resume, budget);
+};
+
+/** A Training proof, one slice at a time. */
+export const stepTrainingProof = (
+  seed: number, botLevel: number, actions: readonly Action[], botVersion: string,
+  resume: { opening: number; at: number } | null, budget: VerifyBudget | null,
+): ProofStep => stepOpenings([newMatch(seed)], botLevel, { actions, botVersion }, resume, budget);
 
 export const verifyCampaignProof = (
   levelId: string,

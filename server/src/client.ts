@@ -619,14 +619,22 @@ export class DuelClient {
     source: { levelId: string; dealSeed?: number } | { ticketId: string },
     actions: readonly Action[],
     botVersion: string,
-    options: { signal?: AbortSignal } = {},
-  ): Promise<RewardResult> {
+    options: { signal?: AbortSignal; resumable?: boolean; resume?: string } = {},
+  ): Promise<RewardResult | { resume: string }> {
     const campaign = 'levelId' in source;
-    const response = await this.request<{ reward: RewardResult }>(
+    // SLICED CHECKS (2026-11-12): `resumable` asks the server to check in slices; until it is done it
+    // answers 202 with a `resume` token, which the caller sends back with the same proof.
+    const body = {
+      ...source, actions, botVersion,
+      ...(options.resumable ? { resumable: true } : {}),
+      ...(options.resume ? { resume: options.resume } : {}),
+    };
+    const response = await this.request<{ reward?: RewardResult; resume?: string }>(
       'POST', campaign ? '/v1/seeds/campaign' : '/v1/seeds/training',
-      { token, body: { ...source, actions, botVersion }, ...(options.signal ? { signal: options.signal } : {}) },
+      { token, body, ...(options.signal ? { signal: options.signal } : {}) },
     );
-    return response.reward;
+    if (typeof response.resume === 'string') return { resume: response.resume };
+    return response.reward as RewardResult;
   }
 
   // ---- transport ----

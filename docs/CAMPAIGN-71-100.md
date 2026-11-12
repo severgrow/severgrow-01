@@ -261,3 +261,14 @@ now use level 9's authored-board caps and Night Bloom level 9's number of moves 
 
 All three now sit at level 9's strength with their own style; Ironwood's small edge did not survive
 the cheaper search. bots-v0.12's rivals are frozen (`RIVAL_CONFIGS_V012`) so its proofs still pay.
+
+### G.2 Sliced proof checks (2026-11-12, owner report: no Seeds for levels 80 and 81)
+
+The Edge runtime stops a request after about 2 s of CPU (HTTP 546). A proof is checked by replaying
+every bot move, so a long game, and above all a bots-v0.12 rival game (3.4-6.3 s), could not finish
+in one request: the proof stayed queued and never paid. Now the page sends proofs `resumable`; the
+server checks bot moves for ~1.2 s, then answers 202 with a signed resume token (player, exact proof,
+opening, bot moves proven, 15-minute expiry; `server/src/seeds/resume-token.ts`), and the page sends
+the same proof back with it until the answer is the reward (at most 12 rounds, each with its own 5 s
+deadline). A page that does not ask is checked whole, exactly as before. Proofs already queued on a
+phone (including old v0.12 rival wins) pay on the next pass of the new page.

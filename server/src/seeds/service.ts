@@ -18,7 +18,19 @@ import type {
   WorldChallengesPayload,
   WorldEconomyStore,
 } from './types.js';
-import { verifyCampaignProof, verifyLessonProof, verifyTrainingProof } from './verify.js';
+import { stepCampaignProof, stepTrainingProof, verifyCampaignProof, verifyLessonProof, verifyTrainingProof } from './verify.js';
+import type { ProofStep, VerifiedOffline } from './verify.js';
+import { proofDigest, readResume, signResume } from './resume-token.js';
+
+/**
+ * SLICED PROOF CHECKS (2026-11-12). The Edge runtime stops a request after ~2 s of CPU, and a long or
+ * rival game can take longer to replay. A page that asks for it is checked in slices of `sliceMs`
+ * (default 1200 ms of the request's clock) and gets a signed resume token between them.
+ */
+export type ResumeOptions = { resumeSecret?: string | null; sliceMs?: number; clock?: () => number };
+export const PROOF_SLICE_MS = 1200;
+/** Rounds per proof are rate-limited apart from the per-proof budget (a slice is not a new proof). */
+const RESUME_ROUNDS_PER_HOUR = 900;
 import { achievementById, achievementFacts, achievementSourceKey, achievementViews } from './achievements.js';
 import type { AchievementHistory, AchievementView, ChallengeView, DuelView } from './achievements.js';
 import { FINAL_LESSON } from '../../../web/src/lessons/final.js';
@@ -44,7 +56,44 @@ export class WorldEconomyService {
     readonly store: WorldEconomyStore,
     private readonly matches: Storage,
     private readonly now: () => number = () => Date.now(),
+    private readonly resume: ResumeOptions = {},
   ) {}
+
+  /** True when this server can hand out resume tokens (it has a secret to sign them). */
+  get slicedProofs(): boolean {
+    return typeof this.resume.resumeSecret === 'string' && this.resume.resumeSecret.length >= 16;
+  }
+
+  /**
+   * One slice of a proof check. Returns the verified game when done, or a resume token. A request with
+   * a token must be the same player and the same proof; it is rate-limited as a round, not a proof.
+   */
+  private async proofSlice(
+    player: PlayerRecord, source: unknown, actions: readonly Action[], botVersion: string, token: string | null,
+    step: (resume: { opening: number; at: number } | null, budget: { clock: () => number; budget: number } | null) => ProofStep,
+  ): Promise<{ kind: 'done'; verified: VerifiedOffline | null } | { kind: 'resume'; resume: string }> {
+    const secret = this.slicedProofs ? this.resume.resumeSecret! : null;
+    if (!secret) {
+      const whole = step(null, null);
+      return { kind: 'done', verified: whole.kind === 'done' ? whole.verified : null };
+    }
+    const digest = proofDigest(source, actions, botVersion);
+    let from: { opening: number; at: number } | null = null;
+    if (token !== null) {
+      from = await readResume(secret, token, player.id, digest, this.now());
+      if (!from) throw new ApiError('INVALID_REQUEST', 'That check has expired. It starts again.');
+      const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
+      if (!(await this.matches.hitRateLimit(`seeds:round:${player.id}`, bucket, RESUME_ROUNDS_PER_HOUR)).ok) {
+        throw new ApiError('RATE_LIMITED', 'Please wait before verifying another match.');
+      }
+    }
+    const clock = this.resume.clock ?? (() => (typeof performance !== 'undefined' ? performance.now() : Date.now()));
+    const result = step(from, { clock, budget: this.resume.sliceMs ?? PROOF_SLICE_MS });
+    if (result.kind === 'paused') {
+      return { kind: 'resume', resume: await signResume(secret, player.id, digest, { opening: result.opening, at: result.at }, this.now()) };
+    }
+    return result;
+  }
 
   async world() {
     // A forfeit must reach the PUBLIC map even when neither participant is signed in to read their
@@ -445,6 +494,41 @@ export class WorldEconomyService {
     return settled;
   }
 
+  /**
+   * A campaign proof in slices (see `proofSlice`): `paid` with the reward, or `resume` with the token
+   * the page sends back with the same proof. The final lesson is short and is checked whole.
+   */
+  async campaignStep(player: PlayerRecord, levelId: string, actions: readonly Action[], botVersion: string, dealSeed: number | undefined, token: string | null) {
+    if (levelId === FINAL_LESSON.id || !this.slicedProofs) {
+      return { kind: 'paid' as const, reward: await this.campaign(player, levelId, actions, botVersion, dealSeed) };
+    }
+    const level = campaignLevelById(levelId);
+    if (!level) throw new ApiError('INVALID_REQUEST', 'That Campaign level is not available.');
+    if (token === null) await this.proofBudget(player);
+    const slice = await this.proofSlice(player, { levelId, dealSeed: dealSeed ?? null }, actions, botVersion, token,
+      (resume, budget) => stepCampaignProof(levelId, actions, botVersion, dealSeed, resume, budget));
+    if (slice.kind === 'resume') return slice;
+    return { kind: 'paid' as const, reward: await this.payCampaign(player, levelId, level.number, slice.verified) };
+  }
+
+  /** The per-proof budget: 90 proofs per player per hour. */
+  private async proofBudget(player: PlayerRecord): Promise<void> {
+    const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
+    if (!(await this.matches.hitRateLimit(`seeds:proof:${player.id}`, bucket, 90)).ok) {
+      throw new ApiError('RATE_LIMITED', 'Please wait before verifying another match.');
+    }
+  }
+
+  private async payCampaign(player: PlayerRecord, levelId: string, levelNumber: number, verified: VerifiedOffline | null) {
+    if (!verified || verified.winner !== 0) throw new ApiError('INVALID_REQUEST', 'That Campaign result could not be verified.');
+    const settled = await this.store.settle({
+      playerId: player.id, sourceKey: `campaign:${levelId}`, mode: 'campaign', outcome: 'win',
+      opponentId: null, now: this.now(), campaignLevel: levelNumber,
+    });
+    await this.recordClear(player, levelId, levelNumber, verified);
+    return settled;
+  }
+
   async campaign(player: PlayerRecord, levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION, dealSeed?: number) {
     if (levelId === FINAL_LESSON.id) {
       if (dealSeed !== undefined) throw new ApiError('INVALID_REQUEST', 'That lesson has one fixed opening.');
@@ -496,6 +580,29 @@ export class WorldEconomyService {
       expiresAt: now + 7 * 86_400_000, usedAt: null };
     await this.store.issueTrainingTicket(ticket);
     return { id: ticket.id, seed: ticket.seed, botLevel: ticket.botLevel, expiresAt: ticket.expiresAt };
+  }
+
+  /** A Training proof in slices (see `campaignStep`). */
+  async trainingStep(player: PlayerRecord, ticketId: string, actions: readonly Action[], botVersion: string, token: string | null) {
+    if (!this.slicedProofs) return { kind: 'paid' as const, reward: await this.training(player, ticketId, actions, botVersion) };
+    if (token === null) await this.proofBudget(player);
+    const ticket = await this.store.trainingTicket(ticketId);
+    if (!ticket || ticket.playerId !== player.id || ticket.expiresAt < this.now()) {
+      throw new ApiError('INVALID_REQUEST', 'That Training ticket is no longer available.');
+    }
+    const slice = await this.proofSlice(player, { ticketId }, actions, botVersion, token,
+      (resume, budget) => stepTrainingProof(ticket.seed, ticket.botLevel, actions, botVersion, resume, budget));
+    if (slice.kind === 'resume') return slice;
+    const verified = slice.verified;
+    if (!verified) throw new ApiError('INVALID_REQUEST', 'That Training result could not be verified.');
+    return {
+      kind: 'paid' as const,
+      reward: await this.store.settle({
+        playerId: player.id, sourceKey: `training:${ticket.id}`, trainingTicketId: ticket.id,
+        mode: 'training', outcome: verified.winner === null ? 'draw' : verified.winner === 0 ? 'win' : 'loss',
+        opponentId: null, now: this.now(),
+      }),
+    };
   }
 
   async training(player: PlayerRecord, ticketId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION) {

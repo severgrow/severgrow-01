@@ -52,7 +52,10 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
   // The memory store also serves the public profile's name + online-record halves, so it is given
   // the same storage the server uses (the Postgres store reads them in its one SQL statement).
   const economyStore = isMemory ? new MemoryWorldEconomyStore(live.storage) : postgresWorldEconomyStore(poolFromUrl(databaseUrlFromEnv()!));
-  const economy = new WorldEconomyService(economyStore, live.storage);
+  // A dev server signs sliced-proof tokens with a per-process secret unless one is configured.
+  const economy = new WorldEconomyService(economyStore, live.storage, () => Date.now(), {
+    resumeSecret: process.env.SEED_PROOF_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? crypto.randomUUID() + crypto.randomUUID(),
+  });
   const service = new MatchService({ storage: live.storage, config, economy });
   // The admin router (docs/ADMIN.md) shares the dev server's OWN in-memory stores, so the dashboard
   // shows the same reports/matches the running server serves. Postgres deployments get the SQL store.

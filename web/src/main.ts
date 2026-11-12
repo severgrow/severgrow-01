@@ -9352,7 +9352,8 @@ function renderGameOver() {
     moves: moves ?? '',
     stats: record,
     highlights,
-    harvest: offlineVerdict(st),
+    // The board window shows the board as it stands even without a result: never an empty window.
+    harvest: offlineVerdict(st) ?? harvestFigure(st.board, st.config, HUMAN, st.terrain),
     share: true,
     cut: !!session?.biggestCut,
     difficulty: !campaign,

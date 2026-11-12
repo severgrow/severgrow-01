@@ -122,30 +122,47 @@ const submitWithDeadline = async (
   proof: PendingSeedProof,
   timeoutMs: number,
 ): Promise<RewardResult> => {
-  const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  const signal = controller ? { signal: controller.signal } : {};
   const source = proof.kind === 'campaign'
     ? (proof.dealSeed === undefined ? { levelId: proof.levelId } : { levelId: proof.levelId, dealSeed: proof.dealSeed })
     : { ticketId: proof.ticketId };
-  const submit = client.submitSeedProof(token, source,
-    proof.actions, proof.botVersion, signal);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      submit,
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => {
-          controller?.abort();
-          reject(new DuelError('TIMEOUT', 'The Seeds request did not answer in time.', 0));
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-    // Whatever lost the race must never surface as an unhandled rejection later.
-    void submit.catch(() => undefined);
+  // SLICED CHECKS (owner report, 2026-11-12: Seeds for levels 80 and 81 never arrived). The server
+  // replays every bot move, and a long or rival game can take longer than one Edge request may run.
+  // So the proof is sent `resumable`: the server answers with a resume token until it is done, and
+  // each ROUND gets its own deadline (the whole check may take several), up to MAX_PROOF_ROUNDS.
+  let resume: string | undefined;
+  for (let round = 0; round < MAX_PROOF_ROUNDS; round++) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const submit = client.submitSeedProof(token, source, proof.actions, proof.botVersion, {
+      ...(controller ? { signal: controller.signal } : {}), resumable: true, ...(resume ? { resume } : {}),
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let answer: Awaited<typeof submit>;
+    try {
+      answer = await Promise.race([
+        submit,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => {
+            controller?.abort();
+            reject(new DuelError('TIMEOUT', 'The Seeds request did not answer in time.', 0));
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      // Whatever lost the race must never surface as an unhandled rejection later.
+      void submit.catch(() => undefined);
+    }
+    if (answer && typeof (answer as { resume?: unknown }).resume === 'string') {
+      resume = (answer as { resume: string }).resume;
+      continue;
+    }
+    return answer as RewardResult;
   }
+  throw new DuelError('TIMEOUT', 'The Seeds check took too many rounds.', 0);
 };
+
+/** A proof check never takes more rounds than this (a slice is ~1.2 s of server time). */
+export const MAX_PROOF_ROUNDS = 12;
 
 /**
  * Single-flight per storage + account, WITHOUT the wedge. An entry remembers every proof its pass

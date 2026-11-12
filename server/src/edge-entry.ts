@@ -133,7 +133,11 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
   const pool = withEdgeConnectionRetry(poolFromPostgresJs(sql));
   const live = wireLiveEdge({ storage: postgresStorage(pool), pool, server: edgeConfig, env: (n) => Deno.env.get(n), ...(broadcaster ? { broadcaster } : {}) });
   const economyStore = postgresWorldEconomyStore(pool);
-  const economy = new WorldEconomyService(economyStore, live.storage);
+  // Sliced proof checks sign their resume tokens with a server secret: SEED_PROOF_SECRET when set,
+  // else the project's service-role key (it never leaves the server; a MAC does not reveal its key).
+  const economy = new WorldEconomyService(economyStore, live.storage, () => Date.now(), {
+    resumeSecret: Deno.env.get('SEED_PROOF_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? null,
+  });
   const service = new MatchService({
     storage: live.storage,
     config: edgeConfig,

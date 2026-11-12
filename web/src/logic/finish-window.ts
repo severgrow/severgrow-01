@@ -13,12 +13,14 @@ export const PLANET_TILE_PRICE = 100;
 export type FinishWindow = 'planet' | 'board';
 
 export const finishWindowFor = (m: { won: boolean; balance: number | null; hasBoard: boolean; teach?: boolean }): FinishWindow => {
-  // No final board to show (a finish whose position is unknown): the planet, as before.
-  if (!m.hasBoard) return 'planet';
+  // THE RULE (owner, 2026-11-12): the planet ONLY on a win with a tile's price in the wallet. A loss
+  // or a draw is the final board, always — even when no board figure was made (the window then shows
+  // the board the page still holds; main.ts never leaves it empty).
+  if (!m.won) return 'board';
   // Level 10 TEACHES the planet, in the planet's own window: its win always shows it, whatever the
   // wallet says (its 100 Seeds may not have landed yet, or cannot be verified offline).
   if (m.teach && m.won) return 'planet';
-  return m.won && m.balance !== null && m.balance >= PLANET_TILE_PRICE ? 'planet' : 'board';
+  return m.balance !== null && m.balance >= PLANET_TILE_PRICE ? 'planet' : 'board';
 };
 
 /** `severgrow.*`: the last wallet balance this device saw, so the card can choose before any read. */

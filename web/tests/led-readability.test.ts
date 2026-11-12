@@ -1,5 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { ledMarqueeTravel, ledMessageWidth, ledStaticMessage, ledToken } from '../src/player/led-cells.js';
+import { ledCompactMessage, ledMarqueeTravel, ledMessageWidth, ledStaticMessage, ledToken } from '../src/player/led-cells.js';
+import { readFileSync } from 'node:fs';
+
+// A WORD THAT DOES NOT FIT SCROLLS (owner, 2026-11-12: "whenever display is showing a word that doesn't
+// fit in the display - it always scrolls"). With motion on, the display never cuts a word to its first
+// five letters: a designed shorthand (WIN, FINAL, 30:12) is kept, anything else is shown whole and the
+// marquee runs whenever it is wider than the glass. Reduce Motion keeps the static short form.
+describe('a word that does not fit scrolls, it is never cut', () => {
+  it('keeps the designed shorthands for compact readouts', () => {
+    expect(ledCompactMessage('YOU WIN')).toBe('WIN');
+    expect(ledCompactMessage('FINAL TURNS')).toBe('FINALS');
+    expect(ledCompactMessage('YOU 30 • 12 OPP')).toBe('30:12');
+    expect(ledCompactMessage('+16 TILES')).toBe('+16');
+  });
+
+  it('shows any other compact word whole (it scrolls if wider than the glass), never its first five letters', () => {
+    expect(ledCompactMessage('STRANGLED')).toBe('STRANGLED');
+    expect(ledCompactMessage('SURROUNDED')).toBe('SURROUNDED');
+    expect(ledCompactMessage('NICE MOVE')).toBe('NICE MOVE');
+    // Reduce Motion has no marquee, so its static form is still the short one.
+    expect(ledStaticMessage('STRANGLED')).toBe('STRAN');
+  });
+
+  it('the cockpit scrolls on width alone, whatever the frame (compact included)', () => {
+    const src = readFileSync(new URL('../src/player/smart-cockpit.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/reduced \? ledStaticMessage\(value\) : frame\.compact \? ledCompactMessage\(value\) : value/);
+    expect(src).toMatch(/const scrolling = animated && !frame\.motif && mode !== 'score' && ledMessageWidth\(shown\) > windowEl\.clientWidth - 2/);
+  });
+});
 
 describe('compact LED readouts', () => {
   it('keeps event numbers readable within the physical display', () => {
