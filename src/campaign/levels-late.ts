@@ -264,10 +264,13 @@ export const CHAPTER_6_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['0,0', '1,0', '-1,0'],
   ), 'many small walls; every hex a small decision'),
 
+  // Re-authored 2026-11-12: it shipped with exactly level 59's stone (the old board is kept in
+  // frozen.ts, RETIRED_OPENINGS, so a win on it still pays). Same counts (14 stone, 7 gold), its own
+  // shape: two broken walls close both flanks and the gold sits in the gaps.
   late(6, 60, 'c6-60', 'The Long Way', 96060, 9, board(
-    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '0,2', '0,-2', '0,3', '0,-3', '-1,3', '1,-3', '-2,0', '2,0'],
-    ['0,0', '1,0', '-1,0', '0,1', '0,-1', '3,0', '-3,0'],
-  ), 'corridor plus rock crown; the chapter finale'),
+    ['-2,-1', '2,1', '-1,-2', '1,2', '-3,1', '3,-1', '-2,0', '2,0', '0,-1', '0,1', '-3,0', '3,0', '0,-3', '0,3'],
+    ['0,0', '-1,-1', '1,1', '0,-2', '0,2', '-1,3', '1,-3'],
+  ), 'two broken walls close both flanks; the chapter finale'),
 ]);
 
 /**
@@ -317,10 +320,13 @@ export const CHAPTER_7_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['0,0', '1,0', '-1,0', '0,1', '0,-1', '-3,0', '3,0'],
   ), 'the centre is a trap'),
 
+  // Re-authored 2026-11-12: it shipped 90% the same as level 66 (the old board is kept in
+  // frozen.ts, RETIRED_OPENINGS). Same counts (12 stone, 9 gold); now a true lattice, gold set
+  // between the stones.
   late(7, 68, 'c7-68', 'Ash Lattice', 96068, 9, board(
-    ['2,0', '-2,0', '3,-1', '-3,1', '1,2', '-1,-2', '0,3', '0,-3', '0,2', '0,-2', '-1,3', '1,-3'],
-    ['0,0', '0,1', '0,-1', '1,0', '-1,0', '2,1', '-2,-1', '3,0', '-3,0'],
-  ), 'only diagonals survive'),
+    ['-1,0', '1,0', '-1,3', '1,-3', '-1,-2', '1,2', '-3,1', '3,-1', '-2,-1', '2,1', '0,-1', '0,1'],
+    ['0,0', '-3,0', '3,0', '-1,-1', '1,1', '0,-3', '0,3', '-2,0', '2,0'],
+  ), 'a lattice: gold set between the stones'),
 
   late(7, 69, 'c7-69', 'The Turning', 96069, 9, board(
     ['1,1', '-1,-1', '1,2', '-1,-2', '0,3', '0,-3', '2,1', '-2,-1', '0,2', '0,-2', '-1,3', '1,-3', '3,0', '-3,0'],

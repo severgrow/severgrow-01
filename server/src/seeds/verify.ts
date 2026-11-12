@@ -2,7 +2,7 @@ import { apply, newMatch, viewFor } from '../../../src/engine/index.js';
 import type { Action, State } from '../../../src/engine/index.js';
 import { botSeed, isBotLevel } from '../../../src/bots/levels.js';
 import { botFor, CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
-import { ALTERNATE_OPENINGS, campaignLevelById, campaignOpening } from '../../../src/campaign/index.js';
+import { ALTERNATE_OPENINGS, RETIRED_OPENINGS, campaignLevelById, campaignOpening } from '../../../src/campaign/index.js';
 
 export type OfflineProof = { actions: readonly Action[]; botVersion: string };
 export type VerifiedOffline = { winner: 0 | 1 | null; actionCount: number; result: State['result'] };
@@ -49,8 +49,16 @@ export const verifyCampaignProof = (levelId: string, actions: readonly Action[],
   const current = verifyOfflineMatch(campaignOpening(level), level.botLevel, { actions, botVersion });
   if (current) return current;
   const alternate = ALTERNATE_OPENINGS[level.id];
-  if (!alternate) return null;
-  return verifyOfflineMatch(newMatch(level.seed, { ...level.config, ...alternate }), level.botLevel, { actions, botVersion });
+  if (alternate) {
+    const viaAlternate = verifyOfflineMatch(newMatch(level.seed, { ...level.config, ...alternate }), level.botLevel, { actions, botVersion });
+    if (viaAlternate) return viaAlternate;
+  }
+  // Openings the level shipped with before a fix (src/campaign/frozen.ts, RETIRED_OPENINGS).
+  for (const retired of RETIRED_OPENINGS[level.id] ?? []) {
+    const viaRetired = verifyOfflineMatch(newMatch(retired.seed, retired.config), level.botLevel, { actions, botVersion });
+    if (viaRetired) return viaRetired;
+  }
+  return null;
 };
 
 export const verifyTrainingProof = (seed: number, botLevel: number, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION): VerifiedOffline | null =>

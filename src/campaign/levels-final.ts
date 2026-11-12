@@ -458,16 +458,16 @@ export const CHAPTER_10_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['-3,0', '0,0', '1,0'],
   ), 'Short lanes run from the bot to your home.', { uneven: 'bot' }),
 
-  // The campaign finale: both rivers, gold on the fords and the islets, against Night Bloom.
-  //      # $ . .
-  //     . $ . B .
-  //    $ . # . . .
-  //   # . # # # . #
-  //    . . . # . $
-  //     . A . $ .
-  //      . . $ #
+  // The campaign finale: both rivers, crossed only beside the stone centre; all four fords are gold.
+  //      # . . .
+  //     . # . B .
+  //    . $ $ . . .
+  //   # # $ # $ # #
+  //    . . . $ $ .
+  //     . A . # .
+  //      . . . #
   final(10, 100, 'c10-100', 'The Last Garden', 97100, 12, board(
-    ['0,-3', '0,-1', '-3,0', '-1,0', '0,0', '1,0', '3,0', '0,1', '0,3'],
-    ['1,-3', '0,-2', '-2,-1', '2,1', '0,2', '-1,3'],
-  ), 'The campaign finale: islands, gold fords, the patient bot.'),
+    ['0,-3', '0,-2', '-3,0', '-2,0', '0,0', '2,0', '3,0', '0,2', '0,3'],
+    ['-1,-1', '0,-1', '-1,0', '1,0', '0,1', '1,1'],
+  ), 'The campaign finale: both rivers, four gold fords around the stone centre, the patient bot.'),
 ]);

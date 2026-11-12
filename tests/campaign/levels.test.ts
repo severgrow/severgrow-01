@@ -452,6 +452,18 @@ describe('campaign levels: the final arc breaks the old spine', () => {
     for (const level of arc.filter((l) => l.chapter === 8)) expect(route(level), level.id).toBeGreaterThan(4);
   });
 
+  it('no two boards in the whole campaign are identical (rock, gold and map size)', () => {
+    // Level 14 shipped identical to lesson 6, and 60 with level 59's exact stone: both fixed
+    // 2026-11-12 (the old openings stay verifiable, frozen.ts RETIRED_OPENINGS).
+    const seen = new Map<string, string>();
+    for (const level of CAMPAIGN_LEVELS) {
+      const b = level.config.board!;
+      const k = `${level.config.boardRadius}|${[...b.rock].sort().join(' ')}|${[...b.gold].sort().join(' ')}`;
+      expect(seen.get(k), `${level.id} repeats ${seen.get(k)}`).toBeUndefined();
+      seen.set(k, level.id);
+    }
+  });
+
   it('no board 71-100 repeats an earlier board (rock and gold), so the arc is never more of the same', () => {
     const key = (l: (typeof CAMPAIGN_LEVELS)[number]) => `${[...l.config.board!.rock].sort().join(' ')}|${[...l.config.board!.gold].sort().join(' ')}`;
     const seen = new Map<string, string>();

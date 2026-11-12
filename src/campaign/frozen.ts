@@ -12,8 +12,8 @@
 // proof that was already earned (queued on a device, or produced by a bundle built before the change).
 //
 // A level whose board has never changed has no entry. Never use an alternate to open a new match.
-import type { BoardSpec } from '../engine/index.js';
-import { CAMPAIGN_SMALL_CELLS, CAMPAIGN_SMALL_HOMES } from './levels.js';
+import type { BoardSpec, RulesConfig } from '../engine/index.js';
+import { CAMPAIGN_CELLS, CAMPAIGN_HOMES, CAMPAIGN_SMALL_CELLS, CAMPAIGN_SMALL_HOMES } from './levels.js';
 import { SMALL_BOARD_RADIUS as TUTORIAL_BOARD_RADIUS } from './small-board.js';
 
 export type AlternateOpening = { boardRadius: number; board: BoardSpec };
@@ -44,4 +44,33 @@ export const ALTERNATE_OPENINGS: Readonly<Record<string, AlternateOpening>> = Ob
   'c1-08': small([], R),
   'c1-09': small(['-2,0', '-1,-1', '-1,0'], R),
   'c1-10': small(['-1,-1', '0,1', '1,1'], Q),
+});
+
+/**
+ * RETIRED OPENINGS (2026-11-12): an opening a level SHIPPED with before a later fix — a duplicate board
+ * re-authored, or a seed re-picked so the shipped deal fits the level's role (docs/CAMPAIGN-71-100.md).
+ * The verifier tries these after the current opening and the /2/ alternate, so a win earned on the old
+ * opening still pays. A level may collect several over time. Never used to open a new match.
+ */
+export type RetiredOpening = { seed: number; config: Partial<RulesConfig> };
+
+/** A product-hexagon (radius 3) opening with the board it shipped with. */
+const shipped = (seed: number, rock: readonly string[], gold: readonly string[]): RetiredOpening => ({
+  seed,
+  config: {
+    boardRadius: 3,
+    rootStyle: 'ring2',
+    board: { cells: [...CAMPAIGN_CELLS], rock: [...rock], gold: [...gold], homes: [CAMPAIGN_HOMES[0], CAMPAIGN_HOMES[1]] },
+  },
+});
+
+export const RETIRED_OPENINGS: Readonly<Record<string, readonly RetiredOpening[]>> = Object.freeze({
+  // Tier 1: the duplicate boards, as they shipped in 0.85.
+  'c2-14': [shipped(95014, ['0,1'], ['0,0', '-2,0', '2,0'])],
+  'c6-60': [shipped(96060,
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '0,2', '0,-2', '0,3', '0,-3', '-1,3', '1,-3', '-2,0', '2,0'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1', '3,0', '-3,0'])],
+  'c7-68': [shipped(96068,
+    ['2,0', '-2,0', '3,-1', '-3,1', '1,2', '-1,-2', '0,3', '0,-3', '0,2', '0,-2', '-1,3', '1,-3'],
+    ['0,0', '0,1', '0,-1', '1,0', '-1,0', '2,1', '-2,-1', '3,0', '-3,0'])],
 });

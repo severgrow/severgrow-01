@@ -194,7 +194,9 @@ export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // The first real detour: a four-hex arc off the centre-left to walk around.
   level(2, 13, 'c2-13', 'The Detour', 95013, 5, board(['-2,0', '-1,0', '-1,-1', '-1,-2'], RICH_PAIR_R), 'A four-hex arc to route around.'),
   // Breathing space: one lone stone, a stronger opponent, and a second gold pair to race for.
-  level(2, 14, 'c2-14', 'Open Horizon', 95014, 5, board(['0,1'], RICH_PAIR_Q), 'Open ground and a clearly better bot.'),
+  // (Its stone moved 2026-11-12 from 0,1 to 1,0: on 0,1 the board was byte-identical to lesson 6. The
+  // old opening is kept in frozen.ts, RETIRED_OPENINGS.)
+  level(2, 14, 'c2-14', 'Open Horizon', 95014, 5, board(['1,0'], RICH_PAIR_Q), 'Open ground and a clearly better bot.'),
   // Twin crystals on opposite wings plus a central pair: two threats to answer at once.
   level(2, 15, 'c2-15', 'Twin Stones', 95015, 6, board(['-3,1', '3,-1', '-1,0', '1,0'], RICH_PAIR_R), 'Twin flanks and a central pair.'),
   // A broken line across the middle with two gaps: cross at the centre or slip through the notch.
