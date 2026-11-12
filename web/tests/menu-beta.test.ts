@@ -58,8 +58,9 @@ describe('the beta line is a quiet version line between the wordmark and the ent
     // 0.8 -> 0.81: owner-authorised foundation pass, with the original 0.8 source tag preserved.
     // 0.82 -> 0.83: owner-authorised misc polish pass (logos, iOS launch, planet coast, CI).
     // 0.83 -> 0.84 (owner, 2026-11-08: "0.84 is fine"): the 0.84 features, the feel pass, the live fixes.
-    expect(FEEDBACK.betaVersion).toBe('0.84');
-    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('0.84');
+    // 0.84 -> 0.85 (owner, 2026-11-12: "change version name to 0.85"): the sharpening batch — throw flick, opponent deal, Blitz key and guide, planet framing, share card, LESSON n LEARNED, Find Opponent resume, cold start.
+    expect(FEEDBACK.betaVersion).toBe('0.85');
+    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('0.85');
     // Owner (2026-10-31): one quiet line, not a sentence — "BETA 0.7 · FEEDBACK".
     expect(FEEDBACK.betaLink).toBe('Feedback');
     expect(lineSource).toContain('FEEDBACK.betaLink');
