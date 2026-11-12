@@ -94,6 +94,15 @@ html.blitz-match #blitz-clock::before {
 html.blitz-match #tool-undo, html.blitz-match #futa04-help-button, html.blitz-match #tool-replay, html.blitz-match #go-replay {
   visibility:hidden !important; pointer-events:none !important;
 }
+/* THE SORTING KEY GOES UNDER THE CONTEXT KEY IN BLITZ (owner, 2026-11-12: the sorting key covered
+   the Blitz timer). The clock takes the display's two bottom cells, so the sorting key must not sit
+   in the outer bottom cell of that row: it moves directly under the skip/cancel key (the context
+   button), and Undo - hidden in Blitz - takes the cell it vacated. Both hand modes then agree:
+   Sort is always under the context key. Blitz only; the ordinary cockpit keeps its own order
+   (owner, 2026-11-11: "replay is on right not left"). Ids, not nth-child, so a DOM reorder cannot
+   silently undo this. */
+html.blitz-match[data-cockpit='left'] #futa04-box #futa04-actions > #hand-sort { grid-column: 3; }
+html.blitz-match[data-cockpit='left'] #futa04-box #futa04-actions > #tool-undo { grid-column: 1; }
 `;
 
 export type BlitzClockSide = 'mine' | 'theirs';
