@@ -31,10 +31,32 @@ export type Difficulty = {
   levels: readonly Level[];
 };
 
+/**
+ * THE HARD OPPONENT'S CEILING — the strongest bot the Hard tier can reach. ONE place: Practice
+ * "Hard" (the top of `HARD_LEVELS` below) and Blitz's persisted ladder (`logic/blitz.ts`) both take
+ * their top from here, so the next change (a seed-based rotation) moves exactly this function.
+ *
+ * It is a CEILING, not a replacement level: the tier still starts at the bottom of its range and the
+ * one-game carry-over still steps up and down inside it. Today it answers 9 for every seed — the top
+ * both ladders already had — so clamping to it is provably a no-op for every current value.
+ *
+ * `_seed` is deliberately part of the signature although nothing reads it yet: the rotation that
+ * comes next needs the game seed, and it belongs here rather than at each caller.
+ */
+export const hardOpponent = (_seed: number): number => 9;
+
+/**
+ * The Hard tier's range: its bottom, then the ceiling `hardOpponent` names. The tier table is static
+ * (one range for the whole game), so it asks the ceiling with a fixed seed of 0; a per-game rotation
+ * will ask with the game's own seed. The cast holds while the `Level` union tops out at 9 — widening
+ * that union is the next step, not this one.
+ */
+const HARD_LEVELS: readonly Level[] = [8, hardOpponent(0) as Level];
+
 export const DIFFICULTIES = [
   { id: 'easy', label: 'EASY', note: 'A gentle challenge', level: 3, levels: [3, 4] },
   { id: 'medium', label: 'MEDIUM', note: 'A thoughtful rival', level: 5, levels: [5, 6, 7] },
-  { id: 'hard', label: 'HARD', note: 'Every turn matters', level: 8, levels: [8, 9] },
+  { id: 'hard', label: 'HARD', note: 'Every turn matters', level: 8, levels: HARD_LEVELS },
 ] as const satisfies readonly Difficulty[];
 
 export const difficultyById = (id: string): Difficulty | undefined => DIFFICULTIES.find((tier) => tier.id === id);

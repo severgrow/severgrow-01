@@ -63,6 +63,13 @@ export const WORLD_CHALLENGE_LIST_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 export const CAMPAIGN_LEVEL_REWARD_MAX = 70;
 
 /**
+ * The strongest bot a Training ticket may name (bot levels are 1-9, `src/bots/levels.ts`). The
+ * server's own copy of the boundary, in ONE constant: `issueTraining` rejects anything above it, so
+ * the page and the server can never disagree about the top of the Training ladder.
+ */
+export const MAX_TRAINING_BOT = 9;
+
+/**
  * The Campaign's first-clear payment and the chapter bonus at every tenth level.
  *
  * Levels 31-70 were added 2026-10-18. The cap moved from 50 to 70 in the same change, because a
