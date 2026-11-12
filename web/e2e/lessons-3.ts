@@ -15,7 +15,7 @@ import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { SMALL_HOMES } from '../src/lessons/authored.js';
 import { LESSON } from '../../src/strings.js';
 import { LESSON_VERSION } from '../src/lessons/mastery.js';
-import { SEEDS_IDENTITY_UNVERIFIED } from '../src/online/seed-icon.js';
+import { PLANET_TEACH, SEEDS_IDENTITY_UNVERIFIED } from '../src/online/seed-icon.js';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
 const SHOTS = process.env.SHOTS ?? '';
@@ -615,28 +615,65 @@ try {
           !card.seeds || card.seeds.startsWith(unverifiedLine),
           `L10 finish card shows no Seeds number without a receipt (${JSON.stringify(card.seeds)})`,
         );
-        // OWNER CHANGED THE RULE (2026-11-04: "at the end of the level 10, over the end of game screen
-        // there should be a lesson window popped up explaining THE PLANET ... and a button that takes
-        // you to the planet"). The card's two inline Territory lines gave way to that window; the
-        // card keeps its own key to the Planet for a player who taps Later.
+        // OWNER CHANGED THE RULE AGAIN (2026-11-11: "keep lessons 1-9 as they are; new screen from
+        // level 10, and retire the separate level-10 Planet intro modal", "but make sure to still
+        // explain the planet after level 10"). The MODAL is gone (commit 61523a7d): the finish card
+        // IS the Planet now, so the promise the modal kept is kept by the card's own window. These
+        // checks are the retired modal's, of equal strength, asserted against the live card: the
+        // window is mounted from the shared renderer, it is the card's hero, the explainer says the
+        // product's exact words where a player can read them — and the modal cannot come back
+        // unnoticed. Nothing here is weakened; the elements simply moved.
         check(card.territory === '', `L10 finish card leaves the explaining to the Planet's window (${card.territory})`);
-        check(card.territoryKey, 'L10 finish card offers the way to the Planet');
-        await page.waitForSelector('#planet-intro:not([hidden])', { timeout: 5000 });
-        const intro = await page.evaluate(() => ({
-          title: document.getElementById('planet-intro-title')?.textContent,
-          lines: [...document.querySelectorAll('#planet-intro .pi-lines li')].map((li) => li.textContent),
-          focused: document.activeElement?.id,
-          fits: (() => { const r = document.querySelector('#planet-intro .pi-panel')!.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth; })(),
-          keys: [...document.querySelectorAll<HTMLElement>('#planet-intro .pi-keys .btn')].map((k) => ({ text: k.textContent, h: k.getBoundingClientRect().height })),
-        }));
-        check(intro.title === 'THE PLANET' && intro.lines.length === 3, `L10: the Planet's window opens over the card (${JSON.stringify(intro.lines)})`);
-        check(intro.focused === 'planet-intro-open', `L10: Open The Planet takes focus (${intro.focused})`);
-        check(intro.fits && intro.keys.every((k) => k.h >= 44), `L10: the window fits the screen with 44px keys (${JSON.stringify(intro.keys)})`);
-        if (SHOTS) await page.screenshot({ path: `${SHOTS}/L10-planet-window.png` });
-        await page.evaluate(() => (document.getElementById('planet-intro-later') as HTMLButtonElement).click());
-        await page.waitForSelector('#planet-intro', { state: 'hidden', timeout: 3000 });
-        const after = await page.evaluate(() => ({ key: document.getElementById('go-territory-open')?.textContent, focused: document.activeElement?.id }));
-        check(after.key === 'Open The Planet' && after.focused === 'go-territory-open', `L10: Later leaves the card with its key to the Planet (${JSON.stringify(after)})`);
+        await page.waitForSelector('#go-world:not([hidden])', { timeout: 10000 });
+        // The shared renderer is mounted a beat after the card's own entrance (main.ts/endgame-planet).
+        await page.waitForSelector('#go-world-surface > .planet-canvas', { timeout: 20000 }).catch(() => undefined);
+        const planet = await page.evaluate(() => {
+          // No helper declarations in here: esbuild's `keepNames` rewrites them to `__name(...)`,
+          // which does not exist in the page. Everything is inlined on purpose.
+          const world = document.getElementById('go-world');
+          const surface = document.getElementById('go-world-surface');
+          const teach = document.getElementById('go-world-teach');
+          const bar = document.getElementById('go-world-bar');
+          const cardEl = document.querySelector('#gameover .go-card');
+          const wr = world && world.getClientRects().length > 0 ? world.getBoundingClientRect() : null;
+          const tr = teach && teach.getClientRects().length > 0 ? teach.getBoundingClientRect() : null;
+          return {
+            worldShown: !!wr,
+            worldBox: wr ? { top: Math.round(wr.top), bottom: Math.round(wr.bottom), left: Math.round(wr.left), right: Math.round(wr.right), w: Math.round(wr.width), h: Math.round(wr.height) } : null,
+            cardH: cardEl ? Math.round(cardEl.getBoundingClientRect().height) : 0,
+            canvas: !!surface?.querySelector(':scope > .planet-canvas'),
+            teachShown: !!tr,
+            teachLines: [...document.querySelectorAll('#go-world-teach .go-world-teach-lines li')].map((li) => li.textContent),
+            teachLabel: teach?.getAttribute('aria-label') ?? '',
+            teachBox: tr ? { top: Math.round(tr.top), bottom: Math.round(tr.bottom), left: Math.round(tr.left), right: Math.round(tr.right), w: Math.round(tr.width), h: Math.round(tr.height) } : null,
+            teachOverflow: teach ? teach.scrollHeight - teach.clientHeight : 0,
+            hint: document.getElementById('go-world-line')?.textContent ?? '',
+            keyHeights: [...(bar?.querySelectorAll('button') ?? [])].filter((k) => k.getClientRects().length > 0).map((k) => Math.round(k.getBoundingClientRect().height)),
+            legacyIntroPresent: !!document.getElementById('planet-intro'),
+            legacyKeyPresent: !!document.getElementById('go-territory-open'),
+          };
+        });
+        check(planet.worldShown && (planet.worldBox?.h ?? 0) > 0, `L10: the card carries the live Planet window (${JSON.stringify(planet.worldBox)})`);
+        check(planet.canvas, 'L10: the window IS the shared planet renderer, mounted in its surface');
+        check((planet.worldBox?.h ?? 0) > planet.cardH * 0.3, `L10: the planet is the card's hero, not a strip (${planet.worldBox?.h} of ${planet.cardH}px)`);
+        check(planet.teachShown, 'L10: the one-time explainer is on screen, inside the window it describes');
+        check(
+          planet.teachLines.length === PLANET_TEACH.lines.length
+            && planet.teachLines.every((line, i) => line === PLANET_TEACH.lines[i]),
+          `L10: the explainer is the product's own words, verbatim (${JSON.stringify(planet.teachLines)})`,
+        );
+        check(planet.teachLabel.startsWith(PLANET_TEACH.title), `L10: a screen reader is told the same thing (${planet.teachLabel.slice(0, 28)}...)`);
+        check(
+          !!planet.teachBox && !!planet.worldBox
+            && planet.teachBox.top >= planet.worldBox.top && planet.teachBox.bottom <= planet.worldBox.bottom
+            && planet.teachBox.left >= planet.worldBox.left && planet.teachBox.right <= planet.worldBox.right,
+          `L10: the explainer sits inside the window (${JSON.stringify(planet.teachBox)} in ${JSON.stringify(planet.worldBox)})`,
+        );
+        check(planet.teachOverflow <= 1, `L10: the explainer's lines are not clipped (${planet.teachOverflow}px)`);
+        check(planet.hint === 'Tap a tile', `L10: the resting hint is the owner's two words (${JSON.stringify(planet.hint)})`);
+        check(planet.keyHeights.every((h) => h >= 44), `L10: every visible key in the window's foot is a real target (${JSON.stringify(planet.keyHeights)})`);
+        check(!planet.legacyIntroPresent && !planet.legacyKeyPresent, 'L10: the retired Planet modal and its card key are gone');
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/L10-planet-in-card.png` });
       }
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/L${level}-finish.png` });
       results.push(`L${level}: ${r.reason}, ${r.turns} turns, ${r.wrong} wrong taps`);
