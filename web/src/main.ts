@@ -129,7 +129,7 @@ import type { BotLevel, Level } from '../../src/bots/levels.js';
 // names everywhere on 2026-10-16. The module and its test remain until he decides whether to keep
 // the names for some future surface.
 import {
-  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, matchLabel, parseDifficultyStep, stepAfterGame, stepLevelFor,
+  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, matchLabel, opponentFor, parseDifficultyStep, stepAfterGame, stepLevelFor,
 } from './logic/difficulty.js';
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
@@ -2388,6 +2388,9 @@ async function startGame(
   // with its local seed, but cannot claim spendable Seeds without a prior ticket. Guests are paid
   // too (owner, 2026-11-08) — the wait must cover minting a guest on a cold Edge, not only a warm
   // identity's round trip (see TRAINING_TICKET_WAIT_MS).
+  // The top of Hard (and of Blitz's ladder) rotates the rivals in, chosen by this game's seed. Decided
+  // BEFORE the Seeds ticket, so the ticket names the bot this game is really played against.
+  if (!campaign && (difficulty !== null || blitzStart !== null)) level = opponentFor(level, seed);
   let ticketId: string | null = null;
   if (difficulty && onlineBuildEnabled() && !IS_TEST) {
     // Read before the request starts: 8 s only for a cold guest mint, 3 s once an identity is here.

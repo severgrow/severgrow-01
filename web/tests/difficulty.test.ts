@@ -93,3 +93,25 @@ describe('what the player is told about the opponent', () => {
     expect(matchLabel({ campaign: 12, difficulty: null, botLevel: 4 })).toBe('Level 12');
   });
 });
+
+describe('the Hard top rotates the rivals in (owner, 2026-11-12)', () => {
+  it('a game at the top of Hard faces 9 or a rival, chosen by its seed, each in turn', async () => {
+    const { opponentFor, HARD_TOP_ROTATION } = await import('../src/logic/difficulty.js');
+    expect([...HARD_TOP_ROTATION]).toEqual([9, 10, 11, 12]);
+    expect([0, 1, 2, 3, 4, 5].map((seed) => opponentFor(9, seed))).toEqual([9, 10, 11, 12, 9, 10]);
+    // every other level is untouched: the rotation lives only at the top
+    for (const level of [1, 3, 5, 7, 8] as const) for (const seed of [0, 1, 2, 3]) expect(opponentFor(level, seed)).toBe(level);
+    // any 32-bit seed works, including the largest
+    expect(HARD_TOP_ROTATION).toContain(opponentFor(9, 0xffffffff));
+  });
+
+  it('is applied where a Practice or Blitz game starts, before its Seeds ticket is asked for', async () => {
+    const { readFileSync } = await import('node:fs');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const start = main.indexOf('async function startGame(');
+    const body = main.slice(start, start + 6000);
+    const rotate = body.indexOf('opponentFor(level, seed)');
+    expect(rotate, 'startGame rotates the top of Hard').toBeGreaterThan(0);
+    expect(rotate, 'before the ticket names the bot').toBeLessThan(body.indexOf('requestTrainingTicket(level)'));
+  });
+});

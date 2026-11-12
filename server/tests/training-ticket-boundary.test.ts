@@ -1,5 +1,5 @@
 // THE TRAINING TICKET'S BOT-LEVEL BOUNDARY. The page can only ask for a Training match at a bot
-// level the game has (1-9); the server's guard is its own copy of that top, `MAX_TRAINING_BOT`.
+// level the game has (1-9, plus the rivals 10-12 that Hard and Blitz rotate in since 2026-11-12); the server's guard is its own copy of that top, `MAX_TRAINING_BOT`.
 // These tests pin the exact boundary, so widening or moving it later is one constant and provable.
 import { describe, expect, it } from 'vitest';
 import { MAX_TRAINING_BOT } from '../src/seeds/config.js';
@@ -12,8 +12,8 @@ const matches = { hitRateLimit: async () => ({ ok: true }) } as unknown as Stora
 const economy = () => new WorldEconomyService(new MemoryWorldEconomyStore(), matches);
 
 describe('the Training ticket bot-level boundary', () => {
-  it('is 9, the top of the bot ladder', () => {
-    expect(MAX_TRAINING_BOT).toBe(9);
+  it('is 12, the top of the bots a Training match can face (the ladder 1-9 plus the rivals, 2026-11-12)', () => {
+    expect(MAX_TRAINING_BOT).toBe(12);
   });
 
   it('issues a ticket AT the boundary', async () => {

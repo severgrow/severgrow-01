@@ -67,7 +67,9 @@ export const CAMPAIGN_LEVEL_REWARD_MAX = 100;
  * server's own copy of the boundary, in ONE constant: `issueTraining` rejects anything above it, so
  * the page and the server can never disagree about the top of the Training ladder.
  */
-export const MAX_TRAINING_BOT = 9;
+// 12 since 2026-11-12: Practice Hard and Blitz rotate the rivals (bots 10-12) in at the top, so a
+// ticket may name one. Verifying it needs bots-v0.12, which this server lists in its features.
+export const MAX_TRAINING_BOT = 12;
 
 /**
  * The Campaign's first-clear payment and the chapter bonus at every tenth level.

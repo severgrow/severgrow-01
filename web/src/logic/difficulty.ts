@@ -1,4 +1,4 @@
-import type { Level } from '../../../src/bots/levels.js';
+import type { BotLevel, Level } from '../../../src/bots/levels.js';
 
 /**
  * The three TRAINING tiers (owner direction, 2026-10-15). Each tier is a RANGE of existing bot
@@ -44,6 +44,18 @@ export type Difficulty = {
  * comes next needs the game seed, and it belongs here rather than at each caller.
  */
 export const hardOpponent = (_seed: number): number => 9;
+
+/**
+ * THE HARD TOP ROTATES (owner, 2026-11-12): a game at the top of the Hard tier (and of Blitz's ladder)
+ * faces level 9 or one of the three rivals (bots 10-12, `src/bots/levels.ts`), chosen by the game's
+ * seed. The ladders themselves are unchanged: they still step 8 <-> 9, and a rival is shown, counted
+ * and carried over as 9 (`ladderLevel`). Only the opponent of that one game changes.
+ */
+export const HARD_TOP_ROTATION = [9, 10, 11, 12] as const;
+
+/** The bot a Practice or Blitz game actually faces at `level`: the rotation at the top, else `level`. */
+export const opponentFor = (level: BotLevel, seed: number): BotLevel =>
+  level === hardOpponent(seed) ? HARD_TOP_ROTATION[(seed >>> 0) % HARD_TOP_ROTATION.length]! : level;
 
 /**
  * The Hard tier's range: its bottom, then the ceiling `hardOpponent` names. The tier table is static
