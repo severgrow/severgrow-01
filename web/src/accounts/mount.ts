@@ -7,7 +7,7 @@ import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 // guests, and an Account block in Settings (sign out, delete my account). Offline play never sees
 // any of it. Nothing shows until the Google provider is switched on in Supabase, so this is safe to
 // ship before the dashboard is set up. A failure here can never break the game (every path is caught).
-import { ACCOUNT, PRIVACY } from '../../../src/strings.js';
+import { ACCOUNT, PRIVACY, TERMS } from '../../../src/strings.js';
 import { taggedName } from '../../../src/player-tag.js';
 import { DUEL_CLIENT_VERSION, browserStorage } from '../../../server/src/client.js';
 import type { KeyValue } from '../../../server/src/client.js';
@@ -96,6 +96,7 @@ ${glassBaseCss('.acct-glass')}
 .acct-google:hover { background:#1d1d1f; }
 .acct-google:disabled { opacity:.6; cursor:default; }
 .acct-google:focus-visible, .acct-btn:focus-visible, .acct-linkbtn:focus-visible { outline:2px solid #f0e9dc; outline-offset:2px; }
+.acct-legal { display:flex; gap:4px; align-self:center; }
 .acct-linkbtn { align-self:center; min-height:44px; padding:0 8px; border:0; background:none; color:#b7a98a; font:inherit; font-size:.8125rem; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
 .acct-status { min-height:1.3em; font-size:.8125rem; color:#c9e4a8 !important; }
 .acct-status[data-tone='bad'] { color:#e0735c !important; }
@@ -325,8 +326,36 @@ export const mountAccounts = async (): Promise<void> => {
     });
     privacy.panel.scrollTop = 0;
   };
+  // ---- 0b. the terms of use at futasaku.com/#terms (launch readiness, 2026-11-12), the same panel ----
+  const terms = sheet('acct-terms', TERMS.title);
+  terms.panel.append(el('h2', '', TERMS.title), el('p', 'acct-small', TERMS.updated), el('p', '', TERMS.intro));
+  {
+    const canonicalTerms = el('a', 'acct-linkbtn', 'futasaku.com/terms');
+    canonicalTerms.href = './terms/';
+    canonicalTerms.style.alignSelf = 'flex-start';
+    canonicalTerms.style.paddingLeft = '0';
+    terms.panel.append(canonicalTerms);
+    for (const s of TERMS.sections) {
+      terms.panel.append(el('h3', '', s.heading));
+      const ul = el('ul');
+      for (const line of s.lines) ul.append(el('li', '', line));
+      terms.panel.append(ul);
+    }
+    const close = button('acct-btn', TERMS.close, 'terms-close');
+    const row = el('div', 'acct-actions row');
+    row.append(close);
+    terms.panel.append(row);
+    close.addEventListener('click', () => terms.close());
+  }
+  const openTerms = () => {
+    terms.open(() => {
+      if (location.hash === '#terms') history.replaceState(history.state, '', location.pathname + location.search);
+    });
+    terms.panel.scrollTop = 0;
+  };
   const checkHash = () => {
     if (location.hash === '#privacy') openPrivacy();
+    if (location.hash === '#terms') openTerms();
   };
   checkHash();
   window.addEventListener('hashchange', checkHash);
@@ -572,14 +601,20 @@ export const mountAccounts = async (): Promise<void> => {
     b.hidden=!emailAvailable; b.addEventListener('click',()=>openEmail(returnTo)); return b;
   };
 
+  /** Privacy and Terms, side by side, wherever the game asks someone to sign in. */
   const privacyLink = () => {
-    const b = button('acct-linkbtn', ACCOUNT.privacy, 'privacy');
-    b.addEventListener('click', () => {
-      welcome.close();
-      confirmSheet.close();
-      openPrivacy();
-    });
-    return b;
+    const link = (label: string, id: string, open: () => void) => {
+      const b = button('acct-linkbtn', label, id);
+      b.addEventListener('click', () => {
+        welcome.close();
+        confirmSheet.close();
+        open();
+      });
+      return b;
+    };
+    const row = el('div', 'acct-legal');
+    row.append(link(ACCOUNT.privacy, 'privacy', openPrivacy), link(ACCOUNT.terms, 'terms', openTerms));
+    return row;
   };
 
   // ---- 3. the one-time welcome before the first online visit ----

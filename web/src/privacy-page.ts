@@ -64,6 +64,22 @@ footer { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(214
  * one inline <style>, no <script>, no external <link>, no images.
  */
 export function renderPrivacyPage(privacy: PrivacyPolicy): string {
+  return renderLegalPage(privacy, 'privacy', 'The in-app policy sits in Settings; this page is the same document at futasaku.com/privacy.');
+}
+
+/** The terms of use at futasaku.com/terms (launch readiness, 2026-11-12): the same renderer, from TERMS. */
+export const TERMS_PAGE_PATH = 'terms/index.html';
+export function renderTermsPage(terms: PrivacyPolicy): string {
+  return renderLegalPage(terms, 'terms', 'The in-app terms sit in Settings; this page is the same document at futasaku.com/terms.');
+}
+export function writeTermsPage(terms: PrivacyPolicy, distDir: string): string {
+  const file = join(distDir, TERMS_PAGE_PATH);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, renderTermsPage(terms), 'utf8');
+  return file;
+}
+
+function renderLegalPage(privacy: PrivacyPolicy, path: 'privacy' | 'terms', footer: string): string {
   const sections = privacy.sections
     .map(
       (section) => `      <section>
@@ -83,7 +99,7 @@ ${section.lines.map((line) => `          <li>${esc(line)}</li>`).join('\n')}
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${esc(privacy.title)} - Futasaku</title>
     <meta name="description" content="${attr(privacy.intro)}" />
-    <link rel="canonical" href="https://www.futasaku.com/privacy" />
+    <link rel="canonical" href="https://www.futasaku.com/${path}" />
     <style>
 ${STYLE}    </style>
   </head>
@@ -94,7 +110,7 @@ ${STYLE}    </style>
       <p class="updated">${esc(privacy.updated)}</p>
       <p class="intro">${esc(privacy.intro)}</p>
 ${sections}
-      <footer>The in-app policy sits in Settings; this page is the same document at futasaku.com/privacy.</footer>
+      <footer>${esc(footer)}</footer>
     </main>
   </body>
 </html>

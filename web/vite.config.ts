@@ -2,8 +2,8 @@ import { fileURLToPath } from 'node:url';
 import { resolve, sep } from 'node:path';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
-import { FEEDBACK, PRIVACY } from '../src/strings.js';
-import { writePrivacyPage } from './src/privacy-page.js';
+import { FEEDBACK, PRIVACY, TERMS } from '../src/strings.js';
+import { writePrivacyPage, writeTermsPage } from './src/privacy-page.js';
 import { contentVersion, versionHeadAssets, versionManifestIcons } from './build-asset-versions.js';
 
 // The playable web version. Builds to web/dist with relative paths so it works
@@ -84,6 +84,7 @@ export default defineConfig({
     // verification crawls it with JavaScript off, so it is generated from src/strings.ts PRIVACY
     // (one source of truth) and carries no external script or stylesheet.
     writePrivacyPage(PRIVACY, output);
+    writeTermsPage(TERMS, output);
     if (channel === 'futa04' || channel === 'futa-test' || channel === 'futa05') {
       const path = resolve(output, 'manifest.webmanifest');
       const manifest = JSON.parse(readFileSync(path, 'utf8'));
@@ -126,6 +127,7 @@ export default defineConfig({
     }
     const pages = readdirSync(output).filter((n) => n.endsWith('.html')).map((n) => resolve(output, n));
     if (existsSync(resolve(output, 'privacy/index.html'))) pages.push(resolve(output, 'privacy/index.html'));
+    if (existsSync(resolve(output, 'terms/index.html'))) pages.push(resolve(output, 'terms/index.html'));
     for (const page of pages) {
       const html = readFileSync(page, 'utf8');
       const stamped = versionHeadAssets(html, hashOf);
