@@ -157,9 +157,11 @@ try {
   check(gutters.left >= 8 && gutters.right >= 8, `the frame sits inside the page's own gutters (${JSON.stringify(gutters)})`);
   const layout = (await phone.evaluate(`(() => {
     const top = (sel) => { const el = document.querySelector(sel); return el ? Math.round(el.getBoundingClientRect().top) : -1; };
-    return { frame: top('.phone-wrap'), caption: top('.preview-caption'), tabs: top('.tabs'), workbench: top('.workbench-head') };
-  })()`)) as { frame: number; caption: number; tabs: number; workbench: number };
-  check(layout.frame > 0 && layout.frame < layout.tabs && layout.tabs < layout.workbench, `preview comes before the tabs and the workbench (${JSON.stringify(layout)})`);
+    return { caption: top('.preview-caption'), frame: top('.phone-wrap'), tabs: top('.tabs'), workbench: top('.workbench-head') };
+  })()`)) as { caption: number; frame: number; tabs: number; workbench: number };
+  check(layout.caption > 0 && layout.caption < layout.frame && layout.frame < layout.tabs && layout.tabs < layout.workbench,
+    `caption, preview, controls, then the workbench (${JSON.stringify(layout)})`);
+  check(layout.caption < 844, `the caption is on the first screen, above the preview (${layout.caption}px)`);
   check(await phone.locator('.preview-caption').isVisible(), 'the frame is captioned as the real game');
   // The lab renders its section labels in its own small-caps style (innerText comes back upper-cased),
   // so compare the words case-insensitively and print the names exactly as they were rendered.
