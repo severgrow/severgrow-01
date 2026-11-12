@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
+import { contextKinds } from './helpers/context-key.js';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { allNeighbors, apply, coordKey, homeCoord, newMatch, rootCoord, scores } from '../../src/engine/index.js';
 import type { Card, State } from '../../src/engine/index.js';
@@ -270,11 +271,28 @@ try {
         `${name}: the sorting key sits directly under the context (skip/cancel) key (dx ${(g.sort.x - g.context.x).toFixed(1)}, gap ${gap.toFixed(1)})`);
       // Still a real key: a tap must reorder the hand (an invisible layer over it would eat the tap).
       if (w === 390 && side === 'right') {
+        // OWNER DIRECTION (2026-11-12): "i dont know why its showing ? guide icon since guide should
+        // not be available in blitz". The turn guide lives in the context key (owner, 2026-11-11) and
+        // nothing filtered it out of a timed mode, so it rode in. DECISION: Blitz offers no guide; the
+        // key falls back to its normal face, never a "?" that looks like a control. Nothing to skip in
+        // the Draw step, so that face is the neutral, unavailable one.
+        check(JSON.stringify(await contextKinds(p)) === '[]', `${name}: the context key offers no turn guide in Blitz`);
+        check(await p.locator('#smart-context').isDisabled()
+          && (await p.locator('#smart-context').getAttribute('data-action')) === '',
+          `${name}: with no move to offer the key is the neutral, unavailable face (not a "?")`);
         const order = () => p.evaluate(() => [...document.querySelectorAll('#hand .card')].map((c) => (c as HTMLElement).dataset.card).join(','));
         const before = await order();
         await p.locator('#hand-sort').click();
         await p.waitForTimeout(320);
         check((await order()) !== before, `${name}: the sorting key is still tappable under the context key`);
+        // The same rule where the key DOES have a move: Skip owns it, and no "?" waits beside it.
+        await p.locator('#deck').evaluate((el) => (el as HTMLElement).click());
+        await p.waitForFunction(() => {
+          const g = (window as any).__severgrow;
+          return g.state().phase === 'ACT' && !g.busy();
+        }, undefined, { timeout: 20000 });
+        check(JSON.stringify(await contextKinds(p)) === '["skip"]',
+          `${name}: in Grow skip owns the key and no "?" joins its menu`);
       }
       noErrors(p);
       await p.close();

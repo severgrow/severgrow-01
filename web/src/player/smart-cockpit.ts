@@ -4,6 +4,7 @@ import './led-art.js'; // registers the sign's pictures (explosion, snake, 点)
 import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeSpan, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledMotifOnce, ledStaticMessage, ledToken } from './led-cells.js';
 import type { LedTone } from './led-cells.js';
 import { publishDisplayLight, LIGHT_CAPS } from './light.js';
+import { BLITZ_CLOCK_EVENT } from '../logic/blitz-clock-event.js';
 import { DisplayMachine } from './display-machine.js';
 import type { DisplayFrame } from './display-machine.js';
 import type { DisplayEvent } from './display-readout.js';
@@ -712,6 +713,16 @@ html.futa04-information.reduce-motion #board .l-over .target.kind-grow { animati
 /** The turn guide as the cockpit sees it: a "?" item in the context key (or its small menu). */
 export type CockpitGuide = { available(): boolean; on(): boolean; toggle(): void; label: string };
 
+/**
+ * TRUE IN A BLITZ MATCH, and the turn guide is not offered there (owner, 2026-11-12: "i dont know why
+ * its showing ? guide icon since guide should not be available in blitz"). Nothing in the repo ever
+ * said the guide was part of Blitz: the "?" was simply wired for every turn (owner, 2026-11-11) and
+ * nothing filtered it, so it rode into a timed mode that deliberately drops Undo, Match Intel and
+ * Replay. Blitz's own rule is the page class: the one clock (`blitz/timer.ts`) marks the page
+ * `blitz-match` for a practice Blitz AND a live Blitz duel, and the key-hiding CSS already reads it.
+ */
+const blitzMatchOn = (): boolean => document.documentElement.classList.contains('blitz-match');
+
 export function mountSmartCockpit(options: { heldMove?: () => string | null; guide?: CockpitGuide } = {}) {
   // THE "?" LIVES IN THE CONTEXT KEY (owner, 2026-11-11): alone, it is the key; next to a move (Skip,
   // Bloom...) the key keeps the move and "?" joins it in the key's small menu. A detached button is
@@ -1021,7 +1032,8 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
     }
     const camera = document.querySelector<HTMLButtonElement>('.cam-whole');
     if (camera && !camera.hidden) items.push(camera);
-    if (options.guide?.available()) items.push(guideSource);
+    // Not in Blitz: the "?" is not part of a timed mode (see blitzMatchOn).
+    if (!blitzMatchOn() && options.guide?.available()) items.push(guideSource);
     if (document.getElementById('confirm')?.hidden === false) {
       items.push(document.getElementById('confirm-play') as HTMLButtonElement,document.getElementById('confirm-cancel') as HTMLButtonElement);
     }
@@ -1101,7 +1113,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
     else refreshMessage();
   });
   window.addEventListener('resize', () => { lastText = ''; machine.repaint(); });
-  return { score: (you:number,opp:number) => machine.score(you,opp), sync() {
+  const api = { score: (you:number,opp:number) => machine.score(you,opp), sync() {
     const reduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
     if (reduced !== lastReduced) { lastReduced = reduced; lastText = ''; machine.repaint(); }
     syncBloom();
@@ -1152,4 +1164,11 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
     quiet: (on: boolean) => machine.setQuiet(on),
     /** Hold the score on the sign while a lesson points at it; false lets it go. */
     holdScore: (on: boolean) => { if (on) machine.holdScore(); else machine.release(); } };
+  /**
+   * A Blitz match started or ended: the context key's item list changed (the "?" comes back when the
+   * match is over). The clock publishes this on `window` (logic/blitz-clock-event.ts — the same signal
+   * the achievement line hears), so the key is right on that frame instead of on the next board paint.
+   */
+  window.addEventListener(BLITZ_CLOCK_EVENT, () => api.sync());
+  return api;
 }
