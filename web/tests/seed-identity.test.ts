@@ -198,7 +198,11 @@ describe('the settle pays the identity that is actually playing', () => {
     // The wiring that makes the recovery real: without this line nothing moves a proof left behind
     // by a finish card that could not reach the server, until the player wins another game.
     const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
-    expect(main).toMatch(/import \{ requestTrainingTicket, seedIdentityWarm, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof \} from '\.\/online\/seed-settle\.js';/);
+    // (Name by name, so a later import from the same module never breaks the check.)
+    const settleImport = /import \{([^}]*)\} from '\.\/online\/seed-settle\.js';/.exec(main)?.[1] ?? '';
+    for (const name of ['requestTrainingTicket', 'seedIdentityWarm', 'settleQueuedSeedsOnBoot', 'trainingTicketWaitMs', 'warmSeedIdentity', 'settleSeedProof']) {
+      expect(settleImport, name).toMatch(new RegExp(`\\b${name}\\b`));
+    }
     expect(main).toMatch(/void settleQueuedSeedsOnBoot\(\);/);
     expect(main).toMatch(/void warmSeedIdentity\(\);/);
   });

@@ -474,7 +474,7 @@ const bootScreen = async (browser: Browser, vp: { width: number; height: number 
     Element.prototype.animate = function (this: Element, keyframes: unknown, options?: unknown) {
       const animation = original.call(this, keyframes as Keyframe[], options as KeyframeAnimationOptions);
       try {
-        const inWindow = this.closest('#go-world') !== null;
+        const inWindow = this.closest('#go-world, #go-boardview') !== null; // the card's window, planet or board (2026-11-12)
         if (inWindow) {
           const frames = Array.isArray(keyframes) ? keyframes : [keyframes];
           const props = new Set<string>();
