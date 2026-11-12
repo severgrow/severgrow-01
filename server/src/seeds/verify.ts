@@ -1,6 +1,6 @@
 import { apply, newMatch, viewFor } from '../../../src/engine/index.js';
 import type { Action, State } from '../../../src/engine/index.js';
-import { botSeed } from '../../../src/bots/levels.js';
+import { botSeed, isBotLevel } from '../../../src/bots/levels.js';
 import { botFor, CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
 import { ALTERNATE_OPENINGS, campaignLevelById, campaignOpening } from '../../../src/campaign/index.js';
 
@@ -19,13 +19,15 @@ export const verifyOfflineMatch = (
 ): VerifiedOffline | null => {
   if (!Array.isArray(proof.actions) || proof.actions.length < 3 || proof.actions.length > MAX_ACTIONS) return null;
   const bot = botFor(proof.botVersion);
-  if (!bot || !Number.isInteger(botLevel) || botLevel < 1 || botLevel > 9) return null;
+  // 1-9 or a rival (10-12). Whether THIS version has that bot is the version's call: bots-v0.10
+  // throws on a rival, which lands in the catch below as "not verified".
+  if (!bot || !isBotLevel(botLevel)) return null;
   let state = opening;
   try {
     for (const action of proof.actions) {
       if (state.phase === 'GAME_OVER') return null;
       if (state.actor === 1) {
-        const expected = bot(viewFor(state, 1), botLevel as 1|2|3|4|5|6|7|8|9,
+        const expected = bot(viewFor(state, 1), botLevel,
           botSeed(state.seed, botLevel, state.turnNumber, state.history?.length ?? 0));
         if (JSON.stringify(action) !== JSON.stringify(expected)) return null;
       }

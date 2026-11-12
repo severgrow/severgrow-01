@@ -49,3 +49,28 @@ describe('levels 11+ after the /3/ lessons', () => {
     expect(verifyCampaignProof(eleven.id, actions, CURRENT_BOT_VERSION)?.winner).toBe(0);
   });
 });
+
+describe('levels 74+ against a rival (bots 10-12, bots-v0.11)', () => {
+  // A level whose bot is a rival must be provable exactly like any other, under the version that has
+  // the rival, and NEVER under bots-v0.10, which did not (a v0.10 proof cannot name a rival).
+  const game = (level: (typeof CAMPAIGN_LEVELS)[number]): Action[] => {
+    let state = campaignOpening(level);
+    const actions: Action[] = [];
+    while (state.phase !== 'GAME_OVER' && actions.length < 1600) {
+      const actor = state.actor;
+      const botLevel = actor === 0 ? 7 : level.botLevel;
+      const action = chooseLevelAction(viewFor(state, actor), botLevel, botSeed(state.seed ^ (actor === 0 ? 0x9e3779b9 : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
+      actions.push(action);
+      state = apply(state, action);
+    }
+    return actions;
+  };
+
+  it('a full game on a rival level replays under bots-v0.11 and is refused under bots-v0.10', () => {
+    const level = CAMPAIGN_LEVELS.find((l) => l.botLevel === 10)!;
+    const actions = game(level);
+    const verified = verifyCampaignProof(level.id, actions, CURRENT_BOT_VERSION);
+    expect(verified, 'a genuine game must replay').not.toBeNull();
+    expect(verifyCampaignProof(level.id, actions, 'bots-v0.10')).toBeNull();
+  }, 120_000);
+});

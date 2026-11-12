@@ -13,9 +13,9 @@ export const SEED_ECONOMY = Object.freeze({
 /**
  * The last Campaign level the economy pays for. One constant, because three places must agree: the
  * award guard here, the admin's chapter rollup, and the campaign data. It moved 50 → 70 on
- * 2026-10-18 when chapters IV-VII were added.
+ * 2026-10-18 when chapters IV-VII were added, and 70 → 100 on 2026-11-12 with chapters VIII-X.
  */
-export const CAMPAIGN_LEVEL_REWARD_MAX = 70;
+export const CAMPAIGN_LEVEL_REWARD_MAX = 100;
 
 /**
  * The Campaign's first-clear payment and the chapter bonus at every tenth level.
@@ -28,8 +28,9 @@ export const CAMPAIGN_LEVEL_REWARD_MAX = 70;
  */
 export const campaignSeedReward = (level: number): { firstWin: number; chapter: number } | null => {
   if (!Number.isInteger(level) || level < 1 || level > CAMPAIGN_LEVEL_REWARD_MAX) return null;
-  const firstWin = level <= 3 ? 50 : level <= 20 ? 15 : level <= 40 ? 20 : 25;
-  const chapter = ({ 10: 50, 20: 60, 30: 75, 40: 90, 50: 125, 60: 150, 70: 200 } as Record<number, number>)[level] ?? 0;
+  // 71-100 (owner decision 2026-11-12): the final arc against the rivals pays 30 per first clear.
+  const firstWin = level <= 3 ? 50 : level <= 20 ? 15 : level <= 40 ? 20 : level <= 70 ? 25 : 30;
+  const chapter = ({ 10: 50, 20: 60, 30: 75, 40: 90, 50: 125, 60: 150, 70: 200, 80: 250, 90: 300, 100: 500 } as Record<number, number>)[level] ?? 0;
   return { firstWin, chapter };
 };
 

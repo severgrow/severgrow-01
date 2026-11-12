@@ -423,7 +423,8 @@ describe('the metric shapes report what the data supports', () => {
     // 31-70 were added 2026-10-18 and the economy pays chapter bonuses at 60 and 70 too. The range
     // is read from the economy's own cap, so a level past 50 can no longer be filed under chapter 6
     // by a hardcoded loop bound.
-    expect(boundaries).toEqual([10, 20, 30, 40, 50, 60, 70]);
+    // 71-100 added 2026-11-12 with bonuses at 80, 90 and 100.
+    expect(boundaries).toEqual([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
     expect(chapterOf(1, boundaries)).toBe(1);
     expect(chapterOf(10, boundaries)).toBe(1);
     expect(chapterOf(11, boundaries)).toBe(2);
@@ -431,6 +432,9 @@ describe('the metric shapes report what the data supports', () => {
     expect(chapterOf(51, boundaries)).toBe(6);
     expect(chapterOf(61, boundaries)).toBe(7);
     expect(chapterOf(70, boundaries)).toBe(7);
+    expect(chapterOf(71, boundaries)).toBe(8);
+    expect(chapterOf(100, boundaries)).toBe(10);
+    expect(levelIdOfSourceKey('campaign:c10-100')).toBe('c10-100');
     expect(levelIdOfSourceKey('campaign:c2-11')).toBe('c2-11');
     expect(levelIdOfSourceKey('campaign:c4-37')).toBe('c4-37');
     expect(levelIdOfSourceKey('training:abc')).toBe('training:abc');
@@ -459,7 +463,8 @@ describe('the metric shapes report what the data supports', () => {
     const repeat = await t.economy.settle({ playerId, sourceKey: 'campaign:c1-01', mode: 'campaign', outcome: 'win', opponentId: null, now: t.now - 500, campaignLevel: 1 });
     expect(repeat.replayed).toBe(true);
     // A zero-award receipt still records WHY (a level the economy cannot price).
-    await t.economy.settle({ playerId, sourceKey: 'campaign:unpriced', mode: 'campaign', outcome: 'win', opponentId: null, now: t.now - 400, campaignLevel: 99 });
+    // (101: one past the last authored level; 99 was the example until levels 71-100 were priced.)
+    await t.economy.settle({ playerId, sourceKey: 'campaign:unpriced', mode: 'campaign', outcome: 'win', opponentId: null, now: t.now - 400, campaignLevel: 101 });
 
     const wallet = await t.economy.wallet(playerId);
     const ledger = await t.store.ledger({ playerId, limit: 200 });

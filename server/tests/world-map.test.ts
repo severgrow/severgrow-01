@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { WORLD_CELLS, WORLD_CELL_IDS, legacyWorldCell, worldNeighbours } from '../src/world.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
-import { SEED_ECONOMY, campaignLevelOfSourceKey, campaignSeedReward } from '../src/seeds/config.js';
+import { CAMPAIGN_LEVEL_REWARD_MAX, SEED_ECONOMY, campaignLevelOfSourceKey, campaignSeedReward } from '../src/seeds/config.js';
+import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 
 const grant = (store: MemoryWorldEconomyStore, playerId: string, sourceKey: string, now = Date.UTC(2026, 9, 15)) =>
   store.settle({ playerId, sourceKey, mode: 'campaign', outcome: 'win', opponentId: null, campaignLevel: 1, now });
@@ -62,8 +63,18 @@ describe('economy schedule and caps', () => {
     expect(campaignSeedReward(60)).toEqual({ firstWin: 25, chapter: 150 });
     expect(campaignSeedReward(69)).toEqual({ firstWin: 25, chapter: 0 });
     expect(campaignSeedReward(70)).toEqual({ firstWin: 25, chapter: 200 });
+    // 71-100 (owner decision 2026-11-12): 30 per first clear, chapter bonuses 250 / 300 / 500.
+    expect(campaignSeedReward(71)).toEqual({ firstWin: 30, chapter: 0 });
+    expect(campaignSeedReward(80)).toEqual({ firstWin: 30, chapter: 250 });
+    expect(campaignSeedReward(89)).toEqual({ firstWin: 30, chapter: 0 });
+    expect(campaignSeedReward(90)).toEqual({ firstWin: 30, chapter: 300 });
+    expect(campaignSeedReward(99)).toEqual({ firstWin: 30, chapter: 0 });
+    expect(campaignSeedReward(100)).toEqual({ firstWin: 30, chapter: 500 });
+    // Every authored level pays: the cap and the campaign agree on the last level.
+    expect(CAMPAIGN_LEVEL_REWARD_MAX).toBe(CAMPAIGN_LEVELS.length);
+    for (const level of CAMPAIGN_LEVELS) expect(campaignSeedReward(level.number), level.id).not.toBeNull();
     // Past the last authored level it is honestly "no reward", not silently zero.
-    expect(campaignSeedReward(71)).toBeNull();
+    expect(campaignSeedReward(101)).toBeNull();
     expect(campaignSeedReward(0)).toBeNull();
   });
   it('caps queue matches and resets at the server UTC boundary', async () => {
