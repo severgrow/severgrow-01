@@ -68,7 +68,11 @@ describe('every level is legal and deterministic', () => {
     // to keep its test comfortably under its budget. Every other level runs the whole sample. Only
     // the count differs; the check itself is identical.
     const sample = level === 9 ? states.filter((_, i) => i % SWEEP_STRIDE_LEVEL9 === 0) : states;
-    it(`level ${level}: same inputs give the same legal action (${sample.length} positions)`, () => {
+    // Level 9's determinized search costs ~10x the other levels per position, so it strides the
+    // sample. Those 67 positions take 7.2s alone and 16.0s with a second test file alongside
+    // here (the straight 200-position levels are ~2s): only level 9 gets a budget, so a busy
+    // runner cannot turn this file red for load.
+    it(`level ${level}: same inputs give the same legal action (${sample.length} positions)`, level === 9 ? { timeout: 180_000 } : {}, () => {
       for (const s of sample) {
         const v = viewFor(s, s.actor);
         const seed = seedFor(s, level);

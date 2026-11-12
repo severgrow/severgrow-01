@@ -208,7 +208,10 @@ describe('player (a): follows the light', () => {
 
 describe('player (b): random legal moves', () => {
   for (const lesson of GUIDED) {
-    it(`level ${lesson.level}: always finishes and never deadlocks`, () => {
+    // Level 10 is 25 full games against the real bot on the 37-hex board: 15.7s measured here,
+    // 80.37s measured on a loaded machine today. The default 60s ceiling makes this a coin flip,
+    // not a test, so it gets its own budget. Every other level finishes in under 2s.
+    it(`level ${lesson.level}: always finishes and never deadlocks`, lesson.level === 10 ? { timeout: 180_000 } : {}, () => {
       for (let seed = 1; seed <= 25; seed++) {
         const rand = mulberry32(seed * 7919 + lesson.level);
         const end = play(lesson, (s) => {
