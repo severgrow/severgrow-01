@@ -669,7 +669,8 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         return { ok: true, match: rowToMatch(own.rows[0]), seat: asNumber(own.rows[0].my_seat) === 1 ? 1 : 0, paired: false };
       }
 
-      // 2. CAP: a player at the per-player limit may not park or accept another match.
+      // 2. CAP, read once: the limit forbids joining a FRESH search or parking (both add an open
+      // match). It never forbids continuing a game the searchers already share (step 3b below).
       const cap = await client.query(
         `select count(*)::int as n
            from matches m
@@ -677,10 +678,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
           where p.player_id = $1 and m.status <> 'finished'`,
         [input.playerId],
       );
-      if (asNumber(cap.rows[0]?.n ?? 0) >= input.maxOpenMatches) {
-        await client.query('rollback');
-        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
-      }
+      const atCap = asNumber(cap.rows[0]?.n ?? 0) >= input.maxOpenMatches;
 
       // 3. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
       const claim = await client.query(
@@ -704,6 +702,10 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         [input.playerId],
       );
       if (claim.rows[0]) {
+        if (atCap) {
+          await client.query('rollback');
+          return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+        }
         const row = claim.rows[0];
         const matchId = asString(row.id);
         const seat: Player = asNumber(row.opener_seat) === 0 ? 1 : 0;
@@ -760,7 +762,11 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         return { ok: false, code: 'MATCH_FULL', reason: 'The shared game moved on; try again.' };
       }
 
-      // 4. Nobody is waiting: park the player's search.
+      // 4. Nobody is waiting: park the player's search (unless the cap forbids one more open game).
+      if (atCap) {
+        await client.query('rollback');
+        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+      }
       try {
         await client.query(INSERT_MATCH_SQL, matchInsertValues({ ...input.parked, openQueue: true }));
       } catch (error) {

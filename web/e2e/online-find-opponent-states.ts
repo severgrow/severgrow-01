@@ -127,7 +127,9 @@ try {
   const vp = { width: 390, height: 844 };
   const a = await newPage(vp);
   await openFind(a);
-  await a.waitForTimeout(1_200);
+  // Stay well INSIDE the walk's 1.2 s parked window: waiting the whole window made this check race
+  // the very offer it asserts is absent.
+  await a.waitForTimeout(400);
   const searchingTitle = await a.textContent('#online-waiting-title');
   check('parks on a searching screen', (await visible(a, 'online-waiting')) === true);
   check('searching title is honest', (searchingTitle ?? '').includes('Finding an opponent'), searchingTitle ?? '');
