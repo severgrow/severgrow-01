@@ -5,8 +5,8 @@
 // that position as its `base`; the game itself never writes one for an ordinary game.
 import { CURRENT_RULES_VERSION, PREVIOUS_03_RULES_VERSION, PREVIOUS_BLOOM_RULES_VERSION, PREVIOUS_MEGA_RULES_VERSION, PREVIOUS_RULES_VERSION, apply, replay, rulesConfig } from '../../../src/engine/index.js';
 import type { Action, State } from '../../../src/engine/index.js';
-import { LEVELS } from '../../../src/bots/levels.js';
-import type { Level } from '../../../src/bots/levels.js';
+import { isBotLevel } from '../../../src/bots/levels.js';
+import type { BotLevel } from '../../../src/bots/levels.js';
 import { difficultyById } from './difficulty.js';
 import type { DifficultyId } from './difficulty.js';
 
@@ -16,7 +16,7 @@ export const SAVE_KEY = 'severgrow.save.v7';
  * writes its one-game carry-over when it ends (see `logic/difficulty.ts`). Optional: a save without
  * it is a game started outside the tiers (a URL seed, the lab, a campaign level).
  */
-export type Saved<C> = { seed: number; actions: readonly Action[]; coach: C | null; level: Level; base?: State | null; difficulty?: DifficultyId };
+export type Saved<C> = { seed: number; actions: readonly Action[]; coach: C | null; level: BotLevel; base?: State | null; difficulty?: DifficultyId };
 export type Loaded<C> = Saved<C> & { state: State };
 
 export const encodeSave = <C>(s: Saved<C>): string => JSON.stringify({ v: 7, rules: CURRENT_RULES_VERSION, seed: s.seed, actions: s.actions, coach: s.coach, level: s.level, ...(s.base ? { base: s.base } : {}), ...(s.difficulty ? { difficulty: s.difficulty } : {}) });
@@ -39,7 +39,9 @@ export const decodeSave = <C>(raw: string | null): Loaded<C> | null => {
     const state = oldConfig && restored.phase !== 'GAME_OVER'
       ? { ...restored,config:{...restored.config,deckFinalTurns:true,strengthenLimitPerGame:-1,expandedBloom:true,strengthTiebreak:true},startingPlayer:restored.startingPlayer ?? (restored.turnNumber % 2 ? restored.turnPlayer : (1-restored.turnPlayer) as 0|1),deckFinal:null }
       : restored;
-    const level = LEVELS.includes(s.level as Level) ? (s.level as Level) : 7;
+    // Any bot a match can be played against, rivals included (a campaign level from 74 on): a match
+    // saved against a rival must resume against that rival, never quietly against level 7.
+    const level: BotLevel = typeof s.level === 'number' && isBotLevel(s.level) ? s.level : 7;
     // A tier id that no longer exists (or junk) is dropped, exactly as an unknown level is.
     const difficulty = typeof s.difficulty === 'string' && difficultyById(s.difficulty) ? s.difficulty : undefined;
     const step = difficulty ? { difficulty } : {};

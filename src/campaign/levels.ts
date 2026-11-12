@@ -8,7 +8,7 @@
 // list below (see docs/CAMPAIGN.md); the schema and the UI expand to 200+ levels with no change.
 import { allCoords, coordKey, rootCoord } from '../engine/index.js';
 import type { BoardSpec, RulesConfig } from '../engine/index.js';
-import type { Level } from '../bots/levels.js';
+import type { BotLevel, Level } from '../bots/levels.js';
 // The small map's size, imported rather than re-typed: the teaching levels play on the same small
 // map the old Tutorial used, and there stays exactly ONE source of truth for how big that map is.
 // It lives in src/campaign/small-board.ts so the levels keep working when the Tutorial is retired.
@@ -16,6 +16,8 @@ import { SMALL_BOARD_RADIUS as TUTORIAL_BOARD_RADIUS } from './small-board.js';
 // Chapters IV-VII live in their own file: 40 authored boards would make every merge with the
 // parallel onboarding work a fight. Type-only import there, so there is no runtime cycle.
 import { CHAPTER_4_LEVELS, CHAPTER_5_LEVELS, CHAPTER_6_LEVELS, CHAPTER_7_LEVELS } from './levels-late.js';
+// Chapters VIII-X (71-100), the final arc, in their own file for the same reason.
+import { CHAPTER_8_LEVELS, CHAPTER_9_LEVELS, CHAPTER_10_LEVELS } from './levels-final.js';
 
 export type CampaignLevel = {
   /** Stable id, never reused or renumbered once published. */
@@ -33,14 +35,23 @@ export type CampaignLevel = {
    * (the engine derives all three from the seed), so a level is reproducible by construction.
    */
   seed: number;
-  /** The existing bot level (1-9). There is no separate campaign AI. */
-  botLevel: Level;
+  /** The bot: a ladder level (1-9) or, from level 74, one of the rivals (10-12). No other campaign AI. */
+  botLevel: BotLevel;
   /**
    * A deliberate easier level (bot 8) placed where the terrain spikes, so the chapter changes gear
    * without dropping the player into a wall. Levels 31-70 only; never two in a row, at most six in
    * the whole extension. The campaign tests read this flag instead of trusting an invisible curve.
    */
   breather?: boolean;
+  /**
+   * A deliberately unfair board (levels 71+): the seat it favours. The balance report must show that
+   * seat ahead by a bounded margin instead of the usual even split (docs/CAMPAIGN-71-100.md).
+   */
+  uneven?: 'bot' | 'player';
+  /** An uneven board allowed past the usual bound (up to 80% bot-vs-bot). A handful, by design. */
+  harsh?: boolean;
+  /** The one kind of board allowed stone in a home zone (three open home neighbours are still kept). */
+  homeZoneStone?: boolean;
   /**
    * Engine `RulesConfig` overrides. `resolveConfig` validates these and THROWS on an impossible
    * board — that throw is the validation layer. A hand-authored `config.board` is the only way to
@@ -229,6 +240,9 @@ export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   ...CHAPTER_5_LEVELS,
   ...CHAPTER_6_LEVELS,
   ...CHAPTER_7_LEVELS,
+  ...CHAPTER_8_LEVELS,
+  ...CHAPTER_9_LEVELS,
+  ...CHAPTER_10_LEVELS,
 ]);
 
 export const CAMPAIGN_CHAPTERS: readonly CampaignChapter[] = Object.freeze([
@@ -266,6 +280,21 @@ export const CAMPAIGN_CHAPTERS: readonly CampaignChapter[] = Object.freeze([
     number: 7,
     id: 'broken-crown',
     levels: Object.freeze(CAMPAIGN_LEVELS.filter((l) => l.chapter === 7)),
+  }),
+  Object.freeze({
+    number: 8,
+    id: 'the-bridges',
+    levels: Object.freeze(CAMPAIGN_LEVELS.filter((l) => l.chapter === 8)),
+  }),
+  Object.freeze({
+    number: 9,
+    id: 'uneven-ground',
+    levels: Object.freeze(CAMPAIGN_LEVELS.filter((l) => l.chapter === 9)),
+  }),
+  Object.freeze({
+    number: 10,
+    id: 'the-last-garden',
+    levels: Object.freeze(CAMPAIGN_LEVELS.filter((l) => l.chapter === 10)),
   }),
 ]);
 

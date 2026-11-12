@@ -26,12 +26,12 @@ import type { CampaignProgress } from '../../src/campaign/index.js';
 import { TUTORIAL_BOARD_RADIUS } from '../../web/src/logic/tutorial-script.js';
 
 describe('campaign levels: the definition is well formed', () => {
-  it('the whole campaign validates (no throw): seven chapters of ten, levels 1-70', () => {
+  it('the whole campaign validates (no throw): ten chapters of ten, levels 1-100', () => {
     expect(() => validateCampaign()).not.toThrow();
-    expect(CAMPAIGN_LEVELS).toHaveLength(70);
-    expect(CAMPAIGN_LEVELS.map((l) => l.number)).toEqual(Array.from({ length: 70 }, (_, i) => i + 1));
+    expect(CAMPAIGN_LEVELS).toHaveLength(100);
+    expect(CAMPAIGN_LEVELS.map((l) => l.number)).toEqual(Array.from({ length: 100 }, (_, i) => i + 1));
     // Chapters are contiguous and each holds exactly its ten levels.
-    expect(CAMPAIGN_CHAPTERS.map((c) => c.number)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(CAMPAIGN_CHAPTERS.map((c) => c.number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     for (const chapter of CAMPAIGN_CHAPTERS) expect(chapter.levels).toHaveLength(10);
     for (const level of CAMPAIGN_LEVELS) {
       expect(CAMPAIGN_CHAPTERS[level.chapter - 1]!.levels).toContain(level);
@@ -46,19 +46,24 @@ describe('campaign levels: the definition is well formed', () => {
       expect(campaignLevelByNumber(level.number)).toBe(level);
     }
     expect(campaignLevelById('c1-99')).toBeNull();
-    // 31-70 now exist (chapters IV-VII), so 70 is the last built level.
+    // 31-100 now exist (chapters IV-X), so 100 is the last built level.
     expect(nextCampaignLevel(30)).toBe(campaignLevelByNumber(31));
     expect(nextCampaignLevel(40)).toBe(campaignLevelByNumber(41));
     expect(nextCampaignLevel(50)).toBe(campaignLevelByNumber(51));
     expect(nextCampaignLevel(60)).toBe(campaignLevelByNumber(61));
-    expect(nextCampaignLevel(70)).toBeNull();
+    expect(nextCampaignLevel(70)).toBe(campaignLevelByNumber(71));
+    expect(nextCampaignLevel(90)).toBe(campaignLevelByNumber(91));
+    expect(nextCampaignLevel(100)).toBeNull();
+    // The id carries the chapter and the level, the shape the Seeds parser and proof verifier read.
+    for (const level of CAMPAIGN_LEVELS) expect(level.id, level.id).toMatch(new RegExp(`^c${level.chapter}-\\d+$`));
     expect(nextCampaignLevel(1)).toBe(CAMPAIGN_LEVELS[1]);
   });
 
-  it('every level uses the existing bot levels and a non-negative integer seed', () => {
+  it('every level uses an existing bot and a non-negative integer seed; the rivals only from 71', () => {
     for (const level of CAMPAIGN_LEVELS) {
       expect(level.botLevel).toBeGreaterThanOrEqual(1);
-      expect(level.botLevel).toBeLessThanOrEqual(9);
+      // 1-9 are the ladder; 10-12 the rivals, which exist only for the final arc.
+      expect(level.botLevel).toBeLessThanOrEqual(level.number >= 71 ? 12 : 9);
       expect(Number.isSafeInteger(level.seed)).toBe(true);
       expect(level.seed).toBeGreaterThanOrEqual(0);
       expect(level.name.trim().length).toBeGreaterThan(0);
@@ -80,8 +85,29 @@ describe('campaign levels: the definition is well formed', () => {
 
   it('no authored board draws rock or gold inside a root zone (the generator eligibility rule)', () => {
     const checks = campaignChecks();
-    for (const level of CAMPAIGN_LEVELS) {
+    for (const level of CAMPAIGN_LEVELS.filter((l) => !l.homeZoneStone)) {
       expect(checks.get(level.id)!.terrainInRootZone, level.id).toEqual([]);
+    }
+  });
+
+  it('the one exception: a flagged board may put STONE (never gold) in the PLAYER\'s home zone', () => {
+    // Owner decision 2026-11-12 (Uneven Ground): at most two boards, from 71 on, may crowd the
+    // player's home with stone. The home still keeps three open neighbours (the validator throws
+    // below that), the bot's zone stays clear, and gold never sits in a zone.
+    const checks = campaignChecks();
+    const flagged = CAMPAIGN_LEVELS.filter((l) => l.homeZoneStone);
+    expect(flagged.length).toBeGreaterThanOrEqual(1);
+    expect(flagged.length).toBeLessThanOrEqual(2);
+    const playerZone = new Set(['-2,2', '-1,2', '-1,1', '-2,1', '-3,2', '-3,3', '-2,3']);
+    for (const level of flagged) {
+      expect(level.number, level.id).toBeGreaterThanOrEqual(71);
+      const inZone = checks.get(level.id)!.terrainInRootZone;
+      expect(inZone.length, level.id).toBeGreaterThan(0);
+      for (const k of inZone) {
+        expect(playerZone.has(k), `${level.id}: ${k} is not in the player's zone`).toBe(true);
+        expect(level.config.board!.rock, `${level.id}: ${k} must be stone`).toContain(k);
+      }
+      expect(checks.get(level.id)!.minHomeOpenNeighbours, level.id).toBeGreaterThanOrEqual(3);
     }
   });
 
@@ -119,6 +145,15 @@ describe('campaign levels: the definition is well formed', () => {
       // Chapter VII (2026-10-18): the finale, heaviest stone in the campaign (10-16).
       [61, 10], [62, 10], [63, 6], [64, 12], [65, 12],
       [66, 12], [67, 14], [68, 12], [69, 14], [70, 16],
+      // Chapter VIII (2026-11-12): rivers. The centre is stone, so the counts are odd as often as even.
+      [71, 3], [72, 5], [73, 5], [74, 5], [75, 7],
+      [76, 3], [77, 9], [78, 5], [79, 4], [80, 9],
+      // Chapter IX (2026-11-12): uneven ground. Light stone; the unfairness is in WHERE it sits.
+      [81, 4], [82, 3], [83, 4], [84, 0], [85, 4],
+      [86, 2], [87, 3], [88, 4], [89, 4], [90, 5],
+      // Chapter X (2026-11-12): callbacks with the late tools.
+      [91, 0], [92, 5], [93, 5], [94, 1], [95, 7],
+      [96, 7], [97, 7], [98, 5], [99, 9], [100, 9],
     ]);
   });
 
@@ -214,6 +249,11 @@ describe('campaign levels: the definition is well formed', () => {
   it('uses gold as well as rocks across the whole campaign (every level but the first has gold off the centre)', () => {
     for (const level of CAMPAIGN_LEVELS) {
       expect(level.config.board!.gold.length, level.id).toBeGreaterThanOrEqual(1);
+    }
+    // 1-70 always carry the gold centre. From 71 the centre may be stone (owner decision 2026-11-12):
+    // with the centre gold and its two neighbours protected, every board 4-70 shared one four-step
+    // route through the middle, so the final arc is allowed to break it (see the route test below).
+    for (const level of CAMPAIGN_LEVELS.filter((l) => l.number <= 70)) {
       expect(level.config.board!.gold, level.id).toContain('0,0');
     }
     // The refinement: every level from 2 on rewards growth on gold beyond the bare centre.
@@ -239,11 +279,11 @@ describe('campaign levels: the definition is well formed', () => {
   });
 
   it('from 31 the bot repeats at the top, and may dip only on a flagged breather', () => {
-    // There is no AI above 9, so 31+ carries difficulty in the BOARD. The owner allows an
-    // occasional bot 8 as a breather. That is a design decision, so it is explicit in the data
-    // (`breather: true`) instead of an invisible curve — and the rules below are stricter than
+    // There is no AI above 9 in 31-70, so those levels carry difficulty in the BOARD. The owner
+    // allows an occasional bot 8 as a breather. That is a design decision, so it is explicit in the
+    // data (`breather: true`) instead of an invisible curve — and the rules below are stricter than
     // "it may drop": a dip must be declared, can never be consecutive, and is capped.
-    const late = CAMPAIGN_LEVELS.filter((l) => l.number >= 31);
+    const late = CAMPAIGN_LEVELS.filter((l) => l.number >= 31 && l.number <= 70);
     expect(late.length).toBeGreaterThan(0);
     let breathers = 0;
     for (const [i, level] of late.entries()) {
@@ -259,6 +299,43 @@ describe('campaign levels: the definition is well formed', () => {
     }
     // Never a quarter of the extension: a breather is punctuation, not the rule.
     expect(breathers).toBeLessThanOrEqual(Math.floor(late.length / 4));
+  });
+
+  it('71-100: each chapter brings its rival, which never appears before its debut; breathers are bot 9', () => {
+    // The final arc (owner decision 2026-11-12): VIII Ironwood (10), IX Strangler Fig (11), X Night
+    // Bloom (12). A rival may come back later (98 and 99 give 10 and 11 their best boards), never
+    // early. Bot 9 is the arc's floor: the chapter openers before the debut and the breathers.
+    const debut: Record<number, number> = { 10: 74, 11: 83, 12: 91 };
+    const arc = CAMPAIGN_LEVELS.filter((l) => l.number >= 71);
+    expect(arc).toHaveLength(30);
+    let breathers = 0;
+    for (const [i, level] of arc.entries()) {
+      expect([9, 10, 11, 12], level.id).toContain(level.botLevel);
+      if (level.botLevel >= 10) expect(level.number, `${level.id} uses bot ${level.botLevel} before its debut`).toBeGreaterThanOrEqual(debut[level.botLevel]!);
+      if (level.breather) {
+        breathers++;
+        expect(level.botLevel, `${level.id} is a breather against a rival`).toBe(9);
+      }
+      if (i > 0) expect(!!level.breather && !!arc[i - 1]!.breather, `${level.id} follows a breather`).toBe(false);
+    }
+    expect(breathers).toBe(3);
+    // Each debut is where the data says.
+    for (const [bot, n] of Object.entries(debut)) expect(campaignLevelByNumber(n)!.botLevel).toBe(Number(bot));
+  });
+
+  it('uneven boards are declared, live in the final arc, and only a handful are harsh', () => {
+    // Owner decision 2026-11-12: from the final arc, a board may be unfair on purpose; it says whom
+    // it favours, and 3-4 may go past the usual bound (\`harsh\`). The balance report holds them to it.
+    for (const level of CAMPAIGN_LEVELS) {
+      if (level.uneven || level.harsh || level.homeZoneStone) expect(level.number, level.id).toBeGreaterThanOrEqual(71);
+      if (level.harsh) expect(level.uneven, `${level.id} is harsh but not declared uneven`).toBeDefined();
+      if (level.homeZoneStone) expect(level.uneven, level.id).toBe('bot');
+    }
+    const harsh = CAMPAIGN_LEVELS.filter((l) => l.harsh).length;
+    expect(harsh).toBeGreaterThanOrEqual(3);
+    expect(harsh).toBeLessThanOrEqual(4);
+    // At least one board is unfair in the player's favour: unfair is a tool, not only a wall.
+    expect(CAMPAIGN_LEVELS.some((l) => l.uneven === 'player')).toBe(true);
   });
 
   it('ships the approved bot ladder exactly, so the rebalance cannot be quietly undone', () => {
@@ -278,11 +355,17 @@ describe('campaign levels: the definition is well formed', () => {
     // Chapters IV-VII (2026-10-18): bot 9 throughout, with breathers at 31 (re-entry after the
     // finale), 38 (gold-heavy), 46 (the open board), 55 (before the squeeze) and 63 (before the
     // finale). Pinned so a later edit is a decision.
-    expect(CAMPAIGN_LEVELS.filter((l) => l.number >= 31).map((l) => l.botLevel)).toEqual([
+    expect(CAMPAIGN_LEVELS.filter((l) => l.number >= 31 && l.number <= 70).map((l) => l.botLevel)).toEqual([
       8, 9, 9, 9, 9, 9, 9, 8, 9, 9,
       9, 9, 9, 9, 9, 8, 9, 9, 9, 9,
       9, 9, 9, 9, 8, 9, 9, 9, 9, 9,
       9, 9, 8, 9, 9, 9, 9, 9, 9, 9,
+    ]);
+    // Chapters VIII-X (2026-11-12): the rivals. Breathers at 76, 84 and 93 (bot 9).
+    expect(CAMPAIGN_LEVELS.filter((l) => l.number >= 71).map((l) => l.botLevel)).toEqual([
+      9, 9, 9, 10, 10, 9, 10, 10, 10, 10,
+      9, 9, 11, 9, 11, 11, 11, 11, 11, 11,
+      12, 12, 9, 12, 12, 12, 12, 10, 11, 12,
     ]);
   });
 
@@ -309,11 +392,12 @@ describe('campaign levels: the definition is well formed', () => {
     expect(TUTORIAL_BOARD_RADIUS).toBe(2);
   });
   it('raises terrain pressure chapter by chapter, so the late game is not more of the same', () => {
-    // 31+ carries difficulty in the board (there is no bot above 9), so the chapters must actually
-    // escalate. Measured as mean rocks + gold per chapter: IV is rock-led, V gold-led, VI rock-heavy
-    // and gold-light, VII both — different compositions, non-decreasing pressure. This test covers
-    // whatever chapters exist, so it keeps holding as V-VII are added.
-    const pressure = CAMPAIGN_CHAPTERS.map((chapter) => {
+    // 31-70 carry difficulty in the board (there is no bot above 9 there), so chapters I-VII must
+    // actually escalate. Measured as mean rocks + gold per chapter: IV is rock-led, V gold-led, VI
+    // rock-heavy and gold-light, VII both — different compositions, non-decreasing pressure. The
+    // final arc (VIII-X) is held to a different rule (the route test below): pressure was used up
+    // by VII, and the arc's difficulty comes from the rivals and from where the stone sits.
+    const pressure = CAMPAIGN_CHAPTERS.filter((c) => c.number <= 7).map((chapter) => {
       const total = chapter.levels.reduce((n, l) => n + l.config.board!.rock.length + l.config.board!.gold.length, 0);
       return { chapter: chapter.number, mean: total / chapter.levels.length };
     });
@@ -325,9 +409,57 @@ describe('campaign levels: the definition is well formed', () => {
     }
     // And the extension really is denser than the teaching chapters: 31+ averages more terrain.
     const early = CAMPAIGN_LEVELS.filter((l) => l.number <= 30);
-    const late = CAMPAIGN_LEVELS.filter((l) => l.number >= 31);
+    const late = CAMPAIGN_LEVELS.filter((l) => l.number >= 31 && l.number <= 70);
     const mean = (ls: typeof early) => ls.reduce((n, l) => n + l.config.board!.rock.length + l.config.board!.gold.length, 0) / ls.length;
     expect(mean(late)).toBeGreaterThan(mean(early));
+  });
+});
+
+describe('campaign levels: the final arc breaks the old spine', () => {
+  // Every board 4-70 has the same shortest route between the homes: four steps through the centre
+  // (docs/CAMPAIGN-71-100.md, A1). The arc exists to change that, so it is pinned here.
+  const route = (level: (typeof CAMPAIGN_LEVELS)[number]): number => {
+    const b = level.config.board!;
+    const rock = new Set(b.rock);
+    const open = new Set(b.cells.filter((k) => !rock.has(k)));
+    const dist = new Map([[b.homes[0], 0]]);
+    const queue = [b.homes[0]];
+    while (queue.length) {
+      const k = queue.shift()!;
+      const [q, r] = k.split(',').map(Number) as [number, number];
+      for (const [dq, dr] of [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]] as const) {
+        const n = `${q + dq},${r + dr}`;
+        if (open.has(n) && !dist.has(n)) {
+          dist.set(n, dist.get(k)! + 1);
+          queue.push(n);
+        }
+      }
+    }
+    return dist.get(b.homes[1])!;
+  };
+
+  it('4-70 all share the four-step route (the finding the arc answers)', () => {
+    for (const level of CAMPAIGN_LEVELS.filter((l) => l.number >= 4 && l.number <= 70)) expect(route(level), level.id).toBe(4);
+  });
+
+  it('71-100: at least half the boards stone the centre, and the route is longer on average', () => {
+    const arc = CAMPAIGN_LEVELS.filter((l) => l.number >= 71);
+    const stoned = arc.filter((l) => l.config.board!.rock.includes('0,0')).length;
+    expect(stoned).toBeGreaterThanOrEqual(15);
+    const mean = arc.reduce((n, l) => n + route(l), 0) / arc.length;
+    expect(mean).toBeGreaterThan(5);
+    // Chapter VIII is the rivers chapter: every one of its boards is longer than four steps.
+    for (const level of arc.filter((l) => l.chapter === 8)) expect(route(level), level.id).toBeGreaterThan(4);
+  });
+
+  it('no board 71-100 repeats an earlier board (rock and gold), so the arc is never more of the same', () => {
+    const key = (l: (typeof CAMPAIGN_LEVELS)[number]) => `${[...l.config.board!.rock].sort().join(' ')}|${[...l.config.board!.gold].sort().join(' ')}`;
+    const seen = new Map<string, string>();
+    for (const level of CAMPAIGN_LEVELS) {
+      const k = key(level);
+      if (level.number >= 71) expect(seen.get(k), `${level.id} repeats ${seen.get(k)}`).toBeUndefined();
+      if (!seen.has(k)) seen.set(k, level.id);
+    }
   });
 });
 

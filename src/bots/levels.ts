@@ -2,8 +2,8 @@
 // original GreedyBot, unchanged. All levels read only their own View, are pure and
 // deterministic: the same (view, level, seed) always gives the same action. Search
 // budgets are counted in iterations, never in time.
-import { allNeighbors, bestMeldPartition, coordKey, createCards, legalActions, mulberry32, score } from '../engine/index.js';
-import type { Action, Card, Player, View } from '../engine/index.js';
+import { allNeighbors, bestMeldPartition, coordKey, createCards, hexDistance, homeCoord, legalActions, mulberry32, onBoard, parseKey, score } from '../engine/index.js';
+import type { Action, Card, Player, Tile, View } from '../engine/index.js';
 import { lookBlooms, shortlistBlooms } from './bloomLook.js';
 import { simulate } from './evaluate.js';
 import { WEIGHTS, rankActions } from './GreedyBot.js';
@@ -13,6 +13,28 @@ import type { Tier } from './tactics.js';
 
 export const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 export type Level = (typeof LEVELS)[number];
+
+/**
+ * The rivals (bots-v0.11): three bots above level 9, each with its own way of playing. They are not
+ * rungs of the 1-9 ladder (none is "10 = better than 9, 11 = better than 10"); they sit beside each
+ * other at the top. Their names are for the code and docs only; the game never shows them.
+ *   10 Ironwood       defensive: compact, guards its home ring, wins on score
+ *   11 Strangler Fig  aggressive: grows toward your home and tries to Strangle it
+ *   12 Night Bloom    patient: holds Blooms and Fruit cards for the turn that counts
+ * Bots 1-9 are frozen (tests/bots/levels-frozen.test.ts): nothing here changes what they choose.
+ */
+export const RIVALS = [10, 11, 12] as const;
+export type Rival = (typeof RIVALS)[number];
+/** Every bot a level, a ticket or a proof may name: the 1-9 ladder plus the rivals. */
+export const BOT_LEVELS = [...LEVELS, ...RIVALS] as const;
+export type BotLevel = Level | Rival;
+export const isRival = (n: number): n is Rival => (RIVALS as readonly number[]).includes(n);
+export const isBotLevel = (n: number): n is BotLevel => (BOT_LEVELS as readonly number[]).includes(n);
+/**
+ * The level a player sees and their stats count. The rivals are never named or numbered in the game:
+ * they show (and are counted) as level 9, the top of the ladder they sit above.
+ */
+export const ladderLevel = (n: BotLevel): Level => (isRival(n) ? 9 : n);
 
 export type LevelConfig = {
   /** Chance (0..1) of not playing the best move on a turn step. */
@@ -50,7 +72,25 @@ export type LevelConfig = {
   bloomSkip: number;
   /** v0.7: holds a plain 3-card Bloom when the unseen cards make a Bloom of 4 likely (levels 8-9). */
   bloomHold: boolean;
+  // ---- rivals only (bots-v0.11). Absent on levels 1-9, which therefore behave exactly as before. ----
+  /** Search the Lab's / campaign's authored boards as fully as the classic board (no iteration caps). */
+  fullSearch?: boolean;
+  /** Candidate moves the turn search judges (default 6). */
+  candidates?: number;
+  /** The rival's way of playing: an extra board term added to every growing move's score. */
+  style?: Style;
+  /** How much the style term counts (points per unit of the term). */
+  styleWeight?: number;
+  /** Bloom holding: the chance of a Bloom of 4 needed to wait (default HOLD_CHANCE). */
+  holdChance?: number;
+  /** Bloom holding: how much the best move without it may cost (default HOLD_MARGIN). */
+  holdMargin?: number;
+  /** Fruit patience: a Fruit card worth less than this is kept for later while the deck is long. */
+  fruitPatience?: number;
 };
+
+/** A rival's way of playing (see `styleTerm`). */
+export type Style = 'fortress' | 'siege' | 'patient';
 
 const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', replyWeight: 0.5, lookahead: 0, searchIterations: 0, strengthenTier: 3, fruitTier: 3, whimRate: 0, fruitRandomRate: 0, fruitThrowRate: 0, bloomBand: 'full', bloomSkip: 0, bloomHold: false } as const;
 
@@ -80,6 +120,22 @@ export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
   //    and imagines 6 possible opponent hands to judge their best reply.
   9: { ...base, bloomHold: true, lookahead: 1, discardStyle: 'keepHigh', cardDenial: true, searchIterations: 6, replyWeight: 0.3, strengthenTier: 4, fruitTier: 4 },
 };
+
+/** Level 9's planner at full strength on every board: the base every rival starts from. */
+const PLANNER: LevelConfig = { ...LEVEL_CONFIGS[9], fullSearch: true };
+
+/**
+ * The rivals' knobs. Tuned with `src/sim/rivals.ts` (docs/RIVALS.md): each at least matches the
+ * full-strength level 9 on campaign boards, two clearly beat it, and each style shows in the numbers.
+ */
+export const RIVAL_CONFIGS: Record<Rival, LevelConfig> = {
+  10: { ...PLANNER, style: 'fortress', styleWeight: 0.8, dangerWeight: 1.0, pressureWeight: 0.2 },
+  11: { ...PLANNER, style: 'siege', styleWeight: 0.9, dangerWeight: 0.45, pressureWeight: 0.45 },
+  12: { ...PLANNER, style: 'patient', styleWeight: 1, holdChance: 0.12, holdMargin: 4, fruitPatience: 4, candidates: 8, searchIterations: 8, replyWeight: 0.4 },
+};
+
+/** Any bot's knobs: a ladder level or a rival. */
+export const configFor = (level: BotLevel): LevelConfig => (isRival(level) ? RIVAL_CONFIGS[level] : LEVEL_CONFIGS[level]);
 
 /** A 32-bit seed for the bot's choices, from public numbers only (FNV-1a over the inputs). */
 export const botSeed = (gameSeed: number, level: number, turnNumber: number, actionIndex: number): number => {
@@ -159,14 +215,14 @@ const opponentView = (after: View, hand: Card[]): View => {
  * over every growing move they could make with this hand. (Lighter than full ranking:
  * no danger checks, just the immediate result of each move.)
  */
-const replyDamage = (oppView: View): number => {
+const replyDamage = (oppView: View, uncapped = false): number => {
   let worst = 0;
   // (v0.7: Blooms through the quick look's short list, not all of them)
   const blooms = shortlistBlooms(lookBlooms(oppView), REPLY_BLOOMS).map((l) => l.action as Action);
   let others = legalActions(oppView).filter((x) => x.t !== 'Bloom');
   // the Lab's boards (config.board set; never the classic board): at most LAB_REPLY_CAP other
   // replies, those landing next to my tiles first (an iteration cap, never a time cap)
-  if (oppView.config.board && others.length > LAB_REPLY_CAP) {
+  if (oppView.config.board && !uncapped && others.length > LAB_REPLY_CAP) {
     const me = other(oppView.player);
     const nearMe = (a: Action) => {
       const c = a.t === 'Sprout' ? a.coord : a.t === 'PlayFruit' ? a.target : null;
@@ -212,16 +268,16 @@ export const LAB_ITERATIONS = 3;
 export type Decision = { action: Action; reason?: string };
 
 /** The level's move. Same (view, level, seed) -> same action. */
-export const chooseLevelAction = (v: View, level: Level, seed: number): Action => decideLevelAction(v, level, seed).action;
+export const chooseLevelAction = (v: View, level: BotLevel, seed: number): Action => decideLevelAction(v, level, seed).action;
 
 /** The level's move and why (the reason is for debugging and simulation reports only). */
-export const decideLevelAction = (v: View, level: Level, seed: number): Decision => {
+export const decideLevelAction = (v: View, level: BotLevel, seed: number): Decision => {
   if (level === 7) {
     const best = rankActions(v)[0];
     if (!best) throw new Error('Level 7 bot: no legal actions');
     return withReason(best); // GreedyBot's choice, exactly
   }
-  return decideWithConfig(v, LEVEL_CONFIGS[level], seed);
+  return decideWithConfig(v, configFor(level), seed);
 };
 
 const withReason = (s: Scored): Decision =>
@@ -274,7 +330,7 @@ const bloomBand = (v: View, c: LevelConfig, ranked: readonly Scored[], pick: Sco
     const cards = b.cards.map((id) => v.hand.find((h) => h.id === id)!);
     const h = holdChance(v, cards);
     const alt = ranked.find((r) => r.action.t !== 'Bloom' && r.action.t !== 'EndAct' && r.score > NEVER / 2 && !usesAny(r.action, b.cards));
-    if (alt && h.chance >= HOLD_CHANCE && alt.score >= pick.score - HOLD_MARGIN) {
+    if (alt && h.chance >= (c.holdChance ?? HOLD_CHANCE) && alt.score >= pick.score - (c.holdMargin ?? HOLD_MARGIN)) {
       return { action: alt.action, reason: `holds ${cards.map((x) => x.rank).join('-')} for a Bloom of 4 (${h.outs} unseen cards would join it, ${Math.round(h.chance * 100)}% soon)` };
     }
   }
@@ -313,6 +369,8 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
     if (throws.length > 0 && fr() < c.fruitThrowRate) return { action: throws[0]!, reason: 'throws a Fruit card away (levels 1-2)' };
   }
   let ranked: Scored[] = rankActions(v, { weights, strengthenTier: c.strengthenTier, fruitTier: c.fruitTier });
+  // Rivals: their way of playing, added to every growing move before the turn search.
+  if (c.style && v.phase === 'ACT') ranked = withStyle(v, c, ranked);
 
   // Look one move further inside its own turn, and (level 9) at the opponent's reply.
   if ((c.lookahead > 0 || c.searchIterations > 0) && v.phase === 'ACT' && ranked[0]!.score < WEIGHTS.win / 2) {
@@ -320,14 +378,14 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
     const handSize = v.opponentHandCount + 1; // after their draw
     const value = new Map<Scored, number>();
     // the Lab's boards only: fewer candidates and imagined hands (iteration caps, never time)
-    const lab = v.config.board !== null && v.config.board !== undefined;
+    const lab = v.config.board !== null && v.config.board !== undefined && !c.fullSearch;
     const iters = lab ? Math.min(c.searchIterations, LAB_ITERATIONS) : c.searchIterations;
-    for (const r of ranked.filter((x) => growing(x.action)).slice(0, lab ? LAB_CANDIDATES : CANDIDATES)) {
+    for (const r of ranked.filter((x) => growing(x.action)).slice(0, lab ? LAB_CANDIDATES : (c.candidates ?? CANDIDATES))) {
       const after = viewAfter(v, r.action);
       let val = r.score + (after && c.lookahead > 0 ? 0.9 * bestFollowUp(after, weights, c) : 0);
       if (after && c.searchIterations > 0) {
         let dmg = 0;
-        for (let i = 0; i < iters; i++) dmg += replyDamage(opponentView(after, sample(unseen, handSize, rng)));
+        for (let i = 0; i < iters; i++) dmg += replyDamage(opponentView(after, sample(unseen, handSize, rng)), !lab);
         val -= c.replyWeight * (dmg / iters);
       }
       value.set(r, val);
@@ -337,7 +395,7 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
       const stop = ranked.find((x) => !growing(x.action));
       if (stop) {
         let dmg = 0;
-        for (let i = 0; i < iters; i++) dmg += replyDamage(opponentView(v, sample(unseen, handSize, rng)));
+        for (let i = 0; i < iters; i++) dmg += replyDamage(opponentView(v, sample(unseen, handSize, rng)), !lab);
         value.set(stop, stop.score - c.replyWeight * (dmg / iters));
       }
     }
@@ -390,3 +448,78 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
   }
   return bloomBand(v, c, ranked, ranked[0]!, seed);
 };
+
+// ---------- the rivals' ways of playing (bots-v0.11) ----------
+
+type Board = Readonly<Record<string, Tile | null>>;
+
+/** The on-board hexes around a player's home (its root ring: what a Strangle must fill). */
+const ringOf = (v: View, p: Player): string[] =>
+  allNeighbors(homeCoord(p, v.config)).filter((n) => onBoard(n, v.config)).map(coordKey);
+
+const tilesIn = (b: Board, keys: readonly string[], owner: Player) => keys.filter((k) => b[k]?.owner === owner).length;
+
+/** How close my nearest tile is to a hex (capped, so an empty network does not swamp the term). */
+const reach = (b: Board, me: Player, to: string): number => {
+  const target = parseKey(to);
+  let best = 6;
+  for (const [k, t] of Object.entries(b)) if (t?.owner === me) best = Math.min(best, hexDistance(parseKey(k), target));
+  return best;
+};
+
+/**
+ * Siege (Strangler Fig): my tiles in the opponent's root ring, minus their own guards there, minus
+ * how far my network still is from their home. Rock in the ring needs no term: it never moves.
+ */
+const siege = (v: View, b: Board): number => {
+  const me = v.player;
+  const opp: Player = me === 0 ? 1 : 0;
+  const ring = ringOf(v, opp);
+  return 1.0 * tilesIn(b, ring, me) - 0.4 * tilesIn(b, ring, opp) - 0.35 * reach(b, me, coordKey(homeCoord(opp, v.config)));
+};
+
+/** Fortress (Ironwood): no enemy tile in my root ring, and a few of my own guarding it. */
+const fortress = (v: View, b: Board): number => {
+  const me = v.player;
+  const opp: Player = me === 0 ? 1 : 0;
+  const ring = ringOf(v, me);
+  return -1.0 * tilesIn(b, ring, opp) + 0.3 * Math.min(3, tilesIn(b, ring, me));
+};
+
+/** The deck is short: a patient bot stops waiting (about four turns each are left). */
+const PATIENT_ENDGAME = 8;
+
+/**
+ * Patience (Night Bloom), judged on the move itself: while the deck is long it keeps a Fruit card that
+ * is not worth much yet, and it does not spend a high card on a plain empty hex.
+ */
+const patience = (v: View, c: LevelConfig, r: Scored): number => {
+  if (v.deckCount <= PATIENT_ENDGAME) return 0;
+  const a = r.action;
+  if (a.t === 'PlayFruit') return r.score < (c.fruitPatience ?? 0) ? -1.5 : 0;
+  if (a.t === 'Sprout' && !v.board[coordKey(a.coord)]) {
+    const rank = v.hand.find((h) => h.id === a.card)?.rank ?? 0;
+    return -0.08 * Math.max(0, rank - 5);
+  }
+  return 0;
+};
+
+/** The style term of one growing move: the change it makes (siege, fortress) or the move itself (patient). */
+export const styleTerm = (v: View, c: LevelConfig, r: Scored): number => {
+  if (!c.style) return 0;
+  if (c.style === 'patient') return patience(v, c, r);
+  const sim = simulate(v, r.action);
+  if (!sim) return 0;
+  const f = c.style === 'siege' ? siege : fortress;
+  return f(v, sim.board) - f(v, v.board);
+};
+
+/** The ranking with each growing move's style term added (decisive moves and ruled-out moves untouched). */
+const withStyle = (v: View, c: LevelConfig, ranked: readonly Scored[]): Scored[] =>
+  ranked
+    .map((r, i) => {
+      const plain = !growing(r.action) || r.score <= NEVER / 2 || r.score >= WEIGHTS.win / 2;
+      return { r: plain ? r : { ...r, score: r.score + (c.styleWeight ?? 1) * styleTerm(v, c, r) }, i };
+    })
+    .sort((x, y) => y.r.score - x.r.score || x.i - y.i)
+    .map((x) => x.r);

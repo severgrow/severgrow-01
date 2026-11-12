@@ -83,6 +83,14 @@ describe('an unfinished campaign match resumes as its level', () => {
     expect(loaded.state.config.board!.rock).toEqual(level.config.board!.rock);
   });
 
+  it('a match against a rival (bots 10-12) resumes against that same rival, never a fallback bot', () => {
+    for (const level of CAMPAIGN_LEVELS.filter((l) => l.botLevel >= 10)) {
+      const match = encodeSave({ seed: level.seed, actions: [], coach: null, level: level.botLevel, base: campaignOpening(level) });
+      expect(decodeSave<null>(match)!.level, level.id).toBe(level.botLevel);
+    }
+    expect(CAMPAIGN_LEVELS.some((l) => l.botLevel >= 10)).toBe(true);
+  });
+
   it('rejects anything unreadable, so a broken campaign save is simply no campaign save', () => {
     for (const raw of [null, '', '{}', '{"v":2,"levelId":"c1-01","match":"x"}', '{"v":1,"match":"x"}', '{"v":1,"levelId":"","match":"x"}']) {
       expect(decodeCampaignSave(raw), String(raw)).toBeNull();

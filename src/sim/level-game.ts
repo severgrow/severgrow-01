@@ -8,7 +8,7 @@
 import { apply, newMatch, score, viewFor } from '../engine/index.js';
 import type { Player, RulesConfig, State } from '../engine/index.js';
 import { botSeed, chooseLevelAction } from '../bots/levels.js';
-import type { Level } from '../bots/levels.js';
+import type { BotLevel as Level } from '../bots/levels.js';
 
 export type LevelGameResult = {
   /** The match seed used for this game. */

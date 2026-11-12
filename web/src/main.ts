@@ -73,8 +73,8 @@ import { howToReferenceHtml } from './logic/howto-reference.js';
 import { mountInstallPrompt } from './logic/install.js';
 import { mountAppWindowButton } from './logic/app-window.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
-import { botSeed } from '../../src/bots/levels.js';
-import type { Level } from '../../src/bots/levels.js';
+import { botSeed, ladderLevel } from '../../src/bots/levels.js';
+import type { BotLevel, Level } from '../../src/bots/levels.js';
 // LEVEL_INFO is deliberately NOT imported: its names (the classic bot levels' labels) were only
 // ever shown on the finish subtitle and in the game log, and the owner removed level and chapter
 // names everywhere on 2026-10-16. The module and its test remain until he decides whether to keep
@@ -1466,7 +1466,7 @@ async function runStarterLottery(opponentStarts: boolean): Promise<void> {
 
 async function startGame(
   seed: number,
-  level: Level = settings.level,
+  level: BotLevel = settings.level,
   watch: { level: Level; pause: number } | null = null,
   /**
    * THE SEAM. Only the offline campaign screen passes a level here. `campaignLevel` is what makes
@@ -2143,7 +2143,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
     if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
-      stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
+      stats = recordResult(stats, p.after.result, HUMAN, ladderLevel(gameLevel));
       store.set(STATS_KEY, JSON.stringify(stats));
       // The install invitation counts EVERY finished game — offline here, online at the finish
       // screen — and never a tutorial step (the guard above already excludes the tutorial).
@@ -2154,7 +2154,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
       if (gameDifficulty) {
         const winner = p.after.result.winner;
         const outcome = winner === HUMAN ? 'win' : winner === null ? 'draw' : 'loss';
-        writeDifficultyStep(gameDifficulty, stepAfterGame(gameDifficulty, gameLevel, outcome));
+        writeDifficultyStep(gameDifficulty, stepAfterGame(gameDifficulty, ladderLevel(gameLevel), outcome));
       }
       // Campaign progress: a win unlocks the next level and marks this one completed; a loss
       // removes nothing. Its own record — the classic stats above are never reshaped by it.
@@ -2484,7 +2484,8 @@ let thinking = false;
 let lastTurnKey = '';
 /** Whether the ? tip is open. */
 /** The bot level of the game being played (kept with the saved game). */
-let gameLevel: Level = 7;
+/** The bot this match is played against: 1-9, or a rival (10-12) in the late campaign. */
+let gameLevel: BotLevel = 7;
 /**
  * The TRAINING tier the current OFFLINE game came from (null: a match started outside the tiers —
  * a URL seed, the lab, a campaign level, the tutorial, or any online duel). It is what the
@@ -4369,7 +4370,7 @@ function renderHud() {
     ? '<b>Game over</b>'
     : isOnlineDuel()
       ? ''
-      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel}</small>`;
+      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${ladderLevel(gameLevel)}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
@@ -5811,7 +5812,7 @@ function renderGameOver() {
   // the level data, never a hardcoded count, so a worker adding levels needs no change here).
   const next = campaign && won ? nextCampaignLevel(campaign.number) : null;
   $('go-title').textContent = won
-    ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.beatLevel(gameLevel)
+    ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.beatLevel(ladderLevel(gameLevel))
     : resultTitle(r, HUMAN);
   // The subtitle used to name the level ("Level 6 · Branching Out"). The owner removed level and
   // chapter NAMES everywhere (2026-10-16): the title already says which level it was, so naming it

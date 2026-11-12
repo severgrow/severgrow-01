@@ -2,7 +2,7 @@
 // thinks. Falls back to the main thread if workers are not available or fail.
 import type { Action, View } from '../../../src/engine/index.js';
 import { chooseLevelAction } from '../../../src/bots/levels.js';
-import type { Level } from '../../../src/bots/levels.js';
+import type { BotLevel as Level } from '../../../src/bots/levels.js';
 
 type Job = { view: View; level: Level; seed: number; resolve: (a: Action) => void };
 let worker: Worker | null = null;

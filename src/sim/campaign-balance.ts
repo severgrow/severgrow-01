@@ -18,7 +18,7 @@
 // flags below mark measurable problems (skew, one-sidedness, duration), never taste.
 import { writeFileSync } from 'node:fs';
 import { CAMPAIGN_LEVELS, campaignOpening, validateLevel } from '../campaign/index.js';
-import type { Level } from '../bots/levels.js';
+import type { BotLevel as Level } from '../bots/levels.js';
 import { playLevelGame, tally } from './level-game.js';
 import type { LevelGameResult } from './level-game.js';
 

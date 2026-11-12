@@ -13,6 +13,8 @@ const progress = (unlocked: number, completed: number[]): CampaignProgress => ({
   best: {},
 });
 const lvl = (n: number) => CAMPAIGN_LEVELS[n - 1]!;
+/** The last built level (70 until 2026-11-12, 100 since): the cases below are about "the end", not a number. */
+const LAST = CAMPAIGN_LEVELS.length;
 
 describe('campaignEntry decides what the entry does', () => {
   it('starts the next unfinished level when nothing is saved', () => {
@@ -28,11 +30,11 @@ describe('campaignEntry decides what the entry does', () => {
 
   it('asks only when the saved match is a DIFFERENT level', () => {
     // The reported bug: everything is done, an old replay of 31 is unfinished.
-    const e = campaignEntry(progress(70, range(70)), lvl(31));
+    const e = campaignEntry(progress(LAST, range(LAST)), lvl(31));
     expect(e.kind).toBe('list');
-    // And with 70 still open, the same old replay must produce a choice, not a silent resume.
-    const open = campaignEntry(progress(70, range(69)), lvl(31));
-    expect(open).toEqual({ kind: 'ask', next: lvl(70), saved: lvl(31) });
+    // And with the last level still open, the same old replay must produce a choice, not a silent resume.
+    const open = campaignEntry(progress(LAST, range(LAST - 1)), lvl(31));
+    expect(open).toEqual({ kind: 'ask', next: lvl(LAST), saved: lvl(31) });
   });
 
   it('asks when the saved match is AHEAD of the next unfinished level', () => {
@@ -42,9 +44,9 @@ describe('campaignEntry decides what the entry does', () => {
   });
 
   it('opens the list, and claims no level number, once every built level is complete', () => {
-    // LEVEL 70 as a label would promise a level; there is none left, so the entry stops saying it.
-    expect(campaignEntry(progress(70, range(70)), null)).toEqual({ kind: 'list' });
-    expect(campaignEntry(progress(70, range(70)), lvl(70))).toEqual({ kind: 'list' });
+    // LEVEL <last> as a label would promise a level; there is none left, so the entry stops saying it.
+    expect(campaignEntry(progress(LAST, range(LAST)), null)).toEqual({ kind: 'list' });
+    expect(campaignEntry(progress(LAST, range(LAST)), lvl(LAST))).toEqual({ kind: 'list' });
   });
 
   it('never asks on a fresh save: level 1 is a start', () => {

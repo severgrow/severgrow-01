@@ -9,7 +9,7 @@
 import { allCoords, allNeighbors, boardNeighbors, coordKey, parseKey } from '../engine/index.js';
 import { ConfigError, resolveConfig } from '../engine/index.js';
 import type { BoardSpec } from '../engine/index.js';
-import { LEVELS } from '../bots/levels.js';
+import { BOT_LEVELS } from '../bots/levels.js';
 import { CAMPAIGN_LEVELS, CAMPAIGN_CHAPTERS } from './levels.js';
 import type { CampaignLevel } from './levels.js';
 
@@ -180,7 +180,7 @@ export const validateLevel = (level: CampaignLevel): LevelChecks => {
   if (!Number.isSafeInteger(level.seed) || level.seed < 0) {
     throw new CampaignError(level.id, `seed must be a non-negative integer, got ${String(level.seed)}`);
   }
-  if (!(LEVELS as readonly number[]).includes(level.botLevel)) {
+  if (!(BOT_LEVELS as readonly number[]).includes(level.botLevel)) {
     throw new CampaignError(level.id, `botLevel ${String(level.botLevel)} is not an existing bot level`);
   }
   try {

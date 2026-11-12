@@ -1129,6 +1129,18 @@ export const CAMPAIGN = Object.freeze({
       title: 'Broken Crown',
       subtitle: 'Ten boards where every shape is broken on purpose.',
     }),
+    'the-bridges': Object.freeze({
+      title: 'The Bridges',
+      subtitle: 'Ten boards split by a river. Hold your crossing.',
+    }),
+    'uneven-ground': Object.freeze({
+      title: 'Uneven Ground',
+      subtitle: 'Ten boards that are not fair. Win anyway.',
+    }),
+    'the-last-garden': Object.freeze({
+      title: 'The Last Garden',
+      subtitle: 'Ten last boards, every lesson at once.',
+    }),
   }) as Readonly<Record<string, { title: string; subtitle: string }>>,
   /** a level's spoken label. The owner removed level and chapter NAMES everywhere (2026-10-16), so
    *  this is the number alone: "Level 4". */
