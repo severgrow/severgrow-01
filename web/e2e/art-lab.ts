@@ -16,6 +16,7 @@ import type { AddressInfo } from 'node:net';
 import { extname, join, resolve } from 'node:path';
 import { chromium, webkit } from 'playwright-core';
 import type { Page } from 'playwright-core';
+import { installEsbuildShim } from './helpers/esbuild-keep-names.js';
 
 const shots = process.argv[2] ?? '/tmp/futasaku-art-lab';
 mkdirSync(shots, { recursive: true });
@@ -53,6 +54,7 @@ const picture = async (page: Page, kind: 'seamless' | 'seam' | 'small'): Promise
 
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
+  await installEsbuildShim(page); // esbuild keepNames wraps evaluated callbacks in __name(), which the page lacks
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(`${origin}/art/#seed=4821&move=12`);
@@ -136,14 +138,77 @@ try {
   await page.waitForSelector('#slot-ground[data-status="done"]', { timeout: 60_000 });
   check(true, 'a reload keeps the uploads');
 
-  // phones first: the lab itself on a phone
+  // phones first: the lab itself on a phone. The dashboard must not read as "this is the game
+  // now": a plain notice, the real game in a frame with gutters, then labelled sections below.
+  const phoneErrors: string[] = [];
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: engine === chromium, hasTouch: true });
+  await installEsbuildShim(phone); // esbuild keepNames vs page.evaluate serialisation (see helpers/)
+  phone.on('pageerror', (e) => phoneErrors.push(String(e)));
   await phone.goto(`${origin}/art/`);
-  await phone.waitForSelector('#slot-ground', { timeout: 60_000 });
-  await phone.waitForTimeout(4000);
-  check(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no sideways scroll on a phone');
+  await phone.waitForSelector('.narrow-note', { timeout: 60_000 });
+  await phone.waitForSelector('#slot-ground', { state: 'attached', timeout: 60_000 });
+  await phone.waitForTimeout(2500);
+  check(await phone.locator('.narrow-note').isVisible(), 'a phone opens with the notice, not the dashboard');
+  const note = await phone.locator('.narrow-note').innerText();
+  check(/bigger screen/i.test(note) && /laptop/i.test(note), `the notice says it needs a bigger screen: ${note.replace(/\s+/g, ' ')}`);
+  const phoneFrame = (await phone.evaluate(`(() => { const r = document.querySelector('.phone').getBoundingClientRect(); return { width: r.width, height: r.height }; })()`)) as { width: number; height: number };
+  check(phoneFrame.width < 390 - 24, `the phone frame is a frame, not a takeover (${Math.round(phoneFrame.width)}px of 390px)`);
+  const gutters = (await phone.evaluate(`(() => { const r = document.querySelector('.phone-wrap').getBoundingClientRect(); return { left: Math.round(r.left), right: Math.round(innerWidth - r.right) }; })()`)) as { left: number; right: number };
+  check(gutters.left >= 8 && gutters.right >= 8, `the frame sits inside the page's own gutters (${JSON.stringify(gutters)})`);
+  const layout = (await phone.evaluate(`(() => {
+    const top = (sel) => { const el = document.querySelector(sel); return el ? Math.round(el.getBoundingClientRect().top) : -1; };
+    return { frame: top('.phone-wrap'), caption: top('.preview-caption'), tabs: top('.tabs'), workbench: top('.workbench-head') };
+  })()`)) as { frame: number; caption: number; tabs: number; workbench: number };
+  check(layout.frame > 0 && layout.frame < layout.tabs && layout.tabs < layout.workbench, `preview comes before the tabs and the workbench (${JSON.stringify(layout)})`);
+  check(await phone.locator('.preview-caption').isVisible(), 'the frame is captioned as the real game');
+  // The lab renders its section labels in its own small-caps style (innerText comes back upper-cased),
+  // so compare the words case-insensitively and print the names exactly as they were rendered.
+  const sectionNames = (await phone.locator('.group-fold > summary h2').allInnerTexts()).map((t) => t.trim());
+  const sectionWords = sectionNames.map((t) => t.toLowerCase());
+  check(['board', 'cards', 'planet'].every((n) => sectionWords.includes(n)), `the dashboard is labelled in sections (${sectionNames.join(', ')})`);
+  check(await phone.locator('.workbench-head').isVisible(), 'the workbench is introduced by its own heading');
+  const phoneHeight = (await phone.evaluate('document.body.scrollHeight')) as number;
+  check(phoneHeight < 12_000, `the phone page is a short labelled stack, not a 24,000px wall (${phoneHeight}px)`);
+  check(await phone.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), 'no sideways scroll on a phone');
   await phone.screenshot({ path: `${shots}/6-lab-on-phone.png`, fullPage: false });
-  check(errors.length === 0, `no page errors: ${errors.join(' | ')}`);
+  // ...and every slot is still reachable, one tap down
+  await phone.locator('#group-board > summary').click();
+  await phone.waitForSelector('#slot-ground', { state: 'visible', timeout: 5000 });
+  check(true, 'a phone can open a section and reach every slot');
+
+  // tablet: the same stack, preview first, sections already open at a readable size
+  const tabletErrors: string[] = [];
+  const tablet = await browser.newPage({ viewport: { width: 800, height: 1000 } });
+  await installEsbuildShim(tablet); // esbuild keepNames vs page.evaluate serialisation (see helpers/)
+  tablet.on('pageerror', (e) => tabletErrors.push(String(e)));
+  await tablet.goto(`${origin}/art/`);
+  await tablet.waitForSelector('.narrow-note', { timeout: 60_000 });
+  await tablet.waitForSelector('#slot-ground', { state: 'attached', timeout: 60_000 });
+  await tablet.waitForTimeout(2500);
+  check(await tablet.locator('.narrow-note').isVisible(), 'a tablet gets the same honest notice');
+  const tabletFrame = (await tablet.evaluate(`(() => { const r = document.querySelector('.phone').getBoundingClientRect(); return { width: r.width, height: r.height }; })()`)) as { width: number; height: number };
+  check(tabletFrame.width < 800 - 24, `the tablet preview keeps its gutters (${Math.round(tabletFrame.width)}px of 800px)`);
+  // the same two-part stack: preview first, the dashboard as three labelled sections below
+  const tabletOrder = (await tablet.evaluate(`(() => {
+    const t = (s) => { const e = document.querySelector(s); return e ? Math.round(e.getBoundingClientRect().top) : -1; };
+    return { frame: t('.phone-wrap'), tabs: t('.tabs'), workbench: t('.workbench-head') };
+  })()`)) as { frame: number; tabs: number; workbench: number };
+  check(tabletOrder.frame < tabletOrder.tabs && tabletOrder.tabs < tabletOrder.workbench, `the tablet stacks preview, controls, then sections (${JSON.stringify(tabletOrder)})`);
+  const tabletSections = (await tablet.locator('.group-fold > summary h2').allInnerTexts()).map((t) => t.trim().toLowerCase());
+  check(['board', 'cards', 'planet'].every((n) => tabletSections.includes(n)), `the tablet dashboard is labelled in sections (${tabletSections.join(', ')})`);
+  const tabletHeight = (await tablet.evaluate('document.body.scrollHeight')) as number;
+  check(tabletHeight < 6_000, `the tablet page is a short labelled stack, not a wall (${tabletHeight}px)`);
+  await tablet.locator('#group-cards > summary').click();
+  await tablet.waitForSelector('#slot-card-moss', { state: 'visible', timeout: 5000 });
+  check(true, 'a tablet opens a section and reaches its slots');
+  check(await tablet.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no sideways scroll on a tablet');
+  await tablet.screenshot({ path: `${shots}/7-lab-on-tablet.png`, fullPage: false });
+  // the 48-slot spec table scrolls in its own box, never the page
+  await tablet.getByRole('tab', { name: 'Spec sheet' }).click();
+  await tablet.waitForTimeout(600);
+  check(await tablet.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), 'the spec table does not push the page sideways');
+  check(errors.length === 0 && phoneErrors.length === 0 && tabletErrors.length === 0,
+    `no page errors: ${[...errors, ...phoneErrors, ...tabletErrors].join(' | ')}`);
   console.log(`art-lab: ${checks} checks passed (${process.env.PW_ENGINE ?? 'chromium'}); screenshots: ${shots}`);
 } finally {
   await browser.close();
