@@ -75,7 +75,7 @@ const stage = h('section', { class: 'stage', 'aria-label': 'Preview' });
 // Narrow screens (lab.css, max-width 999px): the workbench cannot be a workbench at phone size,
 // so the page says so, frames the real game, and hands the dashboard over as labelled sections.
 const narrowNote = h('section', { class: 'narrow-note', 'aria-labelledby': 'narrow-note-title' },
-  h('p', { class: 'eyebrow', text: 'Phone view' }),
+  h('p', { class: 'eyebrow', text: 'Before you start' }),
   h('h1', { id: 'narrow-note-title', text: 'The Art Lab is a workbench for a bigger screen.' }),
   h('p', { text: 'To drop in art and export a pack, open this page on a laptop. Below is the real game at your phone’s size; after it, every art slot and its spec.' }));
 const previewCaption = h('p', { class: 'preview-caption' },
