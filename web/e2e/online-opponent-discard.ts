@@ -108,7 +108,7 @@ try {
     // The pile as it stood WHEN the card launched (the flight's own frame), never a reading taken
     // before the turn: at desktop width the pile is 2px lifted at that moment (2026-11-12, this check
     // compared the flight with a pre-move reading and failed on exactly those 2px).
-    const pileAtLaunch = starts[0]![drawFrom] ?? { x: drawOrigin.x, y: drawOrigin.y };
+    const pileAtLaunch = starts[0]![drawFrom as 'deck' | 'discard'] ?? { x: drawOrigin.x, y: drawOrigin.y };
     assert(Math.hypot(starts[0]!.x-pileAtLaunch.x, starts[0]!.y-pileAtLaunch.y)<2, `draw starts at the actual ${drawFrom} pile (flight ${JSON.stringify({x:starts[0]!.x,y:starts[0]!.y})}, pile at launch ${JSON.stringify(pileAtLaunch)})`);
     assert.equal(await seat.page.locator('#discard-top').getAttribute('data-face-key'), `${thrown!.id}:${thrown!.suit}:${thrown!.rank}`);
     assert.equal(await seat.page.locator('.flyer.opp').count(), 0, 'flight cleans up');

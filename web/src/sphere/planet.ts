@@ -52,13 +52,20 @@ const MENU_SPIN_RAD_PER_MS = (2 * Math.PI) / 160_000;
  * the page was otherwise idle. A deliberate 20 fps ceiling for the drift-only case costs nothing
  * visible and takes a third of that away; any interaction, flight or zoom still runs at full rate.
  */
-const MENU_DRIFT_MS = 34;
+const MENU_DRIFT_MS = 50; // a true 20 fps (it read 34 ms, ~29 fps, under a "20 fps" comment; 2026-11-12)
 /**
  * The same budget for a planet that is not turning but is still sliding its stars — the Territory
  * window at rest, where the disc fills most of the pane. A star field that moves 0.006 CSS px/ms does
  * not need 60 fps, and the window is a screen the player leaves open.
  */
-const IDLE_DRIFT_MS = 34;
+const IDLE_DRIFT_MS = 50;
+/**
+ * REST WHEN NOBODY IS THERE (owner, 2026-11-12: "make sure it is pause and idle and that it's not
+ * overusing"). The slow drift is for a player who is looking; a phone left on the menu or the Planet
+ * page for this long without a touch, key or wheel stops drawing altogether (the last frame stays on
+ * screen) and wakes on the next input. A flight, a coast or a zoom is never cut short by it.
+ */
+export const IDLE_STOP_MS = 45_000;
 /** The planet's light behind the menu, and in the window (the flat map's own "fade in"). */
 // Brighter behind the menu (owner, 2026-11-04: "make the sphere when on main menu brighter/ higher
 // opacity - with low brightness of screen is barely visible"): was .46. It is the canvas's opacity.
@@ -217,6 +224,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const clampZoom = (z: number) => Math.min(zoomFor(MAX_TILE_PX), Math.max(mode === 'menu' ? MENU_ZOOM : MIN_ZOOM, z));
   const spaceVisible = () => discRadius(frameNow.width, frameNow.height, zoom) < Math.hypot(frameNow.width, frameNow.height) / 2;
   const cancelDrift=()=>{clearTimeout(driftTimer);driftTimer=0;};
+  /** The last touch, key or wheel anywhere on the page, and whether the drift has gone to rest. */
+  let lastInput = performance.now();
+  let asleep = false;
   const ask = () => { cancelDrift();if (!raf && !disposed && !frozen && !lost && !document.hidden) raf = requestAnimationFrame(frame); };
   const stopCoast = () => { coastVel = { x: 0, y: 0 }; };
   const stop = () => { cancelDrift();flight = null; targetZoom = zoom; stopCoast(); };
@@ -367,7 +377,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     // The slow slide: a deliberate frame budget. The menu's own drift AND the card's star-only drift
     // ask at 20 fps (IDLE_DRIFT_MS); everything else — a flight, a coast, anything the player is
     // touching — stays at full rate.
-    else if (drifting) driftTimer=window.setTimeout(()=>{driftTimer=0;if(mode==='menu'||spaceVisible())ask();},mode==='menu'?MENU_DRIFT_MS:IDLE_DRIFT_MS);
+    else if (drifting) {
+      if (performance.now() - lastInput > IDLE_STOP_MS) asleep = true;
+      else driftTimer=window.setTimeout(()=>{driftTimer=0;if(mode==='menu'||spaceVisible())ask();},mode==='menu'?MENU_DRIFT_MS:IDLE_DRIFT_MS);
+    }
   }
 
   /** The crop (the window's own rounded frame) and the light, written only when they change. */
@@ -573,7 +586,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   }, { signal });
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; stop(); cancelAnimationFrame(raf); raf = 0; }, { signal });
   canvas.addEventListener('webglcontextrestored', () => { renderer?.dispose(); initialise(); }, { signal });
-  document.addEventListener('visibilitychange', () => { stop(); cancelAnimationFrame(raf); raf = 0; if (!document.hidden) { lastFrame = 0; ask(); } }, { signal });
+  document.addEventListener('visibilitychange', () => { stop(); cancelAnimationFrame(raf); raf = 0; if (!document.hidden) { lastFrame = 0; lastInput = performance.now(); asleep = false; ask(); } }, { signal });
+  // Any input anywhere wakes a resting planet (IDLE_STOP_MS); the listeners are passive and cheap.
+  const wake = () => { lastInput = performance.now(); if (asleep) { asleep = false; ask(); } };
+  for (const type of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) document.addEventListener(type, wake, { signal, passive: true, capture: true });
   // The screen's size moves the canvas; the panel's size moves only the frame (read every frame).
   window.addEventListener('resize', resize, { signal, passive: true });
   const observer = new ResizeObserver(() => { if (!flight && !frameTween) resize(); else ask(); });
