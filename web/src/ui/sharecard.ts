@@ -4,18 +4,58 @@
 // THE PICTURE IS THE PRODUCT'S OWN MATERIALS:
 //   · the sky is the game's sky — `SphereRenderer.sky()`, the SAME shader the menu and the board
 //     draw (deep space, two parallax star layers, the still grain), at 1:1 so nothing is resampled;
-//   · the board is a small planet: matte tiles on a charcoal disc, cream outline detail around each
-//     holding's silhouette, one soft sphere shade and a cream rim;
-//   · the type is Besley (display) and Fragment Mono (ui), the product's two faces, in its cream;
+//   · the board is a small planet of matte tiles with cream outline detail around each holding's
+//     silhouette. Layout A draws NO disc and NO rim (owner, 2026-11-12: "no drawn circle or stroked
+//     rim — the silhouette comes from the tiles"); B and C keep the disc they shipped with;
+//   · the type is Besley (display) and Fragment Mono (ui) — the product's two faces, loaded before
+//     anything is painted, so a card can never be exported in a substitute face;
 //   · the words are the product's (`GAME_TITLE`, `REPLAY.mark`, `REPLAY.tagline`).
 //
 // The layout is pure (`logic/share.ts`): three compositions behind `SHARE_LAYOUT`. Everything here
 // only paints what the layout says, so a change of pick is a one-line change and no geometry moves.
-import { SHARE_H, SHARE_W, SHARE_LAYOUT, fittedSize, shareLayout } from '../logic/share.js';
+import { SHARE_FONTS, SHARE_FONT_FAMILIES, SHARE_H, SHARE_W, SHARE_LAYOUT, fittedSize, shareLayout } from '../logic/share.js';
 import type { ShareData, ShareLayoutId, SharePlanet, ShareText } from '../logic/share.js';
 import { SpaceRenderer } from '../sphere/space.js';
 
 const css = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+
+/**
+ * THE FACES THE CARD PAINTS WITH, from the product's own tokens (`--font-display`, `--font-ui`) with
+ * the declared stacks as the fallback — never a family typed into this module.
+ */
+const families = () => ({
+  display: css('--font-display', SHARE_FONTS.display),
+  ui: css('--font-ui', SHARE_FONTS.ui),
+});
+
+/**
+ * THE PROBES. One per face and size the card asks for: `fonts.load` resolves ONLY when the real face
+ * is available, so an empty answer is the honest "this face is not here" (Georgia standing in for
+ * Besley renders a different card — that is the bug this prevents).
+ */
+const FONT_PROBES = [
+  { family: SHARE_FONT_FAMILIES.display, weight: 600, size: 104 },
+  { family: SHARE_FONT_FAMILIES.display, weight: 600, size: 34 },
+  { family: SHARE_FONT_FAMILIES.ui, weight: 400, size: 46 },
+  { family: SHARE_FONT_FAMILIES.ui, weight: 400, size: 20 },
+] as const;
+
+/**
+ * WAIT FOR THE REAL FACES BEFORE PAINTING (owner, 2026-11-12). The card is drawn once, into a canvas
+ * that is immediately exported, so there is no later frame in which a late font could correct it:
+ * the text would be printed in the fallback stack for ever. This loads every face the layout uses,
+ * waits for the document's font set to settle, and REFUSES to draw if one never arrived.
+ */
+export const ensureShareFonts = async (): Promise<void> => {
+  const fonts = (document as Document & { fonts: FontFaceSet }).fonts;
+  const missing: string[] = [];
+  for (const face of FONT_PROBES) {
+    const loaded = await fonts.load(`${face.weight} ${face.size}px "${face.family}"`).catch(() => [] as FontFace[]);
+    if (!loaded.length) missing.push(`${face.family} ${face.weight}`);
+  }
+  await fonts.ready;
+  if (missing.length) throw new Error(`share card: the product's faces did not load (${missing.join(', ')})`);
+};
 
 /** The two sides' board colours, the ones the game itself paints (`--c-you`, `--c-bot`). */
 const YOU = '#7fcf8d';
@@ -101,22 +141,30 @@ const EDGE_DIRS = [[1, -1], [1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1]] as const;
 /**
  * THE BOARD AS A SMALL PLANET. Matte faces, a fine charcoal grout, and one cream line along the
  * OUTLINE of each holding (never a grid of lines): the detail that makes it read as hardware.
+ *
+ * A RING layout (B, C) sits its land on a charcoal disc with a cream rim. Layout A has NO disc, NO
+ * clip and NO rim: the board's silhouette is the tiles themselves, so every circle in this function
+ * is behind `if (p.ring)` — there is no unconditional `arc` around the centre.
  */
 const paintPlanet = (g: CanvasRenderingContext2D, p: SharePlanet, me: ShareData['me']) => {
-  // the disc the land sits on
-  const disc = g.createRadialGradient(p.cx - p.r * 0.45, p.cy - p.r * 0.5, p.r * 0.08, p.cx, p.cy, p.r);
-  disc.addColorStop(0, '#151819');
-  disc.addColorStop(1, '#0a0c0b');
-  g.beginPath();
-  g.arc(p.cx, p.cy, p.r, 0, Math.PI * 2);
-  g.fillStyle = disc;
-  g.fill();
+  // the disc the land sits on (ring layouts only)
+  if (p.ring) {
+    const disc = g.createRadialGradient(p.cx - p.r * 0.45, p.cy - p.r * 0.5, p.r * 0.08, p.cx, p.cy, p.r);
+    disc.addColorStop(0, '#151819');
+    disc.addColorStop(1, '#0a0c0b');
+    g.beginPath();
+    g.arc(p.cx, p.cy, p.r, 0, Math.PI * 2);
+    g.fillStyle = disc;
+    g.fill();
+  }
 
   const ownerOf = new Map(p.cells.map((cell) => [cell.key, cell.owner]));
   g.save();
-  g.beginPath();
-  g.arc(p.cx, p.cy, p.r - 1.5, 0, Math.PI * 2);
-  g.clip();
+  if (p.ring) {
+    g.beginPath();
+    g.arc(p.cx, p.cy, p.r - 1.5, 0, Math.PI * 2);
+    g.clip();
+  }
   for (const cell of p.cells) {
     hexPath(g, cell.x, cell.y, p.hex);
     g.fillStyle = cell.owner === null ? 'rgba(232,221,197,.035)' : cell.owner === me ? YOU : BOT;
@@ -150,33 +198,41 @@ const paintPlanet = (g: CanvasRenderingContext2D, p: SharePlanet, me: ShareData[
     g.fill();
   }
   // one soft sphere: light from the top-left, a darker limb (matte, not glossy)
-  const shade = g.createRadialGradient(p.cx - p.r * 0.42, p.cy - p.r * 0.48, p.r * 0.15, p.cx, p.cy, p.r * 1.02);
-  shade.addColorStop(0, 'rgba(255,248,233,.055)');
-  shade.addColorStop(0.55, 'rgba(0,0,0,0)');
-  shade.addColorStop(1, 'rgba(0,0,0,.56)');
-  g.fillStyle = shade;
-  g.fillRect(p.cx - p.r, p.cy - p.r, p.r * 2, p.r * 2);
+  if (p.ring) {
+    const shade = g.createRadialGradient(p.cx - p.r * 0.42, p.cy - p.r * 0.48, p.r * 0.15, p.cx, p.cy, p.r * 1.02);
+    shade.addColorStop(0, 'rgba(255,248,233,.055)');
+    shade.addColorStop(0.55, 'rgba(0,0,0,0)');
+    shade.addColorStop(1, 'rgba(0,0,0,.56)');
+    g.fillStyle = shade;
+    g.fillRect(p.cx - p.r, p.cy - p.r, p.r * 2, p.r * 2);
+  }
   g.restore();
 
-  // the rim: one cream hairline, and a breath of atmosphere outside it
-  g.beginPath();
-  g.arc(p.cx, p.cy, p.r - 0.75, 0, Math.PI * 2);
-  g.strokeStyle = 'rgba(232,221,197,.55)';
-  g.lineWidth = 1.5;
-  g.stroke();
-  g.beginPath();
-  g.arc(p.cx, p.cy, p.r + 2.5, 0, Math.PI * 2);
-  g.strokeStyle = 'rgba(232,221,197,.08)';
-  g.lineWidth = 5;
-  g.stroke();
+  // the rim: one cream hairline, and a breath of atmosphere outside it (ring layouts only)
+  if (p.ring) {
+    g.beginPath();
+    g.arc(p.cx, p.cy, p.r - 0.75, 0, Math.PI * 2);
+    g.strokeStyle = 'rgba(232,221,197,.55)';
+    g.lineWidth = 1.5;
+    g.stroke();
+    g.beginPath();
+    g.arc(p.cx, p.cy, p.r + 2.5, 0, Math.PI * 2);
+    g.strokeStyle = 'rgba(232,221,197,.08)';
+    g.lineWidth = 5;
+    g.stroke();
+  }
 };
 
 /** Paint one line of type, exactly inside its box (the box IS the promise the layout tests). */
 const paintText = (g: CanvasRenderingContext2D, t: ShareText, fonts: { display: string; ui: string }) => {
   const family = t.family === 'display' ? fonts.display : fonts.ui;
   const size = fittedSize(t.text, t.w, t.size, t.min, t.family, t.tracking);
+  // THE FACE'S OWN WEIGHT OR NOTHING: Fragment Mono ships 400 only, and `font-synthesis: none` in
+  // the product's typography means a heavier request would be silently ignored (or faked, which is
+  // worse). So a UI line always paints at 400; only Besley's real 600–800 ladder is selectable.
+  const weight = t.family === 'ui' ? 400 : t.weight;
   g.save();
-  g.font = `${t.weight} ${size}px ${family}`;
+  g.font = `${weight} ${size}px ${family}`;
   g.fillStyle = TONE[t.tone];
   g.textBaseline = 'middle';
   g.textAlign = t.align === 'center' ? 'center' : t.align === 'right' ? 'right' : 'left';
@@ -189,14 +245,18 @@ const paintText = (g: CanvasRenderingContext2D, t: ShareText, fonts: { display: 
 /**
  * THE PICTURE. Drawn at the canvas's own 1080x1350 — vector tile edges and text at 1:1, never a
  * smaller bitmap scaled up — so every edge on the exported PNG is a native edge.
+ *
+ * ASYNC BECAUSE OF THE FACES: it waits for Besley and Fragment Mono before the first fillRect, so no
+ * pixel is ever laid down in a fallback and then "fixed" after the picture was already exported.
  */
-export const drawShareCard = (d: ShareData, layout: ShareLayoutId = SHARE_LAYOUT): HTMLCanvasElement => {
+export const drawShareCard = async (d: ShareData, layout: ShareLayoutId = SHARE_LAYOUT): Promise<HTMLCanvasElement> => {
+  await ensureShareFonts();
   const L = shareLayout(d, layout);
   const c = document.createElement('canvas');
   c.width = SHARE_W;
   c.height = SHARE_H;
   const g = c.getContext('2d')!;
-  const fonts = { display: css('--font-display', 'Georgia, serif'), ui: css('--font-ui', 'ui-monospace, monospace') };
+  const fonts = families();
 
   g.drawImage(skyCanvas(SHARE_W, SHARE_H), 0, 0);
   paintPlanet(g, L.planet, d.me);
@@ -215,7 +275,7 @@ export const drawShareCard = (d: ShareData, layout: ShareLayoutId = SHARE_LAYOUT
 
 /** Shares the card (Web Share with a file), or saves it when sharing files isn't possible. */
 export const shareCard = async (d: ShareData): Promise<'shared' | 'saved' | 'cancelled'> => {
-  const canvas = drawShareCard(d);
+  const canvas = await drawShareCard(d);
   const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, 'image/png'));
   if (!blob) return 'cancelled';
   const name = `${d.game.toLowerCase()}-result.png`;
