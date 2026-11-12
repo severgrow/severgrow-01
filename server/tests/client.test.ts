@@ -157,3 +157,48 @@ describe('DuelClient', () => {
     expect(client.loadSession()).toBeNull();
   });
 });
+
+describe('a blip never reaches the player as an error (2026-11-12)', () => {
+  // Owner: "Could not read the map. Try again." / "Chat is not reachable right now." should never
+  // show for a moment's trouble. A READ (GET) is retried quietly on a dropped connection or a
+  // 502/503/504 (a cold or redeploying Edge function); a write is never retried by the transport.
+  const flaky = (failures: Array<'network' | number>, ok: unknown) => {
+    const calls: string[] = [];
+    const fetchImpl: FetchLike = async (url, init) => {
+      calls.push(`${init.method} ${new URL(url).pathname}`);
+      const next = failures.shift();
+      if (next === 'network') throw new TypeError('Failed to fetch');
+      if (typeof next === 'number') return { status: next, ok: false, json: async () => { throw new Error('not json'); } };
+      return { status: 200, ok: true, json: async () => ok };
+    };
+    return { fetchImpl, calls };
+  };
+  const world = { ok: true, world: { version: 3, revision: 1, cells: [] } };
+
+  it('a read survives a dropped connection and a 503, and the player sees the answer', async () => {
+    const { fetchImpl, calls } = flaky(['network', 503], world);
+    const client = new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore(), retryDelaysMs: [0, 0] });
+    await expect(client.worldMap()).resolves.toBeDefined();
+    expect(calls).toEqual(['GET /v1/world', 'GET /v1/world', 'GET /v1/world']);
+  });
+
+  it('gives up after two retries, so a real outage still surfaces', async () => {
+    const { fetchImpl, calls } = flaky([503, 503, 503, 503], world);
+    const client = new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore(), retryDelaysMs: [0, 0] });
+    await expect(client.worldMap()).rejects.toBeDefined();
+    expect(calls).toHaveLength(3);
+  });
+
+  it('never retries a write, and never retries a real answer (a 4xx or a 500)', async () => {
+    const post = flaky([503], { ok: true });
+    const client = new DuelClient({ baseUrl: 'https://api.example', fetch: post.fetchImpl, storage: memoryStore(), retryDelaysMs: [0, 0] });
+    await expect(client.createGuest('A')).rejects.toBeDefined();
+    expect(post.calls).toHaveLength(1);
+    for (const status of [400, 404, 500]) {
+      const get = flaky([status], world);
+      const c = new DuelClient({ baseUrl: 'https://api.example', fetch: get.fetchImpl, storage: memoryStore(), retryDelaysMs: [0, 0] });
+      await expect(c.worldMap()).rejects.toBeDefined();
+      expect(get.calls, String(status)).toHaveLength(1);
+    }
+  });
+});

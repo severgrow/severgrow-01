@@ -1,4 +1,5 @@
 import { enterSurface, exitSurface } from '../ui/interface-motion.js';
+import { shouldReportFailure } from './blips.js';
 // GLOBAL CHAT (backend compatibility id: territoryChat): one shared channel on the Planet,
 // the newest 30 messages (server/src/chat/territory.ts keeps no more). It opens from the chat key in
 // the row of keys under MENU and closes from its own close key, on the same dark glass. While open
@@ -138,7 +139,8 @@ export class TerritoryChat {
       } catch {
         if (generation !== this.generation) return;
         this.failures++;
-        this.say(ONLINE.worldChatOffline);
+        // One blip says nothing: the messages stay and the next poll retries (online/blips.ts).
+        if (shouldReportFailure(this.failures)) this.say(ONLINE.worldChatOffline);
       }
     }
     if (this.open && generation === this.generation && !document.hidden) this.timer = setTimeout(() => void this.poll(), Math.min(60_000, TERRITORY_CHAT_POLL_MS * 2 ** Math.min(4, this.failures)));

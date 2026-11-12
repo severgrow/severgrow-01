@@ -132,6 +132,12 @@ export type DuelClientOptions = {
   /** Self-heal hook for a rejected token. See `UnauthorizedHandler`. */
   onUnauthorized?: UnauthorizedHandler;
   /**
+   * Waits before each quiet retry of a READ (GET) after a dropped connection or a 502/503/504 — a
+   * cold or redeploying Edge function. Default 400 ms then 1.2 s; tests pass zeros. Writes are never
+   * retried here (owner, 2026-11-12: a blip must never reach the player as an error).
+   */
+  retryDelaysMs?: readonly number[];
+  /**
    * Tag guests this client creates as automated test traffic (`x-futasaku-traffic: test`), so they
    * are marked `is_test` at creation and never land on the owner's human views.
    *
@@ -165,6 +171,7 @@ const SEEN_LIMIT = 40;
 
 export class DuelClient {
   private readonly baseUrl: string;
+  private readonly retryDelaysMs: readonly number[];
   private readonly fetchImpl: FetchLike;
   private readonly storage: KeyValue | null;
   private readonly sessionKey: string;
@@ -183,6 +190,7 @@ export class DuelClient {
   onUnauthorized: UnauthorizedHandler | undefined;
 
   constructor(options: DuelClientOptions) {
+    this.retryDelaysMs = options.retryDelaysMs ?? [400, 1200];
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     const injected = options.fetch;
     this.fetchImpl =
@@ -648,12 +656,24 @@ export class DuelClient {
     return this.request('POST', '/v1/territory/chat/report', { token, body: { messageId, reason } });
   }
 
-  private request<T>(
+  private async request<T>(
     method: string,
     path: string,
     options: { token?: string; body?: unknown; traffic?: boolean; signal?: AbortSignal } = {},
   ): Promise<T> {
-    return this.send<T>(method, path, options, true);
+    // A READ is retried quietly through a blip (a dropped connection, or 502/503/504 while the Edge
+    // function starts or redeploys). A real answer (any 4xx, a 500) and every write go straight back.
+    const delays = method === 'GET' ? this.retryDelaysMs : [];
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.send<T>(method, path, options, true);
+      } catch (error) {
+        const transient = error instanceof DuelError ? [502, 503, 504].includes(error.status) : !(error instanceof DOMException && error.name === 'AbortError');
+        if (!transient || attempt >= delays.length || options.signal?.aborted) throw error;
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+        if (options.signal?.aborted) throw error;
+      }
+    }
   }
 
   /**

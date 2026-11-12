@@ -1,4 +1,5 @@
 import type { DuelClient } from '../../../server/src/client.js';
+import { nextPollMs, shouldReportFailure } from './blips.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
 import { isPlanetCell, worldNeighbours } from '../../../server/src/world.js';
@@ -1282,10 +1283,12 @@ export class WorldView {
     // Leaving folds everything away, so the next visit opens on the bare map with only MENU.
     this.setKeys(false, false);
   }
+  /** Map reads that failed in a row (a blip is retried quietly; see online/blips.ts). */
+  private readFailures = 0;
   private notice(text: string) { document.getElementById('online-world-notice')!.textContent = text; }
   private schedule() {
     if (this.timer) clearTimeout(this.timer);
-    if (this.active) this.timer = setTimeout(() => { if (!document.hidden) void this.refresh(); else this.schedule(); }, 12_000);
+    if (this.active) this.timer = setTimeout(() => { if (!document.hidden) void this.refresh(); else this.schedule(); }, nextPollMs(12_000, this.readFailures));
   }
   async refresh(force = false) {
     if (!this.active) {
@@ -1378,8 +1381,11 @@ export class WorldView {
       // that has not seen the resolved row yet (or a read raced the settlement), it posts the same
       // idempotent confirm in the background — never a key the player must press.
       this.settleAutomatically();
+      this.readFailures = 0;
     } catch {
-      if (this.active) this.notice(ONLINE.worldError);
+      // One blip says nothing: the drawn map stays and the next read comes sooner (online/blips.ts).
+      this.readFailures++;
+      if (this.active && shouldReportFailure(this.readFailures)) this.notice(ONLINE.worldError);
     } finally { this.schedule(); }
   }
 
