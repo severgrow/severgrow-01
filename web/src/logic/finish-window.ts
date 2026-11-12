@@ -1,0 +1,28 @@
+// THE FINISH CARD'S WINDOW (owner, 2026-11-12). The card's big window shows THE PLANET only when the
+// player can do something there: a WIN, with at least one tile's price in the wallet. Every other
+// finish — a loss, a draw, or a win with fewer Seeds than a tile costs — shows the FINAL BOARD in the
+// same window, at the same size and with the same frame (the board RESULT shows, made large).
+//
+// The card decides from the last balance it knew (so it never flickers on the common case), then
+// once more when the wallet is read fresh (a win whose payout just crossed the price shows the
+// planet). Pure: main.ts owns the DOM and the reads.
+
+/** One tile on the planet (server/src/seeds/config.ts `SEED_ECONOMY.tileCost`; the pane shows the live price). */
+export const PLANET_TILE_PRICE = 100;
+
+export type FinishWindow = 'planet' | 'board';
+
+export const finishWindowFor = (m: { won: boolean; balance: number | null; hasBoard: boolean }): FinishWindow => {
+  // No final board to show (a finish whose position is unknown): the planet, as before.
+  if (!m.hasBoard) return 'planet';
+  return m.won && m.balance !== null && m.balance >= PLANET_TILE_PRICE ? 'planet' : 'board';
+};
+
+/** `severgrow.*`: the last wallet balance this device saw, so the card can choose before any read. */
+export const SEED_BALANCE_KEY = 'severgrow.seeds.balance.v1';
+
+export const parseBalance = (raw: string | null): number | null => {
+  if (raw === null || raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n >= 0 ? n : null;
+};

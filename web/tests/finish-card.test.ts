@@ -344,7 +344,8 @@ describe('THE PLANET on the card (owner brief, 2026-11-11)', () => {
     const pane = html.slice(html.indexOf('id="go-world"'), html.indexOf('id="go-world-teach"'));
     expect(pane).not.toMatch(/world-key|world-panel|online-world-menu|online-world-chat|world-colour/);
     // It is the shared renderer, mounted by the lobby (one client, one identity), never a second map.
-    expect(mainSource).toMatch(/endgamePlanet = onlineLobbyCtl\?\.mountEndgamePlanet\(host, \(\) => campaignLevel\?\.number \?\? null\) \?\? null;/);
+    // (2026-11-12: it also reports the wallet balance it reads, which the card's window choice remembers.)
+    expect(mainSource).toMatch(/endgamePlanet = onlineLobbyCtl\?\.mountEndgamePlanet\(host, \(\) => campaignLevel\?\.number \?\? null, rememberBalance\) \?\? null;/);
     expect(mainSource).toMatch(/function syncEndgamePlanet\(show: boolean, teach: boolean\): void \{/);
   });
 

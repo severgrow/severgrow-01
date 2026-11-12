@@ -79,7 +79,8 @@ describe('the won level 10 card explains THE PLANET in situ', () => {
     expect(PLANET_TEACH.lines.join(' ')).toMatch(/season/);
     expect(PLANET_TEACH.lines.join(' ')).toMatch(/prizes/);
     expect(html).toContain('<div id="go-world-teach" class="go-world-teach" hidden></div>');
-    expect(main).toMatch(/syncEndgamePlanet\(planetCard, !!taught && taught\.level === FINAL_LESSON\.level && won\);/);
+    // (2026-11-12: through the card's window choice, which shows the planet on a win with a tile's price.)
+    expect(main).toMatch(/syncFinishWindow\(planetCard, won, !!taught && taught\.level === FINAL_LESSON\.level && won, finishResult\.harvest\);/);
     // The separate lesson window is gone: it covered the map it was describing.
     expect(html).not.toContain('go-territory');
     expect(main).not.toMatch(/go-territory|PLANET_INTRO|planetIntro/);

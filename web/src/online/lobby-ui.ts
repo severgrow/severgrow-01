@@ -132,7 +132,7 @@ export type OnlineLobbyController = {
    * be a second, disagreeing viewer of the world. Null where the planet is not part of this build
    * (the locked futa04 line keeps its classic card) or where the world cannot be mounted.
    */
-  mountEndgamePlanet(host: HTMLElement, level: () => number | null): import('./endgame-planet.js').EndgamePlanet | null;
+  mountEndgamePlanet(host: HTMLElement, level: () => number | null, onBalance?: (balance: number | null) => void): import('./endgame-planet.js').EndgamePlanet | null;
   /**
    * Leave the lobby for a match: the one transition every entry point uses (a match row, a friend
    * joining, a join code, a Territory challenge). Tears the Territory view down and gives the
@@ -152,6 +152,8 @@ export type OnlineLobbyController = {
   rematch(finishedMatchId?: string | null): Promise<void>;
   trainingSeedTicket(botLevel: number): Promise<{ id: string; seed: number } | null>;
   syncSeedRewards(): Promise<SeedFlushResult>;
+  /** The wallet's balance (one cheap read, no planet mounted), or null when it cannot be read. */
+  seedBalance?(): Promise<number | null>;
 };
 
 export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController => {
@@ -1846,8 +1848,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
    * there is exactly ONE viewer of the world on this page. `level` is the campaign place for the
    * owner line's LEVEL word (never a second source of truth).
    */
-  const mountEndgamePlanet = (host: HTMLElement, level: () => number | null) =>
+  const mountEndgamePlanet = (host: HTMLElement, level: () => number | null, onBalance?: (balance: number | null) => void) =>
     mountEndgamePlanetPane(host, {
+      ...(onBalance ? { onBalance } : {}),
       client,
       identity: async () => {
         const id = await ensureIdentity();
@@ -1857,9 +1860,16 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       level,
     });
 
+  const seedBalance = async (): Promise<number | null> => {
+    try {
+      const id = await ensureIdentity();
+      return id ? (await client.seedWallet(id.token)).balance : null;
+    } catch { return null; }
+  };
+
   return {
     enabled: true, openHub, openWorld, mountEndgamePlanet, leaveForMatch, handleBootHash, refreshTitle,
-    openMatch, rematch, trainingSeedTicket, syncSeedRewards,
+    openMatch, rematch, trainingSeedTicket, syncSeedRewards, seedBalance,
   };
 };
 

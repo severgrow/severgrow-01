@@ -1079,6 +1079,17 @@
             <p id="go-world-note" class="go-world-note" role="status" aria-live="polite" hidden></p>
           </div>
         </div>
+        <!-- THE BOARD WINDOW (owner, 2026-11-12): the planet's window shows only on a win with a
+             tile's price in the wallet. Every other finish shows the FINAL BOARD here, in the same
+             frame and at the same size (main.ts, logic/finish-window.ts). -->
+        <div id="go-boardview" class="go-world go-boardview" hidden>
+          <div class="go-world-surface go-boardview-surface">
+            <div class="go-world-head">
+              <span id="go-boardview-title" class="go-world-title"></span>
+            </div>
+            <figure id="go-boardview-board" class="go-boardview-board"></figure>
+          </div>
+        </div>
         <p id="go-break" class="muted small" data-go-extra hidden></p>
         <p id="go-moves" class="muted small" data-go-extra hidden></p>
         <ul id="go-highlights" class="highlights" data-go-extra hidden></ul>

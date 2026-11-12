@@ -8427,7 +8427,8 @@ body.result .corner-tools {
    wallet, the hint) sits on exactly the vertical axis of the title and the score above it — one
    optical axis for the whole card. The card clips it, so the plate's own corner shapes the window:
    one corner family, no double frame, no gap that would make it a thumbnail. */
-#gameover[data-anatomy='planet'] #go-world {
+#gameover[data-anatomy='planet'] #go-world,
+#gameover[data-anatomy='planet'] #go-boardview {
   /* THE PLANET TAKES THE REMAINDER (owner correction, 2026-11-11: "the planet window stretching to
      take all the height the header and keys do not need ... on a taller phone the player gets MORE
      planet, not more padding"). It is the plate's one growing child, so the keys are always the last
@@ -8441,7 +8442,8 @@ body.result .corner-tools {
   margin: 0 calc(-1 * var(--go-gutter));
   display: block;
 }
-#gameover[data-anatomy='planet'] #go-world[hidden] { display: none; }
+#gameover[data-anatomy='planet'] #go-world[hidden],
+#gameover[data-anatomy='planet'] #go-boardview[hidden] { display: none; }
 #gameover[data-anatomy='planet'] .go-world-surface { height: 100%; border-radius: 13px; }
 
 /* THE DETAILS LIVE IN RESULT: on the planet card none of them is painted twice. */
@@ -8602,7 +8604,8 @@ body.result .corner-tools {
      2026-11-11: the words "in the centre not on top"). The window takes the row above the keys, so
      the globe's middle and the read-out's middle land on ONE horizontal band; the short foot the
      keys leave under it is the plate's own foot, not a floating card's margin. */
-  #gameover[data-anatomy='planet'] #go-world {
+  #gameover[data-anatomy='planet'] #go-world,
+#gameover[data-anatomy='planet'] #go-boardview {
     grid-column: 1;
     grid-row: 1;
     margin: 0;
@@ -9235,3 +9238,25 @@ html.futasaku-product #sheet-settings::-webkit-scrollbar-thumb {
      fit without a scroll, and it takes nothing from any control. */
   html.futasaku-product #sheet-settings h3 { display: none; }
 }
+
+/* THE BOARD WINDOW (owner, 2026-11-12): the planet window's frame, light and size, holding the final
+   board RESULT shows. The board is centred and fitted inside the window's head and foot bands. */
+.go-boardview-surface { background: #0e0f10; }
+.go-boardview-board {
+  position: absolute; inset: 34px 14px 14px; margin: 0;
+  display: grid; place-items: center; min-height: 0;
+}
+.go-boardview-board .go-harvest-svg { width: 100%; height: 100%; max-height: 100%; overflow: visible; }
+/* The board window's head is the planet window's head (online/endgame-planet.ts injects those rules
+   only when a planet mounts, so the board window carries its own copy of the same values). */
+#go-boardview .go-world-head {
+  position: absolute; z-index: 2; inset: 0 0 auto 0; display: flex; align-items: center;
+  justify-content: space-between; gap: 8px;
+  padding: 9px var(--go-gutter, 14px); pointer-events: none;
+  background: linear-gradient(to bottom, #0b0d0cf2 0%, #0b0d0c9c 58%, #0b0d0c00 100%);
+}
+#go-boardview .go-world-title {
+  font-family: var(--font-ui); font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
+  color: #e8ddc5a6;
+}
+#go-boardview .go-world-surface { position: relative; overflow: hidden; isolation: isolate; height: 100%; border-radius: 13px; }

@@ -50,6 +50,8 @@ import type { OutcomeLight } from './player/atmosphere.js';
 import { planetSnapshot } from './online/world-planet.js';
 import { gameHighlights } from './logic/highlights.js';
 import { harvestFigure, harvestSvg } from './logic/harvest.js';
+import { SEED_BALANCE_KEY, finishWindowFor, parseBalance } from './logic/finish-window.js';
+import type { FinishWindow } from './logic/finish-window.js';
 import type { HarvestFigure } from './logic/harvest.js';
 import { EMPTY_SEL, futa04OneTap, growControls, heldMoveWord, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import type { Sel } from './logic/interaction.js';
@@ -8399,6 +8401,8 @@ function setGoExtrasOpen(open: boolean) {
  */
 function syncEndgameWallet(): void {
   if (endgamePlanet) endgamePlanet.refresh();
+  // A payout that lands after a WON card is up may cross a tile's price: the board becomes the planet.
+  if (finishWindow?.won && finishWindow.view === 'board') void refreshFinishWindow();
 }
 
 /** Paints the shared Seeds line empty: a mode that pays no Seeds (a duel) shows no line at all. */
@@ -8645,6 +8649,67 @@ function closeFinishResult(instant = false): void {
  * WebGL canvas and a network read, not a decoration); a re-render of the same card does nothing.
  * `teach` is level 10's in-situ explanation, in the window's own foot.
  */
+/**
+ * THE FINISH CARD'S WINDOW (owner, 2026-11-12; logic/finish-window.ts): the planet on a win with a
+ * tile's price in the wallet, the final board in the same window otherwise. Chosen at once from the
+ * balance this device last saw, then once more from a fresh wallet read (a payout may have crossed
+ * the price). `card` counts finish cards, so a late read never repaints the wrong one.
+ */
+let finishCard = 0;
+let finishWindow: { card: number; won: boolean; teach: boolean; harvest: HarvestFigure | null; view: FinishWindow } | null = null;
+const rememberBalance = (balance: number | null) => { if (balance !== null) store.set(SEED_BALANCE_KEY, String(balance)); };
+
+function applyFinishWindow(view: FinishWindow): void {
+  const w = finishWindow;
+  if (!w) return;
+  w.view = view;
+  const boardView = document.getElementById('go-boardview');
+  if (boardView) {
+    const arriving = boardView.hidden && view === 'board';
+    boardView.hidden = view !== 'board';
+    const board = document.getElementById('go-boardview-board');
+    if (board) board.innerHTML = view === 'board' && w.harvest ? harvestSvg(w.harvest) : '';
+    const title = document.getElementById('go-boardview-title');
+    if (title) title.textContent = RESULT.finalBoard;
+    // The planet window's own arrival (online/endgame-planet.ts bandIn: fade, 7px rise, the open beat).
+    const surface = boardView.querySelector<HTMLElement>('.go-world-surface');
+    if (arriving && surface && interfaceMotionAllowed()) {
+      surface.animate(
+        [{ opacity: 0, translate: '0 7px' }, { opacity: 1, translate: '0 0' }],
+        { duration: INTERFACE_MOTION.open, easing: INTERFACE_MOTION.easeOpen, fill: 'both' },
+      );
+    }
+  }
+  syncEndgamePlanet(view === 'planet', w.teach);
+}
+
+function syncFinishWindow(show: boolean, won: boolean, teach: boolean, harvest: HarvestFigure | null): void {
+  const card = ++finishCard;
+  if (!show) {
+    finishWindow = null;
+    const boardView = document.getElementById('go-boardview');
+    if (boardView) boardView.hidden = true;
+    syncEndgamePlanet(false, false);
+    return;
+  }
+  finishWindow = { card, won, teach, harvest, view: 'board' };
+  applyFinishWindow(finishWindowFor({ won, balance: parseBalance(store.get(SEED_BALANCE_KEY)), hasBoard: !!harvest }));
+  if (won) void refreshFinishWindow();
+}
+
+/** A fresh wallet read, then the window again (only for the card that asked, only if it changed). */
+async function refreshFinishWindow(): Promise<void> {
+  const w = finishWindow;
+  if (!w || !w.won || !onlineLobbyCtl?.seedBalance) return;
+  const card = w.card;
+  const balance = await onlineLobbyCtl.seedBalance();
+  rememberBalance(balance);
+  const now = finishWindow;
+  if (!now || now.card !== card) return;
+  const view = finishWindowFor({ won: now.won, balance, hasBoard: !!now.harvest });
+  if (view !== now.view) applyFinishWindow(view);
+}
+
 function syncEndgamePlanet(show: boolean, teach: boolean): void {
   const host = document.getElementById('go-world');
   if (!host) return;
@@ -8655,7 +8720,7 @@ function syncEndgamePlanet(show: boolean, teach: boolean): void {
     return;
   }
   if (!endgamePlanet) {
-    endgamePlanet = onlineLobbyCtl?.mountEndgamePlanet(host, () => campaignLevel?.number ?? null) ?? null;
+    endgamePlanet = onlineLobbyCtl?.mountEndgamePlanet(host, () => campaignLevel?.number ?? null, rememberBalance) ?? null;
     endgamePlanet?.open();
   }
   // Painted after the open, so a cached map cannot reset the foot mid-way.
@@ -8672,6 +8737,9 @@ function hideGameOver(): void {
   const pane = endgamePlanet;
   endgamePlanet = null;
   pane?.leave();
+  // A wallet read still on its way belongs to this card: it must not repaint the next one.
+  finishWindow = null;
+  finishCard++;
   if (wasShown) {
     const card = go.querySelector<HTMLElement>('.go-card');
     if (card) card.classList.remove('seed-slot');
@@ -9077,7 +9145,7 @@ function renderGameOver() {
       cut: false,
       difficulty: false,
     };
-    syncEndgamePlanet(anatomy === 'planet', false);
+    syncFinishWindow(anatomy === 'planet', won, false, harvest);
     // A fresh finish starts folded: the card shows the result and the ways forward, nothing else.
     if (wasHidden) setGoExtrasOpen(false);
     else syncGoExtras();
@@ -9279,7 +9347,7 @@ function renderGameOver() {
     difficulty: !campaign,
   };
   // Level 10's teaching, under the live map: the planet explains itself where it is used.
-  syncEndgamePlanet(planetCard, !!taught && taught.level === FINAL_LESSON.level && won);
+  syncFinishWindow(planetCard, won, !!taught && taught.level === FINAL_LESSON.level && won, finishResult.harvest);
   // A fresh finish starts folded (see the online branch): the card shows the result and the ways
   // forward, and the details wait behind "More" — that is what keeps it on one phone screen.
   if (wasHidden) setGoExtrasOpen(false);
@@ -11665,9 +11733,11 @@ type OnlineLobbyCtl = {
   /** The Territory map (the menu's own entry); the finish card's planet pane calls its own mount. */
   openWorld(from: 'hub' | 'menu'): void;
   /** THE PLANET ON THE FINISH CARD: built by the lobby, which owns the client and the identity. */
-  mountEndgamePlanet(host: HTMLElement, level: () => number | null): EndgamePlanet | null;
+  mountEndgamePlanet(host: HTMLElement, level: () => number | null, onBalance?: (balance: number | null) => void): EndgamePlanet | null;
   /** Leave the lobby for a match: the one transition every entry point uses. */
   leaveForMatch(): void;
+  /** The wallet's balance, one cheap read (the finish card's window choice, logic/finish-window.ts). */
+  seedBalance?(): Promise<number | null>;
 };
 let onlineLobbyCtl: OnlineLobbyCtl | null = null;
 /** Set while an online duel is open; the pause menu's Resign calls it (one confirm). */

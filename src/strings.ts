@@ -426,6 +426,8 @@ export const RESULT = Object.freeze({
   won: 'You won',
   lost: 'You lost',
   draw: 'A draw',
+  /** The finish card's board window (owner, 2026-11-12): its name, in the planet window's own head. */
+  finalBoard: 'Final board',
   /** The practice result's second line: "Practice match · Medium" (never the opponent's 1-9 level). */
   practice: (difficulty: string) => `Practice match · ${difficulty}`,
   /** Why the game ended. */
