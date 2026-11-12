@@ -627,32 +627,73 @@ try {
         await page.waitForSelector('#go-world:not([hidden])', { timeout: 10000 });
         // The shared renderer is mounted a beat after the card's own entrance (main.ts/endgame-planet).
         await page.waitForSelector('#go-world-surface > .planet-canvas', { timeout: 20000 }).catch(() => undefined);
-        const planet = await page.evaluate(() => {
-          // No helper declarations in here: esbuild's `keepNames` rewrites them to `__name(...)`,
-          // which does not exist in the page. Everything is inlined on purpose.
-          const world = document.getElementById('go-world');
-          const surface = document.getElementById('go-world-surface');
-          const teach = document.getElementById('go-world-teach');
-          const bar = document.getElementById('go-world-bar');
-          const cardEl = document.querySelector('#gameover .go-card');
-          const wr = world && world.getClientRects().length > 0 ? world.getBoundingClientRect() : null;
-          const tr = teach && teach.getClientRects().length > 0 ? teach.getBoundingClientRect() : null;
+        // A STRING BODY, NOT A FUNCTION (2026-11-12). `page.evaluate(fn)` serialises the function's
+        // SOURCE into the page. tsx transpiles this file with esbuild's `keepNames`, which wraps
+        // every decorated function in a `__name(fn, "…")` helper — and that helper does not exist in
+        // the browser, so the call died with `ReferenceError: __name is not defined` before a single
+        // assertion ran. A string is never transpiled, so nothing can be injected into it. Written
+        // in plain `function` form and guarded ES2017-friendly on purpose: this text is not compiled.
+        const planet = await page.evaluate(`(() => {
+          var world = document.getElementById('go-world');
+          var surface = document.getElementById('go-world-surface');
+          var teach = document.getElementById('go-world-teach');
+          var bar = document.getElementById('go-world-bar');
+          var grow = document.getElementById('go-world-grow');
+          var cardEl = document.querySelector('#gameover .go-card');
+          var go = document.getElementById('gameover');
+          var wr = world && world.getClientRects().length > 0 ? world.getBoundingClientRect() : null;
+          var tr = teach && teach.getClientRects().length > 0 ? teach.getBoundingClientRect() : null;
+          var box = function (r) { return r ? { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), w: Math.round(r.width), h: Math.round(r.height) } : null; };
+          var shown = function (el) { return !!el && el.getClientRects().length > 0; };
+          var lines = [];
+          if (teach) {
+            var found = teach.querySelectorAll('.go-world-teach-lines li');
+            for (var i = 0; i < found.length; i += 1) lines.push(found[i].textContent);
+          }
+          var keys = [];
+          if (bar) {
+            var found2 = bar.querySelectorAll('button');
+            for (var j = 0; j < found2.length; j += 1) {
+              if (found2[j].getClientRects().length > 0) keys.push(Math.round(found2[j].getBoundingClientRect().height));
+            }
+          }
+          var gr = grow && shown(grow) ? Math.round(grow.getBoundingClientRect().height) : 0;
+          var line = document.getElementById('go-world-line');
           return {
+            anatomy: (go && go.dataset.anatomy) || '',
             worldShown: !!wr,
-            worldBox: wr ? { top: Math.round(wr.top), bottom: Math.round(wr.bottom), left: Math.round(wr.left), right: Math.round(wr.right), w: Math.round(wr.width), h: Math.round(wr.height) } : null,
+            worldBox: box(wr),
             cardH: cardEl ? Math.round(cardEl.getBoundingClientRect().height) : 0,
-            canvas: !!surface?.querySelector(':scope > .planet-canvas'),
+            canvas: !!surface && !!surface.querySelector(':scope > .planet-canvas'),
             teachShown: !!tr,
-            teachLines: [...document.querySelectorAll('#go-world-teach .go-world-teach-lines li')].map((li) => li.textContent),
-            teachLabel: teach?.getAttribute('aria-label') ?? '',
-            teachBox: tr ? { top: Math.round(tr.top), bottom: Math.round(tr.bottom), left: Math.round(tr.left), right: Math.round(tr.right), w: Math.round(tr.width), h: Math.round(tr.height) } : null,
+            teachLines: lines,
+            teachLabel: teach ? (teach.getAttribute('aria-label') || '') : '',
+            teachBox: box(tr),
             teachOverflow: teach ? teach.scrollHeight - teach.clientHeight : 0,
-            hint: document.getElementById('go-world-line')?.textContent ?? '',
-            keyHeights: [...(bar?.querySelectorAll('button') ?? [])].filter((k) => k.getClientRects().length > 0).map((k) => Math.round(k.getBoundingClientRect().height)),
+            hint: line ? (line.textContent || '') : '',
+            keyHeights: keys,
+            growHeight: gr,
             legacyIntroPresent: !!document.getElementById('planet-intro'),
             legacyKeyPresent: !!document.getElementById('go-territory-open'),
           };
-        });
+        })()`) as {
+          anatomy: string;
+          worldShown: boolean;
+          worldBox: { top: number; bottom: number; left: number; right: number; w: number; h: number } | null;
+          cardH: number;
+          canvas: boolean;
+          teachShown: boolean;
+          teachLines: string[];
+          teachLabel: string;
+          teachBox: { top: number; bottom: number; left: number; right: number; w: number; h: number } | null;
+          teachOverflow: number;
+          hint: string;
+          keyHeights: number[];
+          growHeight: number;
+          legacyIntroPresent: boolean;
+          legacyKeyPresent: boolean;
+        };
+        check(planet.anatomy === 'planet', `L10: the card IS the planet anatomy, not the classic one (${JSON.stringify(planet.anatomy)})`);
         check(planet.worldShown && (planet.worldBox?.h ?? 0) > 0, `L10: the card carries the live Planet window (${JSON.stringify(planet.worldBox)})`);
         check(planet.canvas, 'L10: the window IS the shared planet renderer, mounted in its surface');
         check((planet.worldBox?.h ?? 0) > planet.cardH * 0.3, `L10: the planet is the card's hero, not a strip (${planet.worldBox?.h} of ${planet.cardH}px)`);
@@ -672,6 +713,9 @@ try {
         check(planet.teachOverflow <= 1, `L10: the explainer's lines are not clipped (${planet.teachOverflow}px)`);
         check(planet.hint === 'Tap a tile', `L10: the resting hint is the owner's two words (${JSON.stringify(planet.hint)})`);
         check(planet.keyHeights.every((h) => h >= 44), `L10: every visible key in the window's foot is a real target (${JSON.stringify(planet.keyHeights)})`);
+        // The grow key is HIDDEN for a guest (no account, so nothing can be grown — PLANET_PANE's own
+        // rule). It is never required to be on screen; when it IS, it must be a real 44px target.
+        check(planet.growHeight === 0 || planet.growHeight >= 44, `L10: the grow key is a real target when it shows (${planet.growHeight}px)`);
         check(!planet.legacyIntroPresent && !planet.legacyKeyPresent, 'L10: the retired Planet modal and its card key are gone');
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/L10-planet-in-card.png` });
       }
