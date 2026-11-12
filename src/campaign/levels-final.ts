@@ -204,17 +204,17 @@ export const CHAPTER_8_LEVELS: readonly CampaignLevel[] = Object.freeze([
  * flank on its own side. Strangler Fig (bot 11), the attacker, arrives at 83.
  */
 export const CHAPTER_9_LEVELS: readonly CampaignLevel[] = Object.freeze([
-  // Mirror-fair across the other axis ((q,r) -> (r,q)): stone on one flank, gold on the other, so both players race up the same side.
-  //      # # . .
-  //     # . . B .
-  //    . # . . . .
-  //   . . . $ . . .
+  // Fair under the side-keeping mirror (q,r) -> (r,q), which swaps the homes but keeps each flank on its side: stone fills one flank, gold the other, so both players race up the same side.
+  //      # . . .
+  //     # # . B .
+  //    # # . . . .
+  //   # # . . . $ .
   //    . . . . $ $
-  //     . A . . $
+  //     . A . $ $
   //      . . . .
   final(9, 81, 'c9-81', 'Lopsided', 97081, 9, board(
-    ['0,-3', '1,-3', '-1,-2', '-1,-1'],
-    ['0,0', '1,1', '2,1', '1,2'],
+    ['0,-3', '-1,-2', '0,-2', '-2,-1', '-1,-1', '-3,0', '-2,0'],
+    ['2,0', '1,1', '2,1', '0,2', '1,2'],
   ), 'One flank stone, the other gold; fair, but both of you race the same side.'),
 
   // Gold two steps from the bot's home; the player's half is open with one more lane.

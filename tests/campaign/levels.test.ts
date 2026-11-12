@@ -149,7 +149,7 @@ describe('campaign levels: the definition is well formed', () => {
       [71, 3], [72, 5], [73, 5], [74, 5], [75, 7],
       [76, 3], [77, 9], [78, 5], [79, 4], [80, 9],
       // Chapter IX (2026-11-12): uneven ground. Light stone; the unfairness is in WHERE it sits.
-      [81, 4], [82, 3], [83, 4], [84, 0], [85, 4],
+      [81, 7], [82, 3], [83, 4], [84, 0], [85, 4],
       [86, 2], [87, 3], [88, 4], [89, 4], [90, 5],
       // Chapter X (2026-11-12): callbacks with the late tools.
       [91, 0], [92, 5], [93, 5], [94, 1], [95, 7],
@@ -321,6 +321,17 @@ describe('campaign levels: the definition is well formed', () => {
     expect(breathers).toBe(3);
     // Each debut is where the data says.
     for (const [bot, n] of Object.entries(debut)) expect(campaignLevelByNumber(n)!.botLevel).toBe(Number(bot));
+  });
+
+  it('81 is fair under the side-keeping mirror (q,r) -> (r,q): each flank stays on its own side', () => {
+    // The chapter's opener is lopsided to look at and fair to play: the mirror swaps the two homes
+    // and maps the stone flank and the gold flank onto themselves.
+    const b = campaignLevelByNumber(81)!.config.board!;
+    const m = (k: string) => k.split(',').reverse().join(',');
+    expect(m(b.homes[0])).toBe(b.homes[1]);
+    for (const k of b.rock) expect(b.rock, k).toContain(m(k));
+    for (const k of b.gold) expect(b.gold, k).toContain(m(k));
+    expect(campaignLevelByNumber(81)!.uneven).toBeUndefined();
   });
 
   it('uneven boards are declared, live in the final arc, and only a handful are harsh', () => {
