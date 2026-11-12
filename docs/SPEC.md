@@ -80,6 +80,28 @@ level UP and a loss one DOWN, never outside the tier’s own range.
 No level is chosen from the match seed: the tier’s level is fixed for the next game until a finished
 game moves it (`stepAfterGame` in `web/src/logic/difficulty.ts`).
 
+### Rivals: bots 10–12 (bots-v0.11)
+
+Three bots above level 9, beside each other rather than a ladder (owner decision 2026-11-12;
+`src/bots/levels.ts`, `RIVAL_CONFIGS`). Each is level 9’s planner, searching every board fully,
+plus one way of playing:
+
+| Bot | Internal name | Way of playing |
+| --- | --- | --- |
+| 10 | Ironwood | defensive: guards its home ring, keeps its network hard to cut, wins on score |
+| 11 | Strangler Fig | aggressive: grows toward the opponent’s home and plays for the Strangle |
+| 12 | Night Bloom | patient: holds Blooms and cheap Bomb cards for the turn that counts |
+
+- **The names are internal.** The game never shows them; a rival is shown, and counted in stats,
+  as level 9 (`ladderLevel`).
+- **Where they play:** campaign levels 74–100 (chapters VIII–X, `docs/CAMPAIGN-71-100.md`).
+  Approved, not yet built: they also rotate with level 9 in the Hard tier and in Blitz practice.
+- **Bots 1–9 do not change.** Their decisions are pinned by `tests/bots/levels-frozen.test.ts`.
+- **Versions:** `bots-v0.11` is current. `bots-v0.10` stays accepted for tickets and proofs issued
+  before it (same moves for levels 1–9) and can never replay a rival.
+- **Acceptance bar** (measured with `src/sim/rivals.ts` on campaign boards, seats swapped): each
+  rival wins at least 50% against full-search level 9, and at least two win 55% or more.
+
 ---
 
 ## Ending the game

@@ -73,7 +73,9 @@ const main = () => {
   const from = Number(arg('from', '0'));
   const levelsArg = arg('levels', '25-70').split('-').map(Number);
   const boards = CAMPAIGN_LEVELS.filter((l) => l.number >= levelsArg[0]! && l.number <= (levelsArg[1] ?? levelsArg[0]!));
-  const A = NAMED[a]!;
+  // --cfg='{"styleWeight":1.5}' patches the rival's knobs for a tuning run (never the reference).
+  const patch = JSON.parse(arg('cfg', '{}')) as Partial<LevelConfig>;
+  const A = { ...NAMED[a]!, ...patch };
   const B = NAMED[b]!;
   const sa = blank();
   const sb = blank();
@@ -87,7 +89,7 @@ const main = () => {
     const s = playConfigs(seed, level.config, swap ? [B, A] : [A, B], swap ? [9, idA] : [idA, 9], stats);
     if (s.result!.winner === null) draws++;
   }
-  console.log(JSON.stringify({ rival: a, opp: b, games, from, draws, rivalSide: sa, oppSide: sb }));
+  console.log(JSON.stringify({ rival: a + (Object.keys(patch).length ? JSON.stringify(patch) : ''), opp: b, games, from, draws, rivalSide: sa, oppSide: sb }));
 };
 
 if (process.argv[1]?.endsWith('rivals.ts')) main();

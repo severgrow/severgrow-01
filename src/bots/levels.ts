@@ -87,6 +87,11 @@ export type LevelConfig = {
   holdMargin?: number;
   /** Fruit patience: a Fruit card worth less than this is kept for later while the deck is long. */
   fruitPatience?: number;
+  /**
+   * Endgame: once the draw pile holds this many cards or fewer, the danger and pressure terms fade
+   * out in proportion (a threat the opponent has no turns left to carry out is not a threat).
+   */
+  endgame?: number;
 };
 
 /** A rival's way of playing (see `styleTerm`). */
@@ -348,7 +353,8 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
   if (legal.length === 0) throw new Error('Bot: no legal actions');
   if (legal.length === 1) return { action: legal[0]! };
 
-  const weights = { ...WEIGHTS, exposure: c.dangerWeight, pressure: c.pressureWeight };
+  const fade = c.endgame && v.deckCount < c.endgame ? v.deckCount / c.endgame : 1;
+  const weights = { ...WEIGHTS, exposure: c.dangerWeight * fade, pressure: c.pressureWeight * fade };
   const rng = mulberry32(seed);
   // Levels 1-2: now and then a whim - a random Strengthen, whether it helps or not.
   // (Its own random stream, so the rest of the bot's choices are not shifted by it.)

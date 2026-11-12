@@ -103,9 +103,9 @@ must show the declared seat ahead by a bounded margin (proposal: bot-9 vs bot-9,
 wins 55–70%) instead of the usual ~50%. "Every open hex reachable from both homes" and
 "≥ 3 open home neighbours" are kept.
 
-New symmetry kind: **mirrored across the home-to-home axis** (`(q,r) → (-r,-q)`). Both homes stay
-put, so the board is fair, but one flank can be all stone and the other all gold, and both players
-race up the same side. It looks lopsided and plays fair: a good opener for an "uneven" chapter.
+New symmetry kind: **the side-keeping mirror** `(q,r) → (r,q)`. It swaps the two homes but keeps
+each flank on its own side, so the board is fair while one flank is all stone and the other all gold,
+and both players race up the same side. (Point symmetry, used by 31–70, swaps the flanks too.) It looks lopsided and plays fair: a good opener for an "uneven" chapter.
 
 | # | Name | Idea |
 | --- | --- | --- |
