@@ -592,6 +592,10 @@ try {
         territoryKey: !(document.getElementById('go-territory-open')?.hidden ?? true),
       }));
       check(!!card.line, `L${level} finish card: ${card.title} / ${card.line}`);
+      // A WON lesson says it was learned (owner, 2026-11-12): `Lesson 3` over `Learned` for levels
+      // 1-9, the one send-off line for level 10. A loss never reaches this suite (the light wins).
+      const wantTitle = level === 10 ? LESSON.canPlay : LESSON.learnedTitle(level);
+      check(card.title === wantTitle, `L${level} finish card title: "${card.title}" (want "${wantTitle}")`);
       if (level < 10) {
         check(!card.seeds, `L${level} finish card has no Seeds line`);
         check(!card.territory && !card.territoryKey, `L${level} finish card says nothing about Territory`);

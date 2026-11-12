@@ -420,6 +420,13 @@ const dismissInstall = async (page: Page): Promise<void> => {
       return;
     }
   }
+  // A guest's end-of-game "keep progress" dialog is a person's "Not now". It arrives 700ms after the
+  // card (main.ts `offerEndOfGamePrompts`), so a fast run used to tap the leading button before it
+  // opened; under load it covers the card and every retry hits it. Dismiss it like a player would.
+  const notNow = page.locator('#keep-progress .keep-progress-actions button:not(.primary)');
+  if (await notNow.isVisible().catch(() => false)) {
+    await notNow.click({ timeout: 2_000 }).catch(() => undefined);
+  }
 };
 
 /** Click a control, dismissing the install sheet whenever it gets in the way (never force-clicked). */
@@ -698,13 +705,24 @@ try {
       const ended = await toGameOver(page);
       check(`campaign ${vp.key}: the campaign level reached its end`, ended === 'ended', ended);
       await waitFinish(page);
-      // A lesson's finish card carries the LESSON's own title (W.youWin, "YOU WIN"), not the campaign
-      // level's "Level 1 complete" (main.ts `presentResult` paints the taught lesson's title). Reading
-      // the campaign title here made a real win look like a loss of words, which silently skipped the
-      // whole next-level block below — the check existed but never ran.
+      // A lesson's finish card carries the LESSON's own title — since 2026-11-12 the two-line
+      // `Lesson 1` over `Learned` lockup (paintGoTitle splits its last space), not the campaign
+      // level's "Level 1 Complete". Reading the campaign title here made a real win look like a
+      // loss of words, which silently skipped the whole next-level block below.
       const startedLesson = lessonFor(level1.number);
       const wonTitle = startedLesson ? startedLesson.finish.title : CAMPAIGN.levelWon(level1.number);
       const wonIt = (await page.textContent('#go-title')) === wonTitle;
+      if (startedLesson && wonIt) {
+        const lockup = await page.evaluate(() => ({
+          kicker: document.querySelector('#go-title .go-kicker')?.textContent ?? '',
+          outcome: document.querySelector('#go-title .go-outcome')?.textContent ?? '',
+        }));
+        check(
+          `campaign ${vp.key}: a won lesson reads LESSON ${level1.number} over LEARNED`,
+          lockup.kicker === `Lesson ${level1.number}` && lockup.outcome === 'Learned',
+          JSON.stringify(lockup),
+        );
+      }
       const m = await report('campaign', vp.key, page, errors, wonIt ? CAMPAIGN.nextLevel : undefined);
       // A campaign win can pay Seeds, but the number is verified after the card is up and it is not
       // always earned. Whatever the build: the line is either absent or the game's own calm sentence

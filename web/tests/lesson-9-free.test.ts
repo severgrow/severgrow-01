@@ -18,15 +18,16 @@ import { apply, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { mulberry32 } from '../../src/engine/prng.js';
 import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
-import { CAMPAIGN_LEVELS, campaignOpening, currentLevel } from '../../src/campaign/index.js';
+import { CAMPAIGN_LEVELS, campaignDeal, campaignOpening, currentLevel } from '../../src/campaign/index.js';
 import type { CampaignProgress } from '../../src/campaign/index.js';
 import { SMALL_BOARD_RADIUS } from '../../src/campaign/small-board.js';
 import { LESSON } from '../../src/strings.js';
 import {
   lessonBeat, lessonFor, lessonIsFree, lessonLocked, lessonOpening, presentedLessonBeat, suggestMove,
 } from '../src/lessons/lessons.js';
-import type { BeatCtx } from '../src/lessons/lessons.js';
+import type { Beat, BeatCtx } from '../src/lessons/lessons.js';
 import { lessonResumable } from '../src/lessons/lesson-save.js';
+import { throwPileCompletesBloom } from '../src/logic/pile-glow.js';
 import { decodeSave, encodeSave } from '../src/logic/persist.js';
 import { countsTowardRecord } from '../src/logic/stats.js';
 import { progressAfterMatch } from '../src/logic/campaign.js';
@@ -61,6 +62,25 @@ const play = (me: (s: State) => Action): State => {
   let s = lessonOpening(L9);
   for (let i = 0; i < 800 && s.phase !== 'GAME_OVER'; i++) s = apply(s, s.actor === 0 ? me(s) : opponent(s));
   return s;
+};
+
+/**
+ * The walk the screen takes when the player follows the light: every beat read from the live state,
+ * with the position it was read at. The same chooser the cockpit shows (`suggestMove`), the level's
+ * real bot on their turn.
+ */
+const walkBeats = (): { beat: Beat | null; state: State }[] => {
+  const out: { beat: Beat | null; state: State }[] = [];
+  const seen = new Set<string>();
+  let s = lessonOpening(L9);
+  for (let i = 0; i < 800 && s.phase !== 'GAME_OVER'; i++) {
+    const beat = lessonBeat(L9, s, { card: null, placing: null, throwPending: null, seen });
+    out.push({ beat, state: s });
+    if (beat?.explain) seen.add(beat.id);
+    const move = s.actor === 0 ? suggestMove(L9, s) ?? legalActions(viewFor(s, 0))[0]! : opponent(s);
+    s = apply(s, move);
+  }
+  return out;
 };
 
 /** The live cue's context: the one line this level still says is already read, and every power
@@ -99,10 +119,43 @@ describe('lesson 9 is a full game on the small map', () => {
     expect(Object.keys(s.board)).toHaveLength(19);
     expect(lessonLocked(L9, s), 'the guided input gate is not in this game').toBe(false);
     expect(s.phase).toBe('DRAW');
-    // The very opening the campaign's own entry and the server verifier rebuild: the deal is the
-    // engine's, not a lesson script.
-    expect(s).toEqual(campaignOpening(LEVEL));
+    // ONE FIXED DEAL (owner, 2026-11-12): still a real campaign deal on the campaign level's own
+    // board and rules — pinned to a seed whose Throw-pile top really completes a Bloom in hand.
+    // Levels 1-9 pay no Seeds, so there is no proof to replay; the game itself is unchanged.
+    expect(s).toEqual(campaignDeal(LEVEL, s.seed));
+    expect(s.terrain).toEqual(campaignOpening(LEVEL).terrain);
+    expect(s.config).toEqual(campaignOpening(LEVEL).config);
+    expect(lessonOpening(L9)).toEqual(s);
     expect(s.deck.length).toBeGreaterThan(30);
+  });
+
+  /**
+   * THE INVARIANT (owner, 2026-11-12): level 9 says "The Throw pile glows gold when its top card
+   * completes a Bloom in your hand." before the first draw. That sentence must be TRUE when it is
+   * said, and it is judged by the product's OWN glow rule (`logic/pile-glow.ts`, the function
+   * main.ts paints the gold light from) — never a second definition of "completes a Bloom".
+   */
+  it('the Throw-pile sentence is true when it is said: the glow rule fires at 9:intro:pile-gold', () => {
+    const at = walkBeats().find((x) => x.beat?.id === '9:intro:pile-gold');
+    expect(at, 'the sentence is shown once, before the first draw').toBeDefined();
+    expect(at!.state.phase).toBe('DRAW');
+    expect(at!.state.actor).toBe(0);
+    const top = at!.state.discard.at(-1);
+    expect(top, 'the Throw pile has a top card to talk about').toBeDefined();
+    // THE INVARIANT: the light's own rule is true at this exact moment.
+    expect(throwPileCompletesBloom(at!.state.hands[0], top, at!.state.config.expandedBloom !== false)).toBe(true);
+    // ...and the card is one the player may really take: a legal Draw from the Throw pile.
+    expect(legalActions(viewFor(at!.state, 0)).some((a) => a.t === 'Draw' && a.from === 'discard')).toBe(true);
+  });
+
+  it('still deals a legal, playable opening: both piles can be drawn, a real game follows', () => {
+    const s = lessonOpening(L9);
+    const legal = legalActions(viewFor(s, 0));
+    expect(legal.some((a) => a.t === 'Draw' && a.from === 'deck'), 'the Draw pile is open').toBe(true);
+    expect(legal.some((a) => a.t === 'Draw' && a.from === 'discard'), 'the Throw pile is open').toBe(true);
+    // Nothing in the pinned deal blocks the opening: a Grow is legal right after the draw.
+    const drawn = apply(s, { t: 'Draw', from: 'deck' });
+    expect(legalActions(viewFor(drawn, 0)).some((a) => a.t === 'Sprout' || a.t === 'Bloom')).toBe(true);
   });
 
   it('is resumable like a real match, and an old scripted save restarts instead', () => {

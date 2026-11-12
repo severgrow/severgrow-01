@@ -15,7 +15,7 @@ import { LESSON as W } from '../../../src/strings.js';
 import { authoredState } from './authored.js';
 import { FINAL_LESSON, finalLessonOpening } from './final.js';
 import { campaignLevelByNumber } from '../../../src/campaign/levels.js';
-import { campaignOpening } from '../../../src/campaign/play.js';
+import { campaignDeal, campaignOpening } from '../../../src/campaign/play.js';
 import type { PositionSpec } from './authored.js';
 import type { LessonOpponent } from './opponent.js';
 import type { ActionKind, LessonTier, PowerKind } from './mastery.js';
@@ -47,16 +47,18 @@ export type Lesson = {
   version: number;
   /**
    * `guide` (the default): a hand-held lesson that opens from an authored position.
-   * `free`: a real game from scratch — the engine's own deal on the campaign level's board, the
-   * real bot, every legal move, played to a real result. The live display still coaches each
-   * action as it happens. Only level 9 (`docs/LESSON-SCRIPTS.md`).
+   * `free`: a real game from scratch — the engine's own deal on the campaign level's board (level
+   * 9 pins its deal so its Throw-pile sentence is true), the real bot, every legal move, played to
+   * a real result. The live display still coaches each action as it happens. Only level 9
+   * (`docs/LESSON-SCRIPTS.md`).
    */
   kind?: 'guided' | 'free';
-  /** A guided lesson's authored opening; a free lesson has none — its deal comes from the level. */
+  /** A guided lesson's authored opening; a free lesson has none (its deal is fixed separately). */
   position?: PositionSpec;
   /**
-   * A guided lesson that is nonetheless a real game from scratch (level 10, owner 2026-11-04: "Real
-   * first game, big board"): its deal, instead of an authored position. Its coaching stays guided.
+   * A fixed deal of the lesson's own, instead of an authored position: a guided lesson that is
+   * nonetheless a real game from scratch (level 10), or a free lesson whose opening must be pinned
+   * so its one sentence is true (level 9).
    */
   deal?: () => State;
   /** The scripted opponent, or a real bot level (levels 9 and 10 are normal games). */
@@ -103,6 +105,21 @@ const POWER_TAUGHT_AT: Readonly<Record<PowerKind, number>> = Object.freeze({ blo
 
 const SET3: readonly (readonly [0 | 1 | 2 | 3, number])[] = [[0, 3], [1, 3], [2, 3]];
 
+/**
+ * LEVEL 9'S ONE DEAL SEED (owner, 2026-11-12). The level is still a real game from scratch — the
+ * campaign level's board, rules, bot and every legal move — but it opens on this fixed deal, chosen
+ * so the Throw pile's top card really completes a Bloom in the dealt hand. That makes the sentence
+ * level 9 says before the first draw true, by the light's own rule (`logic/pile-glow.ts`), instead
+ * of guarding the words.
+ */
+const LESSON_NINE_DEAL_SEED = 95017;
+
+const lessonNineOpening = (): State => {
+  const level = campaignLevelByNumber(9);
+  if (!level) throw new Error('campaign level 9 is missing');
+  return campaignDeal(level, LESSON_NINE_DEAL_SEED);
+};
+
 export const LESSONS: readonly Lesson[] = Object.freeze([
   {
     level: 1, version: 4, locked: true, guide: 'always',
@@ -121,7 +138,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     },
     // The first game is calm: it grows once, on its 2nd turn, and never takes anything (owner, 2026-10-23).
     opponent: { script: { growOn: [2] } },
-    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'DRAW, GROW, THROW', icon: '✦' },
+    finish: { title: W.learnedTitle(1), line: W.wonOnPoints, learned: 'DRAW, GROW, THROW', icon: '✦' },
   },
   {
     level: 2, version: 3, locked: true, guide: 'always',
@@ -137,7 +154,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       discard: [[3, 1]],
     },
     opponent: { script: { avoid: ['0,0'] } },
-    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'STRONGER TILES WIN', icon: '↑' },
+    finish: { title: W.learnedTitle(2), line: W.wonOnPoints, learned: 'STRONGER TILES WIN', icon: '↑' },
   },
   {
     level: 3, version: 3, locked: true, guide: 'always',
@@ -156,7 +173,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     },
     // It heads for the gold first: if you leave it, it takes it (and the lesson shows why).
     opponent: { script: { prefer: ['0,0'] } },
-    finish: { title: W.youWin, line: W.goldDecided, learned: 'GOLD COUNTS DOUBLE', icon: '◆' },
+    finish: { title: W.learnedTitle(3), line: W.goldDecided, learned: 'GOLD COUNTS DOUBLE', icon: '◆' },
   },
   {
     level: 4, version: 3, locked: false, guide: 'always',
@@ -172,7 +189,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       discard: [[3, 1]],
     },
     opponent: { script: { contests: true } },
-    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'CUT THEIR ROOT', icon: '✂' },
+    finish: { title: W.learnedTitle(4), line: W.wonOnPoints, learned: 'CUT THEIR ROOT', icon: '✂' },
   },
   {
     level: 5, version: 3, locked: false, guide: 'always',
@@ -188,7 +205,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       discard: [[3, 1]],
     },
     opponent: { script: { contests: true, blooms: true } },
-    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLOOM THREE AT ONCE', icon: '✿' },
+    finish: { title: W.learnedTitle(5), line: W.wonOnPoints, learned: 'BLOOM THREE AT ONCE', icon: '✿' },
   },
   {
     level: 6, version: 3, locked: false, guide: 'always',
@@ -206,7 +223,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     // It grows like any player, onto a side of its own home when that is all it has; the
     // surround then takes that tile back (owner, 2026-10-22: a level that never moves feels broken).
     opponent: { script: { contests: true, blooms: true } },
-    finish: { title: W.youWin, line: W.wonByKo, learned: 'SURROUND THEIR HOME', icon: '◎' },
+    finish: { title: W.learnedTitle(6), line: W.wonByKo, learned: 'SURROUND THEIR HOME', icon: '◎' },
   },
   {
     level: 7, version: 3, locked: false, guide: 'always',
@@ -222,7 +239,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       discard: [[3, 1]],
     },
     opponent: { script: { contests: true, blooms: true } },
-    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BOMB ONE TILE', icon: '●' },
+    finish: { title: W.learnedTitle(7), line: W.wonOnPoints, learned: 'BOMB ONE TILE', icon: '●' },
   },
   {
     level: 8, version: 3, locked: false, guide: 'always',
@@ -241,7 +258,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       discard: [[3, 1]],
     },
     opponent: { script: { contests: true, blooms: true } },
-    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLAST A HOLE', icon: '✹' },
+    finish: { title: W.learnedTitle(8), line: W.wonOnPoints, learned: 'BLAST A HOLE', icon: '✹' },
   },
   {
     // A FULL game from scratch (owner, 2026-11-01): a real deal, the real engine, every legal
@@ -253,9 +270,12 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     intro: ['pile-gold'],
     goals: [],
     newActions: [],
+    // ONE FIXED DEAL (owner, 2026-11-12): the same real game, opened from a seed whose Throw-pile
+    // top really completes a Bloom in the dealt hand — the sentence is true, not guarded.
+    deal: lessonNineOpening,
     // The campaign level's own bot (4); `web/tests/lesson-9-free.test.ts` pins the two together.
     opponent: { bot: 4 },
-    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'PLAY A FULL GAME', icon: '↦' },
+    finish: { title: W.learnedTitle(9), line: W.wonOnPoints, learned: 'PLAY A FULL GAME', icon: '↦' },
   },
   {
     level: 10, version: 4, locked: false, guide: 'idle',
@@ -279,18 +299,18 @@ export const lessonFor = (level: number): Lesson | null => LESSONS.find((l) => l
 export const lessonIsFree = (lesson: Pick<Lesson, 'kind'>): boolean => lesson.kind === 'free';
 
 /**
- * The opening a lesson starts from. A guided lesson lays its authored position on the small map. A
- * free lesson (level 9) deals the campaign level's own real match — `campaignOpening`, the same
- * `newMatch` call the campaign and the server use, so the deal, the board and who starts are the
- * engine's, never a script.
+ * The opening a lesson starts from. A lesson with its own `deal` (level 9's pinned deal, level 10's
+ * final game) uses it. A guided lesson lays its authored position on the small map. A free lesson
+ * without one deals the campaign level's own real match — `campaignOpening`, the same `newMatch`
+ * call the campaign uses, so the deal, the board and who starts are the engine's, never a script.
  */
 export const lessonOpening = (lesson: Lesson): State => {
+  if (lesson.deal) return lesson.deal();
   if (lessonIsFree(lesson)) {
     const level = campaignLevelByNumber(lesson.level);
     if (!level) throw new Error(`free lesson ${lesson.level} has no campaign level`);
     return campaignOpening(level);
   }
-  if (lesson.deal) return lesson.deal();
   if (!lesson.position) throw new Error(`guided lesson ${lesson.level} has no opening`);
   return authoredState(lesson.position);
 };

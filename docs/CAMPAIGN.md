@@ -375,9 +375,11 @@ Playing them found two things that a unit test cannot see:
   level 8's Fruit lesson now genuinely surfaces, because the networks have time to touch.
   **On 2026-11-01 the owner asked for level 9 to be a full game on the small map anyway**; it is
   the one real match on 19 hexes, and it is short for the same geometric reason (a strong player
-  wins by surround in 3 turns on seed 95009; a careless one loses). Because `/2` and the root
-  publish the same levels again, the c1-09 alternate-opening entry is kept (it is now identical to
-  the level's current board) so an older /2/ proof still verifies.
+  wins by surround in 3 turns; a careless one loses). Since 2026-11-12 the lesson pins its own
+  deal (seed 95017, chosen so its Throw-pile sentence is true) on the same board; the campaign
+  level's own seed stays 95009. Because `/2` and the root publish the same levels again, the
+  c1-09 alternate-opening entry is kept (it is now identical to the level's current board) so an
+  older /2/ proof still verifies.
 - **The first ten levels keep the game's existing guidance language**, and nothing new competes with
   it: the draw/throw piles halo at their step, playable cards are outlined in the hand, and a picked
   card lights its legal hexes on the board. The cockpit's LED still owns the turn's word (GROW!,
