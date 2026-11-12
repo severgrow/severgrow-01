@@ -36,6 +36,38 @@ publishes the NEW /test/ and the OLD live, and the run the `live` move starts is
 the environment policy below. Observed 2026-11-01 (runs 41331774012 and 41331828139). Fix: any later
 push to `futa0.5-online` (or Run workflow → promote on it) publishes the already-moved `live`.
 
+## Two traps found on 2026-11-12 (releasing the 0.84 polish + end screen)
+
+**`npm run promote` is not usable in every checkout on a developer machine.** `scripts/promote.mjs`
+hardcodes the remote `origin`. Several local worktrees on this machine have `origin` pointed at a
+LOCAL directory (e.g. `/Users/patryk/sg-lesson-preview`), not GitHub, so the script reads the wrong
+refs, prints wrong live/test SHAs, and then tries to push `live` into that folder. Release from a
+checkout whose remote is GitHub, or do the two steps by hand with the GitHub remote:
+
+```sh
+git push gh <sha>:refs/heads/futa0.5-online    # reaches /test/ once CI on that commit is green
+git push gh <sha>:refs/heads/live             # selects it for the root (fast-forward, never forced)
+```
+
+`git ls-remote <remote> live` is the cheap check before trusting either step.
+
+**`extra-regressions` never runs on a feature branch.** Its triggers are `futa0.5-online`,
+`fix/**`, `release/**` and a `pull_request` path filter for `admin/**` and `server/**`. A whole
+suite (`online-opponent-discard`) was red on a feature branch at desk size and nobody could see it;
+it surfaced the first time that work reached `futa0.5-online`. It does not gate the publish — the
+publish's `ci-gate` reads `ci.yml` only for the pushed SHA — so it ships red and is discovered
+later. Run the affected `extra-regressions` suite by hand before asking for a merge of a layout
+change.
+
+**A moved branch ref is not a deployed site.** The root sat three builds stale for hours on
+2026-11-12 while `live` pointed at the right commit: the publication had failed at the environment
+step and nothing reported it to a human. Always confirm the deployed number, not the ref:
+
+```sh
+curl -fsSL -H 'Cache-Control: no-cache' https://futasaku.com/BUILD_SHA
+curl -fsSL -H 'Cache-Control: no-cache' https://futasaku.com/test/BUILD_SHA
+```
+
 ## Production environment branch policy
 
 Observed 31 October 2026: the `github-pages` environment accepts publications triggered from
