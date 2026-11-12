@@ -88,6 +88,11 @@ export type LevelConfig = {
   /** Fruit patience: a Fruit card worth less than this is kept for later while the deck is long. */
   fruitPatience?: number;
   /**
+   * Two-step search (rivals): after the opponent's best imagined reply, also find MY best answer to
+   * it with the cards I keep, and count it back at this weight (0 = level 9's one-step reply search).
+   */
+  counterWeight?: number;
+  /**
    * Endgame: once the draw pile holds this many cards or fewer, the danger and pressure terms fade
    * out in proportion (a threat the opponent has no turns left to carry out is not a threat).
    */
@@ -245,6 +250,51 @@ const replyDamage = (oppView: View, uncapped = false): number => {
   return worst;
 };
 
+/** The best immediate result of any growing move in a view: points gained + points the other side loses. */
+const bestStrike = (v: View): { value: number; board: View['board'] | null } => {
+  const blooms = shortlistBlooms(lookBlooms(v), REPLY_BLOOMS).map((l) => l.action as Action);
+  const others = legalActions(v).filter((x) => x.t !== 'Bloom');
+  let value = 0;
+  let board: View['board'] | null = null;
+  for (const a of [...blooms, ...others]) {
+    if (!growing(a)) continue;
+    const sim = simulate(v, a);
+    if (!sim) continue;
+    if (sim.wins) return { value: 50, board: sim.board };
+    const gain = sim.points + sim.botPointsLost;
+    if (gain > value) {
+      value = gain;
+      board = sim.board;
+    }
+  }
+  return { value, board };
+};
+
+/**
+ * Rivals' two-step search: the opponent's best reply in an imagined hand (as `replyDamage`, never
+ * capped), then my best answer to it with the hand I keep. Returns reply minus weighted answer.
+ */
+const replyThenCounter = (oppView: View, mine: View, counterWeight: number): number => {
+  const reply = bestStrike(oppView);
+  if (reply.value >= 50 || !reply.board) return reply.value;
+  const me = mine.player;
+  const ctx = { config: mine.config, terrain: mine.terrain, board: reply.board };
+  const answerView: View = {
+    ...mine,
+    board: reply.board,
+    phase: 'ACT',
+    turnPlayer: me,
+    actor: me,
+    sproutsThisTurn: 0,
+    drawnFromDiscard: null,
+    score: score(ctx, me),
+    opponentScore: score(ctx, other(me)),
+    lastResolution: null,
+  };
+  const answer = bestStrike(answerView);
+  return reply.value - counterWeight * Math.min(answer.value, 50);
+};
+
 /** A random sample of `n` cards from `pool` (seeded, without repeats). */
 const sample = (pool: readonly Card[], n: number, rng: () => number): Card[] => {
   const a = [...pool];
@@ -391,7 +441,10 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
       let val = r.score + (after && c.lookahead > 0 ? 0.9 * bestFollowUp(after, weights, c) : 0);
       if (after && c.searchIterations > 0) {
         let dmg = 0;
-        for (let i = 0; i < iters; i++) dmg += replyDamage(opponentView(after, sample(unseen, handSize, rng)), !lab);
+        for (let i = 0; i < iters; i++) {
+          const opp = opponentView(after, sample(unseen, handSize, rng));
+          dmg += c.counterWeight ? replyThenCounter(opp, after, c.counterWeight) : replyDamage(opp, !lab);
+        }
         val -= c.replyWeight * (dmg / iters);
       }
       value.set(r, val);
@@ -401,7 +454,10 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
       const stop = ranked.find((x) => !growing(x.action));
       if (stop) {
         let dmg = 0;
-        for (let i = 0; i < iters; i++) dmg += replyDamage(opponentView(v, sample(unseen, handSize, rng)), !lab);
+        for (let i = 0; i < iters; i++) {
+          const opp = opponentView(v, sample(unseen, handSize, rng));
+          dmg += c.counterWeight ? replyThenCounter(opp, v, c.counterWeight) : replyDamage(opp, !lab);
+        }
         value.set(stop, stop.score - c.replyWeight * (dmg / iters));
       }
     }
