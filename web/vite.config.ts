@@ -2,7 +2,8 @@ import { fileURLToPath } from 'node:url';
 import { resolve, sep } from 'node:path';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
-import { FEEDBACK, PRIVACY, TERMS } from '../src/strings.js';
+import { FEEDBACK, PRIVACY } from '../src/strings.js';
+import { TERMS } from './src/terms.js';
 import { writePrivacyPage, writeTermsPage } from './src/privacy-page.js';
 import { contentVersion, versionHeadAssets, versionManifestIcons } from './build-asset-versions.js';
 

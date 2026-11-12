@@ -1,13 +1,14 @@
 // TERMS OF USE (launch readiness, 2026-11-12). A public game with accounts, a shared chat and an in-game
 // currency needs written rules before strangers arrive: what is allowed in chat and names, what Seeds
 // are (and are not), what the owner may do about abuse, and how to leave. Like the privacy policy it
-// lives once, in src/strings.ts (TERMS), and is shown in two places that cannot drift: the in-app
+// lives once, in web/src/terms.ts (TERMS), and is shown in two places that cannot drift: the in-app
 // panel at futasaku.com/#terms and the static crawlable page at futasaku.com/terms.
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { PRIVACY, TERMS } from '../../src/strings.js';
+import { PRIVACY } from '../../src/strings.js';
+import { TERMS } from '../src/terms.js';
 import { TERMS_PAGE_PATH, renderPrivacyPage, renderTermsPage, writeTermsPage } from '../src/privacy-page.js';
 
 const dist = mkdtempSync(join(tmpdir(), 'futasaku-terms-'));

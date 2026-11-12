@@ -7,7 +7,8 @@ import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 // guests, and an Account block in Settings (sign out, delete my account). Offline play never sees
 // any of it. Nothing shows until the Google provider is switched on in Supabase, so this is safe to
 // ship before the dashboard is set up. A failure here can never break the game (every path is caught).
-import { ACCOUNT, PRIVACY, TERMS } from '../../../src/strings.js';
+import { ACCOUNT, PRIVACY } from '../../../src/strings.js';
+import { TERMS } from '../terms.js';
 import { taggedName } from '../../../src/player-tag.js';
 import { DUEL_CLIENT_VERSION, browserStorage } from '../../../server/src/client.js';
 import type { KeyValue } from '../../../server/src/client.js';
