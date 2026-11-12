@@ -1781,7 +1781,12 @@ export const LESSON = Object.freeze({
   startAgain: 'START AGAIN',
   // finish cards: the one idea learned, with a small mark, then the way on
   learned: 'YOU LEARNED',
-  youWin: 'YOU WIN',
+  /**
+   * A WON lesson's finish title (owner, 2026-11-12): the level is the kicker, LEARNED the outcome —
+   * the same two-line lockup a campaign win uses (Level 12 / Complete). A lesson LOSS never shows
+   * it; the card keeps the honest `resultTitle` ("You lost" / "A draw").
+   */
+  learnedTitle: (level: number): string => `Lesson ${level} Learned`,
   wonOnPoints: 'You had more points – you won!',
   wonByKo: 'You surrounded their home.',
   goldDecided: 'Gold put you ahead.',

@@ -7,7 +7,7 @@ import {
 } from '../../src/engine/index.js';
 import type { Action, Event, State } from '../../src/engine/index.js';
 import { SMALL_BOARD_RADIUS } from '../../src/campaign/small-board.js';
-import { LESSON } from '../../src/strings.js';
+import { LESSON, RESULT } from '../../src/strings.js';
 import { FINAL_LESSON, finalLessonLegacyOpening, finalLessonOpening } from '../src/lessons/final.js';
 import { lessonResumable } from '../src/lessons/lesson-save.js';
 import {
@@ -23,6 +23,7 @@ import { lessonVoiceFor } from '../src/lessons/lesson-voice.js';
 import { lessonOpponentAction, scriptedOpponentAction } from '../src/lessons/opponent.js';
 import { bloomProblem, tapAnswer } from '../src/lessons/answer.js';
 import type { Tap } from '../src/lessons/answer.js';
+import { resultTitle } from '../src/logic/log.js';
 
 /** The lesson's own opponent: the very function the game asks (a script, or a real bot level). */
 const opponentMove = (lesson: Lesson, s: State): Action => lessonOpponentAction(lesson, s);
@@ -373,6 +374,31 @@ describe('level 10’s send-off (owner, 2026-10-24)', () => {
     expect(l10.version).toBe(LESSON_VERSION + 1);
     expect(lessonResumable({ level: 10, version: l10.version, seen: [] }, l10)).toBe(true);
     expect(lessonResumable({ level: 10, version: LESSON_VERSION, seen: [] }, l10)).toBe(false);
+  });
+});
+
+describe('a won lesson says the lesson was learned (owner, 2026-11-12)', () => {
+  it('levels 1-9 carry the two-line lockup: LESSON n over LEARNED', () => {
+    for (const l of LESSONS.filter((x) => x.level < 10)) {
+      expect(l.finish.title, `L${l.level}`).toBe(LESSON.learnedTitle(l.level));
+      // paintGoTitle splits on the LAST space: the kicker is the level, the outcome is the word.
+      const at = l.finish.title.lastIndexOf(' ');
+      expect(l.finish.title.slice(0, at), `L${l.level} kicker`).toBe(`Lesson ${l.level}`);
+      expect(l.finish.title.slice(at + 1), `L${l.level} outcome`).toBe('Learned');
+    }
+    expect(LESSON.learnedTitle(3)).toBe('Lesson 3 Learned');
+  });
+
+  it('level 10 keeps its one send-off line, untouched', () => {
+    expect(lessonFor(10)!.finish.title).toBe(LESSON.canPlay);
+    expect(LESSON.canPlay).toBe('YOU CAN PLAY FUTASAKU');
+  });
+
+  it('a LOSS keeps the honest outcome: the learned title is painted only on a win', () => {
+    // main.ts paints a lesson's title only inside `if (taught && won)`; a loss falls through to the
+    // result's own words (asserted at the source in web/tests/finish-card.test.ts).
+    expect(resultTitle({ winner: 1, scores: [2, 5], reason: 'deck_exhaustion' }, 0)).toBe(RESULT.lost);
+    expect(resultTitle({ winner: null, scores: [3, 3], reason: 'turn_limit' }, 0)).toBe(RESULT.draw);
   });
 });
 

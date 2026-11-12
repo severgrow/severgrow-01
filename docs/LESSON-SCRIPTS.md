@@ -252,7 +252,7 @@ The same in every level:
   13. Turns 2-4: the fade decides; the display carries the action (DRAW, GROW, THROW become TAP THE DRAW PILE, CHOOSE A CARD, THROW A CARD).
   14. Draw pile at 3 cards: LIT the Draw pile together with its count | DISPLAY: LAST CARDS | tap anywhere
   15. Pile empty: DISPLAY: LAST TURN | BOX: "The Draw pile is empty – this is your last turn." | tap anywhere
-- **Finish:** YOU WIN / YOU LEARNED: DRAW, GROW, THROW (✦)
+- **Finish:** LESSON 1 LEARNED / YOU LEARNED: DRAW, GROW, THROW (✦)
 - **Proof:** the follower wins 4-1 in 4 of your turns. The browser tapper does it with 0 wrong taps.
 
 ## LEVEL 2 — TILE NUMBERS
@@ -268,7 +268,7 @@ The same in every level:
   4. (turn 2, after the draw, when the cut can be played) LIT their tile 0,0 | BOX: "Cut: a higher card can take an opponent’s tile." | tap anywhere
   5. LIT a higher card, then their tile 0,0 | DISPLAY: CHOOSE A CARD → TAP THEIR TILE | 0,0 is yours | TOO WEAK: 2 VS 4
   6. Then the turns; the light prefers taking a weak tile of theirs to an empty hex. Ends on points.
-- **Finish:** YOU WIN / YOU LEARNED: STRONGER TILES WIN (↑)
+- **Finish:** LESSON 2 LEARNED / YOU LEARNED: STRONGER TILES WIN (↑)
 
 ## LEVEL 3 — ROCK AND GOLD
 
@@ -281,7 +281,7 @@ The same in every level:
   2. (after the draw) LIT the gold 0,0 | BOX: "A gold tile counts double, so it is worth two points." | tap anywhere
   3. LIT a card, then the gold | DISPLAY: CHOOSE A CARD → TAP THE LIT TILE | Grow onto 0,0
   4. Then the turn. If you leave the gold, they take it. Ends on points.
-- **Finish:** YOU WIN / YOU LEARNED: GOLD COUNTS DOUBLE (◆)
+- **Finish:** LESSON 3 LEARNED / YOU LEARNED: GOLD COUNTS DOUBLE (◆)
 
 ## LEVEL 4 — CUTTING
 
@@ -294,7 +294,7 @@ The same in every level:
   2. LIT a card, then the link | DISPLAY: CHOOSE A CARD → TAP THEIR TILE | link taken
   3. 0,-1 and -1,-1 are removed | BOX: "Tiles cut off from their home disappear." | tap anywhere
   4. Then the turn. Ends on points.
-- **Finish:** YOU WIN / YOU LEARNED: CUT THEIR ROOT (✂)
+- **Finish:** LESSON 4 LEARNED / YOU LEARNED: CUT THEIR ROOT (✂)
 
 ## LEVEL 5 — BLOOM
 
@@ -312,7 +312,7 @@ The same in every level:
   Two rows of tiny faces built from the cards' own face markup (no new art), static, no overlay, no
   animation; the run row is dropped when the box would grow past a third of the screen. The box
   still never covers a lit target and the map is not padded for it.
-- **Finish:** YOU WIN / YOU LEARNED: BLOOM THREE AT ONCE (✿)
+- **Finish:** LESSON 5 LEARNED / YOU LEARNED: BLOOM THREE AT ONCE (✿)
 
 ## LEVEL 6 — KNOCK-OUT
 
@@ -326,7 +326,7 @@ The same in every level:
   1. (after the draw) LIT their home | BOX: "Surround: fill every tile around their home for an instant win." | tap anywhere
   2. LIT a card, then an open side | DISPLAY: CHOOSE A CARD → TAP THE LIT TILE | Grow onto a side
   3. When the engine sees a winning move this turn (and only then): LIT it | DISPLAY: TAP THE LAST SIDE | surround
-- **Finish:** YOU WIN / YOU LEARNED: SURROUND THEIR HOME (◎)
+- **Finish:** LESSON 6 LEARNED / YOU LEARNED: SURROUND THEIR HOME (◎)
 - **Proof:** won by surround on your 2nd turn. The engine-verified win-moment test plays the lit move and checks the strangle.
 
 ## LEVEL 7 — BOMB
@@ -339,7 +339,7 @@ The same in every level:
   2. LIT the Bomb, then 0,0 | DISPLAY: CHOOSE THE BOMB → BOMB THEIR TILE | 0,0 removed | MUST TOUCH YOUR TILES, HOMES ARE SAFE
   3. Then the turn. Ends on points.
 - **If you throw the Bomb:** the box says "This lesson cannot finish from here." with one START AGAIN button that restarts the level in place.
-- **Finish:** YOU WIN / YOU LEARNED: BOMB ONE TILE (●)
+- **Finish:** LESSON 7 LEARNED / YOU LEARNED: BOMB ONE TILE (●)
 
 ## LEVEL 8 — BLAST
 
@@ -354,19 +354,23 @@ The same in every level:
   4. LIT a card | BOX: "Blast clears several tiles at once and does NOT use your Grow." | tap anywhere
   5. LIT a card, then a tile | DISPLAY: CHOOSE A CARD → TAP THE LIT TILE | the Grow played
   6. Then the turn. Ends on points.
-- **Finish:** YOU WIN / YOU LEARNED: BLAST A HOLE (✹)
+- **Finish:** LESSON 8 LEARNED / YOU LEARNED: BLAST A HOLE (✹)
 
 ## LEVEL 9 — A FULL GAME (ROUND THE STONE)
 
-- **Setup:** none authored. The level deals its own real match on the 19-hex map (the campaign
-  level's board: rocks -2,0 / -1,-1 / -1,0, gold 0,0 / 0,2 / 0,-2), with the campaign's bot (4).
-  It opens with the **Who-starts ritual** — the same card ceremony as a practice match and an
-  online duel — because this is the first level that is a real game from scratch (owner,
-  2026-11-01). Who starts is the engine's `startingPlayerFor(seed)`, shown by the ritual.
+- **Setup:** no authored position; ONE FIXED DEAL (owner, 2026-11-12). The level deals a real
+  match on the 19-hex map (the campaign level's board: rocks -2,0 / -1,-1 / -1,0, gold 0,0 / 0,2 /
+  0,-2), with the campaign's bot (4), from a seed chosen so the Throw pile's top card really
+  completes a Bloom in the dealt hand (`lessons.ts` `LESSON_NINE_DEAL_SEED`). It opens with the
+  **Who-starts ritual** — the same card ceremony as a practice match and an online duel — because
+  this is the first level that is a real game from scratch (owner, 2026-11-01). Who starts is the
+  engine's `startingPlayerFor(seed)`, shown by the ritual.
 - **The one sentence kept from the old lesson:** before the first draw, once, the box says the
-  Throw-pile line ("The Throw pile glows gold when its top card completes a Bloom in your hand.")
-  and nothing is forced. The old skip/Undo explanations still appear only if a Bloom really comes
-  from the Throw pile, at the moment it happens. Nothing was deleted from the teaching.
+  Throw-pile line ("The Throw pile glows gold when its top card completes a Bloom in your hand.").
+  The deal is chosen so that sentence is TRUE when it is said, by the light's own rule
+  (`web/src/logic/pile-glow.ts`); the old skip/Undo explanations still appear only if a Bloom
+  really comes from the Throw pile, at the moment it happens. Nothing was deleted from the
+  teaching, and nothing is guarded.
 - **Every move is the player's.** No goals, no lock, no scripted opponent; all legal Grow / Bloom /
   Bomb / Blast / Throw moves work. The game ends on its own terms — surround, deck end or the turn
   limit — with a real result, and a real loss is possible.
@@ -382,10 +386,10 @@ The same in every level:
   idea each teaches. Level 9's finish card now names the format ("PLAY A FULL GAME"), so its Rules
   card keeps the teaching instead: titled from the lesson's own frozen name ("The Other Pile" →
   "The other pile"), with the Throw-pile sentence as its line (`logic/intel-guide.ts`).
-- **Finish:** YOU WIN / YOU LEARNED: PLAY A FULL GAME (↦).
+- **Finish:** LESSON 9 LEARNED / YOU LEARNED: PLAY A FULL GAME (↦).
 - **Proof range:** with the strongest bot on the player's seat it wins by surround in 3 turns; a
   player who draws and ends the turn without ever Growing loses by surround in about 14. Both are
-  real, deterministic results of seed 95009 on this board.
+  real, deterministic results of seed 95017 on this board.
 
 ## LEVEL 10 — FINALE
 

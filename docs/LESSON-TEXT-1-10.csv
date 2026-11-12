@@ -81,4 +81,4 @@ Levels 1-10 (any step),After a wrong tap,Display (the LED),THEIR TURN,theirTurnN
 Levels 1-10 (any step),A stuck lesson,Info box,This lesson cannot finish from here.,restartLine
 Levels 1-10 (any step),A stuck lesson,Info box (button),START AGAIN,startAgain
 Levels 1-10 (any step),On the win card / a stuck lesson,Other,YOU LEARNED,learned
-Levels 1-10 (any step),On the win card / a stuck lesson,Other,YOU WIN,youWin
+Levels 1-9 (won),Win card,Finish card (title),LESSON 3 / LEARNED,learnedTitle

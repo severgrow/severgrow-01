@@ -137,6 +137,15 @@ describe('lesson words', () => {
     for (const [k, v] of entries.filter(([k]) => FINISH_LINES.has(k))) expect(words(v).length, `${k}: ${v}`).toBeLessThanOrEqual(12);
   });
 
+  it('a won lesson says the lesson was LEARNED, never that you won it (owner, 2026-11-12)', () => {
+    // The card is the same two-line lockup as a campaign win: `LESSON 3` over `LEARNED`.
+    expect(LESSON.learnedTitle(3)).toBe('Lesson 3 Learned');
+    expect(LESSON.learnedTitle(9)).toBe('Lesson 9 Learned');
+    expect(LESSON.learned).toBe('YOU LEARNED');
+    // Level 10's send-off line is untouched.
+    expect(LESSON.canPlay).toBe('YOU CAN PLAY FUTASAKU');
+  });
+
   it('never "set" or "run" for a Bloom, never Fruit, Campaign, bot, tree or take over, never a tile colour', () => {
     // "runs out" / "ran out" is the Draw pile's clock (SPEC), not the Bloom word.
     // Owner, 2026-10-19: it is your HOME, never your tree; never "take over" (cut / disconnect).

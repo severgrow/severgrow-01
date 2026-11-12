@@ -6,11 +6,13 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CAMPAIGN, RESULT, TUTORIAL_REPLAY } from '../../src/strings.js';
+import { CAMPAIGN, LESSON, RESULT, TUTORIAL_REPLAY } from '../../src/strings.js';
 import { PLANET_TEACH } from '../src/online/seed-icon.js';
 import { barFor, canGrowAt } from '../src/online/endgame-planet.js';
 import { CAMPAIGN_LEVELS, nextCampaignLevel } from '../../src/campaign/index.js';
 import { finishLead } from '../src/logic/finish-actions.js';
+import { LESSONS, lessonFor } from '../src/lessons/lessons.js';
+import { resultTitle } from '../src/logic/log.js';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const html = read('../index.html');
@@ -261,6 +263,27 @@ describe('the won lockup (owner, 2026-10-24)', () => {
     // (a 2px ::after on the title), so its absence is asserted at the source.
     expect(read('../src/style.css')).not.toMatch(/#gameover\.won \.go-title::after/);
     expect(read('../src/style.css')).not.toMatch(/@keyframes go-rule/);
+  });
+});
+
+describe('a won lesson’s own lockup (owner, 2026-11-12)', () => {
+  it('paints LESSON n over LEARNED for levels 1-9, and keeps level 10 on one line', () => {
+    // The same paintGoTitle machinery as a campaign win: only the WORDS differ.
+    expect(mainSource).toMatch(/if \(taught && won\) paintGoTitle\(taught\.finish\.title, taught\.level !== FINAL_LESSON\.level\);/);
+    expect(LESSON.learnedTitle(3)).toBe('Lesson 3 Learned');
+    for (const l of LESSONS.filter((x) => x.level < 10)) {
+      expect(l.finish.title, `L${l.level}`).toBe(LESSON.learnedTitle(l.level));
+    }
+    expect(lessonFor(10)!.finish.title).toBe(LESSON.canPlay);
+    // The DOM keeps the whole phrase for a screen reader: the halves are joined by a real space.
+    expect(mainSource).toMatch(/el\.replaceChildren\(kicker, document\.createTextNode\(' '\), outcome\);/);
+  });
+
+  it('a LOSS never claims it was learned: the honest outcome words are painted instead', () => {
+    // main.ts paints the lesson title only on a win; a loss falls through to resultTitle.
+    expect(mainSource).toMatch(/\$\('go-title'\)\.textContent = won\n\s*\? campaign \? CAMPAIGN\.levelWon\(campaign\.number\) : RESULT\.won\n\s*: resultTitle\(r, HUMAN\);/);
+    expect(resultTitle({ winner: 1, scores: [1, 2], reason: 'deck_exhaustion' }, 0)).toBe(RESULT.lost);
+    expect(resultTitle({ winner: null, scores: [2, 2], reason: 'turn_limit' }, 0)).toBe(RESULT.draw);
   });
 });
 

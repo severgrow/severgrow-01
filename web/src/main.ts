@@ -42,6 +42,7 @@ import type { ReplayHandle } from './replay/player.js';
 import type { ReplayPayload } from '../../server/src/protocol.js';
 import { displayEventForPlay } from './player/display-readout.js';
 import { bloomNoRoom } from './logic/bloom-room.js';
+import { throwPileCompletesBloom } from './logic/pile-glow.js';
 import type { DisplayEvent } from './player/display-readout.js';
 import { createTheirsDim, replayedByOpponent } from './player/replay-display.js';
 import { outcomeCue } from './player/outcome-light.js';
@@ -8312,11 +8313,9 @@ function renderPiles(v: View, advice: Advice | null) {
     $(`${id}-hint`).textContent = look.hint ?? '';
   }
   if (IS_FUTA04) {
-    // A new card combination, regardless of board space. Duplicate faces don't create one.
-    const key = (cards: readonly Card[]) => cards.map(c => `${c.suit}:${c.rank}`).sort().join('|');
-    const before = looks.discard.enabled && top ? new Set(bloomGroups(v.hand).map(g => key(g.cards))) : null;
-    const createsBloom = !!before && !!top && bloomGroups([...v.hand, top]).some(g => !before.has(key(g.cards)));
-    $('discard').classList.toggle('futa04-bloom-draw', looks.discard.enabled && createsBloom && bloomsShown());
+    // The one glow rule lives in `logic/pile-glow.ts`, shared with level 9's invariant test.
+    $('discard').classList.toggle('futa04-bloom-draw',
+      looks.discard.enabled && throwPileCompletesBloom(v.hand, top, v.config.expandedBloom !== false) && bloomsShown());
   }
   $('deck').setAttribute('aria-label', `${PILES.draw}: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
   $('discard').setAttribute('aria-label', top ? `${PILES.discard}: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : tossReady ? ' Tap to throw your card.' : ''}` : `${PILES.discard}: empty${tossReady ? '. Tap to throw your card.' : ''}`);
@@ -9158,7 +9157,10 @@ function renderGameOver() {
   // a stale cached shell without the line must not break the finish card.
   // A lesson's finish card says how it was won, in one line (and its title is the lesson's own).
   const taught = lessonActive();
-  if (taught && won) paintGoTitle(taught.finish.title, false);
+  // A WON lesson says the lesson was learned: `Lesson 3` over `Learned`, the same two-line lockup
+  // a campaign win uses (paintGoTitle splits on the last space). Level 10 keeps its one send-off
+  // line. A LOSS never reaches here: it keeps the honest resultTitle painted above.
+  if (taught && won) paintGoTitle(taught.finish.title, taught.level !== FINAL_LESSON.level);
   const learned = taught
     ? (won ? `${LESSON.learned}: ${taught.finish.learned}` : '')
     : campaign && won ? ONBOARD.recap(campaign.number) : '';
